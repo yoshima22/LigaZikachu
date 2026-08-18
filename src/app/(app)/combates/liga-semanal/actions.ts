@@ -95,7 +95,19 @@ export async function getLeagueDataAction() {
 
   const { getLeaguePageData } = await import("./data");
   const data = await getLeaguePageData(player.id, player.displayName, isAdmin(session.user.role));
-  return JSON.parse(JSON.stringify(data));
+
+  // Feedback: se o modo casual foi ativado por ter perdido tudo por W/O na última
+  // liga encerrada, avisamos o jogador (ele pode desligar o casual quando quiser).
+  let casualForcedNotice = false;
+  const playerFlags = await prisma.player.findUnique({ where: { id: player.id }, select: { casualMode: true } });
+  if (playerFlags?.casualMode) {
+    const lastFinished = await prisma.weeklyMascotLeague.findFirst({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, select: { id: true } });
+    if (lastFinished) {
+      const ms = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId: lastFinished.id, OR: [{ playerAId: player.id }, { playerBId: player.id }] }, select: { status: true } });
+      casualForcedNotice = ms.length > 0 && ms.every((m) => m.status === "WO");
+    }
+  }
+  return JSON.parse(JSON.stringify({ ...data, casualForcedNotice }));
 }
 
 // ── Create league ─────────────────────────────────────────────────────────
@@ -1592,6 +1604,19 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
     });
     if (!participants.length) return { error: "Liga sem participantes." };
 
+    // Faltosos: jogadores cujas partidas foram TODAS por W/O. Não recebem
+    // recompensa e têm o modo casual ativado (podem desligar depois).
+    const allMatches = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId }, select: { playerAId: true, playerBId: true, status: true } });
+    const tally = new Map<string, { total: number; wo: number }>();
+    for (const m of allMatches) {
+      for (const pid of [m.playerAId, m.playerBId].filter((id): id is string => Boolean(id))) {
+        const t = tally.get(pid) ?? { total: 0, wo: 0 };
+        t.total++; if (m.status === "WO") t.wo++;
+        tally.set(pid, t);
+      }
+    }
+    const noShow = new Set<string>([...tally].filter(([, t]) => t.total > 0 && t.wo === t.total).map(([id]) => id));
+
     let granted = 0;
     await prisma.$transaction(async (tx) => {
       for (let index = 0; index < participants.length; index++) {
@@ -1601,6 +1626,12 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
         if (matchesPlayed === 0) continue;
 
         const rank = index + 1;
+        if (noShow.has(participant.playerId)) {
+          // Sem recompensa; ativa o modo casual (o jogador pode reativar/desligar depois).
+          await tx.weeklyMascotLeagueParticipant.updateMany({ where: { id: participant.id, rewardGranted: false }, data: { finalRank: rank } });
+          await tx.player.update({ where: { id: participant.playerId }, data: { casualMode: true } });
+          continue;
+        }
         const claimed = await tx.weeklyMascotLeagueParticipant.updateMany({
           where: { id: participant.id, rewardGranted: false },
           data: { finalRank: rank, rewardGranted: true },

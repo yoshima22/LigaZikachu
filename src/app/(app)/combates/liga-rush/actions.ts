@@ -184,6 +184,12 @@ export async function getRushDataAction() {
       megaEvolvedAt: true, megaEvolvedFromPokemonId: true, primaryTypeOverride: true, secondaryTypeOverride: true,
     },
   }) : [];
+  // Feedback de punição: jogador que faltou (tudo W/O) na edição anterior fica
+  // de fora desta. Usado para mostrar um aviso e desabilitar a inscrição.
+  const previousFinished = await prisma.rushLeague.findFirst({ where: { status: "FINISHED", weekStart: { lt: league.weekStart } }, orderBy: { weekStart: "desc" }, select: { ruleJson: true } });
+  const blockedFromRush = previousFinished
+    ? (Array.isArray(ruleData(previousFinished.ruleJson).noShowPlayerIds) && (ruleData(previousFinished.ruleJson).noShowPlayerIds as string[]).includes(player.id))
+    : false;
   const weekHighlights = buildRushHighlights(league.matches, names);
   const currentDate = brtDate();
   const firstBattleDate = brtDate(league.weekStart);
@@ -208,6 +214,7 @@ export async function getRushDataAction() {
     upcomingRegistration,
     upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
     hideResults: Boolean(prefs?.hideLeagueResults),
+    blockedFromRush,
   }));
 }
 
@@ -243,6 +250,14 @@ export async function joinRushLeagueAction(leagueId: string) {
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } });
     if (!league || league.status !== "REGISTRATION") return { error: "As inscrições desta edição estão encerradas." };
     if (new Date() > league.registrationEnds) return { error: "O prazo de inscrição já terminou." };
+    // Bloqueio "semana seguinte": quem faltou (todas as partidas por W/O) na edição
+    // imediatamente anterior fica de fora só desta próxima; depois volta normal.
+    const previous = await prisma.rushLeague.findFirst({
+      where: { status: "FINISHED", weekStart: { lt: league.weekStart } },
+      orderBy: { weekStart: "desc" }, select: { ruleJson: true },
+    });
+    const blocked = previous ? (Array.isArray(ruleData(previous.ruleJson).noShowPlayerIds) ? ruleData(previous.ruleJson).noShowPlayerIds as string[] : []) : [];
+    if (blocked.includes(player.id)) return { error: "Você ficou de fora desta edição por ter perdido todas as partidas da semana passada por W/O (sem comparecer). Na próxima você já pode voltar normalmente." };
     await prisma.rushLeagueParticipant.upsert({ where: { leagueId_playerId: { leagueId, playerId: player.id } }, create: { leagueId, playerId: player.id }, update: {} });
     revalidatePath(PATH);
     return { success: true };
@@ -572,10 +587,33 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
     if (unresolved > 0) return { error: `Ainda existem ${unresolved} partida(s) agendada(s) sem resultado. As caixas não foram enviadas.` };
     const ranking = [...league.participants].sort((a, b) => b.points - a.points || b.wins - a.wins || b.survivorsScore - a.survivorsScore || b.damageDealt - a.damageDealt || a.damageTaken - b.damageTaken);
     const rewards = parseRewards(league.rewardsJson);
+
+    // Faltosos: jogadores cujas partidas foram TODAS por W/O (nunca jogaram de
+    // verdade). Ficam sem qualquer recompensa e são impedidos de entrar na
+    // edição imediatamente seguinte (registrado em ruleJson.noShowPlayerIds).
+    const allMatches = await prisma.rushLeagueMatch.findMany({ where: { leagueId }, select: { playerAId: true, playerBId: true, status: true } });
+    const matchTally = new Map<string, { total: number; wo: number }>();
+    for (const m of allMatches) {
+      for (const pid of [m.playerAId, m.playerBId].filter((id): id is string => Boolean(id))) {
+        const t = matchTally.get(pid) ?? { total: 0, wo: 0 };
+        t.total++; if (m.status === "WO") t.wo++;
+        matchTally.set(pid, t);
+      }
+    }
+    const noShow = new Set<string>();
+    for (const p of league.participants) {
+      const t = matchTally.get(p.playerId);
+      if (t && t.total > 0 && t.wo === t.total) noShow.add(p.playerId);
+    }
+
     await prisma.$transaction(async (tx) => {
       for (let index = 0; index < ranking.length; index++) {
-        const participant = ranking[index]; const rank = index + 1; const reward = rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
+        const participant = ranking[index]; const rank = index + 1;
+        const punished = noShow.has(participant.playerId);
+        const reward = punished ? undefined : rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
         await tx.rushLeagueParticipant.update({ where: { id: participant.id }, data: { finalRank: rank, rewardGranted: Boolean(reward) } });
+        // Faltosos (todos os jogos W/O) não recebem nenhuma recompensa, nem o ovo de participação.
+        if (punished) continue;
         // Ovo de Evento de participação para todos os inscritos, independente da colocação.
         await tx.playerGift.create({ data: {
           playerId: participant.playerId,
@@ -598,7 +636,7 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
           payload: { rewardKind: "TOURNAMENT_BOX", coins: reward.coins ?? 0, food: reward.food ?? 0, sweet: reward.sweet ?? 0, creationDust: reward.creationDust ?? 0, eggs: reward.eggs ?? [], shopItems, origin: `Liga Rush ${league.weekKey}` } as Prisma.InputJsonValue,
         } });
       }
-      await tx.rushLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: ranking[0]?.playerId, rewardsGrantedAt: new Date() } });
+      await tx.rushLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: ranking[0]?.playerId, rewardsGrantedAt: new Date(), ruleJson: { ...ruleData(league.ruleJson), noShowPlayerIds: [...noShow] } as Prisma.InputJsonValue } });
     });
     revalidatePath(PATH);
     return { success: true };

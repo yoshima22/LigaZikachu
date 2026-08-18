@@ -99,6 +99,7 @@ type PageData = {
   } | null;
   hideResults: boolean;
   revealedMatchIds: string[];
+  casualForcedNotice?: boolean;
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
@@ -127,6 +128,12 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
 
   return (
     <div className="space-y-4">
+      {data.casualForcedNotice && (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-200">
+          <p className="font-black">⚠️ Seu modo casual foi ativado</p>
+          <p className="mt-1 text-xs text-amber-200/80">Na última Liga Semanal todas as suas partidas terminaram em W/O (sem comparecer), então você ficou sem recompensas e entrou no modo casual. Você pode desativar o modo casual quando quiser para voltar a competir.</p>
+        </div>
+      )}
       <div className="flex items-center justify-between">
         <div>
           <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1><BattleDivisionControl mode="WEEKLY_LEAGUE" isAdmin={data.player.isAdmin} initialDivision="UNLIMITED"/></div>
