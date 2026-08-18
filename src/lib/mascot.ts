@@ -1518,11 +1518,28 @@ export async function claimExpedition(
   const expeditorName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
 
   // Recompensa: TRAINING retorna só EXP (calculado depois), ITEMS foca itens, STANDARD tudo
-  const baseReward = mode === "TRAINING"
+  let baseReward = mode === "TRAINING"
     ? null  // preenchido após calcular EXP
     : mode === "ITEMS"
       ? await rollItemExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct)
       : await rollExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct);
+
+  // Personalidade: uma nova tentativa (uma vez) contra resultado indesejado.
+  // Sereno/Tímido(felicidade>70) repetem um resultado vazio; Curioso repete em
+  // expedição de Itens quando só veio comida comum. Nunca libera recompensa proibida.
+  if (baseReward) {
+    const pers = expedition.mascot.personality;
+    const isEmpty = baseReward.type === "NOTHING";
+    const isCommonFoodOnly = baseReward.type === "FOOD" && baseReward.foodType === "FOOD";
+    const reroll = () => mode === "ITEMS"
+      ? rollItemExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct)
+      : rollExpeditionReward(expedition.mascot, durationKey, allyCount, picnicLootBonusPct);
+    if ((pers === "SERENE" && isEmpty) || (pers === "TIMID" && isEmpty && expedition.mascot.happiness > 70)) {
+      baseReward = await reroll();
+    } else if (pers === "CURIOUS" && mode === "ITEMS" && isCommonFoodOnly) {
+      baseReward = await reroll();
+    }
+  }
 
   // EXP: base × duração × nível × bônus social
   const expBase = EXP_REWARDS.EXPEDITION;
@@ -1561,9 +1578,25 @@ export async function claimExpedition(
     : 1;
 
   const eventExpMult = 1 + eventExpBonusPct / 100;
+
+  // ── Bônus de EXP de expedição por personalidade ──────────────────────────
+  const pers = expedition.mascot.personality;
+  const superFriendCount = friends.filter((f) => f.interactionCount >= 5).length;
+  let personalityExpMult = 1;
+  if (pers === "LOYAL") personalityExpMult += Math.min(3, superFriendCount) * 0.01;                 // +1% por Super Amigo, até +3%
+  if (pers === "PROUD" && expedition.mascot.happiness > 70) personalityExpMult += 0.08;             // feliz e saudável
+  if (pers === "LAZY" && (durationKey === "3h" || durationKey === "6h")) personalityExpMult += 0.08; // jornadas longas
+  if (pers === "COMPETITIVE" && mode === "TRAINING") personalityExpMult += 0.08;                    // treinamento
+  if (pers === "DRAMATIC" && (expedition.mascot.mood === "HAPPY" || expedition.mascot.mood === "CONFIDENT")) personalityExpMult += 0.10;
+  if (pers === "CURIOUS") {
+    const startBRT = new Date(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) + "T00:00:00-03:00");
+    const priorToday = await prisma.mascotExpedition.count({ where: { mascotId: expedition.mascotId, id: { not: expeditionId }, startedAt: { gte: startBRT } } }).catch(() => 1);
+    if (priorToday === 0) personalityExpMult += 0.05;                                               // primeira expedição do dia
+  }
+
   const expeditionExp = mode === "ITEMS"
-    ? Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoostMult * (eventExpBonusPct / 100))
-    : Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult);
+    ? Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoostMult * (eventExpBonusPct / 100) * personalityExpMult)
+    : Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult * personalityExpMult);
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
