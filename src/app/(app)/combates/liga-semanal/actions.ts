@@ -1067,9 +1067,11 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       };
       if (pair.existingMatchId) await prisma.weeklyMascotLeagueMatch.update({ where: { id: pair.existingMatchId }, data: { winnerId: winPlayer, loserId: woPlayer, status: "WO", resolvedAt: new Date(), resultJson: woData.resultJson } });
       else await prisma.weeklyMascotLeagueMatch.create({ data: woData });
+      // W/O conta como BYE: +3 pontos e 0 vitórias (pesa menos que vitória real
+      // no desempate, cujo 1º critério após pontos é o número de vitórias).
       await prisma.weeklyMascotLeagueParticipant.updateMany({
         where: { leagueId, playerId: winPlayer },
-        data: { points: { increment: 3 }, wins: { increment: 1 }, updatedAt: new Date() },
+        data: { points: { increment: 3 }, byes: { increment: 1 }, updatedAt: new Date() },
       });
       await prisma.weeklyMascotLeagueParticipant.updateMany({
         where: { leagueId, playerId: woPlayer },
@@ -1314,9 +1316,10 @@ export async function resetAndResimulateAction(leagueId: string, slots: number[]
           });
         } else if (match.status === "WO") {
           if (match.winnerId) {
+            // W/O é contabilizado como BYE (+3 pontos, +1 bye), então revertemos o bye.
             await tx.weeklyMascotLeagueParticipant.updateMany({
               where: { leagueId, playerId: match.winnerId },
-              data: { points: { decrement: 3 }, wins: { decrement: 1 }, updatedAt: new Date() },
+              data: { points: { decrement: 3 }, byes: { decrement: 1 }, updatedAt: new Date() },
             });
           }
           if (match.loserId) {

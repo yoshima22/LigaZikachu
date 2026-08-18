@@ -253,6 +253,7 @@ function toArenaMascot(m: {
   id: string; playerId: string; pokemonId: number; nickname: string | null; level: number;
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma?: number | null; happiness: number;
   combatRole?: string | null;
+  preferredCombatRole?: string | null;
   speciesNameOverride?: string | null;
   primaryTypeOverride?: string | null;
   secondaryTypeOverride?: string | null;
@@ -273,7 +274,10 @@ function toArenaMascot(m: {
     charisma: Math.max(1, Math.round(charisma * mult)),
     happiness: m.happiness,
     hp: Math.max(10, Math.round((55 + m.level * 6 + m.statVitality * 4) * mult)),
-    combatRole: normalizeCombatRole(m.combatRole ?? recommendCombatRole({
+    // Ordem de prioridade da postura: papel escolhido para o time > preferência
+    // salva do jogador no mascote > recomendação por status. Assim o combate
+    // sempre respeita o que o jogador selecionou/salvou.
+    combatRole: normalizeCombatRole(m.combatRole ?? m.preferredCombatRole ?? recommendCombatRole({
       statForce: m.statForce,
       statAgility: m.statAgility,
       statInstinct: m.statInstinct,
@@ -726,7 +730,7 @@ function splitDefeatedLoot(loot: ArenaLoot) {
 export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
   const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
@@ -2067,7 +2071,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 export async function lockBotForTeam(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");

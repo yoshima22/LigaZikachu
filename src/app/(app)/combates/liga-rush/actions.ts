@@ -517,9 +517,11 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
           if (!claimed.count) return false;
           for (const playerId of [match.playerAId, match.playerBId!]) {
             const won = playerId === winnerId;
+            // W/O conta como BYE: +3 pontos e 0 vitórias (pesa menos que vitória
+            // real, pois vitórias é o 1º critério de desempate após os pontos).
             await tx.rushLeagueParticipant.update({
               where: { leagueId_playerId: { leagueId, playerId } },
-              data: { points: { increment: won ? 3 : 0 }, wins: { increment: won ? 1 : 0 }, losses: { increment: won ? 0 : 1 } },
+              data: { points: { increment: won ? 3 : 0 }, losses: { increment: won ? 0 : 1 } },
             });
           }
           return true;
