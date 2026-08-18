@@ -4,6 +4,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
+import { personalityOffenseMult, personalityDefenseMult, debuffResistanceFactor, personalityAgilityMult, rollPlayfulTeamBuff, rollTravessoDebuff } from "@/lib/personality-combat";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
@@ -184,6 +185,7 @@ type ArenaMascot = {
   happiness: number;
   hp: number;
   combatRole: CombatRole;
+  personality?: string | null;
 };
 
 function arenaTypes(m: ArenaMascot) { return m.types?.length ? m.types : getPokemonTypes(m.pokemonId); }
@@ -254,6 +256,7 @@ function toArenaMascot(m: {
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma?: number | null; happiness: number;
   combatRole?: string | null;
   preferredCombatRole?: string | null;
+  personality?: string | null;
   speciesNameOverride?: string | null;
   primaryTypeOverride?: string | null;
   secondaryTypeOverride?: string | null;
@@ -264,6 +267,7 @@ function toArenaMascot(m: {
     id: m.id,
     ownerId: m.playerId,
     pokemonId: m.pokemonId,
+    personality: m.personality ?? null,
     name: m.nickname ?? m.speciesNameOverride ?? getPokemonName(m.pokemonId),
     types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(m.pokemonId),
     level: m.level,
@@ -408,11 +412,11 @@ function tryApplyOpportunistDebuff(actor: ArenaMascot, target: ArenaMascot, debu
   const chance = Math.min(0.62, 0.22 + actor.instinct / 220);
   if (Math.random() > chance) return null;
   const current = debuffs.get(target.id) ?? {};
-  const amount = Math.min(0.25, 0.08 + actor.instinct / 500);
+  const amount = Math.min(0.25, 0.08 + actor.instinct / 500) * debuffResistanceFactor(actor, target);
   const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
   const stat = stats[Math.floor(Math.random() * stats.length)];
   debuffs.set(target.id, { ...current, [stat]: Math.max(current[stat] ?? 0, amount) });
-  return `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}%.`;
+  return `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% (resistência aplicada).`;
 }
 
 function trySaboteurDisrupt(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<string, number>): string | null {
@@ -493,7 +497,13 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   const healCount = new Map<string, number>();
   const survivorUsed = new Set<string>();
   const duelistLock = new Map<string, string>();
+  // Estado dos efeitos de personalidade:
+  const hitTaken = new Set<string>();
+  const dramaticSaveUsed = new Set<string>();
+  const travessoFirstHit = new Set<string>();
+  const playfulTeamBuff: Record<"A" | "D", boolean> = { A: rollPlayfulTeamBuff(attackers), D: rollPlayfulTeamBuff(defenders) };
   let turn = 1;
+  let round = 1;
   let guard: { team: "A" | "D"; reduction: number } | null = null;
 
   while (alive(attackers, hp).length > 0 && alive(defenders, hp).length > 0 && turn <= 80) {
@@ -506,7 +516,8 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
       const actor = entry.mascot;
       const enemyTeam = entry.side === "A" ? defenders : attackers;
-      const actionProfile = getCombatActionsPerRound(actor.agility, alive(enemyTeam, hp).map((m) => getEffectiveStat(m, debuffs, "agility")));
+      const effAgility = actor.agility * personalityAgilityMult(actor, round, playfulTeamBuff[entry.side]);
+      const actionProfile = getCombatActionsPerRound(effAgility, alive(enemyTeam, hp).map((m) => getEffectiveStat(m, debuffs, "agility")));
 
       for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
       const opponents = alive(enemyTeam, hp);
@@ -578,11 +589,13 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const targetHpPct = (hp.get(target.id) ?? 0) / target.hp;
       const survivorDefBonus = target.combatRole === "SURVIVOR" && targetHpPct < 0.30 ? 0.75 : 1;
 
+      const persOff = personalityOffenseMult(actor, target, hp, hitTaken);
+      const persDef = personalityDefenseMult(target, hp, hitTaken);
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
-        * (1 + encourage + scoutBonus) * roleDamageMultiplier(actor, target) * duelistBonus * survivorDmgBonus;
+        * (1 + encourage + scoutBonus) * roleDamageMultiplier(actor, target) * duelistBonus * survivorDmgBonus * persOff;
       const mitigation = vitality * 0.8 + target.level;
       const guarded = guard && guard.team !== entry.side ? guard.reduction : 0;
-      let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * (1 - guarded) * survivorDefBonus));
+      let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * (1 - guarded) * survivorDefBonus * persDef));
 
       // PROVOKER: attacker deals less damage when redirected
       if (provoked) damage = Math.round(damage * 0.92);
@@ -595,16 +608,41 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const survivorLS = trySurvivorLastStand(target, damage, hp, survivorUsed);
       if (survivorLS) damage = survivorLS.newDamage;
 
+      // Dramático: 1x por batalha, 25% de sobreviver a um golpe fatal com 1 HP.
+      let dramaticEffect: string | null = null;
+      if (target.personality === "DRAMATIC" && !dramaticSaveUsed.has(target.id)) {
+        const cur = hp.get(target.id) ?? 0;
+        if (cur - damage <= 0 && Math.random() < 0.25) {
+          damage = cur - 1; dramaticSaveUsed.add(target.id);
+          dramaticEffect = `Dramático ${target.name} fez um último ato e sobreviveu com 1 HP!`;
+        }
+      }
+
       hp.set(target.id, Math.max(0, (hp.get(target.id) ?? 0) - damage));
+      if (damage > 0) hitTaken.add(target.id);
       guard = null;
 
       const debuffEffect = tryApplyOpportunistDebuff(actor, target, debuffs);
+      // Travesso: 1º ataque contra cada inimigo, 15% de -8%×resistência no atributo mais útil.
+      let travessoEffect: string | null = null;
+      const travessoKey = `${actor.id}:${target.id}`;
+      if (!travessoFirstHit.has(travessoKey)) {
+        travessoFirstHit.add(travessoKey);
+        const tv = rollTravessoDebuff(actor, target);
+        if (tv) {
+          const cur = debuffs.get(target.id) ?? {};
+          debuffs.set(target.id, { ...cur, [tv.stat]: Math.max(cur[tv.stat] ?? 0, tv.amount) });
+          travessoEffect = `Travessura de ${actor.name}: -${Math.round(tv.amount * 100)}% de ${tv.stat} de ${target.name}.`;
+        }
+      }
       const saboteurEffect = trySaboteurDisrupt(actor, opponents, hp);
       const effects = [
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador ativo: +${Math.round(encourage * 100)}% impulso.` : null,
         scoutBonus > 0 ? `Batedor ativo: +${Math.round(scoutBonus * 100)}% precisão.` : null,
         debuffEffect,
+        travessoEffect,
+        dramaticEffect,
         saboteurEffect,
         guardianIntercept?.effect,
         survivorLS?.effect,
@@ -621,6 +659,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       turn++;
       }
     }
+    round++;
   }
 
   const aHp = alive(attackers, hp).reduce((sum, m) => sum + (hp.get(m.id) ?? 0), 0);
@@ -730,7 +769,7 @@ function splitDefeatedLoot(loot: ArenaLoot) {
 export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true, personality: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId || team.status !== "ACTIVE" || team.members.length === 0) return null;
   const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
@@ -2071,7 +2110,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
 export async function lockBotForTeam(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
-    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true } } }, orderBy: { slot: "asc" } } },
+    include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true, personality: true } } }, orderBy: { slot: "asc" } } },
   });
   if (!team || team.playerId !== playerId) throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE") throw new Error("Equipe nao esta ativa.");
