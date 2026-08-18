@@ -656,12 +656,15 @@ export async function getStoredAnalysisAction(
 // Só mascotes CAÓTICOS que nunca usaram. Redistribui o TOTAL atual de status pela
 // regra de crescimento caótico nível a nível (sem inflar), preservando o total.
 const CHAOTIC_REROLL_CUTOFF = new Date("2026-08-27T00:00:00-03:00"); // fim de 26/08 BRT
+// Só mascotes "antigos" (nascidos antes desta data) podem usar. Mascotes nascidos
+// a partir de agora ficam de fora — sem afetar quem já usou (chaoticRerollUsedAt).
+const CHAOTIC_REROLL_BORN_BEFORE = new Date("2026-08-19T00:00:00-03:00");
 
 export async function getChaoticRerollStateAction() {
   const me = await requirePlayer();
   const open = Date.now() < CHAOTIC_REROLL_CUTOFF.getTime();
   const candidates = open ? await prisma.mascot.findMany({
-    where: { playerId: me.id, personality: "CHAOTIC", chaoticRerollUsedAt: null, arenaState: "FREE", bazarListed: false },
+    where: { playerId: me.id, personality: "CHAOTIC", chaoticRerollUsedAt: null, arenaState: "FREE", bazarListed: false, hatchedAt: { lt: CHAOTIC_REROLL_BORN_BEFORE } },
     orderBy: [{ level: "desc" }, { nickname: "asc" }],
     select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
   }) : [];
@@ -682,10 +685,11 @@ export async function chaoticStatRerollAction(mascotId: string) {
 
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId, playerId: me.id },
-    select: { id: true, pokemonId: true, personality: true, level: true, chaoticRerollUsedAt: true, arenaState: true, bazarListed: true, operationsLocked: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
+    select: { id: true, pokemonId: true, personality: true, level: true, chaoticRerollUsedAt: true, hatchedAt: true, arenaState: true, bazarListed: true, operationsLocked: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
   });
   if (!mascot) return { ok: false as const, error: "Mascote não encontrado." };
   if (mascot.personality !== "CHAOTIC") return { ok: false as const, error: "Só mascotes de personalidade Caótica podem fazer o re-roll." };
+  if (mascot.hatchedAt >= CHAOTIC_REROLL_BORN_BEFORE) return { ok: false as const, error: "Só mascotes antigos (anteriores a esta atualização) podem usar o re-roll caótico." };
   if (mascot.chaoticRerollUsedAt) return { ok: false as const, error: "Este mascote já usou o re-roll caótico (uso único)." };
   if (mascot.arenaState && mascot.arenaState !== "FREE") return { ok: false as const, error: "O mascote está em batalha ou descansando." };
   if (mascot.bazarListed) return { ok: false as const, error: "Retire o mascote do Bazar antes do re-roll." };

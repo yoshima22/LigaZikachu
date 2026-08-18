@@ -82,7 +82,7 @@ export function ChaoticRerollPanel() {
       {/* Cabeçalho */}
       <div className="rounded-2xl border border-purple-500/40 bg-gradient-to-br from-purple-950/40 to-slate-950 p-4">
         <p className="text-sm font-black text-purple-200">🌀 Re-roll Caótico de Status <span className="ml-1 rounded-full border border-red-400/40 bg-red-500/10 px-2 py-0.5 text-[9px] font-black uppercase text-red-300">tempo limitado</span></p>
-        <p className="mt-1 text-[11px] text-slate-400">Só mascotes <b>Caóticos</b> e apenas <b>uma vez</b> cada. Redistribui o total de status atual pela regra caótica de subida nível a nível — <b>sem inflar</b>. Disponível até <b>26/08/2026</b>.</p>
+        <p className="mt-1 text-[11px] text-slate-400">Só mascotes <b>Caóticos antigos</b> (nascidos antes desta atualização) e apenas <b>uma vez</b> cada — mascotes novos <b>não</b> podem usar. Redistribui o total de status atual pela regra caótica de subida nível a nível, <b>sem inflar</b>. Disponível até <b>26/08/2026</b>.</p>
       </div>
 
       {/* Lista + paginação */}
