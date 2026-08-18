@@ -622,8 +622,9 @@ type PresetMascot = {
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number;
 };
 
-// Aplica as MESMAS regras da montagem de time (6 mascotes, posse, divisão/Megas)
-// e normaliza as posturas usando a preferência salva do jogador como fallback.
+// Valida posse + exatamente 6 mascotes únicos e normaliza as posturas usando a
+// preferência salva do jogador como fallback. Genérico (Liga Semanal e Arena Z);
+// a checagem de divisão/Megas é específica de cada contexto e roda no equipar.
 async function validatePresetMascots(playerId: string, mascotIds: unknown, roles: Record<string, string>) {
   if (!Array.isArray(mascotIds) || mascotIds.length !== 6 || new Set(mascotIds).size !== 6) {
     return { error: "Selecione exatamente 6 mascotes diferentes." as string };
@@ -634,9 +635,6 @@ async function validatePresetMascots(playerId: string, mascotIds: unknown, roles
     select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
   });
   if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." as string };
-  const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
-  const divisionCheck = validateBattleDivision(owned, await getBattleModeDivision("WEEKLY_LEAGUE"));
-  if (!divisionCheck.valid) return { error: divisionCheck.message as string };
   const map = new Map<string, PresetMascot>(owned.map((m) => [m.id, m]));
   const normalizedRoles = Object.fromEntries(ids.map((id) => [id, normalizeCombatRole(roles?.[id] ?? map.get(id)!.preferredCombatRole ?? defaultCombatRoleFor(map.get(id)!))]));
   return { ids, map, normalizedRoles };
@@ -648,7 +646,38 @@ export async function listWeeklyPresetsAction() {
   const player = await getSessionPlayer(session.user.id);
   if (!player) return { error: "Jogador não encontrado" };
   const presets = await prisma.weeklyLeagueTeamPreset.findMany({ where: { playerId: player.id }, orderBy: { createdAt: "asc" } });
-  return { presets: presets.map((p) => ({ id: p.id, name: p.name, mascotIds: (p.mascotIdsJson as string[]) ?? [], roles: (p.rolesJson as Record<string, string>) ?? {} })) };
+
+  // Enriquece com sprite/nível/postura para exibir cards completos sem depender
+  // do estado da página (compartilhável entre Liga Semanal e Arena Z).
+  const allIds = [...new Set(presets.flatMap((p) => (p.mascotIdsJson as string[]) ?? []))];
+  const mascots = allIds.length
+    ? await prisma.mascot.findMany({ where: { id: { in: allIds }, playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true } })
+    : [];
+  const byId = new Map(mascots.map((m) => [m.id, m]));
+
+  return {
+    presets: presets.map((p) => {
+      const ids = (p.mascotIdsJson as string[]) ?? [];
+      const roles = (p.rolesJson as Record<string, string>) ?? {};
+      return {
+        id: p.id,
+        name: p.name,
+        mascotIds: ids,
+        roles,
+        members: ids.map((id) => {
+          const m = byId.get(id);
+          return {
+            id,
+            pokemonId: m?.pokemonId ?? 0,
+            name: m ? (m.nickname ?? getPokemonName(m.pokemonId)) : "removido",
+            level: m?.level ?? 0,
+            role: normalizeCombatRole(roles[id]),
+            missing: !m,
+          };
+        }),
+      };
+    }),
+  };
 }
 
 export async function saveWeeklyPresetAction(input: { presetId?: string; name: string; mascotIds: string[]; roles?: Record<string, string> }) {
@@ -707,9 +736,13 @@ export async function equipWeeklyPresetAction(leagueId: string, battleSlot: numb
   const resolvedMatch = await prisma.weeklyMascotLeagueMatch.findFirst({ where: { leagueId, battleDate, battleSlot, status: { in: ["RESOLVED", "WO"] } }, select: { id: true } });
   if (resolvedMatch) return { error: "Este combate já aconteceu e o time está travado." };
 
-  // Revalida posse/divisão (os mascotes podem ter mudado desde que o preset foi salvo).
+  // Revalida posse (os mascotes podem ter mudado desde que o preset foi salvo).
   const v = await validatePresetMascots(player.id, mascotIds, roles);
   if ("error" in v) return { error: `Não é possível equipar "${preset.name}": ${v.error}` };
+  // Divisão/Megas da Liga Semanal.
+  const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
+  const divisionCheck = validateBattleDivision([...v.map.values()], await getBattleModeDivision("WEEKLY_LEAGUE"));
+  if (!divisionCheck.valid) return { error: `Não é possível equipar "${preset.name}": ${divisionCheck.message}` };
 
   // Um mascote não pode estar em duas equipes do mesmo dia ao mesmo tempo.
   const otherTeams = await prisma.weeklyMascotLeagueDailyTeam.findMany({ where: { leagueId, playerId: player.id, battleDate, battleSlot: { not: battleSlot } } });

@@ -4,9 +4,10 @@ import { useState, useTransition, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, getPokemonElement, getPokemonTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
+import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
@@ -353,6 +354,59 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [now, setNow] = useState(() => Date.now());
   const [levelError, setLevelError] = useState<string | null>(null);
 
+  // ── Presets (compartilhados com a Liga Semanal, carregados sob demanda) ──
+  type ArenaPreset = { id: string; name: string; mascotIds: string[]; roles: Record<string, string>; members: Array<{ id: string; pokemonId: number; name: string; level: number; role: string; missing: boolean }> };
+  const [presetsOpen, setPresetsOpen] = useState(false);
+  const [presetList, setPresetList] = useState<ArenaPreset[]>([]);
+  const [presetLoaded, setPresetLoaded] = useState(false);
+  const [presetLoading, setPresetLoading] = useState(false);
+
+  const loadPresets = useCallback(async () => {
+    setPresetLoading(true);
+    const res = await listWeeklyPresetsAction();
+    if (!("error" in res) && res.presets) setPresetList(res.presets as ArenaPreset[]);
+    setPresetLoaded(true);
+    setPresetLoading(false);
+  }, []);
+  const togglePresets = () => { const n = !presetsOpen; setPresetsOpen(n); if (n && !presetLoaded) void loadPresets(); };
+
+  const applyPreset = (preset: ArenaPreset) => {
+    const ownedIds = preset.mascotIds.filter((id) => mascots.some((m) => m.id === id));
+    if (ownedIds.length === 0) { toast.error("Nenhum mascote deste preset está disponível agora."); return; }
+    const use = ownedIds.slice(0, MAX_MASCOTS);
+    setSelected(new Set(use));
+    const newRoles: Record<string, CombatRole> = {};
+    for (const id of use) newRoles[id] = normalizeCombatRole(preset.roles[id]);
+    setRoles(newRoles);
+    const missing = preset.mascotIds.length - use.length;
+    toast.success(`Preset "${preset.name}" aplicado${missing ? ` (${missing} indisponível${missing > 1 ? "is" : ""})` : ""}.`);
+  };
+
+  const savePreset = () => {
+    if (selected.size !== 6) { toast.error("Selecione exatamente 6 mascotes para salvar um preset."); return; }
+    const nm = window.prompt("Nome do preset:", name.trim() || "Meu preset");
+    if (!nm || !nm.trim()) return;
+    const rolePayload = Object.fromEntries([...selected].map((id) => {
+      const mascot = mascots.find((m) => m.id === id);
+      return [id, roles[id] ?? (mascot ? defaultRoleForMascot(mascot) : "ATTACKER")];
+    }));
+    startTransition(async () => {
+      const res = await saveWeeklyPresetAction({ name: nm.trim(), mascotIds: [...selected], roles: rolePayload });
+      if (res && "error" in res && res.error) { toast.error(res.error); return; }
+      toast.success("Preset salvo!");
+      if (presetLoaded) void loadPresets();
+    });
+  };
+
+  const deletePreset = (id: string, nm: string) => {
+    if (!confirm(`Excluir o preset "${nm}"?`)) return;
+    startTransition(async () => {
+      const res = await deleteWeeklyPresetAction(id);
+      if (res && "error" in res && res.error) { toast.error(res.error); return; }
+      void loadPresets();
+    });
+  };
+
   useEffect(() => {
     const id = setInterval(() => setNow(Date.now()), 3000);
     return () => clearInterval(id);
@@ -447,6 +501,55 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
   return (
     <form onSubmit={handleSubmit} className="mt-3 space-y-3">
+
+      {/* ── Presets (salvar / aplicar) — compartilhados com a Liga Semanal ── */}
+      <div className="rounded-xl border border-purple-500/25 bg-purple-950/10">
+        <div className="flex items-center justify-between gap-2 px-3 py-2">
+          <button type="button" onClick={togglePresets} className="flex items-center gap-2 text-[11px] font-black uppercase tracking-widest text-purple-200">
+            🧩 Presets {presetLoaded && `(${presetList.length}/10)`}
+            <span className={`text-xs transition-transform ${presetsOpen ? "rotate-180" : ""}`}>▼</span>
+          </button>
+          <button
+            type="button"
+            onClick={savePreset}
+            disabled={selected.size !== 6 || pending}
+            title={selected.size !== 6 ? "Selecione 6 mascotes para salvar um preset" : "Salvar equipe atual como preset"}
+            className="rounded-lg border border-purple-400/50 bg-purple-500/15 px-3 py-1.5 text-[11px] font-bold text-purple-100 hover:bg-purple-500/25 disabled:opacity-40"
+          >
+            💾 Salvar Preset
+          </button>
+        </div>
+        {presetsOpen && (
+          <div className="space-y-2 border-t border-purple-500/20 p-3">
+            {presetLoading ? (
+              <p className="text-xs text-slate-500">Carregando presets…</p>
+            ) : presetList.length === 0 ? (
+              <p className="text-xs text-slate-500">Nenhum preset salvo. Monte 6 mascotes e clique em “Salvar Preset”.</p>
+            ) : presetList.map((p) => (
+              <div key={p.id} className="rounded-xl border border-border bg-slate-950/50 p-2.5">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="truncate text-sm font-bold text-white">{p.name}</p>
+                  <div className="flex items-center gap-2">
+                    <button type="button" onClick={() => applyPreset(p)} className="rounded-lg bg-[#FFCB05] px-3 py-1 text-[10px] font-black text-[#1A1A2E] hover:bg-[#FFD700]">Aplicar</button>
+                    <button type="button" onClick={() => deletePreset(p.id, p.name)} className="text-[10px] text-red-300 underline hover:text-red-200">Excluir</button>
+                  </div>
+                </div>
+                <div className="mt-2 grid grid-cols-3 gap-1.5 sm:grid-cols-6">
+                  {p.members.map((mem) => (
+                    <div key={mem.id} className={`rounded-lg border p-1.5 text-center ${mem.missing ? "border-red-500/40 bg-red-500/5" : "border-[#FFCB05]/20 bg-[#FFCB05]/5"}`}>
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={getSpriteUrl(mem.pokemonId, true)} alt="" className="mx-auto h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} onError={(e) => { (e.target as HTMLImageElement).src = getSpriteUrl(mem.pokemonId); }} />
+                      <p className="truncate text-[10px] font-semibold text-slate-200">{mem.name}</p>
+                      <p className="text-[9px] text-slate-500">Nv.{mem.level}</p>
+                      <p className="truncate text-[9px] font-semibold text-yellow-300">{getCombatRoleLabel(mem.role)}</p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
 
       {/* ── Barra de seleção ── */}
       {selected.size > 0 && (
