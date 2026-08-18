@@ -309,10 +309,10 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
       )}
 
       {/* Tabs */}
-      <div className="mb-6 flex flex-wrap gap-2">
+      <div className="mb-6 flex gap-2 overflow-x-auto pb-1">
         {(["recycle", "shop", "analyze", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
-            className={`flex items-center gap-2 rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
+            className={`flex shrink-0 items-center gap-2 whitespace-nowrap rounded-xl px-4 py-2 text-sm font-semibold transition-colors ${
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : t === "caotico" ? "border border-purple-400/50 text-purple-200 hover:text-white" : "border border-border text-slate-400 hover:text-white"
             }`}
           >

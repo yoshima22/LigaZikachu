@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
+import { EffectChips } from "@/components/replay-effect-chips";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles, Pause, Play } from "lucide-react";
@@ -404,7 +405,7 @@ function BattleAnimationModal({
                     )}
                   </>
                 )}
-                {turn.effect && <span className="block pt-1 text-[10px] text-slate-500">{turn.effect}</span>}
+                {turn.effect && <EffectChips effect={turn.effect} className="pt-1" />}
               </p>
             ) : (
               <p className="text-[11px] text-slate-500">Calculando resultado...</p>

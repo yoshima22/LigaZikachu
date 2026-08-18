@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
+import { EffectChips } from "@/components/replay-effect-chips";
 
 export type TurnLog = {
   turn: number;
@@ -402,7 +403,7 @@ export function LeagueBattleReplayModal({
                     <span className="font-bold text-emerald-400">+{current.damage} HP</span>
                   </p>
                 )}
-                {current.effect && <p className="text-[10px] text-purple-300 mt-1">{current.effect}</p>}
+                {current.effect && <EffectChips effect={current.effect} className="mt-1 justify-center" />}
               </>
             ) : finished ? (
               <div>
