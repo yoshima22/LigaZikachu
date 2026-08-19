@@ -2,10 +2,10 @@
 
 import { useTransition } from "react";
 import { toast } from "sonner";
-import { setSpecEnabledAction, setSpecResolutionAction, setSpecModeAction } from "@/app/(app)/spec/admin-actions";
-import type { SpecResolution, SpecMode } from "@/lib/spec/constants";
+import { setSpecEnabledAction, setSpecResolutionAction, setSpecModeAction, setSpecFpsAction, setSpecQualityPriorityAction } from "@/app/(app)/spec/admin-actions";
+import type { SpecResolution, SpecMode, SpecFps, SpecQualityPriority } from "@/lib/spec/constants";
 
-export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLimit, resolution, mode }: { enabled: boolean; providerConfigured: boolean; estimatedGb?: number; gbLimit?: number; resolution: SpecResolution; mode: SpecMode }) {
+export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLimit, resolution, mode, fps, qualityPriority }: { enabled: boolean; providerConfigured: boolean; estimatedGb?: number; gbLimit?: number; resolution: SpecResolution; mode: SpecMode; fps: SpecFps; qualityPriority: SpecQualityPriority }) {
   const [pending, start] = useTransition();
   const toggle = () => start(async () => {
     const res = await setSpecEnabledAction(!enabled);
@@ -16,6 +16,16 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
     const res = await setSpecResolutionAction(value);
     if (!res.ok) toast.error(res.error ?? "Falha ao salvar.");
     else toast.success(`Transmissões em ${value}p.`);
+  });
+  const setFps = (value: SpecFps) => start(async () => {
+    const res = await setSpecFpsAction(value);
+    if (!res.ok) toast.error(res.error ?? "Falha ao salvar.");
+    else toast.success(`Transmissões a ${value} fps.`);
+  });
+  const setQuality = (value: SpecQualityPriority) => start(async () => {
+    const res = await setSpecQualityPriorityAction(value);
+    if (!res.ok) toast.error(res.error ?? "Falha ao salvar.");
+    else toast.success(value === "fluidity" ? "Priorizando fluidez (movimento)." : "Priorizando nitidez (texto).");
   });
   const setMode = (value: SpecMode) => start(async () => {
     const res = await setSpecModeAction(value);
@@ -71,6 +81,38 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
             {r}p
           </button>
         ))}
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-purple-500/20 pt-3">
+        <span className="text-[11px] font-bold text-purple-200">Frame rate:</span>
+        {([12, 24, 30] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFps(f)}
+            disabled={pending || fps === f}
+            className={`rounded-lg border px-3 py-1 text-[11px] font-black transition-colors disabled:opacity-100 ${fps === f ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-300 hover:border-slate-500"}`}
+          >
+            {f} fps
+          </button>
+        ))}
+        <span className="w-full text-[10px] text-slate-500">Mais fps = transmissão mais fluida, porém mais pesada (no P2P, multiplica pelo nº de espectadores). 24 fps é um bom equilíbrio.</span>
+      </div>
+
+      <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-purple-500/20 pt-3">
+        <span className="text-[11px] font-bold text-purple-200">Sob banda limitada, priorizar:</span>
+        {([["sharpness", "Nitidez (texto)"], ["fluidity", "Fluidez (movimento)"]] as const).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setQuality(value)}
+            disabled={pending || qualityPriority === value}
+            className={`rounded-lg border px-3 py-1 text-[11px] font-black transition-colors disabled:opacity-100 ${qualityPriority === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-300 hover:border-slate-500"}`}
+          >
+            {label}
+          </button>
+        ))}
+        <span className="w-full text-[10px] text-slate-500">Nitidez segura a resolução e derruba frames no movimento (bom para ler cartas). Fluidez mantém os frames e reduz a resolução nos picos (melhor para ação).</span>
       </div>
     </div>
   );

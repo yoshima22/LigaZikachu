@@ -3,7 +3,7 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
-import { SPEC_RESOLUTION_PROFILES, SPEC_TARGET_FPS, SPEC_P2P_PROFILE } from "@/lib/spec/constants";
+import { SPEC_RESOLUTION_PROFILES, SPEC_P2P_PROFILE, specScaledBitrate } from "@/lib/spec/constants";
 import { SpecBroadcaster } from "@/components/spec/spec-broadcaster";
 import { SpecBroadcasterP2P } from "@/components/spec/spec-broadcaster-p2p";
 import { SpecBroadcasterYouTube } from "@/components/spec/spec-broadcaster-youtube";
@@ -53,20 +53,22 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
         <SpecBroadcasterP2P
           streamId={stream.id}
           matchLabel={view?.title ?? view?.matchLabel ?? "Partida"}
-          maxVideoBitrate={SPEC_P2P_PROFILE.maxVideoBitrate}
+          maxVideoBitrate={specScaledBitrate(SPEC_P2P_PROFILE.maxVideoBitrate, config.fps)}
           width={SPEC_P2P_PROFILE.width}
           height={SPEC_P2P_PROFILE.height}
-          fps={SPEC_P2P_PROFILE.fps}
+          fps={config.fps}
+          qualityPriority={config.qualityPriority}
           resolutionLabel={SPEC_P2P_PROFILE.label}
         />
       ) : (
         <SpecBroadcaster
           streamId={stream.id}
           matchLabel={view?.title ?? view?.matchLabel ?? "Partida"}
-          maxVideoBitrate={profile.maxVideoBitrate}
+          maxVideoBitrate={specScaledBitrate(profile.maxVideoBitrate, config.fps)}
           width={profile.width}
           height={profile.height}
-          fps={SPEC_TARGET_FPS}
+          fps={config.fps}
+          qualityPriority={config.qualityPriority}
           resolutionLabel={profile.label}
         />
       )}

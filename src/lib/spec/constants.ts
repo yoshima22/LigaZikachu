@@ -80,8 +80,37 @@ export type SpecResolution = "720" | "1080";
 
 export const SPEC_DEFAULT_RESOLUTION: SpecResolution = "1080";
 
-/** Frame rate alvo. TCG é quase estático: 12fps economiza muito sem perder leitura. */
-export const SPEC_TARGET_FPS = Number(process.env.SPEC_TARGET_FPS ?? 12);
+/** Frame rate alvo padrão (fallback quando não há escolha do admin). */
+export const SPEC_TARGET_FPS = Number(process.env.SPEC_TARGET_FPS ?? 24);
+
+/** Frame rate selecionável pelo admin. 24fps é o novo padrão (fluido sem exagero). */
+export type SpecFps = 12 | 24 | 30;
+export const SPEC_FPS_OPTIONS: SpecFps[] = [12, 24, 30];
+export const SPEC_DEFAULT_FPS: SpecFps = 24;
+
+/**
+ * Prioridade de qualidade quando a banda/CPU aperta:
+ * - "sharpness": mantém resolução (texto nítido) e derruba frames no movimento.
+ * - "fluidity": mantém frame rate (movimento fluido) e derruba resolução no pico.
+ */
+export type SpecQualityPriority = "sharpness" | "fluidity";
+export const SPEC_DEFAULT_QUALITY_PRIORITY: SpecQualityPriority = "sharpness";
+
+/** Traduz a prioridade para as dicas do encoder WebRTC. */
+export function specEncodeHints(priority: SpecQualityPriority): {
+  contentHint: "detail" | "motion";
+  degradationPreference: "maintain-resolution" | "maintain-framerate";
+} {
+  return priority === "fluidity"
+    ? { contentHint: "motion", degradationPreference: "maintain-framerate" }
+    : { contentHint: "detail", degradationPreference: "maintain-resolution" };
+}
+
+/** Escala o teto de bitrate conforme o FPS (mais frames precisam de mais bits). */
+export function specScaledBitrate(base: number, fps: SpecFps): number {
+  const factor = fps >= 30 ? 1.3 : fps >= 24 ? 1.0 : 0.7;
+  return Math.round(base * factor);
+}
 
 /**
  * Perfil de captura por resolução: dimensões-alvo + teto de bitrate de vídeo (bps).
@@ -89,8 +118,8 @@ export const SPEC_TARGET_FPS = Number(process.env.SPEC_TARGET_FPS ?? 12);
  * barato — e o bitrate multiplica pelo nº de espectadores no custo de egress.
  */
 export const SPEC_RESOLUTION_PROFILES: Record<SpecResolution, { width: number; height: number; maxVideoBitrate: number; label: string }> = {
-  "720":  { width: 1280, height: 720,  maxVideoBitrate: 900_000,   label: "720p" },
-  "1080": { width: 1920, height: 1080, maxVideoBitrate: 1_500_000, label: "1080p" },
+  "720":  { width: 1280, height: 720,  maxVideoBitrate: 1_500_000, label: "720p" },
+  "1080": { width: 1920, height: 1080, maxVideoBitrate: 3_000_000, label: "1080p" },
 };
 
 /**
@@ -102,7 +131,7 @@ export const SPEC_P2P_PROFILE = {
   width: Number(process.env.SPEC_P2P_WIDTH ?? 960),
   height: Number(process.env.SPEC_P2P_HEIGHT ?? 540),
   fps: Number(process.env.SPEC_P2P_FPS ?? 10),
-  maxVideoBitrate: Number(process.env.SPEC_P2P_BITRATE ?? 700_000),
+  maxVideoBitrate: Number(process.env.SPEC_P2P_BITRATE ?? 1_200_000),
   label: "540p",
 };
 

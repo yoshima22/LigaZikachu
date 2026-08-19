@@ -5,15 +5,17 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { endSpecStreamAction } from "@/app/(app)/spec/actions";
 import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
+import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
 
 type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" | "error";
 
 // Broadcaster: captura de tela (getDisplayMedia) + publicação WebRTC. Envia uma
 // única publicação ao SFU; o fan-out para espectadores é da Cloudflare. Mostra
 // só o preview local (não puxa o próprio stream do SFU, para não gastar egress).
-export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, fps, resolutionLabel }: {
-  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; resolutionLabel: string;
+export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, fps, qualityPriority = "sharpness", resolutionLabel }: {
+  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; qualityPriority?: SpecQualityPriority; resolutionLabel: string;
 }) {
+  const hints = specEncodeHints(qualityPriority);
   const router = useRouter();
   const previewRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
@@ -50,7 +52,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       // Dica ao encoder: conteúdo com detalhes/texto (cartas), prioriza nitidez
       // sobre fluidez — combina com o frame rate baixo e reduz bitrate.
       const vTrack = stream.getVideoTracks()[0];
-      if (vTrack) { try { vTrack.contentHint = "detail"; } catch { /* nem todo navegador suporta */ } }
+      if (vTrack) { try { vTrack.contentHint = hints.contentHint; } catch { /* nem todo navegador suporta */ } }
       if (previewRef.current) previewRef.current.srcObject = stream;
 
       // Encerra a live se o usuário parar o compartilhamento pelo navegador.
@@ -78,8 +80,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
           if (!params.encodings || params.encodings.length === 0) params.encodings = [{}];
           params.encodings[0].maxBitrate = maxVideoBitrate;
           params.encodings[0].maxFramerate = fps;
-          // Prioriza manter a resolução (texto legível) e derrubar frames no movimento.
-          (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = "maintain-resolution";
+          (params as RTCRtpSendParameters & { degradationPreference?: string }).degradationPreference = hints.degradationPreference;
           await videoSender.setParameters(params);
         } catch { /* alguns navegadores não suportam; segue sem o limite */ }
       }

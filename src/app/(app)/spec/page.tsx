@@ -35,7 +35,7 @@ export default async function SpecPage() {
         </div>
       </header>
 
-      {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} estimatedGb={usage?.estimatedGb} gbLimit={SPEC_MONTHLY_GB_LIMIT} resolution={config.resolution} mode={config.mode} />}
+      {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} estimatedGb={usage?.estimatedGb} gbLimit={SPEC_MONTHLY_GB_LIMIT} resolution={config.resolution} mode={config.mode} fps={config.fps} qualityPriority={config.qualityPriority} />}
       {admin && config.enabled && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#FFCB05]/20 bg-slate-950/40 p-3">
           <p className="text-xs text-slate-400">Abra uma transmissão fora de partida/torneio (bate-papo, evento, etc.).</p>
