@@ -5,6 +5,21 @@ import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
+
+// Monta os 3 jogos do dia do jogador (uma linha por rodada) na Liga Semanal.
+function semanalDayGames(todayMatches: any[], playerId: string): PlayerDayGame[] {
+  return [1,2,3].map(slot => {
+    const m = todayMatches.find((x:any) => x.battleSlot===slot && (x.playerAId===playerId || x.playerBId===playerId));
+    const time = BATTLE_TIMES_BRT[slot-1] ?? "";
+    if (!m) return null;
+    if (m.status==="BYE") return { slot, time, opponentName: null, status: "BYE", myResult: null };
+    const opponentName = m.playerAId===playerId ? (m.playerBName ?? null) : m.playerAName;
+    const resolved = m.status==="RESOLVED" || m.status==="WO";
+    const myResult: PlayerDayGame["myResult"] = !resolved ? null : m.isDraw ? "DRAW" : m.winnerId===playerId ? "WIN" : "LOSS";
+    return { slot, time, opponentName, status: m.status, myResult };
+  }).filter((g): g is PlayerDayGame => g !== null);
+}
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import {
@@ -72,6 +87,7 @@ type PageData = {
     unlocksAt: string;
   };
   todayMatches: any[];
+  previousMatches?: any[];
   availableMascots: any[];
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
@@ -433,6 +449,9 @@ function LeagueTab({ data }: { data: PageData }) {
           <p>Desempate: Pontos → Vitórias → Dano Causado → Saldo de Sobreviventes → Dano Recebido (menor)</p>
         </div>
       </div>
+
+      {/* 3 jogos do dia do jogador */}
+      <PlayerDayGames games={semanalDayGames(data.todayMatches ?? [], data.player.id)} accent="yellow" />
 
       {/* Standings table */}
       <div className="rounded-2xl border border-border bg-slate-900/60 p-4">
@@ -1314,6 +1333,7 @@ function ResultsTab({ data }: { data: PageData }) {
   const [hideResults, setHideResults] = useState(data.hideResults);
   const [revealed, setRevealed] = useState<Set<string>>(() => new Set(data.revealedMatchIds));
   const [savingPref, startSavingPref] = useTransition();
+  const [view, setView] = useState<"today" | "history">("today");
 
   const toggleHideResults = () => {
     const next = !hideResults;
@@ -1373,11 +1393,120 @@ function ResultsTab({ data }: { data: PageData }) {
     return <div className="py-10 text-center text-sm text-slate-500">Matchups ainda não gerados. Admin pode gerar na aba Admin.</div>;
   }
 
-  const slotGroups = [1, 2, 3].map(slot => ({
-    slot,
-    time: BATTLE_TIMES_BRT[slot - 1],
-    matches: data.todayMatches.filter((m: any) => m.battleSlot === slot),
-  }));
+  const renderMatch = (match: any) => {
+            const odds = match.resultJson as any;
+            const isScheduled = match.status === "SCHEDULED";
+            const isResolved = match.status === "RESOLVED";
+            const isWO = match.status === "WO";
+            const isBye = match.status === "BYE";
+            const hasResult = isResolved || isWO;
+            const spoiled = isSpoiled(match.id);
+            const showResult = hasResult && spoiled;
+            const winnerIsA = match.winnerId === match.playerAId;
+            const winnerIsB = match.winnerId === match.playerBId;
+            const involvesMe = match.playerAId === data.player.id || match.playerBId === data.player.id;
+            const opponentId = match.playerAId === data.player.id ? match.playerBId : match.playerBId === data.player.id ? match.playerAId : null;
+
+            if (isBye) {
+              return (
+                <div key={match.id} className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-500">
+                  {match.playerAName} — <span className="text-slate-600">BYE (+3 pts)</span>
+                </div>
+              );
+            }
+
+            const woInfo = isWO ? (match.resultJson as any) : null;
+            const woLoserId = woInfo?.loserId ?? match.loserId ?? null;
+            const woLoserName = woLoserId === match.playerAId ? match.playerAName : woLoserId === match.playerBId ? (match.playerBName ?? "o jogador") : "o jogador";
+            const woReasonText = (woInfo?.reason === "NO_MASCOTS" || woInfo?.availableMascots === 0)
+              ? `Não há mascotes disponíveis para uso do jogador "${woLoserName}".`
+              : `O jogador "${woLoserName}" não tinha 6 mascotes disponíveis${typeof woInfo?.availableMascots === "number" ? ` (tinha ${woInfo.availableMascots})` : ""}.`;
+
+            return (
+              <div key={match.id} className={`rounded-xl border p-3 space-y-1 ${
+                involvesMe ? "ring-1 ring-[#FFCB05]/45 " : ""
+              }${
+                isScheduled ? "border-yellow-500/20 bg-yellow-500/5" :
+                isWO && showResult ? "border-orange-500/25 bg-orange-500/5" :
+                isResolved && showResult ? "border-green-500/20 bg-green-500/5" :
+                "border-border bg-slate-900/60"
+              }`}>
+                <div className="flex items-center justify-between">
+                  {isScheduled && <span className="text-[10px] font-semibold text-yellow-400">⏳ Agendado</span>}
+                  {hasResult && !spoiled && <span className="text-[10px] font-semibold text-slate-500">🙈 Resultado oculto</span>}
+                  {isResolved && showResult && <span className="text-[10px] font-semibold text-green-400">✓ Resolvido</span>}
+                  {isWO && showResult && <span className="text-[10px] font-semibold text-orange-400">⚠ W/O (vitória sem combate)</span>}
+                </div>
+
+                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
+                  <div className={`text-right ${match.playerAId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
+                    <p className="text-xs font-bold">{match.playerAName}</p>
+                    {odds?.oddsA && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsA).toFixed(2)}×</p>}
+                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
+                  </div>
+
+                  <span className="text-xs font-bold text-slate-500 px-2">vs</span>
+
+                  <div className={`text-left ${match.playerBId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
+                    <p className="text-xs font-bold">{match.playerBName ?? "—"}</p>
+                    {odds?.oddsB && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsB).toFixed(2)}×</p>}
+                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
+                  </div>
+                </div>
+
+                {isResolved && showResult && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
+                {isWO && showResult && (
+                  <p className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-2 py-1 text-[10px] text-orange-200">
+                    <strong>Vitória por W/O.</strong> {woReasonText}
+                  </p>
+                )}
+
+                {hasResult && !spoiled && (
+                  <button
+                    onClick={() => revealMatch(match.id)}
+                    className="mt-1 w-full rounded-lg border border-slate-500/30 bg-slate-500/10 py-1 text-[10px] font-semibold text-slate-300 hover:bg-slate-500/20 transition-colors"
+                  >
+                    Revelar resultado
+                  </button>
+                )}
+
+                {opponentId && involvesMe && (
+                  <>
+                    <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId, match.id)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
+                      {analysisPending && analysisTargetId === opponentId ? "Calculando análise..." : "Analisar adversário"}
+                    </button>
+                    {analysisError?.matchId === match.id && <p className="text-center text-[9px] text-red-300">{analysisError?.message}</p>}
+                  </>
+                )}
+                {isResolved && match.replayJson && (
+                  <button
+                    onClick={() => openReplay(match)}
+                    className="mt-1 w-full rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 py-1 text-[10px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors"
+                  >
+                    {hasResult && !spoiled ? "Assistir replay (revela o resultado)" : "Ver Replay"}
+                  </button>
+                )}
+              </div>
+            );
+  };
+
+  const renderSlotGroups = (dayMatches: any[]) => [1, 2, 3].map(slot => {
+    const matches = dayMatches.filter((m: any) => m.battleSlot === slot);
+    return (
+      <div key={slot} className="space-y-2">
+        <div className="flex items-center gap-2">
+          <span className="text-xs font-bold text-yellow-300">Rodada {slot}</span>
+          <span className="text-[10px] text-slate-500">{BATTLE_TIMES_BRT[slot - 1]} BRT</span>
+        </div>
+        {matches.length === 0 ? <p className="text-[11px] text-slate-600 pl-2">Sem confrontos nesta rodada.</p> : matches.map(renderMatch)}
+      </div>
+    );
+  });
+
+  const previousMatches: any[] = data.previousMatches ?? [];
+  const previousByDay = new Map<string, any[]>();
+  for (const m of previousMatches) { const arr = previousByDay.get(m.battleDate) ?? []; arr.push(m); previousByDay.set(m.battleDate, arr); }
+  const previousDays = [...previousByDay.keys()].sort((a, b) => b.localeCompare(a));
 
   return (
     <div className="space-y-4">
@@ -1399,7 +1528,7 @@ function ResultsTab({ data }: { data: PageData }) {
       )}
       {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}
 
-      <h3 className="text-sm font-bold text-slate-200">Confrontos de Hoje</h3>
+      <h3 className="text-sm font-bold text-slate-200">Confrontos</h3>
 
       {/* Preferência de esconder resultados (spoiler) */}
       <div className="rounded-xl border border-border bg-slate-900/60 p-3">
@@ -1428,117 +1557,23 @@ function ResultsTab({ data }: { data: PageData }) {
 
       <OrderSabotageBanner sabotage={data.orderSabotage} stepState={data.orderLeagueStepState} compact />
 
-      {slotGroups.map(({ slot, time, matches }) => (
-        <div key={slot} className="space-y-2">
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-yellow-300">Rodada {slot}</span>
-            <span className="text-[10px] text-slate-500">{time} BRT</span>
-          </div>
+      {/* Sub-abas: hoje x dias anteriores (mesma semana, todos os jogadores) */}
+      <div className="flex gap-1">
+        {([["today", "Hoje"], ["history", "Dias anteriores"]] as const).map(([id, label]) => (
+          <button key={id} type="button" onClick={() => setView(id)} className={`rounded-lg px-3 py-1 text-[11px] font-bold transition-colors ${view === id ? "bg-yellow-500/20 text-yellow-300" : "text-slate-400 hover:bg-slate-800"}`}>{label}</button>
+        ))}
+      </div>
 
-          {matches.length === 0 ? (
-            <p className="text-[11px] text-slate-600 pl-2">Sem confrontos nesta rodada.</p>
-          ) : matches.map((match: any) => {
-            const odds = match.resultJson as any;
-            const isScheduled = match.status === "SCHEDULED";
-            const isResolved = match.status === "RESOLVED";
-            const isWO = match.status === "WO";
-            const isBye = match.status === "BYE";
-            const hasResult = isResolved || isWO;
-            // Resultado visível só se a opção está desligada ou a partida foi revelada.
-            const spoiled = isSpoiled(match.id);
-            const showResult = hasResult && spoiled;
-            const winnerIsA = match.winnerId === match.playerAId;
-            const winnerIsB = match.winnerId === match.playerBId;
-            const involvesMe = match.playerAId === data.player.id || match.playerBId === data.player.id;
-            const opponentId = match.playerAId === data.player.id ? match.playerBId : match.playerBId === data.player.id ? match.playerAId : null;
-
-            if (isBye) {
-              return (
-                <div key={match.id} className="rounded-xl border border-slate-700/50 bg-slate-900/40 px-4 py-2 text-[11px] text-slate-500">
-                  {match.playerAName} — <span className="text-slate-600">BYE (+3 pts)</span>
-                </div>
-              );
-            }
-
-            // Motivo do W/O (jogador sem mascotes disponíveis).
-            const woInfo = isWO ? (match.resultJson as any) : null;
-            const woLoserId = woInfo?.loserId ?? match.loserId ?? null;
-            const woLoserName = woLoserId === match.playerAId ? match.playerAName : woLoserId === match.playerBId ? (match.playerBName ?? "o jogador") : "o jogador";
-            const woReasonText = (woInfo?.reason === "NO_MASCOTS" || woInfo?.availableMascots === 0)
-              ? `Não há mascotes disponíveis para uso do jogador "${woLoserName}".`
-              : `O jogador "${woLoserName}" não tinha 6 mascotes disponíveis${typeof woInfo?.availableMascots === "number" ? ` (tinha ${woInfo.availableMascots})` : ""}.`;
-
-            return (
-              <div key={match.id} className={`rounded-xl border p-3 space-y-1 ${
-                involvesMe ? "ring-1 ring-[#FFCB05]/45 " : ""
-              }${
-                isScheduled ? "border-yellow-500/20 bg-yellow-500/5" :
-                isWO && showResult ? "border-orange-500/25 bg-orange-500/5" :
-                isResolved && showResult ? "border-green-500/20 bg-green-500/5" :
-                "border-border bg-slate-900/60"
-              }`}>
-                <div className="flex items-center justify-between">
-                  {isScheduled && <span className="text-[10px] font-semibold text-yellow-400">⏳ Agendado</span>}
-                  {hasResult && !spoiled && <span className="text-[10px] font-semibold text-slate-500">🙈 Resultado oculto</span>}
-                  {isResolved && showResult && <span className="text-[10px] font-semibold text-green-400">✓ Resolvido</span>}
-                  {isWO && showResult && <span className="text-[10px] font-semibold text-orange-400">⚠ W/O (vitória sem combate)</span>}
-                </div>
-
-                {/* Matchup card */}
-                <div className="grid grid-cols-[1fr_auto_1fr] gap-2 items-center">
-                  <div className={`text-right ${match.playerAId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsA ? "text-green-300" : "text-slate-200"}`}>
-                    <p className="text-xs font-bold">{match.playerAName}</p>
-                    {odds?.oddsA && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsA).toFixed(2)}×</p>}
-                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerADamageDealt} | Sobr: {match.playerASurvivors}</p>}
-                  </div>
-
-                  <span className="text-xs font-bold text-slate-500 px-2">vs</span>
-
-                  <div className={`text-left ${match.playerBId === data.player.id ? "text-[#FFCB05]" : showResult && winnerIsB ? "text-green-300" : "text-slate-200"}`}>
-                    <p className="text-xs font-bold">{match.playerBName ?? "—"}</p>
-                    {odds?.oddsB && isScheduled && <p className="text-[10px] text-yellow-400 font-semibold">{Number(odds.oddsB).toFixed(2)}×</p>}
-                    {isResolved && showResult && <p className="text-[9px] text-slate-500">Dano: {match.playerBDamageDealt} | Sobr: {match.playerBSurvivors}</p>}
-                  </div>
-                </div>
-
-                {isResolved && showResult && match.isDraw && <p className="text-[10px] text-center text-slate-400 font-semibold">Empate</p>}
-                {isWO && showResult && (
-                  <p className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-2 py-1 text-[10px] text-orange-200">
-                    <strong>Vitória por W/O.</strong> {woReasonText}
-                  </p>
-                )}
-
-                {/* Revelar resultado sem assistir (só quando a opção de esconder está ativa) */}
-                {hasResult && !spoiled && (
-                  <button
-                    onClick={() => revealMatch(match.id)}
-                    className="mt-1 w-full rounded-lg border border-slate-500/30 bg-slate-500/10 py-1 text-[10px] font-semibold text-slate-300 hover:bg-slate-500/20 transition-colors"
-                  >
-                    Revelar resultado
-                  </button>
-                )}
-
-                {opponentId && involvesMe && (
-                  <>
-                    <button disabled={analysisPending && analysisTargetId === opponentId} onClick={() => loadOpponentAnalysis(opponentId, match.id)} className="mt-1 w-full rounded-lg border border-cyan-400/25 bg-cyan-400/5 py-1 text-[10px] font-semibold text-cyan-300 hover:bg-cyan-400/10 disabled:cursor-wait disabled:opacity-50 transition-colors">
-                      {analysisPending && analysisTargetId === opponentId ? "Calculando análise..." : "Analisar adversário"}
-                    </button>
-                    {analysisError?.matchId === match.id && <p className="text-center text-[9px] text-red-300">{analysisError?.message}</p>}
-                  </>
-                )}
-                {isResolved && match.replayJson && (
-                  <button
-                    onClick={() => openReplay(match)}
-                    className="mt-1 w-full rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 py-1 text-[10px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors"
-                  >
-                    {hasResult && !spoiled ? "Assistir replay (revela o resultado)" : "Ver Replay"}
-                  </button>
-                )}
+      {view === "today"
+        ? renderSlotGroups(data.todayMatches)
+        : previousDays.length === 0
+          ? <p className="text-xs text-slate-500">Ainda não há confrontos de dias anteriores nesta semana.</p>
+          : previousDays.map((day) => (
+              <div key={day} className="space-y-2">
+                <h4 className="text-xs font-black uppercase tracking-wide text-yellow-300">{new Date(day + "T12:00:00").toLocaleDateString("pt-BR")}</h4>
+                {renderSlotGroups(previousByDay.get(day) ?? [])}
               </div>
-            );
-          })}
-        </div>
-      ))}
+            ))}
     </div>
   );
 }

@@ -115,6 +115,10 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
     if (t.targetPokemonId && !seen.get(t.targetId)!.pokemonId) seen.get(t.targetId)!.pokemonId = t.targetPokemonId;
     if (t.actorLevel && !seen.get(t.actorId)!.level) seen.get(t.actorId)!.level = t.actorLevel;
     if (t.targetLevel && !seen.get(t.targetId)!.level) seen.get(t.targetId)!.level = t.targetLevel;
+    // Postura: o lineup salvo pode não trazer o rótulo (ex.: Liga Rush guarda
+    // combatRole em vez de role). Preenche a partir dos turnos, que sempre têm.
+    if (t.actorRole && !seen.get(t.actorId)!.role) seen.get(t.actorId)!.role = t.actorRole;
+    if (t.targetRole && !seen.get(t.targetId)!.role) seen.get(t.targetId)!.role = t.targetRole;
   }
 
   const damageTaken = new Map<string, number>();

@@ -55,6 +55,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   let participants: unknown[] = [];
   let myTeams: unknown[] = [];
   let todayMatches: unknown[] = [];
+  let previousMatches: unknown[] = [];
   let allMascots: unknown[] = [];
   let weekHighlights: any[] = [];
   let opponentAnalyses: Record<string, any> = {};
@@ -375,6 +376,40 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         playerAName: mpNames.get(m.playerAId) ?? "Jogador",
         playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
       }));
+
+      // Dias anteriores desta mesma semana (todos os jogadores), para a sub-aba.
+      const previousRaw = await (prisma as any).weeklyMascotLeagueMatch.findMany({
+        where: { leagueId: (currentLeague as any).id, battleDate: { lt: matchDate } },
+        select: { id: true, roundNumber: true, battleDate: true, battleSlot: true, playerAId: true, playerBId: true, winnerId: true, loserId: true, isDraw: true, playerASurvivors: true, playerBSurvivors: true, playerADamageDealt: true, playerBDamageDealt: true, status: true, resolvedAt: true, resultJson: true, replayJson: true },
+        orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }, { createdAt: "asc" }],
+      });
+      if (previousRaw.length) {
+        // Nomes que ainda não temos.
+        const prevPlayerIds = new Set<string>();
+        for (const m of previousRaw as any[]) { prevPlayerIds.add(m.playerAId); if (m.playerBId) prevPlayerIds.add(m.playerBId); }
+        const missingNames = [...prevPlayerIds].filter((id) => !mpNames.has(id));
+        if (missingNames.length) {
+          const extra = await prisma.player.findMany({ where: { id: { in: missingNames } }, select: { id: true, displayName: true, ptcglNick: true, user: { select: { email: true } } } });
+          for (const p of extra) mpNames.set(p.id, formatPlayerLabel(p));
+        }
+        // Níveis para enriquecer replays antigos.
+        const prevReplayIds = [...new Set((previousRaw as any[]).flatMap((match) => Array.isArray(match.replayJson) ? match.replayJson.flatMap((t: any) => [t.actorId, t.targetId]).filter(Boolean) : []))] as string[];
+        const missingReplay = prevReplayIds.filter((id) => !replayLevelById.has(id));
+        if (missingReplay.length) {
+          const extra = await prisma.mascot.findMany({ where: { id: { in: missingReplay } }, select: { id: true, level: true } });
+          for (const mm of extra) replayLevelById.set(mm.id, mm.level);
+        }
+        previousMatches = (previousRaw as any[]).map((m) => ({
+          ...m,
+          replayLineupA: Array.isArray((m.resultJson as any)?.lineupA) ? (m.resultJson as any).lineupA : lineupFromSavedTeam(m.playerAId, m.battleSlot),
+          replayLineupB: Array.isArray((m.resultJson as any)?.lineupB) ? (m.resultJson as any).lineupB : (m.playerBId ? lineupFromSavedTeam(m.playerBId, m.battleSlot) : []),
+          replayJson: Array.isArray(m.replayJson)
+            ? m.replayJson.map((turn: any) => ({ ...turn, actorLevel: turn.actorLevel ?? replayLevelById.get(turn.actorId), targetLevel: turn.targetLevel ?? replayLevelById.get(turn.targetId) }))
+            : m.replayJson,
+          playerAName: mpNames.get(m.playerAId) ?? "Jogador",
+          playerBName: m.playerBId ? (mpNames.get(m.playerBId) ?? "Jogador") : null,
+        }));
+      }
     } catch { /* table may not exist yet */ }
 
     // Partidas de hoje já reveladas por este jogador (para a preferência de spoiler).
@@ -529,6 +564,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     myTeams,
     teamSelection,
     todayMatches,
+    previousMatches,
     availableMascots: allMascots,
     leagueInventory,
     selectedBattleItems,

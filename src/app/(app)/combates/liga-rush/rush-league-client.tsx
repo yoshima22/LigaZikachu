@@ -20,6 +20,23 @@ import { OpponentAnalysisModal, type OpponentAnalysis } from "@/app/(app)/combat
 import { setHideLeagueResultsAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { COMBAT_ROLE_OPTIONS, COMBAT_ROLE_DESCRIPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
+
+// Monta os 3 jogos do dia do jogador (uma linha por rodada) para o card resumido.
+function playerDayGames(matches: Match[], playerId: string|undefined, names: Record<string,string>, today: string, battleTimes: string[]): PlayerDayGame[] {
+  if (!playerId) return [];
+  return [1,2,3].map(slot => {
+    const m = matches.find(x => x.battleDate===today && x.battleSlot===slot && (x.playerAId===playerId || x.playerBId===playerId));
+    const time = battleTimes[slot-1] ?? "";
+    if (!m) return null;
+    if (m.status==="BYE") return { slot, time, opponentName: null, status: "BYE", myResult: null };
+    const opponentId = m.playerAId===playerId ? m.playerBId : m.playerAId;
+    const opponentName = opponentId ? (names[opponentId] ?? opponentId) : null;
+    const resolved = m.status==="RESOLVED" || m.status==="WO";
+    const myResult: PlayerDayGame["myResult"] = !resolved ? null : m.isDraw ? "DRAW" : m.winnerId===playerId ? "WIN" : "LOSS";
+    return { slot, time, opponentName, status: m.status, myResult };
+  }).filter((g): g is PlayerDayGame => g !== null);
+}
 
 type Mascot = { id:string; pokemonId:number; name:string; level:number; personality:string; types:string[]; statForce:number; statAgility:number; statInstinct:number; statVitality:number; statCharisma:number; megaEvolvedAt?:string|null; megaEvolvedFromPokemonId?:number|null };
 type Participant = { id:string; playerId:string; points:number; wins:number; losses:number; draws:number; survivorsScore:number; damageDealt:number; damageTaken:number };
@@ -82,7 +99,7 @@ export function RushLeagueClient({initialData}:{initialData:Data}) {
       {data.upcomingRegistration&&<UpcomingRegistration league={data.upcomingRegistration} joined={Boolean(data.upcomingJoined)} pending={pending} run={run} presets={data.presets??[]}/>}
     </section>
     <div className="flex gap-1 overflow-x-auto">{[["league","Liga Atual","🏆"],["teams","Meus Times","👥"],["results","Resultados","📊"],["rules","Regras","📋"],...(data.isAdmin?[["admin","Admin","⚙️"]]:[])] .map(([id,label,emoji])=><button key={id} onClick={()=>setTab(id as typeof tab)} className={`shrink-0 rounded-xl px-3 py-1.5 text-xs font-semibold ${tab===id?"bg-orange-400/20 text-orange-300":"text-slate-400 hover:bg-slate-800"}`}>{emoji} {label}</button>)}</div>
-    {tab==="league"&&<><Podium participants={data.previousPodium?.participants??league.participants} names={data.previousPodium?.names??names} playerId={data.playerId} finished={Boolean(data.previousPodium)||league.status==="FINISHED"}/><RushTimeline league={league} times={times}/><ActiveChallenge league={league} presets={data.presets??[]}/><OwnAnalysis playerId={data.playerId} mascots={data.mascots??[]}/><Rewards plan={data.rewardPlan} rewards={data.rewards??[]} cap={Number(activeRules.rewardCap??6000)}/><div className="grid gap-6 lg:grid-cols-[1.3fr_.7fr]"><Ranking participants={league.participants} names={names} playerId={data.playerId} matches={league.matches}/><ScheduleCard times={times}/></div><MascotHighlights highlights={data.weekHighlights??[]}/></>}
+    {tab==="league"&&<><Podium participants={data.previousPodium?.participants??league.participants} names={data.previousPodium?.names??names} playerId={data.playerId} finished={Boolean(data.previousPodium)||league.status==="FINISHED"}/><RushTimeline league={league} times={times}/><ActiveChallenge league={league} presets={data.presets??[]}/><OwnAnalysis playerId={data.playerId} mascots={data.mascots??[]}/><Rewards plan={data.rewardPlan} rewards={data.rewards??[]} cap={Number(activeRules.rewardCap??6000)}/><div className="grid gap-6 lg:grid-cols-[1.3fr_.7fr]"><Ranking participants={league.participants} names={names} playerId={data.playerId} matches={league.matches}/><div className="space-y-6"><ScheduleCard times={times}/><PlayerDayGames games={playerDayGames(league.matches,data.playerId,names,data.today??"",times.battle)} accent="orange"/></div></div><MascotHighlights highlights={data.weekHighlights??[]}/></>}
     {tab==="teams"&&data.joined&&<TeamBuilder league={league} today={data.today!} eligible={eligible} teams={teams} selected={selected} setSelected={setSelected} run={run} pending={pending} times={times}/>}
     {tab==="teams"&&!data.joined&&<section className={cardClass}><p className="text-sm text-slate-400">Inscreva-se para montar as equipes desta semana.</p></section>}
     {tab==="results"&&<Matches matches={league.matches} names={names} playerId={data.playerId} mascots={data.mascots??[]} today={data.today} initialHideResults={data.hideResults} times={times}/>}
@@ -140,7 +157,7 @@ function Matches({matches,names,playerId,mascots,today,initialHideResults,times}
   const [replay,setReplay]=useState<Match|null>(null);const [analysis,setAnalysis]=useState<OpponentAnalysis|null>(null);const [pending,start]=useTransition();const [analysisTarget,setAnalysisTarget]=useState<string|null>(null);
   // "Esconder resultados" usa exatamente a mesma preferência salva da Liga Semanal
   // (campo hideLeagueResults do jogador). Alternar aqui reflete lá e vice-versa.
-  const [hideResults,setHideResults]=useState(Boolean(initialHideResults));const [savingPref,startSavingPref]=useTransition();const [revealed,setRevealed]=useState<Set<string>>(new Set());
+  const [hideResults,setHideResults]=useState(Boolean(initialHideResults));const [savingPref,startSavingPref]=useTransition();const [revealed,setRevealed]=useState<Set<string>>(new Set());const [view,setView]=useState<"today"|"history">("today");
   useEffect(()=>{try{const r=JSON.parse(localStorage.getItem("rush-revealed")||"[]");if(Array.isArray(r))setRevealed(new Set(r as string[]));}catch{/* sem storage */}},[]);
   const toggleHide=()=>{const next=!hideResults;setHideResults(next);startSavingPref(async()=>{const res=await setHideLeagueResultsAction(next);if(!res.ok){setHideResults(!next);toast.error(res.error??"Não foi possível salvar a preferência.");}});};
   const reveal=(id:string)=>setRevealed(prev=>{const n=new Set(prev);n.add(id);try{localStorage.setItem("rush-revealed",JSON.stringify([...n]))}catch{}return n;});
@@ -195,14 +212,22 @@ function Matches({matches,names,playerId,mascots,today,initialHideResults,times}
       </div>
       <p className="mt-1.5 text-[10px] leading-relaxed text-slate-500">Com a opção ligada, vencedor, dano e sobreviventes ficam ocultos para você assistir aos replays sem spoiler. Revele um confronto específico no botão dele, ou desligue para ver tudo. A preferência fica salva na sua conta (compartilhada com a Liga Semanal).</p>
     </div>
-    {days.length===0&&<p className="mt-3 text-xs text-slate-500">A chave desta rodada será revelada às 08:00. Nenhum confronto está disponível ainda.</p>}
-    {days.map(day=><div key={day} className="mt-4 space-y-2">
+    {(()=>{const todayDays=days.filter(d=>d===today);const pastDays=days.filter(d=>d!==today);const shown=view==="today"?todayDays:pastDays;
+    const renderDay=(day:string)=><div key={day} className="mt-4 space-y-2">
       <h4 className="text-xs font-black uppercase tracking-wide text-orange-300">{day===today?"Confrontos de hoje":brDate(day)}</h4>
       {[1,2,3].map(slot=>{const dm=(byDay.get(day)??[]).filter(m=>m.battleSlot===slot);if(!dm.length)return null;return <div key={slot} className="space-y-2">
         <div className="flex items-center gap-2"><span className="text-xs font-bold text-yellow-300">Rodada {slot}</span><span className="text-[10px] text-slate-500">{times.battle[slot-1]} BRT</span></div>
         {dm.map(renderMatch)}
       </div>;})}
-    </div>)}
+    </div>;
+    return <>
+      <div className="mt-3 flex gap-1">
+        {([["today","Hoje"],["history","Dias anteriores"]] as const).map(([id,label])=><button key={id} type="button" onClick={()=>setView(id)} className={`rounded-lg px-3 py-1 text-[11px] font-bold transition-colors ${view===id?"bg-orange-400/20 text-orange-300":"text-slate-400 hover:bg-slate-800"}`}>{label}</button>)}
+      </div>
+      {shown.length===0
+        ? <p className="mt-4 text-xs text-slate-500">{view==="today"?"A chave desta rodada será revelada às 08:00. Nenhum confronto está disponível ainda.":"Ainda não há confrontos de dias anteriores nesta edição."}</p>
+        : shown.map(renderDay)}
+    </>;})()}
   </section>
   {analysis&&<OpponentAnalysisModal analysis={analysis} myMascots={mascots as any[]} contextLabel="Liga Rush" onClose={()=>setAnalysis(null)}/>}
   {replay&&replay.playerBId&&<LeagueBattleReplayModal playerAName={names[replay.playerAId]??replay.playerAId} playerBName={names[replay.playerBId]??replay.playerBId} playerAId={replay.playerAId} winnerId={replay.winnerId} isDraw={replay.isDraw} replay={replay.replayJson??[]} playerASurvivors={replay.playerASurvivors} playerBSurvivors={replay.playerBSurvivors} lineupA={replay.resultJson?.lineupA??[]} lineupB={replay.resultJson?.lineupB??[]} onFinish={()=>setReplay(null)}/>}</>;
