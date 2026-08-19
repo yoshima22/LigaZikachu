@@ -111,6 +111,14 @@ const combatLinks = [
     adminOnly: false,
     eventOnly: true,
   },
+  {
+    href: "/combates/torre-dos-rebeldes",
+    label: "Torre dos Rebeldes",
+    icon: Swords,
+    adminOnly: true,
+    platformAdminOnly: true, // em desenvolvimento: só ADMIN, nunca GM
+    beta: true,
+  },
 ];
 
 const rankingLinks = [
@@ -221,6 +229,7 @@ type NavLink = {
   label: string;
   icon: typeof LayoutDashboard;
   adminOnly: boolean;
+  platformAdminOnly?: boolean; // só ADMIN/SUPER_ADMIN (exclui GM) — ex.: Torre dos Rebeldes
   tutorialId?: string;
   eventOnly?: boolean;
   livePvpOnly?: boolean;
@@ -230,6 +239,7 @@ type NavLink = {
 
 export function AppNav({
   admin,
+  platformAdmin = false,
   variant = "desktop",
   giftCount = 0,
   initialNotifications,
@@ -239,6 +249,7 @@ export function AppNav({
   livePvpVisible = false,
 }: {
   admin: boolean;
+  platformAdmin?: boolean;
   variant?: "desktop" | "mobile";
   giftCount?: number;
   initialNotifications: NavNotificationSnapshot;
@@ -427,6 +438,7 @@ export function AppNav({
             icon={Swords}
             links={combatLinks}
             admin={admin}
+            platformAdmin={platformAdmin}
             orderEventVisible={orderEventVisible}
             livePvpVisible={livePvpVisible}
             openMenu={openMenu}
@@ -525,6 +537,7 @@ export function AppNav({
               icon={Swords}
               links={combatLinks}
               admin={admin}
+              platformAdmin={platformAdmin}
               orderEventVisible={orderEventVisible}
               livePvpVisible={livePvpVisible}
               openMenu={openMenu}
@@ -596,6 +609,7 @@ function NavDropdown({
   icon: Icon,
   links,
   admin,
+  platformAdmin = false,
   orderEventVisible = false,
   livePvpVisible = false,
   openMenu,
@@ -610,6 +624,7 @@ function NavDropdown({
   icon: typeof LayoutDashboard;
   links: NavLink[];
   admin: boolean;
+  platformAdmin?: boolean;
   orderEventVisible?: boolean;
   livePvpVisible?: boolean;
   openMenu: string | null;
@@ -622,6 +637,7 @@ function NavDropdown({
   const visibleLinks = links.filter(
     (link) =>
       (!link.adminOnly || admin) &&
+      (!link.platformAdminOnly || platformAdmin) &&
       (!link.eventOnly || admin || orderEventVisible) &&
       (!link.livePvpOnly || admin || livePvpVisible),
   );
@@ -713,6 +729,7 @@ function MobileNavGroup({
   icon: Icon,
   links,
   admin,
+  platformAdmin = false,
   orderEventVisible = false,
   livePvpVisible = false,
   openMenu,
@@ -726,6 +743,7 @@ function MobileNavGroup({
   icon: typeof LayoutDashboard;
   links: NavLink[];
   admin: boolean;
+  platformAdmin?: boolean;
   orderEventVisible?: boolean;
   livePvpVisible?: boolean;
   openMenu: string | null;
@@ -739,6 +757,7 @@ function MobileNavGroup({
   const visibleLinks = links.filter(
     (link) =>
       (!link.adminOnly || admin) &&
+      (!link.platformAdminOnly || platformAdmin) &&
       (!link.eventOnly || admin || orderEventVisible) &&
       (!link.livePvpOnly || admin || livePvpVisible),
   );

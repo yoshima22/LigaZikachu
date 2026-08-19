@@ -4,7 +4,7 @@ import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
 import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
-import { isStaff } from "@/lib/auth/permissions";
+import { isStaff, isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   getManualSessionUser,
@@ -106,6 +106,7 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const admin = isStaff(user.role);
+  const platformAdmin = isAdmin(user.role); // exclui GM — para itens só de ADMIN (ex.: Torre dos Rebeldes)
 
   // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
   const birthdayPlayer = await prisma.player.findUnique({
@@ -267,6 +268,7 @@ export default async function AppLayout({
 
             <AppNav
               admin={admin}
+              platformAdmin={platformAdmin}
               variant="desktop"
               giftCount={giftCount}
               initialNotifications={notificationSnapshot}
@@ -346,6 +348,7 @@ export default async function AppLayout({
           <div className="mx-auto max-w-[1536px]">
             <AppNav
               admin={admin}
+              platformAdmin={platformAdmin}
               variant="mobile"
               giftCount={giftCount}
               initialNotifications={notificationSnapshot}
