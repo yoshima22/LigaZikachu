@@ -2924,7 +2924,7 @@ export async function applyVacationTicket(playerId: string, mascotId: string) {
   if (mascot.expeditions.length > 0) throw new Error("Mascote está em expedição. Conclua antes das férias.");
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
-  const vacationDays = meta.vacationDays ?? 7;
+  const vacationDays = meta.vacationDays ?? 5;
   const finishAt = new Date(Date.now() + vacationDays * 24 * 60 * 60 * 1000);
   await prisma.mascotExpedition.create({
     data: { mascotId, finishAt, status: "ACTIVE", rewardJson: { durationKey: `${vacationDays}d`, mode: "VACATION" } }
@@ -2944,7 +2944,7 @@ export async function claimVacation(playerId: string, expeditionId: string) {
 
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
-  const expBonus = 4000 + Math.max(0, expedition.mascot.level - 1) * 10;
+  const expBonus = 4500 + Math.max(0, expedition.mascot.level - 1) * 10;
   const eggChancePct = meta.eggChancePct ?? 30;
   const gotEgg = Math.random() * 100 < eggChancePct;
 

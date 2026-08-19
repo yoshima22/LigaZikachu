@@ -143,7 +143,7 @@ type FormData = {
 const DEFAULT_FRAME_META:    FrameMeta    = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
 const DEFAULT_BANNER_META:   BannerMeta   = { focusX: 50, focusY: 50, brightnessPct: 115 };
 const DEFAULT_BUFF_META:     BuffMeta     = { buffHours: 2, expMultiplierPct: 25, happinessBonus: 5 };
-const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 7, expBonus: 6000, eggChancePct: 30 };
+const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 5, expBonus: 4500, eggChancePct: 30 };
 
 const EMPTY: FormData = {
   type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100, inventoryEnabled: true,

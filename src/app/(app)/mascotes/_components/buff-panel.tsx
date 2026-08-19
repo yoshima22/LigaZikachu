@@ -362,7 +362,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else if (t === "PICNIC_BASKET") {
           toast.success("Piquenique ativado: próxima expedição -30% e bônus por modo durante 3h. 🧺");
         } else if (t === "VACATION_TICKET") {
-          toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 7 dias. 🏖️`);
+          toast.success(`${mascotName} foi de férias com o Professor Carvalho! Volta em 5 dias. 🏖️`);
         } else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") {
           toast.success(`Compartilhador de XP equipado em ${mascotName}! 📡`);
         } else if (t === "RAINBOW_FEATHER") {

@@ -14,14 +14,14 @@ const DURATIONS: { value: ExpeditionDuration; label: string; hint: string }[] = 
   { value: "1h",    label: "1 hora",     hint: "1× EXP" },
   { value: "3h",    label: "3 horas",    hint: "2.5× EXP" },
   { value: "6h",    label: "6 horas",    hint: "5× EXP" },
-  { value: "7d",    label: "7 dias (Férias)", hint: "modo especial" },
+  { value: "7d",    label: "Férias (5 dias)", hint: "modo especial" },
 ];
 
 const MODES: { value: ExpeditionMode; label: string; hint: string }[] = [
   { value: "STANDARD",  label: "Padrão",      hint: "EXP + chance de item" },
   { value: "TRAINING",  label: "Treinamento",  hint: "EXP muito maior, sem item" },
   { value: "ITEMS",     label: "Itens",        hint: "Focado em itens, sem EXP" },
-  { value: "VACATION",  label: "Férias 🌴",   hint: "Apenas com duração de 7 dias" },
+  { value: "VACATION",  label: "Férias 🌴",   hint: "Use a duração Férias" },
 ];
 
 type Mascot = {
