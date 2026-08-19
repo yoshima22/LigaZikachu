@@ -1412,7 +1412,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">🛡️ Escudo SUS</p>
-              <p>Cada jogador tem 1 escudo diário. Use para proteger um mascote amigo no SUS: recupera o mascote por completo, remove todo o repouso <strong>e bloqueia o próximo ataque oportunista</strong>. Só funciona entre amigos.</p>
+              <p>Cada jogador tem 1 uso diário. Funciona como uma <strong>Política de Fraqueza</strong> aplicada por um amigo: recupera o mascote por completo e remove todo o repouso, deixando-o livre para o combate. Só funciona entre amigos.</p>
             </div>
             <div className="space-y-1">
               <p className="font-semibold text-slate-200">😈 Ataques Oportunistas</p>

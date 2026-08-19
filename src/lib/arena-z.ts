@@ -2312,34 +2312,6 @@ export async function runOpportunisticAttack(attackerPlayerId: string, targetMas
   });
   if (!rivalRelation) throw new Error("Seu time nao tem rivais com este mascote. Apenas rivais podem atacar mascotes feridos.");
 
-  // Escudo contra ataque oportunista (concedido pelo Escudo Diário): bloqueia e consome.
-  const weaknessPolicy = await prisma.mascotBuff.findFirst({
-    where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } }
-  });
-  if (weaknessPolicy) {
-    await prisma.$transaction(async (tx) => {
-      await tx.mascotBuff.delete({ where: { id: weaknessPolicy.id } });
-      await tx.mascotEvent.create({
-        data: { mascotId: targetMascotId, emoji: "🛡️", description: "Escudo ativado! Ataque oportunista bloqueado. (proteção consumida)" },
-      });
-      await recordPlayerActivity(tx, {
-        playerId: targetMascot.playerId,
-        category: "ARENA",
-        action: "ARENA_SHIELD_CONSUMED",
-        summary: `Escudo de ${targetMascot.nickname ?? getPokemonName(targetMascot.pokemonId)} bloqueou um ataque oportunista`,
-        source: "ARENA_Z_OPPORTUNISTIC_ATTACK",
-        entityType: "mascot",
-        entityId: targetMascotId,
-        amount: -1,
-        unit: "SHIELD",
-        before: { protected: true, attackerPlayerId },
-        after: { protected: false, attackBlocked: true },
-        metadata: { buffId: weaknessPolicy.id, buffType: "WEAKNESS_POLICY" },
-      });
-    });
-    throw new Error("Este mascote está protegido por um escudo! A proteção foi consumida ao bloquear o ataque.");
-  }
-
   const attackerPlayer = await prisma.player.findUnique({
     where: { id: attackerPlayerId },
     select: {
@@ -3026,16 +2998,13 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
     throw new Error("Voce ja usou seu escudo diario. O escudo reseta a meia-noite (horario de Brasilia).");
   }
 
-  // Verifica se já existe um escudo ativo (para não duplicar)
-  const existingShield = await prisma.mascotBuff.findFirst({
-    where: { mascotId: targetMascotId, type: "WEAKNESS_POLICY", expiresAt: { gt: new Date("2090-01-01") } },
-  });
-
   await prisma.$transaction(async (tx) => {
     await tx.player.update({
       where: { id: shieldOwnerPlayerId },
       data: { susShieldDate: todayBRT },
     });
+    // Mesmo efeito da Política de Fraqueza (item): apenas revive o mascote,
+    // deixando-o livre para o combate. Sem buff permanente.
     await tx.mascot.update({
       where: { id: targetMascotId },
       data: {
@@ -3045,21 +3014,11 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
         susRestBonusMinutes: 0,
       },
     });
-    // Cria escudo contra ataque oportunista (consumido automaticamente se atacado)
-    if (!existingShield) {
-      await tx.mascotBuff.create({
-        data: {
-          mascotId: targetMascotId,
-          type: "WEAKNESS_POLICY",
-          expiresAt: new Date("2099-01-01"),
-        },
-      });
-    }
     await tx.mascotEvent.create({
       data: {
         mascotId: targetMascotId,
         emoji: "🛡️",
-        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou o escudo diário! Recuperação completa, repouso removido e proteção contra o próximo ataque oportunista.`,
+        description: `${shieldPlayer?.displayName ?? "Um amigo"} usou uma Política de Fraqueza! Recuperação completa e mascote de volta ao combate.`,
       },
     });
     await recordPlayerActivity(tx, {
@@ -3075,9 +3034,8 @@ export async function useSusShield(shieldOwnerPlayerId: string, targetMascotId: 
       before: {
         arenaState: targetMascot.arenaState,
         restingUntil: targetMascot.restingUntil?.toISOString() ?? null,
-        existingProtection: Boolean(existingShield),
       },
-      after: { arenaState: "FREE", restingUntil: null, protected: true },
+      after: { arenaState: "FREE", restingUntil: null },
       metadata: { targetPlayerId: targetMascot.playerId, targetPlayerName: targetMascot.player.displayName },
     });
   });
