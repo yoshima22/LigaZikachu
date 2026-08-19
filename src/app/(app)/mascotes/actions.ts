@@ -17,7 +17,7 @@ import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import type { ExpeditionMode } from "@/lib/mascot-data";
-import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
   getEggCandidatesForGeneration,
@@ -1865,8 +1865,8 @@ export async function getBankMascotsPageAction(input?: {
       and.push(rarityIds.length > 0 ? { pokemonId: { in: rarityIds } } : { id: "__no_match__" });
     }
 
-    // Filtro por personalidade do mascote.
-    if (["LOYAL", "PROUD", "MISCHIEVOUS", "LAZY", "COMPETITIVE", "DRAMATIC", "PLAYFUL", "ELECTRIC", "TIMID", "CHAOTIC"].includes(personality)) {
+    // Filtro por personalidade do mascote (usa a lista canônica — inclui as novas).
+    if (Object.prototype.hasOwnProperty.call(PERSONALITY_LABEL, personality)) {
       and.push({ personality: personality as never });
     }
 

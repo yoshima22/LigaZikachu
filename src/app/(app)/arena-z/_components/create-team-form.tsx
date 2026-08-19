@@ -383,7 +383,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   };
 
   const savePreset = () => {
-    if (selected.size !== 6) { toast.error("Selecione exatamente 6 mascotes para salvar um preset."); return; }
+    if (selected.size < 1 || selected.size > MAX_MASCOTS) { toast.error("Selecione de 1 a 6 mascotes para salvar um preset."); return; }
     const nm = window.prompt("Nome do preset:", name.trim() || "Meu preset");
     if (!nm || !nm.trim()) return;
     const rolePayload = Object.fromEntries([...selected].map((id) => {
@@ -512,8 +512,8 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
           <button
             type="button"
             onClick={savePreset}
-            disabled={selected.size !== 6 || pending}
-            title={selected.size !== 6 ? "Selecione 6 mascotes para salvar um preset" : "Salvar equipe atual como preset"}
+            disabled={selected.size < 1 || selected.size > MAX_MASCOTS || pending}
+            title={selected.size < 1 ? "Selecione de 1 a 6 mascotes para salvar um preset" : "Salvar equipe atual como preset"}
             className="rounded-lg border border-purple-400/50 bg-purple-500/15 px-3 py-1.5 text-[11px] font-bold text-purple-100 hover:bg-purple-500/25 disabled:opacity-40"
           >
             💾 Salvar Preset
@@ -524,7 +524,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             {presetLoading ? (
               <p className="text-xs text-slate-500">Carregando presets…</p>
             ) : presetList.length === 0 ? (
-              <p className="text-xs text-slate-500">Nenhum preset salvo. Monte 6 mascotes e clique em “Salvar Preset”.</p>
+              <p className="text-xs text-slate-500">Nenhum preset salvo. Monte de 1 a 6 mascotes e clique em “Salvar Preset”.</p>
             ) : presetList.map((p) => (
               <div key={p.id} className="rounded-xl border border-border bg-slate-950/50 p-2.5">
                 <div className="flex items-center justify-between gap-2">

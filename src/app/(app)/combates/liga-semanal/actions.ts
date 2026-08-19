@@ -625,16 +625,19 @@ type PresetMascot = {
 // Valida posse + exatamente 6 mascotes únicos e normaliza as posturas usando a
 // preferência salva do jogador como fallback. Genérico (Liga Semanal e Arena Z);
 // a checagem de divisão/Megas é específica de cada contexto e roda no equipar.
+// Presets aceitam de 1 a 6 mascotes: a Liga Semanal usa times de 6, mas o Arena Z
+// (que compartilha os mesmos presets) permite equipes menores. A exigência de 6
+// da Liga Semanal é aplicada no momento de equipar/salvar o time diário.
 async function validatePresetMascots(playerId: string, mascotIds: unknown, roles: Record<string, string>) {
-  if (!Array.isArray(mascotIds) || mascotIds.length !== 6 || new Set(mascotIds).size !== 6) {
-    return { error: "Selecione exatamente 6 mascotes diferentes." as string };
+  if (!Array.isArray(mascotIds) || mascotIds.length < 1 || mascotIds.length > 6 || new Set(mascotIds).size !== mascotIds.length) {
+    return { error: "Selecione de 1 a 6 mascotes diferentes." as string };
   }
   const ids = mascotIds as string[];
   const owned = await prisma.mascot.findMany({
     where: { id: { in: ids }, playerId },
     select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
   });
-  if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." as string };
+  if (owned.length !== ids.length) return { error: "Algum mascote selecionado não pertence a você." as string };
   const map = new Map<string, PresetMascot>(owned.map((m) => [m.id, m]));
   const normalizedRoles = Object.fromEntries(ids.map((id) => [id, normalizeCombatRole(roles?.[id] ?? map.get(id)!.preferredCombatRole ?? defaultCombatRoleFor(map.get(id)!))]));
   return { ids, map, normalizedRoles };
@@ -728,6 +731,8 @@ export async function equipWeeklyPresetAction(leagueId: string, battleSlot: numb
   if (!preset) return { error: "Preset não encontrado." };
   const mascotIds = (preset.mascotIdsJson as string[]) ?? [];
   const roles = (preset.rolesJson as Record<string, string>) ?? {};
+  // A Liga Semanal exige exatamente 6 (presets menores servem só ao Arena Z).
+  if (mascotIds.length !== 6) return { error: `O preset "${preset.name}" tem ${mascotIds.length} mascote${mascotIds.length === 1 ? "" : "s"}; a Liga Semanal exige exatamente 6. Complete o preset ou use-o no Arena Z.` };
 
   const editWindow = getWeeklyTeamEditWindow();
   if (editWindow.locked) return { error: WEEKLY_TEAM_LOCK_MESSAGE };
