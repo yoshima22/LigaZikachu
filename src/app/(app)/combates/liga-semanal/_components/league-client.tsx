@@ -772,6 +772,17 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     return new Set(otherTeams.flatMap((t: any) => (t.mascotIdsJson as string[]) ?? []));
   };
 
+  // Adversário de cada rodada (para exibir acima do time montado).
+  const opponentsBySlot: Record<number, string | null> = Object.fromEntries(
+    semanalDayGames(data.todayMatches ?? [], data.player.id).map((g) => [g.slot, g.opponentName]),
+  );
+  const opponentLine = (slot: number) => {
+    const name = opponentsBySlot[slot];
+    return name
+      ? <p className="text-[10px] text-slate-400">vs <strong className="text-slate-200">{name}</strong></p>
+      : <p className="text-[10px] text-slate-600">Sem adversário definido</p>;
+  };
+
   const startEditing = (slot: number) => {
     const existing = data.myTeams.find((t: any) => t.battleSlot === slot);
     setMovingMascot(null);
@@ -883,7 +894,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     return (
       <div className="space-y-4">
         <div className="flex items-center justify-between gap-3">
-          <h3 className="text-sm font-bold text-slate-100">Montando Time {editingSlot} — {BATTLE_TIMES_BRT[editingSlot - 1]}</h3>
+          <div><h3 className="text-sm font-bold text-slate-100">Montando Time {editingSlot} — {BATTLE_TIMES_BRT[editingSlot - 1]}</h3>{opponentLine(editingSlot)}</div>
           <div className="flex items-center gap-2">
             <button
               onClick={() => savePresetFromSelection(selected, roles, `Time ${editingSlot}`)}
@@ -1067,7 +1078,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <React.Fragment key={slot}>
           <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
             <div className="flex items-center justify-between">
-              <h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>
+              <div><h3 className="text-xs font-bold text-slate-300">Time {slot} — Combate {BATTLE_TIMES_BRT[slot - 1]}</h3>{opponentLine(slot)}</div>
               <div className="flex items-center gap-2">
                 {isCleared ? (
                   <span className="text-[10px] text-slate-500">🗑 Limpo</span>
