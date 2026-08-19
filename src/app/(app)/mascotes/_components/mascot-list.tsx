@@ -21,6 +21,7 @@ interface MascotData {
   id: string; pokemonId: number; nickname: string | null;
   level: number; exp: number; happiness: number; mood: string;
   personality: string; isEquipped: boolean; isFavorite: boolean;
+  primaryTypeOverride?: string | null; secondaryTypeOverride?: string | null;
   statForce: number; statAgility: number; statCharisma: number;
   statInstinct: number; statVitality: number;
   battleWins: number; battleLosses: number;
@@ -302,7 +303,8 @@ export function MascotList({
     const query = search.toLowerCase();
     const matchSearch = !query || displayName.includes(query) || String(m.pokemonId).includes(query) || getPokemonName(m.pokemonId).toLowerCase().includes(query);
     const matchMood = !moodFilter || m.mood === moodFilter;
-    const matchType = !typeFilter || getPokemonElement(m.pokemonId) === typeFilter;
+    const primaryType = m.primaryTypeOverride ?? getPokemonElement(m.pokemonId);
+    const matchType = !typeFilter || primaryType === typeFilter;
     const matchCompanion = !companionOnly || m.isEquipped;
     return matchSearch && matchMood && matchType && matchCompanion;
   });

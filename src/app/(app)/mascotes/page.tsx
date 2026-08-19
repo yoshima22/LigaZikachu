@@ -368,6 +368,7 @@ export default async function MascotesPage() {
     id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
     level: m.level, exp: m.exp, happiness: m.happiness,
     mood: m.mood, personality: m.personality, isEquipped: m.isEquipped, isFavorite: m.isFavorite,
+    primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
     statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma,
     statInstinct: m.statInstinct, statVitality: m.statVitality,
     battleWins: m.battleWins, battleLosses: m.battleLosses,
