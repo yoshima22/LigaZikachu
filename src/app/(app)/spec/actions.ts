@@ -7,7 +7,7 @@ import { isStaff } from "@/lib/auth/permissions";
 import { getSpecConfig } from "@/lib/spec/config";
 import { canStartSpecStream, canManageSpecStream, getMatchTournamentId } from "@/lib/spec/authorization";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
-import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS } from "@/lib/spec/constants";
+import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS, parseYouTubeVideoId } from "@/lib/spec/constants";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 
@@ -190,6 +190,47 @@ export async function markSpecStreamLiveAction(streamId: string): Promise<Action
       });
     }
   } catch (e) { console.error("[spec] falha ao anunciar no ticker (p2p)", e); }
+  revalidatePath("/spec");
+  return { ok: true };
+}
+
+/**
+ * Modo YouTube: o dono cola a URL/id da live não listada do YouTube. Salvamos o
+ * videoId e colocamos a transmissão AO VIVO (o embed passa a aparecer na Zika TV).
+ */
+export async function setSpecStreamYouTubeAction(streamId: string, urlOrId: string): Promise<ActionError | { ok: true }> {
+  const session = await getAppSession();
+  if (!session?.user) return { error: "Não autenticado." };
+  const videoId = parseYouTubeVideoId(urlOrId ?? "");
+  if (!videoId) return { error: "Link do YouTube inválido. Cole a URL da live (ou o id de 11 caracteres)." };
+  const stream = await prisma.specStream.findUnique({
+    where: { id: streamId },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true },
+  });
+  if (!stream) return { error: "Transmissão não encontrada." };
+  if (stream.broadcasterUserId !== session.user.id) return { error: "Apenas o dono pode iniciar esta transmissão." };
+  if (stream.status !== "PREPARING" && stream.status !== "LIVE") return { error: "Esta transmissão não está disponível." };
+
+  const wasLive = stream.status === "LIVE";
+  await prisma.specStream.update({
+    where: { id: streamId },
+    data: { youtubeVideoId: videoId, provider: "youtube", status: "LIVE", startedAt: wasLive ? undefined : new Date(), lastSeenAt: new Date() },
+  });
+  if (!wasLive) {
+    try {
+      const [view] = await enrichSpecStreams([stream]);
+      if (view) {
+        await publishLeagueTicker({
+          type: "spec_live",
+          message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV. Corre pra arquibancada!`,
+          href: `/spec/${stream.id}`,
+          eventKey: `spec-live-${stream.id}`,
+          priority: 5,
+          ttlHours: 3,
+        });
+      }
+    } catch (e) { console.error("[spec] falha ao anunciar no ticker (youtube)", e); }
+  }
   revalidatePath("/spec");
   return { ok: true };
 }

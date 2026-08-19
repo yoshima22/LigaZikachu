@@ -47,7 +47,7 @@ export async function setSpecResolutionAction(resolution: SpecResolution): Promi
 export async function setSpecModeAction(mode: SpecMode): Promise<{ ok: boolean; error?: string }> {
   const session = await getAppSession();
   if (!session?.user || !isStaff(session.user.role)) return { ok: false, error: "Acesso restrito." };
-  if (mode !== "cloudflare-realtime" && mode !== "p2p-mesh") return { ok: false, error: "Modo inválido." };
+  if (mode !== "cloudflare-realtime" && mode !== "p2p-mesh" && mode !== "youtube") return { ok: false, error: "Modo inválido." };
   await saveSpecConfig({ mode });
   return { ok: true };
 }

@@ -3843,6 +3843,8 @@ model SpecStream {
   videoTrackId       String?
   audioTrackId       String?
   broadcastSessionId String?
+  youtubeVideoId     String?          // id do vídeo/live do YouTube (modo "youtube")
+  youtubeBroadcastId String?          // id do liveBroadcast na YouTube Data API (gerência via site)
   startedAt          DateTime?
   endedAt            DateTime?
   lastSeenAt         DateTime?

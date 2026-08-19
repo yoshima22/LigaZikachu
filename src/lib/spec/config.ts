@@ -30,7 +30,7 @@ function isResolution(value: unknown): value is SpecResolution {
 }
 
 function isMode(value: unknown): value is SpecMode {
-  return value === "cloudflare-realtime" || value === "p2p-mesh";
+  return value === "cloudflare-realtime" || value === "p2p-mesh" || value === "youtube";
 }
 
 /** Verdadeiro somente quando a Cloudflare Realtime estiver realmente configurada. */

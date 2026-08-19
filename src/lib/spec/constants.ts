@@ -42,8 +42,38 @@ export const SPEC_MONTHLY_GB_LIMIT = Number(process.env.SPEC_MONTHLY_GB_LIMIT ??
 export const SPEC_TOTAL_MBPS = (SPEC_VIDEO_MAX_BITRATE + SPEC_AUDIO_TARGET_BITRATE) / 1_000_000;
 
 /** Modo de transmissão ativo (selecionável pelo admin). */
-export type SpecMode = "cloudflare-realtime" | "p2p-mesh";
+export type SpecMode = "cloudflare-realtime" | "p2p-mesh" | "youtube";
 export const SPEC_DEFAULT_MODE: SpecMode = SPEC_PROVIDER === "cloudflare-realtime" ? "cloudflare-realtime" : "cloudflare-realtime";
+
+/**
+ * Extrai o id de vídeo do YouTube a partir de uma URL (watch, youtu.be, live,
+ * embed) ou de um id cru de 11 caracteres. Retorna null se não reconhecer.
+ */
+export function parseYouTubeVideoId(input: string): string | null {
+  const raw = input.trim();
+  if (/^[A-Za-z0-9_-]{11}$/.test(raw)) return raw;
+  try {
+    const url = new URL(raw);
+    const host = url.hostname.replace(/^www\./, "");
+    if (host === "youtu.be") {
+      const id = url.pathname.slice(1).split("/")[0];
+      return /^[A-Za-z0-9_-]{11}$/.test(id) ? id : null;
+    }
+    if (host.endsWith("youtube.com") || host.endsWith("youtube-nocookie.com")) {
+      const v = url.searchParams.get("v");
+      if (v && /^[A-Za-z0-9_-]{11}$/.test(v)) return v;
+      // formatos /live/<id>, /embed/<id>, /shorts/<id>
+      const m = url.pathname.match(/\/(?:live|embed|shorts)\/([A-Za-z0-9_-]{11})/);
+      if (m) return m[1];
+    }
+  } catch { /* não é URL — cai fora */ }
+  return null;
+}
+
+/** URL de embed sem cookies para o iframe do espectador. */
+export function youtubeEmbedUrl(videoId: string): string {
+  return `https://www.youtube-nocookie.com/embed/${videoId}?autoplay=1&rel=0&modestbranding=1`;
+}
 
 /** Resolução da transmissão, definida pelo admin ao ativar o Modo SPEC. */
 export type SpecResolution = "720" | "1080";

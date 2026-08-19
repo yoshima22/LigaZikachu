@@ -6,6 +6,7 @@ import { enrichSpecStreams } from "@/lib/spec/data";
 import { SpecPlayer } from "@/components/spec/spec-player";
 import { SpecPlayerP2P } from "@/components/spec/spec-player-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
+import { youtubeEmbedUrl } from "@/lib/spec/constants";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
   const config = await getSpecConfig();
   const stream = config.enabled ? await prisma.specStream.findUnique({
     where: { id: streamId },
-    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true, startedAt: true },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true, startedAt: true, youtubeVideoId: true },
   }).catch(() => null) : null;
 
   if (!config.enabled || !stream) {
@@ -48,7 +49,17 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
       {isLive ? (
         <>
-          {config.mode === "p2p-mesh"
+          {stream.youtubeVideoId ? (
+            <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16 / 9" }}>
+              <iframe
+                src={youtubeEmbedUrl(stream.youtubeVideoId)}
+                title="Zika TV"
+                className="absolute inset-0 h-full w-full"
+                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
+                allowFullScreen
+              />
+            </div>
+          ) : config.mode === "p2p-mesh"
             ? <SpecPlayerP2P streamId={stream.id} broadcasterUserId={stream.broadcasterUserId} />
             : <SpecPlayer streamId={stream.id} />}
           <SpecStands streamId={stream.id} sendPresence />
