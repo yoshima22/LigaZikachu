@@ -214,11 +214,13 @@ export function petRemainingMs(mascotId: string, nowMs: number): number {
 }
 
 // Tooltip component
-function Tip({ text, children }: { text: string; children: React.ReactNode }) {
+function Tip({ text, children, wide = false }: { text: string; children: React.ReactNode; wide?: boolean }) {
+  // `wide`: para textos longos (ex.: descrição de personalidade), quebra linha e
+  // limita a largura para não estourar/cortar no mobile.
   return (
     <div className="group relative">
       {children}
-      <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 whitespace-nowrap rounded-lg border border-border bg-slate-900 px-2.5 py-1.5 text-[10px] text-slate-300 opacity-0 shadow-xl transition-opacity group-hover:opacity-100">
+      <div className={`pointer-events-none absolute bottom-full left-1/2 z-50 mb-1.5 -translate-x-1/2 rounded-lg border border-border bg-slate-900 px-2.5 py-1.5 text-[10px] text-slate-300 opacity-0 shadow-xl transition-opacity group-hover:opacity-100 ${wide ? "w-[220px] max-w-[calc(100vw-1.5rem)] whitespace-normal break-words text-left leading-snug" : "whitespace-nowrap"}`}>
         {text}
         <div className="absolute left-1/2 top-full -translate-x-1/2 border-4 border-transparent border-t-slate-900" />
       </div>
@@ -1098,7 +1100,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             )}
             <div className="text-[10px] text-slate-500 flex items-center gap-1 flex-wrap">
               #{mascot.pokemonId} ·{" "}
-              <Tip text={PERSONALITY_DESCRIPTION[mascot.personality] ?? ""}>
+              <Tip wide text={PERSONALITY_DESCRIPTION[mascot.personality] ?? ""}>
                 <span className="underline decoration-dotted cursor-help">
                   {PERSONALITY_LABEL[mascot.personality]}
                 </span>
