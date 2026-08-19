@@ -78,8 +78,12 @@ async function getAccessToken(): Promise<string | null> {
   }
 }
 
+const APP_URL = process.env.NEXTAUTH_URL ?? "https://liga-zikachu.vercel.app";
+
 async function sendFcmMessage(token: string, payload: NotificationPayload, accessToken: string, projectId: string): Promise<boolean> {
   const destination = payload.url?.startsWith("/") && !payload.url.startsWith("//") ? payload.url : "/dashboard";
+  // URL absoluta para o deep-link (o app nativo/WebView abre direto nela).
+  const absoluteUrl = `${APP_URL.replace(/\/$/, "")}${destination}`;
 
   const res = await fetch(
     `https://fcm.googleapis.com/v1/projects/${projectId}/messages:send`,
@@ -98,11 +102,17 @@ async function sendFcmMessage(token: string, payload: NotificationPayload, acces
           },
           data: {
             ...payload.data,
-            url: destination
+            // Caminho relativo (compat) + URL absoluta, para o app abrir direto.
+            url: destination,
+            link: absoluteUrl
           },
           android: {
             priority: "high",
             notification: { sound: "default" }
+          },
+          // Campo padrão de deep-link do FCM para contextos web push.
+          webpush: {
+            fcmOptions: { link: absoluteUrl }
           }
         }
       })
