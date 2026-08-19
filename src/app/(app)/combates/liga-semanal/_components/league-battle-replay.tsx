@@ -51,6 +51,7 @@ export type ReplayLineupFighter = {
   ownerId?: string;
   role?: string;
   maxHp?: number;
+  hp?: number; // snapshot do combate guarda o HP máximo aqui (ex.: Liga Rush)
 };
 const EMPTY_LINEUP: ReplayLineupFighter[] = [];
 
@@ -82,15 +83,21 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
 
   for (const [side, lineup] of [["A", lineupA], ["B", lineupB]] as const) {
     for (const mascot of lineup) {
+      // O snapshot do combate pode trazer o HP máximo em `maxHp` (Liga Semanal via
+      // time salvo) ou em `hp` (Liga Rush / resultJson.lineup). Usa o que existir
+      // para que a barra de HP seja exata e o replay chegue até o fim sincronizado.
+      const exactMax = typeof mascot.maxHp === "number" && mascot.maxHp > 0 ? mascot.maxHp
+        : typeof mascot.hp === "number" && mascot.hp > 0 ? mascot.hp
+        : null;
       seen.set(mascot.id, {
         id: mascot.id,
         name: resolveName(mascot.name, mascot.pokemonId),
         pokemonId: mascot.pokemonId,
         level: mascot.level,
         side,
-        maxHp: mascot.maxHp ?? 100,
-        hp: mascot.maxHp ?? 100,
-        hasExactMaxHp: typeof mascot.maxHp === "number" && mascot.maxHp > 0,
+        maxHp: exactMax ?? 100,
+        hp: exactMax ?? 100,
+        hasExactMaxHp: exactMax !== null,
         role: mascot.role,
       });
     }
@@ -244,17 +251,20 @@ export function LeagueBattleReplayModal({
   onFinish: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
-  const [baseFighters, setBaseFighters] = useState<Fighter[]>([]);
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
   const onFinishRef = useRef(onFinish);
   const cinematicReplay = useMemo(() => buildCinematicReplay(replay), [replay]);
   useEffect(() => { onFinishRef.current = onFinish; });
 
-  useEffect(() => {
-    setBaseFighters(buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB));
-    setTurnIdx(-1);
-  }, [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB]);
+  // baseFighters é DERIVADO — recomputar não reinicia a reprodução. Isso evita que
+  // uma simples mudança de referência de lineup/props reinicie o replay no meio.
+  const baseFighters = useMemo(
+    () => buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB),
+    [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB],
+  );
+  // Só volta ao início quando o replay em si muda (outra partida), não a cada render.
+  useEffect(() => { setTurnIdx(-1); }, [cinematicReplay]);
 
   // Derive current HP state from baseFighters + all turns up to turnIdx
   const fighters = useMemo(() => {
