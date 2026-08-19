@@ -10,6 +10,7 @@ import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/prov
 import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS, parseYouTubeVideoId } from "@/lib/spec/constants";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { specLiveTickerMessage } from "@/lib/spec/announce";
 
 type ActionError = { error: string };
 
@@ -143,7 +144,6 @@ export async function startStandaloneSpecStreamAction(title: string): Promise<Ac
   if (!config.enabled) return { error: "O Modo SPEC está desativado." };
   const session = await getAppSession();
   if (!session?.user) return { error: "Não autenticado." };
-  if (!isStaff(session.user.role)) return { error: "Apenas a equipe pode abrir transmissões avulsas." };
   const clean = title.trim().slice(0, 80);
   if (clean.length < 3) return { error: "Dê um título com pelo menos 3 caracteres." };
 
@@ -182,7 +182,7 @@ export async function markSpecStreamLiveAction(streamId: string): Promise<Action
     if (view) {
       await publishLeagueTicker({
         type: "spec_live",
-        message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV. Corre pra arquibancada!`,
+        message: specLiveTickerMessage({ isCombat: Boolean(stream.matchId || stream.tournamentId), label: view.matchLabel }),
         href: `/spec/${stream.id}`,
         eventKey: `spec-live-${stream.id}`,
         priority: 5,
@@ -222,7 +222,7 @@ export async function setSpecStreamYouTubeAction(streamId: string, urlOrId: stri
       if (view) {
         await publishLeagueTicker({
           type: "spec_live",
-          message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV. Corre pra arquibancada!`,
+          message: specLiveTickerMessage({ isCombat: Boolean(stream.matchId || stream.tournamentId), label: view.matchLabel }),
           href: `/spec/${stream.id}`,
           eventKey: `spec-live-${stream.id}`,
           priority: 5,

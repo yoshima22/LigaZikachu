@@ -8,6 +8,7 @@ import { enrichSpecStreams } from "@/lib/spec/data";
 import { listActiveSpecStreamsAction } from "./actions";
 import { SpecAdminToggle } from "@/components/spec/spec-admin-toggle";
 import { SpecStandaloneButton } from "@/components/spec/spec-standalone-button";
+import { SpecAdminEndButton } from "@/components/spec/spec-admin-end-button";
 import { SpecRefreshButton } from "@/components/spec/spec-refresh-button";
 import { ZikaTvTabs } from "@/components/spec/zika-tv-tabs";
 
@@ -36,9 +37,9 @@ export default async function SpecPage() {
       </header>
 
       {admin && <SpecAdminToggle enabled={config.enabled} providerConfigured={config.providerConfigured} estimatedGb={usage?.estimatedGb} gbLimit={SPEC_MONTHLY_GB_LIMIT} resolution={config.resolution} mode={config.mode} fps={config.fps} qualityPriority={config.qualityPriority} />}
-      {admin && config.enabled && (
+      {Boolean(session?.user) && config.enabled && (
         <div className="flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-[#FFCB05]/20 bg-slate-950/40 p-3">
-          <p className="text-xs text-slate-400">Abra uma transmissão fora de partida/torneio (bate-papo, evento, etc.).</p>
+          <p className="text-xs text-slate-400">Abra uma live livre (fora de partida/torneio): bate-papo, evento, resenha, o que quiser.</p>
           <SpecStandaloneButton />
         </div>
       )}
@@ -59,7 +60,8 @@ export default async function SpecPage() {
           </p>
           <div className="grid gap-3 sm:grid-cols-2">
             {views.map((s) => (
-              <Link key={s.id} href={`/spec/${s.id}`} className="group overflow-hidden rounded-2xl border border-red-500/25 bg-gradient-to-br from-red-950/20 via-slate-950 to-slate-950 transition-colors hover:border-red-400/50">
+              <Link key={s.id} href={`/spec/${s.id}`} className="group relative overflow-hidden rounded-2xl border border-red-500/25 bg-gradient-to-br from-red-950/20 via-slate-950 to-slate-950 transition-colors hover:border-red-400/50">
+                {admin && <SpecAdminEndButton streamId={s.id} />}
                 <div className="relative flex aspect-video items-center justify-center bg-black/40">
                   <span className="text-4xl opacity-30 transition-transform group-hover:scale-110">📺</span>
                   <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-md bg-red-600 px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-white">

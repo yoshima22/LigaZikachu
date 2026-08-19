@@ -5,6 +5,7 @@ import { getSpecConfig } from "@/lib/spec/config";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { specLiveTickerMessage } from "@/lib/spec/announce";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -80,7 +81,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       if (view) {
         await publishLeagueTicker({
           type: "spec_live",
-          message: `📺 Tá pegando fogo, bicho! ${view.matchLabel} acabou de entrar AO VIVO na Zika TV (${view.tournamentName} · ${view.weekTitle}). Corre pra arquibancada!`,
+          message: specLiveTickerMessage({ isCombat: Boolean(stream.matchId || stream.tournamentId), label: view.matchLabel }),
           href: `/spec/${stream.id}`,
           eventKey: `spec-live-${stream.id}`,
           priority: 5,
