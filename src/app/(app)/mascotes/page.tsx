@@ -22,7 +22,7 @@ import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
-import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
+import { getActiveEggRarityBonusPct, getExpeditionEventBonusPct } from "@/lib/timed-game-bonuses";
 
 export const dynamic = "force-dynamic";
 
@@ -319,6 +319,12 @@ export default async function MascotesPage() {
   // Bônus de raridade de evento ativo agora — recalculado a cada carregamento
   // da página, refletindo eventos de fim de semana no painel da incubadora.
   const eventRarityBonusPct = await getActiveEggRarityBonusPct();
+  // Bônus de EXP de evento ativo por modo (para a prévia de expedição refletir o real).
+  const [eventExpStandard, eventExpTraining] = await Promise.all([
+    getExpeditionEventBonusPct("STANDARD", "1h"),
+    getExpeditionEventBonusPct("TRAINING", "1h"),
+  ]);
+  const expeditionEventExpBonusPct = { STANDARD: eventExpStandard, TRAINING: eventExpTraining };
 
   const eggImageByType: Record<string, string> = {};
   for (const [type, url] of Object.entries(rawEggImages)) {
@@ -695,6 +701,7 @@ export default async function MascotesPage() {
             hasSweet={hasSweet}
             isAdmin={admin}
             spritePreferences={spritePreferences}
+            eventExpBonusPct={expeditionEventExpBonusPct}
           />
         )}
       </div>

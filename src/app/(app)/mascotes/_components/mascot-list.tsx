@@ -224,6 +224,7 @@ export function MascotList({
   hasSweet = false,
   isAdmin = false,
   spritePreferences = null,
+  eventExpBonusPct,
 }: {
   mascots: MascotData[];
   bankMascots?: BankMascot[];
@@ -232,6 +233,7 @@ export function MascotList({
   hasSweet?: boolean;
   isAdmin?: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
+  eventExpBonusPct?: Partial<Record<import("@/lib/mascot-data").ExpeditionMode, number>>;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -499,7 +501,7 @@ export function MascotList({
                 </span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} spritePreferences={spritePreferences} />)}
+                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} spritePreferences={spritePreferences} eventExpBonusPct={eventExpBonusPct} />)}
               </div>
             </section>
           )}

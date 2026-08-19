@@ -26,7 +26,7 @@ import {
   toggleMascotOperationsLockAction,
   removeXpShareAction,
 } from "../actions";
-import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggRarityChances, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
+import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, expeditionPersonalityExpMult, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggRarityChances, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import { getMegaStoneByType } from "@/lib/mega-evolution";
 import { MascotSpeechBubble } from "./mascot-speech-bubble";
@@ -108,6 +108,8 @@ interface Props {
   compactView?: boolean;
   onRefresh?: () => void;
   spritePreferences?: PlayerSpritePreferences | null;
+  /** % de bônus de EXP de evento ativo por modo, para a prévia bater com o recebido. */
+  eventExpBonusPct?: Partial<Record<ExpeditionMode, number>>;
 }
 
 const IV_RATING_STYLE: Record<string, string> = {
@@ -505,7 +507,7 @@ function XpShareBadge({ mascotId }: { mascotId: string }) {
   );
 }
 
-export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh, spritePreferences = null }: Props) {
+export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh, spritePreferences = null, eventExpBonusPct }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
@@ -862,8 +864,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               const luckyEgg = mascot.activeBuffs.some(buff => buff.type === "LUCKY_EGG" && new Date(buff.expiresAt) > new Date()) ? 1.2 : 1;
               const expBoost = mascot.activeBuffs.some(buff => buff.type === "EXP_BOOST" && new Date(buff.expiresAt) > new Date()) ? 1.25 : 1;
               const picnicActive = mascot.activeBuffs.some(buff => buff.type === "PICNIC_BASKET" && new Date(buff.expiresAt) > new Date());
-              const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * (picnicActive ? 1.25 : 1));
-              const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * (picnicActive ? 1.12 : 1));
+              // Buffs de personalidade e de evento — incluídos para a prévia bater com o EXP recebido.
+              const superFriendCount = (mascot.relations ?? []).filter(r => r.type === "FRIEND" && r.interactionCount >= 5).length;
+              const persMult = (m: "TRAINING" | "STANDARD") => expeditionPersonalityExpMult({ personality: mascot.personality, mode: m, durationKey: key as ExpeditionDuration, happiness: localHappiness, mood: localMood, superFriendCount });
+              const eventMult = (m: "TRAINING" | "STANDARD") => 1 + (eventExpBonusPct?.[m] ?? 0) / 100;
+              const trainingExp = Math.round(EXP_REWARDS.EXPEDITION * expMult * levelMult * allyExpBonus * rivalBonus * luckyEgg * expBoost * (picnicActive ? 1.25 : 1) * persMult("TRAINING") * eventMult("TRAINING"));
+              const standardExp = Math.round(EXP_REWARDS.EXPEDITION * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoost * (picnicActive ? 1.12 : 1) * persMult("STANDARD") * eventMult("STANDARD"));
 
               // Linha do ovo: o percentual do "Ovo" é a chance de CAIR UM OVO. Se cair,
               // a raridade é sorteada — mostramos a % de cada raridade (somam 100%).

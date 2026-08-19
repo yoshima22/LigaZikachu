@@ -11,6 +11,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
+  expeditionPersonalityExpMult,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
@@ -1655,17 +1656,17 @@ export async function claimExpedition(
   // ── Bônus de EXP de expedição por personalidade ──────────────────────────
   const pers = expedition.mascot.personality;
   const superFriendCount = friends.filter((f) => f.interactionCount >= 5).length;
-  let personalityExpMult = 1;
-  if (pers === "LOYAL") personalityExpMult += Math.min(3, superFriendCount) * 0.01;                 // +1% por Super Amigo, até +3%
-  if (pers === "PROUD" && expedition.mascot.happiness > 70) personalityExpMult += 0.08;             // feliz e saudável
-  if (pers === "LAZY" && (durationKey === "3h" || durationKey === "6h")) personalityExpMult += 0.08; // jornadas longas
-  if (pers === "COMPETITIVE" && mode === "TRAINING") personalityExpMult += 0.08;                    // treinamento
-  if (pers === "DRAMATIC" && (expedition.mascot.mood === "HAPPY" || expedition.mascot.mood === "CONFIDENT")) personalityExpMult += 0.10;
+  let isFirstExpeditionToday = false;
   if (pers === "CURIOUS") {
     const startBRT = new Date(new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date()) + "T00:00:00-03:00");
     const priorToday = await prisma.mascotExpedition.count({ where: { mascotId: expedition.mascotId, id: { not: expeditionId }, startedAt: { gte: startBRT } } }).catch(() => 1);
-    if (priorToday === 0) personalityExpMult += 0.05;                                               // primeira expedição do dia
+    isFirstExpeditionToday = priorToday === 0;
   }
+  const personalityExpMult = expeditionPersonalityExpMult({
+    personality: pers, mode, durationKey,
+    happiness: expedition.mascot.happiness, mood: expedition.mascot.mood,
+    superFriendCount, isFirstExpeditionToday,
+  });
 
   const expeditionExp = mode === "ITEMS"
     ? Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoostMult * (eventExpBonusPct / 100) * personalityExpMult)

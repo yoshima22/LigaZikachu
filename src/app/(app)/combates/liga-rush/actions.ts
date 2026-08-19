@@ -209,6 +209,7 @@ export async function getRushDataAction() {
     ? (Array.isArray(ruleData(previousFinished.ruleJson).noShowPlayerIds) && (ruleData(previousFinished.ruleJson).noShowPlayerIds as string[]).includes(player.id))
     : false;
   const weekHighlights = buildRushHighlights(league.matches, names);
+  const rushTimes = await getRushTimes();
   const currentDate = brtDate();
   const firstBattleDate = brtDate(league.weekStart);
   const lastBattleDate = brtDate(league.weekEnd);
@@ -233,6 +234,7 @@ export async function getRushDataAction() {
     upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
     hideResults: Boolean(prefs?.hideLeagueResults),
     blockedFromRush,
+    rushTimes,
   }));
 }
 

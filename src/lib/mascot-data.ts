@@ -1220,6 +1220,31 @@ export const EXP_REWARDS = {
   EXPEDITION:      50,  // era 20 — base para expedições padrão
 };
 
+// ── Bônus de EXP de expedição por personalidade ───────────────────────────────
+// Fonte única de verdade, usada tanto no cálculo real (claimExpedition) quanto na
+// prévia do card, para que o valor previsto e o recebido batam. Determinístico a
+// partir do estado do mascote; efeitos condicionais que dependem do servidor
+// (ex.: Curioso "primeira expedição do dia") entram via flags opcionais.
+export function expeditionPersonalityExpMult(opts: {
+  personality: string;
+  mode: ExpeditionMode;
+  durationKey: ExpeditionDuration;
+  happiness: number;
+  mood: string;
+  superFriendCount: number;
+  isFirstExpeditionToday?: boolean;
+}): number {
+  const { personality: p, mode, durationKey, happiness, mood, superFriendCount } = opts;
+  let mult = 1;
+  if (p === "LOYAL") mult += Math.min(3, superFriendCount) * 0.01;                 // +1% por Super Amigo, até +3%
+  if (p === "PROUD" && happiness > 70) mult += 0.08;                                // feliz e saudável
+  if (p === "LAZY" && (durationKey === "3h" || durationKey === "6h")) mult += 0.08; // jornadas longas
+  if (p === "COMPETITIVE" && mode === "TRAINING") mult += 0.08;                     // treinamento
+  if (p === "DRAMATIC" && (mood === "HAPPY" || mood === "CONFIDENT")) mult += 0.10;
+  if (p === "CURIOUS" && opts.isFirstExpeditionToday) mult += 0.05;                 // primeira expedição do dia
+  return mult;
+}
+
 // ── Sprite URL ────────────────────────────────────────────────────────────────
 
 // IDs máximos com GIF animado no PokeAPI (Black/White animated — gen 1-5 apenas)
@@ -2295,19 +2320,19 @@ export function getTypeAdvantageMultiplier(attackerTypes: string | string[], def
 
 // ── Explicações das personalidades ────────────────────────────────────────────
 export const PERSONALITY_DESCRIPTION: Record<string, string> = {
-  LOYAL:       "Leal ao treinador. Ganha mais felicidade com carinho e tende a criar amizades fortes.",
-  PROUD:       "Orgulhoso. Reage mais a vitórias, derrotas e rivalidades; fica melhor quando já está feliz.",
-  MISCHIEVOUS: "Travesso. Puxa provocações, rivalidades leves e eventos de peças sem bloquear demais.",
-  LAZY:        "Preguiçoso. Cansa mais ao brincar, mas mascotes com boa Vitalidade lidam melhor com isso.",
-  COMPETITIVE: "Competitivo. Brilha contra rivais e combina muito com Força alta e vitórias do treinador.",
-  DRAMATIC:    "Dramático. Emoções mais fortes; quando está feliz ou confiante, rende melhor nos eventos.",
-  PLAYFUL:     "Brincalhão. Brincar dá mais felicidade e cerca de 10% mais EXP.",
-  ELECTRIC:    "Elétrico. Tem energia para brincar e expedições curtas, com menor chance de cansar.",
-  TIMID:       "Tímido. Começa devagar no carinho, mas aprende a confiar e cria laços fortes.",
-  CHAOTIC:     "Caótico. Pode gerar eventos raros e imprevisíveis, especialmente com Instinto alto.",
-  CURIOUS:     "Curioso. Investiga expedições e marca a maior ameaça do combate.",
-  GLUTTON:     "Guloso. Transforma alimentação em felicidade, EXP e proteção; sofre quando está com fome.",
-  SERENE:      "Sereno. Remove humores negativos e resiste a controle, causando um pouco menos de dano.",
+  LOYAL:       "Leal. Vincula-se a um aliado (Super Amigo): enquanto ele está vivo e abaixo de 35% de HP, ganha +5% de Carisma e Vitalidade e cura/proteção a ele rende +5%. Cada Super Amigo dá +1% de EXP em expedições (até +3%).",
+  PROUD:       "Orgulhoso. Acima de 70% de HP causa +6% de dano; com felicidade acima de 70 rende +8% de EXP. Vitórias animam e derrotas pesam mais.",
+  MISCHIEVOUS: "Travesso. Seu 1º ataque contra cada inimigo tem 15% de chance de reduzir 8% do melhor atributo do alvo por 1 round — toda a equipe se beneficia ao atacá-lo.",
+  LAZY:        "Preguiçoso. Acima de 50% de HP sofre -8% de dano e jornadas de 3h/6h dão +8% de EXP, mas precisa de mais vantagem de Agilidade para agir de novo.",
+  COMPETITIVE: "Competitivo. Contra oponentes mais fortes causa +7% de dano (e -4% recebido contra o Rival direto). Brincar e treinar rendem EXP extra.",
+  DRAMATIC:    "Dramático. Abaixo de 35% de HP causa +10% de dano e recebe +8% de cura, com 25% de chance (1×/luta) de sobreviver a um golpe fatal com 1 HP.",
+  PLAYFUL:     "Brincalhão. Ao entrar, 12% de chance de dar +5% de Agilidade ao time por 2 rounds; brincar rende mais felicidade e EXP.",
+  ELECTRIC:    "Elétrico. +12% de Agilidade no 1º round (+5% depois) — forte em lutas curtas. Reduz o tempo das expedições curtas.",
+  TIMID:       "Tímido. Antes do 1º golpe recebe -10% de dano; depois ganha +5% de Instinto pelo resto da luta. Feliz, falha menos em expedições de material.",
+  CHAOTIC:     "Caótico. A cada round um atributo próprio muda de forma aleatória (-8% a +12%). Crescimento instável; a brincadeira diária sorteia um bônus para a próxima expedição.",
+  CURIOUS:     "Curioso. Marca o inimigo de maior status e ganha +5% de Instinto contra ele. A 1ª expedição do dia dá +5% de EXP e repete sorteios só de comida comum.",
+  GLUTTON:     "Guloso. Alimentado ou Satisfeito recebe -6% de dano; comida vira felicidade e EXP. Com fome, perde a proteção.",
+  SERENE:      "Sereno. Encurta em 1 round provocações e debuffs longos e enfraquece efeitos de 1 round, em troca de -4% de dano direto.",
 };
 
 // ── Balão de diálogo ──────────────────────────────────────────────────────────
