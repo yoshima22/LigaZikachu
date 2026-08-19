@@ -123,7 +123,7 @@ interface Item {
 type FrameMeta    = { frameScale: number; frameOffsetX: number; frameOffsetY: number };
 type BannerMeta   = { focusX: number; focusY: number; brightnessPct: number };
 type BuffMeta     = { buffHours: number; expMultiplierPct: number; happinessBonus: number };
-type VacationMeta = { vacationDays: number; expBonus: number; eggChancePct: number };
+type VacationMeta = { vacationDays: number; expBonus: number; rareEggChancePct: number; commonEggChancePct: number };
 
 const BUFF_ITEM_TYPES     = new Set(["MASCOT_BUFF_EXP", "PICNIC_BASKET", "LUCKY_EGG"]);
 const VACATION_ITEM_TYPES = new Set(["VACATION_TICKET"]);
@@ -143,7 +143,7 @@ type FormData = {
 const DEFAULT_FRAME_META:    FrameMeta    = { frameScale: 2.0, frameOffsetX: 0, frameOffsetY: 0 };
 const DEFAULT_BANNER_META:   BannerMeta   = { focusX: 50, focusY: 50, brightnessPct: 115 };
 const DEFAULT_BUFF_META:     BuffMeta     = { buffHours: 2, expMultiplierPct: 25, happinessBonus: 5 };
-const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 5, expBonus: 4500, eggChancePct: 30 };
+const DEFAULT_VACATION_META: VacationMeta = { vacationDays: 5, expBonus: 4500, rareEggChancePct: 10, commonEggChancePct: 50 };
 
 const EMPTY: FormData = {
   type: "TITLE", name: "", description: "", imageUrl: "", rarity: "COMMON", price: 100, inventoryEnabled: true,
@@ -182,7 +182,8 @@ const itemToForm = (i: Item & { metadata?: unknown }): FormData => {
     vacationMeta: {
       vacationDays:  meta.vacationDays  ?? DEFAULT_VACATION_META.vacationDays,
       expBonus:      meta.expBonus      ?? DEFAULT_VACATION_META.expBonus,
-      eggChancePct:  meta.eggChancePct  ?? DEFAULT_VACATION_META.eggChancePct,
+      rareEggChancePct:   meta.rareEggChancePct   ?? DEFAULT_VACATION_META.rareEggChancePct,
+      commonEggChancePct: meta.commonEggChancePct ?? DEFAULT_VACATION_META.commonEggChancePct,
     },
     theme: (i.theme as typeof themeOpts[number]) ?? "NEUTRAL",
     flavorText: i.flavorText ?? "",
@@ -497,14 +498,25 @@ function VacationMetaEditor({ vacationMeta, setVacationMeta }: {
         </label>
         <label className="space-y-1 text-xs text-slate-400">
           <div className="flex items-center justify-between">
-            <span>Chance de Ovo (%)</span>
-            <span className="text-[#FFCB05] font-semibold">{vacationMeta.eggChancePct}%</span>
+            <span>Chance de Ovo Raro (%)</span>
+            <span className="text-[#FFCB05] font-semibold">{vacationMeta.rareEggChancePct}%</span>
           </div>
           <input type="number" min={0} max={100} step={1}
-            value={vacationMeta.eggChancePct}
-            onChange={e => setVacationMeta({ ...vacationMeta, eggChancePct: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+            value={vacationMeta.rareEggChancePct}
+            onChange={e => setVacationMeta({ ...vacationMeta, rareEggChancePct: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
             className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
-          <p className="text-[10px] text-slate-600">Probabilidade de trazer um Ovo Comum</p>
+          <p className="text-[10px] text-slate-600">Probabilidade de trazer um Ovo Raro (tem prioridade)</p>
+        </label>
+        <label className="space-y-1 text-xs text-slate-400">
+          <div className="flex items-center justify-between">
+            <span>Chance de Ovo Comum (%)</span>
+            <span className="text-[#FFCB05] font-semibold">{vacationMeta.commonEggChancePct}%</span>
+          </div>
+          <input type="number" min={0} max={100} step={1}
+            value={vacationMeta.commonEggChancePct}
+            onChange={e => setVacationMeta({ ...vacationMeta, commonEggChancePct: Math.min(100, Math.max(0, parseInt(e.target.value) || 0)) })}
+            className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+          <p className="text-[10px] text-slate-600">Probabilidade de trazer um Ovo Comum (se não vier Raro)</p>
         </label>
       </div>
       <p className="text-[10px] text-slate-500">

@@ -1579,7 +1579,7 @@ export async function useVacationTicketAction(mascotId: string): Promise<{ error
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function claimVacationAction(expeditionId: string): Promise<{ error?: string; reward?: { expBonus: number; gotEgg: boolean } }> {
+export async function claimVacationAction(expeditionId: string): Promise<{ error?: string; reward?: { expBonus: number; gotEgg: boolean; eggType?: "RARE" | "COMMON" | null } }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);

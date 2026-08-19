@@ -147,7 +147,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.VACATION_TICKET,
     name: "Ticket de Férias do Prof. Carvalho",
-    description: "Envia o mascote de férias por 5 dias. Ao voltar, recebe 4.500 EXP (mais um pequeno bônus que cresce conforme o nível), felicidade máxima, volta empanturrado e ainda tem chance de trazer um Ovo Comum de presente.",
+    description: "Envia o mascote de férias por 5 dias. Ao voltar, recebe 4.500 EXP + 100 por nível do mascote, felicidade máxima, volta empanturrado e ainda pode trazer um ovo: 10% de chance de Ovo Raro ou 50% de Ovo Comum.",
     imageUrl: null,
     rarity: ShopItemRarity.RARE,
     price: 1600,

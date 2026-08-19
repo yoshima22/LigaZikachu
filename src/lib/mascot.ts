@@ -1170,7 +1170,7 @@ export type ExpeditionReward =
   | { type: "BUFF_ITEM"; shopItemType: string }
   | { type: "MEGA_STONE"; shopItemType: string }
   | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
-  | { type: "VACATION";  expBonus: number; gotEgg: boolean }
+  | { type: "VACATION";  expBonus: number; gotEgg: boolean; eggType?: "RARE" | "COMMON" }
   | { type: "NOTHING" };
 
 function rollRandomMegaStoneType(): string {
@@ -1579,6 +1579,7 @@ export async function claimExpedition(
         type: "VACATION",
         expBonus: vacationReward.expBonus,
         gotEgg: vacationReward.gotEgg,
+        eggType: vacationReward.eggType ?? undefined,
       },
     };
   }
@@ -2944,14 +2945,19 @@ export async function claimVacation(playerId: string, expeditionId: string) {
 
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
-  const expBonus = 4500 + Math.max(0, expedition.mascot.level - 1) * 10;
-  const eggChancePct = meta.eggChancePct ?? 30;
-  const gotEgg = Math.random() * 100 < eggChancePct;
+  const expBonus = 4500 + expedition.mascot.level * 100;
+  // Chances de ovo ao retornar: 10% Raro, 50% Comum, 40% nada (Raro tem prioridade).
+  const rareEggPct = meta.rareEggChancePct ?? 10;
+  const commonEggPct = meta.commonEggChancePct ?? 50;
+  const roll = Math.random() * 100;
+  const eggType: "RARE" | "COMMON" | null = roll < rareEggPct ? "RARE" : roll < rareEggPct + commonEggPct ? "COMMON" : null;
+  const gotEgg = eggType !== null;
+  const eggLabel = eggType === "RARE" ? "Ovo Raro" : "Ovo Comum";
 
   await prisma.$transaction(async (tx) => {
     await tx.mascotExpedition.update({
       where: { id: expeditionId },
-      data: { status: "CLAIMED", rewardJson: { type: "VACATION", expBonus, gotEgg } }
+      data: { status: "CLAIMED", rewardJson: { type: "VACATION", expBonus, gotEgg, eggType } }
     });
     await tx.mascot.update({
       where: { id: expedition.mascotId },
@@ -2961,22 +2967,22 @@ export async function claimVacation(playerId: string, expeditionId: string) {
         lastFedAt: new Date(), // EMPANTURRADO: volta bem alimentado
       }
     });
-    if (gotEgg) {
+    if (eggType) {
       await tx.mascotEgg.create({
-        data: { playerId, type: "COMMON", origin: "VACATION" }
+        data: { playerId, type: eggType, origin: "VACATION" }
       });
     }
     await tx.mascotEvent.create({
       data: {
         mascotId: expedition.mascotId,
         emoji: "🌴",
-        description: `Voltou das férias com o Professor Carvalho! Felicidade máxima, empanturrado e +${expBonus} EXP.${gotEgg ? " Trouxe um Ovo Comum de presente! 🥚" : ""}`
+        description: `Voltou das férias com o Professor Carvalho! Felicidade máxima, empanturrado e +${expBonus} EXP.${eggType ? ` Trouxe um ${eggLabel} de presente! 🥚` : ""}`
       }
     });
   });
 
   await addExp(expedition.mascotId, expBonus, { ignoreBenchPenalty: true });
-  return { expBonus, gotEgg };
+  return { expBonus, gotEgg, eggType };
 }
 
 /** Compartilhador de XP: equipa em Pokémon fora de expedição (1 por jogador) */

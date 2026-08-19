@@ -342,7 +342,7 @@ export function getOrderClueStepLabel(stepKey?: string | null) {
   return ORDER_CLUE_STEP_LABELS[stepKey] ?? "Pista da investigacao";
 }
 
-export function rewardToDisplay(reward: { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
+export function rewardToDisplay(reward: { type: string; eggType?: string | null; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
     const exp = reward.exp ?? 0;
     const dur = reward.durationLabel ?? "";
@@ -354,10 +354,11 @@ export function rewardToDisplay(reward: { type: string; eggType?: string; foodTy
   }
   if (reward.type === "VACATION") {
     const exp = reward.expBonus ?? 0;
+    const eggLabel = reward.eggType === "RARE" ? "um Ovo Raro" : reward.eggType === "COMMON" ? "um Ovo Comum" : reward.gotEgg ? "um Ovo Comum" : null;
     return {
       emoji: "🏖️",
       title: "Férias concluídas!",
-      description: `Seu mascote voltou revigorado com felicidade máxima e +${exp.toLocaleString("pt-BR")} EXP.${reward.gotEgg ? " Também trouxe um Ovo Comum." : ""}`,
+      description: `Seu mascote voltou revigorado com felicidade máxima e +${exp.toLocaleString("pt-BR")} EXP.${eggLabel ? ` Também trouxe ${eggLabel}.` : ""}`,
     };
   }
   if (reward.type === "EGG") {
@@ -393,7 +394,7 @@ const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string
   LUCK_BOOST:      { emoji: "🍀",   label: "Sorte",           color: "border-green-500/40 bg-green-500/10 text-green-300" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
-  WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política Fraqueza", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
+  WEAKNESS_POLICY: { emoji: "🛡️",  label: "Escudo (proteção)", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
   PICNIC_BASKET:   { emoji: "🧺",   label: "Piquenique 3h", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", areas: "Treino +25% EXP · Padrão +12% EXP/+1,5 ponto percentual de loot · Itens +3 pontos percentuais de loot" },
   PICNIC_SPEED:    { emoji: "⚡",   label: "Próxima exp. -30%", color: "border-orange-500/40 bg-orange-500/10 text-orange-300", permanent: true },
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
