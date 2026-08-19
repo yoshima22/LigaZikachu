@@ -2290,6 +2290,22 @@ export function getPokemonTypes(pokemonId: number): string[] {
   return raw.split("/");
 }
 
+/**
+ * Tipos de um MASCOTE específico, respeitando o override do admin. Use SEMPRE que
+ * o tipo for de uma instância de mascote (não da espécie/pokédex): favoritos,
+ * banco, combates, análises, galerias etc. O override é a fonte de verdade quando
+ * presente; senão cai na tabela estática da espécie.
+ */
+export type MascotTypeSource = { pokemonId: number; primaryTypeOverride?: string | null; secondaryTypeOverride?: string | null };
+export function mascotTypes(m: MascotTypeSource): string[] {
+  if (m.primaryTypeOverride) return [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[];
+  return getPokemonTypes(m.pokemonId);
+}
+/** Tipo primário de um mascote, respeitando o override do admin. */
+export function mascotPrimaryType(m: MascotTypeSource): string {
+  return m.primaryTypeOverride || getPokemonElement(m.pokemonId);
+}
+
 // Vantagens de tipo (atacante → defensores fracos)
 export const TYPE_ADVANTAGE: Record<string, string[]> = {
   fire:     ["grass","ice","bug","steel"],

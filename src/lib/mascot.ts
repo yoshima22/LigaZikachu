@@ -13,7 +13,7 @@ import {
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   expeditionPersonalityExpMult,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
-  getSpriteUrl, getPokemonName, getPokemonElement, getTypeAdvantageMultiplier,
+  getSpriteUrl, getPokemonName, mascotPrimaryType, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction, rollExpeditionEggRarity,
 } from "@/lib/mascot-data";
@@ -1965,8 +1965,8 @@ export async function battleMascots(mascotAId: string, mascotBId: string): Promi
     throw new Error("Batalhas envolvendo mascotes de admins não são registradas.");
   }
 
-  const elemA = getPokemonElement(a.pokemonId);
-  const elemB = getPokemonElement(b.pokemonId);
+  const elemA = mascotPrimaryType(a);
+  const elemB = mascotPrimaryType(b);
   const multA = getTypeAdvantageMultiplier(elemA, elemB);
   const multB = getTypeAdvantageMultiplier(elemB, elemA);
 
@@ -1982,7 +1982,7 @@ export async function battleMascots(mascotAId: string, mascotBId: string): Promi
   const winnerName = winner.nickname ?? getPokemonName(winner.pokemonId);
   const loserName  = loser.nickname  ?? getPokemonName(loser.pokemonId);
 
-  const typeNote = wMult > 1 ? ` (vantagem de tipo ${getPokemonElement(winner.pokemonId).toUpperCase()})` : "";
+  const typeNote = wMult > 1 ? ` (vantagem de tipo ${mascotPrimaryType(winner).toUpperCase()})` : "";
   const summary  = `${winnerName} venceu ${loserName}${typeNote}!`;
 
   await prisma.$transaction(async (tx) => {

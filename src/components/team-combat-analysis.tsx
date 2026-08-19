@@ -10,11 +10,13 @@ import {
   recommendCombatRole,
   type CombatRole,
 } from "@/lib/combat-roles";
-import { getPokemonName, getPokemonTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
+import { getPokemonName, mascotTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 
 export type TeamAnalysisMascot = {
   id: string;
   pokemonId: number;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
   nickname?: string | null;
   name?: string;
   level: number;
@@ -105,7 +107,7 @@ export function TeamCombatAnalysisButton({
     const minLevel = levels.length ? Math.min(...levels) : 0;
     const maxLevel = levels.length ? Math.max(...levels) : 0;
     const levelGap = maxLevel - minLevel;
-    const typeSet = new Set(positioned.flatMap((m) => getPokemonTypes(m.pokemonId)));
+    const typeSet = new Set(positioned.flatMap((m) => mascotTypes(m)));
     const coverage = new Set<string>();
     for (const type of typeSet) for (const target of TYPE_ADVANTAGE[type] ?? []) coverage.add(target);
     const weaknesses = new Set<string>();
@@ -153,7 +155,7 @@ export function TeamCombatAnalysisButton({
               <StatCard label="Impulso ofensivo" value={pct(analysis.encouragerBonus + analysis.scoutBonus)} detail={`Encorajador ${pct(analysis.encouragerBonus)} + Batedor ${pct(analysis.scoutBonus)} enquanto estiverem ativos.`} />
               <StatCard label="Cura média por rodada" value={`${Math.round(analysis.healing)} HP`} detail={mode === "RAID" ? "Valor esperado considerando a chance de cura da Raid." : "Potencial se os Cuidadores tiverem aliados feridos e curas disponíveis."} />
               <StatCard label="Proteção de Guardião" value={pct(analysis.guardianDefense)} detail={analysis.guardians.length ? `Primeiro Guardião intercepta essa parcela do golpe em um aliado.` : "Nenhum Guardião selecionado."} />
-              <StatCard label="Cobertura ofensiva" value={`${analysis.coverage.size} tipos`} detail={`${analysis.positioned.length} mascote(s), ${new Set(analysis.positioned.flatMap((m) => getPokemonTypes(m.pokemonId))).size} tipo(s) próprio(s).`} />
+              <StatCard label="Cobertura ofensiva" value={`${analysis.coverage.size} tipos`} detail={`${analysis.positioned.length} mascote(s), ${new Set(analysis.positioned.flatMap((m) => mascotTypes(m))).size} tipo(s) próprio(s).`} />
               <StatCard label="Faixa de níveis" value={`Nv.${analysis.minLevel}–${analysis.maxLevel}`} detail={analysis.levelGap >= 20 ? `Diferença alta de ${analysis.levelGap} níveis: risco maior no PvE.` : `Diferença de ${analysis.levelGap} níveis entre os membros.`} />
             </div>
 

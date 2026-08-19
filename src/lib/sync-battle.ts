@@ -2,7 +2,7 @@ import { prisma } from "@/lib/prisma";
 import { type CombatRole } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { pokemonGeneration } from "@/lib/sync-round-modifiers";
-import { getPokemonTypes } from "@/lib/mascot-data";
+import { mascotTypes } from "@/lib/mascot-data";
 import type { SyncMatchResult } from "@prisma/client";
 
 interface TeamInput {
@@ -75,6 +75,8 @@ type MascotRow = {
   combatRole?: CombatRole | string | null;
   personality?: string | null;
   playerId?: string;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
   [key: string]: unknown;
 };
 
@@ -204,15 +206,15 @@ function computeExecutableModContext(mascotsA: MascotRow[], mascotsB: MascotRow[
     if (!current || totalStats(mascot) > totalStats(current)) context.topTotalStatsIdPerPlayer.set(owner, mascot.id);
   }
 
-  const primaryTypes = (mascots: MascotRow[]) => mascots.map((m) => getPokemonTypes(m.pokemonId)[0] ?? "normal");
+  const primaryTypes = (mascots: MascotRow[]) => mascots.map((m) => mascotTypes(m)[0] ?? "normal");
   const typesA = primaryTypes(mascotsA);
   const typesB = primaryTypes(mascotsB);
   const repeated = (types: string[]) => Math.max(...[...new Set(types)].map((type) => types.filter((entry) => entry === type).length), 0) >= 3;
   const playersShareTypes = (mascots: MascotRow[]) => {
     const owners = [...new Set(mascots.map((m) => m.playerId).filter((id): id is string => Boolean(id)))];
     if (owners.length < 2) return false;
-    const first = new Set(mascots.filter((m) => m.playerId === owners[0]).flatMap((m) => getPokemonTypes(m.pokemonId)));
-    return mascots.filter((m) => m.playerId === owners[1]).some((m) => getPokemonTypes(m.pokemonId).some((type) => first.has(type)));
+    const first = new Set(mascots.filter((m) => m.playerId === owners[0]).flatMap((m) => mascotTypes(m)));
+    return mascots.filter((m) => m.playerId === owners[1]).some((m) => mascotTypes(m).some((type) => first.has(type)));
   };
   const highLevelPenaltyIds = new Set<string>();
   for (const team of [mascotsA, mascotsB]) {
@@ -444,7 +446,7 @@ function applyModToMascot(m: MascotRow, modEffect: ModEffect | null, modContext:
     }
     case "TYPE_MODIFIER": {
       const e = modEffect as { type: "TYPE_MODIFIER"; boostType: string; penaltyType: string; boost: number; penalty: number };
-      const types = getPokemonTypes(m.pokemonId);
+      const types = mascotTypes(m);
       if (types.includes(e.boostType)) return { ...m, ...scaleAll(1 + e.boost) };
       if (types.includes(e.penaltyType)) return { ...m, ...scaleAll(1 - e.penalty) };
       return m;

@@ -349,8 +349,8 @@ export function runLeagueCombat(
         targetLevel: mascot.level,
         action: "DEFEND",
         damage: 0,
-        attackerType: getPokemonElement(mascot.pokemonId),
-        defenderType: getPokemonElement(mascot.pokemonId),
+        attackerType: elementOf(mascot),
+        defenderType: elementOf(mascot),
         multiplier: 1,
         advantageApplied: false,
         actorRole: getCombatRoleLabel(mascot.combatRole),
@@ -402,7 +402,7 @@ export function runLeagueCombat(
           log.push({
             turn: actionNum++, actorId: mascot.id, actorName: mascot.name, actorOwnerId: mascot.ownerId, actorPokemonId: mascot.pokemonId, actorLevel: mascot.level,
             targetId: mascot.id, targetName: mascot.name, targetOwnerId: mascot.ownerId, targetPokemonId: mascot.pokemonId, targetLevel: mascot.level,
-            action: "DEFEND", damage: 0, attackerType: getPokemonElement(mascot.pokemonId), defenderType: getPokemonElement(mascot.pokemonId),
+            action: "DEFEND", damage: 0, attackerType: elementOf(mascot), defenderType: elementOf(mascot),
             multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(mascot.combatRole), targetRole: getCombatRoleLabel(mascot.combatRole),
             effect: `Virada Final: ${mascot.name} recebeu +${bonus} de Vitalidade e ${bonus * 4} HP por ser o último mascote da equipe.`,
           });
@@ -419,7 +419,7 @@ export function runLeagueCombat(
         log.push({
           turn: actionNum++, actorId: mascot.id, actorName: mascot.name, actorOwnerId: mascot.ownerId, actorPokemonId: mascot.pokemonId, actorLevel: mascot.level,
           targetId: mascot.id, targetName: mascot.name, targetOwnerId: mascot.ownerId, targetPokemonId: mascot.pokemonId, targetLevel: mascot.level,
-          action: "DEFEND", damage: 0, attackerType: getPokemonElement(mascot.pokemonId), defenderType: getPokemonElement(mascot.pokemonId),
+          action: "DEFEND", damage: 0, attackerType: elementOf(mascot), defenderType: elementOf(mascot),
           multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(mascot.combatRole), targetRole: getCombatRoleLabel(mascot.combatRole),
           effect: `Pane na Arena: ${mascot.name} teve ${stat} ${delta >= 0 ? `aumentado em ${delta}` : `reduzido em ${Math.abs(delta)}`}.`,
         });
@@ -476,7 +476,7 @@ export function runLeagueCombat(
               turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
               targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
               action: "HEAL", damage: heal,
-              attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(target.pokemonId),
+              attackerType: elementOf(actor), defenderType: elementOf(target),
               multiplier: 1, advantageApplied: false,
               actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
               effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,

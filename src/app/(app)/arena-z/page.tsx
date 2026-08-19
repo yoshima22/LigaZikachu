@@ -179,6 +179,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           where: { playerId: player.id },
           select: {
             id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+            primaryTypeOverride: true, secondaryTypeOverride: true,
             arenaState: true, restingUntil: true, injuredAt: true,
             bazarListed: true, happiness: true, preferredCombatRole: true,
             statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
@@ -1170,6 +1171,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 !mascotIdsInActiveTeams.has(m.id) && !m.bazarListed && m.expeditions.length === 0 && m.arenaState !== "INJURED"
               ).map(m => ({
                 id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+                primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                 statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
                 preferredCombatRole: m.preferredCombatRole,

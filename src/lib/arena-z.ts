@@ -537,7 +537,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         log.push({
           turn, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId,
           targetId: healResult.targetId, targetName: healResult.targetName, targetOwnerId: actor.ownerId,
-          action: "HEAL", damage: healResult.healAmount, attackerType: getPokemonElement(actor.pokemonId), defenderType: getPokemonElement(actor.pokemonId),
+          action: "HEAL", damage: healResult.healAmount, attackerType: arenaElement(actor), defenderType: arenaElement(actor),
           multiplier: 1, advantageApplied: false,
           actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(actor.combatRole),
           effect: `${healResult.effect}${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,
@@ -822,7 +822,7 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
-      type: getPokemonElement(m.pokemonId),
+      type: arenaElement(m),
       force: m.force,
       agility: m.agility,
       vitality: m.vitality,
@@ -2084,7 +2084,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
       name: m.name,
       level: m.level,
       maxHp: m.hp,
-      type: getPokemonElement(m.pokemonId),
+      type: arenaElement(m),
     })),
     highlights: combat.log
       .filter(turn => turn.action === "ATTACK")
@@ -2165,7 +2165,7 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
     difficultyLabel: DIFFICULTY_CONFIG[difficulty].label,
     mascots: bot.defenders.map(m => ({
       id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level,
-      type: getPokemonElement(m.pokemonId), force: m.force, agility: m.agility, vitality: m.vitality,
+      type: arenaElement(m), force: m.force, agility: m.agility, vitality: m.vitality,
     })),
   };
 }

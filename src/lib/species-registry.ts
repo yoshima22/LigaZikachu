@@ -16,7 +16,5 @@ export async function getSpeciesSnapshot(pokemonId: number, db: Db = prisma) {
   };
 }
 
-export function mascotTypes(mascot: { pokemonId: number; primaryTypeOverride?: string | null; secondaryTypeOverride?: string | null }, fallback: (id: number) => string[]) {
-  if (mascot.primaryTypeOverride) return [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[];
-  return fallback(mascot.pokemonId);
-}
+// mascotTypes/mascotPrimaryType agora vivem em @/lib/mascot-data (client-safe,
+// sem depender de fallback externo). Use de lá.

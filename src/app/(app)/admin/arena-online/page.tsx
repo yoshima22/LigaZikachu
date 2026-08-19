@@ -1,6 +1,6 @@
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { getPokemonName, mascotTypes } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import { ArenaOnlineLab } from "./arena-online-lab";
 import { LivePvpAccessPanel } from "./access-panel";
@@ -18,6 +18,8 @@ export default async function ArenaOnlinePage() {
       select: {
         id: true,
         pokemonId: true,
+        primaryTypeOverride: true,
+        secondaryTypeOverride: true,
         nickname: true,
         level: true,
         isShiny: true,
@@ -75,7 +77,7 @@ export default async function ArenaOnlinePage() {
           ownerAvatarUrl: mascot.player.avatarUrl,
           performanceTag: mascot.performanceTag,
           level: mascot.level,
-          types: getPokemonTypes(mascot.pokemonId),
+          types: mascotTypes(mascot),
           spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
             shiny: mascot.isShiny,
           }),

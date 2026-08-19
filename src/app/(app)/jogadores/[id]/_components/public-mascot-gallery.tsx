@@ -4,13 +4,15 @@ import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
-import { getPokemonElement, getPokemonName, getSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getPokemonName, getSpriteUrl, mascotPrimaryType, MOOD_EMOJI } from "@/lib/mascot-data";
 import { addExpAdminAction, adminCancelExpeditionAction, adminClaimExpeditionAction, adminStartExpeditionAction } from "@/app/(app)/mascotes/actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 
 type PublicMascot = {
   id: string;
   pokemonId: number;
+  primaryTypeOverride?: string | null;
+  secondaryTypeOverride?: string | null;
   nickname: string | null;
   level: number;
   exp?: number;
@@ -93,7 +95,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
     return mascots.filter((mascot) => {
       const pokemonName = getPokemonName(mascot.pokemonId);
       const displayName = mascot.nickname ?? pokemonName;
-      const element = getPokemonElement(mascot.pokemonId);
+      const element = mascotPrimaryType(mascot);
       const matchesSearch =
         !query ||
         displayName.toLowerCase().includes(query) ||
@@ -197,7 +199,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
                   <img src={getSpriteUrl(mascot.pokemonId, true)} alt="" className="h-11 w-11 object-contain" style={{ imageRendering: "pixelated" }} />
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold text-slate-100">{mascot.nickname ?? pokemonName}</span>
-                    <span className="text-[10px] text-slate-500">Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}</span>
+                    <span className="text-[10px] text-slate-500">Nv.{mascot.level} | {TYPE_LABELS[mascotPrimaryType(mascot)] ?? mascotPrimaryType(mascot)}</span>
                     <span className="block text-[10px] text-[#FFCB05]">{mascot.isEquipped ? "★ Companheiro" : "☆ Equipe Favorita"}</span>
                   </span>
                 </button>
@@ -229,7 +231,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
                   {mascot.nickname ?? pokemonName}
                 </span>
                 <span className="text-[10px] text-slate-500">
-                  Nv.{mascot.level} | {TYPE_LABELS[getPokemonElement(mascot.pokemonId)] ?? getPokemonElement(mascot.pokemonId)}
+                  Nv.{mascot.level} | {TYPE_LABELS[mascotPrimaryType(mascot)] ?? mascotPrimaryType(mascot)}
                 </span>
                 <span className="block text-[10px] text-slate-600">
                   {MOOD_EMOJI[mascot.mood] ?? ""}{mascot.isEquipped ? " Companheiro" : mascot.isFavorite ? " Equipe Favorita" : mascot.mood}
@@ -295,7 +297,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
             />
             <div className="grid grid-cols-2 gap-2 text-xs">
               <Info label="Nivel" value={`Nv.${selected.level}`} />
-              <Info label="Tipo" value={TYPE_LABELS[getPokemonElement(selected.pokemonId)] ?? getPokemonElement(selected.pokemonId)} />
+              <Info label="Tipo" value={TYPE_LABELS[mascotPrimaryType(selected)] ?? mascotPrimaryType(selected)} />
               <Info label="Humor" value={`${MOOD_EMOJI[selected.mood] ?? ""} ${selected.mood}`} />
               <Info label="Status" value={selected.isFavorite ? "Favorito" : selected.isEquipped ? "Equipado" : "Colecao"} />
               <Info label="Forca" value={String(selected.statForce ?? "-")} />

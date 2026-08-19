@@ -369,7 +369,7 @@ export function MascotBankList({
     const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
     const q    = search.toLowerCase();
     const matchSearch = !q || name.includes(q) || String(m.pokemonId).includes(q);
-    const matchType   = !typeFilter || getPokemonElement(m.pokemonId) === typeFilter;
+    const matchType   = !typeFilter || (m.primaryTypeOverride ?? getPokemonElement(m.pokemonId)) === typeFilter;
     return matchSearch && matchType && matchOcup(m, ocup);
   });
 

@@ -4,7 +4,7 @@ import React, { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
-import { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { getPokemonName, mascotTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import {
@@ -850,7 +850,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       const name = (m.nickname ?? getPokemonName(m.pokemonId)).toLowerCase();
       if (search && !name.includes(search.toLowerCase())) return false;
       if (typeFilter) {
-        const types = getPokemonTypes(m.pokemonId);
+        const types = mascotTypes(m);
         if (!types.includes(typeFilter)) return false;
       }
       return true;
@@ -954,7 +954,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3">
           {paginated.map((m: any) => {
             const isSelected = selected.includes(m.id);
-            const types = getPokemonTypes(m.pokemonId);
+            const types = mascotTypes(m);
             const rec = recommendCombatRole(m as any);
             return (
               <button key={m.id} onClick={() => toggleMascot(m.id)} className={`flex items-start gap-2.5 rounded-xl border p-3 text-left transition-colors ${
@@ -1095,7 +1095,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 {mascotIds.map((id: string, i: number) => {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
-                  const types = getPokemonTypes(m.pokemonId);
+                  const types = mascotTypes(m);
                   const role = teamRoles?.[id] || recommendCombatRole(m as any);
                   const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
                   const isMoving = movingMascot?.slot === slot && movingMascot.index === i;
@@ -1167,21 +1167,21 @@ function buildMascotRecommendations(analysis: OpponentAnalysis, mascots: PageDat
   const opponentPool = analysis.topMascots.filter((mascot) => mascot.pokemonId > 0);
   const totalOpponentUses = Math.max(1, opponentPool.reduce((sum, mascot) => sum + mascot.uses, 0));
   const scored = mascots.map((mascot) => {
-    const types = getPokemonTypes(mascot.pokemonId);
+    const types = mascotTypes(mascot);
     let offensive = 1;
     let incoming = 1;
     let bestTargetName = "";
     let bestTargetMultiplier = 0;
     if (opponentPool.length > 0) {
       offensive = opponentPool.reduce((sum, target) => {
-        const multiplier = getTypeAdvantageMultiplier(types, getPokemonTypes(target.pokemonId));
+        const multiplier = getTypeAdvantageMultiplier(types, mascotTypes(target));
         if (multiplier > bestTargetMultiplier) {
           bestTargetName = getPokemonName(target.pokemonId) || target.name;
           bestTargetMultiplier = multiplier;
         }
         return sum + multiplier * target.uses;
       }, 0) / totalOpponentUses;
-      incoming = opponentPool.reduce((sum, target) => sum + getTypeAdvantageMultiplier(getPokemonTypes(target.pokemonId), types) * target.uses, 0) / totalOpponentUses;
+      incoming = opponentPool.reduce((sum, target) => sum + getTypeAdvantageMultiplier(mascotTypes(target), types) * target.uses, 0) / totalOpponentUses;
     }
     const stats = Number(mascot.statForce ?? 0) + Number(mascot.statAgility ?? 0) + Number(mascot.statInstinct ?? 0) + Number(mascot.statVitality ?? 0) + Number(mascot.statCharisma ?? 0);
     const score = offensive * 55 - incoming * 28 + Math.min(100, Number(mascot.level ?? 1)) * 0.3 + stats * 0.025;
@@ -1198,7 +1198,7 @@ function buildMascotRecommendations(analysis: OpponentAnalysis, mascots: PageDat
   const selected: typeof scored = [];
   const primaryTypeCounts = new Map<string, number>();
   for (const entry of scored) {
-    const primaryType = getPokemonTypes(entry.mascot.pokemonId)[0] ?? "normal";
+    const primaryType = mascotTypes(entry.mascot)[0] ?? "normal";
     if ((primaryTypeCounts.get(primaryType) ?? 0) >= 2) continue;
     selected.push(entry);
     primaryTypeCounts.set(primaryType, (primaryTypeCounts.get(primaryType) ?? 0) + 1);
@@ -1283,7 +1283,7 @@ export function OpponentAnalysisModal({ analysis, myMascots, showRecommendations
             </div>
             <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
               {recommendations.map(({ mascot, score, offensive, incoming, reasons, role }, index) => {
-                const types = getPokemonTypes(mascot.pokemonId);
+                const types = mascotTypes(mascot);
                 return <div key={mascot.id} className="relative overflow-hidden rounded-2xl border border-slate-700/70 bg-slate-950/70 p-3">
                   <span className="absolute right-2 top-2 text-2xl font-black text-slate-800">#{index + 1}</span>
                   <div className="flex items-center gap-3">

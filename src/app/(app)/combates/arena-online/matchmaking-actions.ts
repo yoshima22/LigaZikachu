@@ -7,7 +7,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import {
   getPokemonName,
-  getPokemonTypes,
+  mascotTypes,
   getTypeAdvantageMultiplier,
 } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
@@ -285,7 +285,7 @@ function fighterFromMascot(mascot: {
     spriteUrl: `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/${mascot.pokemonId}.gif`,
     name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
     level: mascot.level,
-    types: getPokemonTypes(mascot.pokemonId),
+    types: mascotTypes(mascot),
     hp: maxHp,
     maxHp,
     force: mascot.statForce,
@@ -769,6 +769,8 @@ export async function getLivePvpMatchAction(
             id: true,
             nickname: true,
             pokemonId: true,
+            primaryTypeOverride: true,
+            secondaryTypeOverride: true,
             level: true,
             statForce: true,
             statAgility: true,
@@ -844,7 +846,7 @@ export async function getLivePvpMatchAction(
       performanceTag: mascot.performanceTag,
       gameStatus: "Selecionado",
       level: mascot.level,
-      types: getPokemonTypes(mascot.pokemonId),
+      types: mascotTypes(mascot),
       spriteUrl: getPreferredSpriteUrl(mascot.pokemonId, mascot.player, {
         shiny: mascot.isShiny,
       }),
@@ -1032,6 +1034,8 @@ export async function initializeLivePvpBattleActionLegacy() {
     select: {
       id: true,
       pokemonId: true,
+      primaryTypeOverride: true,
+      secondaryTypeOverride: true,
       nickname: true,
       level: true,
       statForce: true,
@@ -2013,10 +2017,10 @@ function resolveTacticalRound(match: MatchValue) {
         text: `${actor.name} aproveitou a marca do Batedor contra ${target.name}: +8% de dano.`,
         amount: 8,
       });
-    const typeMult = getPokemonTypes(actor.pokemonId).some(
+    const typeMult = actor.types.some(
       (type) =>
-        getPokemonTypes(target.pokemonId) &&
-        getTypeAdvantageMultiplier([type], getPokemonTypes(target.pokemonId)) >
+        target.types &&
+        getTypeAdvantageMultiplier([type], target.types) >
           1,
     )
       ? 1.3
@@ -2281,6 +2285,8 @@ export async function initializeLivePvpBattleAction() {
     select: {
       id: true,
       pokemonId: true,
+      primaryTypeOverride: true,
+      secondaryTypeOverride: true,
       nickname: true,
       level: true,
       statForce: true,

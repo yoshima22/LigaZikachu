@@ -22,7 +22,7 @@ import { RarityShimmer } from "@/components/ui/rarity-shimmer";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
-import { getPokemonName, getPokemonElement, MOOD_EMOJI, getWishlistPokemonOptions } from "@/lib/mascot-data";
+import { getPokemonName, mascotPrimaryType, MOOD_EMOJI, getWishlistPokemonOptions } from "@/lib/mascot-data";
 import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import { isEggShopItemType } from "@/lib/shop-config";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
@@ -244,6 +244,7 @@ export default async function PlayerDetailPage({
     select: {
       id: true, pokemonId: true, nickname: true, level: true,
       mood: true, isEquipped: true, isShiny: true,
+      primaryTypeOverride: true, secondaryTypeOverride: true,
     },
     orderBy: { level: "desc" },
     take: 6,
@@ -836,8 +837,9 @@ export default async function PlayerDetailPage({
             {(favoriteMascots as Array<{
               id: string; pokemonId: number; nickname: string | null;
               level: number; mood: string; isEquipped: boolean; isShiny: boolean;
+              primaryTypeOverride: string | null; secondaryTypeOverride: string | null;
             }>).map((m) => {
-              const element = getPokemonElement(m.pokemonId);
+              const element = mascotPrimaryType(m);
               const name = m.nickname ?? getPokemonName(m.pokemonId);
               const TYPE_LABELS: Record<string, string> = {
                 normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama",
