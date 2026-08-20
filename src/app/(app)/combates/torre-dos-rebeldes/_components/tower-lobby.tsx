@@ -8,6 +8,7 @@ import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
 import { TowerKnowledge, TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
+import { TowerAdminSettings } from "./tower-admin-settings";
 
 type LobbyData = Extract<Awaited<ReturnType<typeof getTowerLobbyDataAction>>, { ok: true }>;
 type Role = LobbyData["roles"][number];
@@ -41,19 +42,21 @@ export function TowerLobby() {
 
   // Já existe uma expedição ativa (lobby ou em andamento) → painel de turno.
   if (data.activeRun) {
-    return <TowerRunPanel runId={data.activeRun.id} onLeft={() => { router.refresh(); load(); }} />;
+    return <div className="space-y-4"><TowerAdminSettings initial={data.config} onSaved={load}/><TowerNarrativeAdmin initial={data.scenes}/><TowerRunPanel runId={data.activeRun.id} onLeft={() => { router.refresh(); load(); }} /></div>;
   }
 
   // Cooldown de entrada.
   if (data.nextEntryAt) {
     const when = new Date(data.nextEntryAt).toLocaleString("pt-BR");
-    return (
+    return <div className="space-y-4">
+      <TowerAdminSettings initial={data.config} onSaved={load}/>
+      <TowerNarrativeAdmin initial={data.scenes}/>
       <section className={card}>
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Cooldown de entrada</h2>
         <p className="mt-2 text-sm text-slate-300">Próxima entrada disponível em <strong className="text-white">{when}</strong>.</p>
         <p className="mt-1 text-[11px] text-slate-500">O cooldown ({data.config.entryCooldownMinutes} min) é configurável no admin. Em desenvolvimento, defina 0 para testar sem espera.</p>
       </section>
-    );
+    </div>;
   }
 
   const selectedRole = data.roles.find((r) => r.key === role) ?? null;
@@ -75,6 +78,7 @@ export function TowerLobby() {
   return (
     <div className="space-y-6">
       <TowerNarrative scene={data.lobbyScene} />
+      <TowerAdminSettings initial={data.config} onSaved={load}/>
       <TowerKnowledge entries={data.knowledge} failures={data.failures} />
       <TowerNarrativeAdmin initial={data.scenes} />
 

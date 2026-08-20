@@ -16,6 +16,8 @@ import {
   TOWER_ROLE_BY_KEY,
   initialStanceFor,
   towerMaxHp,
+  TOWER_SETTINGS_KEY,
+  type TowerConfig,
 } from "@/lib/tower/config";
 import { Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
 import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
@@ -44,12 +46,14 @@ async function findActiveRunForUser(userId: string) {
 }
 
 async function lastEntryAt(userId: string): Promise<number | null> {
-  const last = await prisma.towerRunMember.findFirst({
+  const [last, bypass] = await Promise.all([prisma.towerRunMember.findFirst({
     where: { userId },
     orderBy: { joinedAt: "desc" },
     select: { run: { select: { createdAt: true } } },
-  });
-  return last ? last.run.createdAt.getTime() : null;
+  }), prisma.towerFeat.findFirst({ where: { userId, featKey: "ADMIN_COOLDOWN_BYPASS" }, orderBy: { achievedAt: "desc" }, select: { achievedAt: true } })]);
+  const entryAt = last?.run.createdAt.getTime() ?? null;
+  if (entryAt !== null && bypass && bypass.achievedAt.getTime() > entryAt) return null;
+  return entryAt;
 }
 
 /** Retorna o usuário só se for ADMIN de plataforma; senão null (GM/USER negados). */
@@ -72,6 +76,24 @@ export async function getTowerOverviewAction(): Promise<TowerOverview> {
     status: "in_development",
     message: "Torre dos Rebeldes em desenvolvimento (Fase 1: shell admin-only).",
   };
+}
+
+export async function saveTowerConfigAction(input: TowerConfig) {
+  const user=await requireTowerAdmin();
+  if(!user)return {error:"Acesso restrito à equipe ADMIN."};
+  const entryCooldownMinutes=Math.max(0,Math.min(10080,Math.trunc(Number(input.entryCooldownMinutes)||0)));
+  const value:TowerConfig={entryCooldownMinutes,requireTicket:input.requireTicket===true};
+  await prisma.appSetting.upsert({where:{key:TOWER_SETTINGS_KEY},create:{key:TOWER_SETTINGS_KEY,value},update:{value}});
+  revalidatePath(PATH);
+  return {ok:true as const,config:value};
+}
+
+export async function clearMyTowerCooldownAction() {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  await prisma.towerFeat.create({ data: { userId: user.id, featKey: "ADMIN_COOLDOWN_BYPASS", data: { reason: "Liberação manual pelo painel da Torre" } } });
+  revalidatePath(PATH);
+  return { ok: true as const };
 }
 
 // ── Fase 4 · Lobby & entrada ──────────────────────────────────────────────────

@@ -28,7 +28,7 @@ export async function getTowerConfig(): Promise<TowerConfig> {
   const v = (setting?.value ?? {}) as Partial<TowerConfig>;
   return {
     entryCooldownMinutes:
-      typeof v.entryCooldownMinutes === "number" && v.entryCooldownMinutes > 0
+      typeof v.entryCooldownMinutes === "number" && v.entryCooldownMinutes >= 0
         ? v.entryCooldownMinutes
         : DEFAULT_CONFIG.entryCooldownMinutes,
     requireTicket: v.requireTicket === true,
