@@ -3,12 +3,13 @@
 import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonTypes, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
-import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction, contributeTowerPreparationAction } from "../actions";
+import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction, contributeTowerPreparationAction, spendTowerTalentAction } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
 import { TowerKnowledge, TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
 import { TowerAdminSettings } from "./tower-admin-settings";
+import { TowerIntro } from "./tower-intro";
 
 type LobbyData = Extract<Awaited<ReturnType<typeof getTowerLobbyDataAction>>, { ok: true }>;
 type Role = LobbyData["roles"][number];
@@ -26,6 +27,7 @@ export function TowerLobby() {
   const [role, setRole] = useState<Role["key"] | null>(null);
   const [picks, setPicks] = useState<string[]>([]);
   const [stances, setStances] = useState<Record<string,string>>({});
+  const [search,setSearch]=useState(""); const [typeFilter,setTypeFilter]=useState("ALL"); const [mascotPage,setMascotPage]=useState(1); const [introKey,setIntroKey]=useState(0);
 
   const load = () => {
     void getTowerLobbyDataAction().then((res) => {
@@ -42,7 +44,7 @@ export function TowerLobby() {
 
   // Já existe uma expedição ativa (lobby ou em andamento) → painel de turno.
   if (data.activeRun) {
-    return <div className="space-y-4"><TowerAdminSettings initial={data.config} onSaved={load}/><TowerNarrativeAdmin initial={data.scenes}/><TowerRunPanel runId={data.activeRun.id} onLeft={() => { router.refresh(); load(); }} /></div>;
+    return <div className="space-y-4"><TowerIntro forceKey={introKey}/><button type="button" onClick={()=>setIntroKey(Date.now())} className="rounded-xl border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-black text-purple-200">▶ Testar introdução do evento</button><TowerAdminSettings initial={data.config} onSaved={load}/><TowerNarrativeAdmin initial={data.scenes}/><TowerRunPanel runId={data.activeRun.id} onLeft={() => { router.refresh(); load(); }} /></div>;
   }
 
   // Cooldown de entrada.
@@ -60,6 +62,8 @@ export function TowerLobby() {
   }
 
   const selectedRole = data.roles.find((r) => r.key === role) ?? null;
+  const filteredMascots=data.mascots.filter(m=>(!search||m.name.toLowerCase().includes(search.toLowerCase()))&&(typeFilter==="ALL"||getPokemonTypes(m.pokemonId).includes(typeFilter)));
+  const mascotPages=Math.max(1,Math.ceil(filteredMascots.length/16)); const visibleMascots=filteredMascots.slice((mascotPage-1)*16,mascotPage*16);
   const toggle = (id: string) =>
     setPicks((cur) => cur.includes(id) ? cur.filter((x) => x !== id) : cur.length >= 2 ? cur : [...cur, id]);
 
@@ -77,7 +81,9 @@ export function TowerLobby() {
 
   return (
     <div className="space-y-6">
+      <TowerIntro forceKey={introKey}/>
       <TowerNarrative scene={data.lobbyScene} />
+      <button type="button" onClick={()=>setIntroKey(Date.now())} className="rounded-xl border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-black text-purple-200">▶ Testar introdução do evento</button>
       <TowerAdminSettings initial={data.config} onSaved={load}/>
       <TowerKnowledge entries={data.knowledge} failures={data.failures} />
       <section className={card}>
@@ -95,6 +101,8 @@ export function TowerLobby() {
         {data.communityCodex.length > 0 && <div className="mt-4 rounded-xl border border-purple-400/20 bg-purple-950/15 p-3"><b className="text-xs uppercase tracking-wider text-purple-200">Descobertas compartilhadas</b>{data.communityCodex.slice(0, 6).map((entry) => <p key={entry.id} className="mt-2 text-xs text-slate-300">✦ {String((entry.data as { text?: string } | null)?.text ?? entry.subjectKey)}</p>)}</div>}
       </section>
       <TowerNarrativeAdmin initial={data.scenes} />
+
+      <section className={card}><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">Árvore de talentos</p><h2 className="text-lg font-black text-white">Legado das runs</h2></div><span className="rounded-full bg-[#FFCB05] px-3 py-1 text-xs font-black text-slate-950">{data.talents.points} ponto(s)</span></div><p className="mt-2 text-xs text-slate-400">Cada chefe derrotado concede um ponto. Os benefícios são permanentes e usados nas próximas runs.</p><div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">{([['PRESSURE','Controle da Pressão','+1 proteção inicial contra Pressão.'],['COMBAT','Treino de combate','+2% de atributos por nível.'],['BOSS','Caçador de chefes','+3% contra chefes por nível.'],['LUCK','Destino dobrado','Melhora futuras rerrolagens de sorte.'],['RESCUE','Equipe de resgate','Melhora salas Anti-Psicose.']] as const).map(([key,title,text])=><article key={key} className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3"><b className="text-xs text-emerald-100">{title}</b><p className="mt-1 min-h-10 text-[10px] text-slate-400">{text}</p><button disabled={pending||data.talents.points<=0||Number(data.talents.ranks[key]??0)>=5} onClick={()=>start(async()=>{const res=await spendTowerTalentAction(key);if('error'in res)toast.error(res.error);else{toast.success('Talento aprendido.');load()}})} className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35">Nv.{Number(data.talents.ranks[key]??0)} · Aprender</button></article>)}</div></section>
 
       {data.rooms.length>0&&<section className={card}><h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Salas aguardando jogadores</h2><p className="mt-1 text-[11px] text-slate-500">Prepare seus dois mascotes abaixo e entre em uma sala de até três treinadores.</p><div className="mt-3 grid gap-3 md:grid-cols-2">{data.rooms.map(room=><article key={room.id} className="rounded-xl border border-purple-400/20 bg-purple-950/15 p-3"><div className="flex justify-between"><b className="text-white">Sala {room.code}</b><span className="text-xs text-purple-300">{room.members.length}/3</span></div><p className="mt-1 text-[10px] text-slate-400">Host: {room.host} · {room.pace==="ONLINE"?"120s":"4h"}</p><div className="mt-2 flex flex-wrap gap-1">{room.members.map(m=><span key={m.userId} className="rounded-full bg-slate-800 px-2 py-1 text-[9px] text-slate-300">{m.name}{m.ready?" ✓":""}</span>)}</div><button disabled={pending||picks.length!==2||!role} onClick={()=>start(async()=>{if(!role)return;const res=await joinTowerRoomAction({runId:room.id,expeditionRole:role,mascotIds:picks,stanceByMascot:stances});if("error" in res)toast.error(res.error);else{toast.success("Você entrou na sala.");load()}})} className="mt-3 w-full rounded-lg border border-purple-400/40 bg-purple-400/10 py-2 text-xs font-black text-purple-200 disabled:opacity-40">Entrar nesta sala</button></article>)}</div></section>}
 
@@ -139,11 +147,12 @@ export function TowerLobby() {
           <span className={`text-xs font-bold ${picks.length === 2 ? "text-[#FFCB05]" : "text-slate-500"}`}>{picks.length}/2</span>
         </div>
         <p className="mt-1 text-[11px] text-slate-500">Eles entram em Survivor e carregam o estado entre combates dentro da Torre.</p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_220px]"><input value={search} onChange={e=>{setSearch(e.target.value);setMascotPage(1)}} placeholder="Buscar mascote pelo nome..." className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"/><select value={typeFilter} onChange={e=>{setTypeFilter(e.target.value);setMascotPage(1)}} className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"><option value="ALL">Todos os tipos</option>{['Normal','Fogo','Água','Elétrico','Planta','Gelo','Lutador','Veneno','Terra','Voador','Psíquico','Inseto','Pedra','Fantasma','Dragão','Sombrio','Aço','Fada'].map(t=><option key={t} value={t}>{t}</option>)}</select></div>
         {data.mascots.length === 0 ? (
           <p className="mt-3 text-xs text-slate-500">Nenhum mascote livre disponível. Libere mascotes (fora de arena/expedição/bazar) para entrar.</p>
         ) : (
           <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {data.mascots.map((m: Mascot) => {
+            {visibleMascots.map((m: Mascot) => {
               const checked = picks.includes(m.id);
               return (
                 <button key={m.id} type="button" onClick={() => toggle(m.id)}
@@ -160,6 +169,7 @@ export function TowerLobby() {
             })}
           </div>
         )}
+        {filteredMascots.length>16&&<div className="mt-3 flex items-center justify-center gap-3"><button disabled={mascotPage<=1} onClick={()=>setMascotPage(p=>p-1)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">Anterior</button><span className="text-xs text-slate-500">Página {mascotPage}/{mascotPages}</span><button disabled={mascotPage>=mascotPages} onClick={()=>setMascotPage(p=>p+1)} className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30">Próxima</button></div>}
       </section>
 
       <button type="button" onClick={create} disabled={pending || picks.length !== 2 || !role}

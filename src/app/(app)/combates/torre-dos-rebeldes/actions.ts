@@ -126,9 +126,11 @@ export async function getTowerLobbyDataAction() {
   const config = await getTowerConfig();
   const scenes = await getTowerNarrativeScenes();
   const failures = await prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] } } } });
-  const [communityProgress, communityCodex] = await Promise.all([
+  const [communityProgress, communityCodex, talentPoints, talentFeats] = await Promise.all([
     prisma.towerCommunityProgress.findMany({ where: { floorId: 1 }, orderBy: { metricKey: "asc" } }),
     prisma.towerCodexEntry.findMany({ where: { userId: null }, orderBy: { updatedAt: "desc" }, take: 30 }),
+    prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT_POINT" } }),
+    prisma.towerFeat.findMany({ where: { userId: user.id, featKey: { startsWith: "TOWER_TALENT:" } }, select: { featKey: true } }),
   ]);
   const active = await findActiveRunForUser(user.id);
   const openRuns = await prisma.towerRun.findMany({
@@ -140,9 +142,11 @@ export async function getTowerLobbyDataAction() {
   const lastAt = await lastEntryAt(user.id);
   const nextEntryMs = lastAt !== null ? lastAt + config.entryCooldownMinutes * 60_000 : 0;
 
+  const lostMascotIds = (await prisma.towerLostMascot.findMany({ where: { ownerUserId: user.id, recoveredAt: null }, select: { mascotId: true } })).map((entry) => entry.mascotId);
   const mascots = await prisma.mascot.findMany({
     where: {
       playerId: player.id,
+      id: { notIn: lostMascotIds },
       arenaState: "FREE",
       bazarListed: false,
       expeditions: { none: { status: "ACTIVE" } },
@@ -163,6 +167,7 @@ export async function getTowerLobbyDataAction() {
     failures,
     communityProgress,
     communityCodex,
+    talents: { points: Math.max(0, talentPoints - talentFeats.length), ranks: Object.fromEntries(talentFeats.map((feat) => [feat.featKey.replace("TOWER_TALENT:", ""), 1 + talentFeats.filter((other) => other.featKey === feat.featKey).indexOf(feat)])) },
     knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
@@ -175,6 +180,21 @@ export async function getTowerLobbyDataAction() {
       return { id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace, host: roomUsers.get(lobby?.hostId ?? run.members[0]?.userId ?? "") ?? "Jogador", members: run.members.map((m) => ({ userId: m.userId, name: roomUsers.get(m.userId) ?? "Jogador", ready: Boolean(lobby?.ready?.[m.userId]) })) };
     }),
   };
+}
+
+export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE") {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  const [earned, spent, rank] = await Promise.all([
+    prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT_POINT" } }),
+    prisma.towerFeat.count({ where: { userId: user.id, featKey: { startsWith: "TOWER_TALENT:" } } }),
+    prisma.towerFeat.count({ where: { userId: user.id, featKey: `TOWER_TALENT:${key}` } }),
+  ]);
+  if (earned <= spent) return { error: "Você não possui pontos de talento disponíveis." };
+  if (rank >= 5) return { error: "Este talento já atingiu o nível máximo." };
+  await prisma.towerFeat.create({ data: { userId: user.id, featKey: `TOWER_TALENT:${key}`, data: { rank: rank + 1 } } });
+  revalidatePath(PATH);
+  return { ok: true as const };
 }
 
 /** Editor narrativo data-driven. Imagens enviadas são persistidas no Storage. */
@@ -343,7 +363,8 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
 
   const progress = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1 } });
   const unlocked = progress.filter((entry) => entry.value >= 5).map((entry) => entry.metricKey);
-  const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: unlocked, pressureShield: unlocked.includes("WARD") ? 2 : 0 };
+  const pressureTalent = await prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT:PRESSURE" } });
+  const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: unlocked, pressureShield: (unlocked.includes("WARD") ? 2 : 0) + pressureTalent };
   const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
   await prisma.towerRun.update({
     where: { id: runId },
@@ -509,7 +530,7 @@ export async function getTowerRunStateAction(runId: string) {
     battle,
     exploration: exploration && room ? {
       currentRoom: { ...room, puzzle: room.puzzle ? { id: room.puzzle.id, prompt: room.puzzle.prompt, options: room.puzzle.options, hint: exploration.countermeasures?.includes("INSIGHT") ? "O Arquivo recomenda observar a sequência, não a intensidade." : null } : undefined },
-      rooms: exploration.graph.map((node) => { const known = exploration.visited.includes(node.id) || exploration.countermeasures?.includes("MAP"); return { id: node.id, title: known ? node.title : "Sala desconhecida", kind: known ? node.kind : "UNKNOWN", visited: exploration.visited.includes(node.id), current: node.id === room.id, cleared: node.cleared }; }),
+      rooms: exploration.graph.map((node) => { const known = exploration.visited.includes(node.id) || exploration.countermeasures?.includes("MAP"); return { id: node.id, title: known ? node.title : "Sala desconhecida", kind: known ? node.kind : "UNKNOWN", visited: exploration.visited.includes(node.id), current: node.id === room.id, cleared: node.cleared, x: node.x, y: node.y, connections: node.connections }; }),
       routes: room.connections.map((id) => {
         const node = exploration.graph.find((candidate) => candidate.id === id);
         return node ? { id: node.id, title: exploration.countermeasures?.includes("MAP") ? node.title : "Rota desconhecida", kind: exploration.countermeasures?.includes("MAP") ? node.kind : "UNKNOWN", visited: exploration.visited.includes(node.id), cleared: node.cleared } : null;
@@ -519,6 +540,7 @@ export async function getTowerRunStateAction(runId: string) {
       countermeasures: exploration.countermeasures ?? [],
       pressureShield: exploration.pressureShield ?? 0,
       encounter: exploration.encounter ?? null,
+      relics: exploration.relics ?? [],
       lastOutcome: exploration.lastOutcome ?? null,
       replay: exploration.pendingReplay ?? null,
       communityDiscoveries,

@@ -1,4 +1,4 @@
-export type TowerRoomKind = "ENTRANCE" | "PUZZLE" | "COMBAT" | "REST" | "EVENT" | "BOSS";
+export type TowerRoomKind = "ENTRANCE" | "PUZZLE" | "COMBAT" | "REST" | "EVENT" | "RESCUE" | "LUCK" | "BOSS";
 
 export type TowerPuzzle = {
   id: string;
@@ -18,6 +18,8 @@ export type TowerRoomNode = {
   connections: string[];
   puzzle?: TowerPuzzle;
   cleared: boolean;
+  x: number;
+  y: number;
 };
 
 export type TowerPressureModifier = {
@@ -47,6 +49,7 @@ export type TowerExplorationState = {
   countermeasures?: string[];
   pressureShield?: number;
   encounter?: { roomId: string; preparationTurns: number; enemies: { pokemonId: number; name: string; level: number }[] };
+  relics?: { key: string; name: string; description: string }[];
 };
 
 const BG = "/events/torre-dos-rebeldes/background.png";
@@ -91,15 +94,23 @@ export function towerPressureModifiers(pressure: number): TowerPressureModifier[
   return all.filter(([at]) => pressure >= at).map(([, mod]) => mod);
 }
 
-export function generateTowerRoomGraph(seed: string): TowerExplorationState {
-  const puzzle = PUZZLES[hash(seed) % PUZZLES.length];
+export function generateTowerRoomGraph(seed: string, floor = 1): TowerExplorationState {
+  const puzzle = PUZZLES[hash(`${seed}:${floor}`) % PUZZLES.length];
+  const room = (id: string, index: number, kind: TowerRoomKind, title: string, description: string, connections: string[], x: number, y: number, cleared = false, roomPuzzle?: TowerPuzzle): TowerRoomNode => ({ id, index, kind, title, description, backgroundUrl: BG, connections, x, y, cleared, puzzle: roomPuzzle });
   const graph: TowerRoomNode[] = [
-    { id: "entrance", index: 0, kind: "ENTRANCE", title: "Vestíbulo Rebelde", description: "A porta fecha atrás do grupo. Dois caminhos parecem seguros — o que costuma significar que nenhum é.", backgroundUrl: BG, connections: ["puzzle", "patrol"], cleared: true },
-    { id: "puzzle", index: 1, kind: "PUZZLE", title: "Arquivo das Vozes", description: "Um mecanismo antigo bloqueia a passagem. A resposta errada alimentará a Torre.", backgroundUrl: BG, connections: ["rest", "gallery"], puzzle, cleared: false },
-    { id: "patrol", index: 2, kind: "COMBAT", title: "Salão da Patrulha", description: "Passos ritmados ecoam adiante. Os rebeldes já perceberam a expedição.", backgroundUrl: BG, connections: ["gallery", "rest"], cleared: false },
-    { id: "rest", index: 3, kind: "REST", title: "Capela Silenciosa", description: "Uma chama azul oferece descanso — ou uma armadilha muito educada.", backgroundUrl: BG, connections: ["gallery"], cleared: false },
-    { id: "gallery", index: 4, kind: "COMBAT", title: "Galeria dos Desobedientes", description: "A guarda de elite protege o elevador quebrado.", backgroundUrl: BG, connections: ["boss"], cleared: false },
-    { id: "boss", index: 5, kind: "BOSS", title: "Câmara do Chandelure", description: "O senhor do andar abre seu livro. A última aula será prática.", backgroundUrl: BG, connections: [], cleared: false },
+    room("entrance",0,"ENTRANCE",`Entrada do ${floor}º andar`,"As escadas se dividem em várias alas.",["archive","patrol","crypt"],6,50,true),
+    room("archive",1,"PUZZLE","Arquivo das Vozes","Um mecanismo bloqueia atalhos futuros.",["sanctuary","reliquary"],22,18,false,puzzle),
+    room("patrol",2,"COMBAT","Salão da Patrulha","Passos rebeldes ecoam adiante.",["sanctuary","crossroads"],22,50),
+    room("crypt",3,"EVENT","Cripta Lacrada","Há algo útil — ou faminto — atrás das correntes.",["rescue","crossroads"],22,82),
+    room("sanctuary",4,"REST","Capela Silenciosa","Uma chama desconhecida oferece descanso.",["observatory","gate"],42,14),
+    room("reliquary",5,"LUCK","Relicário Instável","Uma relíquia pode ajudar a run ou reagir contra o grupo.",["observatory","crossroads"],42,34),
+    room("crossroads",6,"COMBAT","Encruzilhada Rebelde","Uma tropa móvel protege três passagens.",["observatory","rescue","gate"],43,60),
+    room("rescue",7,"RESCUE","Sala Anti-Psicose","Jaulas de contenção guardam mascotes perdidos.",["crossroads","gate"],43,84),
+    room("observatory",8,"PUZZLE","Observatório Partido","Resolver o mecanismo desativa reforços do chefe.",["gate","armory"],63,22,false,PUZZLES[(hash(seed)+floor+1)%PUZZLES.length]),
+    room("armory",9,"EVENT","Arsenal Rebelde","Itens ativos podem fortalecer ou sabotar encontros.",["gate","elite"],64,45),
+    room("gate",10,"COMBAT","Portão da Consciência","A última patrulha bloqueia o acesso ao líder.",["elite"],64,70),
+    room("elite",11,"COMBAT","Escadaria do Regente","A guarda pessoal do chefe não respeita combate justo.",["boss"],82,55),
+    room("boss",12,"BOSS",`Câmara do Chefe ${floor}/7`,`O regente do ${floor}º andar aguarda com seus seguidores.`,[],95,55),
   ];
   return { currentRoomId: "entrance", visited: ["entrance"], graph, pressure: 0, activeModifiers: [] };
 }

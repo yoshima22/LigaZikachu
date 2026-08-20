@@ -49,7 +49,9 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [puzzleChoice, setPuzzleChoice] = useState<string>();
   const [roomAction, setRoomAction] = useState<string>();
   const [showReplay, setShowReplay] = useState(false);
+  const [phaseFlash,setPhaseFlash]=useState<string|null>(null);
   const inFlight = useRef(false);
+  const lastTurnRef=useRef<number|null>(null);
   const replayOpenRef = useRef(false);
   const seenReplayRef = useRef<string | null>(null);
   useEffect(() => { replayOpenRef.current = showReplay; }, [showReplay]);
@@ -59,6 +61,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
     const key = `${replay.title}:${replay.log.length}:${replay.winner}`;
     if (seenReplayRef.current !== key) { seenReplayRef.current = key; setShowReplay(true); }
   }, [state?.exploration?.replay]);
+  useEffect(()=>{ if(!state||state.run.status!=="ACTIVE")return; if(lastTurnRef.current!==null&&lastTurnRef.current!==state.run.globalTurn){setPhaseFlash(state.exploration?.encounter?"ENCONTRO HOSTIL · DECIDAM LUTAR OU ESPERAR":`NOVO TURNO · ${state.exploration?.currentRoom.title??"TORRE"}`);setTimeout(()=>setPhaseFlash(null),1800)} lastTurnRef.current=state.run.globalTurn; },[state?.run.globalTurn,state?.run.status,state?.exploration?.encounter,state?.exploration?.currentRoom.title]);
 
   const refresh = useCallback(async () => {
     if (replayOpenRef.current) return;
@@ -85,11 +88,12 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const run = state.run;
   const ended = run.status === "FINISHED" || run.status === "FAILED" || run.status === "ABANDONED";
   const room = state.exploration?.currentRoom;
-  const missingTowerChoice = Boolean(state.exploration && !state.exploration.encounter && ((room?.cleared && state.exploration.routes.length > 0 && !routeId) || (room?.kind === "PUZZLE" && !room.cleared && !puzzleChoice) || (room?.kind === "REST" && !room.cleared && !roomAction)));
+  const missingTowerChoice = Boolean(state.exploration && (state.exploration.encounter ? !roomAction : ((room?.cleared && state.exploration.routes.length > 0 && !routeId) || (room?.kind === "PUZZLE" && !room.cleared && !puzzleChoice) || (["REST","EVENT","LUCK"].includes(room?.kind ?? "") && !room?.cleared && !roomAction))));
   const towerActionLabel = state.exploration?.encounter ? "Confirmar presença no encontro" : room?.cleared ? "Confirmar rota escolhida" : room?.kind === "PUZZLE" ? "Confirmar resposta do enigma" : room?.kind === "REST" ? "Confirmar decisão sobre a chama" : "Confirmar ação";
 
   return (
     <section className={card}>
+      {phaseFlash&&<div className="fixed inset-0 z-[70] flex pointer-events-none items-center justify-center bg-black/45"><div className="animate-pulse rounded-3xl border-2 border-[#FFCB05] bg-slate-950/95 px-8 py-6 text-center text-xl font-black tracking-widest text-[#FFCB05] shadow-[0_0_70px_rgba(255,203,5,.5)]">{phaseFlash}</div></div>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
           {run.status === "LOBBY" ? "Lobby" : ended ? "Encerrada" : "Expedição · Turno " + run.globalTurn}
@@ -209,7 +213,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
           {/* Confirmar ações do turno */}
           {(state.exploration || !state.battle?.over) && (
-            <div className="rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-3"><div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">Janela da ação atual</p><p className="text-xs text-slate-400">{state.mine.confirmed ? "Sua escolha foi registrada; aguardando os demais." : missingTowerChoice ? "Escolha uma opção destacada antes de confirmar." : "Ao confirmar, esta decisão fica travada até a resolução coletiva."}</p></div><Countdown deadline={run.nextDeadline} /></div><button type="button" disabled={pending || state.mine.confirmed || missingTowerChoice} onClick={() => start(async () => {
+            <div className="sticky bottom-3 z-30 rounded-2xl border border-[#FFCB05]/40 bg-slate-950/95 p-3 shadow-2xl backdrop-blur"><div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">Janela da ação atual</p><p className="text-xs text-slate-400">{state.mine.confirmed ? "Sua escolha foi registrada; aguardando os demais." : missingTowerChoice ? "Escolha uma opção destacada antes de confirmar." : "Ao confirmar, esta decisão fica travada até a resolução coletiva."}</p></div><Countdown deadline={run.nextDeadline} /></div><button type="button" disabled={pending || state.mine.confirmed || missingTowerChoice} onClick={() => start(async () => {
               const payload = state.exploration ? { routeId, puzzleChoice, action: roomAction ?? "RESOLVE_ROOM" } : { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting, destinations, targets };
               const res = await submitTowerActionAction(runId, payload);
               if ("error" in res) { toast.error(res.error); return; }
