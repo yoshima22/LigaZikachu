@@ -2,11 +2,14 @@
 // 4h). Módulo de servidor comum (NÃO "use server"): usado pelas server actions e
 // pelo cron, sem expor a resolução como action pública.
 
+import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { resolveEncounterTurn, type TowerBattleState, type TowerIntent } from "./encounter";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
   log?: string[];
+  battle?: TowerBattleState;
 };
 
 /** Duração da janela de turno por ritmo. */
@@ -40,6 +43,29 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const vol = (run.volatileState ?? {}) as TowerVolatile;
       const submissions = vol.submissions ?? {};
       const active = run.members.filter((m) => !m.afkRemoved);
+      const battleLog: string[] = [];
+
+      // ── Resolução do encounter (uma rodada do motor tático por Turno Global) ──
+      if (vol.battle && !vol.battle.encounterOver) {
+        // Coleta as intenções por mascote das submissões (fallback: ADVANCE).
+        const intents: Record<string, TowerIntent> = {};
+        for (const m of active) {
+          const payload = submissions[m.userId]?.actions as { intents?: Record<string, TowerIntent> } | null | undefined;
+          if (payload?.intents) for (const [mid, it] of Object.entries(payload.intents)) intents[mid] = it;
+        }
+        const { state, events } = resolveEncounterTurn(vol.battle, run.seed, run.globalTurn, intents);
+        vol.battle = state;
+        for (const e of events) if (e.kind === "KO" || e.kind === "SURVIVE") battleLog.push(e.text);
+        if (state.encounterOver) battleLog.push(state.outcome === "WIN" ? "Encounter vencido!" : "Todos os mascotes caíram no encounter.");
+        // Survivor: sincroniza o HP dos aliados de volta no snapshot da run.
+        for (const u of state.units) {
+          if (u.team !== "ALLY") continue;
+          await tx.towerRunMascot.updateMany({
+            where: { mascotId: u.id, member: { runId } },
+            data: { currentHp: u.hp, state: u.hp <= 0 ? "DEFEATED" : "IN_TOWER" },
+          });
+        }
+      }
 
       // AFK: quem confirmou zera as faltas; quem não confirmou soma; 2 seguidas remove.
       let removedNow = 0;
@@ -64,12 +90,12 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const nextTurn = run.globalTurn + 1;
       const order = Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : [];
       const rotated = order.length ? [...order.slice(1), order[0]] : order;
-      const log = [...(vol.log ?? []), `Turno ${run.globalTurn} resolvido.`].slice(-50);
+      const log = [...(vol.log ?? []), ...battleLog, `Turno ${run.globalTurn} resolvido.`].slice(-50);
 
       if (stillActive <= 0) {
         await tx.towerRun.update({
           where: { id: runId },
-          data: { status: "FINISHED", endedAt: new Date(), volatileState: { ...vol, submissions: {}, log } },
+          data: { status: "FINISHED", endedAt: new Date(), volatileState: { ...vol, submissions: {}, log } as unknown as Prisma.InputJsonValue },
         });
         return;
       }
@@ -80,7 +106,7 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
           globalTurn: nextTurn,
           resolutionOrder: rotated,
           nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
-          volatileState: { ...vol, submissions: {}, log },
+          volatileState: { ...vol, submissions: {}, log } as unknown as Prisma.InputJsonValue,
         },
       });
     },

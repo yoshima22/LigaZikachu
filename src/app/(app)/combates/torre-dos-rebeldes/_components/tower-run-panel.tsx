@@ -8,8 +8,17 @@ import {
   submitTowerActionAction,
   abandonTowerRunAction,
 } from "../actions";
+import { getCombatRoleLabel } from "@/lib/combat-roles";
+import { TowerBattleGrid } from "./tower-battle-grid";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
+type Intent = "ADVANCE" | "ATTACK" | "DEFEND" | "WAIT";
+const INTENTS: { value: Intent; label: string }[] = [
+  { value: "ADVANCE", label: "Avançar" },
+  { value: "ATTACK", label: "Atacar" },
+  { value: "DEFEND", label: "Defender" },
+  { value: "WAIT", label: "Esperar" },
+];
 
 const card = "rounded-2xl border border-slate-800 bg-slate-950/70 p-5";
 
@@ -33,6 +42,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
+  const [intents, setIntents] = useState<Record<string, Intent>>({});
   const inFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -111,15 +121,50 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
             </div>
           </div>
 
-          {/* Ação do turno (placeholder até o gameplay da Fase 6) */}
-          <button type="button" disabled={pending || state.mine.confirmed} onClick={() => start(async () => {
-            const res = await submitTowerActionAction(runId, null);
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Ação confirmada.");
-            void refresh();
-          })} className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-black text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
-            {state.mine.confirmed ? "Ação confirmada — aguardando os demais / deadline" : "Confirmar ação do turno (placeholder)"}
-          </button>
+          {/* Sala + fog */}
+          {state.battle && <TowerBattleGrid battle={state.battle} />}
+          {state.battle?.over && (
+            <p className={`rounded-lg border px-3 py-2 text-xs font-bold ${state.battle.outcome === "WIN" ? "border-green-500/30 bg-green-500/5 text-green-300" : "border-red-500/30 bg-red-500/5 text-red-300"}`}>
+              {state.battle.outcome === "WIN" ? "🏆 Encounter vencido!" : "☠️ Seus mascotes caíram no encounter."}
+            </p>
+          )}
+
+          {/* Ordens dos seus mascotes (aplicadas na resolução do turno) */}
+          {!state.battle?.over && state.myMascots.length > 0 && (
+            <div className="space-y-2">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ordens dos seus mascotes</p>
+              {state.myMascots.map((m) => (
+                <div key={m.id} className={`flex items-center gap-2 rounded-lg border p-2 ${m.hp <= 0 ? "border-slate-800 bg-slate-900/30 opacity-50" : "border-slate-800 bg-slate-900/50"}`}>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs font-bold text-white">{m.name}</p>
+                    <p className="text-[10px] text-cyan-300">{getCombatRoleLabel(m.role)} · {m.hp}/{m.maxHp} HP</p>
+                  </div>
+                  {m.hp <= 0 ? (
+                    <span className="text-[10px] font-bold text-red-400">caído</span>
+                  ) : (
+                    <select value={intents[m.id] ?? "ADVANCE"} onChange={(e) => setIntents((cur) => ({ ...cur, [m.id]: e.target.value as Intent }))}
+                      disabled={state.mine.confirmed}
+                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-yellow-300 disabled:opacity-50">
+                      {INTENTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Confirmar ações do turno */}
+          {!state.battle?.over && (
+            <button type="button" disabled={pending || state.mine.confirmed} onClick={() => start(async () => {
+              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])) };
+              const res = await submitTowerActionAction(runId, payload);
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Ordens confirmadas.");
+              void refresh();
+            })} className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-black text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
+              {state.mine.confirmed ? "Ordens confirmadas — aguardando os demais / deadline" : "Confirmar ordens do turno"}
+            </button>
+          )}
 
           {/* Log recente */}
           {state.log.length > 0 && (
