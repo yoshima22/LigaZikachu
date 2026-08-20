@@ -256,6 +256,28 @@ export async function claimTowerMascotRewardAction(featId: string, personality: 
   revalidatePath(PATH); revalidatePath("/mascotes"); return { ok: true as const, name: species.name };
 }
 
+/** Simula o nascimento exclusivo sem criar mascote nem registrar progresso. */
+export async function debugTowerMascotRewardPreviewAction(pokemonId: number, personality: MascotPersonality) {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  if (!Object.values(MascotPersonality).includes(personality)) return { error: "Personalidade inválida." };
+  const species = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === pokemonId);
+  if (!species) return { error: "Mascote exclusivo não reconhecido." };
+  await ensureTowerExclusiveSpecies();
+  const stats = computeProceduralStats(species.basePokemonId, 55, personality, [17, 26]);
+  const records = await prisma.towerFeat.findMany({
+    where: { userId: user.id, featKey: { in: ["TOWER_MASCOT_PENDING", "TOWER_MASCOT_CLAIMED"] }, data: { path: ["pokemonId"], equals: species.pokemonId } },
+    select: { featKey: true },
+  });
+  return { ok: true as const, mascot: {
+    pokemonId: species.pokemonId, basePokemonId: species.basePokemonId, name: species.name,
+    code: species.code, sprite: species.sprite, level: 55, personality, stats,
+    origin: "Ovo de Laboratório · Torre dos Rebeldes",
+    alreadyClaimed: records.some((record) => record.featKey === "TOWER_MASCOT_CLAIMED"),
+    pending: records.some((record) => record.featKey === "TOWER_MASCOT_PENDING"),
+  } };
+}
+
 export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE", requested = 1) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito." };

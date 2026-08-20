@@ -16,6 +16,7 @@ import {
 } from "../actions";
 import { grantEggToPlayer } from "@/app/(app)/mascotes/actions";
 import { PlayerSearchInput } from "@/components/player-search-input";
+import { TOWER_EXCLUSIVE_MASCOTS } from "@/lib/tower/exclusive-catalog";
 
 type Mascot = {
   id: string; pokemonId: number; nickname: string | null; level: number;
@@ -185,7 +186,8 @@ function CreateSection() {
     (id === 10152 || id === 10155) ||
     (id >= 10091 && id <= 10115) ||
     (id >= 10158 && id <= 10176) ||
-    (id >= 10229 && id <= 10244);
+    (id >= 10229 && id <= 10244) ||
+    TOWER_EXCLUSIVE_MASCOTS.some((mascot) => mascot.pokemonId === id);
   const previewName = !isNaN(pokeIdNum) && isValidPokemonId(pokeIdNum)
     ? getPokemonName(pokeIdNum)
     : null;
@@ -279,13 +281,16 @@ function CreateSection() {
         {/* Pokémon ID */}
         <div className="space-y-1">
           <label className="text-xs font-semibold text-slate-400">
-            Pokémon ID (1–1025 ou formas regionais: 10004–10012 · 10091–10115 · 10152 · 10155 · 10158–10176 · 10229–10244)
+            Pokémon ID oficial, forma regional ou exclusivo da Torre
             {previewName && <span className="ml-1.5 font-normal text-[#FFCB05]">→ {previewName}</span>}
           </label>
           <input type="number" min={1} value={pokemonId}
             onChange={e => setPokemonId(e.target.value)}
             placeholder="ex: 172 (Pichu)"
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05] placeholder:text-slate-600" />
+          <div className="flex flex-wrap gap-1 pt-1">
+            {TOWER_EXCLUSIVE_MASCOTS.map((mascot) => <button key={mascot.pokemonId} type="button" onClick={() => { setPokemonId(String(mascot.pokemonId)); setNickname(mascot.name); }} className="rounded-md border border-purple-400/20 bg-purple-400/5 px-1.5 py-1 text-[9px] text-purple-200 hover:border-purple-300/50" title={`${mascot.code} · ID ${mascot.pokemonId}`}>{mascot.name}</button>)}
+          </div>
         </div>
 
         {/* Nível */}

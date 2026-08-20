@@ -958,11 +958,16 @@ export async function computeProceduralStatsAction(opts: {
   try {
     await requireAdmin();
     const SPECIAL_FORM_IDS = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
-    const validPokemonId = (id: number) => (id >= 1 && id <= 1025) || SPECIAL_FORM_IDS.has(id);
+    const { ensureTowerExclusiveSpecies } = await import("@/lib/tower/exclusive-mascots");
+    const { getTowerExclusiveMascot } = await import("@/lib/tower/exclusive-catalog");
+    const towerMascot = getTowerExclusiveMascot(opts.pokemonId);
+    if (towerMascot) await ensureTowerExclusiveSpecies();
+    const customSpecies = opts.pokemonId >= 200000 ? await prisma.pokemonSpeciesDefinition.findUnique({ where: { pokemonId: opts.pokemonId }, select: { id: true } }) : null;
+    const validPokemonId = (id: number) => (id >= 1 && id <= 1025) || SPECIAL_FORM_IDS.has(id) || Boolean(customSpecies);
     if (!validPokemonId(opts.pokemonId)) return { ok: false, error: "pokemonId inválido." };
     if (opts.level < 1 || opts.level > 100) return { ok: false, error: "Nível inválido." };
     const { computeProceduralStats } = await import("@/lib/mascot");
-    const stats = computeProceduralStats(opts.pokemonId, opts.level, opts.personality);
+    const stats = computeProceduralStats(towerMascot?.basePokemonId ?? opts.pokemonId, opts.level, opts.personality, towerMascot ? [17, 26] : undefined);
     return { ok: true, stats };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
@@ -992,6 +997,8 @@ export async function createMascotForPlayerAction(opts: {
     if (!player) return { ok: false, error: "Jogador não encontrado." };
 
     const SPECIAL_FORM_IDS2 = new Set([10004, 10005, 10006, 10007, 10008, 10009, 10010, 10011, 10012]);
+    const { getTowerExclusiveMascot } = await import("@/lib/tower/exclusive-catalog");
+    if (getTowerExclusiveMascot(opts.pokemonId)) await (await import("@/lib/tower/exclusive-mascots")).ensureTowerExclusiveSpecies();
     const customSpecies = opts.pokemonId >= 200000 ? await prisma.pokemonSpeciesDefinition.findUnique({ where: { pokemonId: opts.pokemonId }, select: { id: true } }) : null;
     if (!((opts.pokemonId >= 1 && opts.pokemonId <= 1025) || SPECIAL_FORM_IDS2.has(opts.pokemonId) || customSpecies))
       return { ok: false, error: "pokemonId inválido." };
