@@ -35,13 +35,19 @@ function pickByePlayer(players: PairingPlayer[], byeCount: Map<string, number>, 
   })[0] ?? null;
 }
 
+/** Quantas vezes x já enfrentou y na semana (0 se nunca). */
+function facedCount(faced: Map<string, Map<string, number>>, x: string, y: string): number {
+  return faced.get(x)?.get(y) ?? 0;
+}
+
 /**
  * Gera os pares de um round.
+ * @param faced Contagem de confrontos na semana por par (evita 2ª/3ª revanche, com peso crescente).
  * @param seed String única por (liga, dia, slot) — garante idempotência e variação semanal.
  */
 export function swissPairSlot(
   players: PairingPlayer[],
-  faced: Map<string, Set<string>>,
+  faced: Map<string, Map<string, number>>,
   todayPaired: Map<string, Set<string>>,
   byeCount: Map<string, number>,
   seed: string,
@@ -72,7 +78,6 @@ export function swissPairSlot(
     const p = sorted[i];
     if (paired.has(p.playerId)) continue;
 
-    const prevOpps = faced.get(p.playerId) ?? new Set<string>();
     const todayOpps = todayPaired.get(p.playerId) ?? new Set<string>();
 
     const candidates: Array<{ player: PairingPlayer; score: number }> = [];
@@ -81,7 +86,9 @@ export function swissPairSlot(
       const c = sorted[j];
       let score = Math.abs(p.points - c.points) * 1000 + Math.abs(p.wins - c.wins) * 100;
       if (todayOpps.has(c.playerId)) score += 100000000; // evita a qualquer custo repetir no dia
-      if (prevOpps.has(c.playerId)) score += 100000;     // evita revanche na semana
+      const prevCount = facedCount(faced, p.playerId, c.playerId);
+      // Revanche da semana: peso base + crescente por repetição (3ª >> 2ª).
+      if (prevCount > 0) score += 100000 + prevCount * 400000;
       // Um provável W.O. beneficia primeiro quem recebeu menos vitórias gratuitas.
       if ((p.woLosses ?? 0) > 0) score += (c.freeWins ?? 0) * 5000;
       if ((c.woLosses ?? 0) > 0) score += (p.freeWins ?? 0) * 5000;
@@ -106,51 +113,49 @@ export function swissPairSlot(
     }
   }
 
-  // ── Passe de reparo: elimina repetições do MESMO dia ────────────────────
-  // O pareamento guloso (de baixo para cima) pode forçar o último par restante
-  // a ser uma revanche do dia (ex.: os dois melhores da tabela sobram juntos em
-  // todo slot). Aqui trocamos parceiros com outro par para desfazer isso, desde
-  // que exista uma troca sem criar outra repetição do dia.
-  const isTodayRepeat = (x: string, y: string) => todayPaired.get(x)?.has(y) ?? false;
-  const isWeekRepeat = (x: string, y: string) => faced.get(x)?.has(y) ?? false;
+  // ── Passe de reparo 2-opt: minimiza repetições do DIA e da SEMANA ──────────
+  // O pareamento guloso (de baixo para cima) pode sobrar com revanches forçadas
+  // (mesmo dia, ou a 2ª/3ª da semana). Aqui trocamos parceiros entre pares para
+  // reduzir o custo total, onde repetir no dia pesa muito mais que na semana e a
+  // 3ª revanche da semana pesa mais que a 2ª.
+  const cost = (x: string, y: string) =>
+    (todayPaired.get(x)?.has(y) ? 1_000_000 : 0) + facedCount(faced, x, y);
   const realPairs = result.filter((r): r is { aId: string; bId: string } => Boolean(r.bId));
-  for (let i = 0; i < realPairs.length; i++) {
-    const A = realPairs[i];
-    if (!isTodayRepeat(A.aId, A.bId)) continue;
-    // Procura um par B para trocar; prefere trocas que também evitem revanche da semana.
-    let best: { j: number; mode: 1 | 2; weekClean: boolean } | null = null;
-    for (let j = 0; j < realPairs.length; j++) {
-      if (j === i) continue;
-      const B = realPairs[j];
-      // Modo 1: A=(A.a, B.b) e B=(B.a, A.b)
-      if (!isTodayRepeat(A.aId, B.bId) && !isTodayRepeat(B.aId, A.bId)) {
-        const weekClean = !isWeekRepeat(A.aId, B.bId) && !isWeekRepeat(B.aId, A.bId);
-        if (!best || (weekClean && !best.weekClean)) best = { j, mode: 1, weekClean };
+  for (let iter = 0; iter < 4; iter++) {
+    let improved = false;
+    for (let i = 0; i < realPairs.length; i++) {
+      const A = realPairs[i];
+      if (cost(A.aId, A.bId) === 0) continue;
+      let best: { j: number; mode: 1 | 2; delta: number } | null = null;
+      for (let j = 0; j < realPairs.length; j++) {
+        if (j === i) continue;
+        const B = realPairs[j];
+        const cur = cost(A.aId, A.bId) + cost(B.aId, B.bId);
+        const m1 = cost(A.aId, B.bId) + cost(B.aId, A.bId); // A=(A.a,B.b) B=(B.a,A.b)
+        if (cur - m1 > (best?.delta ?? 0)) best = { j, mode: 1, delta: cur - m1 };
+        const m2 = cost(A.aId, B.aId) + cost(A.bId, B.bId); // A=(A.a,B.a) B=(A.b,B.b)
+        if (cur - m2 > (best?.delta ?? 0)) best = { j, mode: 2, delta: cur - m2 };
       }
-      // Modo 2: A=(A.a, B.a) e B=(A.b, B.b)
-      if (!isTodayRepeat(A.aId, B.aId) && !isTodayRepeat(A.bId, B.bId)) {
-        const weekClean = !isWeekRepeat(A.aId, B.aId) && !isWeekRepeat(A.bId, B.bId);
-        if (!best || (weekClean && !best.weekClean)) best = { j, mode: 2, weekClean };
+      if (best) {
+        const B = realPairs[best.j];
+        if (best.mode === 1) { const t = A.bId; A.bId = B.bId; B.bId = t; }
+        else { const t = A.bId; A.bId = B.aId; B.aId = t; }
+        improved = true;
       }
-      if (best?.weekClean) break;
     }
-    if (best) {
-      const B = realPairs[best.j];
-      if (best.mode === 1) { const t = A.bId; A.bId = B.bId; B.bId = t; }
-      else { const t = A.bId; A.bId = B.aId; B.aId = t; }
-    }
+    if (!improved) break;
   }
 
-  // Registra os pares finais (pós-reparo) em todayPaired e faced.
+  // Registra os pares finais (pós-reparo): incrementa a contagem semanal.
   for (const r of realPairs) {
     if (!todayPaired.has(r.aId)) todayPaired.set(r.aId, new Set());
     if (!todayPaired.has(r.bId)) todayPaired.set(r.bId, new Set());
     todayPaired.get(r.aId)!.add(r.bId);
     todayPaired.get(r.bId)!.add(r.aId);
-    if (!faced.has(r.aId)) faced.set(r.aId, new Set());
-    if (!faced.has(r.bId)) faced.set(r.bId, new Set());
-    faced.get(r.aId)!.add(r.bId);
-    faced.get(r.bId)!.add(r.aId);
+    if (!faced.has(r.aId)) faced.set(r.aId, new Map());
+    if (!faced.has(r.bId)) faced.set(r.bId, new Map());
+    faced.get(r.aId)!.set(r.bId, (faced.get(r.aId)!.get(r.bId) ?? 0) + 1);
+    faced.get(r.bId)!.set(r.aId, (faced.get(r.bId)!.get(r.aId) ?? 0) + 1);
   }
   return result;
 }

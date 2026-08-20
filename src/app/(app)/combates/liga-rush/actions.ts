@@ -496,9 +496,10 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
     const { battleTimes } = await getRushTimes();
     const dayOffset = Math.max(0, Math.round((new Date(`${battleDate}T12:00:00-03:00`).getTime() - league.weekStart.getTime()) / 86400000));
     const history = await prisma.rushLeagueMatch.findMany({ where: { leagueId }, select: { battleDate:true, battleSlot:true, playerAId:true, playerBId:true, winnerId:true, loserId:true, status:true } });
-    const faced = new Map<string, Set<string>>(), todayPaired = new Map<string, Set<string>>(), byeCount = new Map<string, number>(), freeWins = new Map<string, number>(), woLosses = new Map<string, number>();
+    const faced = new Map<string, Map<string, number>>(), todayPaired = new Map<string, Set<string>>(), byeCount = new Map<string, number>(), freeWins = new Map<string, number>(), woLosses = new Map<string, number>();
+    const bump = (a:string,b:string)=>{ if(!faced.has(a))faced.set(a,new Map()); faced.get(a)!.set(b,(faced.get(a)!.get(b)??0)+1); };
     for (const match of history) {
-      if (match.playerBId) { if(!faced.has(match.playerAId))faced.set(match.playerAId,new Set()); if(!faced.has(match.playerBId))faced.set(match.playerBId,new Set()); faced.get(match.playerAId)!.add(match.playerBId); faced.get(match.playerBId)!.add(match.playerAId); if(match.battleDate===battleDate){if(!todayPaired.has(match.playerAId))todayPaired.set(match.playerAId,new Set());if(!todayPaired.has(match.playerBId))todayPaired.set(match.playerBId,new Set());todayPaired.get(match.playerAId)!.add(match.playerBId);todayPaired.get(match.playerBId)!.add(match.playerAId);} }
+      if (match.playerBId) { bump(match.playerAId,match.playerBId); bump(match.playerBId,match.playerAId); if(match.battleDate===battleDate){if(!todayPaired.has(match.playerAId))todayPaired.set(match.playerAId,new Set());if(!todayPaired.has(match.playerBId))todayPaired.set(match.playerBId,new Set());todayPaired.get(match.playerAId)!.add(match.playerBId);todayPaired.get(match.playerBId)!.add(match.playerAId);} }
       if(match.status==="BYE") byeCount.set(match.playerAId,(byeCount.get(match.playerAId)??0)+1);
       // BYE já está em byeCount; freeWins guarda apenas W.O. para não contar a folga duas vezes.
       if(match.status==="WO"&&match.winnerId) freeWins.set(match.winnerId,(freeWins.get(match.winnerId)??0)+1);

@@ -406,13 +406,15 @@ async function loadFacedOpponents(leagueId: string) {
     where: { leagueId, status: { in: ["RESOLVED", "WO", "SCHEDULED"] } },
     select: { playerAId: true, playerBId: true },
   });
-  const faced = new Map<string, Set<string>>();
+  const faced = new Map<string, Map<string, number>>();
+  const bump = (a: string, b: string) => {
+    if (!faced.has(a)) faced.set(a, new Map());
+    faced.get(a)!.set(b, (faced.get(a)!.get(b) ?? 0) + 1);
+  };
   for (const m of prevMatches) {
     if (!m.playerBId) continue;
-    if (!faced.has(m.playerAId)) faced.set(m.playerAId, new Set());
-    if (!faced.has(m.playerBId)) faced.set(m.playerBId, new Set());
-    faced.get(m.playerAId)!.add(m.playerBId);
-    faced.get(m.playerBId)!.add(m.playerAId);
+    bump(m.playerAId, m.playerBId);
+    bump(m.playerBId, m.playerAId);
   }
   return faced;
 }
@@ -506,10 +508,7 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
               resultJson: { oddsA, oddsB },
             },
           });
-          if (!faced.has(pair.aId)) faced.set(pair.aId, new Set());
-          if (!faced.has(pair.bId)) faced.set(pair.bId, new Set());
-          faced.get(pair.aId)!.add(pair.bId);
-          faced.get(pair.bId)!.add(pair.aId);
+          // faced/todayPaired já são atualizados por swissPairSlot.
           created++;
         } else {
           await prisma.weeklyMascotLeagueMatch.create({
@@ -1939,10 +1938,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
               await prisma.weeklyMascotLeagueMatch.create({
                 data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: pair.aId, playerBId: pair.bId, status: "SCHEDULED", resultJson: { oddsA, oddsB } },
               });
-              if (!faced.has(pair.aId)) faced.set(pair.aId, new Set());
-              if (!faced.has(pair.bId)) faced.set(pair.bId, new Set());
-              faced.get(pair.aId)!.add(pair.bId);
-              faced.get(pair.bId)!.add(pair.aId);
+              // faced/todayPaired já são atualizados por swissPairSlot.
             } else {
               await prisma.weeklyMascotLeagueMatch.create({
                 data: { id: createId(), leagueId: league.id, roundNumber: roundBase + battleSlot, battleDate, battleSlot, scheduledAt: now, playerAId: pair.aId, status: "BYE", resolvedAt: now },

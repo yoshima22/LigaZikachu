@@ -47,8 +47,9 @@ async function main() {
 
   // faced a partir de TODAS as partidas restantes (hoje já foi apagado).
   const prev = await prisma.weeklyMascotLeagueMatch.findMany({ where: { leagueId: league.id, playerBId: { not: null } }, select: { playerAId: true, playerBId: true } });
-  const faced = new Map<string, Set<string>>();
-  for (const m of prev) { if (!m.playerBId) continue; (faced.get(m.playerAId) ?? faced.set(m.playerAId, new Set()).get(m.playerAId)!).add(m.playerBId); (faced.get(m.playerBId) ?? faced.set(m.playerBId, new Set()).get(m.playerBId)!).add(m.playerAId); }
+  const faced = new Map<string, Map<string, number>>();
+  const bump = (a: string, b: string) => { if (!faced.has(a)) faced.set(a, new Map()); faced.get(a)!.set(b, (faced.get(a)!.get(b) ?? 0) + 1); };
+  for (const m of prev) { if (!m.playerBId) continue; bump(m.playerAId, m.playerBId); bump(m.playerBId, m.playerAId); }
 
   const roundBase = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId: league.id } });
   const todayPaired = new Map<string, Set<string>>();
