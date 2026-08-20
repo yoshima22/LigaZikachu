@@ -126,16 +126,21 @@ export async function getTowerLobbyDataAction() {
   const config = await getTowerConfig();
   const scenes = await getTowerNarrativeScenes();
   const failures = await prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] } } } });
-  const [communityProgress, communityCodex, talentPoints, talentFeats] = await Promise.all([
+  const [communityProgress, communityCodex, controlledEntries] = await Promise.all([
     prisma.towerCommunityProgress.findMany({ where: { floorId: 1 }, orderBy: { metricKey: "asc" } }),
     prisma.towerCodexEntry.findMany({ where: { userId: null }, orderBy: { updatedAt: "desc" }, take: 30 }),
-    prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT_POINT" } }),
-    prisma.towerFeat.findMany({ where: { userId: user.id, featKey: { startsWith: "TOWER_TALENT:" } }, select: { featKey: true } }),
+    prisma.towerLostMascot.findMany({ where: { recoveredAt: null }, orderBy: { createdAt: "desc" }, take: 60 }),
   ]);
+  const progressValue = (key: string) => communityProgress.find((entry) => entry.metricKey === key)?.value ?? 0;
+  const talentRanks = Object.fromEntries(["PRESSURE","COMBAT","BOSS","LUCK","RESCUE"].map((key) => [key, progressValue(`TALENT:${key}`)]));
+  const talentSpent = Object.values(talentRanks).reduce((sum, value) => sum + Number(value), 0);
+  const controlledMascotRows = await prisma.mascot.findMany({ where: { id: { in: controlledEntries.map((entry) => entry.mascotId) } }, select: { id: true, pokemonId: true, nickname: true, level: true } });
+  const controlledMascotsById = new Map(controlledMascotRows.map((mascot) => [mascot.id, mascot]));
+  const controlledOwners = new Map((await prisma.user.findMany({ where: { id: { in: controlledEntries.map((entry) => entry.ownerUserId) } }, select: { id: true, name: true } })).map((owner) => [owner.id, owner.name ?? "Jogador"]));
   const active = await findActiveRunForUser(user.id);
   const openRuns = await prisma.towerRun.findMany({
     where: { status: "LOBBY" }, orderBy: { createdAt: "desc" }, take: 20,
-    include: { members: { select: { userId: true } } },
+    include: { members: { select: { userId: true, expeditionRole: true, mascots: { select: { mascotId: true, currentStance: true } } } } },
   });
   const roomUserIds = [...new Set(openRuns.flatMap((run) => run.members.map((member) => member.userId)))];
   const roomUsers = new Map((await prisma.user.findMany({ where: { id: { in: roomUserIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name ?? "Jogador"]));
@@ -167,7 +172,8 @@ export async function getTowerLobbyDataAction() {
     failures,
     communityProgress,
     communityCodex,
-    talents: { points: Math.max(0, talentPoints - talentFeats.length), ranks: Object.fromEntries(talentFeats.map((feat) => [feat.featKey.replace("TOWER_TALENT:", ""), 1 + talentFeats.filter((other) => other.featKey === feat.featKey).indexOf(feat)])) },
+    talents: { points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent), ranks: talentRanks },
+    controlledMascots: controlledEntries.map((entry) => { const mascot = controlledMascotsById.get(entry.mascotId); return mascot ? { id: mascot.id, pokemonId: mascot.pokemonId, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), level: mascot.level, owner: controlledOwners.get(entry.ownerUserId) ?? "Jogador", floor: entry.floor } : null; }).filter(Boolean),
     knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
@@ -177,7 +183,8 @@ export async function getTowerLobbyDataAction() {
     mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId) })),
     rooms: openRuns.filter((run) => run.members.length < 3).map((run) => {
       const lobby = ((run.volatileState ?? {}) as { lobby?: { code?: string; hostId?: string; ready?: Record<string, boolean> } }).lobby;
-      return { id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace, host: roomUsers.get(lobby?.hostId ?? run.members[0]?.userId ?? "") ?? "Jogador", members: run.members.map((m) => ({ userId: m.userId, name: roomUsers.get(m.userId) ?? "Jogador", ready: Boolean(lobby?.ready?.[m.userId]) })) };
+      const host = run.members.find((member) => member.userId === lobby?.hostId) ?? run.members[0];
+      return { id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace, host: roomUsers.get(host?.userId ?? "") ?? "Jogador", hostSetup: host ? { expeditionRole: host.expeditionRole, stances: host.mascots.map((mascot) => mascot.currentStance) } : null, members: run.members.map((m) => ({ userId: m.userId, name: roomUsers.get(m.userId) ?? "Jogador", ready: Boolean(lobby?.ready?.[m.userId]), expeditionRole: m.expeditionRole })) };
     }),
   };
 }
@@ -185,14 +192,14 @@ export async function getTowerLobbyDataAction() {
 export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE") {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito." };
-  const [earned, spent, rank] = await Promise.all([
-    prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT_POINT" } }),
-    prisma.towerFeat.count({ where: { userId: user.id, featKey: { startsWith: "TOWER_TALENT:" } } }),
-    prisma.towerFeat.count({ where: { userId: user.id, featKey: `TOWER_TALENT:${key}` } }),
-  ]);
+  const rows = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { startsWith: "TALENT" } } });
+  const value = (metric: string) => rows.find((row) => row.metricKey === metric)?.value ?? 0;
+  const earned = value("TALENT_POINTS");
+  const spent = rows.filter((row) => row.metricKey.startsWith("TALENT:")).reduce((sum, row) => sum + row.value, 0);
+  const rank = value(`TALENT:${key}`);
   if (earned <= spent) return { error: "Você não possui pontos de talento disponíveis." };
   if (rank >= 5) return { error: "Este talento já atingiu o nível máximo." };
-  await prisma.towerFeat.create({ data: { userId: user.id, featKey: `TOWER_TALENT:${key}`, data: { rank: rank + 1 } } });
+  await prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: `TALENT:${key}` } }, create: { floorId: 1, metricKey: `TALENT:${key}`, value: 1 }, update: { value: { increment: 1 } } });
   revalidatePath(PATH);
   return { ok: true as const };
 }
@@ -329,6 +336,21 @@ export async function setTowerReadyAction(runId:string,ready:boolean){
  await prisma.towerRun.update({where:{id:runId},data:{volatileState:{...vol,lobby:{...vol.lobby,hostId:vol.lobby?.hostId??run.members[0]?.userId,ready:{...(vol.lobby?.ready??{}),[user.id]:ready}}} as Prisma.InputJsonValue}});revalidatePath(PATH);return {ok:true as const};
 }
 
+export async function updateTowerLobbyClassAction(runId: string, expeditionRole: TowerExpeditionRole) {
+  const user = await requireTowerAdmin(); if (!user) return { error: "Acesso restrito." };
+  const role = TOWER_ROLE_BY_KEY[expeditionRole]; if (!role) return { error: "Classe inválida." };
+  const run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
+  const member = run?.members.find((entry) => entry.userId === user.id);
+  if (!run || run.status !== "LOBBY" || !member) return { error: "A classe só pode ser alterada no lobby." };
+  const lobby = ((run.volatileState ?? {}) as { lobby?: { ready?: Record<string, boolean> } }).lobby;
+  if (lobby?.ready?.[user.id]) return { error: "Cancele o Pronto antes de trocar de classe." };
+  await prisma.$transaction([
+    prisma.towerRunMember.update({ where: { id: member.id }, data: { expeditionRole } }),
+    ...member.mascots.map((mascot) => prisma.towerRunMascot.update({ where: { id: mascot.id }, data: { allowedStances: role.stances, currentStance: role.stances.includes(normalizeCombatRole(mascot.currentStance)) ? mascot.currentStance : role.stances[0] } })),
+  ]);
+  revalidatePath(PATH); return { ok: true as const };
+}
+
 /** Encerra/abandona a expedição do usuário (uso em dev enquanto não há gameplay). */
 export async function abandonTowerRunAction(runId: string): Promise<{ error: string } | { ok: true }> {
   const user = await requireTowerAdmin();
@@ -363,7 +385,7 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
 
   const progress = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1 } });
   const unlocked = progress.filter((entry) => entry.value >= 5).map((entry) => entry.metricKey);
-  const pressureTalent = await prisma.towerFeat.count({ where: { userId: user.id, featKey: "TOWER_TALENT:PRESSURE" } });
+  const pressureTalent = (await prisma.towerCommunityProgress.findUnique({ where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT:PRESSURE" } } }))?.value ?? 0;
   const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: unlocked, pressureShield: (unlocked.includes("WARD") ? 2 : 0) + pressureTalent };
   const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
   await prisma.towerRun.update({
@@ -441,14 +463,14 @@ export async function getTowerRunStateAction(runId: string) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
 
-  let run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+  let run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
   if (!run) return { error: "Expedição não encontrada." };
   if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
 
   // Auto-resolução ao acessar após o deadline (além do cron).
   if (run.status === "ACTIVE" && run.nextDeadline && run.nextDeadline.getTime() <= Date.now()) {
     await resolveTowerTurnLocked(runId).catch(() => null);
-    run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+    run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
     if (!run) return { error: "Expedição não encontrada." };
   }
 
@@ -461,6 +483,8 @@ export async function getTowerRunStateAction(runId: string) {
     where: { id: { in: run.members.map((member) => member.userId) } },
     select: { id: true, name: true },
   })).map((member) => [member.id, member.name ?? "Jogador"]));
+  const setupMascotIds = run.members.flatMap((member) => member.mascots.map((mascot) => mascot.mascotId));
+  const setupMascots = new Map((await prisma.mascot.findMany({ where: { id: { in: setupMascotIds } }, select: { id: true, pokemonId: true, nickname: true, level: true } })).map((mascot) => [mascot.id, mascot]));
 
   // View do combate com fog de time: aliados sempre; inimigos só se visíveis.
   type ObjView = { id: string; key: string; name: string; x: number; y: number; radius: number; progress: number; required: number; resolved: boolean; suppression: boolean; interactable: boolean; spriteUrl: string; effect: string };
@@ -524,9 +548,11 @@ export async function getTowerRunStateAction(runId: string) {
     members: run.members.map((m) => ({
       userId: m.userId, name: userNames.get(m.userId) ?? "Jogador", expeditionRole: m.expeditionRole, afkRemoved: m.afkRemoved,
       consecutiveMisses: m.consecutiveMisses, confirmed: Boolean(submissions[m.userId]),
+      mascots: m.mascots.map((snapshot) => { const mascot = setupMascots.get(snapshot.mascotId); return { id: snapshot.mascotId, pokemonId: mascot?.pokemonId ?? 0, name: mascot?.nickname ?? (mascot ? getPokemonName(mascot.pokemonId) : "Mascote"), level: mascot?.level ?? 1, stance: snapshot.currentStance }; }),
     })),
     mine: { userId: user.id, confirmed: Boolean(submissions[user.id]) },
     lobby: { code: lobby?.code ?? run.id.slice(-6).toUpperCase(), hostId: lobby?.hostId ?? run.members[0]?.userId ?? "", ready: lobby?.ready ?? {} },
+    roles: TOWER_EXPEDITION_ROLES.map((role) => ({ key: role.key, label: role.label })),
     battle,
     exploration: exploration && room ? {
       currentRoom: { ...room, puzzle: room.puzzle ? { id: room.puzzle.id, prompt: room.puzzle.prompt, options: room.puzzle.options, hint: exploration.countermeasures?.includes("INSIGHT") ? "O Arquivo recomenda observar a sequência, não a intensidade." : null } : undefined },
@@ -544,6 +570,7 @@ export async function getTowerRunStateAction(runId: string) {
       lastOutcome: exploration.lastOutcome ?? null,
       replay: exploration.pendingReplay ?? null,
       communityDiscoveries,
+      votes: run.members.map((member) => { const choice = (submissions[member.userId]?.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string }; return { userId: member.userId, name: userNames.get(member.userId) ?? "Jogador", confirmed: Boolean(submissions[member.userId]), routeId: choice.routeId ?? null, puzzleChoice: choice.puzzleChoice ?? null, action: choice.action ?? null }; }),
     } : null,
     myMascots,
     log: (vol.log ?? []).slice(-12),

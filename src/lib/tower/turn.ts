@@ -38,6 +38,8 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
   if (!state) return;
   const room = currentTowerRoom(state);
   const choices = Object.values(submissions).map((s) => (s.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string });
+  const distinctRoutes = new Set(choices.map((choice) => choice.routeId).filter(Boolean));
+  const splitPathPenalty = distinctRoutes.size > 1 ? 2 : 1;
   const majority = (values: (string | undefined)[]) => {
     const count = new Map<string, number>();
     for (const value of values) if (value) count.set(value, (count.get(value) ?? 0) + 1);
@@ -54,7 +56,7 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
       const preview = towerEncounterPreview(destination, averageLevel, snapshots.length);
       if (destination.kind === "BOSS" && preview[0]) preview[0].pokemonId = [25,448,197,94,778,52,196][Math.min(6, run.currentFloor - 1)];
       const encounter = destination.kind === "COMBAT" || destination.kind === "BOSS" ? { roomId: destination.id, preparationTurns: destination.kind === "BOSS" ? 2 : 1, enemies: preview.map((enemy) => ({ ...enemy, name: getPokemonName(enemy.pokemonId) })) } : undefined;
-      state = { ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], encounter, lastOutcome: `O grupo percorreu a passagem e chegou a ${destination.title}.` };
+      state = { ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], encounter, lastOutcome: distinctRoutes.size > 1 ? `O grupo se dividiu entre caminhos. A maioria chegou a ${destination.title}, mas a Pressão desta ação foi dobrada.` : `O grupo percorreu a passagem e chegou a ${destination.title}.` };
       battleLog.push(state.lastOutcome!);
     } else {
       state = applyTowerPressure({ ...state, lastOutcome: "A expedição hesitou. A Torre ficou mais atenta." });
@@ -125,9 +127,10 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
       return [fighter];
     });
     const avg = Math.max(1, Math.round(allies.reduce((sum, m) => sum + m.level, 0) / Math.max(1, allies.length)));
-    const combatTalent = await tx.towerFeat.count({ where: { userId: { in: run.members.map((member) => member.userId) }, featKey: "TOWER_TALENT:COMBAT" } });
-    const bossTalent = room.kind === "BOSS" ? await tx.towerFeat.count({ where: { userId: { in: run.members.map((member) => member.userId) }, featKey: "TOWER_TALENT:BOSS" } }) : 0;
-    const allyTalentMult = 1 + (combatTalent * .02 + bossTalent * .03) / Math.max(1, run.members.length);
+    const talentRows = await tx.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { in: ["TALENT:COMBAT", "TALENT:BOSS"] } } });
+    const combatTalent = talentRows.find((row) => row.metricKey === "TALENT:COMBAT")?.value ?? 0;
+    const bossTalent = room.kind === "BOSS" ? talentRows.find((row) => row.metricKey === "TALENT:BOSS")?.value ?? 0 : 0;
+    const allyTalentMult = 1 + combatTalent * .02 + bossTalent * .03;
     for (const ally of allies) { ally.force = Math.round(ally.force * allyTalentMult); ally.agility = Math.round(ally.agility * allyTalentMult); ally.instinct = Math.round(ally.instinct * allyTalentMult); ally.vitality = Math.round(ally.vitality * allyTalentMult); }
     const pressureMult = state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1) * (1 + state.pressure * .03);
     const variance = Math.abs([...`${run.seed}:${room.id}`].reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 5 - 1;
@@ -160,7 +163,7 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     state = { ...state, graph: [...state.graph], encounter: undefined, lastOutcome: won ? `${room.title} foi vencida.` : "A expedição foi derrotada.", pendingReplay: { winner: result.winner, log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, teamASurvivors: result.teamASurvivors, teamBSurvivors: result.teamBSurvivors, title: room.title } };
     battleLog.push(state.lastOutcome!);
   }
-  vol.exploration = applyTowerPressure(state, Object.keys(submissions).length);
+  vol.exploration = applyTowerPressure(state, Object.keys(submissions).length * splitPathPenalty);
 }
 
 /** Duração da janela de turno por ritmo. */
@@ -250,6 +253,14 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
             where: { id: m.id },
             data: { consecutiveMisses: misses, afkRemoved: remove, removedAt: remove ? new Date() : null },
           });
+          if (remove) {
+            const abandoned = await tx.towerRunMascot.findMany({ where: { memberId: m.id } });
+            for (const mascot of abandoned) {
+              await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: 0, state: "LOST_IN_TOWER" } });
+              await tx.towerLostMascot.upsert({ where: { mascotId: mascot.mascotId }, create: { mascotId: mascot.mascotId, ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor }, update: { ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor, recoveredAt: null, recoveredById: null } });
+            }
+            battleLog.push(`Um treinador foi removido por AFK; seus ${abandoned.length} mascote(s) ficaram sob controle da Torre.`);
+          }
         }
       }
 
@@ -262,12 +273,17 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const runFailed = Boolean(vol.exploration?.pendingReplay?.winner === "B" && explorationRoom && !explorationRoom.cleared) || Boolean(vol.battle?.encounterOver && vol.battle.outcome === "LOSS");
       const log = [...(vol.log ?? []), ...battleLog, ...(bossVictory ? ["🏆 Boss do andar derrotado!"] : []), `Turno ${run.globalTurn} resolvido.`].slice(-50);
 
+      if (bossVictory) {
+        await tx.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT_POINTS" } }, create: { floorId: 1, metricKey: "TALENT_POINTS", value: 1 }, update: { value: { increment: 1 } } });
+        const shardCount = run.pace === "ONLINE" ? 2 : 1;
+        for (const member of active) for (let shard = 0; shard < shardCount; shard++) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_RELIC_SHARD", data: { floor: run.currentFloor, pace: run.pace } } });
+      }
+
       if (bossVictory && run.currentFloor < 7) {
         const nextFloor = run.currentFloor + 1;
         const nextExploration = generateTowerRoomGraph(run.seed, nextFloor);
         nextExploration.countermeasures = vol.exploration?.countermeasures ?? [];
         nextExploration.pressureShield = vol.exploration?.pressureShield ?? 0;
-        for (const member of active) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_TALENT_POINT", data: { floor: run.currentFloor, source: "BOSS" } } });
         await tx.towerCodexEntry.create({ data: { userId: null, subjectType: "LEADER", subjectKey: `floor-${run.currentFloor}`, discoveryLevel: 1, data: { defeatedAt: new Date().toISOString(), runId } } }).catch(() => null);
         await tx.towerRun.update({ where: { id: runId }, data: { currentFloor: nextFloor, globalTurn: nextTurn, resolutionOrder: rotated, nextDeadline: new Date(Date.now() + windowMsFor(run.pace)), volatileState: { ...vol, exploration: nextExploration, submissions: {}, log: [...log, `As escadas abriram. O grupo alcançou o ${nextFloor}º andar.`] } as unknown as Prisma.InputJsonValue } });
         return;

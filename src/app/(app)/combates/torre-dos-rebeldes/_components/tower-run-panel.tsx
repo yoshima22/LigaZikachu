@@ -9,12 +9,15 @@ import {
   abandonTowerRunAction,
   advanceToBossAction,
   setTowerReadyAction,
+  updateTowerLobbyClassAction,
 } from "../actions";
 import { TowerBattleGrid } from "./tower-battle-grid";
 import { TowerNarrative } from "./tower-narrative";
 import { TowerCombatScene } from "./tower-combat-scene";
 import { TowerRoomView } from "./tower-room-view";
 import { LeagueBattleReplayModal, type TurnLog, type ReplayLineupFighter } from "../../liga-semanal/_components/league-battle-replay";
+import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getCombatRoleLabel } from "@/lib/combat-roles";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
 type Intent = "ADVANCE" | "DEFEND";
@@ -107,7 +110,9 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
       {run.status === "LOBBY" && (
         <div className="mt-4 space-y-4">
+          <div className="rounded-xl border border-cyan-300/25 bg-cyan-950/10 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><b className="text-sm text-cyan-100">Setup visível da sala</b><span className="rounded-full border border-cyan-300/30 px-3 py-1 text-[9px] font-black text-cyan-200">{run.pace === "ONLINE" ? "ONLINE · 120s · LEGADO 2×" : "MODO LENTO · 4h"}</span></div><div className="mt-3 grid gap-2 sm:grid-cols-3">{state.members.map(member=><article key={member.userId} className="rounded-xl border border-slate-700 bg-black/25 p-3"><b className="text-xs text-white">{member.name}</b><p className="mt-1 text-[10px] text-cyan-300">Classe: {member.expeditionRole}</p>{member.mascots.map(mascot=><div key={mascot.id} className="mt-2 flex items-center gap-2 rounded-lg bg-slate-900/70 p-2">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain"/><span className="text-[10px] text-slate-400"><b className="block text-white">{mascot.name} · Nv.{mascot.level}</b>{getCombatRoleLabel(mascot.stance)}</span></div>)}</article>)}</div><p className="mt-3 text-[10px] text-slate-500">A classe e as posturas são escolhidas na montagem antes de entrar. Para alterar, cancele o Pronto e remonte a entrada no lobby.</p></div>
           <div className="rounded-xl border border-purple-400/25 bg-purple-950/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-purple-300">Sala {state.lobby.code}</p><div className="mt-3 grid gap-2 sm:grid-cols-3">{state.members.map(member=><div key={member.userId} className={`rounded-xl border p-3 ${state.lobby.ready[member.userId]?"border-emerald-400/35 bg-emerald-400/10":"border-slate-700 bg-black/20"}`}><b className="text-sm text-white">{member.name}</b><p className="mt-1 text-[10px] text-slate-400">{member.expeditionRole}</p><span className={`mt-2 inline-block rounded-full px-2 py-1 text-[9px] font-black ${state.lobby.ready[member.userId]?"bg-emerald-400 text-emerald-950":"bg-slate-800 text-slate-400"}`}>{state.lobby.ready[member.userId]?"PRONTO":"PREPARANDO"}</span></div>)}</div></div>
+          <label className="block rounded-xl border border-purple-400/25 bg-purple-950/15 p-3 text-xs text-purple-100"><span className="mb-2 block font-black">Sua classe nesta run</span><select disabled={pending || state.lobby.ready[state.mine.userId]} value={state.members.find((member)=>member.userId===state.mine.userId)?.expeditionRole} onChange={(event)=>start(async()=>{const res=await updateTowerLobbyClassAction(runId,event.target.value as never);if("error" in res)toast.error(res.error);else{toast.success("Classe e posturas compatíveis atualizadas.");void refresh()}})} className="w-full rounded-lg border border-purple-300/30 bg-slate-950 p-2 text-white disabled:opacity-50">{state.roles.map(role=><option key={role.key} value={role.key}>{role.label}</option>)}</select><small className="mt-2 block text-slate-400">Cancele o Pronto para alterar. Posturas incompatíveis são ajustadas automaticamente.</small></label>
           <button type="button" disabled={pending} onClick={() => start(async()=>{const next=!state.lobby.ready[state.mine.userId];const res=await setTowerReadyAction(runId,next);if("error" in res)toast.error(res.error);else void refresh()})} className="w-full rounded-xl border border-emerald-400/40 bg-emerald-400/10 py-2.5 text-sm font-black text-emerald-200 disabled:opacity-40">{state.lobby.ready[state.mine.userId]?"Cancelar pronto":"✓ Estou pronto"}</button>
           {state.lobby.hostId===state.mine.userId&&<button type="button" disabled={pending || !state.members.every(m=>state.lobby.ready[m.userId])} onClick={() => start(async () => {
             const res = await startTowerExpeditionAction(runId);

@@ -95,23 +95,31 @@ export function towerPressureModifiers(pressure: number): TowerPressureModifier[
 }
 
 export function generateTowerRoomGraph(seed: string, floor = 1): TowerExplorationState {
-  const puzzle = PUZZLES[hash(`${seed}:${floor}`) % PUZZLES.length];
   const room = (id: string, index: number, kind: TowerRoomKind, title: string, description: string, connections: string[], x: number, y: number, cleared = false, roomPuzzle?: TowerPuzzle): TowerRoomNode => ({ id, index, kind, title, description, backgroundUrl: BG, connections, x, y, cleared, puzzle: roomPuzzle });
-  const graph: TowerRoomNode[] = [
-    room("entrance",0,"ENTRANCE",`Entrada do ${floor}º andar`,"As escadas se dividem em várias alas.",["archive","patrol","crypt"],6,50,true),
-    room("archive",1,"PUZZLE","Arquivo das Vozes","Um mecanismo bloqueia atalhos futuros.",["sanctuary","reliquary"],22,18,false,puzzle),
-    room("patrol",2,"COMBAT","Salão da Patrulha","Passos rebeldes ecoam adiante.",["sanctuary","crossroads"],22,50),
-    room("crypt",3,"EVENT","Cripta Lacrada","Há algo útil — ou faminto — atrás das correntes.",["rescue","crossroads"],22,82),
-    room("sanctuary",4,"REST","Capela Silenciosa","Uma chama desconhecida oferece descanso.",["observatory","gate"],42,14),
-    room("reliquary",5,"LUCK","Relicário Instável","Uma relíquia pode ajudar a run ou reagir contra o grupo.",["observatory","crossroads"],42,34),
-    room("crossroads",6,"COMBAT","Encruzilhada Rebelde","Uma tropa móvel protege três passagens.",["observatory","rescue","gate"],43,60),
-    room("rescue",7,"RESCUE","Sala Anti-Psicose","Jaulas de contenção guardam mascotes perdidos.",["crossroads","gate"],43,84),
-    room("observatory",8,"PUZZLE","Observatório Partido","Resolver o mecanismo desativa reforços do chefe.",["gate","armory"],63,22,false,PUZZLES[(hash(seed)+floor+1)%PUZZLES.length]),
-    room("armory",9,"EVENT","Arsenal Rebelde","Itens ativos podem fortalecer ou sabotar encontros.",["gate","elite"],64,45),
-    room("gate",10,"COMBAT","Portão da Consciência","A última patrulha bloqueia o acesso ao líder.",["elite"],64,70),
-    room("elite",11,"COMBAT","Escadaria do Regente","A guarda pessoal do chefe não respeita combate justo.",["boss"],82,55),
-    room("boss",12,"BOSS",`Câmara do Chefe ${floor}/7`,`O regente do ${floor}º andar aguarda com seus seguidores.`,[],95,55),
-  ];
+  const kinds: TowerRoomKind[] = ["COMBAT","PUZZLE","EVENT","REST","COMBAT","LUCK","COMBAT","RESCUE"];
+  const names: Record<TowerRoomKind,string[]> = {
+    ENTRANCE:["Vestíbulo Rebelde"], BOSS:["Câmara do Regente"],
+    COMBAT:["Patrulha Errante","Galeria dos Desobedientes","Portão da Consciência","Escadaria Hostil"],
+    PUZZLE:["Arquivo das Vozes","Observatório Partido","Sala dos Sinos","Galeria de Espelhos"],
+    EVENT:["Cripta Lacrada","Arsenal Rebelde","Oficina Rotom","Câmara das Correntes"],
+    REST:["Capela Silenciosa","Jardim Noturno","Biblioteca Adormecida"],
+    RESCUE:["Sala Anti-Psicose","Ala de Contenção"], LUCK:["Relicário Instável","Cofre do Acaso"],
+  };
+  const graph: TowerRoomNode[] = [];
+  for(let column=0;column<13;column++) for(let row=0;row<3;row++) {
+    const id=column===0&&row===1?"entrance":column===12&&row===1?"boss":`f${floor}-c${column}-r${row}`;
+    let kind:TowerRoomKind=column===0&&row===1?"ENTRANCE":column===12&&row===1?"BOSS":kinds[hash(`${seed}:${floor}:${column}:${row}`)%kinds.length];
+    const next:string[]=[];
+    if(column<12){
+      const same=column+1===12&&row===1?"boss":`f${floor}-c${column+1}-r${row}`; next.push(same);
+      const other=(row+(hash(`${seed}:branch:${column}:${row}`)%2?1:2))%3;
+      next.push(column+1===12&&other===1?"boss":`f${floor}-c${column+1}-r${other}`);
+    }
+    if(column===12&&row!==1)next.push("boss");
+    const title=kind==="ENTRANCE"?`Entrada do ${floor}º andar`:kind==="BOSS"?`Câmara do Chefe ${floor}/7`:names[kind][hash(`${id}:name`)%names[kind].length];
+    const description=kind==="BOSS"?`O regente do ${floor}º andar aguarda com seus seguidores.`:kind==="PUZZLE"?"Um mecanismo pode abrir ou cortar caminhos adiante.":kind==="RESCUE"?"Jaulas de contenção guardam mascotes perdidos em outras runs.":"A função real desta sala só fica clara ao atravessá-la.";
+    graph.push(room(id,column*3+row,kind,title,description,[...new Set(next)],4+column*7.6,[18,50,82][row],kind==="ENTRANCE",kind==="PUZZLE"?PUZZLES[hash(`${id}:puzzle`)%PUZZLES.length]:undefined));
+  }
   return { currentRoomId: "entrance", visited: ["entrance"], graph, pressure: 0, activeModifiers: [] };
 }
 
