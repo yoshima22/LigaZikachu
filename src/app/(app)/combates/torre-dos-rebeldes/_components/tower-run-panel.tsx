@@ -8,19 +8,14 @@ import {
   submitTowerActionAction,
   abandonTowerRunAction,
   advanceToBossAction,
+  setTowerReadyAction,
 } from "../actions";
-import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { TowerBattleGrid } from "./tower-battle-grid";
 import { TowerNarrative } from "./tower-narrative";
+import { TowerCombatScene } from "./tower-combat-scene";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
-type Intent = "ADVANCE" | "ATTACK" | "DEFEND" | "WAIT";
-const INTENTS: { value: Intent; label: string }[] = [
-  { value: "ADVANCE", label: "Avançar" },
-  { value: "ATTACK", label: "Atacar" },
-  { value: "DEFEND", label: "Defender" },
-  { value: "WAIT", label: "Esperar" },
-];
+type Intent = "ADVANCE" | "DEFEND";
 
 const card = "rounded-2xl border border-slate-800 bg-slate-950/70 p-5";
 
@@ -72,7 +67,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   if (!state) return <section className={card}><p className="text-sm text-slate-500">Carregando expedição…</p></section>;
 
   const run = state.run;
-  const ended = run.status === "FINISHED" || run.status === "ABANDONED";
+  const ended = run.status === "FINISHED" || run.status === "FAILED" || run.status === "ABANDONED";
 
   return (
     <section className={card}>
@@ -88,20 +83,22 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
       </div>
 
       {run.status === "LOBBY" && (
-        <div className="mt-4">
-          <p className="text-sm text-slate-300">Pronto para entrar. Ao iniciar, abre a primeira janela de turno.</p>
-          <button type="button" disabled={pending} onClick={() => start(async () => {
+        <div className="mt-4 space-y-4">
+          <div className="rounded-xl border border-purple-400/25 bg-purple-950/20 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-purple-300">Sala {state.lobby.code}</p><div className="mt-3 grid gap-2 sm:grid-cols-3">{state.members.map(member=><div key={member.userId} className={`rounded-xl border p-3 ${state.lobby.ready[member.userId]?"border-emerald-400/35 bg-emerald-400/10":"border-slate-700 bg-black/20"}`}><b className="text-sm text-white">{member.name}</b><p className="mt-1 text-[10px] text-slate-400">{member.expeditionRole}</p><span className={`mt-2 inline-block rounded-full px-2 py-1 text-[9px] font-black ${state.lobby.ready[member.userId]?"bg-emerald-400 text-emerald-950":"bg-slate-800 text-slate-400"}`}>{state.lobby.ready[member.userId]?"PRONTO":"PREPARANDO"}</span></div>)}</div></div>
+          <button type="button" disabled={pending} onClick={() => start(async()=>{const next=!state.lobby.ready[state.mine.userId];const res=await setTowerReadyAction(runId,next);if("error" in res)toast.error(res.error);else void refresh()})} className="w-full rounded-xl border border-emerald-400/40 bg-emerald-400/10 py-2.5 text-sm font-black text-emerald-200 disabled:opacity-40">{state.lobby.ready[state.mine.userId]?"Cancelar pronto":"✓ Estou pronto"}</button>
+          {state.lobby.hostId===state.mine.userId&&<button type="button" disabled={pending || !state.members.every(m=>state.lobby.ready[m.userId])} onClick={() => start(async () => {
             const res = await startTowerExpeditionAction(runId);
             if ("error" in res) { toast.error(res.error); return; }
             toast.success("Expedição iniciada!"); void refresh();
-          })} className="mt-3 rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">
-            🗼 Iniciar Expedição
-          </button>
+          })} className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">🗼 Iniciar — todos confirmaram</button>}
         </div>
       )}
 
       {run.status === "ACTIVE" && (
         <div className="mt-4 space-y-4">
+          {state.battle && <TowerCombatScene
+            events={state.lastEvents} units={state.battle.units} turn={state.lastResolvedTurn}
+          />}
           <TowerNarrative scene={state.scene} />
           {/* Ordem de resolução / confirmações */}
           <div>
@@ -142,7 +139,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           {/* Sala + fog */}
           {state.battle && <TowerBattleGrid battle={state.battle} mineId={state.mine.userId} disabled={state.mine.confirmed || pending || state.battle.over} destinations={destinations} targets={targets}
             onDestination={(id, p) => { setDestinations((cur) => ({ ...cur, [id]: p })); setIntents((cur) => ({ ...cur, [id]: "ADVANCE" })); }}
-            onTarget={(id, target) => { setTargets((cur) => ({ ...cur, [id]: target })); setIntents((cur) => ({ ...cur, [id]: "ATTACK" })); }}
+            onTarget={(id, target) => setTargets((cur) => ({ ...cur, [id]: target }))}
             onDefend={(id) => setIntents((cur) => ({ ...cur, [id]: "DEFEND" }))} />}
 
           {state.lastEvents?.length > 0 && (
@@ -164,17 +161,9 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
               <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Mecanismos à vista</p>
               {state.battle.objects.filter((o) => !o.resolved).map((o) => {
                 const on = interacting.includes(o.id);
-                return (
-                  <label key={o.id} className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${o.interactable ? "border-amber-500/30 bg-amber-500/5" : "border-slate-800 bg-slate-900/40 opacity-70"}`}>
-                    <input type="checkbox" disabled={!o.interactable || state.mine.confirmed} checked={on}
-                      onChange={(e) => setInteracting((cur) => e.target.checked ? [...cur, o.id] : cur.filter((x) => x !== o.id))} />
-                    <span className="min-w-0 flex-1">
-                      <strong className="text-white">{o.name}</strong>
-                      <span className="text-slate-500"> · {o.progress}/{o.required}{o.suppression ? " · supressão" : ""}</span>
-                    </span>
-                    {!o.interactable && <span className="text-[10px] text-slate-500">aproxime um mascote</span>}
-                  </label>
-                );
+                return <button type="button" key={o.id} disabled={!o.interactable||state.mine.confirmed} onClick={()=>setInteracting(cur=>on?cur.filter(x=>x!==o.id):[...cur,o.id])} className={`flex w-full items-center gap-3 rounded-xl border p-3 text-left transition ${on?"border-amber-300 bg-amber-300/15 ring-2 ring-amber-300/20":o.interactable?"border-purple-400/30 bg-purple-950/20 hover:border-purple-300":"border-slate-800 bg-slate-900/40 opacity-55"}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}<img src={o.spriteUrl} alt="" className="h-14 w-14 object-contain drop-shadow-[0_0_8px_#a855f7]"/><span className="min-w-0 flex-1"><strong className="block text-white">{o.name}</strong><span className="mt-1 block text-[10px] leading-relaxed text-slate-400">{o.effect}</span><span className="mt-1 block text-[10px] font-bold text-purple-200">Progresso {o.progress}/{o.required}{o.suppression?" · enfraquece os inimigos":""}</span></span><span className="rounded-lg border border-amber-300/30 px-2 py-1 text-[9px] font-black text-amber-200">{on?"SELECIONADO":o.interactable?"INTERAGIR":"FORA DE ALCANCE"}</span>
+                </button>;
               })}
             </div>
           )}
@@ -191,32 +180,8 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
               if ("error" in res) { toast.error(res.error); return; }
               toast.success("Rumo à câmara do boss!"); setInteracting([]); void refresh();
             })} className="w-full rounded-xl bg-purple-500 py-2.5 text-sm font-black text-white hover:bg-purple-400 disabled:opacity-40">
-              👑 Avançar para o Boss {state.battle.suppression.total - state.battle.suppression.resolved > 0 ? `(${state.battle.suppression.total - state.battle.suppression.resolved} mecanismo(s) reforçam o boss)` : "(mecanismos neutralizados!)"}
+              {state.run.roomIndex<3?`🚪 Completar sala e avançar para a sala ${state.run.roomIndex+1}`:`👑 Abrir a câmara do Boss${state.battle.suppression.total-state.battle.suppression.resolved>0?` · ${state.battle.suppression.total-state.battle.suppression.resolved} mecanismo(s) ativo(s)`:""}`}
             </button>
-          )}
-
-          {/* Ordens dos seus mascotes (aplicadas na resolução do turno) */}
-          {!state.battle?.over && state.myMascots.length > 0 && (
-            <div className="space-y-2">
-              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ordens dos seus mascotes</p>
-              {state.myMascots.map((m) => (
-                <div key={m.id} className={`flex items-center gap-2 rounded-lg border p-2 ${m.hp <= 0 ? "border-slate-800 bg-slate-900/30 opacity-50" : "border-slate-800 bg-slate-900/50"}`}>
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-bold text-white">{m.name}</p>
-                    <p className="text-[10px] text-cyan-300">{getCombatRoleLabel(m.role)} · {m.hp}/{m.maxHp} HP</p>
-                  </div>
-                  {m.hp <= 0 ? (
-                    <span className="text-[10px] font-bold text-red-400">caído</span>
-                  ) : (
-                    <select value={intents[m.id] ?? "ADVANCE"} onChange={(e) => setIntents((cur) => ({ ...cur, [m.id]: e.target.value as Intent }))}
-                      disabled={state.mine.confirmed}
-                      className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[11px] text-yellow-300 disabled:opacity-50">
-                      {INTENTS.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
 
           {/* Confirmar ações do turno */}
@@ -241,7 +206,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
         </div>
       )}
 
-      {ended && <p className="mt-3 text-sm text-slate-400">Esta expedição foi {run.status === "FINISHED" ? "concluída" : "abandonada"}.</p>}
+      {ended && <p className={`mt-3 text-sm ${run.status==="FAILED"?"text-red-300":"text-slate-400"}`}>Esta expedição foi {run.status === "FINISHED" ? "concluída" : run.status==="FAILED"?"derrotada — novas informações podem ter surgido no Arquivo da Torre":"abandonada"}.</p>}
 
       <button type="button" disabled={pending} onClick={() => start(async () => {
         const res = await abandonTowerRunAction(runId);

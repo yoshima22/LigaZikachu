@@ -16,6 +16,9 @@ export type TowerNarrativeScene = {
   characterSide: "LEFT" | "RIGHT";
   enabled: boolean;
   order: number;
+  minFailures?: number;
+  knowledgeTitle?: string;
+  knowledgeText?: string;
 };
 
 export const DEFAULT_TOWER_SCENES: TowerNarrativeScene[] = [
@@ -85,8 +88,13 @@ export async function getTowerNarrativeScenes(): Promise<TowerNarrativeScene[]> 
   return (saved.length ? saved : DEFAULT_TOWER_SCENES).sort((a, b) => a.order - b.order);
 }
 
-export function towerSceneFor(scenes: TowerNarrativeScene[], trigger: TowerSceneTrigger, floor = 1) {
-  return scenes.find((scene) => scene.enabled && scene.trigger === trigger && scene.floor === floor)
-    ?? scenes.find((scene) => scene.enabled && scene.trigger === trigger)
+export function unlockedTowerScenes(scenes: TowerNarrativeScene[], failures: number) {
+  return scenes.filter((scene) => scene.enabled && failures >= Math.max(0, scene.minFailures ?? 0));
+}
+
+export function towerSceneFor(scenes: TowerNarrativeScene[], trigger: TowerSceneTrigger, floor = 1, failures = 0) {
+  const unlocked = unlockedTowerScenes(scenes, failures);
+  return unlocked.filter((scene) => scene.trigger === trigger && scene.floor === floor).at(-1)
+    ?? unlocked.filter((scene) => scene.trigger === trigger).at(-1)
     ?? null;
 }

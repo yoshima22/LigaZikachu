@@ -26,6 +26,7 @@ import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import {
   getTowerNarrativeScenes,
   towerSceneFor,
+  unlockedTowerScenes,
   TOWER_NARRATIVE_KEY,
   type TowerNarrativeScene,
   type TowerSceneTrigger,
@@ -84,7 +85,14 @@ export async function getTowerLobbyDataAction() {
 
   const config = await getTowerConfig();
   const scenes = await getTowerNarrativeScenes();
+  const failures = await prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] } } } });
   const active = await findActiveRunForUser(user.id);
+  const openRuns = await prisma.towerRun.findMany({
+    where: { status: "LOBBY" }, orderBy: { createdAt: "desc" }, take: 20,
+    include: { members: { select: { userId: true } } },
+  });
+  const roomUserIds = [...new Set(openRuns.flatMap((run) => run.members.map((member) => member.userId)))];
+  const roomUsers = new Map((await prisma.user.findMany({ where: { id: { in: roomUserIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name ?? "Jogador"]));
   const lastAt = await lastEntryAt(user.id);
   const nextEntryMs = lastAt !== null ? lastAt + config.entryCooldownMinutes * 60_000 : 0;
 
@@ -107,13 +115,19 @@ export async function getTowerLobbyDataAction() {
     ok: true as const,
     config,
     scenes,
-    lobbyScene: towerSceneFor(scenes, "LOBBY", 1),
+    lobbyScene: towerSceneFor(scenes, "LOBBY", 1, failures),
+    failures,
+    knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
     roles: TOWER_EXPEDITION_ROLES.map((r) => ({
       key: r.key, label: r.label, exploration: r.exploration, benefit: r.benefit, stances: r.stances,
     })),
     mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId) })),
+    rooms: openRuns.filter((run) => run.members.length < 3).map((run) => {
+      const lobby = ((run.volatileState ?? {}) as { lobby?: { code?: string; hostId?: string; ready?: Record<string, boolean> } }).lobby;
+      return { id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace, host: roomUsers.get(lobby?.hostId ?? run.members[0]?.userId ?? "") ?? "Jogador", members: run.members.map((m) => ({ userId: m.userId, name: roomUsers.get(m.userId) ?? "Jogador", ready: Boolean(lobby?.ready?.[m.userId]) })) };
+    }),
   };
 }
 
@@ -141,6 +155,9 @@ export async function saveTowerNarrativeScenesAction(input: TowerNarrativeScene[
       title: raw.title?.trim() || "Cena da Torre", speaker: raw.speaker.trim(), text: raw.text.trim(),
       backgroundUrl, characterUrl, characterSide: raw.characterSide === "LEFT" ? "LEFT" : "RIGHT",
       enabled: raw.enabled !== false, order: Number.isFinite(raw.order) ? Math.trunc(raw.order) : index * 10,
+      minFailures: Math.max(0, Math.trunc(raw.minFailures ?? 0)),
+      knowledgeTitle: raw.knowledgeTitle?.trim() || undefined,
+      knowledgeText: raw.knowledgeText?.trim() || undefined,
     });
   }
   await prisma.appSetting.upsert({
@@ -157,6 +174,7 @@ export async function createTowerRunAction(input: {
   pace: TowerPaceMode;
   expeditionRole: TowerExpeditionRole;
   mascotIds: string[];
+  stanceByMascot?: Record<string, string>;
 }): Promise<{ error: string } | { ok: true; runId: string }> {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
@@ -195,7 +213,7 @@ export async function createTowerRunAction(input: {
   const allowedStances = TOWER_ROLE_BY_KEY[input.expeditionRole].stances;
   const run = await prisma.$transaction(async (tx) => {
     const created = await tx.towerRun.create({
-      data: { pace: input.pace, seed, status: "LOBBY", resolutionOrder: [user.id] },
+      data: { pace: input.pace, seed, status: "LOBBY", resolutionOrder: [user.id], volatileState: { lobby: { code: randomBytes(3).toString("hex").toUpperCase(), hostId: user.id, ready: { [user.id]: false } } } },
     });
     const member = await tx.towerRunMember.create({
       data: { runId: created.id, userId: user.id, expeditionRole: input.expeditionRole, resolutionIndex: 0 },
@@ -206,7 +224,7 @@ export async function createTowerRunAction(input: {
         data: {
           memberId: member.id, mascotId: m.id, ownerUserId: user.id,
           currentHp: maxHp, maxHp,
-          currentStance: initialStanceFor(input.expeditionRole, m.preferredCombatRole),
+          currentStance: allowedStances.includes(normalizeCombatRole(input.stanceByMascot?.[m.id])) ? normalizeCombatRole(input.stanceByMascot?.[m.id]) : initialStanceFor(input.expeditionRole, m.preferredCombatRole),
           allowedStances, state: "IN_TOWER",
         },
       });
@@ -215,6 +233,34 @@ export async function createTowerRunAction(input: {
   });
   revalidatePath(PATH);
   return { ok: true as const, runId: run.id };
+}
+
+/** Entra em uma sala aberta. Cada integrante leva sua própria classe, posturas e dois mascotes. */
+export async function joinTowerRoomAction(input: { runId: string; expeditionRole: TowerExpeditionRole; mascotIds: string[]; stanceByMascot?: Record<string,string> }) {
+  const user=await requireTowerAdmin(); if(!user)return {error:"Acesso restrito à equipe ADMIN."};
+  const player=await getSessionPlayer(user.id); if(!player)return {error:"Jogador não encontrado."};
+  if(await findActiveRunForUser(user.id))return {error:"Você já participa de uma expedição ativa."};
+  const role=TOWER_ROLE_BY_KEY[input.expeditionRole]; if(!role)return {error:"Classe inválida."};
+  const ids=[...new Set(input.mascotIds??[])]; if(ids.length!==2)return {error:"Selecione exatamente 2 mascotes."};
+  const mascots=await prisma.mascot.findMany({where:{id:{in:ids},playerId:player.id,arenaState:"FREE",bazarListed:false,expeditions:{none:{status:"ACTIVE"}}},select:{id:true,level:true,statVitality:true,preferredCombatRole:true}});
+  if(mascots.length!==2)return {error:"Um dos mascotes não está disponível."};
+  await prisma.$transaction(async tx=>{
+    const run=await tx.towerRun.findUnique({where:{id:input.runId},include:{members:true}});
+    if(!run||run.status!=="LOBBY"||run.members.length>=3)throw new Error("Sala indisponível ou cheia.");
+    const member=await tx.towerRunMember.create({data:{runId:run.id,userId:user.id,expeditionRole:input.expeditionRole,resolutionIndex:run.members.length}});
+    for(const m of mascots){const maxHp=towerMaxHp(m.level,m.statVitality);const requested=normalizeCombatRole(input.stanceByMascot?.[m.id]);await tx.towerRunMascot.create({data:{memberId:member.id,mascotId:m.id,ownerUserId:user.id,currentHp:maxHp,maxHp,currentStance:role.stances.includes(requested)?requested:initialStanceFor(input.expeditionRole,m.preferredCombatRole),allowedStances:role.stances,state:"IN_TOWER"}})}
+    const vol=(run.volatileState??{}) as {lobby?:{code?:string;hostId?:string;ready?:Record<string,boolean>}};
+    await tx.towerRun.update({where:{id:run.id},data:{resolutionOrder:[...run.members.map(m=>m.userId),user.id],volatileState:{...vol,lobby:{...vol.lobby,hostId:vol.lobby?.hostId??run.members[0]?.userId,ready:{...(vol.lobby?.ready??{}),[user.id]:false}}} as Prisma.InputJsonValue}});
+  });
+  revalidatePath(PATH);return {ok:true as const,runId:input.runId};
+}
+
+/** Confirma ou reabre a preparação. Iniciar só é permitido ao host com todos prontos. */
+export async function setTowerReadyAction(runId:string,ready:boolean){
+ const user=await requireTowerAdmin();if(!user)return {error:"Acesso restrito."};
+ const run=await prisma.towerRun.findUnique({where:{id:runId},include:{members:true}});if(!run||run.status!=="LOBBY"||!run.members.some(m=>m.userId===user.id))return {error:"Sala não encontrada."};
+ const vol=(run.volatileState??{}) as {lobby?:{code?:string;hostId?:string;ready?:Record<string,boolean>}};
+ await prisma.towerRun.update({where:{id:runId},data:{volatileState:{...vol,lobby:{...vol.lobby,hostId:vol.lobby?.hostId??run.members[0]?.userId,ready:{...(vol.lobby?.ready??{}),[user.id]:ready}}} as Prisma.InputJsonValue}});revalidatePath(PATH);return {ok:true as const};
 }
 
 /** Encerra/abandona a expedição do usuário (uso em dev enquanto não há gameplay). */
@@ -238,13 +284,16 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
     select: {
-      id: true, status: true, pace: true, seed: true,
+      id: true, status: true, pace: true, seed: true, volatileState: true,
       members: { select: { userId: true, resolutionIndex: true, mascots: { select: { mascotId: true, currentStance: true } } } },
     },
   });
   if (!run) return { error: "Expedição não encontrada." };
   if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
   if (run.status !== "LOBBY") return { error: "Esta expedição já foi iniciada." };
+  const lobby=((run.volatileState??{}) as {lobby?:{hostId?:string;ready?:Record<string,boolean>}}).lobby;
+  if((lobby?.hostId??run.members[0]?.userId)!==user.id)return {error:"Somente o criador da sala pode iniciar."};
+  if(!run.members.every(m=>lobby?.ready?.[m.userId]))return {error:"Todos os jogadores precisam marcar Pronto."};
 
   const mascotIds = run.members.flatMap((m) => m.mascots.map((x) => x.mascotId));
   const rows = await prisma.mascot.findMany({
@@ -272,7 +321,7 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
     data: {
       status: "ACTIVE", startedAt: new Date(), globalTurn: 1, resolutionOrder: order,
       nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
-      volatileState: { submissions: {}, log: ["Expedição iniciada. Um encounter começou!"], battle } as unknown as Prisma.InputJsonValue,
+      volatileState: { ...(run.volatileState as object ?? {}), submissions: {}, roomIndex: 1, log: ["A porta se fechou. A primeira sala foi revelada."], battle } as unknown as Prisma.InputJsonValue,
     },
   });
   revalidatePath(PATH);
@@ -299,6 +348,7 @@ export async function advanceToBossAction(runId: string): Promise<{ error: strin
   if (b.isBoss) return { error: "Você já está enfrentando o boss." };
 
   const unresolved = b.objects.filter((o) => o.suppression && !o.resolved).length;
+  const nextRoom=(vol.roomIndex??1)+1;
 
   const mascotIds = run.members.flatMap((m) => m.mascots.map((x) => x.mascotId));
   const rows = await prisma.mascot.findMany({
@@ -321,14 +371,15 @@ export async function advanceToBossAction(runId: string): Promise<{ error: strin
   const survivors = members.reduce((s, m) => s + m.mascots.filter((mm) => (mm.currentHp ?? 1) > 0).length, 0);
   if (survivors === 0) return { error: "Nenhum mascote sobreviveu para enfrentar o boss." };
 
-  const battle = generateBossEncounter(run.seed, members, unresolved);
-  const log = [...((vol.log ?? [])), `Câmara do boss! ${unresolved} mecanismo(s) ignorado(s) reforçam o líder.`].slice(-50);
+  const isBossRoom=nextRoom>3;
+  const battle = isBossRoom?generateBossEncounter(run.seed, members, unresolved):generateEncounter(`${run.seed}:room:${nextRoom}`,members);
+  const log = [...((vol.log ?? [])), isBossRoom?`Câmara do boss! ${unresolved} mecanismo(s) ignorado(s) reforçam o líder.`:`Sala ${nextRoom} revelada. A arquitetura da Torre mudou.`].slice(-50);
   await prisma.towerRun.update({
     where: { id: runId },
     data: {
       globalTurn: run.status === "ACTIVE" ? { increment: 1 } : undefined,
       nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
-      volatileState: { submissions: {}, log, battle } as unknown as Prisma.InputJsonValue,
+      volatileState: { ...vol, submissions: {}, roomIndex: nextRoom, log, battle } as unknown as Prisma.InputJsonValue,
     },
   });
   revalidatePath(PATH);
@@ -352,8 +403,10 @@ export async function getTowerRunStateAction(runId: string) {
   }
 
   const vol = (run.volatileState ?? {}) as TowerVolatile;
+  const lobby = (run.volatileState as { lobby?: { code?: string; hostId?: string; ready?: Record<string,boolean> } } | null)?.lobby;
   const submissions = vol.submissions ?? {};
   const scenes = await getTowerNarrativeScenes();
+  const priorFailures = await prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] }, id: { not: run.id } } } });
   const userNames = new Map((await prisma.user.findMany({
     where: { id: { in: run.members.map((member) => member.userId) } },
     select: { id: true, name: true },
@@ -362,7 +415,7 @@ export async function getTowerRunStateAction(runId: string) {
   // View do combate com fog de time: aliados sempre; inimigos só se visíveis.
   type ObjView = { id: string; key: string; name: string; x: number; y: number; radius: number; progress: number; required: number; resolved: boolean; suppression: boolean; interactable: boolean; spriteUrl: string; effect: string };
   let battle: null | {
-    room: { width: number; height: number; blocked: string[] };
+    room: { width: number; height: number; blocked: string[]; wallTiles?: string[]; doorTiles?: string[]; trapTiles?: string[] };
     discovered: string[]; visible: string[];
     units: { id: string; team: string; ownerId: string | null; name: string; pokemonId: number; level: number; types: string[]; x: number; y: number; hp: number; maxHp: number; role: string; shield: number; agility: number; effects: { id: string; label: string; kind: string; value: number; duration: number }[] }[];
     objects: ObjView[];
@@ -402,6 +455,7 @@ export async function getTowerRunStateAction(runId: string) {
     run: {
       id: run.id, status: run.status, pace: run.pace, currentFloor: run.currentFloor,
       globalTurn: run.globalTurn, nextDeadline: run.nextDeadline?.toISOString() ?? null,
+      roomIndex: vol.roomIndex ?? 1,
     },
     order: (Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : []),
     members: run.members.map((m) => ({
@@ -409,6 +463,7 @@ export async function getTowerRunStateAction(runId: string) {
       consecutiveMisses: m.consecutiveMisses, confirmed: Boolean(submissions[m.userId]),
     })),
     mine: { userId: user.id, confirmed: Boolean(submissions[user.id]) },
+    lobby: { code: lobby?.code ?? run.id.slice(-6).toUpperCase(), hostId: lobby?.hostId ?? run.members[0]?.userId ?? "", ready: lobby?.ready ?? {} },
     battle,
     myMascots,
     log: (vol.log ?? []).slice(-12),
@@ -418,6 +473,7 @@ export async function getTowerRunStateAction(runId: string) {
       scenes,
       battle?.isBoss ? "BOSS" : run.globalTurn <= 1 ? "RUN_START" : "ENCOUNTER",
       run.currentFloor,
+      priorFailures,
     ),
   };
 }

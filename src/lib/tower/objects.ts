@@ -41,6 +41,16 @@ export const TOWER_OBJECTS: Record<string, TowerObjectDef> = {
     effect: "Recompensa da sala (em breve).",
     spriteUrl: "/events/torre-dos-rebeldes/objects/15_chave.png",
   },
+  DOOR: {
+    key: "DOOR", name: "Porta Selada", radius: 1, required: 1, suppression: false,
+    effect: "Bloqueia uma passagem. Um mascote próximo pode romper o selo e abrir o caminho.",
+    spriteUrl: "/events/torre-dos-rebeldes/objects/09_porta_selada.png",
+  },
+  TRAP: {
+    key: "TRAP", name: "Placa de Pressão", radius: 0, required: 1, suppression: false,
+    effect: "Armadilha oculta: ativa apenas quando um mascote termina o movimento sobre esta casa.",
+    spriteUrl: "/events/torre-dos-rebeldes/objects/22_placa_de_pressao.png",
+  },
 };
 
 export const objectEffectId = (key: string) => `obj:${key}`;

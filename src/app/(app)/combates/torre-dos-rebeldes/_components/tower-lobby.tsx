@@ -5,9 +5,9 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
-import { getTowerLobbyDataAction, createTowerRunAction } from "../actions";
+import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
-import { TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
+import { TowerKnowledge, TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
 
 type LobbyData = Extract<Awaited<ReturnType<typeof getTowerLobbyDataAction>>, { ok: true }>;
 type Role = LobbyData["roles"][number];
@@ -24,6 +24,7 @@ export function TowerLobby() {
   const [pace, setPace] = useState<"ONLINE" | "SLOW">("ONLINE");
   const [role, setRole] = useState<Role["key"] | null>(null);
   const [picks, setPicks] = useState<string[]>([]);
+  const [stances, setStances] = useState<Record<string,string>>({});
 
   const load = () => {
     void getTowerLobbyDataAction().then((res) => {
@@ -63,7 +64,7 @@ export function TowerLobby() {
     if (!role) { toast.error("Escolha uma Função de Expedição."); return; }
     if (picks.length !== 2) { toast.error("Selecione exatamente 2 mascotes."); return; }
     start(async () => {
-      const res = await createTowerRunAction({ pace, expeditionRole: role, mascotIds: picks });
+      const res = await createTowerRunAction({ pace, expeditionRole: role, mascotIds: picks, stanceByMascot: stances });
       if ("error" in res) { toast.error(res.error); return; }
       toast.success("Expedição criada!");
       setPicks([]);
@@ -74,7 +75,10 @@ export function TowerLobby() {
   return (
     <div className="space-y-6">
       <TowerNarrative scene={data.lobbyScene} />
+      <TowerKnowledge entries={data.knowledge} failures={data.failures} />
       <TowerNarrativeAdmin initial={data.scenes} />
+
+      {data.rooms.length>0&&<section className={card}><h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Salas aguardando jogadores</h2><p className="mt-1 text-[11px] text-slate-500">Prepare seus dois mascotes abaixo e entre em uma sala de até três treinadores.</p><div className="mt-3 grid gap-3 md:grid-cols-2">{data.rooms.map(room=><article key={room.id} className="rounded-xl border border-purple-400/20 bg-purple-950/15 p-3"><div className="flex justify-between"><b className="text-white">Sala {room.code}</b><span className="text-xs text-purple-300">{room.members.length}/3</span></div><p className="mt-1 text-[10px] text-slate-400">Host: {room.host} · {room.pace==="ONLINE"?"120s":"4h"}</p><div className="mt-2 flex flex-wrap gap-1">{room.members.map(m=><span key={m.userId} className="rounded-full bg-slate-800 px-2 py-1 text-[9px] text-slate-300">{m.name}{m.ready?" ✓":""}</span>)}</div><button disabled={pending||picks.length!==2||!role} onClick={()=>start(async()=>{if(!role)return;const res=await joinTowerRoomAction({runId:room.id,expeditionRole:role,mascotIds:picks,stanceByMascot:stances});if("error" in res)toast.error(res.error);else{toast.success("Você entrou na sala.");load()}})} className="mt-3 w-full rounded-lg border border-purple-400/40 bg-purple-400/10 py-2 text-xs font-black text-purple-200 disabled:opacity-40">Entrar nesta sala</button></article>)}</div></section>}
 
       {/* Ritmo */}
       <section className={card}>
@@ -131,6 +135,7 @@ export function TowerLobby() {
                   <span className="min-w-0">
                     <strong className="block truncate text-[11px] text-white">{m.name}</strong>
                     <small className="text-[10px] text-slate-500">Nv.{m.level}</small>
+                    {checked&&selectedRole&&<select value={stances[m.id]??selectedRole.stances[0]} onClick={e=>e.stopPropagation()} onChange={e=>setStances(cur=>({...cur,[m.id]:e.target.value}))} className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-950 p-1 text-[9px] text-cyan-200">{selectedRole.stances.map(s=><option key={s} value={s}>{getCombatRoleLabel(s)}</option>)}</select>}
                   </span>
                 </button>
               );
@@ -141,7 +146,7 @@ export function TowerLobby() {
 
       <button type="button" onClick={create} disabled={pending || picks.length !== 2 || !role}
         className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-[#1A1A2E] transition hover:bg-[#FFD700] disabled:opacity-40">
-        {pending ? "Criando…" : "🗼 Iniciar Expedição"}
+        {pending ? "Criando…" : "🗼 Criar sala de expedição"}
       </button>
     </div>
   );

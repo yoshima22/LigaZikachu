@@ -11,7 +11,7 @@ import type { TowerGrid, TowerOrder, TowerUnit } from "./engine/types";
 import { towerMaxHp } from "./config";
 import { TOWER_OBJECTS, objectEffectId } from "./objects";
 
-export type TowerRoom = { width: number; height: number; blocked: string[] };
+export type TowerRoom = { width: number; height: number; blocked: string[]; wallTiles?: string[]; doorTiles?: string[]; trapTiles?: string[] };
 
 /** Objeto/mecanismo posicionado na sala. */
 export type TowerObject = {
@@ -98,7 +98,9 @@ export function generateEncounter(
       if (x > 2 && x < width - 2) blocked.push(tileKey(x, y));
     }
   }
-  const room: TowerRoom = { width, height, blocked: [...new Set(blocked)] };
+  const doorTile=tileKey(Math.floor(width/2),Math.floor(height/2));
+  blocked.push(doorTile);
+  const room: TowerRoom = { width, height, blocked: [...new Set(blocked)], wallTiles:[...new Set(blocked.filter(k=>k!==doorTile))], doorTiles:[doorTile], trapTiles:[] };
   const taken = new Set(room.blocked);
   const units: TowerUnit[] = [];
 
@@ -138,15 +140,17 @@ export function generateEncounter(
 
   // Objetos de supressão da sala (slice: Altar + Totem), em casas livres do meio.
   const objects: TowerObject[] = [];
-  const objSpecs = ["ALTAR", "TOTEM"] as const;
+  const objSpecs = ["ALTAR", "TOTEM", "DOOR", "TRAP"] as const;
   objSpecs.forEach((key, i) => {
     const def = TOWER_OBJECTS[key];
-    const spot = firstFreeTileNear(8 + i * 4, 3 + i * 5, room, taken);
+    const forced=key==="DOOR"?{x:Math.floor(width/2),y:Math.floor(height/2)}:null;
+    const spot = forced??firstFreeTileNear(6 + (i*3)%10, 2 + (i*4)%9, room, taken);
     taken.add(tileKey(spot.x, spot.y));
     objects.push({
       id: `obj:${i}`, key, name: def.name, x: spot.x, y: spot.y,
       radius: def.radius, required: def.required, progress: 0, resolved: false, suppression: def.suppression,
     });
+    if(key==="TRAP")room.trapTiles?.push(tileKey(spot.x,spot.y));
   });
 
   const state: TowerBattleState = { room, units, objects, discovered: [], encounterOver: false };
@@ -300,7 +304,9 @@ function orderFromIntent(
   if (intent === "ATTACK" && requestedTarget && manhattan(unit, requestedTarget) <= roleRange(unit.role)) {
     return { unitId: unit.id, type: "ATTACK", targetId: requestedTarget.id };
   }
-  if (intent === "ATTACK" && inRange) return { unitId: unit.id, type: "ATTACK", targetId: foe.id };
+  // Não existe botão redundante de ataque: ao terminar em alcance, a postura
+  // executa automaticamente sua ação ofensiva/de suporte no fechamento do turno.
+  if (inRange) return { unitId: unit.id, type: "ATTACK", targetId: foe.id };
   // ADVANCE, ou ATTACK fora de alcance → move em direção ao inimigo mais próximo.
   return { unitId: unit.id, type: "MOVE", x: foe.x, y: foe.y };
 }
@@ -332,6 +338,7 @@ export function resolveEncounterTurn(
     obj.progress = Math.min(obj.required, obj.progress + 1);
     if (obj.progress >= obj.required) {
       obj.resolved = true;
+      if(obj.key==="DOOR")state.room.blocked=state.room.blocked.filter((key)=>key!==tileKey(obj.x,obj.y));
       objectLog.push(`${obj.name} ${obj.suppression ? "neutralizado" : "resolvido"}!`);
     } else {
       objectLog.push(`${obj.name}: progresso ${obj.progress}/${obj.required}.`);
@@ -358,6 +365,14 @@ export function resolveEncounterTurn(
   }
   const res = resolveTowerRound({ units: state.units, grid, orders: orderMap, round, seed });
   state.units = res.units;
+  for(const trap of state.objects.filter((obj)=>obj.key==="TRAP"&&!obj.resolved)){
+    const victim=state.units.find((unit)=>unit.hp>0&&unit.x===trap.x&&unit.y===trap.y);
+    if(!victim)continue;
+    const amount=Math.max(1,Math.round(victim.maxHp*0.12));victim.hp=Math.max(0,victim.hp-amount);trap.resolved=true;
+    res.events.push({unitId:victim.id,targetId:victim.id,kind:"ATTACK",amount,text:`${victim.name} ativou ${trap.name} e perdeu ${amount} HP.`});
+    objectLog.push(`⚠ ${trap.name} ativada por ${victim.name}: -${amount} HP.`);
+    if(victim.hp<=0)res.events.push({unitId:victim.id,targetId:victim.id,kind:"KO",text:`${victim.name} foi nocauteado pela armadilha.`});
+  }
   recomputeFog(state);
   if (isEncounterOver(state.units)) {
     state.encounterOver = true;
