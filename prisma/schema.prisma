@@ -3922,3 +3922,149 @@ model SpecPollVote {
   @@index([pollId])
   @@map("spec_poll_votes")
 }
+
+// ── Torre dos Rebeldes (modo roguelike cooperativo, admin-only em dev) ──────────
+// Persistência mínima da Fase 3. O estado volátil de grid/fog/tiles/encounter vive
+// em TowerRun.volatileState (Json) — só o consultável vira tabela.
+
+enum TowerRunMode {
+  EXPEDITION
+  RIVAL_EXPEDITION
+}
+
+enum TowerPaceMode {
+  ONLINE
+  SLOW
+}
+
+enum TowerRunStatus {
+  LOBBY
+  ACTIVE
+  FINISHED
+  FAILED
+  ABANDONED
+}
+
+enum TowerExpeditionRole {
+  INVESTIGADOR
+  NAVEGADOR
+  PROTETOR
+  ARTIFICE
+  RITUALISTA
+  BATEDOR
+}
+
+enum TowerMascotState {
+  IN_TOWER
+  DEFEATED
+  LOST_IN_TOWER
+  RECOVERED
+}
+
+model TowerRun {
+  id              String         @id @default(cuid())
+  mode            TowerRunMode   @default(EXPEDITION)
+  pace            TowerPaceMode
+  status          TowerRunStatus @default(LOBBY)
+  seed            String
+  currentFloor    Int            @default(1)
+  globalTurn      Int            @default(0)
+  resolutionOrder Json?          // rotação de resolução (ex.: ["userA","userB"])
+  volatileState   Json?          // grid, fog, tiles, encounters, portas, loot
+  ticketConsumed  Boolean        @default(false)
+  nextDeadline    DateTime?
+  startedAt       DateTime?
+  endedAt         DateTime?
+  createdAt       DateTime       @default(now())
+  updatedAt       DateTime       @updatedAt
+  members         TowerRunMember[]
+
+  @@index([status])
+  @@map("tower_runs")
+}
+
+model TowerRunMember {
+  id                String              @id @default(cuid())
+  runId             String
+  userId            String
+  expeditionRole    TowerExpeditionRole
+  resolutionIndex   Int                 @default(0)
+  confirmed         Boolean             @default(false)
+  consecutiveMisses Int                 @default(0)
+  afkRemoved        Boolean             @default(false)
+  joinedAt          DateTime            @default(now())
+  removedAt         DateTime?
+  run               TowerRun            @relation(fields: [runId], references: [id], onDelete: Cascade)
+  mascots           TowerRunMascot[]
+
+  @@unique([runId, userId])
+  @@index([userId, afkRemoved])
+  @@map("tower_run_members")
+}
+
+model TowerRunMascot {
+  id             String           @id @default(cuid())
+  memberId       String
+  mascotId       String
+  ownerUserId    String
+  currentHp      Int
+  maxHp          Int
+  currentStance  String
+  allowedStances Json?            // posturas permitidas pela Função de Expedição
+  statusEffects  Json?            // buffs/debuffs persistentes (Survivor)
+  state          TowerMascotState @default(IN_TOWER)
+  member         TowerRunMember   @relation(fields: [memberId], references: [id], onDelete: Cascade)
+
+  @@index([mascotId])
+  @@map("tower_run_mascots")
+}
+
+model TowerLostMascot {
+  id            String    @id @default(cuid())
+  mascotId      String    @unique
+  ownerUserId   String
+  lostRunId     String
+  floor         Int
+  recoveredById String?   // quem resgatou (nunca muda o dono)
+  recoveredAt   DateTime?
+  createdAt     DateTime  @default(now())
+
+  @@index([ownerUserId])
+  @@map("tower_lost_mascots")
+}
+
+model TowerCommunityProgress {
+  id        String   @id @default(cuid())
+  floorId   Int
+  metricKey String
+  value     Float    @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@unique([floorId, metricKey])
+  @@map("tower_community_progress")
+}
+
+model TowerCodexEntry {
+  id             String   @id @default(cuid())
+  userId         String?  // null = descoberta comunitária
+  subjectType    String   // ENEMY | MECHANISM | TRAP | LEADER ...
+  subjectKey     String
+  discoveryLevel Int      @default(0)
+  data           Json?
+  updatedAt      DateTime @updatedAt
+
+  @@unique([userId, subjectType, subjectKey])
+  @@map("tower_codex_entries")
+}
+
+model TowerFeat {
+  id         String   @id @default(cuid())
+  userId     String
+  runId      String?
+  featKey    String
+  data       Json?
+  achievedAt DateTime @default(now())
+
+  @@index([userId])
+  @@map("tower_feats")
+}
