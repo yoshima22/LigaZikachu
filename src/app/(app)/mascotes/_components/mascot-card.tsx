@@ -743,6 +743,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const spriteUrl = mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || (imgFailed
     ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
     : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny }));
+  const hasIllustratedSprite = mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008;
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
@@ -1020,7 +1021,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       <div className="p-4 space-y-4">
         {/* Sprite + Nome */}
         <div className="flex items-center gap-4">
-          <div className="group relative shrink-0 flex h-[72px] w-[72px] cursor-help items-center justify-center">
+          <div className={`group relative flex shrink-0 cursor-help items-center justify-center ${hasIllustratedSprite ? "h-24 w-24" : "h-[72px] w-[72px]"}`}>
             {/* Speech bubble on hover */}
             <MascotSpeechBubble
               id={mascot.id}
@@ -1050,9 +1051,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             <img
               src={spriteUrl}
               alt={name}
-              width={72} height={72}
-              className="object-contain drop-shadow-[0_0_8px_rgba(255,203,5,0.3)]"
-              style={{ imageRendering: "pixelated" }}
+              width={hasIllustratedSprite ? 96 : 72} height={hasIllustratedSprite ? 96 : 72}
+              className={`${hasIllustratedSprite ? "h-24 w-24" : "h-[72px] w-[72px]"} object-contain drop-shadow-[0_0_8px_rgba(255,203,5,0.3)]`}
+              style={{ imageRendering: hasIllustratedSprite ? "auto" : "pixelated" }}
               onError={() => setImgFailed(true)}
             />
             <span className="absolute -top-1 -right-1 text-base leading-none select-none">

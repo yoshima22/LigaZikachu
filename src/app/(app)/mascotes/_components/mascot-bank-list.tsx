@@ -236,8 +236,8 @@ function BankRow({
           <img
             src={mascot.staticSpriteUrlOverride || mascot.animatedSpriteUrlOverride || getStaticSpriteUrl(mascot.pokemonId)}
             alt=""
-            className={`h-9 w-9 object-contain shrink-0 ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-            style={{ imageRendering: "pixelated" }}
+            className={`${mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008 ? "h-12 w-12" : "h-9 w-9"} shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
+            style={{ imageRendering: mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008 ? "auto" : "pixelated" }}
             loading="lazy"
           />
           <span className="flex-1 min-w-0 space-y-0.5">
