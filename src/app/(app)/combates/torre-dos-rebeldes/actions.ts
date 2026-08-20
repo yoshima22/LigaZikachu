@@ -19,7 +19,7 @@ import {
 } from "@/lib/tower/config";
 import { Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
 import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
-import { generateEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
+import { generateEncounter, generateBossEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
 import { tileKey, manhattan } from "@/lib/tower/engine/grid";
 import { normalizeCombatRole } from "@/lib/combat-roles";
 
@@ -232,6 +232,62 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   return { ok: true as const };
 }
 
+/** Avança para o Boss após vencer o encounter. Objetivos ignorados o reforçam. */
+export async function advanceToBossAction(runId: string): Promise<{ error: string } | { ok: true }> {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  const run = await prisma.towerRun.findUnique({
+    where: { id: runId },
+    select: {
+      id: true, status: true, pace: true, seed: true, volatileState: true,
+      members: { select: { userId: true, mascots: { select: { mascotId: true, currentHp: true, currentStance: true, state: true } } } },
+    },
+  });
+  if (!run) return { error: "Expedição não encontrada." };
+  if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
+  if (run.status !== "ACTIVE") return { error: "A expedição não está ativa." };
+  const vol = (run.volatileState ?? {}) as TowerVolatile;
+  const b = vol.battle;
+  if (!b || !b.encounterOver || b.outcome !== "WIN") return { error: "Vença o encounter atual antes de enfrentar o boss." };
+  if (b.isBoss) return { error: "Você já está enfrentando o boss." };
+
+  const unresolved = b.objects.filter((o) => o.suppression && !o.resolved).length;
+
+  const mascotIds = run.members.flatMap((m) => m.mascots.map((x) => x.mascotId));
+  const rows = await prisma.mascot.findMany({
+    where: { id: { in: mascotIds } },
+    select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
+  });
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  const members = run.members.map((m) => ({
+    userId: m.userId,
+    mascots: m.mascots.flatMap((mm): MemberMascotInput[] => {
+      const r = byId.get(mm.mascotId);
+      if (!r) return [];
+      return [{
+        id: r.id, pokemonId: r.pokemonId, name: r.nickname ?? getPokemonName(r.pokemonId), level: r.level,
+        force: r.statForce, agility: r.statAgility, instinct: r.statInstinct, vitality: r.statVitality, charisma: r.statCharisma,
+        stance: normalizeCombatRole(mm.currentStance), currentHp: mm.currentHp,
+      }];
+    }),
+  }));
+  const survivors = members.reduce((s, m) => s + m.mascots.filter((mm) => (mm.currentHp ?? 1) > 0).length, 0);
+  if (survivors === 0) return { error: "Nenhum mascote sobreviveu para enfrentar o boss." };
+
+  const battle = generateBossEncounter(run.seed, members, unresolved);
+  const log = [...((vol.log ?? [])), `Câmara do boss! ${unresolved} mecanismo(s) ignorado(s) reforçam o líder.`].slice(-50);
+  await prisma.towerRun.update({
+    where: { id: runId },
+    data: {
+      globalTurn: run.status === "ACTIVE" ? { increment: 1 } : undefined,
+      nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
+      volatileState: { submissions: {}, log, battle } as unknown as Prisma.InputJsonValue,
+    },
+  });
+  revalidatePath(PATH);
+  return { ok: true as const };
+}
+
 /** Estado atual da run (para polling). Resolve o turno se o deadline já passou. */
 export async function getTowerRunStateAction(runId: string) {
   const user = await requireTowerAdmin();
@@ -259,6 +315,7 @@ export async function getTowerRunStateAction(runId: string) {
     units: { id: string; team: string; name: string; pokemonId: number; x: number; y: number; hp: number; maxHp: number; role: string; shield: number }[];
     objects: ObjView[];
     suppression: { resolved: number; total: number };
+    isBoss: boolean;
     over: boolean; outcome: "WIN" | "LOSS" | null;
   } = null;
   let myMascots: { id: string; name: string; hp: number; maxHp: number; role: string }[] = [];
@@ -279,6 +336,7 @@ export async function getTowerRunStateAction(runId: string) {
         .map((u) => ({ id: u.id, team: u.team, name: u.name, pokemonId: u.pokemonId, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, role: u.role, shield: u.shield })),
       objects,
       suppression: { resolved: suppResolved, total: suppTotal },
+      isBoss: b.isBoss ?? false,
       over: b.encounterOver, outcome: b.outcome ?? null,
     };
     myMascots = b.units

@@ -35,6 +35,7 @@ export type TowerBattleState = {
   discovered: string[]; // casas já reveladas (fog acumulado do time)
   encounterOver: boolean;
   outcome?: "WIN" | "LOSS";
+  isBoss?: boolean;
 };
 
 /** Intenção por mascote escolhida pelo jogador no turno. */
@@ -51,6 +52,7 @@ export type MemberMascotInput = {
   vitality: number;
   charisma: number;
   stance: CombatRole;
+  currentHp?: number; // carrega HP entre combates (Survivor); default = HP máximo
 };
 
 const VISION_RADIUS = 4;
@@ -108,7 +110,7 @@ export function generateEncounter(
     units.push({
       id: mm.id, team: "ALLY", ownerId: mm.userId, pokemonId: mm.pokemonId, name: mm.name,
       level: mm.level, types: getPokemonTypes(mm.pokemonId),
-      hp: maxHp, maxHp, force: mm.force, agility: mm.agility, instinct: mm.instinct,
+      hp: Math.min(maxHp, mm.currentHp ?? maxHp), maxHp, force: mm.force, agility: mm.agility, instinct: mm.instinct,
       vitality: mm.vitality, charisma: mm.charisma, role: mm.stance,
       x: spot.x, y: spot.y, shield: 0, survivorUsed: false, effects: [],
     });
@@ -170,6 +172,75 @@ function applyObjectEffects(state: TowerBattleState): void {
       });
     }
   }
+}
+
+// Boss do Andar 1: Meowth. Os mecanismos ignorados reforçam o boss e adicionam
+// lacaios (Houndour). Sobreviventes carregam o HP atual (Survivor).
+const FLOOR1_BOSS = { pokemonId: 52, role: "DUELIST" as CombatRole };
+const FLOOR1_MINION = { pokemonId: 228, role: "ATTACKER" as CombatRole };
+
+export function generateBossEncounter(
+  seed: string,
+  members: { userId: string; mascots: MemberMascotInput[] }[],
+  unresolvedSuppression: number,
+): TowerBattleState {
+  const width = 20, height = 14;
+  const blocked: string[] = [];
+  for (let c = 0; c < 2; c++) {
+    const cx = 8 + Math.floor(towerRoll(seed, "bwall", c, "x") * 4);
+    const cy = 4 + Math.floor(towerRoll(seed, "bwall", c, "y") * 6);
+    blocked.push(tileKey(cx, cy), tileKey(cx + 1, cy));
+  }
+  const room: TowerRoom = { width, height, blocked: [...new Set(blocked)] };
+  const taken = new Set(room.blocked);
+  const units: TowerUnit[] = [];
+
+  const allies = members.flatMap((m) => m.mascots.filter((mm) => (mm.currentHp ?? 1) > 0).map((mm) => ({ ...mm, userId: m.userId })));
+  allies.forEach((mm, i) => {
+    const spot = firstFreeTileNear(1, 2 + i * 2, room, taken);
+    taken.add(tileKey(spot.x, spot.y));
+    const maxHp = towerMaxHp(mm.level, mm.vitality);
+    units.push({
+      id: mm.id, team: "ALLY", ownerId: mm.userId, pokemonId: mm.pokemonId, name: mm.name,
+      level: mm.level, types: getPokemonTypes(mm.pokemonId), hp: Math.min(maxHp, mm.currentHp ?? maxHp), maxHp,
+      force: mm.force, agility: mm.agility, instinct: mm.instinct, vitality: mm.vitality, charisma: mm.charisma,
+      role: mm.stance, x: spot.x, y: spot.y, shield: 0, survivorUsed: false, effects: [],
+    });
+  });
+
+  const avgLevel = allies.length ? Math.round(allies.reduce((s, m) => s + m.level, 0) / allies.length) : 30;
+  const bossLevel = avgLevel + 5;
+  const mult = 1 + unresolvedSuppression * 0.15;
+  const bossVit = Math.round((8 + bossLevel) * mult);
+  const bossHp = Math.round(towerMaxHp(bossLevel, bossVit) * (2 + unresolvedSuppression * 0.5));
+  const bossSpot = firstFreeTileNear(width - 3, Math.floor(height / 2), room, taken);
+  taken.add(tileKey(bossSpot.x, bossSpot.y));
+  units.push({
+    id: "boss", team: "ENEMY", ownerId: null, pokemonId: FLOOR1_BOSS.pokemonId,
+    name: getPokemonName(FLOOR1_BOSS.pokemonId), level: bossLevel, types: getPokemonTypes(FLOOR1_BOSS.pokemonId),
+    hp: bossHp, maxHp: bossHp, force: Math.round((8 + bossLevel) * mult), agility: Math.round((6 + bossLevel) * mult),
+    instinct: Math.round((8 + bossLevel) * mult), vitality: bossVit, charisma: 8 + bossLevel,
+    role: FLOOR1_BOSS.role, x: bossSpot.x, y: bossSpot.y, shield: 0, survivorUsed: false, effects: [],
+  });
+
+  // Lacaios: um por mecanismo de supressão ignorado.
+  for (let i = 0; i < unresolvedSuppression; i++) {
+    const mLevel = Math.max(5, bossLevel - 10);
+    const vit = 6 + mLevel;
+    const hp = towerMaxHp(mLevel, vit);
+    const spot = firstFreeTileNear(width - 5, 3 + i * 3, room, taken);
+    taken.add(tileKey(spot.x, spot.y));
+    units.push({
+      id: `minion:${i}`, team: "ENEMY", ownerId: null, pokemonId: FLOOR1_MINION.pokemonId,
+      name: getPokemonName(FLOOR1_MINION.pokemonId), level: mLevel, types: getPokemonTypes(FLOOR1_MINION.pokemonId),
+      hp, maxHp: hp, force: 6 + mLevel, agility: 6 + mLevel, instinct: 6 + mLevel, vitality: vit, charisma: 6 + mLevel,
+      role: FLOOR1_MINION.role, x: spot.x, y: spot.y, shield: 0, survivorUsed: false, effects: [],
+    });
+  }
+
+  const state: TowerBattleState = { room, units, objects: [], discovered: [], encounterOver: false, isBoss: true };
+  recomputeFog(state);
+  return state;
 }
 
 /** Casas visíveis pelo time aliado agora (união dos raios de visão dos vivos). */

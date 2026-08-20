@@ -7,6 +7,7 @@ import {
   startTowerExpeditionAction,
   submitTowerActionAction,
   abandonTowerRunAction,
+  advanceToBossAction,
 } from "../actions";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { TowerBattleGrid } from "./tower-battle-grid";
@@ -130,6 +131,10 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
             </p>
           )}
 
+          {state.battle?.isBoss && (
+            <p className="rounded-lg border border-purple-500/40 bg-purple-500/10 px-3 py-2 text-center text-xs font-black uppercase tracking-widest text-purple-200">👑 Batalha de Boss</p>
+          )}
+
           {/* Sala + fog */}
           {state.battle && <TowerBattleGrid battle={state.battle} />}
 
@@ -155,8 +160,19 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           )}
           {state.battle?.over && (
             <p className={`rounded-lg border px-3 py-2 text-xs font-bold ${state.battle.outcome === "WIN" ? "border-green-500/30 bg-green-500/5 text-green-300" : "border-red-500/30 bg-red-500/5 text-red-300"}`}>
-              {state.battle.outcome === "WIN" ? "🏆 Encounter vencido!" : "☠️ Seus mascotes caíram no encounter."}
+              {state.battle.outcome === "WIN" ? (state.battle.isBoss ? "🏆 Boss derrotado! Andar conquistado." : "🏆 Encounter vencido!") : "☠️ Seus mascotes caíram no encounter."}
             </p>
+          )}
+
+          {/* Avançar para o boss após vencer o encounter normal */}
+          {state.battle?.over && state.battle.outcome === "WIN" && !state.battle.isBoss && (
+            <button type="button" disabled={pending} onClick={() => start(async () => {
+              const res = await advanceToBossAction(runId);
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success("Rumo à câmara do boss!"); setInteracting([]); void refresh();
+            })} className="w-full rounded-xl bg-purple-500 py-2.5 text-sm font-black text-white hover:bg-purple-400 disabled:opacity-40">
+              👑 Avançar para o Boss {state.battle.suppression.total - state.battle.suppression.resolved > 0 ? `(${state.battle.suppression.total - state.battle.suppression.resolved} mecanismo(s) reforçam o boss)` : "(mecanismos neutralizados!)"}
+            </button>
           )}
 
           {/* Ordens dos seus mascotes (aplicadas na resolução do turno) */}

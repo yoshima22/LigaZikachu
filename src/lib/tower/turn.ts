@@ -93,9 +93,10 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const nextTurn = run.globalTurn + 1;
       const order = Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : [];
       const rotated = order.length ? [...order.slice(1), order[0]] : order;
-      const log = [...(vol.log ?? []), ...battleLog, `Turno ${run.globalTurn} resolvido.`].slice(-50);
+      const bossVictory = Boolean(vol.battle?.isBoss && vol.battle.encounterOver && vol.battle.outcome === "WIN");
+      const log = [...(vol.log ?? []), ...battleLog, ...(bossVictory ? ["🏆 Boss do andar derrotado!"] : []), `Turno ${run.globalTurn} resolvido.`].slice(-50);
 
-      if (stillActive <= 0) {
+      if (stillActive <= 0 || bossVictory) {
         await tx.towerRun.update({
           where: { id: runId },
           data: { status: "FINISHED", endedAt: new Date(), volatileState: { ...vol, submissions: {}, log } as unknown as Prisma.InputJsonValue },
