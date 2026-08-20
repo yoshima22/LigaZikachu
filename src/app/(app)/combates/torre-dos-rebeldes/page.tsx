@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
-import { getTowerOverviewAction } from "./actions";
+import { TowerLobby } from "./_components/tower-lobby";
 
 export const dynamic = "force-dynamic";
 
@@ -9,7 +9,6 @@ export const dynamic = "force-dynamic";
 // redirecionados — a segurança NÃO depende de esconder o link no frontend.
 export default async function TorreDosRebeldesPage() {
   await requirePlatformAdmin();
-  const overview = await getTowerOverviewAction();
 
   return (
     <main className="mx-auto max-w-4xl space-y-6 px-4 py-8">
@@ -32,31 +31,16 @@ export default async function TorreDosRebeldesPage() {
         </p>
       </header>
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5">
-        <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Fase 1 · Fundação</h2>
-        <ul className="mt-3 space-y-2 text-sm text-slate-300">
-          <li>✅ Gate <strong className="text-white">admin-only</strong> — página, navegação e actions atrás de verificação de role no servidor.</li>
-          <li>✅ <strong className="text-white">GM negado</strong> — usa <code className="text-slate-400">requirePlatformAdmin</code>/<code className="text-slate-400">isAdmin</code>, nunca <code className="text-slate-400">isStaff</code>.</li>
-          <li>⏳ Próximo — <strong className="text-white">Fase 2</strong>: extrair o motor tático da Arena Z num núcleo reutilizável com grid parametrizável.</li>
-        </ul>
-        {"ok" in overview && (
-          <p className="mt-4 rounded-lg border border-emerald-500/25 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-200">
-            Verificação de acesso e action guardada funcionando: <span className="text-emerald-100">{overview.message}</span>
-          </p>
-        )}
-      </section>
+      <TowerLobby />
 
-      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-5 text-sm text-slate-400">
+      <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-[11px] text-slate-500">
         <p>
-          O plano de implementação faseado (auditoria do código real, modelo de dados,
-          mapa de arquivos e riscos) orienta as próximas fases. Nada de gameplay está
-          disponível ainda — o objetivo desta entrega é estabelecer o acesso restrito e
-          o esqueleto do modo.
+          Fase 4 (lobby &amp; entrada): criação de expedição, seleção de 2 mascotes, Função
+          de Expedição e ritmo. O gameplay (mapa, exploração e combates) chega nas próximas
+          fases. Multiplayer 1–3 será adicionado sobre este lobby.
         </p>
-        <div className="mt-4">
-          <Link href="/combates/liga-rush" className="text-xs font-bold text-[#FFCB05] hover:underline">
-            ← Voltar aos Combates
-          </Link>
+        <div className="mt-3">
+          <Link href="/combates/liga-rush" className="font-bold text-[#FFCB05] hover:underline">← Voltar aos Combates</Link>
         </div>
       </section>
     </main>
