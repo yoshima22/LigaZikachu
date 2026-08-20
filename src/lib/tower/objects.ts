@@ -14,6 +14,7 @@ export type TowerObjectDef = {
   effect: string;
   /** Enquanto ativo, aplica este buff a TODOS os inimigos do encounter. */
   activeEnemyBuff?: { stat: TowerObjectStat; value: number };
+  spriteUrl: string;
 };
 
 export const TOWER_OBJECTS: Record<string, TowerObjectDef> = {
@@ -21,20 +22,24 @@ export const TOWER_OBJECTS: Record<string, TowerObjectDef> = {
     key: "ALTAR", name: "Altar Amaldiçoado", radius: 1, required: 3, suppression: true,
     effect: "+25% de Vitalidade aos inimigos enquanto ativo. Purificar remove o bônus e enfraquece o boss.",
     activeEnemyBuff: { stat: "vitality", value: 0.25 },
+    spriteUrl: "/events/torre-dos-rebeldes/objects/02_altar.png",
   },
   TOTEM: {
     key: "TOTEM", name: "Totem", radius: 1, required: 2, suppression: true,
     effect: "+20% de Força aos inimigos enquanto ativo. Destruir remove o bônus.",
     activeEnemyBuff: { stat: "force", value: 0.2 },
+    spriteUrl: "/events/torre-dos-rebeldes/objects/16_totem.png",
   },
   GENERATOR: {
     key: "GENERATOR", name: "Gerador Rotom", radius: 1, required: 3, suppression: true,
     effect: "+15% de Agilidade aos inimigos enquanto ativo. Desativar remove o bônus.",
     activeEnemyBuff: { stat: "agility", value: 0.15 },
+    spriteUrl: "/events/torre-dos-rebeldes/objects/11_gerador_rotom.png",
   },
   CHEST: {
     key: "CHEST", name: "Cofre do Mordomo", radius: 1, required: 1, suppression: false,
     effect: "Recompensa da sala (em breve).",
+    spriteUrl: "/events/torre-dos-rebeldes/objects/15_chave.png",
   },
 };
 

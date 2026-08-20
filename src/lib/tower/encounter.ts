@@ -40,6 +40,7 @@ export type TowerBattleState = {
 
 /** Intenção por mascote escolhida pelo jogador no turno. */
 export type TowerIntent = "ADVANCE" | "ATTACK" | "DEFEND" | "WAIT";
+export type TowerPlannedDestination = { x: number; y: number };
 
 export type MemberMascotInput = {
   id: string;
@@ -280,12 +281,25 @@ function roleRange(role: CombatRole): number {
 }
 
 /** Converte a intenção do jogador na ordem do motor (mira/aproxima conforme o caso). */
-function orderFromIntent(unit: TowerUnit, intent: TowerIntent, units: TowerUnit[]): TowerOrder {
+function orderFromIntent(
+  unit: TowerUnit,
+  intent: TowerIntent,
+  units: TowerUnit[],
+  destination?: TowerPlannedDestination,
+  targetId?: string,
+): TowerOrder {
   if (intent === "DEFEND") return { unitId: unit.id, type: "DEFEND" };
   if (intent === "WAIT") return { unitId: unit.id, type: "WAIT" };
+  if (destination && Number.isInteger(destination.x) && Number.isInteger(destination.y)) {
+    return { unitId: unit.id, type: "MOVE", x: destination.x, y: destination.y };
+  }
   const foe = nearestEnemy(unit, units);
   if (!foe) return { unitId: unit.id, type: "WAIT" };
   const inRange = manhattan(unit, foe) <= roleRange(unit.role);
+  const requestedTarget = targetId ? units.find((candidate) => candidate.id === targetId && candidate.team !== unit.team && candidate.hp > 0) : null;
+  if (intent === "ATTACK" && requestedTarget && manhattan(unit, requestedTarget) <= roleRange(unit.role)) {
+    return { unitId: unit.id, type: "ATTACK", targetId: requestedTarget.id };
+  }
   if (intent === "ATTACK" && inRange) return { unitId: unit.id, type: "ATTACK", targetId: foe.id };
   // ADVANCE, ou ATTACK fora de alcance → move em direção ao inimigo mais próximo.
   return { unitId: unit.id, type: "MOVE", x: foe.x, y: foe.y };
@@ -299,7 +313,12 @@ export function resolveEncounterTurn(
   state: TowerBattleState,
   seed: string,
   round: number,
-  orders: { intents: Record<string, TowerIntent>; interactions: string[] },
+  orders: {
+    intents: Record<string, TowerIntent>;
+    interactions: string[];
+    destinations?: Record<string, TowerPlannedDestination>;
+    targets?: Record<string, string>;
+  },
 ): { state: TowerBattleState; events: ReturnType<typeof resolveTowerRound>["events"]; objectLog: string[] } {
   if (state.encounterOver) return { state, events: [], objectLog: [] };
   const objectLog: string[] = [];
@@ -326,7 +345,13 @@ export function resolveEncounterTurn(
   for (const u of state.units) {
     if (u.hp <= 0) continue;
     if (u.team === "ALLY") {
-      orderMap.set(u.id, orderFromIntent(u, orders.intents[u.id] ?? "ADVANCE", state.units));
+      orderMap.set(u.id, orderFromIntent(
+        u,
+        orders.intents[u.id] ?? "ADVANCE",
+        state.units,
+        orders.destinations?.[u.id],
+        orders.targets?.[u.id],
+      ));
     } else {
       orderMap.set(u.id, orderFromIntent(u, "ATTACK", state.units)); // IA inimiga: pressiona
     }

@@ -4,12 +4,15 @@
 
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { resolveEncounterTurn, type TowerBattleState, type TowerIntent } from "./encounter";
+import { resolveEncounterTurn, type TowerBattleState, type TowerIntent, type TowerPlannedDestination } from "./encounter";
+import type { TowerBattleEvent } from "./engine/types";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
   log?: string[];
   battle?: TowerBattleState;
+  lastEvents?: TowerBattleEvent[];
+  lastResolvedTurn?: number;
 };
 
 /** Duração da janela de turno por ritmo. */
@@ -50,13 +53,24 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
         // Coleta intenções por mascote e interações com objetos das submissões.
         const intents: Record<string, TowerIntent> = {};
         const interactions: string[] = [];
+        const destinations: Record<string, TowerPlannedDestination> = {};
+        const targets: Record<string, string> = {};
         for (const m of active) {
-          const payload = submissions[m.userId]?.actions as { intents?: Record<string, TowerIntent>; interactions?: string[] } | null | undefined;
+          const payload = submissions[m.userId]?.actions as {
+            intents?: Record<string, TowerIntent>;
+            interactions?: string[];
+            destinations?: Record<string, TowerPlannedDestination>;
+            targets?: Record<string, string>;
+          } | null | undefined;
           if (payload?.intents) for (const [mid, it] of Object.entries(payload.intents)) intents[mid] = it;
           if (Array.isArray(payload?.interactions)) interactions.push(...payload.interactions);
+          if (payload?.destinations) Object.assign(destinations, payload.destinations);
+          if (payload?.targets) Object.assign(targets, payload.targets);
         }
-        const { state, events, objectLog } = resolveEncounterTurn(vol.battle, run.seed, run.globalTurn, { intents, interactions });
+        const { state, events, objectLog } = resolveEncounterTurn(vol.battle, run.seed, run.globalTurn, { intents, interactions, destinations, targets });
         vol.battle = state;
+        vol.lastEvents = events;
+        vol.lastResolvedTurn = run.globalTurn;
         battleLog.push(...objectLog);
         for (const e of events) if (e.kind === "KO" || e.kind === "SURVIVE") battleLog.push(e.text);
         if (state.encounterOver) battleLog.push(state.outcome === "WIN" ? "Encounter vencido!" : "Todos os mascotes caíram no encounter.");

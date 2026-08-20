@@ -7,6 +7,7 @@ import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { getTowerLobbyDataAction, createTowerRunAction } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
+import { TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
 
 type LobbyData = Extract<Awaited<ReturnType<typeof getTowerLobbyDataAction>>, { ok: true }>;
 type Role = LobbyData["roles"][number];
@@ -72,6 +73,9 @@ export function TowerLobby() {
 
   return (
     <div className="space-y-6">
+      <TowerNarrative scene={data.lobbyScene} />
+      <TowerNarrativeAdmin initial={data.scenes} />
+
       {/* Ritmo */}
       <section className={card}>
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Ritmo</h2>

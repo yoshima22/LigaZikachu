@@ -22,6 +22,15 @@ import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } f
 import { generateEncounter, generateBossEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
 import { tileKey, manhattan } from "@/lib/tower/engine/grid";
 import { normalizeCombatRole } from "@/lib/combat-roles";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
+import {
+  getTowerNarrativeScenes,
+  towerSceneFor,
+  TOWER_NARRATIVE_KEY,
+  type TowerNarrativeScene,
+  type TowerSceneTrigger,
+} from "@/lib/tower/narrative";
+import { TOWER_OBJECTS } from "@/lib/tower/objects";
 
 const PATH = "/combates/torre-dos-rebeldes";
 
@@ -74,6 +83,7 @@ export async function getTowerLobbyDataAction() {
   if (!player) return { error: "Jogador não encontrado." };
 
   const config = await getTowerConfig();
+  const scenes = await getTowerNarrativeScenes();
   const active = await findActiveRunForUser(user.id);
   const lastAt = await lastEntryAt(user.id);
   const nextEntryMs = lastAt !== null ? lastAt + config.entryCooldownMinutes * 60_000 : 0;
@@ -96,6 +106,8 @@ export async function getTowerLobbyDataAction() {
   return {
     ok: true as const,
     config,
+    scenes,
+    lobbyScene: towerSceneFor(scenes, "LOBBY", 1),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
     roles: TOWER_EXPEDITION_ROLES.map((r) => ({
@@ -103,6 +115,41 @@ export async function getTowerLobbyDataAction() {
     })),
     mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId) })),
   };
+}
+
+/** Editor narrativo data-driven. Imagens enviadas são persistidas no Storage. */
+export async function saveTowerNarrativeScenesAction(input: TowerNarrativeScene[]) {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  if (!Array.isArray(input) || input.length > 50) return { error: "Lista de cenas inválida." };
+  const validTriggers = new Set<TowerSceneTrigger>(["LOBBY", "RUN_START", "ENCOUNTER", "BOSS", "VICTORY"]);
+  const scenes: TowerNarrativeScene[] = [];
+  for (let index = 0; index < input.length; index++) {
+    const raw = input[index];
+    if (!raw || !validTriggers.has(raw.trigger) || !raw.speaker?.trim() || !raw.text?.trim()) {
+      return { error: `A cena ${index + 1} possui campos obrigatórios inválidos.` };
+    }
+    const id = raw.id?.trim() || `tower-scene-${Date.now()}-${index}`;
+    const backgroundUrl = raw.backgroundUrl?.startsWith("data:image/")
+      ? await uploadDataUrlAsset(raw.backgroundUrl, "events/tower/scenes", `${id}-background`)
+      : raw.backgroundUrl?.trim() || "/events/torre-dos-rebeldes/background.png";
+    const characterUrl = raw.characterUrl?.startsWith("data:image/")
+      ? await uploadDataUrlAsset(raw.characterUrl, "events/tower/scenes", `${id}-character`)
+      : raw.characterUrl?.trim() || "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png";
+    scenes.push({
+      id, trigger: raw.trigger, floor: Math.max(1, Math.min(7, Math.trunc(raw.floor || 1))),
+      title: raw.title?.trim() || "Cena da Torre", speaker: raw.speaker.trim(), text: raw.text.trim(),
+      backgroundUrl, characterUrl, characterSide: raw.characterSide === "LEFT" ? "LEFT" : "RIGHT",
+      enabled: raw.enabled !== false, order: Number.isFinite(raw.order) ? Math.trunc(raw.order) : index * 10,
+    });
+  }
+  await prisma.appSetting.upsert({
+    where: { key: TOWER_NARRATIVE_KEY },
+    create: { key: TOWER_NARRATIVE_KEY, value: scenes as unknown as Prisma.InputJsonValue },
+    update: { value: scenes as unknown as Prisma.InputJsonValue },
+  });
+  revalidatePath(PATH);
+  return { ok: true as const, scenes };
 }
 
 /** Cria a expedição (host/solo). Valida cooldown, run única e 2 mascotes elegíveis. */
@@ -306,13 +353,18 @@ export async function getTowerRunStateAction(runId: string) {
 
   const vol = (run.volatileState ?? {}) as TowerVolatile;
   const submissions = vol.submissions ?? {};
+  const scenes = await getTowerNarrativeScenes();
+  const userNames = new Map((await prisma.user.findMany({
+    where: { id: { in: run.members.map((member) => member.userId) } },
+    select: { id: true, name: true },
+  })).map((member) => [member.id, member.name ?? "Jogador"]));
 
   // View do combate com fog de time: aliados sempre; inimigos só se visíveis.
-  type ObjView = { id: string; key: string; name: string; x: number; y: number; radius: number; progress: number; required: number; resolved: boolean; suppression: boolean; interactable: boolean };
+  type ObjView = { id: string; key: string; name: string; x: number; y: number; radius: number; progress: number; required: number; resolved: boolean; suppression: boolean; interactable: boolean; spriteUrl: string; effect: string };
   let battle: null | {
     room: { width: number; height: number; blocked: string[] };
     discovered: string[]; visible: string[];
-    units: { id: string; team: string; name: string; pokemonId: number; x: number; y: number; hp: number; maxHp: number; role: string; shield: number }[];
+    units: { id: string; team: string; ownerId: string | null; name: string; pokemonId: number; level: number; types: string[]; x: number; y: number; hp: number; maxHp: number; role: string; shield: number; agility: number; effects: { id: string; label: string; kind: string; value: number; duration: number }[] }[];
     objects: ObjView[];
     suppression: { resolved: number; total: number };
     isBoss: boolean;
@@ -324,7 +376,8 @@ export async function getTowerRunStateAction(runId: string) {
     const vis = visibleTiles(b);
     const myAllies = b.units.filter((u) => u.team === "ALLY" && u.ownerId === user.id && u.hp > 0);
     const objects: ObjView[] = objectsView(b, vis).map((o) => ({
-      ...o,
+      ...o, spriteUrl: TOWER_OBJECTS[o.key]?.spriteUrl ?? "/events/torre-dos-rebeldes/objects/19_pedra_runica.png",
+      effect: TOWER_OBJECTS[o.key]?.effect ?? "Mecanismo desconhecido.",
       interactable: !o.resolved && myAllies.some((u) => manhattan(u, o) <= o.radius),
     }));
     const suppTotal = b.objects.filter((o) => o.suppression).length;
@@ -333,7 +386,7 @@ export async function getTowerRunStateAction(runId: string) {
       room: b.room, discovered: b.discovered, visible: [...vis],
       units: b.units
         .filter((u) => u.team === "ALLY" || vis.has(tileKey(u.x, u.y)))
-        .map((u) => ({ id: u.id, team: u.team, name: u.name, pokemonId: u.pokemonId, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, role: u.role, shield: u.shield })),
+        .map((u) => ({ id: u.id, team: u.team, ownerId: u.ownerId, name: u.name, pokemonId: u.pokemonId, level: u.level, types: u.types, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, role: u.role, shield: u.shield, agility: u.agility, effects: u.effects })),
       objects,
       suppression: { resolved: suppResolved, total: suppTotal },
       isBoss: b.isBoss ?? false,
@@ -352,13 +405,20 @@ export async function getTowerRunStateAction(runId: string) {
     },
     order: (Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : []),
     members: run.members.map((m) => ({
-      userId: m.userId, expeditionRole: m.expeditionRole, afkRemoved: m.afkRemoved,
+      userId: m.userId, name: userNames.get(m.userId) ?? "Jogador", expeditionRole: m.expeditionRole, afkRemoved: m.afkRemoved,
       consecutiveMisses: m.consecutiveMisses, confirmed: Boolean(submissions[m.userId]),
     })),
     mine: { userId: user.id, confirmed: Boolean(submissions[user.id]) },
     battle,
     myMascots,
     log: (vol.log ?? []).slice(-12),
+    lastEvents: vol.lastEvents ?? [],
+    lastResolvedTurn: vol.lastResolvedTurn ?? null,
+    scene: towerSceneFor(
+      scenes,
+      battle?.isBoss ? "BOSS" : run.globalTurn <= 1 ? "RUN_START" : "ENCOUNTER",
+      run.currentFloor,
+    ),
   };
 }
 

@@ -11,6 +11,7 @@ import {
 } from "../actions";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { TowerBattleGrid } from "./tower-battle-grid";
+import { TowerNarrative } from "./tower-narrative";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
 type Intent = "ADVANCE" | "ATTACK" | "DEFEND" | "WAIT";
@@ -45,6 +46,8 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [pending, start] = useTransition();
   const [intents, setIntents] = useState<Record<string, Intent>>({});
   const [interacting, setInteracting] = useState<string[]>([]);
+  const [destinations, setDestinations] = useState<Record<string, { x: number; y: number }>>({});
+  const [targets, setTargets] = useState<Record<string, string>>({});
   const inFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -99,6 +102,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
       {run.status === "ACTIVE" && (
         <div className="mt-4 space-y-4">
+          <TowerNarrative scene={state.scene} />
           {/* Ordem de resolução / confirmações */}
           <div>
             <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Ordem de resolução</p>
@@ -109,7 +113,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
                 return (
                   <div key={userId} className="flex items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-1.5 text-xs">
                     <span className="w-5 font-bold text-slate-500">{i + 1}.</span>
-                    <span className={`font-semibold ${isMe ? "text-[#FFCB05]" : "text-slate-200"}`}>{isMe ? "Você" : "Jogador"} · {m?.expeditionRole ?? "?"}</span>
+                    <span className={`font-semibold ${isMe ? "text-[#FFCB05]" : "text-slate-200"}`}>{isMe ? `Você (${m?.name ?? ""})` : m?.name ?? "Jogador"} · {m?.expeditionRole ?? "?"}</span>
                     <span className="ml-auto">
                       {m?.afkRemoved
                         ? <span className="rounded bg-red-500/15 px-2 py-0.5 text-[10px] font-black text-red-300">AFK removido</span>
@@ -136,7 +140,23 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           )}
 
           {/* Sala + fog */}
-          {state.battle && <TowerBattleGrid battle={state.battle} />}
+          {state.battle && <TowerBattleGrid battle={state.battle} mineId={state.mine.userId} disabled={state.mine.confirmed || pending || state.battle.over} destinations={destinations} targets={targets}
+            onDestination={(id, p) => { setDestinations((cur) => ({ ...cur, [id]: p })); setIntents((cur) => ({ ...cur, [id]: "ADVANCE" })); }}
+            onTarget={(id, target) => { setTargets((cur) => ({ ...cur, [id]: target })); setIntents((cur) => ({ ...cur, [id]: "ATTACK" })); }}
+            onDefend={(id) => setIntents((cur) => ({ ...cur, [id]: "DEFEND" }))} />}
+
+          {state.lastEvents?.length > 0 && (
+            <div className="rounded-2xl border border-purple-400/30 bg-gradient-to-r from-red-950/45 via-slate-950 to-blue-950/45 p-4">
+              <p className="text-center text-[10px] font-black uppercase tracking-[.24em] text-purple-200">Confronto · rodada {state.lastResolvedTurn}</p>
+              <div className="mt-3 space-y-2">{state.lastEvents.filter((event) => event.kind !== "MOVE").map((event, index) => (
+                <div key={`${event.kind}-${index}`} className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 rounded-xl border border-white/10 bg-black/30 px-3 py-2 text-xs">
+                  <span className="text-right font-bold text-cyan-200">{event.unitId ? state.battle?.units.find((u) => u.id === event.unitId)?.name ?? "Aliado" : "Torre"}</span>
+                  <span className={`rounded-full px-2 py-1 font-black ${event.kind === "KO" ? "bg-red-500 text-white" : "bg-purple-500/20 text-purple-100"}`}>{event.kind === "KO" ? "K.O." : event.kind === "ATTACK" ? `⚔ ${event.amount ?? ""}` : "✦"}</span>
+                  <span className="font-bold text-red-200">{event.targetId ? state.battle?.units.find((u) => u.id === event.targetId)?.name ?? "Alvo" : event.text}</span>
+                </div>
+              ))}</div>
+            </div>
+          )}
 
           {/* Mecanismos ao alcance */}
           {!state.battle?.over && state.battle && state.battle.objects.some((o) => !o.resolved) && (
@@ -202,11 +222,11 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           {/* Confirmar ações do turno */}
           {!state.battle?.over && (
             <button type="button" disabled={pending || state.mine.confirmed} onClick={() => start(async () => {
-              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting };
+              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting, destinations, targets };
               const res = await submitTowerActionAction(runId, payload);
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Ordens confirmadas.");
-              void refresh();
+              setDestinations({}); setTargets({}); void refresh();
             })} className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-black text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
               {state.mine.confirmed ? "Ordens confirmadas — aguardando os demais / deadline" : "Confirmar ordens do turno"}
             </button>

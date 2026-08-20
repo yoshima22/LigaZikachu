@@ -1,74 +1,38 @@
 "use client";
 
-// Renderiza a sala da Torre com fog de time. Casas nunca vistas ficam ocultas;
-// vistas antes (descobertas) aparecem esmaecidas; visíveis agora, normais.
-// Aliados sempre aparecem; inimigos só nas casas visíveis (o servidor já filtra).
+import Image from "next/image";
+import { useMemo, useState } from "react";
 
-type Unit = { id: string; team: string; name: string; pokemonId: number; x: number; y: number; hp: number; maxHp: number; role: string };
-type Obj = { id: string; name: string; x: number; y: number; resolved: boolean; suppression: boolean; progress: number; required: number };
-type Battle = {
-  room: { width: number; height: number; blocked: string[] };
-  discovered: string[]; visible: string[];
-  units: Unit[]; objects: Obj[]; over: boolean; outcome: "WIN" | "LOSS" | null;
-};
+type Unit = { id:string; ownerId?:string|null; team:string; name:string; pokemonId:number; x:number; y:number; hp:number; maxHp:number; role:string; level?:number; agility?:number };
+type Obj = { id:string; name:string; x:number; y:number; resolved:boolean; suppression:boolean; progress:number; required:number; spriteUrl?:string; effect?:string };
+type Battle = { room:{width:number;height:number;blocked:string[]}; discovered:string[]; visible:string[]; units:Unit[]; objects:Obj[]; over:boolean; outcome:"WIN"|"LOSS"|null };
+type Mode = "MOVE"|"ATTACK"|"DEFEND"|null;
+const TILE=56;
+const dist=(a:Unit,x:number,y:number)=>Math.abs(a.x-x)+Math.abs(a.y-y);
+const gif=(id:number)=>`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/other/showdown/${id}.gif`;
 
-const TILE = 20;
-
-export function TowerBattleGrid({ battle }: { battle: Battle }) {
-  const { width, height } = battle.room;
-  const blocked = new Set(battle.room.blocked);
-  const discovered = new Set(battle.discovered);
-  const visible = new Set(battle.visible);
-  const unitAt = new Map<string, Unit>();
-  for (const u of battle.units) if (u.hp > 0) unitAt.set(`${u.x}:${u.y}`, u);
-  const objAt = new Map<string, Obj>();
-  for (const o of battle.objects) objAt.set(`${o.x}:${o.y}`, o);
-
-  return (
-    <div className="overflow-x-auto rounded-xl border border-slate-800 bg-black/60 p-2">
-      <div
-        className="relative mx-auto"
-        style={{ width: width * TILE, height: height * TILE, display: "grid", gridTemplateColumns: `repeat(${width}, ${TILE}px)`, gridTemplateRows: `repeat(${height}, ${TILE}px)` }}
-      >
-        {Array.from({ length: width * height }).map((_, i) => {
-          const x = i % width, y = Math.floor(i / width);
-          const key = `${x}:${y}`;
-          const isVisible = visible.has(key);
-          const isKnown = discovered.has(key);
-          const isWall = blocked.has(key);
-          const unit = unitAt.get(key);
-          const obj = objAt.get(key);
-          let bg = "#05060a"; // desconhecido (fog cheio)
-          if (isKnown) bg = isWall ? "#3a3550" : isVisible ? "#171a2b" : "#0d0f18";
-          return (
-            <div key={i} style={{ background: bg, outline: "1px solid rgba(255,255,255,0.03)", position: "relative" }}>
-              {obj && !unit && (
-                <span title={`${obj.name} · ${obj.progress}/${obj.required}`} style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 12, color: obj.resolved ? "#4ade80" : obj.suppression ? "#f59e0b" : "#38bdf8" }}>◆</span>
-              )}
-              {unit && (
-                <span
-                  title={`${unit.name} · ${unit.hp}/${unit.maxHp} HP`}
-                  style={{
-                    position: "absolute", inset: 2, borderRadius: "50%",
-                    background: unit.team === "ALLY" ? "#3b82f6" : "#ef4444",
-                    boxShadow: `0 0 0 1px ${unit.team === "ALLY" ? "#93c5fd" : "#fca5a5"}`,
-                    display: "grid", placeItems: "center", fontSize: 8, fontWeight: 700, color: "#fff",
-                  }}
-                >
-                  {unit.team === "ALLY" ? "A" : "E"}
-                </span>
-              )}
-            </div>
-          );
-        })}
-      </div>
-      <div className="mt-1 flex flex-wrap items-center justify-center gap-3 text-[10px] text-slate-500">
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: "#3b82f6" }} />Aliado</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: "#ef4444" }} />Inimigo (visível)</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 align-middle" style={{ background: "#3a3550" }} />Parede</span>
-        <span><span className="mr-1 inline-block h-2.5 w-2.5 align-middle" style={{ background: "#05060a", outline: "1px solid #222" }} />Névoa</span>
-        <span style={{ color: "#f59e0b" }}>◆ Mecanismo</span>
-      </div>
-    </div>
-  );
+export function TowerBattleGrid({battle,mineId,disabled,destinations,targets,onDestination,onTarget,onDefend}:{battle:Battle;mineId:string;disabled?:boolean;destinations:Record<string,{x:number;y:number}>;targets:Record<string,string>;onDestination:(id:string,p:{x:number;y:number})=>void;onTarget:(id:string,target:string)=>void;onDefend:(id:string)=>void}){
+ const [selected,setSelected]=useState<string|null>(null),[mode,setMode]=useState<Mode>(null);
+ const selectedUnit=battle.units.find(u=>u.id===selected&&u.hp>0);
+ const blocked=useMemo(()=>new Set(battle.room.blocked),[battle.room.blocked]);
+ const occupied=useMemo(()=>new Map(battle.units.filter(u=>u.hp>0).map(u=>[`${u.x}:${u.y}`,u])),[battle.units]);
+ const visible=new Set(battle.visible),discovered=new Set(battle.discovered);
+ const moveRange=selectedUnit?Math.max(2,Math.min(6,2+Math.floor((selectedUnit.agility??40)/45))):0;
+ const choose=(x:number,y:number)=>{if(disabled||!selectedUnit)return;const u=occupied.get(`${x}:${y}`);if(mode==="ATTACK"&&u?.team==="ENEMY"&&dist(selectedUnit,x,y)<=1){onTarget(selectedUnit.id,u.id);setMode(null)}else if(mode==="MOVE"&&!blocked.has(`${x}:${y}`)&&!u&&dist(selectedUnit,x,y)<=moveRange){onDestination(selectedUnit.id,{x,y});setMode(null)}};
+ return <div className="rounded-2xl border border-purple-400/25 bg-[#07040d] p-3 shadow-[0_0_45px_rgba(124,58,237,.15)]">
+  <div className="mb-3 flex flex-wrap items-center justify-between gap-2"><div><p className="text-xs font-black uppercase tracking-[.18em] text-purple-200">Sala da Torre</p><p className="text-[11px] text-slate-400">Selecione seu mascote, escolha uma ação e marque o destino.</p></div>{selectedUnit&&<div className="rounded-lg border border-purple-400/30 bg-purple-950/60 px-3 py-1 text-xs text-purple-100">{selectedUnit.name} · {mode?`Escolhendo ${mode.toLowerCase()}`:"Escolha uma ação"}</div>}</div>
+  <div className="overflow-auto rounded-xl border border-purple-950/80 bg-black/70 p-3"><div className="relative mx-auto bg-cover bg-center" style={{width:battle.room.width*TILE,height:battle.room.height*TILE,display:"grid",gridTemplateColumns:`repeat(${battle.room.width},${TILE}px)`,gridTemplateRows:`repeat(${battle.room.height},${TILE}px)`,backgroundImage:"linear-gradient(rgba(7,4,13,.58),rgba(7,4,13,.72)),url('/events/torre-dos-rebeldes/background.png')"}}>
+   {Array.from({length:battle.room.width*battle.room.height}).map((_,i)=>{const x=i%battle.room.width,y=Math.floor(i/battle.room.width),key=`${x}:${y}`,u=occupied.get(key),o=battle.objects.find(v=>v.x===x&&v.y===y),known=discovered.has(key),canMove=!!selectedUnit&&mode==="MOVE"&&dist(selectedUnit,x,y)<=moveRange&&!blocked.has(key)&&!u,canHit=!!selectedUnit&&mode==="ATTACK"&&u?.team==="ENEMY"&&dist(selectedUnit,x,y)<=1,planned=!!selectedUnit&&destinations[selectedUnit.id]?.x===x&&destinations[selectedUnit.id]?.y===y;return <button type="button" key={key} disabled={!known||disabled} onClick={()=>u?.ownerId===mineId?(setSelected(u.id),setMode(null)):choose(x,y)} className={`relative border border-purple-200/10 transition ${!known?"bg-black":blocked.has(key)?"bg-slate-950/90":"bg-purple-950/15"} ${canMove?"cursor-pointer bg-emerald-400/25 ring-2 ring-inset ring-emerald-300":canHit?"cursor-crosshair bg-red-500/30 ring-2 ring-inset ring-red-300":""} ${planned?"ring-2 ring-inset ring-yellow-300":""}`}>
+    {o&&known&&<Image
+      src={o.spriteUrl||"/events/torre-dos-rebeldes/objects/04_bau_rebelde.png"} alt={o.name} width={42} height={42}
+      className={`absolute inset-0 m-auto object-contain ${o.resolved?"grayscale opacity-40":"drop-shadow-[0_0_8px_#a855f7]"}`}
+      title={`${o.name}: ${o.effect??"mecanismo da sala"}`}
+    />}
+    {u&&<div className={`absolute inset-1 z-10 rounded-xl border-2 ${u.ownerId===mineId?"border-cyan-300 bg-cyan-950/55":u.team==="ALLY"?"border-blue-400 bg-blue-950/50":"border-red-400 bg-red-950/50"} ${selected===u.id?"ring-2 ring-yellow-300":""}`}><Image unoptimized src={gif(u.pokemonId)} onError={e=>{(e.currentTarget as HTMLImageElement).src=`https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/${u.pokemonId}.png`}} alt={u.name} width={42} height={42} className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]"/><span className="absolute bottom-0 left-1 right-1 h-1 overflow-hidden rounded bg-black"><i className="block h-full bg-emerald-400" style={{width:`${Math.max(0,u.hp/u.maxHp*100)}%`}}/></span></div>}
+    {!visible.has(key)&&known&&<span className="pointer-events-none absolute inset-0 z-20 bg-black/55"/>}
+   </button>})}
+  </div></div>
+  {selectedUnit&&selectedUnit.ownerId===mineId&&!disabled&&<div className="mt-3 grid grid-cols-3 gap-2"><button onClick={()=>setMode("MOVE")} className="rounded-xl border border-emerald-400/40 bg-emerald-400/10 py-2 text-xs font-black text-emerald-200">Mover</button><button onClick={()=>setMode("ATTACK")} className="rounded-xl border border-red-400/40 bg-red-400/10 py-2 text-xs font-black text-red-200">Atacar</button><button onClick={()=>{onDefend(selectedUnit.id);setMode("DEFEND")}} className="rounded-xl border border-blue-400/40 bg-blue-400/10 py-2 text-xs font-black text-blue-200">Defender</button></div>}
+  <div className="mt-3 flex flex-wrap gap-4 text-[10px] text-slate-400"><span>🔵 Seus mascotes</span><span>🔷 Aliados</span><span>🔴 Inimigos</span><span>🟩 Movimento</span><span>🟥 Ataque</span></div>
+ </div>
 }
