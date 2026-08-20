@@ -501,17 +501,18 @@ export function computeProceduralStats(
   pokemonId: number,
   targetLevel: number,
   personality: MascotPersonality,
+  baseRange: readonly [number, number] = [8, 14],
 ): Record<MascotStatKey, number> {
-  // Stats base = ovo COMMON range (8–14)
+  // Por padrão usa ovo comum; eventos podem informar o range do ovo de origem.
   const cur: Record<MascotStatKey, number> & { pokemonId: number; level: number; personality: MascotPersonality } = {
     pokemonId,
     level: 1,
     personality,
-    statForce:    randomInt(8, 14),
-    statAgility:  randomInt(8, 14),
-    statCharisma: randomInt(8, 14),
-    statInstinct: randomInt(8, 14),
-    statVitality: randomInt(8, 14),
+    statForce:    randomInt(baseRange[0], baseRange[1]),
+    statAgility:  randomInt(baseRange[0], baseRange[1]),
+    statCharisma: randomInt(baseRange[0], baseRange[1]),
+    statInstinct: randomInt(baseRange[0], baseRange[1]),
+    statVitality: randomInt(baseRange[0], baseRange[1]),
   };
 
   for (let lvl = 1; lvl < Math.max(1, Math.min(100, targetLevel)); lvl++) {

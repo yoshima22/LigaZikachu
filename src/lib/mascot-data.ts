@@ -1284,7 +1284,14 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
 
 // Sprites auto-hospedados em public/sprites (CDN estático do Vercel) — o
 // raw.githubusercontent.com sofria rate limit (HTTP 429) e quebrava imagens.
+const EVENT_CUSTOM_SPRITES: Record<number,string> = {
+  210001: "/events/torre-dos-rebeldes/leaders/01_pikachu_rebelde.png", 210002: "/events/torre-dos-rebeldes/leaders/02_lucario_rebelde.png",
+  210003: "/events/torre-dos-rebeldes/leaders/03_umbreon_rebelde.png", 210004: "/events/torre-dos-rebeldes/leaders/04_gengar_rebelde.png",
+  210005: "/events/torre-dos-rebeldes/leaders/05_mimikyu_rebelde.png", 210006: "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png",
+  210007: "/events/torre-dos-rebeldes/leaders/07_espeon_rebelde.png", 210008: "/events/torre-dos-rebeldes/chandelure.png",
+};
 export function getSpriteUrl(pokemonId: number, animated = false): string {
+  if (EVENT_CUSTOM_SPRITES[pokemonId]) return EVENT_CUSTOM_SPRITES[pokemonId];
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   // GIFs animados só existem para gen 1-5 (IDs 1-649).
   // Para IDs > 649 (gen 6+), usar sempre o PNG estático para evitar imagens quebradas.
@@ -1296,6 +1303,7 @@ export function getSpriteUrl(pokemonId: number, animated = false): string {
 
 // URL do sprite estático (sempre PNG, qualquer geração)
 export function getStaticSpriteUrl(pokemonId: number): string {
+  if (EVENT_CUSTOM_SPRITES[pokemonId]) return EVENT_CUSTOM_SPRITES[pokemonId];
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
   return `/sprites/pokemon/${spriteId}.png`;
 }
@@ -1813,6 +1821,8 @@ const POKEMON_GEN9_NAMES: Record<number, string> = {
 };
 
 export function getPokemonName(id: number): string {
+  const eventName = ({210001:"Barão Pikachuque",210002:"Sir Lucardio",210003:"Umbrelord",210004:"Gengartola",210005:"Quase Barão Trapinho",210006:"Dom Miano",210007:"Madame Espeã",210008:"Xandinho Guia"} as Record<number,string>)[id];
+  if (eventName) return eventName;
   const megaStone = getMegaStoneForMegaPokemon(id);
   if (megaStone) return megaStone.megaPokemonName;
   return (
@@ -2281,11 +2291,15 @@ export const POKEMON_ELEMENT: Record<number, string> = {
 };
 
 export function getPokemonElement(pokemonId: number): string {
+  const eventPrimary = ({210001:"electric",210002:"fighting",210003:"dark",210004:"ghost",210005:"ghost",210006:"normal",210007:"psychic",210008:"ghost"} as Record<number,string>)[pokemonId];
+  if (eventPrimary) return eventPrimary;
   const raw = POKEMON_ELEMENT[pokemonId] ?? "normal";
   return raw.split("/")[0];
 }
 
 export function getPokemonTypes(pokemonId: number): string[] {
+  const eventTypes = ({210001:["electric"],210002:["fighting","steel"],210003:["dark"],210004:["ghost","poison"],210005:["ghost","fairy"],210006:["normal"],210007:["psychic"],210008:["ghost","fire"]} as Record<number,string[]>)[pokemonId];
+  if (eventTypes) return eventTypes;
   const raw = POKEMON_ELEMENT[pokemonId] ?? "normal";
   return raw.split("/");
 }

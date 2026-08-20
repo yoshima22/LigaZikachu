@@ -1,4 +1,4 @@
-// Torre dos Rebeldes — núcleo do turn engine (janela global; Online 120s / Lento
+// Torre dos Rebeldes — núcleo do turn engine (janela global; Online 5min / Lento
 // 4h). Módulo de servidor comum (NÃO "use server"): usado pelas server actions e
 // pelo cron, sem expor a resolução como action pública.
 
@@ -10,6 +10,7 @@ import { applyTowerPressure, currentTowerRoom, generateTowerRoomGraph, towerEnco
 import { runLeagueCombat, toLeagueMascot, type LeagueMascot } from "@/lib/league-combat";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { normalizeCombatRole } from "@/lib/combat-roles";
+import { TOWER_EXCLUSIVE_MASCOTS, towerRewardForFloor, XANDINHO } from "./exclusive-mascots";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -54,8 +55,13 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
       const levels = await tx.mascot.findMany({ where: { id: { in: snapshots.map((m) => m.mascotId) } }, select: { level: true } });
       const averageLevel = Math.max(1, Math.round(levels.reduce((sum, m) => sum + m.level, 0) / Math.max(1, levels.length)));
       const preview = towerEncounterPreview(destination, averageLevel, snapshots.length);
-      if (destination.kind === "BOSS" && preview[0]) preview[0].pokemonId = [25,448,197,94,778,52,196][Math.min(6, run.currentFloor - 1)];
-      const encounter = destination.kind === "COMBAT" || destination.kind === "BOSS" ? { roomId: destination.id, preparationTurns: destination.kind === "BOSS" ? 2 : 1, enemies: preview.map((enemy) => ({ ...enemy, name: getPokemonName(enemy.pokemonId) })) } : undefined;
+      if (destination.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
+      if ((destination.kind === "COMBAT" || destination.kind === "BOSS") && preview.length < 8) {
+        const captive = await tx.towerLostMascot.findFirst({ where: { recoveredAt: null }, orderBy: { createdAt: "asc" } });
+        const captiveMascot = captive ? await tx.mascot.findUnique({ where: { id: captive.mascotId }, select: { pokemonId: true, nickname: true, level: true } }) : null;
+        if (captiveMascot) preview.push({ pokemonId: captiveMascot.pokemonId, level: captiveMascot.level, name: `${captiveMascot.nickname ?? getPokemonName(captiveMascot.pokemonId)} · sob Psicose` });
+      }
+      const encounter = destination.kind === "COMBAT" || destination.kind === "BOSS" ? { roomId: destination.id, preparationTurns: destination.kind === "BOSS" ? 2 : 1, enemies: preview.map((enemy) => ({ ...enemy, name: TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId)?.name ?? enemy.name ?? getPokemonName(enemy.pokemonId) })) } : undefined;
       state = { ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], encounter, lastOutcome: distinctRoutes.size > 1 ? `O grupo se dividiu entre caminhos. A maioria chegou a ${destination.title}, mas a Pressão desta ação foi dobrada.` : `O grupo percorreu a passagem e chegou a ${destination.title}.` };
       battleLog.push(state.lastOutcome!);
     } else {
@@ -136,28 +142,16 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     const allyTalentMult = 1 + combatTalent * .02 + bossTalent * .03;
     for (const ally of allies) { ally.force = Math.round(ally.force * allyTalentMult); ally.agility = Math.round(ally.agility * allyTalentMult); ally.instinct = Math.round(ally.instinct * allyTalentMult); ally.vitality = Math.round(ally.vitality * allyTalentMult); }
     const pressureMult = state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1) * (1 + state.pressure * .03);
-    const variance = Math.abs([...`${run.seed}:${room.id}`].reduce((sum, char) => sum + char.charCodeAt(0), 0)) % 5 - 1;
-    const count = Math.max(1, Math.min(8, allies.length + variance + (room.kind === "BOSS" ? 2 : 0)));
-    const bossIds = [25, 448, 197, 94, 778, 52, 196];
-    const pool = room.kind === "BOSS" ? [bossIds[Math.min(6, run.currentFloor - 1)], 609, 94, 302] : [92, 198, 200, 353, 607, 215];
-    const enemies: LeagueMascot[] = Array.from({ length: count }, (_, index) => {
-      const pokemonId = pool[(room.index + index) % pool.length];
+    // A composição é congelada ao entrar na sala. Esperar pode fortalecer os
+    // inimigos pela Pressão, mas nunca inserir espécies que não apareceram no preview.
+    const frozenPreview = state.encounter?.enemies ?? towerEncounterPreview(room, avg, allies.length);
+    const enemies: LeagueMascot[] = frozenPreview.map((previewEnemy, index) => {
+      const pokemonId = previewEnemy.pokemonId;
       const base = Math.max(12, Math.round((avg * .72 + 18 + room.index * 2) * pressureMult));
-      return { id: `tower:${run.id}:${room.id}:${index}`, ownerId: "TORRE", pokemonId, types: getPokemonTypes(pokemonId), name: getPokemonName(pokemonId), level: Math.max(1, avg + room.index * 2), force: base, agility: base, instinct: base, vitality: base, charisma: base, hp: 55 + avg * 6 + base * 4, combatRole: normalizeCombatRole(index % 2 ? "DEFENDER" : "ATTACKER"), slot: index + 1 };
+      const level = Math.max(1, previewEnemy.level);
+      const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === pokemonId);
+      return { id: `tower:${run.id}:${room.id}:${index}`, ownerId: "TORRE", pokemonId, types: exclusive ? [exclusive.primaryType, "secondaryType" in exclusive ? exclusive.secondaryType : null].filter(Boolean) as string[] : getPokemonTypes(pokemonId), name: previewEnemy.name || exclusive?.name || getPokemonName(pokemonId), level, force: base, agility: base, instinct: base, vitality: base, charisma: base, hp: 55 + level * 6 + base * 4, combatRole: normalizeCombatRole(index % 2 ? "DEFENDER" : "ATTACKER"), slot: index + 1 };
     });
-    const captive = await tx.towerLostMascot.findFirst({ where: { recoveredAt: null }, orderBy: { createdAt: "asc" } });
-    if (captive && enemies.length < 8) {
-      const capturedMascot = await tx.mascot.findUnique({ where: { id: captive.mascotId } });
-      if (capturedMascot) {
-        const rebel = toLeagueMascot(capturedMascot, enemies.length + 1, "ATTACKER");
-        rebel.id = `captive:${capturedMascot.id}`;
-        rebel.ownerId = "TORRE";
-        rebel.name = `${rebel.name} · sob Psicose`;
-        rebel.force = Math.round(rebel.force * pressureMult);
-        rebel.agility = Math.round(rebel.agility * pressureMult);
-        enemies.push(rebel);
-      }
-    }
     const result = runLeagueCombat(allies, enemies);
     const hp = finalHp(allies, result.log);
     for (const ally of allies) await tx.towerRunMascot.updateMany({ where: { mascotId: ally.id, member: { runId: run.id } }, data: { currentHp: hp.get(ally.id) ?? 0, state: (hp.get(ally.id) ?? 0) <= 0 ? "DEFEATED" : "IN_TOWER" } });
@@ -171,7 +165,7 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
 
 /** Duração da janela de turno por ritmo. */
 export function windowMsFor(pace: string): number {
-  return pace === "SLOW" ? 4 * 60 * 60_000 : 120_000;
+  return pace === "SLOW" ? 4 * 60 * 60_000 : 5 * 60_000;
 }
 
 /** Lock consultivo estável por run (evita resolver o mesmo turno duas vezes). */
@@ -281,6 +275,11 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
         const shardCount = run.pace === "ONLINE" ? 2 : 1;
         for (const member of active) for (let shard = 0; shard < shardCount; shard++) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_RELIC_SHARD", data: { floor: run.currentFloor, pace: run.pace } } });
         for (const member of run.members.filter((entry) => !entry.afkRemoved)) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_TALENT_CONTRIBUTION", data: { floor: run.currentFloor, source: "BOSS", spectator: !active.some((entry) => entry.userId === member.userId) } } });
+        const reward = towerRewardForFloor(run.currentFloor);
+        for (const member of run.members) {
+          const prior = await tx.towerFeat.findFirst({ where: { userId: member.userId, featKey: { in: ["TOWER_MASCOT_PENDING", "TOWER_MASCOT_CLAIMED"] }, data: { path: ["pokemonId"], equals: reward.pokemonId } } });
+          if (!prior) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_MASCOT_PENDING", data: { pokemonId: reward.pokemonId, basePokemonId: reward.basePokemonId, name: reward.name, floor: run.currentFloor } } });
+        }
       }
 
       if (bossVictory && run.currentFloor < 7) {
@@ -294,6 +293,10 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       }
 
       if (runFailed) {
+        for (const member of run.members) {
+          const prior = await tx.towerFeat.findFirst({ where: { userId: member.userId, featKey: { in: ["TOWER_MASCOT_PENDING", "TOWER_MASCOT_CLAIMED"] }, data: { path: ["pokemonId"], equals: XANDINHO.pokemonId } } });
+          if (!prior) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_MASCOT_PENDING", data: { pokemonId: XANDINHO.pokemonId, basePokemonId: XANDINHO.basePokemonId, name: XANDINHO.name, reason: "FIRST_RUN_LOSS" } } });
+        }
         const defeated = await tx.towerRunMascot.findMany({ where: { member: { runId }, currentHp: { lte: 0 } } });
         for (const mascot of defeated) {
           await tx.towerLostMascot.upsert({ where: { mascotId: mascot.mascotId }, create: { mascotId: mascot.mascotId, ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor }, update: { ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor, recoveredAt: null, recoveredById: null } });

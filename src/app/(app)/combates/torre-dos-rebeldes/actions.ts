@@ -19,7 +19,7 @@ import {
   TOWER_SETTINGS_KEY,
   type TowerConfig,
 } from "@/lib/tower/config";
-import { Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
+import { MascotPersonality, Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
 import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
 import { generateEncounter, generateBossEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
 import { tileKey, manhattan } from "@/lib/tower/engine/grid";
@@ -35,8 +35,15 @@ import {
 } from "@/lib/tower/narrative";
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
 import { currentTowerRoom, generateTowerRoomGraph } from "@/lib/tower/rooms";
+import { computeProceduralStats } from "@/lib/mascot";
+import { ensureTowerExclusiveSpecies, TOWER_EXCLUSIVE_MASCOTS } from "@/lib/tower/exclusive-mascots";
 
 const PATH = "/combates/torre-dos-rebeldes";
+const TOWER_TICKET_ID = "tower-entry-ticket";
+
+async function ensureTowerTicket() {
+  return prisma.shopItem.upsert({ where: { id: TOWER_TICKET_ID }, create: { id: TOWER_TICKET_ID, type: "VACATION_TICKET", name: "Ticket da Torre", description: "Consumido somente quando a expedição realmente começa.", price: 0, active: false, inventoryEnabled: true, metadata: { towerOnly: true, adminGrantOnly: true } }, update: { name: "Ticket da Torre", description: "Consumido somente quando a expedição realmente começa.", inventoryEnabled: true } });
+}
 
 /** Membro de uma run ainda ativa (LOBBY/ACTIVE) do usuário, se houver. */
 async function findActiveRunForUser(userId: string) {
@@ -143,6 +150,8 @@ export async function contributeTowerPreparationAction(metricKey: "WARD" | "INSI
 export async function getTowerLobbyDataAction() {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  await ensureTowerExclusiveSpecies();
+  await ensureTowerTicket();
   const player = await getSessionPlayer(user.id);
   if (!player) return { error: "Jogador não encontrado." };
 
@@ -168,6 +177,9 @@ export async function getTowerLobbyDataAction() {
   const rankingUserIds = [...new Set([...entryGroups.map((row) => row.userId), ...rescueGroups.flatMap((row) => row.recoveredById ? [row.recoveredById] : []), ...talentGroups.map((row) => row.userId)])];
   const rankingNames = new Map((await prisma.user.findMany({ where: { id: { in: rankingUserIds } }, select: { id: true, name: true } })).map((row) => [row.id, row.name ?? "Jogador"]));
   const active = await findActiveRunForUser(user.id);
+  const sessionPlayerForTicket = await getSessionPlayer(user.id);
+  const towerTicketQuantity = sessionPlayerForTicket ? (await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: sessionPlayerForTicket.id, itemId: TOWER_TICKET_ID } }, select: { quantity: true } }))?.quantity ?? 0 : 0;
+  const pendingMascotRewards = await prisma.towerFeat.findMany({ where: { userId: user.id, featKey: "TOWER_MASCOT_PENDING" }, orderBy: { achievedAt: "asc" } });
   const openRuns = await prisma.towerRun.findMany({
     where: { status: "LOBBY" }, orderBy: { createdAt: "desc" }, take: 20,
     include: { members: { select: { userId: true, expeditionRole: true, mascots: { select: { mascotId: true, currentStance: true } } } } },
@@ -204,7 +216,10 @@ export async function getTowerLobbyDataAction() {
     communityCodex,
     talents: { points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent), ranks: talentRanks },
     controlledMascots: controlledEntries.map((entry) => { const mascot = controlledMascotsById.get(entry.mascotId); return mascot ? { id: mascot.id, pokemonId: mascot.pokemonId, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), level: mascot.level, owner: controlledOwners.get(entry.ownerUserId) ?? "Jogador", floor: entry.floor } : null; }).filter(Boolean),
-    ranking: rankingUserIds.map((userId) => ({ userId, name: rankingNames.get(userId) ?? "Jogador", entries: entryGroups.find((row) => row.userId === userId)?._count._all ?? 0, rescues: rescueGroups.find((row) => row.recoveredById === userId)?._count._all ?? 0, talentPoints: talentGroups.find((row) => row.userId === userId)?._count._all ?? 0 })).sort((a,b) => b.talentPoints-a.talentPoints || b.rescues-a.rescues || b.entries-a.entries).slice(0,30),
+    ranking: rankingUserIds.map((userId) => ({ userId, name: rankingNames.get(userId) ?? "Jogador", entries: entryGroups.find((row) => row.userId === userId)?._count._all ?? 0, rescues: rescueGroups.find((row) => row.recoveredById === userId)?._count._all ?? 0, talentPoints: talentGroups.find((row) => row.userId === userId)?._count._all ?? 0 })),
+    pendingMascotRewards: pendingMascotRewards.map((feat) => ({ id: feat.id, ...(feat.data as { pokemonId:number; basePokemonId:number; name:string; floor?:number; reason?:string }) })),
+    exclusiveMascotCodes: TOWER_EXCLUSIVE_MASCOTS.map(({ code, pokemonId, name }) => ({ code, pokemonId, name })),
+    towerTicketQuantity,
     knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
@@ -220,7 +235,28 @@ export async function getTowerLobbyDataAction() {
   };
 }
 
-export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE") {
+export async function claimTowerMascotRewardAction(featId: string, personality: MascotPersonality) {
+  const user = await requireTowerAdmin(); if (!user) return { error: "Acesso restrito." };
+  if (!Object.values(MascotPersonality).includes(personality)) return { error: "Personalidade inválida." };
+  await ensureTowerExclusiveSpecies();
+  const player = await getSessionPlayer(user.id); if (!player) return { error: "Jogador não encontrado." };
+  const feat = await prisma.towerFeat.findFirst({ where: { id: featId, userId: user.id, featKey: "TOWER_MASCOT_PENDING" } });
+  if (!feat) return { error: "Esta recompensa já foi recebida ou não existe." };
+  const data = feat.data as { pokemonId:number; basePokemonId:number; name:string };
+  const species = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === data.pokemonId);
+  if (!species) return { error: "Mascote exclusivo não reconhecido." };
+  const stats = computeProceduralStats(species.basePokemonId, 55, personality, [17, 26]);
+  await prisma.$transaction(async (tx) => {
+    const recheck = await tx.towerFeat.findFirst({ where: { id: featId, userId: user.id, featKey: "TOWER_MASCOT_PENDING" } });
+    if (!recheck) throw new Error("Recompensa já resgatada.");
+    const mascot = await tx.mascot.create({ data: { playerId: player.id, pokemonId: species.pokemonId, nickname: species.name, speciesNameOverride: species.name, primaryTypeOverride: species.primaryType, secondaryTypeOverride: "secondaryType" in species ? species.secondaryType : null, staticSpriteUrlOverride: species.sprite, animatedSpriteUrlOverride: species.sprite, generationOverride: 0, level: 55, personality, ...stats, hatchedFromEggType: "LAB", hatchedFromEggOrigin: "TOWER_REBEL_LAB", hatchedPokemonId: species.pokemonId, happiness: 70 } });
+    await tx.playerPokemonDex.upsert({ where: { playerId_pokemonId: { playerId: player.id, pokemonId: species.pokemonId } }, create: { playerId: player.id, pokemonId: species.pokemonId, source: "TOWER_REWARD" }, update: {} });
+    await tx.towerFeat.update({ where: { id: featId }, data: { featKey: "TOWER_MASCOT_CLAIMED", data: { ...data, personality, mascotId: mascot.id } } });
+  });
+  revalidatePath(PATH); revalidatePath("/mascotes"); return { ok: true as const, name: species.name };
+}
+
+export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE", requested = 1) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito." };
   const rows = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { startsWith: "TALENT" } } });
@@ -228,11 +264,13 @@ export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS"
   const earned = value("TALENT_POINTS");
   const spent = rows.filter((row) => row.metricKey.startsWith("TALENT:")).reduce((sum, row) => sum + row.value, 0);
   const rank = value(`TALENT:${key}`);
-  if (earned <= spent) return { error: "Você não possui pontos de talento disponíveis." };
+  const available = Math.max(0, Math.floor(earned - spent));
+  if (available <= 0) return { error: "Você não possui pontos de talento disponíveis." };
   if (rank >= 5) return { error: "Este talento já atingiu o nível máximo." };
-  await prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: `TALENT:${key}` } }, create: { floorId: 1, metricKey: `TALENT:${key}`, value: 1 }, update: { value: { increment: 1 } } });
+  const amount = Math.max(1, Math.min(available, 5 - Math.floor(rank), Math.floor(requested || 1)));
+  await prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: `TALENT:${key}` } }, create: { floorId: 1, metricKey: `TALENT:${key}`, value: amount }, update: { value: { increment: amount } } });
   revalidatePath(PATH);
-  return { ok: true as const };
+  return { ok: true as const, amount };
 }
 
 /** Editor narrativo data-driven. Imagens enviadas são persistidas no Storage. */
@@ -367,6 +405,20 @@ export async function setTowerReadyAction(runId:string,ready:boolean){
  await prisma.towerRun.update({where:{id:runId},data:{volatileState:{...vol,lobby:{...vol.lobby,hostId:vol.lobby?.hostId??run.members[0]?.userId,ready:{...(vol.lobby?.ready??{}),[user.id]:ready}}} as Prisma.InputJsonValue}});revalidatePath(PATH);return {ok:true as const};
 }
 
+export async function removeTowerLobbyMemberAction(runId: string, targetUserId: string) {
+  const user = await requireTowerAdmin(); if (!user) return { error: "Acesso restrito." };
+  const run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+  if (!run || run.status !== "LOBBY") return { error: "Sala indisponível." };
+  const vol = (run.volatileState ?? {}) as { lobby?: { hostId?: string; ready?: Record<string,boolean> } };
+  const hostId = vol.lobby?.hostId ?? run.members[0]?.userId;
+  if (hostId !== user.id) return { error: "Somente o dono pode remover jogadores." };
+  if (targetUserId === hostId) return { error: "O dono deve cancelar a sala para sair." };
+  const target = run.members.find((member) => member.userId === targetUserId); if (!target) return { error: "Jogador não está na sala." };
+  const ready = { ...(vol.lobby?.ready ?? {}) }; delete ready[targetUserId];
+  await prisma.$transaction([prisma.towerRunMember.delete({ where: { id: target.id } }), prisma.towerRun.update({ where: { id: runId }, data: { resolutionOrder: run.members.filter((member) => member.userId !== targetUserId).map((member) => member.userId), volatileState: { ...vol, lobby: { ...vol.lobby, hostId, ready } } as Prisma.InputJsonValue } })]);
+  revalidatePath(PATH); return { ok: true as const };
+}
+
 export async function updateTowerLobbyClassAction(runId: string, expeditionRole: TowerExpeditionRole) {
   const user = await requireTowerAdmin(); if (!user) return { error: "Acesso restrito." };
   const role = TOWER_ROLE_BY_KEY[expeditionRole]; if (!role) return { error: "Classe inválida." };
@@ -421,7 +473,7 @@ export async function abandonTowerRunAction(runId: string): Promise<{ error: str
   return { ok: true as const };
 }
 
-// ── Fase 5 · Turn Engine (janela global; Online 120s / Lento 4h) ──────────────
+// ── Turn Engine (janela global; Online 5min / Lento 4h) ──────────────────────
 // Núcleo em @/lib/tower/turn (compartilhado com o cron; não exposto como action).
 
 /** Inicia a expedição no grafo de salas, LOBBY → ACTIVE e abre a 1ª janela. */
@@ -441,6 +493,14 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   const lobby=((run.volatileState??{}) as {lobby?:{hostId?:string;ready?:Record<string,boolean>}}).lobby;
   if((lobby?.hostId??run.members[0]?.userId)!==user.id)return {error:"Somente o criador da sala pode iniciar."};
   if(!run.members.every(m=>lobby?.ready?.[m.userId]))return {error:"Todos os jogadores precisam marcar Pronto."};
+  const config = await getTowerConfig();
+  await ensureTowerTicket();
+  const memberPlayers = await prisma.player.findMany({ where: { userId: { in: run.members.map((member) => member.userId) } }, select: { id: true, userId: true } });
+  if (config.requireTicket) {
+    const inventories = await prisma.playerInventory.findMany({ where: { playerId: { in: memberPlayers.map((player) => player.id) }, itemId: TOWER_TICKET_ID }, select: { playerId: true, quantity: true } });
+    const missing = memberPlayers.filter((player) => (inventories.find((inventory) => inventory.playerId === player.id)?.quantity ?? 0) < 1);
+    if (missing.length) return { error: `${missing.length} jogador(es) não possuem Ticket da Torre. Nada foi consumido.` };
+  }
 
   const progress = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1 } });
   const unlocked = progress.filter((entry) => entry.value >= 5).map((entry) => entry.metricKey);
@@ -448,13 +508,14 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   const pressureTalent = (await prisma.towerCommunityProgress.findUnique({ where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT:PRESSURE" } } }))?.value ?? 0;
   const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: [...unlocked, ...roleCounters], pressureShield: (unlocked.includes("WARD") ? 2 : 0) + pressureTalent };
   const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
-  await prisma.towerRun.update({
-    where: { id: runId },
-    data: {
-      status: "ACTIVE", startedAt: new Date(), globalTurn: 1, resolutionOrder: order,
-      nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
-      volatileState: { ...(run.volatileState as object ?? {}), submissions: {}, roomIndex: 1, log: ["A porta se fechou. O mapa da Torre começou a se desenhar."], exploration } as unknown as Prisma.InputJsonValue,
-    },
+  await prisma.$transaction(async (tx) => {
+    if (config.requireTicket) for (const player of memberPlayers) {
+      const inventory = await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: TOWER_TICKET_ID } } });
+      if (!inventory || inventory.quantity < 1) throw new Error("Ticket indisponível no momento do início.");
+      if (inventory.quantity === 1) await tx.playerInventory.delete({ where: { id: inventory.id } });
+      else await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
+    }
+    await tx.towerRun.update({ where: { id: runId }, data: { status: "ACTIVE", ticketConsumed: config.requireTicket, startedAt: new Date(), globalTurn: 1, resolutionOrder: order, nextDeadline: new Date(Date.now() + windowMsFor(run.pace)), volatileState: { ...(run.volatileState as object ?? {}), submissions: {}, roomIndex: 1, log: ["A porta se fechou. O mapa da Torre começou a se desenhar."], exploration } as unknown as Prisma.InputJsonValue } });
   });
   revalidatePath(PATH);
   return { ok: true as const };

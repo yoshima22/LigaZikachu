@@ -18,7 +18,7 @@ export type TowerConfig = {
 
 const DEFAULT_CONFIG: TowerConfig = {
   entryCooldownMinutes: 60,
-  requireTicket: false,
+  requireTicket: true,
 };
 
 export async function getTowerConfig(): Promise<TowerConfig> {
@@ -48,42 +48,42 @@ export const TOWER_EXPEDITION_ROLES: {
     key: "INVESTIGADOR",
     label: "Investigador",
     exploration: "Identifica pistas, mecanismos, objetos falsos e armadilhas.",
-    benefit: "Revela composição inimiga e uma pista adicional em mecanismos; +8% de eficiência ao investigar.",
+    benefit: "Revela pista adicional em mecanismos e concede +8% de Instinto nos combates da Torre.",
     stances: ["SCOUT", "SPECIALIST", "OPPORTUNIST", "PROVOKER"],
   },
   {
     key: "NAVEGADOR",
     label: "Navegador",
     exploration: "Lê melhor as conexões do labirinto.",
-    benefit: "Revela uma conexão adicional do mapa e reduz em 1 a Pressão da primeira espera da run.",
+    benefit: "Concede +3% de Agilidade nos combates e reduz em 1 a Pressão da primeira espera da run.",
     stances: ["FLANK", "SCOUT", "DUELIST"],
   },
   {
     key: "PROTETOR",
     label: "Protetor",
     exploration: "Protege aliados durante interações e resgates.",
-    benefit: "O grupo recebe 6% menos dano no primeiro confronto de cada andar.",
+    benefit: "Concede +6% de Vitalidade aos seus mascotes em todos os combates da Torre.",
     stances: ["DEFENDER", "GUARDIAN", "SURVIVOR"],
   },
   {
     key: "ARTIFICE",
     label: "Artífice",
     exploration: "Especialista em Geradores, Portas, Alavancas e Placas.",
-    benefit: "Mecanismos tecnológicos exigem 1 etapa a menos e falhas geram 1 Pressão a menos.",
+    benefit: "Falhas em mecanismos geram 1 Pressão a menos e seus mascotes recebem +4% de Força.",
     stances: ["SPECIALIST", "SABOTEUR", "ENCOURAGER", "ATTACKER"],
   },
   {
     key: "RITUALISTA",
     label: "Ritualista",
     exploration: "Especialista em Altares, Runas, Máscaras e Espelhos.",
-    benefit: "Reduz em 20% debuffs sobrenaturais e melhora curas de salas em 10%.",
+    benefit: "Melhora curas de sala e Carisma dos seus mascotes em 10%.",
     stances: ["HEALER", "ENCOURAGER", "PROVOKER", "SURVIVOR"],
   },
   {
     key: "BATEDOR",
     label: "Batedor",
     exploration: "Reconhece áreas e presença hostil.",
-    benefit: "Revela emboscadas antes da entrada e concede +7% de Agilidade no primeiro ciclo do combate.",
+    benefit: "Concede +7% de Agilidade aos seus mascotes nos combates da Torre.",
     stances: ["FLANK", "SCOUT", "OPPORTUNIST", "DUELIST"],
   },
 ];
