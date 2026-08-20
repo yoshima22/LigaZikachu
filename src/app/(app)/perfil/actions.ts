@@ -13,8 +13,17 @@ import { parseBirthDateInput } from "@/lib/birthday";
 const MAX_WISHLIST_POKEMON = 9;
 const MAX_WISHLIST_ITEMS = 12;
 
+// Nick precisa ter ao menos 4 caracteres e não pode conter símbolos especiais
+// (permitido: letras — inclusive acentuadas —, números e espaços).
+const displayNameSchema = z
+  .string()
+  .trim()
+  .min(4, "O nome precisa ter ao menos 4 caracteres.")
+  .max(60, "O nome pode ter no máximo 60 caracteres.")
+  .regex(/^[\p{L}\p{N} ]+$/u, "O nome não pode conter símbolos especiais.");
+
 const updateProfileSchema = z.object({
-  displayName: z.string().min(1).max(60),
+  displayName: displayNameSchema,
   ptcglNick: z.string().max(60).optional(),
   popId: z.string().max(30).optional(),
   mascotSpritePreference: z.enum(["ANIMATED", "STATIC"]).optional(),
@@ -176,7 +185,11 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
   });
   if (!player) return { error: "Jogador nao encontrado" };
 
-  const data = updateProfileSchema.parse(input);
+  const parsed = updateProfileSchema.safeParse(input);
+  if (!parsed.success) {
+    return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
+  }
+  const data = parsed.data;
 
   // Verifica unicidade do nick PTCG Live (case-insensitive, excluindo o próprio jogador)
   if (data.ptcglNick) {

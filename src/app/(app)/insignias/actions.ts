@@ -18,6 +18,21 @@ const createBadgeSchema = z.object({
     )
 });
 
+const updateBadgeSchema = z.object({
+  badgeId: z.string().min(1),
+  tournamentId: z.string().min(1, "Selecione um torneio."),
+  name: z.string().trim().min(2, "Informe um nome para a insignia.").max(80),
+  // Imagem opcional na edição: se vier vazia, mantém a atual.
+  imageUrl: z
+    .string()
+    .max(1_200_000, "A imagem esta muito grande. Use uma imagem menor.")
+    .refine(
+      (value) => !value || value.startsWith("data:image/") || value.startsWith("https://") || value.startsWith("http://"),
+      "Use uma imagem valida."
+    )
+    .optional()
+});
+
 const badgePlayerSchema = z.object({
   badgeId: z.string().min(1),
   playerId: z.string().min(1, "Selecione um jogador.")
@@ -65,6 +80,72 @@ export async function createLeagueBadgeAction(
     });
 
     revalidateBadgePaths(tournament.slug, tournament.season?.slug);
+    return {};
+  } catch (err) {
+    if (err instanceof z.ZodError) {
+      return { error: err.issues.map((issue) => issue.message).join(", ") };
+    }
+
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function updateLeagueBadgeAction(
+  input: z.infer<typeof updateBadgeSchema>
+): Promise<{ error?: string }> {
+  try {
+    const actor = await requireAdmin();
+    const data = updateBadgeSchema.parse(input);
+
+    const badge = await prisma.leagueBadge.findUnique({
+      where: { id: data.badgeId },
+      include: { tournament: { select: { id: true, name: true, slug: true, season: { select: { slug: true } } } } }
+    });
+
+    if (!badge) return { error: "Insignia nao encontrada." };
+
+    const tournament = await prisma.tournament.findUnique({
+      where: { id: data.tournamentId },
+      select: { id: true, name: true, slug: true, season: { select: { slug: true } } }
+    });
+
+    if (!tournament) return { error: "Torneio nao encontrado." };
+
+    const updated = await prisma.leagueBadge.update({
+      where: { id: badge.id },
+      data: {
+        name: data.name,
+        tournamentId: tournament.id,
+        // Só troca a imagem se uma nova foi enviada.
+        ...(data.imageUrl ? { imageUrl: data.imageUrl } : {})
+      }
+    });
+
+    await prisma.auditLog.create({
+      data: {
+        actorUserId: actor.id,
+        entityType: "leagueBadge",
+        entityId: badge.id,
+        action: "league_badge.updated",
+        before: {
+          name: badge.name,
+          tournamentId: badge.tournamentId,
+          tournamentName: badge.tournament.name,
+          imageChanged: Boolean(data.imageUrl)
+        },
+        after: {
+          name: updated.name,
+          tournamentId: tournament.id,
+          tournamentName: tournament.name,
+          imageChanged: Boolean(data.imageUrl)
+        }
+      }
+    });
+
+    revalidateBadgePaths(tournament.slug, tournament.season?.slug);
+    if (badge.tournament.slug !== tournament.slug) {
+      revalidateBadgePaths(badge.tournament.slug, badge.tournament.season?.slug);
+    }
     return {};
   } catch (err) {
     if (err instanceof z.ZodError) {

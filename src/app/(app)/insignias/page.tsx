@@ -46,6 +46,7 @@ export default async function InsigniasPage() {
     id: badge.id,
     name: badge.name,
     imageUrl: badge.imageUrl,
+    tournamentId: badge.tournamentId,
     tournamentName: badge.tournament.name,
     seasonName: badge.tournament.season?.name ?? null,
     owners: badge.owners.map((owner) => ({

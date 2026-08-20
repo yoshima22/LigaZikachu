@@ -1,4 +1,5 @@
 import { unstable_cache } from "next/cache";
+import { Role } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import Link from "next/link";
@@ -20,7 +21,8 @@ const MASCOT_SELECT = {
   player: { select: { id: true, displayName: true } },
 } as const;
 
-const PLAYER_FILTER = { player: { user: { role: "PLAYER" as const } } };
+// Apenas contas ADMIN/SUPER_ADMIN saem dos rankings; Gamemasters continuam listados.
+const PLAYER_FILTER = { player: { user: { role: { notIn: [Role.ADMIN, Role.SUPER_ADMIN] } } } };
 
 // ── Helpers ────────────────────────────────────────────────────────────────────
 
