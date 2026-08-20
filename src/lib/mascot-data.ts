@@ -1282,13 +1282,12 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
   10013: 1013,  // Sinistcha Masterpiece → same sprite as Sinistcha
 };
 
-// Sprites auto-hospedados em public/sprites (CDN estático do Vercel) — o
-// raw.githubusercontent.com sofria rate limit (HTTP 429) e quebrava imagens.
+// Ilustrações exclusivas hospedadas no bucket público de assets do projeto.
 const EVENT_CUSTOM_SPRITES: Record<number,string> = {
-  210001: "/events/torre-dos-rebeldes/leaders/01_pikachu_rebelde.png", 210002: "/events/torre-dos-rebeldes/leaders/02_lucario_rebelde.png",
-  210003: "/events/torre-dos-rebeldes/leaders/03_umbreon_rebelde.png", 210004: "/events/torre-dos-rebeldes/leaders/04_gengar_rebelde.png",
-  210005: "/events/torre-dos-rebeldes/leaders/05_mimikyu_rebelde.png", 210006: "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png",
-  210007: "/events/torre-dos-rebeldes/leaders/07_espeon_rebelde.png", 210008: "/events/torre-dos-rebeldes/chandelure.png",
+  210001: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/01_pikachu_rebelde.png", 210002: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/02_lucario_rebelde.png",
+  210003: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/03_umbreon_rebelde.png", 210004: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/04_gengar_rebelde.png",
+  210005: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/05_mimikyu_rebelde.png", 210006: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/06_meowth_rebelde.png",
+  210007: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/07_espeon_rebelde.png", 210008: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/TorreDosRebeldesChandelure.png",
 };
 export function getSpriteUrl(pokemonId: number, animated = false): string {
   if (EVENT_CUSTOM_SPRITES[pokemonId]) return EVENT_CUSTOM_SPRITES[pokemonId];

@@ -9,6 +9,10 @@ export async function ensureTowerExclusiveSpecies() {
       create: { pokemonId: mascot.pokemonId, name: mascot.name, generation: 0, primaryType: mascot.primaryType, secondaryType: "secondaryType" in mascot ? mascot.secondaryType : null, staticSpriteUrl: mascot.sprite, animatedSpriteUrl: mascot.sprite, custom: true, eggEligible: false, rarity: "EVENT" },
       update: { name: mascot.name, primaryType: mascot.primaryType, secondaryType: "secondaryType" in mascot ? mascot.secondaryType : null, staticSpriteUrl: mascot.sprite, animatedSpriteUrl: mascot.sprite, custom: true, eggEligible: false, rarity: "EVENT" },
     });
+    await prisma.mascot.updateMany({
+      where: { pokemonId: mascot.pokemonId },
+      data: { staticSpriteUrlOverride: mascot.sprite, animatedSpriteUrlOverride: mascot.sprite },
+    });
   }
 }
 

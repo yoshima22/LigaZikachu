@@ -316,7 +316,7 @@ export async function saveTowerNarrativeScenesAction(input: TowerNarrativeScene[
       : raw.backgroundUrl?.trim() || "/events/torre-dos-rebeldes/background.png";
     const characterUrl = raw.characterUrl?.startsWith("data:image/")
       ? await uploadDataUrlAsset(raw.characterUrl, "events/tower/scenes", `${id}-character`)
-      : raw.characterUrl?.trim() || "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png";
+      : raw.characterUrl?.trim() || "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/CustomPokemonSprites/06_meowth_rebelde.png";
     scenes.push({
       id, trigger: raw.trigger, floor: Math.max(1, Math.min(7, Math.trunc(raw.floor || 1))),
       title: raw.title?.trim() || "Cena da Torre", speaker: raw.speaker.trim(), text: raw.text.trim(),
