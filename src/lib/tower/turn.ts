@@ -90,9 +90,15 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     room.cleared = true; state.graph = [...state.graph]; battleLog.push(state.lastOutcome!);
   } else if (room.kind === "RESCUE") {
     const prisoners = await tx.towerLostMascot.findMany({ where: { recoveredAt: null }, orderBy: { createdAt: "asc" }, take: 2 });
+    const rescuedMascots = prisoners.length ? await tx.mascot.findMany({
+      where: { id: { in: prisoners.map((prisoner) => prisoner.mascotId) } },
+      select: { id: true, nickname: true, pokemonId: true, player: { select: { displayName: true } } },
+    }) : [];
+    const rescuedById = new Map(rescuedMascots.map((mascot) => [mascot.id, `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} · dono: ${mascot.player.displayName}`]));
     for (const prisoner of prisoners) await tx.towerLostMascot.update({ where: { id: prisoner.id }, data: { recoveredAt: new Date(), recoveredById: run.members[0]?.userId ?? null } });
     room.cleared = true;
-    state = { ...state, graph: [...state.graph], lastOutcome: prisoners.length ? `${prisoners.length} mascote(s) de outras runs foram libertados e devolvidos aos donos.` : "As jaulas estavam vazias. Alguém chegou antes." };
+    const rescuedNames = prisoners.map((prisoner) => rescuedById.get(prisoner.mascotId) ?? `Mascote #${prisoner.mascotId}`).join("; ");
+    state = { ...state, graph: [...state.graph], lastOutcome: prisoners.length ? `A Sala Anti-Psicose libertou ${prisoners.length} mascote(s) de outras runs e os devolveu aos donos: ${rescuedNames}.` : "A Sala Anti-Psicose foi ativada, mas as jaulas estavam vazias. Nenhum mascote precisava de resgate." };
     battleLog.push(state.lastOutcome!);
   } else if (room.kind === "REST") {
     const decision = majority(choices.map((choice) => choice.action));

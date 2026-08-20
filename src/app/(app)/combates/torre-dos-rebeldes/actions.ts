@@ -217,7 +217,7 @@ export async function getTowerLobbyDataAction() {
     talents: { points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent), ranks: talentRanks },
     controlledMascots: controlledEntries.map((entry) => { const mascot = controlledMascotsById.get(entry.mascotId); return mascot ? { id: mascot.id, pokemonId: mascot.pokemonId, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), level: mascot.level, owner: controlledOwners.get(entry.ownerUserId) ?? "Jogador", floor: entry.floor } : null; }).filter(Boolean),
     ranking: rankingUserIds.map((userId) => ({ userId, name: rankingNames.get(userId) ?? "Jogador", entries: entryGroups.find((row) => row.userId === userId)?._count._all ?? 0, rescues: rescueGroups.find((row) => row.recoveredById === userId)?._count._all ?? 0, talentPoints: talentGroups.find((row) => row.userId === userId)?._count._all ?? 0 })),
-    pendingMascotRewards: pendingMascotRewards.map((feat) => ({ id: feat.id, ...(feat.data as { pokemonId:number; basePokemonId:number; name:string; floor?:number; reason?:string }) })),
+    pendingMascotRewards: pendingMascotRewards.map((feat) => { const reward = feat.data as { pokemonId:number; basePokemonId:number; name:string; floor?:number; reason?:string }; return { id: feat.id, ...reward, sprite: TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === reward.pokemonId)?.sprite ?? "" }; }),
     exclusiveMascotCodes: TOWER_EXCLUSIVE_MASCOTS.map(({ code, pokemonId, name }) => ({ code, pokemonId, name })),
     towerTicketQuantity,
     knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
@@ -253,7 +253,10 @@ export async function claimTowerMascotRewardAction(featId: string, personality: 
     await tx.playerPokemonDex.upsert({ where: { playerId_pokemonId: { playerId: player.id, pokemonId: species.pokemonId } }, create: { playerId: player.id, pokemonId: species.pokemonId, source: "TOWER_REWARD" }, update: {} });
     await tx.towerFeat.update({ where: { id: featId }, data: { featKey: "TOWER_MASCOT_CLAIMED", data: { ...data, personality, mascotId: mascot.id } } });
   });
-  revalidatePath(PATH); revalidatePath("/mascotes"); return { ok: true as const, name: species.name };
+  revalidatePath(PATH); revalidatePath("/mascotes"); return {
+    ok: true as const,
+    mascot: { name: species.name, pokemonId: species.pokemonId, sprite: species.sprite, level: 55, personality, stats, origin: "Ovo de Laboratório · Torre dos Rebeldes" },
+  };
 }
 
 /** Simula o nascimento exclusivo sem criar mascote nem registrar progresso. */
