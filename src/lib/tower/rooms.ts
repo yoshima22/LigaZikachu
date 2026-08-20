@@ -46,6 +46,7 @@ export type TowerExplorationState = {
   };
   countermeasures?: string[];
   pressureShield?: number;
+  encounter?: { roomId: string; preparationTurns: number; enemies: { pokemonId: number; name: string; level: number }[] };
 };
 
 const BG = "/events/torre-dos-rebeldes/background.png";
@@ -111,4 +112,13 @@ export function applyTowerPressure(state: TowerExplorationState, amount = 1) {
   const absorbed = Math.min(Math.max(0, state.pressureShield ?? 0), amount);
   const pressure = Math.max(0, state.pressure + amount - absorbed);
   return { ...state, pressure, pressureShield: Math.max(0, (state.pressureShield ?? 0) - absorbed), activeModifiers: towerPressureModifiers(pressure) };
+}
+
+export function towerEncounterPreview(room: TowerRoomNode, averageLevel: number, allyCount: number) {
+  const pool = room.kind === "BOSS" ? [609, 94, 197, 302] : [92, 198, 200, 353, 607, 215];
+  const count = room.kind === "BOSS" ? Math.max(2, allyCount) : Math.max(2, Math.min(allyCount, 4));
+  return Array.from({ length: count }, (_, index) => ({
+    pokemonId: pool[(room.index + index) % pool.length],
+    name: "", level: Math.max(1, averageLevel + room.index * 2),
+  }));
 }

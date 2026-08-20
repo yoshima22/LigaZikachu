@@ -6,7 +6,7 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { resolveEncounterTurn, type TowerBattleState, type TowerIntent, type TowerPlannedDestination } from "./encounter";
 import type { TowerBattleEvent } from "./engine/types";
-import { applyTowerPressure, currentTowerRoom, type TowerExplorationState } from "./rooms";
+import { applyTowerPressure, currentTowerRoom, towerEncounterPreview, type TowerExplorationState } from "./rooms";
 import { runLeagueCombat, toLeagueMascot, type LeagueMascot } from "@/lib/league-combat";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { normalizeCombatRole } from "@/lib/combat-roles";
@@ -47,7 +47,12 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
   if (room.cleared) {
     const routeId = majority(choices.map((c) => c.routeId));
     if (routeId && room.connections.includes(routeId)) {
-      state = applyTowerPressure({ ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], lastOutcome: `O grupo avançou para ${state.graph.find((r) => r.id === routeId)?.title}.` });
+      const destination = state.graph.find((r) => r.id === routeId)!;
+      const snapshots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id }, state: "IN_TOWER" }, select: { mascotId: true } });
+      const levels = await tx.mascot.findMany({ where: { id: { in: snapshots.map((m) => m.mascotId) } }, select: { level: true } });
+      const averageLevel = Math.max(1, Math.round(levels.reduce((sum, m) => sum + m.level, 0) / Math.max(1, levels.length)));
+      const encounter = destination.kind === "COMBAT" || destination.kind === "BOSS" ? { roomId: destination.id, preparationTurns: destination.kind === "BOSS" ? 2 : 1, enemies: towerEncounterPreview(destination, averageLevel, snapshots.length).map((enemy) => ({ ...enemy, name: getPokemonName(enemy.pokemonId) })) } : undefined;
+      state = { ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], encounter, lastOutcome: `O grupo percorreu a passagem e chegou a ${destination.title}.` };
       battleLog.push(state.lastOutcome!);
     } else {
       state = applyTowerPressure({ ...state, lastOutcome: "A expedição hesitou. A Torre ficou mais atenta." });
@@ -65,13 +70,22 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
       else await tx.towerCodexEntry.create({ data: { userId: null, subjectType: "PUZZLE", subjectKey: room.puzzle.id, discoveryLevel: 1, data: { text: room.puzzle.discovery } } });
     }
   } else if (room.kind === "REST") {
+    const decision = majority(choices.map((choice) => choice.action));
     const runMascots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id }, state: "IN_TOWER" } });
     const healMult = state.activeModifiers.reduce((m, mod) => m * mod.healingMultiplier, 1);
-    for (const mascot of runMascots) await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * .2 * healMult)) } });
+    if (decision === "INTERACT") for (const mascot of runMascots) await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * .2 * healMult)) } });
     room.cleared = true;
-    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: "O grupo descansou e recuperou parte do HP. A Torre não parou de contar o tempo." });
+    state = decision === "INTERACT"
+      ? applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: "O grupo decidiu usar a chama, recuperou parte do HP e aceitou que a Torre avançasse seu relógio." })
+      : { ...state, graph: [...state.graph], lastOutcome: "O grupo ignorou a chama e seguiu sem recuperar HP." };
     battleLog.push(state.lastOutcome!);
   } else if (room.kind === "COMBAT" || room.kind === "BOSS") {
+    if (state.encounter && state.encounter.preparationTurns > 1) {
+      state = { ...state, encounter: { ...state.encounter, preparationTurns: state.encounter.preparationTurns - 1 }, lastOutcome: `O confronto se aproxima. Resta ${state.encounter.preparationTurns - 1} janela de preparação para aliados chegarem.` };
+      battleLog.push(state.lastOutcome!);
+      vol.exploration = state;
+      return;
+    }
     const snapshots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id } }, include: { member: true } });
     const rows = await tx.mascot.findMany({ where: { id: { in: snapshots.map((m) => m.mascotId) } } });
     const snapById = new Map(snapshots.map((m) => [m.mascotId, m]));
@@ -95,7 +109,7 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     for (const ally of allies) await tx.towerRunMascot.updateMany({ where: { mascotId: ally.id, member: { runId: run.id } }, data: { currentHp: hp.get(ally.id) ?? 0, state: (hp.get(ally.id) ?? 0) <= 0 ? "DEFEATED" : "IN_TOWER" } });
     const won = result.winner === "A";
     room.cleared = won;
-    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: won ? `${room.title} foi vencida.` : "A expedição foi derrotada.", pendingReplay: { winner: result.winner, log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, teamASurvivors: result.teamASurvivors, teamBSurvivors: result.teamBSurvivors, title: room.title } });
+    state = { ...state, graph: [...state.graph], encounter: undefined, lastOutcome: won ? `${room.title} foi vencida.` : "A expedição foi derrotada.", pendingReplay: { winner: result.winner, log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, teamASurvivors: result.teamASurvivors, teamBSurvivors: result.teamBSurvivors, title: room.title } };
     battleLog.push(state.lastOutcome!);
   }
   vol.exploration = state;

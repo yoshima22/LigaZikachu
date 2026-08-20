@@ -518,6 +518,7 @@ export async function getTowerRunStateAction(runId: string) {
       modifiers: exploration.activeModifiers,
       countermeasures: exploration.countermeasures ?? [],
       pressureShield: exploration.pressureShield ?? 0,
+      encounter: exploration.encounter ?? null,
       lastOutcome: exploration.lastOutcome ?? null,
       replay: exploration.pendingReplay ?? null,
       communityDiscoveries,
