@@ -17,7 +17,8 @@ import {
   initialStanceFor,
   towerMaxHp,
 } from "@/lib/tower/config";
-import type { TowerExpeditionRole, TowerPaceMode } from "@prisma/client";
+import { Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
+import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
 
 const PATH = "/combates/torre-dos-rebeldes";
 
@@ -175,4 +176,85 @@ export async function abandonTowerRunAction(runId: string): Promise<{ error: str
   await prisma.towerRun.update({ where: { id: runId }, data: { status: "ABANDONED", endedAt: new Date() } });
   revalidatePath(PATH);
   return { ok: true as const };
+}
+
+// ── Fase 5 · Turn Engine (janela global; Online 120s / Lento 4h) ──────────────
+// Núcleo em @/lib/tower/turn (compartilhado com o cron; não exposto como action).
+
+/** Inicia a expedição: LOBBY → ACTIVE e abre a primeira janela de turno. */
+export async function startTowerExpeditionAction(runId: string): Promise<{ error: string } | { ok: true }> {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  const run = await prisma.towerRun.findUnique({ where: { id: runId }, select: { id: true, status: true, pace: true, members: { select: { userId: true, resolutionIndex: true } } } });
+  if (!run) return { error: "Expedição não encontrada." };
+  if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
+  if (run.status !== "LOBBY") return { error: "Esta expedição já foi iniciada." };
+  const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
+  await prisma.towerRun.update({
+    where: { id: runId },
+    data: { status: "ACTIVE", startedAt: new Date(), globalTurn: 1, resolutionOrder: order, nextDeadline: new Date(Date.now() + windowMsFor(run.pace)), volatileState: { submissions: {}, log: ["Expedição iniciada."] } },
+  });
+  revalidatePath(PATH);
+  return { ok: true as const };
+}
+
+/** Estado atual da run (para polling). Resolve o turno se o deadline já passou. */
+export async function getTowerRunStateAction(runId: string) {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+
+  let run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+  if (!run) return { error: "Expedição não encontrada." };
+  if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
+
+  // Auto-resolução ao acessar após o deadline (além do cron).
+  if (run.status === "ACTIVE" && run.nextDeadline && run.nextDeadline.getTime() <= Date.now()) {
+    await resolveTowerTurnLocked(runId).catch(() => null);
+    run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+    if (!run) return { error: "Expedição não encontrada." };
+  }
+
+  const vol = (run.volatileState ?? {}) as TowerVolatile;
+  const submissions = vol.submissions ?? {};
+  return {
+    ok: true as const,
+    run: {
+      id: run.id, status: run.status, pace: run.pace, currentFloor: run.currentFloor,
+      globalTurn: run.globalTurn, nextDeadline: run.nextDeadline?.toISOString() ?? null,
+    },
+    order: (Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : []),
+    members: run.members.map((m) => ({
+      userId: m.userId, expeditionRole: m.expeditionRole, afkRemoved: m.afkRemoved,
+      consecutiveMisses: m.consecutiveMisses, confirmed: Boolean(submissions[m.userId]),
+    })),
+    mine: { userId: user.id, confirmed: Boolean(submissions[user.id]) },
+    log: (vol.log ?? []).slice(-12),
+  };
+}
+
+/** Submete/confirma a ação do turno. Resolve na hora se todos os ativos confirmarem. */
+export async function submitTowerActionAction(runId: string, actions: unknown): Promise<{ error: string } | { ok: true; resolved: boolean }> {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+
+  const resolvedNow = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
+    const run = await tx.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+    if (!run) throw new Error("Expedição não encontrada.");
+    if (run.status !== "ACTIVE") throw new Error("A expedição não está aceitando ações.");
+    const me = run.members.find((m) => m.userId === user.id);
+    if (!me || me.afkRemoved) throw new Error("Você não está ativo nesta expedição.");
+
+    const vol = (run.volatileState ?? {}) as TowerVolatile;
+    const submissions = { ...(vol.submissions ?? {}) };
+    submissions[user.id] = { confirmedAt: new Date().toISOString(), actions: actions ?? null };
+    await tx.towerRun.update({ where: { id: runId }, data: { volatileState: { ...vol, submissions } as unknown as Prisma.InputJsonValue } });
+
+    const active = run.members.filter((m) => !m.afkRemoved);
+    return active.every((m) => Boolean(submissions[m.userId]));
+  }, { timeout: 15000 });
+
+  if (resolvedNow) await resolveTowerTurnLocked(runId).catch(() => null);
+  revalidatePath(PATH);
+  return { ok: true as const, resolved: resolvedNow };
 }

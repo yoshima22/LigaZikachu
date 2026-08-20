@@ -5,7 +5,8 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
-import { getTowerLobbyDataAction, createTowerRunAction, abandonTowerRunAction } from "../actions";
+import { getTowerLobbyDataAction, createTowerRunAction } from "../actions";
+import { TowerRunPanel } from "./tower-run-panel";
 
 type LobbyData = Extract<Awaited<ReturnType<typeof getTowerLobbyDataAction>>, { ok: true }>;
 type Role = LobbyData["roles"][number];
@@ -36,31 +37,9 @@ export function TowerLobby() {
   if (loadError) return <section className={card}><p className="text-sm text-red-300">{loadError}</p></section>;
   if (!data) return <section className={card}><p className="text-sm text-slate-500">Carregando lobby…</p></section>;
 
-  // Já existe uma expedição ativa.
+  // Já existe uma expedição ativa (lobby ou em andamento) → painel de turno.
   if (data.activeRun) {
-    const run = data.activeRun;
-    return (
-      <section className={card}>
-        <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Expedição ativa</h2>
-        <p className="mt-2 text-sm text-slate-300">
-          Você já está numa expedição — <strong className="text-white">{run.status === "LOBBY" ? "no lobby" : "em andamento"}</strong> · Andar {run.currentFloor} · Ritmo {run.pace === "ONLINE" ? "Online (120s)" : "Lento (4h)"}.
-        </p>
-        <p className="mt-1 text-[11px] text-slate-500">Gameplay ainda não implementado (próximas fases). Você pode encerrar para testar de novo.</p>
-        <button
-          type="button"
-          disabled={pending}
-          onClick={() => start(async () => {
-            const res = await abandonTowerRunAction(run.id);
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success("Expedição encerrada.");
-            router.refresh(); load();
-          })}
-          className="mt-4 rounded-xl border border-red-400/40 px-4 py-2 text-xs font-bold text-red-300 hover:bg-red-500/10 disabled:opacity-40"
-        >
-          Encerrar expedição
-        </button>
-      </section>
-    );
+    return <TowerRunPanel runId={data.activeRun.id} onLeft={() => { router.refresh(); load(); }} />;
   }
 
   // Cooldown de entrada.

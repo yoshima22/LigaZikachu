@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/tower-resolve",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/deck-reminder",
       "schedule": "0 12 * * *"
     },
