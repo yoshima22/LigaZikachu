@@ -5,10 +5,11 @@
 // Aliados sempre aparecem; inimigos só nas casas visíveis (o servidor já filtra).
 
 type Unit = { id: string; team: string; name: string; pokemonId: number; x: number; y: number; hp: number; maxHp: number; role: string };
+type Obj = { id: string; name: string; x: number; y: number; resolved: boolean; suppression: boolean; progress: number; required: number };
 type Battle = {
   room: { width: number; height: number; blocked: string[] };
   discovered: string[]; visible: string[];
-  units: Unit[]; over: boolean; outcome: "WIN" | "LOSS" | null;
+  units: Unit[]; objects: Obj[]; over: boolean; outcome: "WIN" | "LOSS" | null;
 };
 
 const TILE = 20;
@@ -20,6 +21,8 @@ export function TowerBattleGrid({ battle }: { battle: Battle }) {
   const visible = new Set(battle.visible);
   const unitAt = new Map<string, Unit>();
   for (const u of battle.units) if (u.hp > 0) unitAt.set(`${u.x}:${u.y}`, u);
+  const objAt = new Map<string, Obj>();
+  for (const o of battle.objects) objAt.set(`${o.x}:${o.y}`, o);
 
   return (
     <div className="overflow-x-auto rounded-xl border border-slate-800 bg-black/60 p-2">
@@ -34,10 +37,14 @@ export function TowerBattleGrid({ battle }: { battle: Battle }) {
           const isKnown = discovered.has(key);
           const isWall = blocked.has(key);
           const unit = unitAt.get(key);
+          const obj = objAt.get(key);
           let bg = "#05060a"; // desconhecido (fog cheio)
           if (isKnown) bg = isWall ? "#3a3550" : isVisible ? "#171a2b" : "#0d0f18";
           return (
             <div key={i} style={{ background: bg, outline: "1px solid rgba(255,255,255,0.03)", position: "relative" }}>
+              {obj && !unit && (
+                <span title={`${obj.name} · ${obj.progress}/${obj.required}`} style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", fontSize: 12, color: obj.resolved ? "#4ade80" : obj.suppression ? "#f59e0b" : "#38bdf8" }}>◆</span>
+              )}
               {unit && (
                 <span
                   title={`${unit.name} · ${unit.hp}/${unit.maxHp} HP`}
@@ -60,6 +67,7 @@ export function TowerBattleGrid({ battle }: { battle: Battle }) {
         <span><span className="mr-1 inline-block h-2.5 w-2.5 rounded-full align-middle" style={{ background: "#ef4444" }} />Inimigo (visível)</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 align-middle" style={{ background: "#3a3550" }} />Parede</span>
         <span><span className="mr-1 inline-block h-2.5 w-2.5 align-middle" style={{ background: "#05060a", outline: "1px solid #222" }} />Névoa</span>
+        <span style={{ color: "#f59e0b" }}>◆ Mecanismo</span>
       </div>
     </div>
   );

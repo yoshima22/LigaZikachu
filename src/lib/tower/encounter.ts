@@ -9,13 +9,29 @@ import { manhattan, tileKey, towerRoll } from "./engine/grid";
 import { resolveTowerRound, isEncounterOver } from "./engine/combat";
 import type { TowerGrid, TowerOrder, TowerUnit } from "./engine/types";
 import { towerMaxHp } from "./config";
+import { TOWER_OBJECTS, objectEffectId } from "./objects";
 
 export type TowerRoom = { width: number; height: number; blocked: string[] };
+
+/** Objeto/mecanismo posicionado na sala. */
+export type TowerObject = {
+  id: string;
+  key: string; // chave em TOWER_OBJECTS
+  name: string;
+  x: number;
+  y: number;
+  radius: number;
+  required: number;
+  progress: number;
+  resolved: boolean;
+  suppression: boolean;
+};
 
 /** Estado persistido em TowerRun.volatileState.battle. Tiles como "x:y" (JSON). */
 export type TowerBattleState = {
   room: TowerRoom;
   units: TowerUnit[];
+  objects: TowerObject[];
   discovered: string[]; // casas já reveladas (fog acumulado do time)
   encounterOver: boolean;
   outcome?: "WIN" | "LOSS";
@@ -117,9 +133,43 @@ export function generateEncounter(
     });
   });
 
-  const state: TowerBattleState = { room, units, discovered: [], encounterOver: false };
+  // Objetos de supressão da sala (slice: Altar + Totem), em casas livres do meio.
+  const objects: TowerObject[] = [];
+  const objSpecs = ["ALTAR", "TOTEM"] as const;
+  objSpecs.forEach((key, i) => {
+    const def = TOWER_OBJECTS[key];
+    const spot = firstFreeTileNear(8 + i * 4, 3 + i * 5, room, taken);
+    taken.add(tileKey(spot.x, spot.y));
+    objects.push({
+      id: `obj:${i}`, key, name: def.name, x: spot.x, y: spot.y,
+      radius: def.radius, required: def.required, progress: 0, resolved: false, suppression: def.suppression,
+    });
+  });
+
+  const state: TowerBattleState = { room, units, objects, discovered: [], encounterOver: false };
+  applyObjectEffects(state);
   recomputeFog(state);
   return state;
+}
+
+/** (Re)aplica aos inimigos os buffs dos objetos de supressão ainda ativos. */
+function applyObjectEffects(state: TowerBattleState): void {
+  for (const u of state.units) {
+    if (u.team !== "ENEMY") continue;
+    u.effects = u.effects.filter((e) => !e.id.startsWith("obj:"));
+  }
+  for (const obj of state.objects) {
+    if (obj.resolved) continue;
+    const def = TOWER_OBJECTS[obj.key];
+    if (!def.activeEnemyBuff) continue;
+    for (const u of state.units) {
+      if (u.team !== "ENEMY" || u.hp <= 0) continue;
+      u.effects.push({
+        id: objectEffectId(obj.key), label: def.name, kind: "BUFF",
+        stat: def.activeEnemyBuff.stat, value: def.activeEnemyBuff.value, duration: 2,
+      });
+    }
+  }
 }
 
 /** Casas visíveis pelo time aliado agora (união dos raios de visão dos vivos). */
@@ -178,25 +228,51 @@ export function resolveEncounterTurn(
   state: TowerBattleState,
   seed: string,
   round: number,
-  intentsByMascot: Record<string, TowerIntent>,
-): { state: TowerBattleState; events: ReturnType<typeof resolveTowerRound>["events"] } {
-  if (state.encounterOver) return { state, events: [] };
+  orders: { intents: Record<string, TowerIntent>; interactions: string[] },
+): { state: TowerBattleState; events: ReturnType<typeof resolveTowerRound>["events"]; objectLog: string[] } {
+  if (state.encounterOver) return { state, events: [], objectLog: [] };
+  const objectLog: string[] = [];
+
+  // ── Interações com objetos: exige um aliado vivo dentro do raio ────────────
+  const wanted = new Set(orders.interactions ?? []);
+  for (const obj of state.objects) {
+    if (obj.resolved || !wanted.has(obj.id)) continue;
+    const inRange = state.units.some((u) => u.team === "ALLY" && u.hp > 0 && manhattan(u, obj) <= obj.radius);
+    if (!inRange) continue;
+    obj.progress = Math.min(obj.required, obj.progress + 1);
+    if (obj.progress >= obj.required) {
+      obj.resolved = true;
+      objectLog.push(`${obj.name} ${obj.suppression ? "neutralizado" : "resolvido"}!`);
+    } else {
+      objectLog.push(`${obj.name}: progresso ${obj.progress}/${obj.required}.`);
+    }
+  }
+  applyObjectEffects(state); // remove buffs dos resolvidos / mantém dos ativos
+
+  // ── Combate (uma rodada do motor) ──────────────────────────────────────────
   const grid: TowerGrid = { width: state.room.width, height: state.room.height, blocked: new Set(state.room.blocked) };
-  const orders = new Map<string, TowerOrder>();
+  const orderMap = new Map<string, TowerOrder>();
   for (const u of state.units) {
     if (u.hp <= 0) continue;
     if (u.team === "ALLY") {
-      orders.set(u.id, orderFromIntent(u, intentsByMascot[u.id] ?? "ADVANCE", state.units));
+      orderMap.set(u.id, orderFromIntent(u, orders.intents[u.id] ?? "ADVANCE", state.units));
     } else {
-      orders.set(u.id, orderFromIntent(u, "ATTACK", state.units)); // IA inimiga: pressiona
+      orderMap.set(u.id, orderFromIntent(u, "ATTACK", state.units)); // IA inimiga: pressiona
     }
   }
-  const res = resolveTowerRound({ units: state.units, grid, orders, round, seed });
+  const res = resolveTowerRound({ units: state.units, grid, orders: orderMap, round, seed });
   state.units = res.units;
   recomputeFog(state);
   if (isEncounterOver(state.units)) {
     state.encounterOver = true;
     state.outcome = state.units.some((u) => u.team === "ALLY" && u.hp > 0) ? "WIN" : "LOSS";
   }
-  return { state, events: res.events };
+  return { state, events: res.events, objectLog };
+}
+
+/** Objetos visíveis para o time (na névoa atual) com estado de interação. */
+export function objectsView(state: TowerBattleState, vis: Set<string>) {
+  return state.objects
+    .filter((o) => vis.has(tileKey(o.x, o.y)))
+    .map((o) => ({ id: o.id, key: o.key, name: o.name, x: o.x, y: o.y, radius: o.radius, progress: o.progress, required: o.required, resolved: o.resolved, suppression: o.suppression }));
 }

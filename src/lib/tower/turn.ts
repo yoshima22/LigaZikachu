@@ -47,14 +47,17 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
 
       // ── Resolução do encounter (uma rodada do motor tático por Turno Global) ──
       if (vol.battle && !vol.battle.encounterOver) {
-        // Coleta as intenções por mascote das submissões (fallback: ADVANCE).
+        // Coleta intenções por mascote e interações com objetos das submissões.
         const intents: Record<string, TowerIntent> = {};
+        const interactions: string[] = [];
         for (const m of active) {
-          const payload = submissions[m.userId]?.actions as { intents?: Record<string, TowerIntent> } | null | undefined;
+          const payload = submissions[m.userId]?.actions as { intents?: Record<string, TowerIntent>; interactions?: string[] } | null | undefined;
           if (payload?.intents) for (const [mid, it] of Object.entries(payload.intents)) intents[mid] = it;
+          if (Array.isArray(payload?.interactions)) interactions.push(...payload.interactions);
         }
-        const { state, events } = resolveEncounterTurn(vol.battle, run.seed, run.globalTurn, intents);
+        const { state, events, objectLog } = resolveEncounterTurn(vol.battle, run.seed, run.globalTurn, { intents, interactions });
         vol.battle = state;
+        battleLog.push(...objectLog);
         for (const e of events) if (e.kind === "KO" || e.kind === "SURVIVE") battleLog.push(e.text);
         if (state.encounterOver) battleLog.push(state.outcome === "WIN" ? "Encounter vencido!" : "Todos os mascotes caíram no encounter.");
         // Survivor: sincroniza o HP dos aliados de volta no snapshot da run.

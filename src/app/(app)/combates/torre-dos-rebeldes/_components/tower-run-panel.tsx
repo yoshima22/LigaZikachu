@@ -43,6 +43,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [intents, setIntents] = useState<Record<string, Intent>>({});
+  const [interacting, setInteracting] = useState<string[]>([]);
   const inFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -121,8 +122,37 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
             </div>
           </div>
 
+          {/* Supressão do andar */}
+          {state.battle && state.battle.suppression.total > 0 && (
+            <p className="text-[11px] text-slate-400">
+              Mecanismos de supressão neutralizados: <strong className="text-[#FFCB05]">{state.battle.suppression.resolved}/{state.battle.suppression.total}</strong>
+              <span className="text-slate-500"> · cada um ativo reforça os inimigos.</span>
+            </p>
+          )}
+
           {/* Sala + fog */}
           {state.battle && <TowerBattleGrid battle={state.battle} />}
+
+          {/* Mecanismos ao alcance */}
+          {!state.battle?.over && state.battle && state.battle.objects.some((o) => !o.resolved) && (
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-bold uppercase tracking-wide text-slate-500">Mecanismos à vista</p>
+              {state.battle.objects.filter((o) => !o.resolved).map((o) => {
+                const on = interacting.includes(o.id);
+                return (
+                  <label key={o.id} className={`flex items-center gap-2 rounded-lg border p-2 text-xs ${o.interactable ? "border-amber-500/30 bg-amber-500/5" : "border-slate-800 bg-slate-900/40 opacity-70"}`}>
+                    <input type="checkbox" disabled={!o.interactable || state.mine.confirmed} checked={on}
+                      onChange={(e) => setInteracting((cur) => e.target.checked ? [...cur, o.id] : cur.filter((x) => x !== o.id))} />
+                    <span className="min-w-0 flex-1">
+                      <strong className="text-white">{o.name}</strong>
+                      <span className="text-slate-500"> · {o.progress}/{o.required}{o.suppression ? " · supressão" : ""}</span>
+                    </span>
+                    {!o.interactable && <span className="text-[10px] text-slate-500">aproxime um mascote</span>}
+                  </label>
+                );
+              })}
+            </div>
+          )}
           {state.battle?.over && (
             <p className={`rounded-lg border px-3 py-2 text-xs font-bold ${state.battle.outcome === "WIN" ? "border-green-500/30 bg-green-500/5 text-green-300" : "border-red-500/30 bg-red-500/5 text-red-300"}`}>
               {state.battle.outcome === "WIN" ? "🏆 Encounter vencido!" : "☠️ Seus mascotes caíram no encounter."}
@@ -156,7 +186,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           {/* Confirmar ações do turno */}
           {!state.battle?.over && (
             <button type="button" disabled={pending || state.mine.confirmed} onClick={() => start(async () => {
-              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])) };
+              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting };
               const res = await submitTowerActionAction(runId, payload);
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Ordens confirmadas.");

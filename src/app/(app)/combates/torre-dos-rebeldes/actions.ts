@@ -19,8 +19,8 @@ import {
 } from "@/lib/tower/config";
 import { Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
 import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
-import { generateEncounter, visibleTiles, type MemberMascotInput } from "@/lib/tower/encounter";
-import { tileKey } from "@/lib/tower/engine/grid";
+import { generateEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
+import { tileKey, manhattan } from "@/lib/tower/engine/grid";
 import { normalizeCombatRole } from "@/lib/combat-roles";
 
 const PATH = "/combates/torre-dos-rebeldes";
@@ -252,21 +252,33 @@ export async function getTowerRunStateAction(runId: string) {
   const submissions = vol.submissions ?? {};
 
   // View do combate com fog de time: aliados sempre; inimigos só se visíveis.
+  type ObjView = { id: string; key: string; name: string; x: number; y: number; radius: number; progress: number; required: number; resolved: boolean; suppression: boolean; interactable: boolean };
   let battle: null | {
     room: { width: number; height: number; blocked: string[] };
     discovered: string[]; visible: string[];
     units: { id: string; team: string; name: string; pokemonId: number; x: number; y: number; hp: number; maxHp: number; role: string; shield: number }[];
+    objects: ObjView[];
+    suppression: { resolved: number; total: number };
     over: boolean; outcome: "WIN" | "LOSS" | null;
   } = null;
   let myMascots: { id: string; name: string; hp: number; maxHp: number; role: string }[] = [];
   if (vol.battle) {
     const b = vol.battle;
     const vis = visibleTiles(b);
+    const myAllies = b.units.filter((u) => u.team === "ALLY" && u.ownerId === user.id && u.hp > 0);
+    const objects: ObjView[] = objectsView(b, vis).map((o) => ({
+      ...o,
+      interactable: !o.resolved && myAllies.some((u) => manhattan(u, o) <= o.radius),
+    }));
+    const suppTotal = b.objects.filter((o) => o.suppression).length;
+    const suppResolved = b.objects.filter((o) => o.suppression && o.resolved).length;
     battle = {
       room: b.room, discovered: b.discovered, visible: [...vis],
       units: b.units
         .filter((u) => u.team === "ALLY" || vis.has(tileKey(u.x, u.y)))
         .map((u) => ({ id: u.id, team: u.team, name: u.name, pokemonId: u.pokemonId, x: u.x, y: u.y, hp: u.hp, maxHp: u.maxHp, role: u.role, shield: u.shield })),
+      objects,
+      suppression: { resolved: suppResolved, total: suppTotal },
       over: b.encounterOver, outcome: b.outcome ?? null,
     };
     myMascots = b.units
