@@ -6,6 +6,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { resolveEncounterTurn, type TowerBattleState, type TowerIntent, type TowerPlannedDestination } from "./encounter";
 import type { TowerBattleEvent } from "./engine/types";
+import { applyTowerPressure, currentTowerRoom, type TowerExplorationState } from "./rooms";
+import { runLeagueCombat, toLeagueMascot, type LeagueMascot } from "@/lib/league-combat";
+import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { normalizeCombatRole } from "@/lib/combat-roles";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -14,7 +18,88 @@ export type TowerVolatile = {
   lastEvents?: TowerBattleEvent[];
   lastResolvedTurn?: number;
   roomIndex?: number;
+  exploration?: TowerExplorationState;
 };
+
+function finalHp(lineup: LeagueMascot[], log: { action: string; targetId: string; damage: number }[]) {
+  const hp = new Map(lineup.map((m) => [m.id, m.hp]));
+  for (const event of log) {
+    if (event.action === "ATTACK") hp.set(event.targetId, Math.max(0, (hp.get(event.targetId) ?? 0) - event.damage));
+    if (event.action === "HEAL" && (hp.get(event.targetId) ?? 0) > 0) {
+      const max = lineup.find((m) => m.id === event.targetId)?.hp ?? 0;
+      hp.set(event.targetId, Math.min(max, (hp.get(event.targetId) ?? 0) + event.damage));
+    }
+  }
+  return hp;
+}
+
+async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType<typeof tx.towerRun.findUnique>> & { members: Array<{ id: string; userId: string; expeditionRole: string; afkRemoved: boolean; consecutiveMisses: number }> }, vol: TowerVolatile, submissions: Record<string, { confirmedAt: string; actions: unknown }>, battleLog: string[]) {
+  let state = vol.exploration;
+  if (!state) return;
+  const room = currentTowerRoom(state);
+  const choices = Object.values(submissions).map((s) => (s.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string });
+  const majority = (values: (string | undefined)[]) => {
+    const count = new Map<string, number>();
+    for (const value of values) if (value) count.set(value, (count.get(value) ?? 0) + 1);
+    return [...count].sort((a, b) => b[1] - a[1])[0]?.[0];
+  };
+
+  if (room.cleared) {
+    const routeId = majority(choices.map((c) => c.routeId));
+    if (routeId && room.connections.includes(routeId)) {
+      state = applyTowerPressure({ ...state, currentRoomId: routeId, visited: [...new Set([...state.visited, routeId])], lastOutcome: `O grupo avançou para ${state.graph.find((r) => r.id === routeId)?.title}.` });
+      battleLog.push(state.lastOutcome!);
+    } else {
+      state = applyTowerPressure({ ...state, lastOutcome: "A expedição hesitou. A Torre ficou mais atenta." });
+      battleLog.push(state.lastOutcome!);
+    }
+  } else if (room.kind === "PUZZLE" && room.puzzle) {
+    const answer = majority(choices.map((c) => c.puzzleChoice));
+    const success = answer === room.puzzle.answer;
+    room.cleared = true;
+    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: success ? "O mecanismo cedeu. O grupo registrou uma nova descoberta." : "Resposta errada. A passagem abriu, mas a Torre despertou." }, success ? 0 : 2);
+    battleLog.push(state.lastOutcome!);
+    if (success) {
+      const found = await tx.towerCodexEntry.findFirst({ where: { userId: null, subjectType: "PUZZLE", subjectKey: room.puzzle.id }, select: { id: true } });
+      if (found) await tx.towerCodexEntry.update({ where: { id: found.id }, data: { discoveryLevel: { increment: 1 }, data: { text: room.puzzle.discovery } } });
+      else await tx.towerCodexEntry.create({ data: { userId: null, subjectType: "PUZZLE", subjectKey: room.puzzle.id, discoveryLevel: 1, data: { text: room.puzzle.discovery } } });
+    }
+  } else if (room.kind === "REST") {
+    const runMascots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id }, state: "IN_TOWER" } });
+    const healMult = state.activeModifiers.reduce((m, mod) => m * mod.healingMultiplier, 1);
+    for (const mascot of runMascots) await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * .2 * healMult)) } });
+    room.cleared = true;
+    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: "O grupo descansou e recuperou parte do HP. A Torre não parou de contar o tempo." });
+    battleLog.push(state.lastOutcome!);
+  } else if (room.kind === "COMBAT" || room.kind === "BOSS") {
+    const snapshots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id } }, include: { member: true } });
+    const rows = await tx.mascot.findMany({ where: { id: { in: snapshots.map((m) => m.mascotId) } } });
+    const snapById = new Map(snapshots.map((m) => [m.mascotId, m]));
+    const allies = rows.flatMap((m, index) => {
+      const snap = snapById.get(m.id); if (!snap || snap.currentHp <= 0) return [];
+      const fighter = toLeagueMascot(m, index + 1, snap.currentStance);
+      fighter.hp = snap.currentHp;
+      return [fighter];
+    });
+    const avg = Math.max(1, Math.round(allies.reduce((sum, m) => sum + m.level, 0) / Math.max(1, allies.length)));
+    const pressureMult = state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1);
+    const count = room.kind === "BOSS" ? Math.max(2, allies.length) : Math.max(2, Math.min(allies.length, 4));
+    const pool = room.kind === "BOSS" ? [609, 94, 197, 302] : [92, 198, 200, 353, 607, 215];
+    const enemies: LeagueMascot[] = Array.from({ length: count }, (_, index) => {
+      const pokemonId = pool[(room.index + index) % pool.length];
+      const base = Math.max(12, Math.round((avg * .72 + 18 + room.index * 2) * pressureMult));
+      return { id: `tower:${run.id}:${room.id}:${index}`, ownerId: "TORRE", pokemonId, types: getPokemonTypes(pokemonId), name: getPokemonName(pokemonId), level: Math.max(1, avg + room.index * 2), force: base, agility: base, instinct: base, vitality: base, charisma: base, hp: 55 + avg * 6 + base * 4, combatRole: normalizeCombatRole(index % 2 ? "DEFENDER" : "ATTACKER"), slot: index + 1 };
+    });
+    const result = runLeagueCombat(allies, enemies);
+    const hp = finalHp(allies, result.log);
+    for (const ally of allies) await tx.towerRunMascot.updateMany({ where: { mascotId: ally.id, member: { runId: run.id } }, data: { currentHp: hp.get(ally.id) ?? 0, state: (hp.get(ally.id) ?? 0) <= 0 ? "DEFEATED" : "IN_TOWER" } });
+    const won = result.winner === "A";
+    room.cleared = won;
+    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: won ? `${room.title} foi vencida.` : "A expedição foi derrotada.", pendingReplay: { winner: result.winner, log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, teamASurvivors: result.teamASurvivors, teamBSurvivors: result.teamBSurvivors, title: room.title } });
+    battleLog.push(state.lastOutcome!);
+  }
+  vol.exploration = state;
+}
 
 /** Duração da janela de turno por ritmo. */
 export function windowMsFor(pace: string): number {
@@ -49,8 +134,10 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const active = run.members.filter((m) => !m.afkRemoved);
       const battleLog: string[] = [];
 
+      if (vol.exploration) await resolveRoom(tx, run as never, vol, submissions, battleLog);
+
       // ── Resolução do encounter (uma rodada do motor tático por Turno Global) ──
-      if (vol.battle && !vol.battle.encounterOver) {
+      if (!vol.exploration && vol.battle && !vol.battle.encounterOver) {
         // Coleta intenções por mascote e interações com objetos das submissões.
         const intents: Record<string, TowerIntent> = {};
         const interactions: string[] = [];
@@ -108,8 +195,9 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const nextTurn = run.globalTurn + 1;
       const order = Array.isArray(run.resolutionOrder) ? (run.resolutionOrder as string[]) : [];
       const rotated = order.length ? [...order.slice(1), order[0]] : order;
-      const bossVictory = Boolean(vol.battle?.isBoss && vol.battle.encounterOver && vol.battle.outcome === "WIN");
-      const runFailed = Boolean(vol.battle?.encounterOver && vol.battle.outcome === "LOSS");
+      const explorationRoom = vol.exploration ? currentTowerRoom(vol.exploration) : null;
+      const bossVictory = Boolean(explorationRoom?.kind === "BOSS" && explorationRoom.cleared) || Boolean(vol.battle?.isBoss && vol.battle.encounterOver && vol.battle.outcome === "WIN");
+      const runFailed = Boolean(vol.exploration?.pendingReplay?.winner === "B" && explorationRoom && !explorationRoom.cleared) || Boolean(vol.battle?.encounterOver && vol.battle.outcome === "LOSS");
       const log = [...(vol.log ?? []), ...battleLog, ...(bossVictory ? ["🏆 Boss do andar derrotado!"] : []), `Turno ${run.globalTurn} resolvido.`].slice(-50);
 
       if (stillActive <= 0 || bossVictory || runFailed) {

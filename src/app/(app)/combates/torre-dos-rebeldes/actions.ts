@@ -34,6 +34,7 @@ import {
   type TowerSceneTrigger,
 } from "@/lib/tower/narrative";
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
+import { currentTowerRoom, generateTowerRoomGraph } from "@/lib/tower/rooms";
 
 const PATH = "/combates/torre-dos-rebeldes";
 
@@ -96,6 +97,23 @@ export async function clearMyTowerCooldownAction() {
   return { ok: true as const };
 }
 
+/** Interações de metaprogressão feitas fora das runs. Cada estudo vale uma vez por dia. */
+export async function contributeTowerPreparationAction(metricKey: "WARD" | "INSIGHT" | "MAP") {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito à equipe ADMIN." };
+  if (!(["WARD", "INSIGHT", "MAP"] as const).includes(metricKey)) return { error: "Preparação inválida." };
+  const day = new Date().toISOString().slice(0, 10);
+  const featKey = `TOWER_PREP:${metricKey}:${day}`;
+  const used = await prisma.towerFeat.findFirst({ where: { userId: user.id, featKey }, select: { id: true } });
+  if (used) return { error: "Você já contribuiu com este estudo hoje." };
+  await prisma.$transaction([
+    prisma.towerFeat.create({ data: { userId: user.id, featKey, data: { metricKey, day } } }),
+    prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey } }, create: { floorId: 1, metricKey, value: 1 }, update: { value: { increment: 1 } } }),
+  ]);
+  revalidatePath(PATH);
+  return { ok: true as const };
+}
+
 // ── Fase 4 · Lobby & entrada ──────────────────────────────────────────────────
 
 /** Dados para montar o lobby: run ativa, cooldown, mascotes elegíveis, Funções. */
@@ -108,6 +126,10 @@ export async function getTowerLobbyDataAction() {
   const config = await getTowerConfig();
   const scenes = await getTowerNarrativeScenes();
   const failures = await prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] } } } });
+  const [communityProgress, communityCodex] = await Promise.all([
+    prisma.towerCommunityProgress.findMany({ where: { floorId: 1 }, orderBy: { metricKey: "asc" } }),
+    prisma.towerCodexEntry.findMany({ where: { userId: null }, orderBy: { updatedAt: "desc" }, take: 30 }),
+  ]);
   const active = await findActiveRunForUser(user.id);
   const openRuns = await prisma.towerRun.findMany({
     where: { status: "LOBBY" }, orderBy: { createdAt: "desc" }, take: 20,
@@ -139,6 +161,8 @@ export async function getTowerLobbyDataAction() {
     scenes,
     lobbyScene: towerSceneFor(scenes, "LOBBY", 1, failures),
     failures,
+    communityProgress,
+    communityCodex,
     knowledge: unlockedTowerScenes(scenes, failures).filter((scene) => scene.knowledgeTitle?.trim()).map((scene) => ({ id: scene.id, title: scene.knowledgeTitle!, text: scene.knowledgeText || scene.text, floor: scene.floor })),
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
@@ -299,7 +323,7 @@ export async function abandonTowerRunAction(runId: string): Promise<{ error: str
 // ── Fase 5 · Turn Engine (janela global; Online 120s / Lento 4h) ──────────────
 // Núcleo em @/lib/tower/turn (compartilhado com o cron; não exposto como action).
 
-/** Inicia a expedição: gera o encounter, LOBBY → ACTIVE e abre a 1ª janela. */
+/** Inicia a expedição no grafo de salas, LOBBY → ACTIVE e abre a 1ª janela. */
 export async function startTowerExpeditionAction(runId: string): Promise<{ error: string } | { ok: true }> {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
@@ -317,33 +341,16 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   if((lobby?.hostId??run.members[0]?.userId)!==user.id)return {error:"Somente o criador da sala pode iniciar."};
   if(!run.members.every(m=>lobby?.ready?.[m.userId]))return {error:"Todos os jogadores precisam marcar Pronto."};
 
-  const mascotIds = run.members.flatMap((m) => m.mascots.map((x) => x.mascotId));
-  const rows = await prisma.mascot.findMany({
-    where: { id: { in: mascotIds } },
-    select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
-  });
-  const byId = new Map(rows.map((r) => [r.id, r]));
-  const members = run.members.map((m) => ({
-    userId: m.userId,
-    mascots: m.mascots.flatMap((mm): MemberMascotInput[] => {
-      const r = byId.get(mm.mascotId);
-      if (!r) return [];
-      return [{
-        id: r.id, pokemonId: r.pokemonId, name: r.nickname ?? getPokemonName(r.pokemonId), level: r.level,
-        force: r.statForce, agility: r.statAgility, instinct: r.statInstinct, vitality: r.statVitality, charisma: r.statCharisma,
-        stance: normalizeCombatRole(mm.currentStance),
-      }];
-    }),
-  }));
-
-  const battle = generateEncounter(run.seed, members);
+  const progress = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1 } });
+  const unlocked = progress.filter((entry) => entry.value >= 5).map((entry) => entry.metricKey);
+  const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: unlocked, pressureShield: unlocked.includes("WARD") ? 2 : 0 };
   const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
   await prisma.towerRun.update({
     where: { id: runId },
     data: {
       status: "ACTIVE", startedAt: new Date(), globalTurn: 1, resolutionOrder: order,
       nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
-      volatileState: { ...(run.volatileState as object ?? {}), submissions: {}, roomIndex: 1, log: ["A porta se fechou. A primeira sala foi revelada."], battle } as unknown as Prisma.InputJsonValue,
+      volatileState: { ...(run.volatileState as object ?? {}), submissions: {}, roomIndex: 1, log: ["A porta se fechou. O mapa da Torre começou a se desenhar."], exploration } as unknown as Prisma.InputJsonValue,
     },
   });
   revalidatePath(PATH);
@@ -472,6 +479,19 @@ export async function getTowerRunStateAction(runId: string) {
       .map((u) => ({ id: u.id, name: u.name, hp: u.hp, maxHp: u.maxHp, role: u.role }));
   }
 
+  const exploration = vol.exploration;
+  const room = exploration ? currentTowerRoom(exploration) : null;
+  const communityDiscoveries = exploration ? await prisma.towerCodexEntry.findMany({
+    where: { userId: null, subjectType: "PUZZLE" },
+    select: { subjectKey: true, discoveryLevel: true, data: true },
+    orderBy: { updatedAt: "desc" }, take: 20,
+  }) : [];
+  if (exploration) {
+    const snapshots = await prisma.towerRunMascot.findMany({ where: { member: { runId, userId: user.id } } });
+    const names = new Map((await prisma.mascot.findMany({ where: { id: { in: snapshots.map((m) => m.mascotId) } }, select: { id: true, nickname: true, pokemonId: true } })).map((m) => [m.id, m.nickname ?? getPokemonName(m.pokemonId)]));
+    myMascots = snapshots.map((m) => ({ id: m.mascotId, name: names.get(m.mascotId) ?? "Mascote", hp: m.currentHp, maxHp: m.maxHp, role: m.currentStance }));
+  }
+
   return {
     ok: true as const,
     run: {
@@ -487,6 +507,21 @@ export async function getTowerRunStateAction(runId: string) {
     mine: { userId: user.id, confirmed: Boolean(submissions[user.id]) },
     lobby: { code: lobby?.code ?? run.id.slice(-6).toUpperCase(), hostId: lobby?.hostId ?? run.members[0]?.userId ?? "", ready: lobby?.ready ?? {} },
     battle,
+    exploration: exploration && room ? {
+      currentRoom: { ...room, puzzle: room.puzzle ? { id: room.puzzle.id, prompt: room.puzzle.prompt, options: room.puzzle.options, hint: exploration.countermeasures?.includes("INSIGHT") ? "O Arquivo recomenda observar a sequência, não a intensidade." : null } : undefined },
+      rooms: exploration.graph.map((node) => { const known = exploration.visited.includes(node.id) || exploration.countermeasures?.includes("MAP"); return { id: node.id, title: known ? node.title : "Sala desconhecida", kind: known ? node.kind : "UNKNOWN", visited: exploration.visited.includes(node.id), current: node.id === room.id, cleared: node.cleared }; }),
+      routes: room.connections.map((id) => {
+        const node = exploration.graph.find((candidate) => candidate.id === id);
+        return node ? { id: node.id, title: exploration.countermeasures?.includes("MAP") ? node.title : "Rota desconhecida", kind: exploration.countermeasures?.includes("MAP") ? node.kind : "UNKNOWN", visited: exploration.visited.includes(node.id), cleared: node.cleared } : null;
+      }).filter(Boolean),
+      pressure: exploration.pressure,
+      modifiers: exploration.activeModifiers,
+      countermeasures: exploration.countermeasures ?? [],
+      pressureShield: exploration.pressureShield ?? 0,
+      lastOutcome: exploration.lastOutcome ?? null,
+      replay: exploration.pendingReplay ?? null,
+      communityDiscoveries,
+    } : null,
     myMascots,
     log: (vol.log ?? []).slice(-12),
     lastEvents: vol.lastEvents ?? [],

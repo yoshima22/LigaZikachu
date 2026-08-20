@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
-import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction } from "../actions";
+import { getTowerLobbyDataAction, createTowerRunAction, joinTowerRoomAction, contributeTowerPreparationAction } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
 import { TowerKnowledge, TowerNarrative, TowerNarrativeAdmin } from "./tower-narrative";
 import { TowerAdminSettings } from "./tower-admin-settings";
@@ -80,6 +80,20 @@ export function TowerLobby() {
       <TowerNarrative scene={data.lobbyScene} />
       <TowerAdminSettings initial={data.config} onSaved={load}/>
       <TowerKnowledge entries={data.knowledge} failures={data.failures} />
+      <section className={card}>
+        <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">Preparação entre runs</p>
+        <h2 className="mt-1 text-lg font-black text-white">O conhecimento da comunidade enfraquece a Torre</h2>
+        <p className="mt-2 text-xs leading-relaxed text-slate-400">No começo, mecanismos e objetos não explicam o que fazem. Acertos entram no Arquivo compartilhado. Fora da run, cada jogador pode estudar uma frente por dia; com 5 contribuições, a contramedida passa a valer nas próximas expedições.</p>
+        <div className="mt-4 grid gap-3 md:grid-cols-3">{([
+          ["WARD", "Reforçar proteções", "Absorve os dois primeiros pontos de Pressão."] as const,
+          ["INSIGHT", "Decifrar mecanismos", "Prepara pistas mais claras para enigmas descobertos."] as const,
+          ["MAP", "Mapear corredores", "Amplia o conhecimento das rotas futuras."] as const,
+        ]).map(([key, title, text]) => {
+          const value = data.communityProgress.find((entry) => entry.metricKey === key)?.value ?? 0;
+          return <article key={key} className="rounded-xl border border-cyan-400/20 bg-cyan-950/10 p-3"><div className="flex items-center justify-between gap-2"><b className="text-sm text-cyan-100">{title}</b><span className="text-xs font-black text-[#FFCB05]">{Math.min(5, value)}/5</span></div><p className="mt-1 min-h-10 text-[11px] text-slate-400">{text}</p><button type="button" disabled={pending || value >= 5} onClick={() => start(async () => { const res = await contributeTowerPreparationAction(key); if ("error" in res) toast.error(res.error); else { toast.success("Estudo registrado no Arquivo comunitário."); load(); } })} className="mt-3 w-full rounded-lg border border-cyan-300/30 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40">{value >= 5 ? "CONTRAMEDIDA LIBERADA" : "CONTRIBUIR HOJE"}</button></article>;
+        })}</div>
+        {data.communityCodex.length > 0 && <div className="mt-4 rounded-xl border border-purple-400/20 bg-purple-950/15 p-3"><b className="text-xs uppercase tracking-wider text-purple-200">Descobertas compartilhadas</b>{data.communityCodex.slice(0, 6).map((entry) => <p key={entry.id} className="mt-2 text-xs text-slate-300">✦ {String((entry.data as { text?: string } | null)?.text ?? entry.subjectKey)}</p>)}</div>}
+      </section>
       <TowerNarrativeAdmin initial={data.scenes} />
 
       {data.rooms.length>0&&<section className={card}><h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Salas aguardando jogadores</h2><p className="mt-1 text-[11px] text-slate-500">Prepare seus dois mascotes abaixo e entre em uma sala de até três treinadores.</p><div className="mt-3 grid gap-3 md:grid-cols-2">{data.rooms.map(room=><article key={room.id} className="rounded-xl border border-purple-400/20 bg-purple-950/15 p-3"><div className="flex justify-between"><b className="text-white">Sala {room.code}</b><span className="text-xs text-purple-300">{room.members.length}/3</span></div><p className="mt-1 text-[10px] text-slate-400">Host: {room.host} · {room.pace==="ONLINE"?"120s":"4h"}</p><div className="mt-2 flex flex-wrap gap-1">{room.members.map(m=><span key={m.userId} className="rounded-full bg-slate-800 px-2 py-1 text-[9px] text-slate-300">{m.name}{m.ready?" ✓":""}</span>)}</div><button disabled={pending||picks.length!==2||!role} onClick={()=>start(async()=>{if(!role)return;const res=await joinTowerRoomAction({runId:room.id,expeditionRole:role,mascotIds:picks,stanceByMascot:stances});if("error" in res)toast.error(res.error);else{toast.success("Você entrou na sala.");load()}})} className="mt-3 w-full rounded-lg border border-purple-400/40 bg-purple-400/10 py-2 text-xs font-black text-purple-200 disabled:opacity-40">Entrar nesta sala</button></article>)}</div></section>}

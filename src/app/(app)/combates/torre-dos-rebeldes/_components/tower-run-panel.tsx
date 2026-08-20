@@ -13,6 +13,8 @@ import {
 import { TowerBattleGrid } from "./tower-battle-grid";
 import { TowerNarrative } from "./tower-narrative";
 import { TowerCombatScene } from "./tower-combat-scene";
+import { TowerRoomView } from "./tower-room-view";
+import { LeagueBattleReplayModal, type TurnLog, type ReplayLineupFighter } from "../../liga-semanal/_components/league-battle-replay";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
 type Intent = "ADVANCE" | "DEFEND";
@@ -43,6 +45,9 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [interacting, setInteracting] = useState<string[]>([]);
   const [destinations, setDestinations] = useState<Record<string, { x: number; y: number }>>({});
   const [targets, setTargets] = useState<Record<string, string>>({});
+  const [routeId, setRouteId] = useState<string>();
+  const [puzzleChoice, setPuzzleChoice] = useState<string>();
+  const [showReplay, setShowReplay] = useState(false);
   const inFlight = useRef(false);
 
   const refresh = useCallback(async () => {
@@ -96,7 +101,11 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
       {run.status === "ACTIVE" && (
         <div className="mt-4 space-y-4">
-          {state.battle && <TowerCombatScene
+          {state.exploration && <TowerRoomView exploration={state.exploration} routeId={routeId} puzzleChoice={puzzleChoice} disabled={state.mine.confirmed || pending} onRoute={setRouteId} onPuzzle={setPuzzleChoice} />}
+          {state.exploration?.lastOutcome && <p className="rounded-xl border border-purple-400/25 bg-purple-950/20 p-3 text-sm text-purple-100">{state.exploration.lastOutcome}</p>}
+          {state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Assistir ao combate convencional completo</button>}
+          {showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}
+          {!state.exploration && state.battle && <TowerCombatScene
             events={state.lastEvents} units={state.battle.units} turn={state.lastResolvedTurn}
           />}
           <TowerNarrative scene={state.scene} />
@@ -137,7 +146,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           )}
 
           {/* Sala + fog */}
-          {state.battle && <TowerBattleGrid battle={state.battle} mineId={state.mine.userId} disabled={state.mine.confirmed || pending || state.battle.over} destinations={destinations} targets={targets}
+          {!state.exploration && state.battle && <TowerBattleGrid battle={state.battle} mineId={state.mine.userId} disabled={state.mine.confirmed || pending || state.battle.over} destinations={destinations} targets={targets}
             onDestination={(id, p) => { setDestinations((cur) => ({ ...cur, [id]: p })); setIntents((cur) => ({ ...cur, [id]: "ADVANCE" })); }}
             onTarget={(id, target) => setTargets((cur) => ({ ...cur, [id]: target }))}
             onDefend={(id) => setIntents((cur) => ({ ...cur, [id]: "DEFEND" }))} />}
@@ -185,13 +194,13 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
           )}
 
           {/* Confirmar ações do turno */}
-          {!state.battle?.over && (
+          {(state.exploration || !state.battle?.over) && (
             <button type="button" disabled={pending || state.mine.confirmed} onClick={() => start(async () => {
-              const payload = { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting, destinations, targets };
+              const payload = state.exploration ? { routeId, puzzleChoice, action: "RESOLVE_ROOM" } : { intents: Object.fromEntries(state.myMascots.map((m) => [m.id, intents[m.id] ?? "ADVANCE"])), interactions: interacting, destinations, targets };
               const res = await submitTowerActionAction(runId, payload);
               if ("error" in res) { toast.error(res.error); return; }
               toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Ordens confirmadas.");
-              setDestinations({}); setTargets({}); void refresh();
+              setDestinations({}); setTargets({}); setRouteId(undefined); setPuzzleChoice(undefined); void refresh();
             })} className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-black text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">
               {state.mine.confirmed ? "Ordens confirmadas — aguardando os demais / deadline" : "Confirmar ordens do turno"}
             </button>
@@ -206,7 +215,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
         </div>
       )}
 
-      {ended && <p className={`mt-3 text-sm ${run.status==="FAILED"?"text-red-300":"text-slate-400"}`}>Esta expedição foi {run.status === "FINISHED" ? "concluída" : run.status==="FAILED"?"derrotada — novas informações podem ter surgido no Arquivo da Torre":"abandonada"}.</p>}
+      {ended && <div className="mt-4 space-y-3"><p className={`text-sm ${run.status==="FAILED"?"text-red-300":"text-slate-400"}`}>Esta expedição foi {run.status === "FINISHED" ? "concluída" : run.status==="FAILED"?"derrotada — novas informações podem ter surgido no Arquivo da Torre":"abandonada"}.</p>{state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Rever o último combate completo</button>}{showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}</div>}
 
       <button type="button" disabled={pending} onClick={() => start(async () => {
         const res = await abandonTowerRunAction(runId);
