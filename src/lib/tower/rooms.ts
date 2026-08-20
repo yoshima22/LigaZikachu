@@ -118,7 +118,7 @@ export function generateTowerRoomGraph(seed: string, floor = 1): TowerExploratio
     if(column===12&&row!==1)next.push("boss");
     const title=kind==="ENTRANCE"?`Entrada do ${floor}º andar`:kind==="BOSS"?`Câmara do Chefe ${floor}/7`:names[kind][hash(`${id}:name`)%names[kind].length];
     const description=kind==="BOSS"?`O regente do ${floor}º andar aguarda com seus seguidores.`:kind==="PUZZLE"?"Um mecanismo pode abrir ou cortar caminhos adiante.":kind==="RESCUE"?"Jaulas de contenção guardam mascotes perdidos em outras runs.":"A função real desta sala só fica clara ao atravessá-la.";
-    graph.push(room(id,column*3+row,kind,title,description,[...new Set(next)],4+column*7.6,[18,50,82][row],kind==="ENTRANCE",kind==="PUZZLE"?PUZZLES[hash(`${id}:puzzle`)%PUZZLES.length]:undefined));
+    graph.push(room(id,column*3+row,kind,title,description,[...new Set(next)],[18,50,82][row],4+column*7.6,kind==="ENTRANCE",kind==="PUZZLE"?PUZZLES[hash(`${id}:puzzle`)%PUZZLES.length]:undefined));
   }
   return { currentRoomId: "entrance", visited: ["entrance"], graph, pressure: 0, activeModifiers: [] };
 }

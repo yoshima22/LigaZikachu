@@ -37,7 +37,7 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
   let state = vol.exploration;
   if (!state) return;
   const room = currentTowerRoom(state);
-  const choices = Object.values(submissions).map((s) => (s.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string });
+  const choices = Object.values(submissions).map((s) => (s.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string; _roomId?: string }).filter((choice) => !choice._roomId || choice._roomId === room.id);
   const distinctRoutes = new Set(choices.map((choice) => choice.routeId).filter(Boolean));
   const splitPathPenalty = distinctRoutes.size > 1 ? 2 : 1;
   const majority = (values: (string | undefined)[]) => {
@@ -66,7 +66,8 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     const answer = majority(choices.map((c) => c.puzzleChoice));
     const success = answer === room.puzzle.answer;
     room.cleared = success;
-    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: success ? "O mecanismo cedeu. O grupo registrou uma nova descoberta." : "Resposta errada. A passagem abriu, mas a Torre despertou." }, success ? 0 : 2);
+    const failurePressure = state.countermeasures?.includes("ROLE:ARTIFICE") ? 1 : 2;
+    state = applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: success ? "O mecanismo cedeu. O grupo registrou uma nova descoberta." : `Resposta errada. A passagem abriu, mas a Torre despertou${failurePressure===1?"; o Artífice conteve parte da reação":""}.` }, success ? 0 : failurePressure);
     battleLog.push(state.lastOutcome!);
     if (success) {
       const found = await tx.towerCodexEntry.findFirst({ where: { userId: null, subjectType: "PUZZLE", subjectKey: room.puzzle.id }, select: { id: true } });
@@ -91,7 +92,8 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
     const decision = majority(choices.map((choice) => choice.action));
     const runMascots = await tx.towerRunMascot.findMany({ where: { member: { runId: run.id }, state: "IN_TOWER" } });
     const healMult = state.activeModifiers.reduce((m, mod) => m * mod.healingMultiplier, 1);
-    if (decision === "INTERACT") for (const mascot of runMascots) await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * .2 * healMult)) } });
+    const ritualHeal = state.countermeasures?.includes("ROLE:RITUALISTA") ? 1.1 : 1;
+    if (decision === "INTERACT") for (const mascot of runMascots) await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { currentHp: Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * .2 * healMult * ritualHeal)) } });
     room.cleared = true;
     state = decision === "INTERACT"
       ? applyTowerPressure({ ...state, graph: [...state.graph], lastOutcome: "O grupo decidiu usar a chama, recuperou parte do HP e aceitou que a Torre avançasse seu relógio." })
@@ -100,7 +102,8 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
   } else if (room.kind === "COMBAT" || room.kind === "BOSS") {
     const encounterDecision = majority(choices.map((choice) => choice.action));
     if (encounterDecision === "WAIT") {
-      state = applyTowerPressure({ ...state, encounter: state.encounter ? { ...state.encounter, preparationTurns: state.encounter.preparationTurns + 1 } : state.encounter, lastOutcome: "O grupo decidiu esperar reforços. A Torre ganhou +1 de Pressão adicional e fortaleceu seus defensores." }, Object.keys(submissions).length + 1);
+      const navigatorDiscount = state.countermeasures?.includes("ROLE:NAVEGADOR") && !state.countermeasures.includes("ROLE:NAVEGADOR:USED") ? 1 : 0;
+      state = applyTowerPressure({ ...state, countermeasures: navigatorDiscount ? [...(state.countermeasures??[]),"ROLE:NAVEGADOR:USED"] : state.countermeasures, encounter: state.encounter ? { ...state.encounter, preparationTurns: state.encounter.preparationTurns + 1 } : state.encounter, lastOutcome: navigatorDiscount ? "O Navegador encontrou um abrigo: a primeira espera custou 1 Pressão a menos." : "O grupo decidiu esperar reforços. A Torre ganhou +1 de Pressão adicional e fortaleceu seus defensores." }, Object.keys(submissions).length + 1 - navigatorDiscount);
       battleLog.push(state.lastOutcome!);
       vol.exploration = state;
       return;
@@ -191,12 +194,12 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
-      const run = await tx.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+      const run = await tx.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
       if (!run || run.status !== "ACTIVE") return;
 
       const vol = (run.volatileState ?? {}) as TowerVolatile;
       const submissions = vol.submissions ?? {};
-      const active = run.members.filter((m) => !m.afkRemoved);
+      const active = run.members.filter((m) => !m.afkRemoved && m.mascots.some((mascot) => mascot.currentHp > 0 && mascot.state === "IN_TOWER"));
       const battleLog: string[] = [];
 
       if (vol.exploration) await resolveRoom(tx, run as never, vol, submissions, battleLog);
@@ -277,6 +280,7 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
         await tx.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT_POINTS" } }, create: { floorId: 1, metricKey: "TALENT_POINTS", value: 1 }, update: { value: { increment: 1 } } });
         const shardCount = run.pace === "ONLINE" ? 2 : 1;
         for (const member of active) for (let shard = 0; shard < shardCount; shard++) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_RELIC_SHARD", data: { floor: run.currentFloor, pace: run.pace } } });
+        for (const member of run.members.filter((entry) => !entry.afkRemoved)) await tx.towerFeat.create({ data: { userId: member.userId, runId, featKey: "TOWER_TALENT_CONTRIBUTION", data: { floor: run.currentFloor, source: "BOSS", spectator: !active.some((entry) => entry.userId === member.userId) } } });
       }
 
       if (bossVictory && run.currentFloor < 7) {
