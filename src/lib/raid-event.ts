@@ -1488,7 +1488,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       const roleAttributeMultiplier = {
         ATTACKER: 1 + roleStatBonus(mascot.statForce, 0.08, 0.26),
         FLANK: 1 + roleStatBonus(mascot.statAgility, 0.04, 0.18),
-        OPPORTUNIST: 1 + roleStatBonus(mascot.statInstinct, 0.05, 0.18),
+        OPPORTUNIST: 1 + roleStatBonus(mascot.statInstinct, 0.05, 0.28, 250),
         ENCOURAGER: 1,
         GUARDIAN: 0.9,
         DUELIST: 1 + roleStatBonus((mascot.statForce + mascot.statInstinct) / 2, 0.06, 0.18),

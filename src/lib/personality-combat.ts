@@ -50,10 +50,10 @@ export function debuffResistanceFactor(source: CombatUnit, target: CombatUnit) {
   return clamped * (target.personality === "GLUTTON" ? 0.6 : 1);
 }
 
-// Brincalhão: ao entrar, 12% (por Brincalhão no time) de +5% de agilidade ao time
+// Brincalhão: ao entrar, 50% (por Brincalhão no time) de +5% de agilidade ao time
 // nos 2 primeiros rounds. Retorna se o buff foi ativado para a equipe.
 export function rollPlayfulTeamBuff(team: CombatUnit[]) {
-  return team.filter((m) => m.personality === "PLAYFUL").some(() => Math.random() < 0.12);
+  return team.filter((m) => m.personality === "PLAYFUL").some(() => Math.random() < 0.50);
 }
 
 // Multiplicador de agilidade efetiva por personalidade (para ações extras).

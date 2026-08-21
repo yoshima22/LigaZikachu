@@ -374,7 +374,7 @@ export function runLeagueCombat(
   const dramaticSaveUsed = new Set<string>();          // Dramático já usou a sobrevivência (1x/batalha)
   const travessoFirstHit = new Set<string>();          // "actorId:targetId" já teve o 1º ataque (Travesso)
   // Brincalhão: ao entrar, 12% de chance de dar +5% de Agilidade ao time por 2 rounds.
-  const playfulRoll = (team: LeagueMascot[]) => team.filter(m => m.personality === "PLAYFUL").some(() => Math.random() < 0.12);
+  const playfulRoll = (team: LeagueMascot[]) => team.filter(m => m.personality === "PLAYFUL").some(() => Math.random() < 0.50);
   const playfulTeamBuff: Record<"A" | "B", boolean> = { A: playfulRoll(a), B: playfulRoll(b) };
   // Leal: escolhe um aliado para proteger (maior Carisma do time, exceto ele).
   const loyalAlly = new Map<string, LeagueMascot>();
