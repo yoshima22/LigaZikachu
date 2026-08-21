@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState, useTransition } from "react";
-import { Award, BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle, PawPrint } from "lucide-react";
+import { Award, BookOpen, ChevronDown, ChevronUp, Swords, Trash2, CheckCircle, PawPrint, Search, X } from "lucide-react";
 import { POKEMON_TYPE_EMOJIS } from "@/lib/pokemon-types-data";
 import { submitDeckForMatch, deleteOwnDeckSubmission } from "../../../../../actions";
 import { DeckActionButtons } from "@/components/ui/deck-action-buttons";
@@ -60,10 +60,16 @@ export function MatchDeckSelector({
   const [deckList, setDeckList] = useState(existingSubmission?.deckList ?? "");
   const [archetype, setArchetype] = useState(existingSubmission?.archetype ?? "");
   const [selectedMascotId, setSelectedMascotId] = useState(existingSubmission?.mascotMissionMascotId ?? "");
+  const [mascotQuery, setMascotQuery] = useState("");
+  const [mascotPickerOpen, setMascotPickerOpen] = useState(false);
   const [selectedGymBadgeId, setSelectedGymBadgeId] = useState(existingSubmission?.gymBadgeId ?? "");
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
   const selectedMascot = mascotOptions.find((mascot) => mascot.id === selectedMascotId) ?? null;
+  const filteredMascots = useMemo(() => {
+    const query = mascotQuery.trim().toLocaleLowerCase("pt-BR");
+    return mascotOptions.filter((mascot) => !query || `${mascot.displayName} ${mascot.speciesName} ${mascot.level}`.toLocaleLowerCase("pt-BR").includes(query)).slice(0, 12);
+  }, [mascotOptions, mascotQuery]);
   const missionValidation = useMemo(
     () => selectedMascot ? validateMascotMissionDeckList(deckList, selectedMascot.acceptedCardNames) : null,
     [deckList, selectedMascot],
@@ -114,11 +120,11 @@ export function MatchDeckSelector({
   };
 
   return (
-    <div className="rounded-xl border border-border bg-slate-900/50 overflow-hidden">
+    <div className="overflow-hidden rounded-2xl border border-slate-700/80 bg-gradient-to-br from-slate-900/90 via-slate-950/90 to-indigo-950/30 shadow-xl shadow-black/10">
       {/* Header da partida */}
       <button
         type="button"
-        className="flex w-full items-center justify-between gap-3 px-4 py-3 hover:bg-slate-800/40 transition-colors"
+        className="flex w-full items-center justify-between gap-3 px-4 py-3.5 transition-colors hover:bg-slate-800/40"
         onClick={() => setOpen(o => !o)}
       >
         <div className="flex items-center gap-2 min-w-0">
@@ -155,7 +161,7 @@ export function MatchDeckSelector({
 
       {/* Formulário */}
       {open && (
-        <div className="border-t border-border px-4 py-4 space-y-3">
+        <div className="space-y-4 border-t border-slate-700/70 px-4 py-5">
           {existingSubmission && (
             <div className="flex items-start justify-between gap-2 rounded-lg bg-emerald-500/10 border border-emerald-500/20 px-3 py-2">
               <div>
@@ -235,16 +241,25 @@ export function MatchDeckSelector({
                     <label className="space-y-1 text-[10px] text-slate-400">
                       <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-emerald-300"><PawPrint size={11} /> Missão de Mascote (opcional)</span>
                       <span className="block text-[10px] leading-4 text-slate-500">A validação acontece agora, mas a EXP da missão só é entregue quando o dia for oficialmente encerrado.</span>
-                      <select
-                        value={selectedMascotId}
-                        onChange={(event) => { setSelectedMascotId(event.target.value); setSuccess(false); }}
-                        className="w-full rounded-lg border border-emerald-400/25 bg-slate-950 px-2.5 py-2 text-xs text-slate-100 outline-none focus:border-emerald-400"
-                      >
-                        <option value="">Não participar da missão neste deck</option>
-                        {mascotOptions.map((mascot) => (
-                          <option key={mascot.id} value={mascot.id}>{mascot.displayName} · {mascot.speciesName} · Nv.{mascot.level}</option>
-                        ))}
-                      </select>
+                      <span className="relative block">
+                        <Search size={14} className="pointer-events-none absolute left-3 top-3 text-emerald-300/60" />
+                        <input
+                          value={mascotQuery}
+                          onFocus={() => setMascotPickerOpen(true)}
+                          onChange={(event) => { setMascotQuery(event.target.value); setMascotPickerOpen(true); }}
+                          placeholder={selectedMascot ? `${selectedMascot.displayName} (${selectedMascot.speciesName})` : "Buscar mascote por nome ou espécie..."}
+                          className="w-full rounded-xl border border-emerald-400/25 bg-slate-950 py-2.5 pl-9 pr-10 text-xs text-slate-100 outline-none placeholder:text-slate-500 focus:border-emerald-400"
+                        />
+                        {(selectedMascot || mascotQuery) && <button type="button" onClick={() => { setSelectedMascotId(""); setMascotQuery(""); setMascotPickerOpen(false); setSuccess(false); }} className="absolute right-2.5 top-2.5 rounded p-0.5 text-slate-500 hover:text-white" aria-label="Remover mascote"><X size={15}/></button>}
+                        {mascotPickerOpen && <span className="absolute z-30 mt-1 block max-h-72 w-full overflow-y-auto rounded-xl border border-emerald-400/25 bg-slate-950 p-1.5 shadow-2xl">
+                          <button type="button" onClick={() => { setSelectedMascotId(""); setMascotQuery(""); setMascotPickerOpen(false); }} className="mb-1 flex w-full rounded-lg px-3 py-2 text-left text-[11px] text-slate-400 hover:bg-slate-800">Não participar da missão neste deck</button>
+                          {filteredMascots.map((mascot) => <button key={mascot.id} type="button" onClick={() => { setSelectedMascotId(mascot.id); setMascotQuery(""); setMascotPickerOpen(false); setSuccess(false); }} className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-2 text-left hover:bg-emerald-400/10 ${selectedMascotId === mascot.id ? "bg-emerald-400/10" : ""}`}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}<img src={mascot.spriteUrl} alt="" className="h-10 w-10 shrink-0 object-contain" />
+                            <span className="min-w-0"><b className="block truncate text-xs text-white">{mascot.displayName}</b><small className="block truncate text-[10px] text-slate-500">{mascot.speciesName} · Nv.{mascot.level}</small></span>
+                          </button>)}
+                          {filteredMascots.length === 0 && <span className="block px-3 py-4 text-center text-[11px] text-slate-500">Nenhum mascote encontrado.</span>}
+                        </span>}
+                      </span>
                     </label>
                     {selectedMascot && (
                       <div className="mt-3 flex items-start gap-3 rounded-lg border border-slate-700/70 bg-slate-950/70 p-3">

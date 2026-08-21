@@ -106,6 +106,16 @@ export default async function PartidasPage({ params }: Props) {
     mascotMissionMascotName: string | null; mascotMissionValid: boolean | null;
     gymBadgeId: string | null; gymBadgeName: string | null; gymBadgeValid: boolean | null;
   }>>();
+  const publicDeckIntentById = new Map(week.deckSubmissions.map((submission) => [submission.id, {
+    id: submission.id,
+    deckName: submission.deckName,
+    mascotMissionMascotName: submission.mascotMissionMascotName,
+    mascotMissionPokemonId: submission.mascotMissionPokemonId,
+    mascotMissionValid: submission.mascotMissionValid,
+    gymBadgeId: submission.gymBadgeId,
+    gymBadgeName: submission.gymBadge?.name ?? null,
+    gymBadgeValid: submission.gymBadgeValid,
+  }]));
   const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
@@ -180,6 +190,8 @@ export default async function PartidasPage({ params }: Props) {
     playerADecks: visibleDecksByPlayer.get(match.playerAId) ?? [],
     playerBDecks: match.playerBId ? visibleDecksByPlayer.get(match.playerBId) ?? [] : [],
     currentPlayerDecks: player ? visibleDecksByPlayer.get(player.id) ?? [] : [],
+    playerAIntent: match.playerADeckSubmissionId ? publicDeckIntentById.get(match.playerADeckSubmissionId) ?? null : null,
+    playerBIntent: match.playerBDeckSubmissionId ? publicDeckIntentById.get(match.playerBDeckSubmissionId) ?? null : null,
     confirmations: match.confirmations.map((confirmation) => ({
       playerId: confirmation.playerId,
       status: confirmation.status

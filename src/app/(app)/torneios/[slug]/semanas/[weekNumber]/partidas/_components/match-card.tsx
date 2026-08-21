@@ -5,9 +5,10 @@ import { Button } from "@/components/ui/button";
 import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion, updateMatchSchedule } from "../actions";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
-import { CalendarClock } from "lucide-react";
+import { Award, CalendarClock, PawPrint, ShieldCheck } from "lucide-react";
 import { validateGymDeckSubmission } from "@/app/(app)/torneios/actions";
 import { SpecMatchControl } from "@/components/spec/spec-match-control";
+import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
 interface PlayerDeckSummary {
   id: string;
@@ -15,6 +16,17 @@ interface PlayerDeckSummary {
   deckName: string;
   archetype: string | null;
   deckList: string;
+  gymBadgeId: string | null;
+  gymBadgeName: string | null;
+  gymBadgeValid: boolean | null;
+}
+
+interface PublicDeckIntent {
+  id: string;
+  deckName: string;
+  mascotMissionMascotName: string | null;
+  mascotMissionPokemonId: number | null;
+  mascotMissionValid: boolean | null;
   gymBadgeId: string | null;
   gymBadgeName: string | null;
   gymBadgeValid: boolean | null;
@@ -46,6 +58,8 @@ interface MatchCardProps {
     playerADecks: PlayerDeckSummary[];
     playerBDecks: PlayerDeckSummary[];
     currentPlayerDecks: PlayerDeckSummary[];
+    playerAIntent: PublicDeckIntent | null;
+    playerBIntent: PublicDeckIntent | null;
   };
   currentPlayerId?: string;
   isAdmin: boolean;
@@ -99,6 +113,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   const [enguicaContractCompleted, setEnguicaContractCompleted] = useState(
     enguicaContract?.myCompletionMatchId === match.id,
   );
+  const [opponentGymBadgeValid, setOpponentGymBadgeValid] = useState(true);
   const [selectedDeckId, setSelectedDeckId] = useState(() => {
     if (match.playerAId === currentPlayerId) return match.playerADeckSubmissionId ?? "";
     if (match.playerBId === currentPlayerId) return match.playerBDeckSubmissionId ?? "";
@@ -111,6 +126,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   const isInPerson = tournamentFormat === "IN_PERSON";
   const canReport = isParticipant || isAdmin || !!canReportResult;
   const canEditSchedule = isParticipant || isAdmin;
+  const opponentIntent = isPlayerA ? match.playerBIntent : isPlayerB ? match.playerAIntent : null;
 
   const myConfirmation = match.confirmations.find(
     (c) => c.playerId === currentPlayerId
@@ -143,6 +159,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
         winnerId,
         winnerDefendedPrizes: Number(winnerDefendedPrizes) || 0,
         enguicaContractCompleted,
+        opponentGymBadgeValid: opponentIntent?.gymBadgeId ? opponentGymBadgeValid : undefined,
       });
       router.refresh();
     } catch (e) {
@@ -155,7 +172,11 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   async function handleConfirm() {
     setLoading(true);
     try {
-      await confirmMatchResult({ matchId: match.id, enguicaContractCompleted });
+      await confirmMatchResult({
+        matchId: match.id,
+        enguicaContractCompleted,
+        opponentGymBadgeValid: opponentIntent?.gymBadgeId ? opponentGymBadgeValid : undefined,
+      });
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
@@ -254,6 +275,21 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
     // Nenhum deck enviado
     return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
+  }
+
+  function PublicIntent({ intent }: { intent: PublicDeckIntent | null }) {
+    if (!intent?.gymBadgeId && !intent?.mascotMissionMascotName) return null;
+    return <div className="mt-2 grid gap-1.5 text-left">
+      {intent.gymBadgeId && <div className="flex items-start gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
+        <Award size={14} className="mt-0.5 shrink-0 text-amber-300" />
+        <span className="min-w-0"><b className="block text-[9px] uppercase tracking-wider text-amber-300">Jornada de Ginásio</b><span className="block truncate text-[11px] font-semibold text-amber-50">{intent.gymBadgeName}</span><small className="text-[9px] text-amber-200/65">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</small></span>
+      </div>}
+      {intent.mascotMissionMascotName && <div className="flex items-start gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        {intent.mascotMissionPokemonId ? <img src={getStaticSpriteUrl(intent.mascotMissionPokemonId)} alt="" className="h-8 w-8 shrink-0 object-contain" /> : <PawPrint size={14} className="mt-0.5 shrink-0 text-emerald-300" />}
+        <span className="min-w-0"><b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b><span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span></span>
+      </div>}
+    </div>;
   }
 
   async function handleDeckChoice(applyToWeek: boolean) {
@@ -361,6 +397,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
             : "bg-slate-800/50"
         }`}>
           <p className="font-semibold text-white text-sm truncate">{match.playerA.displayName}</p>
+          <PublicIntent intent={match.playerAIntent} />
           <DeckBadges decks={match.playerADecks} selectedDeckId={match.playerADeckSubmissionId} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
@@ -377,6 +414,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
           <p className="font-semibold text-white text-sm truncate">
             {match.playerB?.displayName || "Bye"}
           </p>
+          <PublicIntent intent={match.playerBIntent} />
           {match.playerBId && <DeckBadges decks={match.playerBDecks} selectedDeckId={match.playerBDeckSubmissionId} />}
           {match.status === "CONFIRMED" && match.playerBId && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsB}pt</p>
@@ -401,6 +439,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
 
       {/* Actions */}
       <div className="mt-3 space-y-2">
+        {isParticipant && opponentIntent?.gymBadgeId && match.status === "PENDING_CONFIRMATION" && (
+          <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+            <div className="flex items-start gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-300"/><div><p className="text-xs font-bold text-amber-100">Confirmação da Jornada adversária</p><p className="mt-1 text-[10px] leading-4 text-slate-400">O deck de {isPlayerA ? match.playerB.displayName : match.playerA.displayName} está buscando <b className="text-amber-200">{opponentIntent.gymBadgeName}</b>. Sua declaração será considerada válida, a menos que a organização faça uma correção.</p></div></div>
+            <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs text-slate-200"><input type="checkbox" checked={opponentGymBadgeValid} onChange={(event)=>setOpponentGymBadgeValid(event.target.checked)} className="h-4 w-4 accent-amber-400"/><span>Confirmo que o deck adversário conta para esta insígnia</span></label>
+          </div>
+        )}
         {isParticipant && match.currentPlayerDecks.length > 0 && (
           <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
             <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">

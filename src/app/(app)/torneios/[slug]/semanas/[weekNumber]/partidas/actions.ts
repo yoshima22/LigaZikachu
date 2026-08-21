@@ -481,7 +481,38 @@ const reportResultSchema = z.object({
   winnerDefendedPrizes: z.coerce.number().int().min(0).max(99).default(0),
   notes: z.string().optional(),
   enguicaContractCompleted: z.boolean().default(false),
+  opponentGymBadgeValid: z.boolean().optional(),
 });
+
+function gymValidationWasReviewedByAdmin(value: Prisma.JsonValue | null): boolean {
+  return Boolean(value && typeof value === "object" && !Array.isArray(value) && "reviewedById" in value);
+}
+
+async function registerOpponentGymReview(
+  tx: Prisma.TransactionClient,
+  input: { submissionId: string | null; valid: boolean | undefined; reporterPlayerId: string; matchId: string },
+) {
+  if (!input.submissionId || input.valid === undefined) return;
+  const submission = await tx.deckSubmission.findUnique({
+    where: { id: input.submissionId },
+    select: { id: true, gymBadgeId: true, gymBadge: { select: { name: true } }, gymBadgeValidation: true },
+  });
+  if (!submission?.gymBadgeId || gymValidationWasReviewedByAdmin(submission.gymBadgeValidation)) return;
+  await tx.deckSubmission.update({
+    where: { id: submission.id },
+    data: {
+      gymBadgeValid: input.valid,
+      gymBadgeValidation: {
+        status: input.valid ? "VALID" : "INVALID",
+        source: "PLAYER_CONFIRMATION",
+        badgeName: submission.gymBadge?.name ?? null,
+        reporterPlayerId: input.reporterPlayerId,
+        matchId: input.matchId,
+        reportedAt: new Date().toISOString(),
+      },
+    },
+  });
+}
 
 const deckChoiceSchema = z.object({
   matchId: z.string().min(1),
@@ -510,7 +541,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const { matchId, winnerId, winnerDefendedPrizes, notes, enguicaContractCompleted } = reportResultSchema.parse(input);
+  const { matchId, winnerId, winnerDefendedPrizes, notes, enguicaContractCompleted, opponentGymBadgeValid } = reportResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -575,6 +606,12 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     });
     if (isPlayer) {
       await recordEnguicaCompletion(tx, match, player.id, enguicaContractCompleted);
+      await registerOpponentGymReview(tx, {
+        submissionId: player.id === match.playerAId ? match.playerBDeckSubmissionId : match.playerADeckSubmissionId,
+        valid: opponentGymBadgeValid,
+        reporterPlayerId: player.id,
+        matchId,
+      });
     }
   });
 
@@ -796,6 +833,7 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
 const confirmResultSchema = z.object({
   matchId: z.string().min(1),
   enguicaContractCompleted: z.boolean().default(false),
+  opponentGymBadgeValid: z.boolean().optional(),
 });
 
 const updateMatchScheduleSchema = z.object({
@@ -848,7 +886,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   const user = await getSessionUser();
   if (!user) throw new Error("Nao autenticado");
 
-  const { matchId, enguicaContractCompleted } = confirmResultSchema.parse(input);
+  const { matchId, enguicaContractCompleted, opponentGymBadgeValid } = confirmResultSchema.parse(input);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
@@ -874,6 +912,12 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
   const now = new Date();
   const confirmations = await prisma.$transaction(async (tx) => {
     await recordEnguicaCompletion(tx, match, player.id, enguicaContractCompleted);
+    await registerOpponentGymReview(tx, {
+      submissionId: player.id === match.playerAId ? match.playerBDeckSubmissionId : match.playerADeckSubmissionId,
+      valid: opponentGymBadgeValid,
+      reporterPlayerId: player.id,
+      matchId,
+    });
     await tx.matchConfirmation.upsert({
       where: { matchId_playerId: { matchId, playerId: player.id } },
       update: { status: "CONFIRMED", confirmedAt: now },
