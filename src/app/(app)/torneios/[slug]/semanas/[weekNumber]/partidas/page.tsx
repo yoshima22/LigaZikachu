@@ -13,6 +13,7 @@ import { buildMascotMissionOption } from "@/lib/tcg-mascot-mission";
 import { isDeckRegistrationLocked } from "@/lib/decks";
 import { EnguicaContractPanel } from "./_components/enguica-contract-panel";
 import { getSpecConfig } from "@/lib/spec/config";
+import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -111,6 +112,7 @@ export default async function PartidasPage({ params }: Props) {
     deckName: submission.deckName,
     mascotMissionMascotName: submission.mascotMissionMascotName,
     mascotMissionPokemonId: submission.mascotMissionPokemonId,
+    mascotMissionSpriteUrl: submission.mascotMissionPokemonId ? getStaticSpriteUrl(submission.mascotMissionPokemonId) : null,
     mascotMissionValid: submission.mascotMissionValid,
     gymBadgeId: submission.gymBadgeId,
     gymBadgeName: submission.gymBadge?.name ?? null,

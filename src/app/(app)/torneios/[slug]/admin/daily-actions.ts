@@ -6,6 +6,7 @@ import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { addExp } from "@/lib/mascot";
 import { prisma } from "@/lib/prisma";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 import {
   finalizePayload,
   parseTournamentRewardConfig,
@@ -273,6 +274,30 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
       });
     }
   }
+
+  const playerNameById = new Map(week.matches.flatMap((match) => [
+    [match.playerAId, match.playerA.displayName] as const,
+    ...(match.playerBId && match.playerB ? [[match.playerBId, match.playerB.displayName] as const] : []),
+  ]));
+  const topPlayer = stats.find((entry) => entry.playerId === topPlayerId);
+  const topName = playerNameById.get(topPlayerId) ?? "Top do Dia";
+  const raffleName = playerNameById.get(rafflePlayerId) ?? "Participante sorteado";
+  const dateLabel = new Date(`${input.dateKey}T12:00:00-03:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
+  const href = `/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`;
+  await Promise.all([
+    publishLeagueTicker({
+      type: "TOURNAMENT_TOP_OF_DAY", eventKey: `tournament-day:${week.id}:${input.dateKey}:top`, href, priority: 7, ttlHours: 24,
+      message: `👑 Top do Dia ${dateLabel}: ${topName} liderou com ${topPlayer?.wins ?? 0} vitória(s) e ${topPlayer?.defendedPrizes ?? 0} prêmio(s) defendido(s). Professor Enguiça confirma: dia de respeito!`,
+    }),
+    publishLeagueTicker({
+      type: "TOURNAMENT_DAILY_RAFFLE", eventKey: `tournament-day:${week.id}:${input.dateKey}:raffle`, href, priority: 6, ttlHours: 24,
+      message: `🎁 Sorteio do Dia ${dateLabel}: ${raffleName} foi escolhido entre os participantes. O Professor Enguiça garante que o papelzinho foi muito bem embaralhado.`,
+    }),
+    publishLeagueTicker({
+      type: "TOURNAMENT_DAY_CLOSED", eventKey: `tournament-day:${week.id}:${input.dateKey}:summary`, href, priority: 8, ttlHours: 24,
+      message: `📚 Dia ${dateLabel} encerrado em ${week.tournament.name}: ${week.matches.length} partida(s), ${participantIds.length} participante(s) e ${rewards.length} recompensa(s) preparadas. Top: ${topName}; sorteado: ${raffleName}.`,
+    }),
+  ]);
 
   revalidatePath(`/torneios/${week.tournament.slug}`);
   revalidatePath(`/torneios/${week.tournament.slug}/admin`);

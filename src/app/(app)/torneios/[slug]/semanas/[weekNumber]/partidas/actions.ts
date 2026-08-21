@@ -16,6 +16,7 @@ import { isDeckRegistrationLocked } from "@/lib/decks";
 import { drawEnguicaContract, ENGUICA_BOX_REWARD_LABEL } from "@/lib/tcg-enguica-contracts";
 import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
 import { computeTournamentRanking } from "@/lib/ranking";
+import { announceTournamentDispute, announceTournamentResult } from "@/lib/tournament-ticker";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
@@ -615,6 +616,8 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     }
   });
 
+  await announceTournamentResult(match, winnerId, match.playerAId, "REGISTERED");
+
   if (isInPerson) {
     // Partida presencial já confirmada — credita ZikaCoins imediatamente
     const matchForCoins = {
@@ -744,6 +747,8 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
   const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: {
+      playerA: { select: { displayName: true } },
+      playerB: { select: { displayName: true } },
       tournamentWeek: { include: { tournament: true } },
       confirmations: true,
     },
@@ -823,6 +828,8 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
       winnerPlayerId: winnerId,
     }).catch(() => {});
   }
+
+  await announceTournamentResult(match, winnerId, match.playerAId, "CORRECTED");
 
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/ranking`);
@@ -1031,6 +1038,8 @@ export async function disputeMatchResult(input: z.infer<typeof disputeSchema>) {
     create: { matchId, playerId: player.id, status: "REJECTED" },
   });
 
+  await announceTournamentDispute(match);
+
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
 
   return { success: true };
@@ -1049,7 +1058,11 @@ export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
-    include: { tournamentWeek: { include: { tournament: true } } },
+    include: {
+      playerA: { select: { displayName: true } },
+      playerB: { select: { displayName: true } },
+      tournamentWeek: { include: { tournament: true } },
+    },
   });
 
   if (!match) throw new Error("Partida não encontrada");
@@ -1096,6 +1109,9 @@ export async function adminResolveMatch(input: z.infer<typeof adminResolveSchema
       winnerPlayerId: winnerId,
     }).catch(() => {});
   }
+
+
+  await announceTournamentResult(match, winnerId, match.playerAId, "CORRECTED");
 
   revalidatePath(`/torneios/${week?.tournament.slug}/semanas/${week?.weekNumber}/partidas`);
 

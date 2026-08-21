@@ -8,7 +8,6 @@ import { useRouter } from "next/navigation";
 import { Award, CalendarClock, PawPrint, ShieldCheck } from "lucide-react";
 import { validateGymDeckSubmission } from "@/app/(app)/torneios/actions";
 import { SpecMatchControl } from "@/components/spec/spec-match-control";
-import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
 interface PlayerDeckSummary {
   id: string;
@@ -26,6 +25,7 @@ interface PublicDeckIntent {
   deckName: string;
   mascotMissionMascotName: string | null;
   mascotMissionPokemonId: number | null;
+  mascotMissionSpriteUrl: string | null;
   mascotMissionValid: boolean | null;
   gymBadgeId: string | null;
   gymBadgeName: string | null;
@@ -286,7 +286,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
       </div>}
       {intent.mascotMissionMascotName && <div className="flex items-start gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        {intent.mascotMissionPokemonId ? <img src={getStaticSpriteUrl(intent.mascotMissionPokemonId)} alt="" className="h-8 w-8 shrink-0 object-contain" /> : <PawPrint size={14} className="mt-0.5 shrink-0 text-emerald-300" />}
+        {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-8 w-8 shrink-0 object-contain" /> : <PawPrint size={14} className="mt-0.5 shrink-0 text-emerald-300" />}
         <span className="min-w-0"><b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b><span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span></span>
       </div>}
     </div>;
