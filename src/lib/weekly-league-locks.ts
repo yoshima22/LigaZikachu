@@ -55,6 +55,29 @@ export async function getWeeklyLeagueLockedMascotIds(
   const leagueIds = leagues.map((league) => league.id);
   if (!leagueIds.length) return locked;
 
+  // Confrontos do jogador de hoje em diante. Um slot cujo confronto já foi
+  // resolvido (RESOLVED/WO/BYE/CANCELLED) não precisa mais travar o time — o
+  // mascote fica livre para o Bazar mesmo que ainda tenha sido escalado hoje.
+  const playerMatches = await client.weeklyMascotLeagueMatch.findMany({
+    where: {
+      leagueId: { in: leagueIds },
+      battleDate: { gte: today },
+      OR: [{ playerAId: playerId }, { playerBId: playerId }],
+    },
+    select: { leagueId: true, battleDate: true, battleSlot: true, status: true },
+  });
+
+  const resolvedKeys = new Set<string>();
+  const pendingMatches: Array<{ leagueId: string; battleDate: string; battleSlot: number }> = [];
+  for (const match of playerMatches) {
+    const key = teamKey(match.leagueId, match.battleDate, match.battleSlot);
+    if (match.status === "SCHEDULED") {
+      pendingMatches.push({ leagueId: match.leagueId, battleDate: match.battleDate, battleSlot: match.battleSlot });
+    } else {
+      resolvedKeys.add(key);
+    }
+  }
+
   const explicitTeams = await client.weeklyMascotLeagueDailyTeam.findMany({
     where: {
       playerId,
@@ -66,25 +89,22 @@ export async function getWeeklyLeagueLockedMascotIds(
 
   const explicitKeys = new Set<string>();
   for (const team of explicitTeams) {
-    explicitKeys.add(teamKey(team.leagueId, team.battleDate, team.battleSlot));
+    const key = teamKey(team.leagueId, team.battleDate, team.battleSlot);
+    explicitKeys.add(key);
+    // Slot já resolvido não trava mais os mascotes escalados nele.
+    if (resolvedKeys.has(key)) continue;
     for (const mascotId of readMascotIds(team.mascotIdsJson)) locked.add(mascotId);
   }
 
   const visibleTodayInheritedSlots = leagueIds.flatMap((leagueId) =>
     [1, 2, 3]
-      .filter((battleSlot) => !explicitKeys.has(teamKey(leagueId, today, battleSlot)))
+      .filter(
+        (battleSlot) =>
+          !explicitKeys.has(teamKey(leagueId, today, battleSlot)) &&
+          !resolvedKeys.has(teamKey(leagueId, today, battleSlot)),
+      )
       .map((battleSlot) => ({ leagueId, battleDate: today, battleSlot })),
   );
-
-  const pendingMatches = await client.weeklyMascotLeagueMatch.findMany({
-    where: {
-      leagueId: { in: leagueIds },
-      battleDate: { gte: today },
-      status: { in: ["SCHEDULED"] },
-      OR: [{ playerAId: playerId }, { playerBId: playerId }],
-    },
-    select: { leagueId: true, battleDate: true, battleSlot: true },
-  });
 
   const inheritedTargets = uniqueTargets([
     ...visibleTodayInheritedSlots,
