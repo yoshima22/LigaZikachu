@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { sendSpecSignalAction, pollSpecSignalsAction } from "@/app/(app)/spec/signal-actions";
+import { sendSpecSignalAction, pollSpecSignalsAction, getSpecSignalCursorAction } from "@/app/(app)/spec/signal-actions";
 import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
 import { useZikaTvVolume, ZikaTvVolumeControl } from "./use-zika-tv-volume";
 
@@ -55,7 +55,9 @@ export function SpecPlayerP2P({ streamId, broadcasterUserId, compact = false }: 
         else if (s === "failed" || s === "closed" || s === "disconnected") setState((prev) => (prev === "ended" ? prev : "error"));
       };
 
-      // 1) Anuncia que quer assistir. O broadcaster responde com a OFERTA.
+      // Ignora ofertas de montagens anteriores (ex.: player grande -> mini).
+      cursorRef.current = await getSpecSignalCursorAction(streamId);
+      // 1) Anuncia que quer assistir. O broadcaster responde com uma nova OFERTA.
       await sendSpecSignalAction(streamId, broadcasterUserId, "JOIN", {});
 
       // 2) Aguarda a OFERTA por polling e responde com a ANSWER.
@@ -87,7 +89,9 @@ export function SpecPlayerP2P({ streamId, broadcasterUserId, compact = false }: 
 
   useEffect(() => {
     connect();
-    return () => { void sendSpecSignalAction(streamId, broadcasterUserId, "BYE", {}).catch(() => null); cleanup(); };
+    // Não envia BYE durante o handoff para o miniplayer. O fechamento do próprio
+    // PeerConnection sinaliza a queda, e o JOIN seguinte substitui a conexão.
+    return cleanup;
   }, [connect, cleanup, streamId, broadcasterUserId]);
 
   return (

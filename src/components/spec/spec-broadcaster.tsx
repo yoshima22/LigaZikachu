@@ -24,6 +24,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
   const [state, setState] = useState<BroadcasterState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
+  const [switchingSource, setSwitchingSource] = useState(false);
   useSpecBroadcastLifecycle(streamId, state === "live");
 
   const teardown = useCallback(() => {
@@ -58,7 +59,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       if (previewRef.current) previewRef.current.srcObject = stream;
 
       // Encerra a live se o usuário parar o compartilhamento pelo navegador.
-      stream.getVideoTracks()[0]?.addEventListener("ended", () => { void end(true); });
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === stream.getVideoTracks()[0]) void end(true); });
 
       setState("connecting");
       const pc = new RTCPeerConnection({ iceServers: SPEC_ICE_SERVERS });
@@ -118,6 +119,31 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     }
   }, [streamId, maxVideoBitrate, teardown, end, onLive]);
 
+  const switchSource = useCallback(async () => {
+    if (state !== "live" || switchingSource || !pcRef.current) return;
+    setSwitchingSource(true);
+    try {
+      const next = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
+      const previous = streamRef.current;
+      const nextVideo = next.getVideoTracks()[0] ?? null;
+      const nextAudio = next.getAudioTracks()[0] ?? null;
+      const senders = pcRef.current.getSenders();
+      const videoSender = senders.find((sender) => sender.track?.kind === "video");
+      const audioSender = senders.find((sender) => sender.track?.kind === "audio");
+      if (videoSender) await videoSender.replaceTrack(nextVideo);
+      if (audioSender) await audioSender.replaceTrack(nextAudio);
+      else if (nextAudio) toast.warning("A live começou sem áudio. Para adicionar áudio agora, reinicie a transmissão.");
+      streamRef.current = next;
+      if (previewRef.current) previewRef.current.srcObject = next;
+      setHasAudio(Boolean(nextAudio));
+      nextVideo?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === nextVideo) void end(true); });
+      previous?.getTracks().forEach((track) => track.stop());
+      toast.success("Janela compartilhada trocada sem encerrar a live.");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error("Não foi possível trocar a janela.");
+    } finally { setSwitchingSource(false); }
+  }, [state, switchingSource, width, height, fps, end]);
+
   useEffect(() => teardown, [teardown]);
 
   return (
@@ -155,6 +181,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
             Encerrar transmissão
           </button>
         )}
+        {state === "live" && <button onClick={switchSource} disabled={switchingSource} className="rounded-xl border border-cyan-400/40 px-5 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">{switchingSource ? "Escolhendo…" : "Trocar janela"}</button>}
       </div>
     </div>
   );

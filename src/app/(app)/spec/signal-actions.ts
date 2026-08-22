@@ -48,3 +48,13 @@ export async function pollSpecSignalsAction(
   const nextCursor = rows.length ? rows[rows.length - 1].seq : cursor;
   return { cursor: nextCursor, signals: rows.map((r) => ({ seq: r.seq, fromUserId: r.fromUserId, kind: r.kind, payload: r.payload })) };
 }
+
+/** Cursor atual do espectador: permite reconectar sem consumir ofertas antigas. */
+export async function getSpecSignalCursorAction(streamId: string): Promise<number> {
+  const session = await getAppSession();
+  if (!session?.user?.id) return 0;
+  const latest = await prisma.specSignal.findFirst({
+    where: { streamId, toUserId: session.user.id }, orderBy: { seq: "desc" }, select: { seq: true },
+  }).catch(() => null);
+  return latest?.seq ?? 0;
+}
