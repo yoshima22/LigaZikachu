@@ -72,6 +72,17 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
           resolutionLabel={profile.label}
         />
       )}
+      {config.mode !== "youtube" && stream.status === "PREPARING" && (
+        <div className="space-y-2">
+          <div className="flex items-center gap-3 text-[10px] font-black uppercase tracking-widest text-slate-500"><span className="h-px flex-1 bg-border" />ou use um link do YouTube<span className="h-px flex-1 bg-border" /></div>
+          <SpecBroadcasterYouTube
+            streamId={stream.id}
+            matchLabel={view?.title ?? view?.matchLabel ?? "Partida"}
+            live={false}
+            currentVideoId={stream.youtubeVideoId}
+          />
+        </div>
+      )}
       {stream.status === "LIVE" && <SpecStands streamId={stream.id} sendPresence={false} />}
     </main>
   );

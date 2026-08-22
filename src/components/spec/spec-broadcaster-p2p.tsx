@@ -7,6 +7,7 @@ import { endSpecStreamAction, markSpecStreamLiveAction } from "@/app/(app)/spec/
 import { sendSpecSignalAction, pollSpecSignalsAction } from "@/app/(app)/spec/signal-actions";
 import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
 import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
+import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
 
 type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" | "error";
 
@@ -27,6 +28,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const [viewerCount, setViewerCount] = useState(0);
+  useSpecBroadcastLifecycle(streamId, state === "live");
 
   const teardown = useCallback(() => {
     if (pollRef.current) { clearInterval(pollRef.current); pollRef.current = null; }
@@ -154,11 +156,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
     }
   }, [streamId, fps, width, height, teardown, end, startSignalingLoop]);
 
-  useEffect(() => {
-    const onHide = () => { void endSpecStreamAction(streamId); };
-    window.addEventListener("pagehide", onHide);
-    return () => { window.removeEventListener("pagehide", onHide); teardown(); };
-  }, [streamId, teardown]);
+  useEffect(() => teardown, [teardown]);
 
   return (
     <div className="space-y-4">

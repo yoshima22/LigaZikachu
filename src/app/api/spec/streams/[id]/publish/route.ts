@@ -65,6 +65,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     await prisma.specStream.update({
       where: { id },
       data: {
+        provider: "cloudflare-realtime",
         status: "LIVE",
         startedAt: new Date(),
         broadcastSessionId: sessionId,

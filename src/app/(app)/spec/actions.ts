@@ -20,8 +20,17 @@ const ACTIVE_STATUSES = ["PREPARING", "LIVE"] as const;
 // Marca como stale lives que passaram do tempo máximo (evita live fantasma).
 async function expireStaleStreams() {
   const cutoff = new Date(Date.now() - SPEC_MAX_STREAM_MINUTES * 60_000);
+  // Abas em segundo plano podem ter timers reduzidos pelo navegador. Três
+  // minutos evitam falso encerramento sem deixar uma live travada para sempre.
+  const heartbeatCutoff = new Date(Date.now() - 3 * 60_000);
   await prisma.specStream.updateMany({
-    where: { status: { in: ["PREPARING", "LIVE"] }, createdAt: { lt: cutoff } },
+    where: {
+      status: { in: ["PREPARING", "LIVE"] },
+      OR: [
+        { createdAt: { lt: cutoff } },
+        { status: "LIVE", provider: { not: "youtube" }, lastSeenAt: { lt: heartbeatCutoff } },
+      ],
+    },
     data: { status: "ENDED", endedAt: new Date() },
   }).catch(() => null);
 }
@@ -176,7 +185,7 @@ export async function markSpecStreamLiveAction(streamId: string): Promise<Action
   if (stream.broadcasterUserId !== session.user.id) return { error: "Apenas o dono pode iniciar esta transmissão." };
   if (stream.status !== "PREPARING" && stream.status !== "LIVE") return { error: "Esta transmissão não está disponível." };
 
-  await prisma.specStream.update({ where: { id: streamId }, data: { status: "LIVE", startedAt: new Date(), lastSeenAt: new Date() } });
+  await prisma.specStream.update({ where: { id: streamId }, data: { provider: "p2p-mesh", status: "LIVE", startedAt: new Date(), lastSeenAt: new Date() } });
   try {
     const [view] = await enrichSpecStreams([stream]);
     if (view) {

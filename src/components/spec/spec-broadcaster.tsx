@@ -6,6 +6,7 @@ import { toast } from "sonner";
 import { endSpecStreamAction } from "@/app/(app)/spec/actions";
 import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
 import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
+import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
 
 type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" | "error";
 
@@ -23,6 +24,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
   const [state, setState] = useState<BroadcasterState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
+  useSpecBroadcastLifecycle(streamId, state === "live");
 
   const teardown = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -115,11 +117,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     }
   }, [streamId, maxVideoBitrate, teardown, end]);
 
-  useEffect(() => {
-    const onHide = () => { void endSpecStreamAction(streamId); };
-    window.addEventListener("pagehide", onHide);
-    return () => { window.removeEventListener("pagehide", onHide); teardown(); };
-  }, [streamId, teardown]);
+  useEffect(() => teardown, [teardown]);
 
   return (
     <div className="space-y-4">

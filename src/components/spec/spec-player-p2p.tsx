@@ -8,7 +8,7 @@ type PlayerState = "connecting" | "watching" | "ended" | "error";
 
 // Player P2P mesh: conecta direto com o broadcaster. Envia JOIN, recebe a OFERTA
 // por sinalização, responde com ANSWER; a mídia flui browser <-> browser.
-export function SpecPlayerP2P({ streamId, broadcasterUserId }: { streamId: string; broadcasterUserId: string }) {
+export function SpecPlayerP2P({ streamId, broadcasterUserId, compact = false }: { streamId: string; broadcasterUserId: string; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const cursorRef = useRef(0);
@@ -83,7 +83,7 @@ export function SpecPlayerP2P({ streamId, broadcasterUserId }: { streamId: strin
   }, [connect, cleanup, streamId, broadcasterUserId]);
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? "h-full" : "space-y-3"}>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-black">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video ref={videoRef} autoPlay playsInline muted={muted} className="aspect-video w-full bg-black" />
@@ -95,14 +95,14 @@ export function SpecPlayerP2P({ streamId, broadcasterUserId }: { streamId: strin
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      {!compact && <div className="flex items-center gap-2">
         <button onClick={() => setMuted((m) => !m)} className="rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white">
           {muted ? "🔊 Ativar som" : "🔇 Mudo"}
         </button>
         <button onClick={() => videoRef.current?.requestFullscreen?.()} className="rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white">
           ⛶ Tela cheia
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

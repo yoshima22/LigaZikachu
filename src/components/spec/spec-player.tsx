@@ -8,7 +8,7 @@ type PlayerState = "connecting" | "watching" | "ended" | "error";
 // Player do espectador: WebRTC receive-only. Cria a oferta, envia ao backend
 // (/subscribe) que negocia com o SFU e devolve a resposta. O vídeo flui direto
 // browser <-> Cloudflare; nunca pela Vercel.
-export function SpecPlayer({ streamId }: { streamId: string }) {
+export function SpecPlayer({ streamId, compact = false }: { streamId: string; compact?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
   const [state, setState] = useState<PlayerState>("connecting");
@@ -85,7 +85,7 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
   }, [connect, cleanup]);
 
   return (
-    <div className="space-y-3">
+    <div className={compact ? "h-full" : "space-y-3"}>
       <div className="relative overflow-hidden rounded-2xl border border-border bg-black">
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
         <video ref={videoRef} autoPlay playsInline muted={muted} className="aspect-video w-full bg-black" />
@@ -97,14 +97,14 @@ export function SpecPlayer({ streamId }: { streamId: string }) {
           </div>
         )}
       </div>
-      <div className="flex items-center gap-2">
+      {!compact && <div className="flex items-center gap-2">
         <button onClick={() => setMuted((m) => !m)} className="rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white">
           {muted ? "🔊 Ativar som" : "🔇 Mudo"}
         </button>
         <button onClick={() => videoRef.current?.requestFullscreen?.()} className="rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white">
           ⛶ Tela cheia
         </button>
-      </div>
+      </div>}
     </div>
   );
 }

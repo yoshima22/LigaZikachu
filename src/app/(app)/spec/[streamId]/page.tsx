@@ -7,6 +7,7 @@ import { SpecPlayer } from "@/components/spec/spec-player";
 import { SpecPlayerP2P } from "@/components/spec/spec-player-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
 import { youtubeEmbedUrl } from "@/lib/spec/constants";
+import { SpecMiniPlayerActivator } from "@/components/spec/spec-mini-player";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
   const config = await getSpecConfig();
   const stream = config.enabled ? await prisma.specStream.findUnique({
     where: { id: streamId },
-    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true, startedAt: true, youtubeVideoId: true },
+    select: { id: true, matchId: true, tournamentId: true, title: true, broadcasterUserId: true, status: true, provider: true, startedAt: true, youtubeVideoId: true },
   }).catch(() => null) : null;
 
   if (!config.enabled || !stream) {
@@ -49,6 +50,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
       {isLive ? (
         <>
+          <SpecMiniPlayerActivator data={{ streamId: stream.id, title: view?.matchLabel ?? "Zika TV", provider: stream.provider, broadcasterUserId: stream.broadcasterUserId, youtubeVideoId: stream.youtubeVideoId }} />
           {stream.youtubeVideoId ? (
             <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16 / 9" }}>
               <iframe
@@ -59,7 +61,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
                 allowFullScreen
               />
             </div>
-          ) : config.mode === "p2p-mesh"
+          ) : stream.provider === "p2p-mesh"
             ? <SpecPlayerP2P streamId={stream.id} broadcasterUserId={stream.broadcasterUserId} />
             : <SpecPlayer streamId={stream.id} />}
           <SpecStands streamId={stream.id} sendPresence />
