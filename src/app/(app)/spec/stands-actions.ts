@@ -116,15 +116,30 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
 }
 
 /** Chat leve da transmissão, compartilhado por P2P, YouTube e Cloudflare. */
-export async function sendSpecChatMessageAction(streamId: string, rawMessage: string): Promise<{ ok: boolean; error?: string }> {
+export async function sendSpecChatMessageAction(streamId: string, rawMessage: string): Promise<{ ok: boolean; error?: string; retryAfter?: number }> {
   const session = await getAppSession();
   if (!session?.user?.id) return { ok: false, error: "Não autenticado." };
   const stream = await loadStreamOwner(streamId);
   if (!stream || (stream.status !== "LIVE" && stream.status !== "PREPARING")) return { ok: false, error: "Transmissão encerrada." };
   const message = rawMessage.trim().replace(/\s+/g, " ").slice(0, 300);
   if (!message) return { ok: false, error: "Digite uma mensagem." };
-  await prisma.specChatMessage.create({ data: { streamId, userId: session.user.id, userName: session.user.name?.trim() || "Jogador", message } });
-  return { ok: true };
+  const lastMessage = await prisma.specChatMessage.findFirst({
+    where: { streamId, userId: session.user.id }, orderBy: { createdAt: "desc" }, select: { createdAt: true },
+  }).catch(() => null);
+  if (lastMessage) {
+    const remainingMs = 10_000 - (Date.now() - lastMessage.createdAt.getTime());
+    if (remainingMs > 0) {
+      const retryAfter = Math.ceil(remainingMs / 1000);
+      return { ok: false, error: `Modo lento: aguarde ${retryAfter}s.`, retryAfter };
+    }
+  }
+  try {
+    await prisma.specChatMessage.create({ data: { streamId, userId: session.user.id, userName: session.user.name?.trim() || "Jogador", message } });
+    return { ok: true };
+  } catch (error) {
+    console.error("[spec-chat] falha ao enviar mensagem", error);
+    return { ok: false, error: "Não foi possível enviar agora. Tente novamente." };
+  }
 }
 
 /** Cria uma enquete (dono da transmissão, GameMaster ou Admin). Uma ativa por vez. */

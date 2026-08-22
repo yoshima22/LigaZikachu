@@ -92,26 +92,45 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
 function ChatSection({ stands, streamId, onChange }: { stands: Stands; streamId: string; onChange: () => void }) {
   const [message, setMessage] = useState("");
   const [sending, setSending] = useState(false);
+  const [cooldown, setCooldown] = useState(0);
+  const [showEmoji, setShowEmoji] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const emojis = ["😀", "😂", "😍", "🔥", "👏", "🎉", "⚡", "❤️", "👍", "👀", "🤔", "😱", "🏆", "🎮", "✨", "💜"];
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [stands.chat.length]);
+  useEffect(() => {
+    if (cooldown <= 0) return;
+    const timer = window.setInterval(() => setCooldown((value) => Math.max(0, value - 1)), 1_000);
+    return () => window.clearInterval(timer);
+  }, [cooldown]);
   const send = async () => {
-    if (!message.trim() || sending) return;
+    if (!message.trim() || sending || cooldown > 0) return;
     setSending(true);
-    const res = await sendSpecChatMessageAction(streamId, message);
-    setSending(false);
-    if (!res.ok) { toast.error(res.error ?? "Falha ao enviar."); return; }
-    setMessage(""); onChange();
+    try {
+      const res = await sendSpecChatMessageAction(streamId, message);
+      if (!res.ok) {
+        if (res.retryAfter) setCooldown(res.retryAfter);
+        toast.error(res.error ?? "Falha ao enviar.");
+        return;
+      }
+      setMessage(""); setCooldown(10); setShowEmoji(false); onChange();
+    } catch {
+      toast.error("A conexão falhou. O botão foi liberado para tentar novamente.");
+    } finally {
+      setSending(false);
+    }
   };
   return <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/60">
-    <header className="border-b border-border px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-cyan-300">💬 Chat da transmissão</header>
-    <div className="max-h-56 space-y-2 overflow-y-auto p-3">
+    <header className="flex items-center justify-between gap-2 border-b border-border px-4 py-2.5"><span className="text-[10px] font-black uppercase tracking-widest text-cyan-300">💬 Chat da transmissão</span><span className="text-[9px] font-bold text-slate-500">Modo lento · 10 segundos</span></header>
+    <div className="h-56 space-y-2 overflow-y-scroll p-3 [scrollbar-gutter:stable]">
       {stands.chat.length === 0 && <p className="py-4 text-center text-xs text-slate-500">Seja o primeiro a falar na arquibancada.</p>}
       {stands.chat.map((item) => <div key={item.id} className="text-xs"><span className="font-black text-[#FFCB05]">{item.userName}: </span><span className="break-words text-slate-200">{item.message}</span></div>)}
       <div ref={bottomRef} />
     </div>
+    {showEmoji && <div className="flex flex-wrap gap-1 border-t border-border bg-slate-900/70 px-3 py-2">{emojis.map((emoji) => <button key={emoji} type="button" onClick={() => setMessage((value) => `${value}${emoji}`.slice(0, 300))} className="rounded-md p-1.5 text-base hover:bg-white/10">{emoji}</button>)}</div>}
     <div className="flex gap-2 border-t border-border p-3">
+      <button type="button" onClick={() => setShowEmoji((value) => !value)} aria-label="Escolher emoji" className={`rounded-lg border px-2.5 text-base ${showEmoji ? "border-cyan-400 bg-cyan-400/10" : "border-border bg-slate-900"}`}>😊</button>
       <input value={message} maxLength={300} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void send(); }} placeholder="Escreva para a arquibancada…" className="min-w-0 flex-1 rounded-lg border border-border bg-slate-900 px-3 py-2 text-xs text-white" />
-      <button onClick={send} disabled={sending || !message.trim()} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">Enviar</button>
+      <button onClick={send} disabled={sending || cooldown > 0 || !message.trim()} className="min-w-[4.5rem] rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">{sending ? "Enviando…" : cooldown > 0 ? `${cooldown}s` : "Enviar"}</button>
     </div>
   </section>;
 }
