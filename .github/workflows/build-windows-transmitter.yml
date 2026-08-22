@@ -26,7 +26,7 @@ jobs:
           node-version: '22.14.0'
           cache: npm
           cache-dependency-path: windows-transmitter/discord-screen-host/package-lock.json
-      - name: Assemble portable Discord Activity host
+      - name: Prepare portable bundle
         shell: pwsh
         run: |
           $bundle = "output/LigaZikachuTransmissor"
@@ -34,10 +34,24 @@ jobs:
           New-Item -ItemType Directory -Force -Path $module,"$bundle/Runtime/Node","$module/.cache" | Out-Null
           Copy-Item output/windows-transmitter/LigaZikachuTransmissor.exe "$bundle/LigaZikachuTransmissor.exe"
           Copy-Item windows-transmitter/discord-screen-host/* $module -Recurse -Force
+      - name: Install and build Discord Activity
+        shell: pwsh
+        run: |
+          $module = "output/LigaZikachuTransmissor/Modules/DiscordScreen"
           npm ci --prefix $module
           npm run build --prefix $module
+      - name: Include Node and Cloudflare Tunnel
+        shell: pwsh
+        run: |
+          $bundle = "output/LigaZikachuTransmissor"
+          $module = "$bundle/Modules/DiscordScreen"
           Copy-Item (Get-Command node).Source "$bundle/Runtime/Node/node.exe"
-          Invoke-WebRequest "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$module/.cache/cloudflared.exe"
+          curl.exe -L --fail --retry 4 --retry-delay 3 "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -o "$module/.cache/cloudflared.exe"
+          if ((Get-Item "$module/.cache/cloudflared.exe").Length -lt 10MB) { throw "Download do cloudflared está incompleto." }
+      - name: Compress complete transmitter
+        shell: pwsh
+        run: |
+          $bundle = "output/LigaZikachuTransmissor"
           Compress-Archive -Path "$bundle/*" -DestinationPath LigaZikachuTransmissorCompleto.zip -CompressionLevel Optimal
       - name: Publish beta release
         shell: bash
