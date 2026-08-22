@@ -7,6 +7,7 @@
  * entre os dois.
  */
 import path from 'node:path';
+import fs from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
@@ -23,7 +24,9 @@ export const RAIZ = path.join(path.dirname(fileURLToPath(import.meta.url)), '..'
  * shell, e o vite fica rodando órfão. Chamando o arquivo .js com o próprio
  * Node, o processo é um só e o kill alcança.
  */
-export const VITE = path.join(RAIZ, 'node_modules', 'vite', 'bin', 'vite.js');
+const viteRaiz = path.join(RAIZ, 'node_modules', 'vite', 'bin', 'vite.js');
+const viteCliente = path.join(RAIZ, 'client', 'node_modules', 'vite', 'bin', 'vite.js');
+export const VITE = fs.existsSync(viteRaiz) ? viteRaiz : viteCliente;
 
 const filhos = new Set();
 let encerrando = false;
