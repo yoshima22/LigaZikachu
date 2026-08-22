@@ -4,7 +4,7 @@ import { useEffect, useState, useTransition } from "react";
 import { Download, MonitorUp, RefreshCw } from "lucide-react";
 import { createWindowsTransmitterPairingAction, getWindowsTransmitterPairingStateAction } from "@/app/(app)/spec/windows-transmitter-actions";
 
-const DOWNLOAD_URL = "https://github.com/yoshima22/LigaZikachu/releases/download/transmitter-latest/LigaZikachuTransmissor.exe";
+const DOWNLOAD_URL = "https://github.com/yoshima22/LigaZikachu/releases/download/transmitter-latest/LigaZikachuTransmissorCompleto.zip";
 
 export function SpecWindowsTransmitter({ streamId }: { streamId: string }) {
   const [pair, setPair] = useState<{ code: string; expiresAt: number } | null>(null);
@@ -23,7 +23,7 @@ export function SpecWindowsTransmitter({ streamId }: { streamId: string }) {
   return <section className="rounded-2xl border border-violet-400/25 bg-violet-950/10 p-4">
     <div className="flex items-start gap-3"><span className="rounded-xl bg-violet-400/10 p-2 text-violet-300"><MonitorUp size={22} /></span><div><p className="font-black text-white">Transmissor Windows · programa portátil</p><p className="mt-1 text-xs leading-relaxed text-slate-400">O programa assume a tela e os controles da live. A mídia continua P2P enquanto você navega pelo site; chat, enquetes e arquibancada permanecem associados à mesma transmissão.</p></div></div>
     <ol className="mt-4 grid gap-2 text-xs text-slate-300 sm:grid-cols-3">
-      <li className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><strong className="block text-violet-300">1. Baixe e abra</strong>Abra o arquivo LigaZikachuTransmissor.exe.</li>
+      <li className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><strong className="block text-violet-300">1. Baixe e extraia</strong>Extraia o ZIP e abra LigaZikachuTransmissor.exe. O Node e o módulo Discord Screen já vêm no pacote.</li>
       <li className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><strong className="block text-violet-300">2. Selecione o jogo</strong>Escolha Valorant ou outra janela no aplicativo.</li>
       <li className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><strong className="block text-violet-300">3. Controle pelo aplicativo</strong>Informe o código e use a central para iniciar, pausar, trocar a fonte ou encerrar.</li>
     </ol>

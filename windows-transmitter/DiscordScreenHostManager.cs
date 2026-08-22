@@ -40,9 +40,14 @@ internal sealed class DiscordScreenHostManager : IDisposable
         modulePath = Path.GetFullPath(Environment.ExpandEnvironmentVariables(modulePath.Trim().Trim('"')));
         var entryPoint = Path.Combine(modulePath, "scripts", "start-fast.mjs");
         var envFile = Path.Combine(modulePath, ".env");
-        if (!File.Exists(entryPoint) || !File.Exists(envFile))
+        if (!File.Exists(entryPoint))
         {
-            Fail("A pasta não contém scripts/start-fast.mjs e .env configurado.");
+            Fail("O módulo Discord Screen não está presente neste pacote. Baixe a versão completa do transmissor.");
+            return;
+        }
+        if (!DiscordHostConfiguration.PrepareModule(modulePath))
+        {
+            Fail("Configure o Client ID e o Client Secret da Activity antes de iniciar.");
             return;
         }
 
@@ -130,9 +135,11 @@ internal sealed class DiscordScreenHostManager : IDisposable
     public async Task RefreshStatusAsync()
     {
         if (Status is DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth or DiscordHostStatus.Stopping) return;
-        var healthy = await IsHealthyAsync(LocalUrl);
-        if (healthy && Status != DiscordHostStatus.Online) SetStatus(DiscordHostStatus.Online);
-        if (!healthy && Status == DiscordHostStatus.Online && !_ownsProcess) SetStatus(DiscordHostStatus.Offline);
+        var localHealthy = await IsHealthyAsync(LocalUrl);
+        PublicUrl ??= DiscordHostConfiguration.LoadPublicOrigin();
+        var publicHealthy = PublicUrl is not null && await IsHealthyAsync(PublicUrl);
+        if (localHealthy && publicHealthy && Status != DiscordHostStatus.Online) SetStatus(DiscordHostStatus.Online);
+        if ((!localHealthy || !publicHealthy) && Status == DiscordHostStatus.Online && !_ownsProcess) { PublicUrl = null; SetStatus(DiscordHostStatus.Offline); }
     }
 
     private async Task WaitForHealthAsync(CancellationToken cancellation)
@@ -186,6 +193,7 @@ internal sealed class DiscordScreenHostManager : IDisposable
         if (match.Success && !match.Value.Contains("discordsays.com", StringComparison.OrdinalIgnoreCase))
         {
             PublicUrl = match.Value.TrimEnd('/');
+            if (_launcher?.StartInfo.WorkingDirectory is string modulePath) DiscordHostConfiguration.CaptureModuleState(modulePath);
             Changed?.Invoke();
         }
         AddLog(line);

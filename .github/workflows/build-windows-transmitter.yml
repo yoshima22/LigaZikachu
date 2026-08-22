@@ -21,6 +21,24 @@ jobs:
       - name: Publish single-file executable
         shell: pwsh
         run: dotnet publish windows-transmitter/LigaZikachuTransmissor.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o output/windows-transmitter
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22.14.0'
+          cache: npm
+          cache-dependency-path: windows-transmitter/discord-screen-host/package-lock.json
+      - name: Assemble portable Discord Activity host
+        shell: pwsh
+        run: |
+          $bundle = "output/LigaZikachuTransmissor"
+          $module = "$bundle/Modules/DiscordScreen"
+          New-Item -ItemType Directory -Force -Path $module,"$bundle/Runtime/Node","$module/.cache" | Out-Null
+          Copy-Item output/windows-transmitter/LigaZikachuTransmissor.exe "$bundle/LigaZikachuTransmissor.exe"
+          Copy-Item windows-transmitter/discord-screen-host/* $module -Recurse -Force
+          npm ci --prefix $module
+          npm run build --prefix $module
+          Copy-Item (Get-Command node).Source "$bundle/Runtime/Node/node.exe"
+          Invoke-WebRequest "https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-windows-amd64.exe" -OutFile "$module/.cache/cloudflared.exe"
+          Compress-Archive -Path "$bundle/*" -DestinationPath LigaZikachuTransmissorCompleto.zip -CompressionLevel Optimal
       - name: Publish beta release
         shell: bash
         env:
@@ -28,4 +46,4 @@ jobs:
         run: |
           cp output/windows-transmitter/LigaZikachuTransmissor.exe LigaZikachuTransmissor.exe
           gh release delete transmitter-latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create transmitter-latest LigaZikachuTransmissor.exe --title "Transmissor Windows da Zika TV" --notes "Aplicativo portátil com pareamento, transmissão P2P, controles de mídia e funcionamento independente do navegador."
+          gh release create transmitter-latest LigaZikachuTransmissor.exe LigaZikachuTransmissorCompleto.zip --title "Transmissor Windows da Liga Zikachu" --notes "Pacote completo com transmissão P2P da Zika TV e hospedagem portátil da Activity Discord Screen. Baixe o ZIP completo para usar a hospedagem do Discord sem selecionar pastas ou instalar Node."
