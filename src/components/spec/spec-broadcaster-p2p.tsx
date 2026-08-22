@@ -27,6 +27,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
   const [state, setState] = useState<BroadcasterState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const [viewerCount, setViewerCount] = useState(0);
   const [switchingSource, setSwitchingSource] = useState(false);
   useSpecBroadcastLifecycle(streamId, state === "live");
@@ -132,8 +133,9 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       const stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
       streamRef.current = stream;
       setHasAudio(stream.getAudioTracks().length > 0);
+      setAudioEnabled(stream.getAudioTracks().some((track) => track.enabled));
       if (sharedDisplaySurface(stream) === "monitor" && stream.getAudioTracks().length > 0) {
-        toast.warning("Tela inteira selecionada. Para garantir que o Discord não seja ouvido, interrompa e compartilhe somente a aba do jogo.", { duration: 9_000 });
+        toast.warning("Tela inteira selecionada: o áudio pode incluir Discord e outros programas. Prefira compartilhar a janela do jogo ou corte o áudio da live.", { duration: 9_000 });
       }
       if (previewRef.current) previewRef.current.srcObject = stream;
       const vTrack = stream.getVideoTracks()[0];
@@ -178,6 +180,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       if (missingAudioSender) toast.warning("A nova janela possui áudio, mas algumas conexões começaram sem áudio. Esses espectadores devem reconectar para recebê-lo.");
       if (previewRef.current) previewRef.current.srcObject = next;
       setHasAudio(Boolean(nextAudio));
+      setAudioEnabled(Boolean(nextAudio?.enabled));
       nextVideo?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === nextVideo) void end(true); });
       previous?.getTracks().forEach((track) => track.stop());
       toast.success("Janela compartilhada trocada sem encerrar a live.");
@@ -185,6 +188,18 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error("Não foi possível trocar a janela.");
     } finally { setSwitchingSource(false); }
   }, [state, switchingSource, width, height, fps, end]);
+
+  const toggleOutgoingAudio = useCallback(() => {
+    const tracks = streamRef.current?.getAudioTracks() ?? [];
+    if (tracks.length === 0) {
+      toast.info("Esta fonte foi compartilhada sem áudio.");
+      return;
+    }
+    const next = !audioEnabled;
+    tracks.forEach((track) => { track.enabled = next; });
+    setAudioEnabled(next);
+    toast.success(next ? "Áudio da transmissão ativado." : "Áudio da transmissão cortado. O Discord não será ouvido.");
+  }, [audioEnabled]);
 
   useEffect(() => teardown, [teardown]);
 
@@ -198,7 +213,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
             {state === "live" ? "🔴 AO VIVO" : state === "connecting" ? "Conectando…" : state === "requesting" ? "Escolhendo tela…" : state === "ended" ? "Encerrada" : "Pronto"}
           </span>
           {state === "live" && <span className="rounded-full bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">👥 {viewerCount} conectado{viewerCount === 1 ? "" : "s"}</span>}
-          {state === "live" && <span className="text-slate-500">Qualidade: {resolutionLabel}{fps} · {hasAudio ? "+ áudio do sistema" : "sem áudio"}</span>}
+          {state === "live" && <span className="text-slate-500">Qualidade: {resolutionLabel}{fps} · {hasAudio ? (audioEnabled ? "+ áudio compartilhado" : "+ áudio cortado") : "sem áudio"}</span>}
         </div>
       </div>
 
@@ -208,7 +223,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       </div>
 
       <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-200">
-        Modo P2P: o vídeo vai direto do seu PC para cada espectador. Para excluir o Discord, escolha <strong>uma aba do navegador</strong> e compartilhe apenas o áudio dessa aba; o áudio geral do sistema é solicitado como bloqueado.
+        Para jogos externos, escolha <strong>Janela</strong> e, se disponível, <strong>áudio desta janela</strong>. Se o Windows entregar Discord e jogo já misturados, o navegador não consegue separá-los: use “Cortar áudio” abaixo ou envie o Discord para outro dispositivo de saída.
       </p>
 
       {error && <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
@@ -225,6 +240,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
           </button>
         )}
         {state === "live" && <button onClick={switchSource} disabled={switchingSource} className="rounded-xl border border-cyan-400/40 px-5 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">{switchingSource ? "Escolhendo…" : "Trocar janela"}</button>}
+        {state === "live" && hasAudio && <button onClick={toggleOutgoingAudio} className="rounded-xl border border-amber-400/40 px-5 py-2.5 text-sm font-bold text-amber-200 hover:bg-amber-500/10">{audioEnabled ? "Cortar áudio" : "Restaurar áudio"}</button>}
       </div>
     </div>
   );

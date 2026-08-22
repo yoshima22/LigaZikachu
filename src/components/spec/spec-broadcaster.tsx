@@ -24,6 +24,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
   const [state, setState] = useState<BroadcasterState>("idle");
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
+  const [audioEnabled, setAudioEnabled] = useState(true);
   const [switchingSource, setSwitchingSource] = useState(false);
   useSpecBroadcastLifecycle(streamId, state === "live");
 
@@ -48,8 +49,9 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       const stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
       streamRef.current = stream;
       setHasAudio(stream.getAudioTracks().length > 0);
+      setAudioEnabled(stream.getAudioTracks().some((track) => track.enabled));
       if (sharedDisplaySurface(stream) === "monitor" && stream.getAudioTracks().length > 0) {
-        toast.warning("Tela inteira selecionada. Para garantir que o Discord não seja ouvido, interrompa e compartilhe somente a aba do jogo.", { duration: 9_000 });
+        toast.warning("Tela inteira selecionada: o áudio pode incluir Discord e outros programas. Prefira compartilhar a janela do jogo ou corte o áudio da live.", { duration: 9_000 });
       }
 
       // Dica ao encoder: conteúdo com detalhes/texto (cartas), prioriza nitidez
@@ -136,6 +138,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       streamRef.current = next;
       if (previewRef.current) previewRef.current.srcObject = next;
       setHasAudio(Boolean(nextAudio));
+      setAudioEnabled(Boolean(nextAudio?.enabled));
       nextVideo?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === nextVideo) void end(true); });
       previous?.getTracks().forEach((track) => track.stop());
       toast.success("Janela compartilhada trocada sem encerrar a live.");
@@ -143,6 +146,18 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error("Não foi possível trocar a janela.");
     } finally { setSwitchingSource(false); }
   }, [state, switchingSource, width, height, fps, end]);
+
+  const toggleOutgoingAudio = useCallback(() => {
+    const tracks = streamRef.current?.getAudioTracks() ?? [];
+    if (tracks.length === 0) {
+      toast.info("Esta fonte foi compartilhada sem áudio.");
+      return;
+    }
+    const next = !audioEnabled;
+    tracks.forEach((track) => { track.enabled = next; });
+    setAudioEnabled(next);
+    toast.success(next ? "Áudio da transmissão ativado." : "Áudio da transmissão cortado. O Discord não será ouvido.");
+  }, [audioEnabled]);
 
   useEffect(() => teardown, [teardown]);
 
@@ -155,7 +170,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
           <span className={`rounded-full px-2 py-1 font-bold ${state === "live" ? "bg-red-500/15 text-red-300" : "bg-slate-800 text-slate-400"}`}>
             {state === "live" ? "🔴 AO VIVO" : state === "connecting" ? "Conectando…" : state === "requesting" ? "Escolhendo tela…" : state === "ended" ? "Encerrada" : "Pronto"}
           </span>
-          {state === "live" && <span className="text-slate-500">Qualidade alvo: {resolutionLabel}30 · vídeo {hasAudio ? "+ áudio do sistema" : "sem áudio"}</span>}
+          {state === "live" && <span className="text-slate-500">Qualidade alvo: {resolutionLabel}30 · vídeo {hasAudio ? (audioEnabled ? "+ áudio compartilhado" : "+ áudio cortado") : "sem áudio"}</span>}
         </div>
       </div>
 
@@ -165,7 +180,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       </div>
 
       <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200">
-        Para não transmitir o Discord, selecione <strong>uma aba do navegador</strong> e marque apenas o áudio da aba. A Zika TV solicita ao navegador que nunca envie o áudio geral do sistema.
+        Para jogos externos, escolha <strong>Janela</strong> e, se disponível, <strong>áudio desta janela</strong>. Se o Windows entregar Discord e jogo já misturados, o navegador não consegue separá-los: use “Cortar áudio” abaixo ou envie o Discord para outro dispositivo de saída.
       </p>
 
       {error && <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
@@ -182,6 +197,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
           </button>
         )}
         {state === "live" && <button onClick={switchSource} disabled={switchingSource} className="rounded-xl border border-cyan-400/40 px-5 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">{switchingSource ? "Escolhendo…" : "Trocar janela"}</button>}
+        {state === "live" && hasAudio && <button onClick={toggleOutgoingAudio} className="rounded-xl border border-amber-400/40 px-5 py-2.5 text-sm font-bold text-amber-200 hover:bg-amber-500/10">{audioEnabled ? "Cortar áudio" : "Restaurar áudio"}</button>}
       </div>
     </div>
   );

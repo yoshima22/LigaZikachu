@@ -99,6 +99,21 @@ const getNavData = (userId: string) =>
     { revalidate: 60, tags: [`nav-${userId}`] },
   )();
 
+// Um único sinal compartilhado por todos os usuários. O cache curto evita uma
+// consulta por navegação e o corte por heartbeat impede que uma live abandonada
+// mantenha o selo aceso indefinidamente.
+const getZikaTvLiveStatus = unstable_cache(
+  async () => Boolean(await prisma.specStream.findFirst({
+    where: {
+      status: "LIVE",
+      lastSeenAt: { gte: new Date(Date.now() - 3 * 60_000) },
+    },
+    select: { id: true },
+  })),
+  ["zika-tv-live-nav-v1"],
+  { revalidate: 20 },
+);
+
 export default async function AppLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
@@ -136,7 +151,7 @@ export default async function AppLayout({
       unreadNews: 0,
     };
   });
-  const [globalNotice, tickerEvents, livePvpConfig, notificationSnapshot] = await Promise.all([
+  const [globalNotice, tickerEvents, livePvpConfig, notificationSnapshot, zikaTvLive] = await Promise.all([
     getGlobalNotice(),
     navData.player
       ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
@@ -154,6 +169,7 @@ export default async function AppLayout({
           bazarAlerts: [],
         }))
       : Promise.resolve({ messageCount: 0, bazarCount: 0, messageAlerts: [], bazarAlerts: [] }),
+    getZikaTvLiveStatus().catch(() => false),
   ]);
   const livePvpVisible = canAccessLivePvp(
     livePvpConfig,
@@ -277,6 +293,7 @@ export default async function AppLayout({
               playerId={player?.id}
               orderEventVisible={orderEventVisible}
               livePvpVisible={livePvpVisible}
+              zikaTvLive={zikaTvLive}
             />
 
             {/* User + logout */}
@@ -357,6 +374,7 @@ export default async function AppLayout({
               playerId={player?.id}
               orderEventVisible={orderEventVisible}
               livePvpVisible={livePvpVisible}
+              zikaTvLive={zikaTvLive}
             />
           </div>
           {globalNotice.message && (

@@ -247,6 +247,7 @@ export function AppNav({
   playerId,
   orderEventVisible = false,
   livePvpVisible = false,
+  zikaTvLive = false,
 }: {
   admin: boolean;
   platformAdmin?: boolean;
@@ -257,6 +258,7 @@ export function AppNav({
   playerId?: string;
   orderEventVisible?: boolean;
   livePvpVisible?: boolean;
+  zikaTvLive?: boolean;
 }) {
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
@@ -426,6 +428,12 @@ export function AppNav({
                 >
                   <Icon size={14} className="mr-1.5" />
                   {label}
+                  {href === "/torneios" && zikaTvLive && (
+                    <span className="absolute -right-1 -top-2 flex items-center gap-1 rounded-full border border-red-400/50 bg-red-600 px-1.5 py-0.5 text-[8px] font-black leading-none tracking-wide text-white shadow-[0_0_12px_rgba(239,68,68,0.65)]">
+                      <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
+                      AO VIVO
+                    </span>
+                  )}
                   {href === "/noticias" && unreadNews > 0 && (
                     <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
                   )}
@@ -525,6 +533,12 @@ export function AppNav({
                   >
                     <Icon size={14} />
                     <span className="max-w-full truncate">{label}</span>
+                    {href === "/torneios" && zikaTvLive && (
+                      <span className="absolute right-1 top-1 flex items-center gap-0.5 rounded-full bg-red-600 px-1 py-0.5 text-[7px] font-black leading-none text-white shadow-[0_0_10px_rgba(239,68,68,0.65)]">
+                        <span className="h-1 w-1 animate-pulse rounded-full bg-white" />
+                        AO VIVO
+                      </span>
+                    )}
                     {href === "/noticias" && unreadNews > 0 && (
                       <span className="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.8)]" />
                     )}
