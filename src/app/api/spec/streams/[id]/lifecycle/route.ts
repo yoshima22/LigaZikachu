@@ -11,7 +11,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
   const { id } = await context.params;
   const stream = await prisma.specStream.findUnique({ where: { id }, select: { broadcasterUserId: true, status: true, provider: true } });
   if (!stream || stream.broadcasterUserId !== session.user.id) return NextResponse.json({ error: "Transmissão não encontrada." }, { status: 404 });
-  if (stream.provider === "youtube" || stream.status === "ENDED" || stream.status === "FAILED") return NextResponse.json({ ok: true });
+  if (stream.status === "ENDED" || stream.status === "FAILED") return NextResponse.json({ ok: true });
 
   const body = await request.json().catch(() => ({})) as { event?: string };
   if (body.event === "end") {

@@ -28,7 +28,7 @@ async function expireStaleStreams() {
       status: { in: ["PREPARING", "LIVE"] },
       OR: [
         { createdAt: { lt: cutoff } },
-        { status: "LIVE", provider: { not: "youtube" }, lastSeenAt: { lt: heartbeatCutoff } },
+        { status: "LIVE", lastSeenAt: { lt: heartbeatCutoff } },
       ],
     },
     data: { status: "ENDED", endedAt: new Date() },
@@ -241,6 +241,19 @@ export async function setSpecStreamYouTubeAction(streamId: string, urlOrId: stri
     } catch (e) { console.error("[spec] falha ao anunciar no ticker (youtube)", e); }
   }
   revalidatePath("/spec");
+  return { ok: true };
+}
+
+/** Recebe o estado ENDED emitido pela API oficial do player do YouTube. */
+export async function reportSpecYoutubeEndedAction(streamId: string, videoId: string): Promise<{ ok: true }> {
+  const session = await getAppSession();
+  if (!session?.user?.id) return { ok: true };
+  await prisma.specStream.updateMany({
+    where: { id: streamId, provider: "youtube", youtubeVideoId: videoId, status: "LIVE" },
+    data: { status: "ENDED", endedAt: new Date(), lastSeenAt: new Date() },
+  }).catch(() => null);
+  revalidatePath("/spec");
+  revalidatePath(`/spec/${streamId}`);
   return { ok: true };
 }
 

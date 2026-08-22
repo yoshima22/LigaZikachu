@@ -6,8 +6,8 @@ import { enrichSpecStreams } from "@/lib/spec/data";
 import { SpecPlayer } from "@/components/spec/spec-player";
 import { SpecPlayerP2P } from "@/components/spec/spec-player-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
-import { youtubeEmbedUrl } from "@/lib/spec/constants";
 import { SpecMiniPlayerActivator } from "@/components/spec/spec-mini-player";
+import { SpecYoutubePlayer } from "@/components/spec/spec-youtube-player";
 
 export const dynamic = "force-dynamic";
 
@@ -53,13 +53,7 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
           <SpecMiniPlayerActivator data={{ streamId: stream.id, title: view?.matchLabel ?? "Zika TV", provider: stream.provider, broadcasterUserId: stream.broadcasterUserId, youtubeVideoId: stream.youtubeVideoId }} />
           {stream.youtubeVideoId ? (
             <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16 / 9" }}>
-              <iframe
-                src={youtubeEmbedUrl(stream.youtubeVideoId)}
-                title="Zika TV"
-                className="absolute inset-0 h-full w-full"
-                allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
-                allowFullScreen
-              />
+              <SpecYoutubePlayer streamId={stream.id} videoId={stream.youtubeVideoId} />
             </div>
           ) : stream.provider === "p2p-mesh"
             ? <SpecPlayerP2P streamId={stream.id} broadcasterUserId={stream.broadcasterUserId} />

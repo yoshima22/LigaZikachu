@@ -8,11 +8,14 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { setSpecStreamYouTubeAction, endSpecStreamAction } from "@/app/(app)/spec/actions";
+import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
+import { SpecYoutubePlayer } from "./spec-youtube-player";
 
 export function SpecBroadcasterYouTube({ streamId, matchLabel, live, currentVideoId }: { streamId: string; matchLabel: string; live: boolean; currentVideoId?: string | null }) {
   const router = useRouter();
   const [url, setUrl] = useState("");
   const [pending, start] = useTransition();
+  useSpecBroadcastLifecycle(streamId, live);
 
   const goLive = () => start(async () => {
     const res = await setSpecStreamYouTubeAction(streamId, url);
@@ -76,6 +79,7 @@ export function SpecBroadcasterYouTube({ streamId, matchLabel, live, currentVide
       <p className="rounded-lg border border-yellow-400/20 bg-yellow-400/5 p-2 text-[10px] leading-relaxed text-yellow-100">
         Use sempre o modo <strong>Não listado</strong> — a live não aparece na busca nem no seu canal, só dentro da Zika TV. O modo <strong>Privado</strong> do YouTube não pode ser embutido e não funciona aqui.
       </p>
+      {live && currentVideoId && <div className="aspect-video overflow-hidden rounded-xl border border-border bg-black"><SpecYoutubePlayer streamId={streamId} videoId={currentVideoId} /></div>}
     </div>
   );
 }

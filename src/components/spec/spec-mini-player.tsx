@@ -2,10 +2,10 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
-import { youtubeEmbedUrl } from "@/lib/spec/constants";
+import { useEffect, useRef, useState } from "react";
 import { SpecPlayer } from "./spec-player";
 import { SpecPlayerP2P } from "./spec-player-p2p";
+import { SpecYoutubePlayer } from "./spec-youtube-player";
 
 export type SpecMiniPlayerData = {
   streamId: string;
@@ -27,6 +27,8 @@ export function SpecMiniPlayer() {
   const pathname = usePathname();
   const [stream, setStream] = useState<SpecMiniPlayerData | null>(null);
   const [youtubeControls, setYoutubeControls] = useState(false);
+  const [size, setSize] = useState({ width: 352, height: 240 });
+  const dragRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
 
   useEffect(() => {
     const load = () => {
@@ -41,6 +43,14 @@ export function SpecMiniPlayer() {
     return () => window.removeEventListener(EVENT_NAME, changed);
   }, []);
 
+  useEffect(() => {
+    const ended = (event: Event) => {
+      if ((event as CustomEvent<{ streamId: string }>).detail?.streamId === stream?.streamId) close();
+    };
+    window.addEventListener("zika-tv-stream-ended", ended);
+    return () => window.removeEventListener("zika-tv-stream-ended", ended);
+  }, [stream?.streamId]);
+
   if (!stream || pathname === `/spec/${stream.streamId}` || pathname.startsWith(`/spec/${stream.streamId}/`)) return null;
 
   const close = () => {
@@ -48,20 +58,36 @@ export function SpecMiniPlayer() {
     setStream(null);
   };
 
+  const startResize = (event: React.PointerEvent<HTMLButtonElement>) => {
+    event.preventDefault();
+    dragRef.current = { x: event.clientX, y: event.clientY, width: size.width, height: size.height };
+    const move = (pointer: PointerEvent) => {
+      const start = dragRef.current;
+      if (!start) return;
+      setSize({
+        width: Math.max(280, Math.min(window.innerWidth * 0.9, start.width + start.x - pointer.clientX)),
+        height: Math.max(190, Math.min(window.innerHeight * 0.8, start.height + start.y - pointer.clientY)),
+      });
+    };
+    const stop = () => { dragRef.current = null; window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", stop); };
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", stop);
+  };
+
   return (
-    <aside className="fixed bottom-4 right-3 z-[70] flex h-[15rem] w-[min(22rem,calc(100vw-1.5rem))] min-h-[12rem] min-w-[18rem] max-h-[80vh] max-w-[90vw] resize flex-col overflow-auto rounded-2xl border border-[#FFCB05]/40 bg-slate-950 shadow-2xl shadow-black/60">
+    <aside style={{ width: size.width, height: size.height }} className="fixed bottom-4 right-3 z-[70] flex max-h-[80vh] max-w-[calc(100vw-1.5rem)] flex-col overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-slate-950 shadow-2xl shadow-black/60">
+      <button onPointerDown={startResize} aria-label="Redimensionar miniplayer" title="Arraste para redimensionar" className="absolute left-0 top-0 z-20 flex h-8 w-8 cursor-nwse-resize items-start justify-start rounded-br-xl bg-[#FFCB05]/20 p-1 text-[11px] font-black text-[#FFCB05]">↖</button>
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
-        <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
+        <span className="ml-5 h-2 w-2 animate-pulse rounded-full bg-red-500" />
         <Link href={`/spec/${stream.streamId}`} className="min-w-0 flex-1 truncate text-xs font-black text-white" title="Voltar para a transmissão">
           {stream.title}
         </Link>
-        <span className="text-[9px] text-slate-600" title="Arraste o canto inferior direito para redimensionar">↘</span>
         {stream.youtubeVideoId && <button onClick={() => setYoutubeControls((value) => !value)} className="rounded-md px-2 py-1 text-[9px] font-bold text-slate-400 hover:bg-white/10 hover:text-white">{youtubeControls ? "Ocultar controles" : "Controles"}</button>}
         <button onClick={close} aria-label="Fechar miniplayer" className="rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white">×</button>
       </div>
       <div className="min-h-0 flex-1 bg-black">
         {stream.youtubeVideoId ? (
-          <iframe src={youtubeEmbedUrl(stream.youtubeVideoId)} title="Zika TV em miniplayer" className={`${youtubeControls ? "" : "pointer-events-none"} h-full w-full`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+          <SpecYoutubePlayer streamId={stream.streamId} videoId={stream.youtubeVideoId} interactive={youtubeControls} />
         ) : stream.provider === "p2p-mesh" ? (
           <SpecPlayerP2P streamId={stream.streamId} broadcasterUserId={stream.broadcasterUserId} compact />
         ) : (
