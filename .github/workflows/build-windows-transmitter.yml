@@ -1,0 +1,31 @@
+name: Build Windows Transmitter Beta
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'windows-transmitter/**'
+      - '.github/workflows/build-windows-transmitter.yml'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '8.0.x'
+      - name: Publish single-file executable
+        shell: pwsh
+        run: dotnet publish windows-transmitter/LigaZikachuTransmissor.csproj -c Release -r win-x64 --self-contained true -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true -o output/windows-transmitter
+      - name: Publish beta release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp output/windows-transmitter/LigaZikachuTransmissor.exe LigaZikachuTransmissor.exe
+          gh release delete transmitter-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create transmitter-latest LigaZikachuTransmissor.exe --title "Transmissor Windows Beta" --notes "Beta fechado: pareamento e seleção do processo do jogo."

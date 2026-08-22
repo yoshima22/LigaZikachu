@@ -4,13 +4,15 @@ import { useState } from "react";
 import { SpecBroadcaster } from "./spec-broadcaster";
 import { SpecBroadcasterP2P } from "./spec-broadcaster-p2p";
 import { SpecBroadcasterYouTube } from "./spec-broadcaster-youtube";
+import { SpecWindowsTransmitter } from "./spec-windows-transmitter";
 import type { SpecFps, SpecQualityPriority } from "@/lib/spec/constants";
 
-type Method = "p2p-mesh" | "youtube" | "cloudflare-realtime";
+type Method = "p2p-mesh" | "youtube" | "cloudflare-realtime" | "windows-native";
 
 export function SpecBroadcastMethodChooser(props: {
   streamId: string; matchLabel: string; status: string; provider: string;
   currentVideoId?: string | null; cloudflareEnabled: boolean;
+  windowsTransmitterBeta?: boolean;
   defaultFps: SpecFps; defaultQuality: SpecQualityPriority;
 }) {
   const [started, setStarted] = useState(props.status === "LIVE");
@@ -27,10 +29,11 @@ export function SpecBroadcastMethodChooser(props: {
   return <div className="space-y-4">
     {!locked && <section className="rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4">
       <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Como você quer transmitir?</p>
-      <div className="mt-3 grid gap-2 sm:grid-cols-3">
+      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
         <MethodButton active={method === "p2p-mesh"} onClick={() => setMethod("p2p-mesh")} title="P2P direto" detail="Sempre disponível · sem egress de vídeo" />
         <MethodButton active={method === "youtube"} onClick={() => setMethod("youtube")} title="Link do YouTube" detail="Live não listada ou pública" />
         {props.cloudflareEnabled && <MethodButton active={method === "cloudflare-realtime"} onClick={() => setMethod("cloudflare-realtime")} title="Cloudflare" detail="Liberado pelo administrador" />}
+        {props.windowsTransmitterBeta && <MethodButton active={method === "windows-native"} onClick={() => setMethod("windows-native")} title="Transmissor Windows" detail="Beta fechado · áudio por processo" />}
       </div>
       {!props.cloudflareEnabled && <p className="mt-2 text-[10px] text-slate-500">Cloudflare está fechado. Um administrador precisa habilitá-lo manualmente.</p>}
     </section>}
@@ -48,6 +51,7 @@ export function SpecBroadcastMethodChooser(props: {
     </>}
     {method === "youtube" && <SpecBroadcasterYouTube streamId={props.streamId} matchLabel={props.matchLabel} live={locked} currentVideoId={props.currentVideoId} />}
     {method === "cloudflare-realtime" && props.cloudflareEnabled && <SpecBroadcaster streamId={props.streamId} matchLabel={props.matchLabel} width={1920} height={1080} maxVideoBitrate={3_000_000} fps={fps} qualityPriority={quality} resolutionLabel="1080p · " onLive={() => setStarted(true)} />}
+    {method === "windows-native" && props.windowsTransmitterBeta && <SpecWindowsTransmitter streamId={props.streamId} />}
   </div>;
 }
 
