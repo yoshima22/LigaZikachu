@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from "react";
 import { SpecPlayer } from "./spec-player";
 import { SpecPlayerP2P } from "./spec-player-p2p";
 import { SpecYoutubePlayer } from "./spec-youtube-player";
+import { SPEC_BROADCAST_CONTROL_EVENT, SPEC_BROADCAST_CONTROL_KEY } from "./spec-broadcast-control";
 
 export type SpecMiniPlayerData = {
   streamId: string;
@@ -26,6 +27,7 @@ export function rememberSpecStream(data: SpecMiniPlayerData) {
 export function SpecMiniPlayer() {
   const pathname = usePathname();
   const [stream, setStream] = useState<SpecMiniPlayerData | null>(null);
+  const [ownBroadcastActive, setOwnBroadcastActive] = useState(false);
   const [youtubeControls, setYoutubeControls] = useState(false);
   const [size, setSize] = useState({ width: 352, height: 240 });
   const dragRef = useRef<{ x: number; y: number; width: number; height: number } | null>(null);
@@ -44,6 +46,18 @@ export function SpecMiniPlayer() {
   }, []);
 
   useEffect(() => {
+    const update = () => setOwnBroadcastActive(Boolean(localStorage.getItem(SPEC_BROADCAST_CONTROL_KEY)));
+    const storage = (event: StorageEvent) => { if (event.key === SPEC_BROADCAST_CONTROL_KEY) update(); };
+    update();
+    window.addEventListener(SPEC_BROADCAST_CONTROL_EVENT, update);
+    window.addEventListener("storage", storage);
+    return () => {
+      window.removeEventListener(SPEC_BROADCAST_CONTROL_EVENT, update);
+      window.removeEventListener("storage", storage);
+    };
+  }, []);
+
+  useEffect(() => {
     const ended = (event: Event) => {
       if ((event as CustomEvent<{ streamId: string }>).detail?.streamId === stream?.streamId) close();
     };
@@ -51,7 +65,7 @@ export function SpecMiniPlayer() {
     return () => window.removeEventListener("zika-tv-stream-ended", ended);
   }, [stream?.streamId]);
 
-  if (!stream || pathname === `/spec/${stream.streamId}` || pathname.startsWith(`/spec/${stream.streamId}/`)) return null;
+  if (ownBroadcastActive || !stream || pathname === `/spec/${stream.streamId}` || pathname.startsWith(`/spec/${stream.streamId}/`)) return null;
 
   const close = () => {
     sessionStorage.removeItem(STORAGE_KEY);

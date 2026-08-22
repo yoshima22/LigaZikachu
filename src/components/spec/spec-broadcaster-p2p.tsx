@@ -8,6 +8,7 @@ import { sendSpecSignalAction, pollSpecSignalsAction } from "@/app/(app)/spec/si
 import { SPEC_ICE_SERVERS, waitForIceGathering, specDisplayMediaOptions, sharedDisplaySurface } from "@/lib/spec/webrtc-client";
 import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
 import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
+import { publishSpecBroadcastState, SPEC_BROADCAST_CHANNEL, type SpecBroadcastCommand } from "./spec-broadcast-control";
 
 type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" | "error";
 
@@ -28,6 +29,8 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
   const [error, setError] = useState<string | null>(null);
   const [hasAudio, setHasAudio] = useState(false);
   const [audioEnabled, setAudioEnabled] = useState(true);
+  const [broadcastPaused, setBroadcastPaused] = useState(false);
+  const audioBeforePauseRef = useRef(true);
   const [viewerCount, setViewerCount] = useState(0);
   const [switchingSource, setSwitchingSource] = useState(false);
   useSpecBroadcastLifecycle(streamId, state === "live");
@@ -44,9 +47,10 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
   const end = useCallback(async (redirect = true) => {
     teardown();
     setState("ended");
+    publishSpecBroadcastState({ streamId, title: matchLabel, state: "ended" });
     await endSpecStreamAction(streamId).catch(() => null);
     if (redirect) router.push("/spec");
-  }, [streamId, teardown, router]);
+  }, [streamId, matchLabel, teardown, router]);
 
   // Cria a conexão para um espectador que enviou JOIN e devolve a OFERTA.
   const offerToViewer = useCallback(async (viewerId: string) => {
@@ -147,6 +151,9 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       if ("error" in res) throw new Error(res.error);
       startSignalingLoop();
       setState("live");
+      setBroadcastPaused(false);
+      window.name = `zika-tv-broadcast-${streamId}`;
+      publishSpecBroadcastState({ streamId, title: matchLabel, state: "live" });
       onLive?.();
       toast.success("Transmissão P2P ao vivo!");
     } catch (e) {
@@ -158,7 +165,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       setState("error");
       await endSpecStreamAction(streamId).catch(() => null);
     }
-  }, [streamId, fps, width, height, teardown, end, startSignalingLoop, onLive]);
+  }, [streamId, matchLabel, fps, width, height, teardown, end, startSignalingLoop, onLive]);
 
   const switchSource = useCallback(async () => {
     if (state !== "live" || switchingSource) return;
@@ -201,6 +208,40 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
     toast.success(next ? "Áudio da transmissão ativado." : "Áudio da transmissão cortado. O Discord não será ouvido.");
   }, [audioEnabled]);
 
+  useEffect(() => {
+    let channel: BroadcastChannel | null = null;
+    try {
+      channel = new BroadcastChannel(SPEC_BROADCAST_CHANNEL);
+      channel.onmessage = (event) => {
+        if (event.data?.type !== "command") return;
+        const command = event.data.command as SpecBroadcastCommand;
+        if (command === "stop") { void end(true); return; }
+        if (command === "focus") { window.focus(); return; }
+        if (command === "pause") {
+          audioBeforePauseRef.current = audioEnabled;
+          streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = false; });
+          streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = false; });
+          setBroadcastPaused(true);
+          publishSpecBroadcastState({ streamId, title: matchLabel, state: "paused" });
+        }
+        if (command === "play") {
+          streamRef.current?.getVideoTracks().forEach((track) => { track.enabled = true; });
+          streamRef.current?.getAudioTracks().forEach((track) => { track.enabled = audioBeforePauseRef.current; });
+          setBroadcastPaused(false);
+          publishSpecBroadcastState({ streamId, title: matchLabel, state: "live" });
+        }
+      };
+    } catch { /* BroadcastChannel indisponível */ }
+    return () => channel?.close();
+  }, [audioEnabled, end, matchLabel, streamId]);
+
+  useEffect(() => {
+    if (state !== "live") return;
+    const clearDock = () => publishSpecBroadcastState({ streamId, title: matchLabel, state: "ended" });
+    window.addEventListener("pagehide", clearDock);
+    return () => window.removeEventListener("pagehide", clearDock);
+  }, [state, streamId, matchLabel]);
+
   useEffect(() => teardown, [teardown]);
 
   return (
@@ -210,7 +251,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
         <p className="mt-1 text-lg font-black text-white">{matchLabel}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2 text-xs">
           <span className={`rounded-full px-2 py-1 font-bold ${state === "live" ? "bg-red-500/15 text-red-300" : "bg-slate-800 text-slate-400"}`}>
-            {state === "live" ? "🔴 AO VIVO" : state === "connecting" ? "Conectando…" : state === "requesting" ? "Escolhendo tela…" : state === "ended" ? "Encerrada" : "Pronto"}
+            {state === "live" ? (broadcastPaused ? "⏸ PAUSADA" : "🔴 AO VIVO") : state === "connecting" ? "Conectando…" : state === "requesting" ? "Escolhendo tela…" : state === "ended" ? "Encerrada" : "Pronto"}
           </span>
           {state === "live" && <span className="rounded-full bg-emerald-500/15 px-2 py-1 font-bold text-emerald-300">👥 {viewerCount} conectado{viewerCount === 1 ? "" : "s"}</span>}
           {state === "live" && <span className="text-slate-500">Qualidade: {resolutionLabel}{fps} · {hasAudio ? (audioEnabled ? "+ áudio compartilhado" : "+ áudio cortado") : "sem áudio"}</span>}
@@ -241,6 +282,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
         )}
         {state === "live" && <button onClick={switchSource} disabled={switchingSource} className="rounded-xl border border-cyan-400/40 px-5 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">{switchingSource ? "Escolhendo…" : "Trocar janela"}</button>}
         {state === "live" && hasAudio && <button onClick={toggleOutgoingAudio} className="rounded-xl border border-amber-400/40 px-5 py-2.5 text-sm font-bold text-amber-200 hover:bg-amber-500/10">{audioEnabled ? "Cortar áudio" : "Restaurar áudio"}</button>}
+        {state === "live" && <button onClick={() => window.open("/dashboard", "_blank", "noopener")} className="rounded-xl border border-violet-400/40 px-5 py-2.5 text-sm font-bold text-violet-200 hover:bg-violet-500/10">Navegar pelo site sem encerrar</button>}
       </div>
     </div>
   );

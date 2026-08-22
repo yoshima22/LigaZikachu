@@ -17,7 +17,9 @@ export function useSpecBroadcastLifecycle(streamId: string, active: boolean) {
     return () => {
       window.clearInterval(timer);
       window.removeEventListener("pagehide", finish);
-      finish();
+      // Uma navegação interna do Next desmonta a página sem fechar a aba. Não
+      // encerramos no cleanup: o botão explícito/track ended encerra a live e
+      // pagehide continua cobrindo fechamento ou recarga real da aba.
     };
   }, [streamId, active]);
 }
