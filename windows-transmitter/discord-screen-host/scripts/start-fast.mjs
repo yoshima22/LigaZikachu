@@ -26,7 +26,9 @@ const linha = (t = '') => console.log(t);
 const nota = (t) => linha(`${cor.fraco}${t}${cor.fim}`);
 const erro = (t) => linha(`${cor.vermelho}  ${t}${cor.fim}`);
 
-if (!fs.existsSync(VITE)) {
+const siteCompilado = path.join(RAIZ, 'client', 'dist', 'index.html');
+
+if (!fs.existsSync(siteCompilado) && !fs.existsSync(VITE)) {
   linha(`\n${cor.vermelho}  Faltam as dependências. Rode: npm install${cor.fim}\n`);
   process.exit(1);
 }
@@ -166,19 +168,21 @@ contarEntryPoint(
 
 // -------------------------------------------------------------------- build
 
-linha();
-nota('  Montando o site…');
+if (!fs.existsSync(siteCompilado)) {
+  linha();
+  nota('  Montando o site…');
 
-const build = spawnSync(process.execPath, [VITE, 'build'], {
-  cwd: path.join(RAIZ, 'client'),
-  stdio: 'ignore',
-});
+  const build = spawnSync(process.execPath, [VITE, 'build'], {
+    cwd: path.join(RAIZ, 'client'),
+    stdio: 'ignore',
+  });
 
-if (build.status !== 0) {
-  linha(
-    `\n${cor.vermelho}  O site não compilou. Rode "npm run build" para ver o erro.${cor.fim}\n`,
-  );
-  process.exit(1);
+  if (build.status !== 0) {
+    linha(
+      `\n${cor.vermelho}  O site não compilou. Rode "npm run build" para ver o erro.${cor.fim}\n`,
+    );
+    process.exit(1);
+  }
 }
 
 // ------------------------------------------------------------- túnel e servidor
