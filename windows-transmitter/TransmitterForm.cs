@@ -13,13 +13,25 @@ internal sealed class TransmitterForm : Form
     private readonly Label _status = L("", 9, Muted, 485, 60);
     private readonly Button _pair = Button("CONECTAR À ZIKA TV", 235, Violet, Color.White);
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private readonly DiscordScreenHostManager _discordHost = new();
 
     public TransmitterForm()
     {
         Text = "Liga Zikachu — Transmissor Windows"; Width = 1180; Height = 780; MinimumSize = new Size(1080, 720); StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Color.White; Font = new Font("Segoe UI", 10); DoubleBuffered = true;
         _resolution.SelectedIndex = 1; _fps.SelectedIndex = 2; _quality.SelectedIndex = 0; _pair.Click += async (_, _) => await PairAsync();
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(22), BackColor = Bg };
-        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62)); root.Controls.Add(Intro(), 0, 0); root.Controls.Add(Setup(), 1, 0); Controls.Add(root); LoadProcesses();
+        root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62)); root.Controls.Add(Intro(), 0, 0); root.Controls.Add(SetupTabs(), 1, 0); Controls.Add(root); LoadProcesses();
+    }
+
+    private Control SetupTabs()
+    {
+        var tabs = new TabControl { Dock = DockStyle.Fill, Appearance = TabAppearance.Normal, Padding = new Point(18, 8) };
+        var zika = new TabPage("Zika TV") { BackColor = Bg, Padding = new Padding(0) };
+        var discord = new TabPage("Discord Screen") { BackColor = Bg, Padding = new Padding(0) };
+        zika.Controls.Add(Setup());
+        discord.Controls.Add(new DiscordScreenHostPanel(_discordHost));
+        tabs.TabPages.Add(zika); tabs.TabPages.Add(discord);
+        return tabs;
     }
 
     private Control Intro()
@@ -71,6 +83,7 @@ internal sealed class TransmitterForm : Form
     }
 
     private void SetStatus(string text, Color color) { _status.Text = text; _status.ForeColor = color; }
+    protected override void OnFormClosed(FormClosedEventArgs e) { _discordHost.Dispose(); _http.Dispose(); base.OnFormClosed(e); }
     private static string? JsonError(string json) { try { return JsonDocument.Parse(json).RootElement.GetProperty("error").GetString(); } catch { return null; } }
     private static Panel Panel(Color color) => new() { Dock = DockStyle.Fill, Margin = new Padding(8), Padding = new Padding(25), BackColor = color };
     private static FlowLayoutPanel Stack(Control p) { var s = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = false }; p.Controls.Add(s); return s; }
