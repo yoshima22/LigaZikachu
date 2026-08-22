@@ -29,9 +29,11 @@ jobs:
       - name: Install and build Discord Activity
         shell: pwsh
         run: |
-          git config --global --add safe.directory $env:GITHUB_WORKSPACE
-          npm ci --prefix windows-transmitter/discord-screen-host --include=dev --ignore-scripts --no-audit --no-fund
-          npm run build --prefix windows-transmitter/discord-screen-host
+          $client = "windows-transmitter/discord-screen-host/client"
+          $server = "windows-transmitter/discord-screen-host/server"
+          npm install --prefix $client --ignore-scripts --no-audit --no-fund --package-lock=false
+          npm run build --prefix $client
+          npm install --prefix $server --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Prepare portable bundle
         shell: pwsh
         run: |
