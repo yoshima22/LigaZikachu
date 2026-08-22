@@ -5,7 +5,6 @@ import { getSpecConfig } from "@/lib/spec/config";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { SpecBroadcastMethodChooser } from "@/components/spec/spec-broadcast-method-chooser";
 import { SpecStands } from "@/components/spec/spec-stands";
-import { isStaff } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -32,6 +31,7 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
   }
 
   const [view] = await enrichSpecStreams([stream]);
+  const windowsTransmitterConnected = Boolean(await prisma.specSignal.findFirst({ where: { streamId: stream.id, fromUserId: session.user.id, kind: "WIN_CONNECTED" }, select: { id: true } }));
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-1 py-3">
@@ -39,7 +39,7 @@ export default async function SpecBroadcastPage({ params }: { params: Promise<{ 
         <h1 className="text-xl font-black text-white">Transmitir na Zika TV</h1>
         <Link href="/spec" className="rounded-lg border border-border px-3 py-1.5 text-xs text-slate-400 hover:text-slate-200">← Zika TV</Link>
       </div>
-      <SpecBroadcastMethodChooser streamId={stream.id} matchLabel={view?.title ?? view?.matchLabel ?? "Partida"} status={stream.status} provider={stream.provider} currentVideoId={stream.youtubeVideoId} cloudflareEnabled={config.mode === "cloudflare-realtime" && config.providerConfigured} windowsTransmitterBeta={isStaff(session.user.role)} defaultFps={config.fps} defaultQuality={config.qualityPriority} />
+      <SpecBroadcastMethodChooser streamId={stream.id} matchLabel={view?.title ?? view?.matchLabel ?? "Partida"} status={stream.status} provider={stream.provider} currentVideoId={stream.youtubeVideoId} cloudflareEnabled={config.mode === "cloudflare-realtime" && config.providerConfigured} windowsTransmitterBeta windowsTransmitterConnected={windowsTransmitterConnected} defaultFps={config.fps} defaultQuality={config.qualityPriority} />
       <SpecStands streamId={stream.id} sendPresence={false} />
     </main>
   );

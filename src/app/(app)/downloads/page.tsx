@@ -131,14 +131,14 @@ export default function DownloadsPage() {
         <div className="absolute -right-10 -top-16 h-56 w-56 rounded-full bg-violet-500/15 blur-3xl" />
         <div className="relative grid items-center gap-5 lg:grid-cols-[1fr_auto]">
           <div>
-            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-violet-300">Ferramenta para transmissões · Beta</span>
+            <span className="text-[10px] font-black uppercase tracking-[0.22em] text-violet-300">Ferramenta portátil para transmissões</span>
             <h2 className="mt-1 text-2xl font-black text-white">Transmissor Windows da Zika TV</h2>
             <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">Programa portátil separado da Liga para selecionar o jogo, parear com uma live e configurar resolução, FPS e prioridade do P2P. Ele pode ser baixado pelo Opera, Chrome ou Edge e não exige instalar a PWA do site, OBS ou .NET.</p>
             <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-slate-300"><span className="rounded-full border border-white/10 px-2.5 py-1">Arquivo único .exe</span><span className="rounded-full border border-white/10 px-2.5 py-1">Áudio por processo</span><span className="rounded-full border border-white/10 px-2.5 py-1">Configuração P2P</span><span className="rounded-full border border-white/10 px-2.5 py-1">Windows 10/11 64 bits</span></div>
           </div>
           <a href={TRANSMITTER_PATH} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-violet-950/40 transition hover:-translate-y-0.5 hover:bg-violet-400"><Download size={20} /> Baixar transmissor</a>
         </div>
-        <p className="relative mt-4 border-t border-white/10 pt-3 text-[11px] text-amber-200/80">Beta fechado: pareamento, seleção do processo e configurações estão disponíveis. A publicação nativa do vídeo e do áudio isolado será liberada após os testes técnicos.</p>
+        <p className="relative mt-4 border-t border-white/10 pt-3 text-[11px] text-emerald-200/80">O aplicativo mantém a live P2P ativa enquanto você navega pelo site. Chat, enquetes e arquibancada continuam disponíveis normalmente na página da transmissão.</p>
       </section>
 
       <section className="grid gap-3 rounded-3xl border border-white/10 bg-slate-950/60 p-5 sm:grid-cols-2 lg:grid-cols-4">

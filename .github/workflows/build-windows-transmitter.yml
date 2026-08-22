@@ -28,4 +28,4 @@ jobs:
         run: |
           cp output/windows-transmitter/LigaZikachuTransmissor.exe LigaZikachuTransmissor.exe
           gh release delete transmitter-latest --yes --cleanup-tag 2>/dev/null || true
-          gh release create transmitter-latest LigaZikachuTransmissor.exe --title "Transmissor Windows Beta" --notes "Beta fechado: pareamento e seleção do processo do jogo."
+          gh release create transmitter-latest LigaZikachuTransmissor.exe --title "Transmissor Windows da Zika TV" --notes "Aplicativo portátil com pareamento, transmissão P2P, controles de mídia e funcionamento independente do navegador."

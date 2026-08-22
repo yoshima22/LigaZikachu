@@ -16,7 +16,7 @@ internal sealed class TransmitterForm : Form
 
     public TransmitterForm()
     {
-        Text = "Liga Zikachu — Transmissor Windows Beta"; Width = 1180; Height = 780; MinimumSize = new Size(1080, 720); StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Color.White; Font = new Font("Segoe UI", 10); DoubleBuffered = true;
+        Text = "Liga Zikachu — Transmissor Windows"; Width = 1180; Height = 780; MinimumSize = new Size(1080, 720); StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Color.White; Font = new Font("Segoe UI", 10); DoubleBuffered = true;
         _resolution.SelectedIndex = 1; _fps.SelectedIndex = 2; _quality.SelectedIndex = 0; _pair.Click += async (_, _) => await PairAsync();
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(22), BackColor = Bg };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62)); root.Controls.Add(Intro(), 0, 0); root.Controls.Add(Setup(), 1, 0); Controls.Add(root); LoadProcesses();
@@ -28,8 +28,8 @@ internal sealed class TransmitterForm : Form
         var s = Stack(card);
         s.Controls.Add(new LogoBadge()); s.Controls.Add(L("ZIKA TV", 10, Yellow)); s.Controls.Add(L("Transmissor\nWindows", 28, Color.White, 310, 104, FontStyle.Bold));
         s.Controls.Add(L("Áudio do jogo sem levar a conversa do Discord junto.", 11, Color.FromArgb(221, 214, 254), 310, 58)); s.Controls.Add(Gap(8));
-        s.Controls.Add(Feature("P2P direto", "Sem egress de vídeo da Liga.")); s.Controls.Add(Feature("Áudio por processo", "Escolha somente o jogo.")); s.Controls.Add(Feature("Independente do navegador", "Use com Opera, Chrome ou Edge.")); s.Controls.Add(Gap(12));
-        s.Controls.Add(L("BETA FECHADO", 9, Color.FromArgb(196, 181, 253), 310, 24, FontStyle.Bold)); s.Controls.Add(L("Pareamento e configurações já ativos. A publicação nativa será liberada após os testes desta base.", 9, Muted, 310, 65)); return card;
+        s.Controls.Add(Feature("P2P direto", "Sem egress de vídeo da Liga.")); s.Controls.Add(Feature("Áudio da janela", "Quando o Windows oferecer suporte.")); s.Controls.Add(Feature("Independente do navegador", "Use com Opera, Chrome ou Edge.")); s.Controls.Add(Gap(12));
+        s.Controls.Add(L("CENTRAL DA TRANSMISSÃO", 9, Color.FromArgb(196, 181, 253), 310, 24, FontStyle.Bold)); s.Controls.Add(L("Após o pareamento, o programa mantém a live e seus controles ativos enquanto você navega pelo site.", 9, Muted, 310, 65)); return card;
     }
 
     private Control Setup()
@@ -62,7 +62,9 @@ internal sealed class TransmitterForm : Form
             var response = await _http.PostAsJsonAsync(_server.Text.Trim().TrimEnd('/') + "/api/spec/windows-transmitter/pair", new { code, deviceName = Environment.MachineName, processName = process.Name, resolution = _resolution.Text, fps = _fps.Text, quality = _quality.Text });
             var json = await response.Content.ReadAsStringAsync(); if (!response.IsSuccessStatusCode) { SetStatus("⚠ " + (JsonError(json) ?? "Não foi possível parear."), Color.LightPink); return; }
             var result = JsonSerializer.Deserialize<PairResult>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true }); if (result?.Token is null) { SetStatus("⚠ Resposta inválida.", Color.LightPink); return; }
-            CredentialStore.Save(result.StreamId!, result.Token, process.Id, _resolution.Text, _fps.Text, _quality.Text); SetStatus($"✓ PAREADO COM SUCESSO\n{process.Title} · {_resolution.Text} · {_fps.Text} · {_quality.Text}", Color.FromArgb(110, 231, 183));
+            CredentialStore.Save(result.StreamId!, result.Token, process.Id, _resolution.Text, _fps.Text, _quality.Text); SetStatus($"✓ PAREADO COM SUCESSO\nAbrindo os controles da transmissão…", Color.FromArgb(110, 231, 183));
+            var studio = new BroadcastStudioForm(_server.Text.Trim().TrimEnd('/'), result.StreamId!, result.Token, this);
+            studio.Show(); Hide();
         }
         catch (Exception ex) { SetStatus("⚠ Falha de conexão: " + ex.Message, Color.LightPink); }
         finally { _pair.Enabled = true; _pair.Text = "CONECTAR À ZIKA TV"; }
@@ -85,8 +87,18 @@ internal sealed class TransmitterForm : Form
 
 internal sealed class LogoBadge : Control
 {
-    public LogoBadge() { Width = 62; Height = 62; Margin = new Padding(0, 0, 0, 10); DoubleBuffered = true; }
-    protected override void OnPaint(PaintEventArgs e) { e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias; using var y = new SolidBrush(Color.FromArgb(255, 203, 5)); e.Graphics.FillEllipse(y, 1, 1, 58, 58); using var f = new Font("Segoe UI Symbol", 25, FontStyle.Bold); using var d = new SolidBrush(Color.FromArgb(18, 12, 46)); e.Graphics.DrawString("ϟ", f, d, 14, 9); }
+    public LogoBadge() { Width = 68; Height = 68; Margin = new Padding(0, 0, 0, 10); DoubleBuffered = true; }
+    protected override void OnPaint(PaintEventArgs e)
+    {
+        e.Graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        using var dark = new SolidBrush(Color.FromArgb(2, 6, 23)); using var yellow = new SolidBrush(Color.FromArgb(250, 204, 21)); using var blue = new Pen(Color.FromArgb(96, 165, 250), 4) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round }; using var line = new Pen(Color.FromArgb(2, 6, 23), 5) { StartCap = System.Drawing.Drawing2D.LineCap.Round, EndCap = System.Drawing.Drawing2D.LineCap.Round };
+        e.Graphics.FillRoundedRectangle(dark, new Rectangle(0, 0, 66, 66), 14); e.Graphics.FillEllipse(yellow, 10, 7, 46, 46); e.Graphics.DrawLine(line, 12, 28, 54, 28); e.Graphics.FillEllipse(dark, 26, 20, 16, 16); using var white = new SolidBrush(Color.White); e.Graphics.FillEllipse(white, 31, 25, 6, 6); e.Graphics.DrawArc(blue, 15, 34, 36, 20, 18, 144);
+    }
+}
+
+internal static class GraphicsExtensions
+{
+    public static void FillRoundedRectangle(this Graphics graphics, Brush brush, Rectangle bounds, int radius) { using var path = new System.Drawing.Drawing2D.GraphicsPath(); var d = radius * 2; path.AddArc(bounds.X, bounds.Y, d, d, 180, 90); path.AddArc(bounds.Right - d, bounds.Y, d, d, 270, 90); path.AddArc(bounds.Right - d, bounds.Bottom - d, d, d, 0, 90); path.AddArc(bounds.X, bounds.Bottom - d, d, d, 90, 90); path.CloseFigure(); graphics.FillPath(brush, path); }
 }
 
 internal sealed class AdvancedPanel : Panel

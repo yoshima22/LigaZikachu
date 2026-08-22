@@ -13,12 +13,12 @@ export function SpecBroadcastMethodChooser(props: {
   streamId: string; matchLabel: string; status: string; provider: string;
   currentVideoId?: string | null; cloudflareEnabled: boolean;
   windowsTransmitterBeta?: boolean;
+  windowsTransmitterConnected?: boolean;
   defaultFps: SpecFps; defaultQuality: SpecQualityPriority;
 }) {
   const [started, setStarted] = useState(props.status === "LIVE");
   const locked = props.status === "LIVE" || started;
-  const initial: Method = locked && (props.provider === "youtube" || props.provider === "cloudflare-realtime" || props.provider === "p2p-mesh")
-    ? props.provider : "p2p-mesh";
+  const initial: Method = locked && props.windowsTransmitterConnected ? "windows-native" : locked && (props.provider === "youtube" || props.provider === "cloudflare-realtime" || props.provider === "p2p-mesh") ? props.provider : "p2p-mesh";
   const [method, setMethod] = useState<Method>(initial);
   const [resolution, setResolution] = useState<"540" | "720" | "1080">("720");
   const [fps, setFps] = useState<SpecFps>(props.defaultFps);
@@ -33,7 +33,7 @@ export function SpecBroadcastMethodChooser(props: {
         <MethodButton active={method === "p2p-mesh"} onClick={() => setMethod("p2p-mesh")} title="P2P direto" detail="Sempre disponível · sem egress de vídeo" />
         <MethodButton active={method === "youtube"} onClick={() => setMethod("youtube")} title="Link do YouTube" detail="Live não listada ou pública" />
         {props.cloudflareEnabled && <MethodButton active={method === "cloudflare-realtime"} onClick={() => setMethod("cloudflare-realtime")} title="Cloudflare" detail="Liberado pelo administrador" />}
-        {props.windowsTransmitterBeta && <MethodButton active={method === "windows-native"} onClick={() => setMethod("windows-native")} title="Transmissor Windows" detail="Beta fechado · áudio por processo" />}
+        {props.windowsTransmitterBeta && <MethodButton active={method === "windows-native"} onClick={() => setMethod("windows-native")} title="Programa Windows" detail="Live independente do navegador" />}
       </div>
       {!props.cloudflareEnabled && <p className="mt-2 text-[10px] text-slate-500">Cloudflare está fechado. Um administrador precisa habilitá-lo manualmente.</p>}
     </section>}
