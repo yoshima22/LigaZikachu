@@ -28,11 +28,13 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
     if (s) setStands(s);
   }, [streamId]);
 
-  // Heartbeat de presença (watch) a cada 15s + saída ao desmontar.
+  // Heartbeat abaixo da janela de presença, mas sem escrever no banco a cada 15s.
   useEffect(() => {
     if (!sendPresence) return;
     void heartbeatSpecPresenceAction(streamId);
-    const timer = window.setInterval(() => { void heartbeatSpecPresenceAction(streamId); }, 15_000);
+    const timer = window.setInterval(() => {
+      if (document.visibilityState === "visible") void heartbeatSpecPresenceAction(streamId);
+    }, 25_000);
     const onHide = () => { void leaveSpecPresenceAction(streamId); };
     window.addEventListener("pagehide", onHide);
     return () => {
@@ -42,11 +44,18 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
     };
   }, [streamId, sendPresence]);
 
-  // Atualiza arquibancada, enquete e chat em um único snapshot barato.
+  // Atualiza arquibancada, enquete e chat em um único snapshot. Abas ocultas não
+  // consomem egress; ao voltar, sincronizam imediatamente.
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(refresh, 5_000);
-    return () => window.clearInterval(timer);
+    const tick = () => { if (document.visibilityState === "visible") void refresh(); };
+    const timer = window.setInterval(tick, 8_000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      window.clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+    };
   }, [refresh]);
 
   if (!stands) return null;

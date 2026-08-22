@@ -4,7 +4,7 @@ import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 
 // Botão de atualizar a lista da Zika TV (a página é server-rendered). Também
-// atualiza sozinho a cada 20s enquanto a aba está visível.
+// atualiza sozinho em ritmo econômico enquanto a aba está visível.
 export function SpecRefreshButton() {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -14,7 +14,7 @@ export function SpecRefreshButton() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") start(() => router.refresh());
-    }, 20_000);
+    }, 45_000);
     return () => clearInterval(timer);
   }, [router]);
 

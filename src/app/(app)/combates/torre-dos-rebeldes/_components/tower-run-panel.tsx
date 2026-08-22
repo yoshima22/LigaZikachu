@@ -22,7 +22,7 @@ import { LeagueBattleReplayModal, type TurnLog, type ReplayLineupFighter } from 
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
 
-type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true }>;
+type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true; unchanged: false }>;
 type Intent = "ADVANCE" | "DEFEND";
 
 const card = "rounded-2xl border border-slate-800 bg-slate-950/70 p-5";
@@ -58,6 +58,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [editingTeam,setEditingTeam]=useState(false); const [lobbyPicks,setLobbyPicks]=useState<string[]>([]); const [lobbySearch,setLobbySearch]=useState("");
   const [phaseFlash,setPhaseFlash]=useState<string|null>(null);
   const inFlight = useRef(false);
+  const revisionRef = useRef<string | undefined>(undefined);
   const lastTurnRef=useRef<number|null>(null);
   const replayOpenRef = useRef(false);
   const seenReplayRef = useRef<string | null>(null);
@@ -75,9 +76,12 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
     if (inFlight.current) return;
     inFlight.current = true;
     try {
-      const res = await getTowerRunStateAction(runId);
+      const res = await getTowerRunStateAction(runId, revisionRef.current);
       if ("error" in res) setError(res.error ?? "Erro ao carregar a expedição.");
-      else setState(res);
+      else if (!res.unchanged) {
+        revisionRef.current = res.revision;
+        setState(res);
+      }
     } finally {
       inFlight.current = false;
     }
@@ -85,8 +89,16 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
   useEffect(() => {
     void refresh();
-    const t = setInterval(() => void refresh(), 4000);
-    return () => clearInterval(t);
+    const tick = () => { if (document.visibilityState === "visible") void refresh(); };
+    const t = setInterval(tick, 6000);
+    const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
+    document.addEventListener("visibilitychange", onVisible);
+    window.addEventListener("focus", onVisible);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener("visibilitychange", onVisible);
+      window.removeEventListener("focus", onVisible);
+    };
   }, [refresh]);
 
   if (error) return <section className={card}><p className="text-sm text-red-300">{error}</p></section>;

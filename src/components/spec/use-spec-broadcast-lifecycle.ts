@@ -12,7 +12,9 @@ export function useSpecBroadcastLifecycle(streamId: string, active: boolean) {
       if (!navigator.sendBeacon(url, payload)) void fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ event: "end" }), keepalive: true });
     };
     heartbeat();
-    const timer = window.setInterval(heartbeat, 15_000);
+    // O servidor tolera três minutos sem pulso. Trinta segundos mantém margem
+    // ampla para reconexão e reduz pela metade as escritas da transmissão.
+    const timer = window.setInterval(heartbeat, 30_000);
     window.addEventListener("pagehide", finish);
     return () => {
       window.clearInterval(timer);

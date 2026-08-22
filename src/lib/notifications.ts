@@ -96,12 +96,13 @@ async function sendFcmMessage(token: string, payload: NotificationPayload, acces
       body: JSON.stringify({
         message: {
           token,
-          notification: {
-            title: payload.title,
-            body: payload.body
-          },
           data: {
             ...payload.data,
+            // Data-only é intencional: em segundo plano o bloco `notification`
+            // faria o Android criar um PendingIntent genérico para a Activity,
+            // descartando a rota e abrindo primeiro o dashboard.
+            title: payload.title,
+            body: payload.body,
             // Caminho relativo (compat) + URL absoluta, para o app abrir direto.
             url: destination,
             link: absoluteUrl

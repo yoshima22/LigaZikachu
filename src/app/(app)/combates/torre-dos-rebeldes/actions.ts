@@ -605,20 +605,54 @@ export async function advanceToBossAction(runId: string): Promise<{ error: strin
 }
 
 /** Estado atual da run (para polling). Resolve o turno se o deadline já passou. */
-export async function getTowerRunStateAction(runId: string) {
+export async function getTowerRunStateAction(runId: string, knownRevision?: string) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
 
+  // O cliente consulta com frequência para manter a sala sincronizada. Antes de
+  // montar o snapshot completo (mapa, replay, mascotes e narrativa), confira uma
+  // revisão pequena. Quando nada mudou, a resposta tem apenas alguns bytes.
+  let revisionProbe = await prisma.towerRun.findUnique({
+    where: { id: runId },
+    select: {
+      status: true,
+      nextDeadline: true,
+      updatedAt: true,
+      members: { select: {
+        userId: true, expeditionRole: true, confirmed: true, consecutiveMisses: true, afkRemoved: true,
+        mascots: { select: { mascotId: true, currentHp: true, currentStance: true, state: true } },
+      } },
+    },
+  });
+  if (!revisionProbe) return { error: "Expedição não encontrada." };
+  if (!revisionProbe.members.some((member) => member.userId === user.id)) return { error: "Você não participa desta expedição." };
+
+  if (revisionProbe.status === "ACTIVE" && revisionProbe.nextDeadline && revisionProbe.nextDeadline.getTime() <= Date.now()) {
+    await resolveTowerTurnLocked(runId).catch(() => null);
+    revisionProbe = await prisma.towerRun.findUnique({
+      where: { id: runId },
+      select: {
+        status: true, nextDeadline: true, updatedAt: true,
+        members: { select: {
+          userId: true, expeditionRole: true, confirmed: true, consecutiveMisses: true, afkRemoved: true,
+          mascots: { select: { mascotId: true, currentHp: true, currentStance: true, state: true } },
+        } },
+      },
+    });
+    if (!revisionProbe) return { error: "Expedição não encontrada." };
+  }
+
+  const revision = [
+    revisionProbe.updatedAt.toISOString(),
+    ...revisionProbe.members.flatMap((member) => [
+      member.userId, member.expeditionRole, Number(member.confirmed), member.consecutiveMisses, Number(member.afkRemoved),
+      ...member.mascots.flatMap((mascot) => [mascot.mascotId, mascot.currentHp, mascot.currentStance, mascot.state]),
+    ]),
+  ].join(":");
+  if (knownRevision === revision) return { ok: true as const, unchanged: true as const, revision };
+
   let run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
   if (!run) return { error: "Expedição não encontrada." };
-  if (!run.members.some((m) => m.userId === user.id)) return { error: "Você não participa desta expedição." };
-
-  // Auto-resolução ao acessar após o deadline (além do cron).
-  if (run.status === "ACTIVE" && run.nextDeadline && run.nextDeadline.getTime() <= Date.now()) {
-    await resolveTowerTurnLocked(runId).catch(() => null);
-    run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: { include: { mascots: true } } } });
-    if (!run) return { error: "Expedição não encontrada." };
-  }
 
   const vol = (run.volatileState ?? {}) as TowerVolatile;
   const lobby = (run.volatileState as { lobby?: { code?: string; hostId?: string; ready?: Record<string,boolean> } } | null)?.lobby;
@@ -687,6 +721,8 @@ export async function getTowerRunStateAction(runId: string) {
 
   return {
     ok: true as const,
+    unchanged: false as const,
+    revision,
     run: {
       id: run.id, status: run.status, pace: run.pace, currentFloor: run.currentFloor,
       globalTurn: run.globalTurn, nextDeadline: run.nextDeadline?.toISOString() ?? null,

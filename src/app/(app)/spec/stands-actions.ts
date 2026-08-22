@@ -8,7 +8,7 @@ import { recordSpectatorWatchAndCheck } from "@/lib/spec/usage";
 import { SPEC_PRESENCE_HEARTBEAT_SECONDS } from "@/lib/spec/constants";
 
 // Janela para considerar um espectador "online" na arquibancada (ms).
-const PRESENCE_WINDOW_MS = 30_000;
+const PRESENCE_WINDOW_MS = 60_000;
 
 type StandsState = {
   spectators: Array<{ userId: string; name: string }>;

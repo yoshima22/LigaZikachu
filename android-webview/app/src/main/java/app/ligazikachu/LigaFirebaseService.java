@@ -40,6 +40,13 @@ public class LigaFirebaseService extends FirebaseMessagingService {
                 body = remoteMessage.getNotification().getBody();
         }
 
+        // As mensagens atuais são data-only para que este serviço sempre crie o
+        // PendingIntent com a página final, inclusive com o app fechado.
+        if (remoteMessage.getData().containsKey("title"))
+            title = remoteMessage.getData().get("title");
+        if (remoteMessage.getData().containsKey("body"))
+            body = remoteMessage.getData().get("body");
+
         if (remoteMessage.getData().containsKey("url"))
             url = "https://liga-zikachu.vercel.app" + remoteMessage.getData().get("url");
 

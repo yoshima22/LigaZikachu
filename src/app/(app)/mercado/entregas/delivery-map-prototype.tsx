@@ -340,6 +340,15 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     setWeatherLoading(true);
     setWeatherError(null);
     try {
+      const cacheKey = `delivery-weather-v2:${logicalRoutePoints.map((point) => `${point.lat.toFixed(2)},${point.lng.toFixed(2)}`).join("|")}`;
+      const cachedRaw = sessionStorage.getItem(cacheKey);
+      if (cachedRaw) {
+        const cached = JSON.parse(cachedRaw) as { at: number; weather: WeatherSnapshot[] };
+        if (Date.now() - cached.at < 15 * 60_000) {
+          setWeather(cached.weather);
+          return;
+        }
+      }
       const response = await fetch("/api/admin/delivery-weather", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -348,6 +357,7 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
       const payload = await response.json() as { weather?: WeatherSnapshot[]; error?: string };
       if (!response.ok || !payload.weather) throw new Error(payload.error || "Clima indisponível.");
       setWeather(payload.weather);
+      sessionStorage.setItem(cacheKey, JSON.stringify({ at: Date.now(), weather: payload.weather }));
     } catch (error) {
       setWeather([]);
       setWeatherError(error instanceof Error ? error.message : "Clima indisponível; rota usando condições neutras.");
@@ -362,10 +372,18 @@ export function DeliveryMapPrototype({ mascots, initialHome }: { mascots: Mascot
     const timer = window.setTimeout(async () => {
       setRoadLoading(true); setRoadError(null);
       try {
+        const cacheKey = `delivery-road-v1:${origin.lat.toFixed(4)},${origin.lng.toFixed(4)}:${destination.lat.toFixed(4)},${destination.lng.toFixed(4)}`;
+        const cachedRaw = sessionStorage.getItem(cacheKey);
+        if (cachedRaw) {
+          const cached = JSON.parse(cachedRaw) as { points: Array<{ lat: number; lng: number }>; distanceKm: number };
+          setRoadRoute(cached);
+          return;
+        }
         const response = await fetch("/api/admin/delivery-route", { method: "POST", headers: { "Content-Type": "application/json" }, signal: controller.signal, body: JSON.stringify({ origin, destination }) });
         const payload = await response.json() as { points?: Array<{ lat: number; lng: number }>; distanceKm?: number; error?: string };
         if (!response.ok || !payload.points || !payload.distanceKm) throw new Error(payload.error || "Rota terrestre indisponível.");
         setRoadRoute({ points: payload.points, distanceKm: payload.distanceKm });
+        sessionStorage.setItem(cacheKey, JSON.stringify({ points: payload.points, distanceKm: payload.distanceKm }));
       } catch (error) {
         if ((error as Error).name !== "AbortError") { setRoadRoute(null); setRoadError(error instanceof Error ? error.message : "Rota terrestre indisponível."); }
       } finally { setRoadLoading(false); }
