@@ -13,8 +13,8 @@ type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" 
 // Broadcaster: captura de tela (getDisplayMedia) + publicação WebRTC. Envia uma
 // única publicação ao SFU; o fan-out para espectadores é da Cloudflare. Mostra
 // só o preview local (não puxa o próprio stream do SFU, para não gastar egress).
-export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, fps, qualityPriority = "sharpness", resolutionLabel }: {
-  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; qualityPriority?: SpecQualityPriority; resolutionLabel: string;
+export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, height, fps, qualityPriority = "sharpness", resolutionLabel, onLive }: {
+  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; qualityPriority?: SpecQualityPriority; resolutionLabel: string; onLive?: () => void;
 }) {
   const hints = specEncodeHints(qualityPriority);
   const router = useRouter();
@@ -104,6 +104,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       const { answerSdp } = await res.json() as { answerSdp: string };
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
       setState("live");
+      onLive?.();
       toast.success("Transmissão ao vivo!");
     } catch (e) {
       teardown();
@@ -115,7 +116,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       // Se a captura foi cancelada, a live nem chegou a ir ao ar: limpa o registro.
       await endSpecStreamAction(streamId).catch(() => null);
     }
-  }, [streamId, maxVideoBitrate, teardown, end]);
+  }, [streamId, maxVideoBitrate, teardown, end, onLive]);
 
   useEffect(() => teardown, [teardown]);
 

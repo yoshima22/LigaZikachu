@@ -14,8 +14,8 @@ type BroadcasterState = "idle" | "requesting" | "connecting" | "live" | "ended" 
 // Broadcaster P2P mesh: conecta DIRETO com cada espectador (uma PeerConnection
 // por pessoa). Sem SFU: egress zero para o servidor, mas o upload/CPU do
 // transmissor cresce com o número de espectadores. Sinalização (SDP) via banco.
-export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, width, height, fps, qualityPriority = "sharpness", resolutionLabel }: {
-  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; qualityPriority?: SpecQualityPriority; resolutionLabel: string;
+export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, width, height, fps, qualityPriority = "sharpness", resolutionLabel, onLive }: {
+  streamId: string; matchLabel: string; maxVideoBitrate: number; width: number; height: number; fps: number; qualityPriority?: SpecQualityPriority; resolutionLabel: string; onLive?: () => void;
 }) {
   const hints = specEncodeHints(qualityPriority);
   const router = useRouter();
@@ -144,6 +144,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       if ("error" in res) throw new Error(res.error);
       startSignalingLoop();
       setState("live");
+      onLive?.();
       toast.success("Transmissão P2P ao vivo!");
     } catch (e) {
       teardown();
@@ -154,7 +155,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       setState("error");
       await endSpecStreamAction(streamId).catch(() => null);
     }
-  }, [streamId, fps, width, height, teardown, end, startSignalingLoop]);
+  }, [streamId, fps, width, height, teardown, end, startSignalingLoop, onLive]);
 
   useEffect(() => teardown, [teardown]);
 

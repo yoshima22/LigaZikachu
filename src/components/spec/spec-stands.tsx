@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import {
   heartbeatSpecPresenceAction, leaveSpecPresenceAction, getSpecStandsAction,
   createSpecPollAction, voteSpecPollAction, closeSpecPollAction,
+  sendSpecChatMessageAction,
 } from "@/app/(app)/spec/stands-actions";
 
 type Stands = Awaited<ReturnType<typeof getSpecStandsAction>>;
@@ -41,10 +42,10 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
     };
   }, [streamId, sendPresence]);
 
-  // Atualiza arquibancada + enquete a cada 8s.
+  // Atualiza arquibancada, enquete e chat em um único snapshot barato.
   useEffect(() => {
     void refresh();
-    const timer = window.setInterval(refresh, 8_000);
+    const timer = window.setInterval(refresh, 5_000);
     return () => window.clearInterval(timer);
   }, [refresh]);
 
@@ -53,6 +54,7 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
   return (
     <div className="space-y-4">
       <PollSection stands={stands} streamId={streamId} onChange={refresh} />
+      <ChatSection stands={stands} streamId={streamId} onChange={refresh} />
 
       <div className="overflow-hidden rounded-2xl border border-border bg-gradient-to-b from-slate-900/80 to-slate-950/60">
         <div className="flex items-center justify-between gap-2 border-b border-border/70 bg-slate-950/40 px-4 py-2.5">
@@ -85,6 +87,33 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
       </div>
     </div>
   );
+}
+
+function ChatSection({ stands, streamId, onChange }: { stands: Stands; streamId: string; onChange: () => void }) {
+  const [message, setMessage] = useState("");
+  const [sending, setSending] = useState(false);
+  const bottomRef = useRef<HTMLDivElement>(null);
+  useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [stands.chat.length]);
+  const send = async () => {
+    if (!message.trim() || sending) return;
+    setSending(true);
+    const res = await sendSpecChatMessageAction(streamId, message);
+    setSending(false);
+    if (!res.ok) { toast.error(res.error ?? "Falha ao enviar."); return; }
+    setMessage(""); onChange();
+  };
+  return <section className="overflow-hidden rounded-2xl border border-cyan-500/20 bg-slate-950/60">
+    <header className="border-b border-border px-4 py-2.5 text-[10px] font-black uppercase tracking-widest text-cyan-300">💬 Chat da transmissão</header>
+    <div className="max-h-56 space-y-2 overflow-y-auto p-3">
+      {stands.chat.length === 0 && <p className="py-4 text-center text-xs text-slate-500">Seja o primeiro a falar na arquibancada.</p>}
+      {stands.chat.map((item) => <div key={item.id} className="text-xs"><span className="font-black text-[#FFCB05]">{item.userName}: </span><span className="break-words text-slate-200">{item.message}</span></div>)}
+      <div ref={bottomRef} />
+    </div>
+    <div className="flex gap-2 border-t border-border p-3">
+      <input value={message} maxLength={300} onChange={(e) => setMessage(e.target.value)} onKeyDown={(e) => { if (e.key === "Enter") void send(); }} placeholder="Escreva para a arquibancada…" className="min-w-0 flex-1 rounded-lg border border-border bg-slate-900 px-3 py-2 text-xs text-white" />
+      <button onClick={send} disabled={sending || !message.trim()} className="rounded-lg bg-cyan-500 px-3 py-2 text-xs font-black text-slate-950 disabled:opacity-40">Enviar</button>
+    </div>
+  </section>;
 }
 
 function PollSection({ stands, streamId, onChange }: { stands: Stands; streamId: string; onChange: () => void }) {

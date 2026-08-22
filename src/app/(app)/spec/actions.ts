@@ -269,6 +269,7 @@ export async function endSpecStreamAction(streamId: string): Promise<ActionError
   // Limpa sinais P2P e presença efêmeros desta live.
   await prisma.specSignal.deleteMany({ where: { streamId } }).catch(() => null);
   await prisma.specSpectator.deleteMany({ where: { streamId } }).catch(() => null);
+  await prisma.specChatMessage.deleteMany({ where: { streamId } }).catch(() => null);
   revalidatePath("/spec");
   return { ok: true };
 }

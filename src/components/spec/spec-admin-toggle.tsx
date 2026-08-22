@@ -53,8 +53,8 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
       </div>
 
       <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-purple-500/20 pt-3">
-        <span className="text-[11px] font-bold text-purple-200">Modo de transmissão:</span>
-        {([["cloudflare-realtime", "Cloudflare (plateia grande)"], ["p2p-mesh", "P2P econômico"], ["youtube", "YouTube (não listado)"]] as const).map(([value, label]) => (
+        <span className="text-[11px] font-bold text-purple-200">Cloudflare para os jogadores:</span>
+        {([["p2p-mesh", "Fechado"], ["cloudflare-realtime", "Liberado"]] as const).map(([value, label]) => (
           <button
             key={value}
             type="button"
@@ -65,7 +65,7 @@ export function SpecAdminToggle({ enabled, providerConfigured, estimatedGb, gbLi
             {label}
           </button>
         ))}
-        <span className="w-full text-[10px] text-slate-500">P2P: vídeo direto entre navegadores (egress zero), ideal para poucas dezenas de pessoas. Cloudflare: usa o SFU (1TB grátis/mês), melhor para plateias grandes. YouTube: transmite via live não listada do YouTube (plateia ilimitada pelo CDN do YouTube, egress fora do app).</span>
+        <span className="w-full text-[10px] text-slate-500">P2P e YouTube ficam sempre disponíveis. Cloudflare só aparece como escolha quando estiver liberado aqui e as credenciais do provedor estiverem configuradas.</span>
       </div>
 
       <div className="mt-3 flex items-center gap-2 border-t border-purple-500/20 pt-3">

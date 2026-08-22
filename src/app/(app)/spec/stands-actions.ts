@@ -14,6 +14,7 @@ type StandsState = {
   spectators: Array<{ userId: string; name: string }>;
   count: number;
   canManage: boolean;
+  chat: Array<{ id: string; userId: string; userName: string; message: string; createdAt: Date }>;
   poll: {
     id: string;
     question: string;
@@ -61,7 +62,7 @@ export async function leaveSpecPresenceAction(streamId: string): Promise<void> {
 
 /** Estado da arquibancada + enquete ativa (para o watch e o painel do transmissor). */
 export async function getSpecStandsAction(streamId: string): Promise<StandsState> {
-  const empty: StandsState = { spectators: [], count: 0, canManage: false, poll: null };
+  const empty: StandsState = { spectators: [], count: 0, canManage: false, chat: [], poll: null };
   const session = await getAppSession();
   if (!session?.user?.id) return empty;
   const config = await getSpecConfig();
@@ -72,7 +73,7 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
   const canManage = stream.broadcasterUserId === session.user.id || isStaff(session.user.role);
 
   const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
-  const [spectators, poll] = await Promise.all([
+  const [spectators, poll, chat] = await Promise.all([
     prisma.specSpectator.findMany({
       where: { streamId, lastSeenAt: { gte: since } },
       orderBy: { joinedAt: "asc" },
@@ -83,6 +84,10 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
       orderBy: { createdAt: "desc" },
       select: { id: true, question: true, options: true, status: true },
     }).catch(() => null),
+    prisma.specChatMessage.findMany({
+      where: { streamId }, orderBy: { createdAt: "desc" }, take: 50,
+      select: { id: true, userId: true, userName: true, message: true, createdAt: true },
+    }).catch(() => []),
   ]);
 
   let pollState: StandsState["poll"] = null;
@@ -105,8 +110,21 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
     spectators: spectators.map((s) => ({ userId: s.userId, name: s.displayName })),
     count: spectators.length,
     canManage,
+    chat: chat.reverse(),
     poll: pollState,
   };
+}
+
+/** Chat leve da transmissão, compartilhado por P2P, YouTube e Cloudflare. */
+export async function sendSpecChatMessageAction(streamId: string, rawMessage: string): Promise<{ ok: boolean; error?: string }> {
+  const session = await getAppSession();
+  if (!session?.user?.id) return { ok: false, error: "Não autenticado." };
+  const stream = await loadStreamOwner(streamId);
+  if (!stream || (stream.status !== "LIVE" && stream.status !== "PREPARING")) return { ok: false, error: "Transmissão encerrada." };
+  const message = rawMessage.trim().replace(/\s+/g, " ").slice(0, 300);
+  if (!message) return { ok: false, error: "Digite uma mensagem." };
+  await prisma.specChatMessage.create({ data: { streamId, userId: session.user.id, userName: session.user.name?.trim() || "Jogador", message } });
+  return { ok: true };
 }
 
 /** Cria uma enquete (dono da transmissão, GameMaster ou Admin). Uma ativa por vez. */

@@ -86,9 +86,9 @@ export function SpecPlayer({ streamId, compact = false }: { streamId: string; co
 
   return (
     <div className={compact ? "h-full" : "space-y-3"}>
-      <div className="relative overflow-hidden rounded-2xl border border-border bg-black">
+      <div className={`relative overflow-hidden border border-border bg-black ${compact ? "h-full" : "rounded-2xl"}`}>
         {/* eslint-disable-next-line jsx-a11y/media-has-caption */}
-        <video ref={videoRef} autoPlay playsInline muted={muted} className="aspect-video w-full bg-black" />
+        <video ref={videoRef} autoPlay playsInline muted={muted} className={compact ? "h-full w-full bg-black object-contain" : "aspect-video w-full bg-black"} />
         {state !== "watching" && (
           <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-black/70 text-center text-sm text-slate-300">
             {state === "connecting" && <><span className="h-6 w-6 animate-spin rounded-full border-2 border-[#FFCB05] border-t-transparent" /> Conectando à transmissão…</>}

@@ -3932,6 +3932,18 @@ enum TowerRunMode {
   RIVAL_EXPEDITION
 }
 
+model SpecChatMessage {
+  id        String   @id @default(cuid())
+  streamId  String
+  userId    String
+  userName  String
+  message   String
+  createdAt DateTime @default(now())
+
+  @@index([streamId, createdAt])
+  @@map("spec_chat_messages")
+}
+
 enum TowerPaceMode {
   ONLINE
   SLOW

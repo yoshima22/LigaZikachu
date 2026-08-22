@@ -26,6 +26,7 @@ export function rememberSpecStream(data: SpecMiniPlayerData) {
 export function SpecMiniPlayer() {
   const pathname = usePathname();
   const [stream, setStream] = useState<SpecMiniPlayerData | null>(null);
+  const [youtubeControls, setYoutubeControls] = useState(false);
 
   useEffect(() => {
     const load = () => {
@@ -48,17 +49,19 @@ export function SpecMiniPlayer() {
   };
 
   return (
-    <aside className="fixed bottom-4 right-3 z-[70] w-[min(22rem,calc(100vw-1.5rem))] overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-slate-950 shadow-2xl shadow-black/60">
+    <aside className="fixed bottom-4 right-3 z-[70] flex h-[15rem] w-[min(22rem,calc(100vw-1.5rem))] min-h-[12rem] min-w-[18rem] max-h-[80vh] max-w-[90vw] resize flex-col overflow-auto rounded-2xl border border-[#FFCB05]/40 bg-slate-950 shadow-2xl shadow-black/60">
       <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
         <span className="h-2 w-2 animate-pulse rounded-full bg-red-500" />
         <Link href={`/spec/${stream.streamId}`} className="min-w-0 flex-1 truncate text-xs font-black text-white" title="Voltar para a transmissão">
           {stream.title}
         </Link>
+        <span className="text-[9px] text-slate-600" title="Arraste o canto inferior direito para redimensionar">↘</span>
+        {stream.youtubeVideoId && <button onClick={() => setYoutubeControls((value) => !value)} className="rounded-md px-2 py-1 text-[9px] font-bold text-slate-400 hover:bg-white/10 hover:text-white">{youtubeControls ? "Ocultar controles" : "Controles"}</button>}
         <button onClick={close} aria-label="Fechar miniplayer" className="rounded-md px-2 py-1 text-xs text-slate-400 hover:bg-white/10 hover:text-white">×</button>
       </div>
-      <div className="aspect-video bg-black">
+      <div className="min-h-0 flex-1 bg-black">
         {stream.youtubeVideoId ? (
-          <iframe src={youtubeEmbedUrl(stream.youtubeVideoId)} title="Zika TV em miniplayer" className="h-full w-full" allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
+          <iframe src={youtubeEmbedUrl(stream.youtubeVideoId)} title="Zika TV em miniplayer" className={`${youtubeControls ? "" : "pointer-events-none"} h-full w-full`} allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowFullScreen />
         ) : stream.provider === "p2p-mesh" ? (
           <SpecPlayerP2P streamId={stream.streamId} broadcasterUserId={stream.broadcasterUserId} compact />
         ) : (

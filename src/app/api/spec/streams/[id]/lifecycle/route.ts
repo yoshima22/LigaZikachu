@@ -19,6 +19,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       prisma.specStream.update({ where: { id }, data: { status: "ENDED", endedAt: new Date(), lastSeenAt: new Date() } }),
       prisma.specSignal.deleteMany({ where: { streamId: id } }),
       prisma.specSpectator.deleteMany({ where: { streamId: id } }),
+      prisma.specChatMessage.deleteMany({ where: { streamId: id } }),
     ]);
   } else {
     await prisma.specStream.update({ where: { id }, data: { lastSeenAt: new Date() } });
