@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { endSpecStreamAction } from "@/app/(app)/spec/actions";
-import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
+import { SPEC_ICE_SERVERS, waitForIceGathering, specDisplayMediaOptions, sharedDisplaySurface } from "@/lib/spec/webrtc-client";
 import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
 import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
 
@@ -44,12 +44,12 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     setError(null);
     setState("requesting");
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: fps, max: fps }, width: { ideal: width }, height: { ideal: height } },
-        audio: true,
-      });
+      const stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
       streamRef.current = stream;
       setHasAudio(stream.getAudioTracks().length > 0);
+      if (sharedDisplaySurface(stream) === "monitor" && stream.getAudioTracks().length > 0) {
+        toast.warning("Tela inteira selecionada. Para garantir que o Discord não seja ouvido, interrompa e compartilhe somente a aba do jogo.", { duration: 9_000 });
+      }
 
       // Dica ao encoder: conteúdo com detalhes/texto (cartas), prioriza nitidez
       // sobre fluidez — combina com o frame rate baixo e reduz bitrate.
@@ -139,7 +139,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       </div>
 
       <p className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-[11px] text-amber-200">
-        Escolha a janela/aba onde a partida está acontecendo. Evite compartilhar esta própria página (efeito espelho). Marque "Compartilhar áudio" no seletor quando aparecer.
+        Para não transmitir o Discord, selecione <strong>uma aba do navegador</strong> e marque apenas o áudio da aba. A Zika TV solicita ao navegador que nunca envie o áudio geral do sistema.
       </p>
 
       {error && <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}

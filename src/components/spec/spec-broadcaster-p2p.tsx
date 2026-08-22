@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { endSpecStreamAction, markSpecStreamLiveAction } from "@/app/(app)/spec/actions";
 import { sendSpecSignalAction, pollSpecSignalsAction } from "@/app/(app)/spec/signal-actions";
-import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
+import { SPEC_ICE_SERVERS, waitForIceGathering, specDisplayMediaOptions, sharedDisplaySurface } from "@/lib/spec/webrtc-client";
 import { specEncodeHints, type SpecQualityPriority } from "@/lib/spec/constants";
 import { useSpecBroadcastLifecycle } from "./use-spec-broadcast-lifecycle";
 
@@ -128,12 +128,12 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
     setError(null);
     setState("requesting");
     try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({
-        video: { frameRate: { ideal: fps, max: fps }, width: { ideal: width }, height: { ideal: height } },
-        audio: true,
-      });
+      const stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
       streamRef.current = stream;
       setHasAudio(stream.getAudioTracks().length > 0);
+      if (sharedDisplaySurface(stream) === "monitor" && stream.getAudioTracks().length > 0) {
+        toast.warning("Tela inteira selecionada. Para garantir que o Discord não seja ouvido, interrompa e compartilhe somente a aba do jogo.", { duration: 9_000 });
+      }
       if (previewRef.current) previewRef.current.srcObject = stream;
       const vTrack = stream.getVideoTracks()[0];
       if (vTrack) { try { vTrack.contentHint = hints.contentHint; } catch { /* ok */ } }
@@ -179,7 +179,7 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
       </div>
 
       <p className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-[11px] text-emerald-200">
-        Modo P2P: o vídeo vai direto do seu PC para cada espectador (sem custo de servidor). Recomendado para poucas dezenas de pessoas. Mantenha esta aba aberta e evite compartilhar esta própria página. Marque “Compartilhar áudio” no seletor.
+        Modo P2P: o vídeo vai direto do seu PC para cada espectador. Para excluir o Discord, escolha <strong>uma aba do navegador</strong> e compartilhe apenas o áudio dessa aba; o áudio geral do sistema é solicitado como bloqueado.
       </p>
 
       {error && <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
