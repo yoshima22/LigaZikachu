@@ -30,11 +30,9 @@ jobs:
         shell: pwsh
         run: |
           $client = "windows-transmitter/discord-screen-host/client"
-          $server = "windows-transmitter/discord-screen-host/server"
           npm install --prefix $client --workspaces=false --ignore-scripts --no-audit --no-fund --package-lock=false
           npm run build --prefix $client
           Remove-Item "$client/node_modules" -Recurse -Force
-          npm install --prefix $server --workspaces=false --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
           Remove-Item "windows-transmitter/discord-screen-host/node_modules" -Recurse -Force -ErrorAction SilentlyContinue
       - name: Prepare portable bundle
         shell: pwsh
@@ -43,7 +41,11 @@ jobs:
           $module = "$bundle/Modules/DiscordScreen"
           New-Item -ItemType Directory -Force -Path $module,"$bundle/Runtime/Node","$module/.cache" | Out-Null
           Copy-Item output/windows-transmitter/LigaZikachuTransmissor.exe "$bundle/LigaZikachuTransmissor.exe"
-          Copy-Item windows-transmitter/discord-screen-host/* $module -Recurse -Force
+          $source = (Resolve-Path "windows-transmitter/discord-screen-host").Path
+          & robocopy $source $module /E /R:2 /W:2 /XD "$source/node_modules" "$source/client/node_modules" /XF ".env"
+          if ($LASTEXITCODE -ge 8) { throw "Falha ao copiar o módulo Discord Screen (robocopy $LASTEXITCODE)." }
+          $global:LASTEXITCODE = 0
+          npm install --prefix "$module/server" --workspaces=false --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Include Node and Cloudflare Tunnel
         shell: pwsh
         run: |
