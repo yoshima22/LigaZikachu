@@ -26,14 +26,6 @@ jobs:
           node-version: '22.14.0'
           cache: npm
           cache-dependency-path: windows-transmitter/discord-screen-host/package-lock.json
-      - name: Install and build Discord Activity
-        shell: pwsh
-        run: |
-          $client = "windows-transmitter/discord-screen-host/client"
-          npm install --prefix $client --workspaces=false --ignore-scripts --no-audit --no-fund --package-lock=false
-          npm run build --prefix $client
-          Remove-Item "$client/node_modules" -Recurse -Force
-          Remove-Item "windows-transmitter/discord-screen-host/node_modules" -Recurse -Force -ErrorAction SilentlyContinue
       - name: Prepare portable bundle
         shell: pwsh
         run: |
@@ -45,7 +37,7 @@ jobs:
           & robocopy $source $module /E /R:2 /W:2 /XD "$source/node_modules" "$source/client/node_modules" /XF ".env"
           if ($LASTEXITCODE -ge 8) { throw "Falha ao copiar o módulo Discord Screen (robocopy $LASTEXITCODE)." }
           $global:LASTEXITCODE = 0
-          npm install --prefix "$module/server" --workspaces=false --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
+          npm install dotenv@16.4.7 express@4.21.2 ws@8.18.0 --prefix "$module/server" --workspaces=false --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
       - name: Include Node and Cloudflare Tunnel
         shell: pwsh
         run: |
