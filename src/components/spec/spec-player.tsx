@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SPEC_ICE_SERVERS, waitForIceGathering } from "@/lib/spec/webrtc-client";
+import { useZikaTvVolume, ZikaTvVolumeControl } from "./use-zika-tv-volume";
 
 type PlayerState = "connecting" | "watching" | "ended" | "error";
 
@@ -16,6 +17,13 @@ export function SpecPlayer({ streamId, compact = false }: { streamId: string; co
   // Som ligado por padrão; se o navegador bloquear o autoplay com áudio,
   // caímos para mudo e o espectador ativa o som com um clique.
   const [muted, setMuted] = useState(false);
+  const { volume, setVolume } = useZikaTvVolume();
+
+  useEffect(() => {
+    if (!videoRef.current) return;
+    videoRef.current.volume = volume;
+    videoRef.current.muted = volume === 0 || muted;
+  }, [volume, muted]);
 
   const cleanup = useCallback(() => {
     pcRef.current?.getSenders().forEach((s) => s.track?.stop());
@@ -96,8 +104,10 @@ export function SpecPlayer({ streamId, compact = false }: { streamId: string; co
             {state === "ended" && <p>Transmissão encerrada.</p>}
           </div>
         )}
+        {compact && state === "watching" && <div className="absolute bottom-2 right-2 z-10"><ZikaTvVolumeControl compact volume={volume} onChange={(value) => { setMuted(false); setVolume(value); }} /></div>}
       </div>
       {!compact && <div className="flex items-center gap-2">
+        <ZikaTvVolumeControl volume={volume} onChange={(value) => { setMuted(false); setVolume(value); }} />
         <button onClick={() => setMuted((m) => !m)} className="rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white">
           {muted ? "🔊 Ativar som" : "🔇 Mudo"}
         </button>
