@@ -22,6 +22,6 @@ export async function getWindowsTransmitterPairingStateAction(streamId: string) 
   const session = await getAppSession();
   if (!session?.user?.id) return { connected: false };
   const row = await prisma.specSignal.findFirst({ where: { streamId, fromUserId: session.user.id, kind: "WIN_CONNECTED", createdAt: { gte: new Date(Date.now() - PAIR_TTL_MS) } }, orderBy: { seq: "desc" }, select: { payload: true } });
-  const payload = row?.payload as { deviceName?: string; processName?: string } | null;
-  return { connected: Boolean(row), deviceName: payload?.deviceName, processName: payload?.processName };
+  const payload = row?.payload as { deviceName?: string; processName?: string; resolution?: string; fps?: string; quality?: string } | null;
+  return { connected: Boolean(row), deviceName: payload?.deviceName, processName: payload?.processName, resolution: payload?.resolution, fps: payload?.fps, quality: payload?.quality };
 }
