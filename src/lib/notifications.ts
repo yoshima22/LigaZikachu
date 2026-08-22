@@ -96,6 +96,13 @@ async function sendFcmMessage(token: string, payload: NotificationPayload, acces
       body: JSON.stringify({
         message: {
           token,
+          // Mantido durante a transição para versões anteriores à 0.7.17, que
+          // leem título e corpo apenas do bloco visual do FCM. O `data.url`
+          // continua acompanhando o clique e é resolvido pela MainActivity.
+          notification: {
+            title: payload.title,
+            body: payload.body
+          },
           data: {
             ...payload.data,
             // Data-only é intencional: em segundo plano o bloco `notification`

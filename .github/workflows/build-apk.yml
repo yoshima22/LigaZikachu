@@ -86,9 +86,8 @@ jobs:
           ACTUAL=$("$APKSIGNER" verify --print-certs android-webview/app/build/outputs/apk/debug/app-debug.apk \
             | sed -n 's/.*certificate SHA-256 digest: //p' | head -1)
           if [ "$ACTUAL" != "$EXPECTED" ]; then
-            echo "::warning::Assinatura incompatível. O APK não será publicado. Esperada: $EXPECTED; recebida: $ACTUAL"
-            echo "compatible=false" >> "$GITHUB_OUTPUT"
-            exit 0
+            echo "::error::Assinatura incompatível. O APK não pode atualizar instalações existentes. Esperada: $EXPECTED; recebida: $ACTUAL"
+            exit 1
           fi
           echo "compatible=true" >> "$GITHUB_OUTPUT"
           cp android-webview/app/build/outputs/apk/debug/app-debug.apk LigaZikachu.apk

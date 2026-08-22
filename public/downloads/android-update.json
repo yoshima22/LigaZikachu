@@ -1,7 +1,7 @@
 {
-  "versionCode": 22,
-  "versionName": "0.7.15",
-  "apkUrl": "/downloads/LigaZikachu-0.7.15.apk",
-  "sha256": "5E56AE0A64E2A9267279055D85770BAC295D504690BCF2DA36E6F28916F58F4E",
-  "notes": "Atualização neutra para validar a abertura única do instalador pela versão 0.7.14."
+  "versionCode": 24,
+  "versionName": "0.7.17",
+  "apkUrl": "/downloads/LigaZikachu-0.7.17.apk",
+  "sha256": "8223ABDBBE98C403EB29EB2C15F69E827E2A3C1F8BD88DF2AAD4F3B26C8D5867",
+  "notes": "Corrige notificações push, abre diretamente a página indicada e reduz o consumo de dados."
 }

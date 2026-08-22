@@ -12,8 +12,9 @@ import {
 } from "lucide-react";
 import { WindowsInstallButton } from "./_components/windows-install-button";
 import { AndroidUpdateButton } from "@/components/android-update";
+import androidRelease from "../../../../public/downloads/android-update.json";
 
-const APK_PATH = "/downloads/LigaZikachu-0.7.15.apk";
+const APK_PATH = androidRelease.apkUrl;
 const TRANSMITTER_PATH = "https://github.com/yoshima22/LigaZikachu/releases/download/transmitter-latest/LigaZikachuTransmissor.exe";
 
 export default function DownloadsPage() {
@@ -76,7 +77,7 @@ export default function DownloadsPage() {
               </div>
 
               <div className="my-6 grid grid-cols-3 gap-2 text-center text-xs">
-                <InfoPill label="Versão" value="0.7.15" />
+                <InfoPill label="Versão" value={androidRelease.versionName} />
                 <InfoPill label="Tamanho" value="2,48 MB" />
                 <InfoPill label="Formato" value="APK" />
               </div>
