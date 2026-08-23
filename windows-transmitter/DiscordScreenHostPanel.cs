@@ -36,7 +36,7 @@ internal sealed class DiscordScreenHostPanel : Panel
         _toggle.Click += async (_, _) => await ToggleAsync(); _portal.Click += (_, _) => OpenPortal(); _configure.Click += (_, _) => Configure();
         _copyTarget.Click += (_, _) => Copy(_target); _copyRedirect.Click += (_, _) => Copy(_redirect);
         _manager.Changed += UpdateSafe; _manager.LogAdded += _ => UpdateLogsSafe();
-        _healthTimer.Tick += async (_, _) => await _manager.RefreshStatusAsync(); _healthTimer.Start(); UpdateUi();
+        _healthTimer.Tick += async (_, _) => await _manager.RefreshStatusAsync(_modulePath); _healthTimer.Start(); UpdateUi();
     }
 
     private Control StatusRow()
@@ -101,7 +101,9 @@ internal sealed class DiscordScreenHostPanel : Panel
         if (_manager.Status is DiscordHostStatus.Online or DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth) await _manager.StopAsync();
         else if (!DiscordHostConfiguration.Load().IsConfigured) Configure();
         else await _manager.StartAsync(_modulePath);
-        _toggle.Enabled = true;
+        // E não `Enabled = true`: se o que apareceu foi um servidor de outra
+        // janela, o botão precisa continuar desligado.
+        UpdateUi();
     }
 
     private void UpdateSafe() { if (IsDisposed) return; if (InvokeRequired) BeginInvoke(UpdateUi); else UpdateUi(); }
@@ -114,6 +116,7 @@ internal sealed class DiscordScreenHostPanel : Panel
             DiscordHostStatus.Preparing => ("● PREPARANDO", Color.FromArgb(250, 204, 21), "Verificando o módulo e o runtime incluídos…"),
             DiscordHostStatus.StartingTunnel => ("● TÚNEL", Color.FromArgb(250, 204, 21), "Criando endereço público seguro…"),
             DiscordHostStatus.WaitingForHealth => ("● VERIFICANDO", Cyan, "Aguardando servidor local e acesso público…"),
+            DiscordHostStatus.Online when !_manager.OwnsProcess => ("● JÁ ONLINE", Color.FromArgb(110, 231, 183), "Servidor aberto por outra janela. Este painel só acompanha — não encerra o que não iniciou."),
             DiscordHostStatus.Online => ("● ONLINE", Color.FromArgb(110, 231, 183), "Servidor no ar. Confira os dois endereços abaixo no portal do Discord."),
             DiscordHostStatus.Stopping => ("● ENCERRANDO", Color.FromArgb(250, 204, 21), "Finalizando somente os processos deste host…"),
             _ => ("● ERRO", Color.FromArgb(251, 113, 133), _manager.LastError ?? "Falha desconhecida."),
@@ -128,8 +131,15 @@ internal sealed class DiscordScreenHostPanel : Panel
         var busy = _manager.Status is DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth or DiscordHostStatus.Stopping;
         _configure.Enabled = !busy && _manager.Status != DiscordHostStatus.Online;
         _portal.Enabled = DiscordHostConfiguration.Load().IsConfigured;
-        _toggle.Text = _manager.Status is DiscordHostStatus.Online or DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth ? "ENCERRAR SERVIDOR" : _manager.Status == DiscordHostStatus.Error ? "TENTAR NOVAMENTE" : "INICIAR SERVIDOR";
-        _toggle.BackColor = _manager.Status == DiscordHostStatus.Online ? Color.FromArgb(190, 24, 93) : Color.FromArgb(16, 185, 129);
+        // Servidor adotado não ganha botão de encerrar: quem não o subiu não
+        // decide derrubá-lo. É esse o controle que impede uma janela de tirar a
+        // Activity do ar debaixo de quem já estava usando.
+        var adopted = _manager.Status == DiscordHostStatus.Online && !_manager.OwnsProcess;
+        _toggle.Enabled = !adopted;
+        _toggle.Text = adopted ? "ABERTO POR OUTRA JANELA"
+            : _manager.Status is DiscordHostStatus.Online or DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth ? "ENCERRAR SERVIDOR"
+            : _manager.Status == DiscordHostStatus.Error ? "TENTAR NOVAMENTE" : "INICIAR SERVIDOR";
+        _toggle.BackColor = adopted ? Color.FromArgb(30, 41, 69) : _manager.Status == DiscordHostStatus.Online ? Color.FromArgb(190, 24, 93) : Color.FromArgb(16, 185, 129);
         UpdateLogs();
     }
 

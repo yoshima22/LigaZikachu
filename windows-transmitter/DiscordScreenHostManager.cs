@@ -31,6 +31,9 @@ internal sealed class DiscordScreenHostManager : IDisposable
     private bool _tunnelRegistered;
 
     public DiscordHostStatus Status { get; private set; } = DiscordHostStatus.Offline;
+
+    /// <summary>Falso quando o servidor no ar foi aberto por fora deste painel.</summary>
+    public bool OwnsProcess => _ownsProcess;
     public string? PublicUrl { get; private set; }
     public string LocalUrl => "http://127.0.0.1:3001";
     public string? LastError { get; private set; }
@@ -50,25 +53,36 @@ internal sealed class DiscordScreenHostManager : IDisposable
             Fail("O módulo Discord Screen não está presente neste pacote. Baixe a versão completa do transmissor.");
             return;
         }
-        if (!DiscordHostConfiguration.PrepareModule(modulePath))
+        // Procurar servidor de pé antes de escrever qualquer coisa.
+        //
+        // O PrepareModule copia as credenciais guardadas por cima do .env do
+        // módulo, e o PUBLIC_ORIGIN vai junto. Quando alguém já subiu o servidor
+        // por fora — pelo PowerShell, ou por outra janela deste programa — o
+        // endereço vivo é o que está naquele arquivo, e sobrescrevê-lo trocava
+        // por um endereço morto de alguma execução anterior. O servidor
+        // continuava no ar, porque leu o env no arranque; quem passava a mentir
+        // era o painel, mostrando para colar no portal um Target que não é o
+        // dele. Ou seja: exatamente o passo que faz a Activity abrir em branco.
+        if (await IsHealthyAsync(LocalUrl))
         {
-            Fail("Configure o Client ID e o Client Secret da Activity antes de iniciar.");
+            AdoptExistingServer(envFile);
+            if (PublicUrl is not null && !await IsHealthyAsync(PublicUrl)) WarnAboutUnconfirmedPublicUrl(PublicUrl);
             return;
         }
 
-        if (await IsHealthyAsync(LocalUrl))
+        // Porta ocupada sem responder ao health check: é servidor subindo agora,
+        // ou travado. Nos dois casos, subir outro por cima só produz um processo
+        // que morre com "porta em uso" — e o log diria que este host caiu
+        // sozinho, escondendo que quem estava lá primeiro continua de pé.
+        if (IsLocalPortBusy())
         {
-            _ownsProcess = false;
-            PublicUrl = ReadPublicOrigin(envFile);
-            if (PublicUrl is null)
-            {
-                Fail("Existe um servidor local na porta 3001, mas ele não registrou nenhum endereço público. Encerre o host antigo e tente novamente.");
-                return;
-            }
-            SetStatus(DiscordHostStatus.Online);
-            AddLog("Servidor existente encontrado na porta 3001.");
-            if (await IsHealthyAsync(PublicUrl)) AddLog("Health check local e público confirmados.");
-            else WarnAboutUnconfirmedPublicUrl(PublicUrl);
+            Fail("A porta 3001 já está ocupada neste computador. O servidor da Activity está subindo agora ou já está aberto por outra janela — não vou iniciar outro por cima. Espere alguns segundos e tente de novo.");
+            return;
+        }
+
+        if (!DiscordHostConfiguration.PrepareModule(modulePath))
+        {
+            Fail("Configure o Client ID e o Client Secret da Activity antes de iniciar.");
             return;
         }
 
@@ -132,6 +146,15 @@ internal sealed class DiscordScreenHostManager : IDisposable
     public async Task StopAsync()
     {
         if (Status == DiscordHostStatus.Offline) return;
+
+        // Só derruba o que este painel subiu. O servidor de outra janela fica
+        // exatamente onde estava — o painel apenas para de acompanhá-lo.
+        if (!_ownsProcess)
+        {
+            AddLog("Este painel não iniciou esse servidor, então deixei ele rodando. Para encerrá-lo, use a janela que o abriu.");
+            return;
+        }
+
         SetStatus(DiscordHostStatus.Stopping);
         _startupCancellation?.Cancel();
         await StopOwnedProcessAsync();
@@ -142,14 +165,58 @@ internal sealed class DiscordScreenHostManager : IDisposable
         AddLog("Servidor encerrado.");
     }
 
-    public async Task RefreshStatusAsync()
+    /// <summary>
+    /// Reconhece um servidor que já estava no ar em vez de subir outro por cima.
+    /// </summary>
+    /// <remarks>
+    /// O endereço vem do .env do módulo, e não da configuração guardada: quem
+    /// está de pé leu aquele arquivo no arranque, então é ele que diz qual
+    /// Target está valendo no portal agora. A configuração guardada é a desta
+    /// janela, e a desta janela não subiu nada.
+    /// </remarks>
+    private void AdoptExistingServer(string envFile)
+    {
+        _ownsProcess = false;
+        PublicUrl = ReadPublicOrigin(envFile) ?? DiscordHostConfiguration.LoadPublicOrigin();
+        SetStatus(DiscordHostStatus.Online);
+        AddLog("Já havia um servidor no ar na porta 3001 — este painel adotou o que encontrou, sem subir outro.");
+        AddLog(PublicUrl is null
+            ? "Esse servidor não registrou endereço público no .env do módulo. Confira o Target direto na janela que o abriu."
+            : $"Endereço público em uso por ele: {PublicUrl}");
+    }
+
+    public async Task RefreshStatusAsync(string modulePath)
     {
         if (Status is DiscordHostStatus.Preparing or DiscordHostStatus.StartingTunnel or DiscordHostStatus.WaitingForHealth or DiscordHostStatus.Stopping) return;
         var localHealthy = await IsHealthyAsync(LocalUrl);
-        PublicUrl ??= DiscordHostConfiguration.LoadPublicOrigin();
+
+        // Servidor que apareceu sem ser por aqui: alguém o abriu enquanto esta
+        // janela estava parada. Mostrar Online é o que impede a pessoa de clicar
+        // em iniciar e derrubar — ou tentar derrubar — o de quem chegou antes.
+        if (localHealthy && Status is DiscordHostStatus.Offline or DiscordHostStatus.Error)
+        {
+            AdoptExistingServer(Path.Combine(modulePath, ".env"));
+            return;
+        }
+
+        PublicUrl ??= ReadPublicOrigin(Path.Combine(modulePath, ".env")) ?? DiscordHostConfiguration.LoadPublicOrigin();
         var publicHealthy = PublicUrl is not null && await IsHealthyAsync(PublicUrl);
         if (localHealthy && publicHealthy && Status != DiscordHostStatus.Online) SetStatus(DiscordHostStatus.Online);
-        if ((!localHealthy || !publicHealthy) && Status == DiscordHostStatus.Online && !_ownsProcess) { PublicUrl = null; SetStatus(DiscordHostStatus.Offline); }
+        if (!localHealthy && Status == DiscordHostStatus.Online && !_ownsProcess) { PublicUrl = null; SetStatus(DiscordHostStatus.Offline); }
+    }
+
+    /// <summary>
+    /// Alguém escutando na 3001, mesmo que ainda não responda ao health check.
+    /// </summary>
+    private static bool IsLocalPortBusy()
+    {
+        try
+        {
+            return System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties()
+                .GetActiveTcpListeners()
+                .Any(listener => listener.Port == 3001);
+        }
+        catch { return false; }
     }
 
     private async Task WaitForHealthAsync(CancellationToken cancellation)
