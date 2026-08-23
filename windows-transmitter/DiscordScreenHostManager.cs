@@ -1,6 +1,8 @@
 using System.Diagnostics;
 using System.Net;
+using System.Net.Sockets;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 
 namespace LigaZikachu.Transmissor;
@@ -20,12 +22,13 @@ internal sealed class DiscordScreenHostManager : IDisposable
 {
     private static readonly Regex PublicUrlPattern = new(@"https://[a-z0-9-]+\.trycloudflare\.com", RegexOptions.IgnoreCase | RegexOptions.Compiled);
     private static readonly Regex AnsiPattern = new(@"\x1B\[[0-?]*[ -/]*[@-~]", RegexOptions.Compiled);
-    private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(4) };
+    private readonly HttpClient _http = new(PublicDns.CreateHandler()) { Timeout = TimeSpan.FromSeconds(8) };
     private readonly List<string> _logs = [];
     private Process? _launcher;
     private CancellationTokenSource? _startupCancellation;
     private bool _ownsProcess;
     private bool _suppressUnexpectedExit;
+    private bool _tunnelRegistered;
 
     public DiscordHostStatus Status { get; private set; } = DiscordHostStatus.Offline;
     public string? PublicUrl { get; private set; }
@@ -57,13 +60,15 @@ internal sealed class DiscordScreenHostManager : IDisposable
         {
             _ownsProcess = false;
             PublicUrl = ReadPublicOrigin(envFile);
-            if (PublicUrl is null || !await IsHealthyAsync(PublicUrl))
+            if (PublicUrl is null)
             {
-                Fail("Existe um servidor local na porta 3001, mas o endereço público não está disponível. Encerre o host antigo e tente novamente.");
+                Fail("Existe um servidor local na porta 3001, mas ele não registrou nenhum endereço público. Encerre o host antigo e tente novamente.");
                 return;
             }
             SetStatus(DiscordHostStatus.Online);
-            AddLog("Servidor existente encontrado; health check local e público confirmados.");
+            AddLog("Servidor existente encontrado na porta 3001.");
+            if (await IsHealthyAsync(PublicUrl)) AddLog("Health check local e público confirmados.");
+            else WarnAboutUnconfirmedPublicUrl(PublicUrl);
             return;
         }
 
@@ -76,6 +81,7 @@ internal sealed class DiscordScreenHostManager : IDisposable
 
         LastError = null;
         PublicUrl = null;
+        _tunnelRegistered = false;
         SetStatus(DiscordHostStatus.Preparing);
         AddLog($"Módulo: {modulePath}");
         AddLog($"Runtime: {node}");
@@ -154,31 +160,84 @@ internal sealed class DiscordScreenHostManager : IDisposable
         {
             cancellation.ThrowIfCancellationRequested();
             if (_launcher?.HasExited == true) throw new InvalidOperationException("O launcher encerrou antes do health check.");
-            if (await IsHealthyAsync(LocalUrl))
+            if (!await IsHealthyAsync(LocalUrl))
             {
-                if (PublicUrl is null)
-                {
-                    await Task.Delay(900, cancellation);
-                    continue;
-                }
-                else
-                {
-                    AddLog("Servidor local pronto. Aguardando a propagação do endereço público do Cloudflare…");
-                    var publicDeadline = DateTimeOffset.UtcNow.AddSeconds(90);
-                    while (DateTimeOffset.UtcNow < publicDeadline && !await IsHealthyAsync(PublicUrl))
-                    {
-                        await Task.Delay(1800, cancellation);
-                    }
-                    if (!await IsHealthyAsync(PublicUrl))
-                        throw new InvalidOperationException("Servidor local iniciou, mas o endereço público do Cloudflare não respondeu após 90 segundos. Tente iniciar novamente; o túnel rápido pode estar temporariamente indisponível.");
-                }
-                SetStatus(DiscordHostStatus.Online);
+                await Task.Delay(900, cancellation);
+                continue;
+            }
+
+            // O endereço público sai na saída do launcher alguns segundos depois
+            // do servidor local. Quando o túnel falha, o start-fast sobe o
+            // servidor assim mesmo e o endereço nunca aparece — por isso esperar
+            // o prazo inteiro antes de concluir que este host só vale local.
+            if (PublicUrl is null)
+            {
+                await Task.Delay(900, cancellation);
+                continue;
+            }
+
+            await ConfirmPublicUrlAsync(PublicUrl, cancellation);
+            SetStatus(DiscordHostStatus.Online);
+            return;
+        }
+
+        // Servidor de pé e nenhum endereço público em 70 segundos: quem não subiu
+        // foi o túnel. Fora do Discord tudo funciona, então isto é aviso, não erro.
+        if (await IsHealthyAsync(LocalUrl))
+        {
+            SetStatus(DiscordHostStatus.Online);
+            AddLog($"Aviso: o túnel não anunciou nenhum endereço público. O servidor responde em {LocalUrl}, mas o Discord não alcança este computador enquanto for assim.");
+            AddLog("Encerre e inicie de novo para tentar outro túnel.");
+            return;
+        }
+
+        throw new TimeoutException("O servidor não ficou disponível em até 70 segundos.");
+    }
+
+    /// <summary>
+    /// Confirma, deste computador, que o endereço público responde — e nunca
+    /// derruba o arranque quando não consegue.
+    /// </summary>
+    /// <remarks>
+    /// O endereço de um túnel rápido nasce na hora, e o registro de DNS dele leva
+    /// alguns segundos para aparecer. Perguntar antes da hora ensina o resolvedor
+    /// da rede local a responder "não existe", e muito roteador doméstico guarda
+    /// essa negativa por minutos. Era esse o mecanismo por trás do erro "o
+    /// endereço público não respondeu após 90 segundos": o túnel estava de pé e o
+    /// Discord chegava nele normalmente; só este computador não resolvia o nome.
+    ///
+    /// Daí as duas defesas: esperar antes da primeira pergunta, para não envenenar
+    /// o cache; e resolver por DNS-over-HTTPS quando o resolvedor da casa negar o
+    /// nome (ver <see cref="PublicDns"/>). Falhar o arranque por causa disto era
+    /// punir o host por um problema que não é dele.
+    /// </remarks>
+    private async Task ConfirmPublicUrlAsync(string url, CancellationToken cancellation)
+    {
+        AddLog("Servidor local pronto. Aguardando a propagação do endereço público do Cloudflare…");
+        await Task.Delay(TimeSpan.FromSeconds(12), cancellation);
+
+        var deadline = DateTimeOffset.UtcNow.AddSeconds(60);
+        while (true)
+        {
+            if (await IsHealthyAsync(url))
+            {
                 AddLog("Health check confirmado. Host online.");
                 return;
             }
-            await Task.Delay(900, cancellation);
+            if (DateTimeOffset.UtcNow >= deadline) break;
+            await Task.Delay(2500, cancellation);
         }
-        throw new TimeoutException("O servidor não ficou disponível em até 70 segundos.");
+
+        WarnAboutUnconfirmedPublicUrl(url);
+    }
+
+    private void WarnAboutUnconfirmedPublicUrl(string url)
+    {
+        AddLog("Aviso: não consegui confirmar o endereço público a partir deste computador.");
+        AddLog(_tunnelRegistered
+            ? "O túnel está registrado na Cloudflare, então o Discord alcança este servidor mesmo assim."
+            : "O túnel ainda não confirmou o registro na Cloudflare — se a Activity não abrir, encerre e inicie de novo.");
+        AddLog($"Quase sempre é o DNS da sua rede guardando a resposta \"não existe\" de quando {url} ainda não tinha nascido. Ele se corrige sozinho em alguns minutos, ou na hora se o DNS deste computador apontar para 1.1.1.1.");
     }
 
     private async Task<bool> IsHealthyAsync(string baseUrl)
@@ -202,6 +261,9 @@ internal sealed class DiscordScreenHostManager : IDisposable
             if (_launcher?.StartInfo.WorkingDirectory is string modulePath) DiscordHostConfiguration.CaptureModuleState(modulePath);
             Changed?.Invoke();
         }
+        // A única prova de que o túnel está mesmo servindo, e ela vem do
+        // cloudflared: ao contrário do health check, não passa pelo DNS daqui.
+        if (line.Contains("Registered tunnel connection", StringComparison.OrdinalIgnoreCase)) _tunnelRegistered = true;
         AddLog(line);
     }
 
@@ -291,5 +353,106 @@ internal sealed class DiscordScreenHostManager : IDisposable
         try { StopOwnedProcessAsync().GetAwaiter().GetResult(); } catch { }
         _startupCancellation?.Dispose();
         _http.Dispose();
+    }
+}
+
+/// <summary>
+/// Resolução de nomes que não depende do resolvedor configurado na máquina.
+/// </summary>
+/// <remarks>
+/// O endereço de um túnel rápido é um nome que passou a existir há segundos.
+/// Muito roteador doméstico responde "não existe" para ele e guarda essa resposta
+/// por minutos — e nesse intervalo o host fica inalcançável daqui, embora esteja
+/// no ar para o resto do mundo. Quando o resolvedor da casa nega o nome, esta
+/// classe pergunta de novo por DNS-over-HTTPS, direto para 1.1.1.1 e 8.8.8.8.
+///
+/// Os dois são IP literal de propósito: um servidor de DNS que precisasse de DNS
+/// para ser encontrado não seria saída para este problema. O certificado dos dois
+/// cobre o próprio IP, então o TLS continua verificado como em qualquer pedido.
+/// </remarks>
+internal static class PublicDns
+{
+    private static readonly string[] Endpoints = ["https://1.1.1.1/dns-query", "https://8.8.8.8/resolve"];
+    private static readonly HttpClient Resolver = new() { Timeout = TimeSpan.FromSeconds(5) };
+    private static readonly Dictionary<string, (IPAddress[] Addresses, DateTimeOffset Expires)> Cache = new(StringComparer.OrdinalIgnoreCase);
+
+    public static SocketsHttpHandler CreateHandler() => new()
+    {
+        ConnectTimeout = TimeSpan.FromSeconds(6),
+        PooledConnectionLifetime = TimeSpan.FromMinutes(2),
+        ConnectCallback = ConnectAsync,
+    };
+
+    private static async ValueTask<Stream> ConnectAsync(SocketsHttpConnectionContext context, CancellationToken cancellation)
+    {
+        var endpoint = context.DnsEndPoint;
+        Exception? last = null;
+        foreach (var address in await ResolveAsync(endpoint.Host, cancellation))
+        {
+            var socket = new Socket(address.AddressFamily, SocketType.Stream, ProtocolType.Tcp) { NoDelay = true };
+            try
+            {
+                await socket.ConnectAsync(address, endpoint.Port, cancellation);
+                // Sem TLS aqui: quem negocia é o próprio handler, com o nome do
+                // pedido no SNI. Trocar o nome pelo IP quebraria a verificação do
+                // certificado — e é justamente ela que este caminho preserva.
+                return new NetworkStream(socket, ownsSocket: true);
+            }
+            catch (Exception error)
+            {
+                socket.Dispose();
+                last = error;
+            }
+        }
+        throw last ?? new SocketException((int)SocketError.HostNotFound);
+    }
+
+    private static async Task<IReadOnlyList<IPAddress>> ResolveAsync(string host, CancellationToken cancellation)
+    {
+        if (IPAddress.TryParse(host, out var literal)) return [literal];
+        try
+        {
+            var addresses = await Dns.GetHostAddressesAsync(host, cancellation);
+            if (addresses.Length > 0) return addresses;
+        }
+        catch (SocketException) { }
+        return await ResolveOverHttpsAsync(host, cancellation);
+    }
+
+    private static async Task<IReadOnlyList<IPAddress>> ResolveOverHttpsAsync(string host, CancellationToken cancellation)
+    {
+        lock (Cache)
+        {
+            if (Cache.TryGetValue(host, out var hit) && hit.Expires > DateTimeOffset.UtcNow) return hit.Addresses;
+        }
+
+        foreach (var endpoint in Endpoints)
+        {
+            try
+            {
+                using var request = new HttpRequestMessage(HttpMethod.Get, $"{endpoint}?name={Uri.EscapeDataString(host)}&type=A");
+                request.Headers.Accept.ParseAdd("application/dns-json");
+                using var response = await Resolver.SendAsync(request, cancellation);
+                if (!response.IsSuccessStatusCode) continue;
+
+                using var payload = JsonDocument.Parse(await response.Content.ReadAsStringAsync(cancellation));
+                if (!payload.RootElement.TryGetProperty("Answer", out var answers)) continue;
+
+                // type 1 é o registro A; o resto da resposta são os CNAME do
+                // caminho, que não dão endereço para conectar.
+                var addresses = answers.EnumerateArray()
+                    .Where(answer => answer.TryGetProperty("type", out var type) && type.GetInt32() == 1)
+                    .Select(answer => answer.TryGetProperty("data", out var data) ? data.GetString() : null)
+                    .Select(data => IPAddress.TryParse(data, out var address) ? address : null)
+                    .OfType<IPAddress>()
+                    .ToArray();
+                if (addresses.Length == 0) continue;
+
+                lock (Cache) Cache[host] = (addresses, DateTimeOffset.UtcNow.AddMinutes(5));
+                return addresses;
+            }
+            catch { }
+        }
+        return [];
     }
 }

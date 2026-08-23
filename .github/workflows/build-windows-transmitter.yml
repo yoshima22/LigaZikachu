@@ -38,6 +38,13 @@ jobs:
           if ($LASTEXITCODE -ge 8) { throw "Falha ao copiar o módulo Discord Screen (robocopy $LASTEXITCODE)." }
           $global:LASTEXITCODE = 0
           npm install dotenv@16.4.7 express@4.21.2 ws@8.18.0 --prefix "$module/server" --workspaces=false --omit=dev --ignore-scripts --no-audit --no-fund --package-lock=false
+          # As páginas de server/public faltaram no pacote por um release inteiro
+          # sem quebrar nada de forma visível: sem elas o catch-all devolve a
+          # Activity no lugar da página de captura, com status 200 e título
+          # errado. Falhar aqui é a única forma de isso não passar de novo.
+          foreach ($obrigatorio in "scripts/start-fast.mjs","client/dist/index.html","server/index.js","server/public/share.html","server/public/share.js","server/public/termos.html","server/public/privacidade.html") {
+            if (-not (Test-Path "$module/$obrigatorio")) { throw "O pacote portátil saiu sem $obrigatorio." }
+          }
       - name: Include Node and Cloudflare Tunnel
         shell: pwsh
         run: |
