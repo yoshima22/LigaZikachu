@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Net;
+using System.Text;
 using System.Text.RegularExpressions;
 
 namespace LigaZikachu.Transmissor;
@@ -24,6 +25,7 @@ internal sealed class DiscordScreenHostManager : IDisposable
     private Process? _launcher;
     private CancellationTokenSource? _startupCancellation;
     private bool _ownsProcess;
+    private bool _suppressUnexpectedExit;
 
     public DiscordHostStatus Status { get; private set; } = DiscordHostStatus.Offline;
     public string? PublicUrl { get; private set; }
@@ -88,6 +90,8 @@ internal sealed class DiscordScreenHostManager : IDisposable
             RedirectStandardOutput = true,
             RedirectStandardError = true,
             RedirectStandardInput = true,
+            StandardOutputEncoding = Encoding.UTF8,
+            StandardErrorEncoding = Encoding.UTF8,
         };
         start.ArgumentList.Add(entryPoint);
 
@@ -96,7 +100,7 @@ internal sealed class DiscordScreenHostManager : IDisposable
         _launcher.ErrorDataReceived += (_, e) => HandleOutput(e.Data);
         _launcher.Exited += (_, _) =>
         {
-            if (Status == DiscordHostStatus.Stopping) return;
+            if (Status == DiscordHostStatus.Stopping || _suppressUnexpectedExit) return;
             var code = SafeExitCode(_launcher);
             Fail($"O host foi encerrado inesperadamente (código {code}).");
         };
@@ -159,12 +163,14 @@ internal sealed class DiscordScreenHostManager : IDisposable
                 }
                 else
                 {
-                    var publicDeadline = DateTimeOffset.UtcNow.AddSeconds(20);
+                    AddLog("Servidor local pronto. Aguardando a propagação do endereço público do Cloudflare…");
+                    var publicDeadline = DateTimeOffset.UtcNow.AddSeconds(90);
                     while (DateTimeOffset.UtcNow < publicDeadline && !await IsHealthyAsync(PublicUrl))
                     {
-                        await Task.Delay(1200, cancellation);
+                        await Task.Delay(1800, cancellation);
                     }
-                    if (!await IsHealthyAsync(PublicUrl)) throw new InvalidOperationException("Servidor local iniciou, mas o túnel público não respondeu.");
+                    if (!await IsHealthyAsync(PublicUrl))
+                        throw new InvalidOperationException("Servidor local iniciou, mas o endereço público do Cloudflare não respondeu após 90 segundos. Tente iniciar novamente; o túnel rápido pode estar temporariamente indisponível.");
                 }
                 SetStatus(DiscordHostStatus.Online);
                 AddLog("Health check confirmado. Host online.");
@@ -257,6 +263,7 @@ internal sealed class DiscordScreenHostManager : IDisposable
         var process = _launcher;
         _launcher = null;
         if (!_ownsProcess || process is null) return;
+        _suppressUnexpectedExit = true;
         try
         {
             if (!process.HasExited)
@@ -267,7 +274,11 @@ internal sealed class DiscordScreenHostManager : IDisposable
             }
         }
         catch { try { if (!process.HasExited) process.Kill(entireProcessTree: true); } catch { } }
-        finally { process.Dispose(); }
+        finally
+        {
+            process.Dispose();
+            _suppressUnexpectedExit = false;
+        }
     }
 
     private void SetStatus(DiscordHostStatus status) { Status = status; Changed?.Invoke(); }
