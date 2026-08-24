@@ -868,12 +868,7 @@ export async function updateMatchSchedule(input: z.infer<typeof updateMatchSched
   const participant = Boolean(player && (match.playerAId === player.id || match.playerBId === player.id));
   if (!admin && !participant) return { error: "Apenas os participantes ou um administrador podem alterar este horário." };
 
-  const { startDate, endDate } = match.tournamentWeek;
-  if (scheduledAt < startDate || scheduledAt > endDate) {
-    const fmt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
-    return { error: `Escolha um horário dentro do período desta semana (${fmt(startDate)} até ${fmt(endDate)}, horário de Brasília).` };
-  }
-
+  // Sem janela de início/fim: define-se apenas o horário de início da partida.
   await prisma.$transaction(async (tx) => {
     await tx.match.update({ where: { id: matchId }, data: { scheduledAt } });
     await tx.auditLog.create({

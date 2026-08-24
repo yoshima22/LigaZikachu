@@ -286,23 +286,25 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
 
   function PublicIntent({ intent }: { intent: PublicDeckIntent | null }) {
     if (!intent?.gymBadgeId && !intent?.mascotMissionMascotName) return null;
+    // Boxes de mesma altura (min-h) e ícone num slot fixo centralizado, para que
+    // os dois apontamentos fiquem alinhados quando empilhados.
     return <div className="mt-2 grid gap-1.5 text-left">
-      {intent.gymBadgeId && <div className="flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center">
+      {intent.gymBadgeId && <div className="flex min-h-[2.75rem] items-center gap-2.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-400/15">
           <Award size={18} className="text-amber-300" />
         </span>
-        <span className="min-w-0 leading-tight">
+        <span className="min-w-0 flex-1 leading-tight">
           <b className="block text-[9px] uppercase tracking-wider text-amber-300">Jornada de Ginásio</b>
           <span className="block truncate text-[11px] font-semibold text-amber-50">{intent.gymBadgeName}</span>
           <small className="block text-[9px] text-amber-200/65">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</small>
         </span>
       </div>}
-      {intent.mascotMissionMascotName && <div className="flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
-        <span className="grid h-8 w-8 shrink-0 place-items-center">
+      {intent.mascotMissionMascotName && <div className="flex min-h-[2.75rem] items-center gap-2.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1.5">
+        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-emerald-400/15">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-8 w-8 object-contain" /> : <PawPrint size={18} className="text-emerald-300" />}
+          {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-7 w-7 object-contain" /> : <PawPrint size={18} className="text-emerald-300" />}
         </span>
-        <span className="min-w-0 leading-tight">
+        <span className="min-w-0 flex-1 leading-tight">
           <b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b>
           <span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span>
         </span>
@@ -375,8 +377,6 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
             <input
               type="datetime-local"
               value={scheduledAt}
-              min={toBrtDateTimeLocal(match.weekStartDate)}
-              max={toBrtDateTimeLocal(match.weekEndDate)}
               onChange={(event) => setScheduledAt(event.target.value)}
               className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-slate-200"
             />
