@@ -98,10 +98,10 @@ function ruleData(value: unknown) {
   return value && typeof value === "object" && !Array.isArray(value) ? value as Record<string, unknown> : {};
 }
 
-type RushRepeatMode = "WEEKLY_UNIQUE" | "DAILY_UNIQUE" | "UNRESTRICTED";
+type RushRepeatMode = "WEEKLY_UNIQUE" | "DAY_LOCKED" | "DAILY_UNIQUE" | "UNRESTRICTED";
 function repeatMode(rules: Record<string, unknown>, legacyUnique: boolean): RushRepeatMode {
   const value = String(rules.repeatMode ?? "");
-  if (value === "DAILY_UNIQUE" || value === "UNRESTRICTED" || value === "WEEKLY_UNIQUE") return value;
+  if (value === "DAILY_UNIQUE" || value === "UNRESTRICTED" || value === "WEEKLY_UNIQUE" || value === "DAY_LOCKED") return value;
   return legacyUnique ? "WEEKLY_UNIQUE" : "UNRESTRICTED";
 }
 
@@ -314,12 +314,23 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     if (requiredPersonality && mascots.some((m) => m.personality !== requiredPersonality)) return { error: `Esta semana aceita apenas mascotes de personalidade ${requiredPersonality}.` };
     const repetition = repeatMode(rules, league.uniqueSpecies);
     if (repetition !== "UNRESTRICTED") {
-      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, playerId: player.id, ...(repetition === "DAILY_UNIQUE" ? { battleDate: input.battleDate } : {}) }, select: { id: true, mascotIdsJson: true } });
+      // DAILY_UNIQUE olha so o proprio dia; DAY_LOCKED olha so os outros dias
+      // (reutilizar no mesmo dia e permitido); WEEKLY_UNIQUE olha a semana toda.
+      const escopo = repetition === "DAILY_UNIQUE" ? { battleDate: input.battleDate }
+        : repetition === "DAY_LOCKED" ? { battleDate: { not: input.battleDate } }
+        : {};
+      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, playerId: player.id, ...escopo }, select: { id: true, mascotIdsJson: true } });
       const current = await prisma.rushLeagueDailyTeam.findUnique({ where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } } });
       const otherIds = otherTeams.filter((t) => t.id !== current?.id).flatMap((t) => Array.isArray(t.mascotIdsJson) ? t.mascotIdsJson as string[] : []);
       const usedMascotIds = new Set(otherIds);
       const repeated = mascots.find((m) => usedMascotIds.has(m.id));
-      if (repeated) return { error: `${repetition === "DAILY_UNIQUE" ? "Sem repetição no dia" : "Sem repetição na semana"}: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} já foi usado em outra equipe.` };
+      if (repeated) {
+        const rotulo = repetition === "DAILY_UNIQUE" ? "Sem repetição no dia"
+          : repetition === "DAY_LOCKED" ? "Sem repetição entre dias"
+          : "Sem repetição na semana";
+        const onde = repetition === "DAY_LOCKED" ? "já foi usado em outro dia desta edição." : "já foi usado em outra equipe.";
+        return { error: `${rotulo}: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} ${onde}` };
+      }
     }
     const roles = Object.fromEntries(mascots.map((m) => [m.id, normalizeCombatRole(input.roles?.[m.id]??m.preferredCombatRole??defaultCombatRoleFor(m))]));
     await prisma.rushLeagueDailyTeam.upsert({
@@ -521,10 +532,11 @@ export async function adminGenerateRushDayAction(leagueId: string, battleDate: s
     for(const row of rows.filter(row=>row.status==="BYE")) await prisma.rushLeagueParticipant.update({where:{leagueId_playerId:{leagueId,playerId:row.playerAId}},data:{points:{increment:3}}});
 
     // Herda os times do dia anterior (mesmo slot) para hoje, quando o jogador
-    // ainda não montou. Semanas SEM repetição na semana (WEEKLY_UNIQUE) não podem
-    // herdar, pois reusariam os mesmos mascotes já usados.
+    // ainda não montou. Semanas SEM repetição na semana (WEEKLY_UNIQUE) e as que
+    // prendem o mascote a um único dia (DAY_LOCKED) não podem herdar, pois
+    // reusariam em outro dia mascotes já usados.
     const repetition = repeatMode(ruleData(league.ruleJson), league.uniqueSpecies);
-    if (dayOffset > 0 && repetition !== "WEEKLY_UNIQUE") {
+    if (dayOffset > 0 && repetition !== "WEEKLY_UNIQUE" && repetition !== "DAY_LOCKED") {
       const prevDate = addDaysDate(battleDate, -1);
       const [prevTeams, todayTeams] = await Promise.all([
         prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate: prevDate } }),
