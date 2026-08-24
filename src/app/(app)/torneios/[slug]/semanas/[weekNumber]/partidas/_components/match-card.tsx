@@ -294,9 +294,12 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
   function DeckIntent({ playerName, intent }: { playerName: string; intent: PublicDeckIntent | null }) {
     if (!hasIntent(intent) || !intent) return null;
     return (
-      <div className="rounded-xl border border-border/60 bg-slate-950/40 p-2.5 text-left">
-        <p className="mb-1.5 truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{playerName}</p>
-        <div className="grid gap-1.5">
+      <div className="overflow-hidden rounded-xl border border-white/10 bg-gradient-to-b from-slate-900/80 to-slate-950/60 text-left">
+        {/* Cabeçalho de largura total — agrupa tudo do jogador dentro do mesmo card. */}
+        <div className="border-b border-white/10 bg-white/[0.06] px-3 py-1.5">
+          <p className="truncate text-[10px] font-bold uppercase tracking-widest text-slate-300">{playerName}</p>
+        </div>
+        <div className="grid gap-1.5 p-2">
           {intent.gymBadgeId && (
             <div className="flex items-center gap-2.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
               <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-400/15">
