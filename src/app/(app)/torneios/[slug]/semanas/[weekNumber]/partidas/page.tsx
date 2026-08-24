@@ -1,7 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, requireAdmin, isStaff } from "@/lib/auth/permissions";
 import { canViewTournamentWeekDecklist } from "@/lib/decks";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
 import { Button } from "@/components/ui/button";
@@ -97,6 +97,10 @@ export default async function PartidasPage({ params }: Props) {
     : null;
   const canReportAnyInPersonMatch =
     tournament.format === "IN_PERSON" && (isAdmin || registration?.status === "APPROVED");
+
+  // Apontamentos de insígnia/mascote só ficam públicos quando os decks são
+  // revelados a todos. Antes disso, apenas staff (admin/gamemaster) pode ver.
+  const showDeckIntent = isDeckRegistrationLocked(week) || (user ? isStaff(user.role) : false);
 
   // Monta mapa playerId → decks únicos visíveis.
   // Deduplica por deckList para que o mesmo deck enviado em múltiplas partidas
@@ -328,6 +332,7 @@ export default async function PartidasPage({ params }: Props) {
                   match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${globalIdx}` }}
                   currentPlayerId={player.id}
                   isAdmin={isAdmin}
+                  showDeckIntent={showDeckIntent}
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
                   enguicaContract={enguicaContract}
@@ -419,6 +424,7 @@ export default async function PartidasPage({ params }: Props) {
               match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${num}` }}
               currentPlayerId={player?.id}
               isAdmin={isAdmin}
+              showDeckIntent={showDeckIntent}
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}
               enguicaContract={enguicaContract}

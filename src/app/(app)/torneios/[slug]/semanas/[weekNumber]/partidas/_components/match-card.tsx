@@ -63,6 +63,9 @@ interface MatchCardProps {
   };
   currentPlayerId?: string;
   isAdmin: boolean;
+  // Mostra os apontamentos (insígnia/mascote) do deck. Só quando os decks já são
+  // públicos para todos, ou para staff (admin/gamemaster), que veem antes.
+  showDeckIntent?: boolean;
   tournamentFormat?: string;
   canReportResult?: boolean;
   specEnabled?: boolean;
@@ -101,7 +104,7 @@ function formatBrtSchedule(value: string) {
   });
 }
 
-export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, canReportResult, specEnabled, enguicaContract }: MatchCardProps) {
+export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = false, tournamentFormat, canReportResult, specEnabled, enguicaContract }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -189,10 +192,14 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
     if (!scheduledAt) return;
     setLoading(true);
     try {
-      await updateMatchSchedule({
+      const res = await updateMatchSchedule({
         matchId: match.id,
         scheduledAt: new Date(`${scheduledAt}:00-03:00`).toISOString(),
       });
+      if (res?.error) {
+        alert(res.error);
+        return;
+      }
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro ao atualizar horário");
@@ -280,14 +287,25 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
   function PublicIntent({ intent }: { intent: PublicDeckIntent | null }) {
     if (!intent?.gymBadgeId && !intent?.mascotMissionMascotName) return null;
     return <div className="mt-2 grid gap-1.5 text-left">
-      {intent.gymBadgeId && <div className="flex items-start gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
-        <Award size={14} className="mt-0.5 shrink-0 text-amber-300" />
-        <span className="min-w-0"><b className="block text-[9px] uppercase tracking-wider text-amber-300">Jornada de Ginásio</b><span className="block truncate text-[11px] font-semibold text-amber-50">{intent.gymBadgeName}</span><small className="text-[9px] text-amber-200/65">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</small></span>
+      {intent.gymBadgeId && <div className="flex items-center gap-2 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
+        <span className="grid h-8 w-8 shrink-0 place-items-center">
+          <Award size={18} className="text-amber-300" />
+        </span>
+        <span className="min-w-0 leading-tight">
+          <b className="block text-[9px] uppercase tracking-wider text-amber-300">Jornada de Ginásio</b>
+          <span className="block truncate text-[11px] font-semibold text-amber-50">{intent.gymBadgeName}</span>
+          <small className="block text-[9px] text-amber-200/65">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</small>
+        </span>
       </div>}
-      {intent.mascotMissionMascotName && <div className="flex items-start gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-8 w-8 shrink-0 object-contain" /> : <PawPrint size={14} className="mt-0.5 shrink-0 text-emerald-300" />}
-        <span className="min-w-0"><b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b><span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span></span>
+      {intent.mascotMissionMascotName && <div className="flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
+        <span className="grid h-8 w-8 shrink-0 place-items-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-8 w-8 object-contain" /> : <PawPrint size={18} className="text-emerald-300" />}
+        </span>
+        <span className="min-w-0 leading-tight">
+          <b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b>
+          <span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span>
+        </span>
       </div>}
     </div>;
   }
@@ -397,7 +415,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
             : "bg-slate-800/50"
         }`}>
           <p className="font-semibold text-white text-sm truncate">{match.playerA.displayName}</p>
-          <PublicIntent intent={match.playerAIntent} />
+          {showDeckIntent && <PublicIntent intent={match.playerAIntent} />}
           <DeckBadges decks={match.playerADecks} selectedDeckId={match.playerADeckSubmissionId} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
@@ -414,7 +432,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, tournamentFormat, c
           <p className="font-semibold text-white text-sm truncate">
             {match.playerB?.displayName || "Bye"}
           </p>
-          <PublicIntent intent={match.playerBIntent} />
+          {showDeckIntent && <PublicIntent intent={match.playerBIntent} />}
           {match.playerBId && <DeckBadges decks={match.playerBDecks} selectedDeckId={match.playerBDeckSubmissionId} />}
           {match.status === "CONFIRMED" && match.playerBId && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsB}pt</p>

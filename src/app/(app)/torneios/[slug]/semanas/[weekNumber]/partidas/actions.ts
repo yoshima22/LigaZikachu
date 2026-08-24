@@ -848,27 +848,30 @@ const updateMatchScheduleSchema = z.object({
   scheduledAt: z.string().datetime(),
 });
 
-export async function updateMatchSchedule(input: z.infer<typeof updateMatchScheduleSchema>) {
+export async function updateMatchSchedule(input: z.infer<typeof updateMatchScheduleSchema>): Promise<{ success?: boolean; error?: string }> {
   const user = await getSessionUser();
-  if (!user) throw new Error("Não autenticado");
-  const { matchId, scheduledAt: scheduledAtIso } = updateMatchScheduleSchema.parse(input);
+  if (!user) return { error: "Não autenticado." };
+  const parsed = updateMatchScheduleSchema.safeParse(input);
+  if (!parsed.success) return { error: "Data e horário inválidos." };
+  const { matchId, scheduledAt: scheduledAtIso } = parsed.data;
   const scheduledAt = new Date(scheduledAtIso);
 
   const match = await prisma.match.findUnique({
     where: { id: matchId },
     include: { tournamentWeek: { include: { tournament: { select: { slug: true } } } } },
   });
-  if (!match?.tournamentWeek) throw new Error("Partida ou semana não encontrada");
-  if (match.status === MatchStatus.CANCELED) throw new Error("Uma partida cancelada não pode ser reagendada");
+  if (!match?.tournamentWeek) return { error: "Partida ou semana não encontrada." };
+  if (match.status === MatchStatus.CANCELED) return { error: "Uma partida cancelada não pode ser reagendada." };
 
   const player = await getSessionPlayer(user.id);
   const admin = user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
   const participant = Boolean(player && (match.playerAId === player.id || match.playerBId === player.id));
-  if (!admin && !participant) throw new Error("Apenas os participantes ou um administrador podem alterar este horário");
+  if (!admin && !participant) return { error: "Apenas os participantes ou um administrador podem alterar este horário." };
 
   const { startDate, endDate } = match.tournamentWeek;
   if (scheduledAt < startDate || scheduledAt > endDate) {
-    throw new Error("Escolha uma data e horário dentro do período desta semana");
+    const fmt = (d: Date) => d.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" });
+    return { error: `Escolha um horário dentro do período desta semana (${fmt(startDate)} até ${fmt(endDate)}, horário de Brasília).` };
   }
 
   await prisma.$transaction(async (tx) => {
