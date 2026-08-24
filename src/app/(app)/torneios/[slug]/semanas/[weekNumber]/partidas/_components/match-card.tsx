@@ -284,32 +284,46 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
     return <p className="mt-1 text-[10px] text-slate-500">Deck oculto</p>;
   }
 
-  function PublicIntent({ intent }: { intent: PublicDeckIntent | null }) {
-    if (!intent?.gymBadgeId && !intent?.mascotMissionMascotName) return null;
-    // Boxes de mesma altura (min-h) e ícone num slot fixo centralizado, para que
-    // os dois apontamentos fiquem alinhados quando empilhados.
-    return <div className="mt-2 grid gap-1.5 text-left">
-      {intent.gymBadgeId && <div className="flex min-h-[2.75rem] items-center gap-2.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-1.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-amber-400/15">
-          <Award size={18} className="text-amber-300" />
-        </span>
-        <span className="min-w-0 flex-1 leading-tight">
-          <b className="block text-[9px] uppercase tracking-wider text-amber-300">Jornada de Ginásio</b>
-          <span className="block truncate text-[11px] font-semibold text-amber-50">{intent.gymBadgeName}</span>
-          <small className="block text-[9px] text-amber-200/65">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</small>
-        </span>
-      </div>}
-      {intent.mascotMissionMascotName && <div className="flex min-h-[2.75rem] items-center gap-2.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-1.5">
-        <span className="grid h-8 w-8 shrink-0 place-items-center rounded-md bg-emerald-400/15">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-7 w-7 object-contain" /> : <PawPrint size={18} className="text-emerald-300" />}
-        </span>
-        <span className="min-w-0 flex-1 leading-tight">
-          <b className="block text-[9px] uppercase tracking-wider text-emerald-300">Missão de Mascote</b>
-          <span className="block truncate text-[11px] font-semibold text-emerald-50">{intent.mascotMissionMascotName}</span>
-        </span>
-      </div>}
-    </div>;
+  function hasIntent(intent: PublicDeckIntent | null): boolean {
+    return Boolean(intent?.gymBadgeId || intent?.mascotMissionMascotName);
+  }
+
+  // Card de apontamentos (insígnia/mascote) de UM jogador, em largura total —
+  // fora das colunas estreitas, para o texto não transbordar. Ícone em slot fixo,
+  // rótulo + valor (com truncate) alinhados.
+  function DeckIntent({ playerName, intent }: { playerName: string; intent: PublicDeckIntent | null }) {
+    if (!hasIntent(intent) || !intent) return null;
+    return (
+      <div className="rounded-xl border border-border/60 bg-slate-950/40 p-2.5 text-left">
+        <p className="mb-1.5 truncate text-[10px] font-bold uppercase tracking-wider text-slate-400">{playerName}</p>
+        <div className="grid gap-1.5">
+          {intent.gymBadgeId && (
+            <div className="flex items-center gap-2.5 rounded-lg border border-amber-400/25 bg-amber-400/10 px-2.5 py-2">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-amber-400/15">
+                <Award size={18} className="text-amber-300" />
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-amber-300">Jornada de Ginásio</p>
+                <p className="truncate text-xs font-semibold text-amber-50">{intent.gymBadgeName}</p>
+                <p className="text-[9px] text-amber-200/70">{intent.gymBadgeValid === true ? "Confirmada" : intent.gymBadgeValid === false ? "Marcada como inválida" : "Aguardando confirmação"}</p>
+              </div>
+            </div>
+          )}
+          {intent.mascotMissionMascotName && (
+            <div className="flex items-center gap-2.5 rounded-lg border border-emerald-400/25 bg-emerald-400/10 px-2.5 py-2">
+              <span className="grid h-9 w-9 shrink-0 place-items-center rounded-md bg-emerald-400/15">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                {intent.mascotMissionSpriteUrl ? <img src={intent.mascotMissionSpriteUrl} alt="" className="h-7 w-7 object-contain" /> : <PawPrint size={18} className="text-emerald-300" />}
+              </span>
+              <div className="min-w-0 flex-1 leading-tight">
+                <p className="text-[9px] font-bold uppercase tracking-wider text-emerald-300">Missão de Mascote</p>
+                <p className="truncate text-xs font-semibold text-emerald-50">{intent.mascotMissionMascotName}</p>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   }
 
   async function handleDeckChoice(applyToWeek: boolean) {
@@ -415,7 +429,6 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
             : "bg-slate-800/50"
         }`}>
           <p className="font-semibold text-white text-sm truncate">{match.playerA.displayName}</p>
-          {showDeckIntent && <PublicIntent intent={match.playerAIntent} />}
           <DeckBadges decks={match.playerADecks} selectedDeckId={match.playerADeckSubmissionId} />
           {match.status === "CONFIRMED" && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsA}pt</p>
@@ -432,13 +445,21 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
           <p className="font-semibold text-white text-sm truncate">
             {match.playerB?.displayName || "Bye"}
           </p>
-          {showDeckIntent && <PublicIntent intent={match.playerBIntent} />}
           {match.playerBId && <DeckBadges decks={match.playerBDecks} selectedDeckId={match.playerBDeckSubmissionId} />}
           {match.status === "CONFIRMED" && match.playerBId && (
             <p className="text-xs text-green-400 mt-1">+{match.rankingPointsB}pt</p>
           )}
         </div>
       </div>
+
+      {/* Apontamentos de deck (insígnia/mascote) — largura total, fora das colunas
+          estreitas, para o texto não transbordar. */}
+      {showDeckIntent && (hasIntent(match.playerAIntent) || hasIntent(match.playerBIntent)) && (
+        <div className="mt-2 grid gap-2 sm:grid-cols-2">
+          <DeckIntent playerName={match.playerA.displayName} intent={match.playerAIntent} />
+          {match.playerBId && <DeckIntent playerName={match.playerB?.displayName ?? "Bye"} intent={match.playerBIntent} />}
+        </div>
+      )}
 
       {/* Modo SPEC: transmissão ao vivo desta partida (só aparece se ativado) */}
       {specEnabled && match.playerBId && <SpecMatchControl matchId={match.id} canBroadcast={isParticipant || isAdmin} />}
