@@ -23,12 +23,17 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
       setTargetRect(null);
       return;
     }
-    const el = document.querySelector(step.target);
-    if (el) {
-      setTargetRect(el.getBoundingClientRect());
-    } else {
+    const el = document.querySelector(step.target) as HTMLElement | null;
+    if (!el) {
       setTargetRect(null);
+      return;
     }
+    const rect = el.getBoundingClientRect();
+    // Alvo oculto/colapsado (ex.: item dentro de um menu fechado) tem tamanho ~0
+    // e geraria um "quadradinho de destaque" desalinhado. Nesse caso, não destaca
+    // nada (mostra o card central) em vez de apontar para o lugar errado.
+    const isVisible = el.offsetParent !== null && rect.width > 4 && rect.height > 4;
+    setTargetRect(isVisible ? rect : null);
   }, [step]);
 
   useEffect(() => {

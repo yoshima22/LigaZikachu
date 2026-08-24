@@ -12,7 +12,7 @@ import { parseBirthDateInput } from "@/lib/birthday";
 type FormState = { error?: string };
 
 const registerSchema = z.object({
-  name:       z.string().trim().min(2).max(80),
+  name:       z.string().trim().min(2).max(16, "O nome pode ter no máximo 16 caracteres."),
   email:      z.string().trim().toLowerCase().email(),
   ptcglNick:  z.string().trim().min(2, "Nick do PTCG Live deve ter ao menos 2 caracteres.").max(60),
   password:   z.string().min(8).max(72),

@@ -28,11 +28,11 @@ export function RegisterForm({
     <form action={formAction} className="space-y-4">
       <div className="space-y-2">
         <label className="text-sm font-medium text-slate-200" htmlFor="name">
-          Nome completo
+          Nome
         </label>
-        <input id="name" name="name" type="text" required
+        <input id="name" name="name" type="text" required maxLength={16}
           className="h-11 w-full rounded-xl border border-border bg-slate-950/60 px-3 text-sm text-white outline-none transition focus:border-primary"
-          placeholder="Seu nome" />
+          placeholder="Seu nome (até 16 caracteres)" />
       </div>
 
       <div className="space-y-2">

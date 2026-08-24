@@ -441,10 +441,64 @@ export const TUTORIALS: Record<string, PageTutorial> = {
         position: "top"
       }
     ]
+  },
+  dashboard: {
+    pageId: "dashboard",
+    steps: [
+      { title: "Sua central ⚡", description: "O Dashboard reúne o resumo do seu dia: partidas pendentes, decks da semana, avisos e atalhos rápidos para tudo na Liga Zikachu.", position: "center" },
+      { title: "Fique de olho nos alertas", description: "Resultados aguardando confirmação, semanas sem deck e novidades aparecem aqui primeiro. Comece o dia por esta tela!", position: "center" },
+      { title: "Explore pelo menu", description: "Use o menu no topo para navegar entre Mascotes, Combates, Torneios, Bazar e mais. Em cada página, o botão ❓ mostra as dicas daquela tela.", position: "center" },
+    ]
+  },
+  carteira: {
+    pageId: "carteira",
+    steps: [
+      { title: "Sua carteira 🪙", description: "Aqui você acompanha seu saldo de ZikaCoins e todo o histórico de créditos e débitos (compras, prêmios, apostas e presentes).", position: "center" },
+      { title: "De onde vêm as ZikaCoins?", description: "Você ganha ZC em torneios, expedições, conquistas, presentes de amigos e eventos. Gaste na ZikaShop, no Bazar e na máquina do Miauvadão.", position: "center" },
+    ]
+  },
+  "passe-apoiador": {
+    pageId: "passe-apoiador",
+    steps: [
+      { title: "Passe de Apoiador 🎫", description: "Resgate uma recompensa por dia ao longo do calendário do passe: moedas, ovos, itens e prêmios especiais nos marcos.", position: "center" },
+      { title: "Não perca um dia", description: "Cada dia liberado tem seu presente. Volte todo dia para resgatar — alguns passes permitem resgatar dias anteriores pendentes.", position: "center" },
+    ]
+  },
+  insignias: {
+    pageId: "insignias",
+    steps: [
+      { title: "Insígnias 🏅", description: "As insígnias são conquistas de destaque dadas em torneios e eventos. Cada uma vale pontos extras no seu ranking.", position: "center" },
+      { title: "Mostre no perfil", description: "Suas insígnias aparecem no seu perfil público para todo mundo ver. Colecione o máximo que puder!", position: "center" },
+    ]
+  },
+  noticias: {
+    pageId: "noticias",
+    steps: [
+      { title: "Notícias 📰", description: "Acompanhe os comunicados oficiais da Liga: eventos, atualizações, resultados e avisos importantes ficam todos aqui.", position: "center" },
+    ]
+  },
+  mensagens: {
+    pageId: "mensagens",
+    steps: [
+      { title: "Mensagens 💬", description: "Converse com outros jogadores por mensagens diretas. Notificações do sistema (como propostas do Bazar) também chegam por aqui.", position: "center" },
+    ]
+  },
+  manual: {
+    pageId: "manual",
+    steps: [
+      { title: "Manual do jogo 📖", description: "O manual reúne as regras detalhadas: expedições, combate, posturas, drops, economia e muito mais. Consulte sempre que tiver dúvida.", position: "center" },
+    ]
   }
 };
 
 const ROUTE_TUTORIALS: Array<[RegExp, string]> = [
+  [/^\/dashboard(\/|$)/, "dashboard"],
+  [/^\/carteira(\/|$)/, "carteira"],
+  [/^\/passe-apoiador(\/|$)/, "passe-apoiador"],
+  [/^\/insignias(\/|$)/, "insignias"],
+  [/^\/noticias(\/|$)/, "noticias"],
+  [/^\/mensagens(\/|$)/, "mensagens"],
+  [/^\/manual(\/|$)/, "manual"],
   [/^\/bazar(\/|$)/, "bazar"],
   [/^\/mascotes\/ranking(\/|$)/, "ranking"],
   [/^\/mascotes(\/|$)/, "mascotes"],

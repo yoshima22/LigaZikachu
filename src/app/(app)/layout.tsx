@@ -17,7 +17,7 @@ import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
 import { AchievementNotifier } from "@/components/achievement-notifier";
-import { WelcomeTutorial } from "@/components/tutorial/welcome-tutorial";
+import { WelcomeScreen } from "@/components/tutorial/welcome-screen";
 import { RouteTutorialHelpButton } from "@/components/tutorial/route-tutorial-help-button";
 import { MaintenanceVisibilityGuard } from "@/components/maintenance-visibility-guard";
 import { SessionPersistenceGuard } from "@/components/session-persistence-guard";
@@ -417,7 +417,7 @@ export default async function AppLayout({
         <SpecMiniPlayer />
         <SpecBroadcastControlDock />
         {player && <DesktopChatDockLoader initialUnreadCount={notificationSnapshot.messageCount} />}
-        {!admin && <WelcomeTutorial />}
+        {!admin && <WelcomeScreen />}
       </div>
     </>
   );
