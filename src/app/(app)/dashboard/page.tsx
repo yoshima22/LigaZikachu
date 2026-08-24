@@ -208,16 +208,33 @@ export default async function DashboardPage() {
   // diferentes. Usa a data BRT (não UTC) para não jogar jogos da noite no dia seguinte.
   const brtDayKey = (value: Date | string) =>
     new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
+
+  // Limites da SEMANA ATUAL no fuso de Brasília (segunda a domingo). Só mostramos
+  // os jogos desta semana — os das próximas semanas ficam de fora do dashboard.
+  const todayBrt = brtDayKey(new Date());
+  // Dia da semana (0=dom … 6=sáb) do "hoje" em BRT, calculado a partir da data BRT
+  // pura para não sofrer com o fuso local do servidor.
+  const brtWeekday = new Date(`${todayBrt}T12:00:00Z`).getUTCDay();
+  const daysSinceMonday = (brtWeekday + 6) % 7; // segunda = 0
+  const addDays = (isoDay: string, delta: number) => {
+    const d = new Date(`${isoDay}T12:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + delta);
+    return d.toISOString().slice(0, 10);
+  };
+  const weekStart = addDays(todayBrt, -daysSinceMonday); // segunda-feira desta semana
+  const weekEnd = addDays(weekStart, 6);                 // domingo desta semana
+
   const matchesByDay = new Map<string, typeof upcomingMatches>();
   for (const m of upcomingMatches) {
-    const dayKey = m.scheduledAt ? brtDayKey(m.scheduledAt) : "9999-99-99"; // sem data → por último
+    if (!m.scheduledAt) continue; // sem data definida não entra na "semana atual"
+    const dayKey = brtDayKey(m.scheduledAt);
+    if (dayKey < weekStart || dayKey > weekEnd) continue; // fora da semana atual
     const arr = matchesByDay.get(dayKey) ?? [];
     arr.push(m);
     matchesByDay.set(dayKey, arr);
   }
-  // Grupos de dias, em ordem cronológica (máx. 6 dias para não poluir o dashboard).
+  // Grupos de dias desta semana, em ordem cronológica.
   const upcomingDayGroups = [...matchesByDay.keys()].sort()
-    .slice(0, 6)
     .map((day) => ({ day, matches: matchesByDay.get(day) ?? [] }));
 
   // ── DECKS PENDENTES: partidas abertas sem deck registrado ────────────────────
@@ -347,13 +364,13 @@ export default async function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Próximas Partidas — todos os jogos do dia mais próximo */}
+        {/* Próximas Partidas — apenas os jogos da semana atual, separados por dia */}
         <Card>
           <CardTitle className="mb-3 flex items-center gap-2">
-            <Calendar size={18} className="text-primary" /> Próximas Partidas
+            <Calendar size={18} className="text-primary" /> Partidas desta semana
           </CardTitle>
           {upcomingDayGroups.length === 0 ? (
-            <EmptyState message="Nenhuma partida agendada." icon={<Calendar size={24} />} />
+            <EmptyState message="Nenhuma partida agendada para esta semana." icon={<Calendar size={24} />} />
           ) : (
             <div className="space-y-4">
               {upcomingDayGroups.map(({ day, matches }) => {
