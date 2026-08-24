@@ -204,19 +204,21 @@ export default async function DashboardPage() {
       })
     : [];
 
-  // Agrupa por data (dia) e pega o dia mais próximo
+  // Agrupa por data (dia, no fuso de Brasília) para separar jogos de dias
+  // diferentes. Usa a data BRT (não UTC) para não jogar jogos da noite no dia seguinte.
+  const brtDayKey = (value: Date | string) =>
+    new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit" }).format(new Date(value));
   const matchesByDay = new Map<string, typeof upcomingMatches>();
   for (const m of upcomingMatches) {
-    const dayKey = m.scheduledAt
-      ? new Date(m.scheduledAt).toISOString().slice(0, 10)
-      : "sem-data";
+    const dayKey = m.scheduledAt ? brtDayKey(m.scheduledAt) : "9999-99-99"; // sem data → por último
     const arr = matchesByDay.get(dayKey) ?? [];
     arr.push(m);
     matchesByDay.set(dayKey, arr);
   }
-  const sortedDays = [...matchesByDay.keys()].sort();
-  const nextDay = sortedDays[0] ?? null;
-  const nextMatches = nextDay ? (matchesByDay.get(nextDay) ?? []) : [];
+  // Grupos de dias, em ordem cronológica (máx. 6 dias para não poluir o dashboard).
+  const upcomingDayGroups = [...matchesByDay.keys()].sort()
+    .slice(0, 6)
+    .map((day) => ({ day, matches: matchesByDay.get(day) ?? [] }));
 
   // ── DECKS PENDENTES: partidas abertas sem deck registrado ────────────────────
   // Busca partidas das semanas OPEN em torneios ativos
@@ -350,37 +352,50 @@ export default async function DashboardPage() {
           <CardTitle className="mb-3 flex items-center gap-2">
             <Calendar size={18} className="text-primary" /> Próximas Partidas
           </CardTitle>
-          {nextMatches.length === 0 ? (
+          {upcomingDayGroups.length === 0 ? (
             <EmptyState message="Nenhuma partida agendada." icon={<Calendar size={24} />} />
           ) : (
-            <div className="space-y-2">
-              {nextMatches[0].scheduledAt && (
-                <p className="text-xs font-semibold text-[#FFCB05] mb-3">
-                  📅 {new Date(nextMatches[0].scheduledAt).toLocaleDateString("pt-BR", {
-                    weekday: "long", day: "2-digit", month: "long",
-                    hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo"
-                  })}
-                </p>
-              )}
-              {nextMatches.map(m => {
-                const isA = m.playerAId === player.id;
-                const opp = isA ? m.playerB?.displayName : m.playerA.displayName;
-                const href = m.tournamentWeek
-                  ? `/torneios/${m.tournamentWeek.tournament.slug}/semanas/${m.tournamentWeek.weekNumber}/partidas`
-                  : "/torneios";
+            <div className="space-y-4">
+              {upcomingDayGroups.map(({ day, matches }) => {
+                const headerDate = matches[0]?.scheduledAt
+                  ? new Date(matches[0].scheduledAt).toLocaleDateString("pt-BR", {
+                      weekday: "long", day: "2-digit", month: "long", timeZone: "America/Sao_Paulo",
+                    })
+                  : "Sem data definida";
                 return (
-                  <Link key={m.id} href={href}
-                    className="flex items-center justify-between gap-2 rounded-xl border border-border bg-slate-900/40 px-3 py-2.5 hover:border-slate-600 transition-colors">
-                    <div>
-                      <p className="text-sm text-white">vs <span className="font-semibold text-primary">{opp}</span></p>
-                      {m.tournamentWeek && (
-                        <p className="text-[11px] text-slate-500 mt-0.5">
-                          {m.tournamentWeek.tournament.name} · {m.tournamentWeek.label ?? `Semana ${m.tournamentWeek.weekNumber}`}
-                        </p>
-                      )}
-                    </div>
-                    <StatusBadge variant="warning" label="Agendada" />
-                  </Link>
+                  <div key={day} className="space-y-2">
+                    {/* Cabeçalho da data — separa os jogos por dia */}
+                    <p className="flex items-center gap-1.5 border-b border-border/60 pb-1.5 text-xs font-semibold text-[#FFCB05]">
+                      📅 <span className="capitalize">{headerDate}</span>
+                    </p>
+                    {matches.map(m => {
+                      const isA = m.playerAId === player.id;
+                      const opp = isA ? m.playerB?.displayName : m.playerA.displayName;
+                      const time = m.scheduledAt
+                        ? new Date(m.scheduledAt).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })
+                        : null;
+                      const href = m.tournamentWeek
+                        ? `/torneios/${m.tournamentWeek.tournament.slug}/semanas/${m.tournamentWeek.weekNumber}/partidas`
+                        : "/torneios";
+                      return (
+                        <Link key={m.id} href={href}
+                          className="flex items-center justify-between gap-2 rounded-xl border border-border bg-slate-900/40 px-3 py-2.5 hover:border-slate-600 transition-colors">
+                          <div className="min-w-0">
+                            <p className="text-sm text-white">
+                              vs <span className="font-semibold text-primary">{opp}</span>
+                              {time && <span className="ml-2 text-[11px] font-normal text-slate-400">{time}</span>}
+                            </p>
+                            {m.tournamentWeek && (
+                              <p className="text-[11px] text-slate-500 mt-0.5 truncate">
+                                {m.tournamentWeek.tournament.name} · {m.tournamentWeek.label ?? `Semana ${m.tournamentWeek.weekNumber}`}
+                              </p>
+                            )}
+                          </div>
+                          <StatusBadge variant="warning" label="Agendada" />
+                        </Link>
+                      );
+                    })}
+                  </div>
                 );
               })}
             </div>
