@@ -463,7 +463,7 @@ function levelStatBonuses(
   // recebe viés forte (×1,15) e o "útil" um viés leve (×1,08). Vale para todas as
   // personalidades (o Caótico não tem afinidade fixa — ver concentração abaixo).
   const aff = PERSONALITY_AFFINITY[mascot.personality];
-  if (aff?.veryUseful) weights[STAT_KEY_TO_WEIGHT[aff.veryUseful]] *= 1.15;
+  if (aff?.veryUseful) weights[STAT_KEY_TO_WEIGHT[aff.veryUseful]] *= 1.10;
   if (aff?.useful) weights[STAT_KEY_TO_WEIGHT[aff.useful]] *= 1.08;
   // Limitação preservada do Dramático: -15% no crescimento de Vitalidade.
   if (mascot.personality === "DRAMATIC") weights.statVitality *= 0.85;
