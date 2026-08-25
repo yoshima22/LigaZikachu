@@ -1224,13 +1224,13 @@ export type ManagedForm = {
 export async function listManagedForms(): Promise<ManagedForm[]> {
   await requirePlatformAdmin();
   const { EXTRA_FORM_IDS, EXTRA_FORM_GENERATION } = await import("@/lib/extra-forms-data");
-  const { getPokemonName, getPokemonTypes, getStaticSpriteUrl } = await import("@/lib/mascot-data");
+  const { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeLabelPt } = await import("@/lib/mascot-data");
   const disabledRows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
   const disabled = new Set(disabledRows.map((r) => r.pokemonId));
   return EXTRA_FORM_IDS.map((id) => ({
     id,
     name: getPokemonName(id),
-    types: getPokemonTypes(id),
+    types: getPokemonTypes(id).map(getTypeLabelPt),
     generation: EXTRA_FORM_GENERATION[id] ?? null,
     spriteUrl: getStaticSpriteUrl(id),
     enabled: !disabled.has(id),
@@ -1243,13 +1243,21 @@ export async function searchMascotSprites(query: string): Promise<MascotSpriteHi
   await requirePlatformAdmin();
   const q = query.trim().toLowerCase();
   if (!q) return [];
-  const { POKEMON_PT_NAMES, getPokemonName, getPokemonTypes, getStaticSpriteUrl } = await import("@/lib/mascot-data");
-  const hit = (id: number): MascotSpriteHit => ({ id, name: getPokemonName(id), types: getPokemonTypes(id), spriteUrl: getStaticSpriteUrl(id) });
+  const { POKEMON_PT_NAMES, getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeLabelPt } = await import("@/lib/mascot-data");
+  const { EXTRA_FORM_IDS } = await import("@/lib/extra-forms-data");
+  const hit = (id: number): MascotSpriteHit => ({ id, name: getPokemonName(id), types: getPokemonTypes(id).map(getTypeLabelPt), spriteUrl: getStaticSpriteUrl(id) });
   if (/^\d+$/.test(q)) return [hit(Number(q))];
-  const ids = Object.keys(POKEMON_PT_NAMES).map(Number)
+  // Universo completo de IDs: toda a Pokédex nacional (1–1025, cujos nomes ficam
+  // espalhados em vários mapas de geração), + formas/megas/Unown + IDs de evento.
+  const universe = new Set<number>();
+  for (let i = 1; i <= 1025; i++) universe.add(i);
+  for (const k of Object.keys(POKEMON_PT_NAMES)) universe.add(Number(k));
+  for (const id of EXTRA_FORM_IDS) universe.add(id);
+  for (let e = 210001; e <= 210008; e++) universe.add(e);
+  const ids = [...universe]
     .filter((id) => getPokemonName(id).toLowerCase().includes(q))
     .sort((a, b) => a - b)
-    .slice(0, 60);
+    .slice(0, 120);
   return ids.map(hit);
 }
 

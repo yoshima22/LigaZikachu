@@ -2332,22 +2332,43 @@ export function mascotPrimaryType(m: MascotTypeSource): string {
 }
 
 // Vantagens de tipo (atacante → defensores fracos)
+// Tabela de vantagem de tipo (super-eficaz) dos 18 tipos, seguindo a matriz
+// oficial dos jogos. O motor de combate aplica um bônus fixo (1.3×) quando
+// qualquer tipo do atacante é super-eficaz contra algum tipo do alvo.
 export const TYPE_ADVANTAGE: Record<string, string[]> = {
+  normal:   [],
   fire:     ["grass","ice","bug","steel"],
   water:    ["fire","ground","rock"],
-  grass:    ["water","ground","rock"],
   electric: ["water","flying"],
+  grass:    ["water","ground","rock"],
+  ice:      ["grass","ground","flying","dragon"],
+  fighting: ["normal","ice","rock","dark","steel"],
+  poison:   ["grass","fairy"],
+  ground:   ["fire","electric","poison","rock","steel"],
+  flying:   ["grass","fighting","bug"],
   psychic:  ["fighting","poison"],
+  bug:      ["grass","psychic","dark"],
+  rock:     ["fire","ice","flying","bug"],
   ghost:    ["psychic","ghost"],
   dragon:   ["dragon"],
-  fighting: ["normal","rock","ice","dark","steel"],
-  ground:   ["fire","electric","poison","rock","steel"],
-  rock:     ["fire","flying","bug","ice"],
-  ice:      ["grass","ground","flying","dragon"],
-  poison:   ["grass","fairy"],
-  bug:      ["grass","psychic","dark"],
-  normal:   [],
+  dark:     ["psychic","ghost"],
+  steel:    ["ice","rock","fairy"],
+  fairy:    ["fighting","dragon","dark"],
 };
+
+// Nomes padronizados em português dos 18 tipos de combate (chaves minúsculas,
+// como em POKEMON_ELEMENT/getPokemonTypes). Fonte única para as tags de tipo.
+export const TYPE_LABELS_PT: Record<string, string> = {
+  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico",
+  grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno",
+  ground: "Terra", flying: "Voador", psychic: "Psíquico", bug: "Inseto",
+  rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio",
+  steel: "Aço", fairy: "Fada",
+};
+
+export function getTypeLabelPt(type: string): string {
+  return TYPE_LABELS_PT[type.toLowerCase()] ?? type;
+}
 
 export function getTypeAdvantageMultiplier(attackerTypes: string | string[], defenderTypes: string | string[]): number {
   const atk = Array.isArray(attackerTypes) ? attackerTypes : [attackerTypes];
