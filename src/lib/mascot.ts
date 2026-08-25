@@ -108,7 +108,10 @@ async function includeCustomSpeciesInRoll(result: EggRollResult, excludedPokemon
   });
   const eligible = custom.filter((item) => registryTier(item.rarity) === result.tier);
   if (!eligible.length) return result;
-  const officialCount = getEggCandidatesForGeneration(result.generation, result.tier).length;
+  // Não conta as espécies excluídas/desligadas no total de oficiais (senão o
+  // denominador infla e distorce a chance de injetar a espécie custom).
+  const excludedSet = new Set(excludedPokemonIds);
+  const officialCount = getEggCandidatesForGeneration(result.generation, result.tier).filter((id) => !excludedSet.has(id)).length;
   if (Math.random() * (officialCount + eligible.length) >= eligible.length) return result;
   return { ...result, pokemonId: randomFrom(eligible).pokemonId };
 }

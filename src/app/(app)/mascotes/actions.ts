@@ -11,7 +11,7 @@ import {
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
   applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
-  rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts,
+  rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds,
 } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
@@ -575,6 +575,9 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
     const generation = Number(generationMatch[1]);
     const eventBonusPct = await getActiveEggRarityBonusPct();
     const ownedCounts = await getOwnedBaseCounts(player.id);
+    // Espécies desligadas no admin (formas custom etc.) não entram no sorteio real,
+    // então também não devem aparecer no preview de possíveis filhotes.
+    const disabledIds = new Set(await getDisabledEggPokemonIds());
     const bonusPct = incubator.egg.hatchRarityBonusPct + eventBonusPct;
     const { effective } = getEggTierWeightsForGeneration(
       context.eggType,
@@ -606,7 +609,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
     for (const tier of tiers) {
       const tierChance = effective[tier] / 100;
       if (tierChance <= 0) continue;
-      const official = getEggCandidatesForGeneration(generation, tier);
+      const official = getEggCandidatesForGeneration(generation, tier).filter((id) => !disabledIds.has(id));
       const custom = customSpecies.filter((species) => previewRegistryTier(species.rarity) === tier);
       if (!official.length) continue;
 
