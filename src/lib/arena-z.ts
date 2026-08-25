@@ -597,6 +597,19 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const survivorDefBonus = target.combatRole === "SURVIVOR" && targetHpPct < 0.30 ? 0.75 : 1;
 
       const persOff = personalityOffenseMult(actor, target, hp, hitTaken);
+      // Feedback roxo da personalidade quando o bônus ofensivo ativa. O Dramático
+      // entra em "fúria" (+10% de dano) com HP < 35% e antes não deixava nenhuma
+      // pista no log — parecia bug. Agora registra a ativação (o texto contém "HP",
+      // então o EffectChips o classifica como personalidade/roxo).
+      let persOffNote: string | null = null;
+      if (persOff > 1) {
+        const pct = Math.round((persOff - 1) * 100);
+        if (actor.personality === "DRAMATIC") persOffNote = `Dramático ${actor.name} entrou em fúria com HP baixo (+${pct}% de dano).`;
+        else if (actor.personality === "PROUD") persOffNote = `Orgulho de ${actor.name} em alta: personalidade rende +${pct}% de dano.`;
+        else if (actor.personality === "COMPETITIVE") persOffNote = `Competitivo ${actor.name} encara um alvo mais forte: personalidade rende +${pct}% de dano.`;
+        else if (actor.personality === "TIMID") persOffNote = `Tímido ${actor.name} reage após ser atingido: personalidade rende +${pct}% de dano.`;
+        else if (actor.personality === "CURIOUS") persOffNote = `Curioso ${actor.name} estuda o oponente: personalidade rende +${pct}% de dano.`;
+      }
       const persDef = personalityDefenseMult(target, hp, hitTaken);
       // Leal: +5% enquanto o aliado protegido estiver vivo e abaixo de 35% de HP.
       const loyalMate = loyalAlly.get(actor.id);
@@ -656,6 +669,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         encourage > 0 ? `Encorajador ativo: +${Math.round(encourage * 100)}% impulso.` : null,
         scoutBonus > 0 ? `Batedor ativo: +${Math.round(scoutBonus * 100)}% precisão.` : null,
         loyalNote,
+        persOffNote,
         debuffEffect,
         travessoEffect,
         dramaticEffect,
@@ -1955,13 +1969,20 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
           ...(teamDefeated
             ? { reward, preserved: defeatPreserved, burned: defeatSplit?.burned, stolenByBot: defeatSplit?.stolen, teamDefeated: true }
             : reward),
-          replayMascots: [...attackers, ...defenders].map((mascot) => ({
+          replayMascots: [
+            ...attackers.map((mascot) => ({ mascot, side: "A" as const })),
+            ...defenders.map((mascot) => ({ mascot, side: "D" as const })),
+          ].map(({ mascot, side }) => ({
             id: mascot.id,
             pokemonId: mascot.pokemonId,
             name: mascot.name,
             level: mascot.level,
             ownerId: mascot.ownerId,
             maxHp: mascot.hp,
+            // Lado do confronto (A = atacante, D = defensor). Necessário para separar
+            // os times num treino "espelho" (self vs self), em que os dois lados têm
+            // o mesmo dono e não dá para distinguir só pelo ownerId.
+            side,
           })),
         } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
@@ -2687,13 +2708,20 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
           defenseRewardCoins,
           attackerEgg: attackerEgg ?? null,
           defenderEgg: defenderEgg ?? null,
-          replayMascots: [...attackers, ...defenders].map((mascot) => ({
+          replayMascots: [
+            ...attackers.map((mascot) => ({ mascot, side: "A" as const })),
+            ...defenders.map((mascot) => ({ mascot, side: "D" as const })),
+          ].map(({ mascot, side }) => ({
             id: mascot.id,
             pokemonId: mascot.pokemonId,
             name: mascot.name,
             level: mascot.level,
             ownerId: mascot.ownerId,
             maxHp: mascot.hp,
+            // Lado do confronto (A = atacante, D = defensor). Necessário para separar
+            // os times num treino "espelho" (self vs self), em que os dois lados têm
+            // o mesmo dono e não dá para distinguir só pelo ownerId.
+            side,
           })),
         } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,

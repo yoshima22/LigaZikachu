@@ -317,9 +317,19 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           level: number;
           ownerId: string | null;
           maxHp: number;
+          side?: "A" | "D";
         }>
       : [];
     const replayMascotById = new Map(replayMascots.map((mascot) => [mascot.id, mascot]));
+    // Treino "espelho": o mesmo jogador controla os dois times, então o ownerId não
+    // distingue os lados. Nesse caso separamos pelo lado do confronto (A = atacante
+    // vira "seu lado", D = defensor vira "oponente") gravado em replayMascots.side.
+    const sideById = new Map(replayMascots.filter((m) => m.side).map((m) => [m.id, m.side as "A" | "D"]));
+    // Só aplicamos o desempate por lado se o replay realmente gravou os lados
+    // (batalhas antigas não têm; nesse caso mantemos o comportamento por ownerId).
+    const isSelfMirror = Boolean(battle.attackerPlayerId && battle.attackerPlayerId === battle.defenderPlayerId) && sideById.size > 0;
+    const belongsToPlayerSide = (id: string, ownerId: string | null | undefined) =>
+      isSelfMirror ? sideById.get(id) === "A" : ownerId === playerId;
     const parseLegacyBot = (id: string) => {
       const match = /^bot-\d+-(\d+)-(\d+)$/.exec(id);
       return match ? { pokemonId: Number(match[1]), level: Number(match[2]) } : null;
@@ -356,8 +366,8 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
             : Math.max(1, received + (survived ? 100 : 0))),
       };
     };
-    const playerMascotIds = mascotIds.filter(id => fighterOwner.get(id) === playerId);
-    const opponentMascotIds = mascotIds.filter(id => fighterOwner.get(id) !== playerId);
+    const playerMascotIds = mascotIds.filter(id => belongsToPlayerSide(id, fighterOwner.get(id)));
+    const opponentMascotIds = mascotIds.filter(id => !belongsToPlayerSide(id, fighterOwner.get(id)));
     const battleAnimation = log.map(turn => ({
       turn: turn.turn,
       action: turn.action,
@@ -375,7 +385,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
         ?? 0,
       damage: turn.damage,
       advantageApplied: !!turn.advantageApplied,
-      isPlayerAttacker: turn.actorOwnerId === playerId,
+      isPlayerAttacker: belongsToPlayerSide(turn.actorId, turn.actorOwnerId),
       actorRole: turn.actorRole,
       targetRole: turn.targetRole,
       effect: turn.effect,
