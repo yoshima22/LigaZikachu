@@ -40,7 +40,7 @@ export function EffectChips({ effect, className }: { effect?: string | null; cla
   const parts = splitEffect(effect);
   if (parts.length === 0) return null;
   return (
-    <div className={`flex flex-wrap gap-1 ${className ?? ""}`}>
+    <div className={`flex flex-wrap justify-center gap-1 ${className ?? ""}`}>
       {parts.map((p, i) => {
         const style = KIND_STYLE[classify(p)];
         return (
