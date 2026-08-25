@@ -1262,7 +1262,15 @@ export async function setEggPokemonEnabled(pokemonId: number, enabled: boolean):
       update: { disabled: !enabled, updatedById: admin.id },
       create: { pokemonId, disabled: !enabled, updatedById: admin.id },
     });
+    // Se for uma forma mega custom, reflete a visibilidade da Pedra de Mega
+    // correspondente no Zikashop e no pool do bazar.
+    const { CUSTOM_MEGA_POKEMON_IDS } = await import("@/lib/extra-mega-stones");
+    if (CUSTOM_MEGA_POKEMON_IDS.includes(pokemonId)) {
+      const { syncCustomMegaStoneShopItem } = await import("@/lib/mega-shop");
+      await syncCustomMegaStoneShopItem(pokemonId, enabled);
+    }
     revalidatePath("/admin");
+    revalidatePath("/shop");
     return { enabled };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };

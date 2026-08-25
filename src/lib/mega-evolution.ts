@@ -1,4 +1,5 @@
 import type { Prisma, ShopItemType } from "@prisma/client";
+import { EXTRA_MEGA_STONES } from "@/lib/extra-mega-stones";
 
 export type MegaStoneConfig = {
   type: ShopItemType;
@@ -16,7 +17,7 @@ export const MEGA_STAT_BONUS = 10;
 export const MEGA_MIN_LEVEL_DEFAULT = 50;
 export const MEGA_STONE_PRICE = 15000;
 
-export const MEGA_STONES: readonly MegaStoneConfig[] = [
+const MEGA_STONES_OFFICIAL: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_ABOMASITE", stoneName: "Abomasite", compatiblePokemonId: 460, compatiblePokemonName: "Abomasnow", megaPokemonId: 10060, megaPokemonName: "Mega Abomasnow", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_ABSOLITE", stoneName: "Absolite", compatiblePokemonId: 359, compatiblePokemonName: "Absol", megaPokemonId: 10057, megaPokemonName: "Mega Absol", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_AERODACTYLITE", stoneName: "Aerodactylite", compatiblePokemonId: 142, compatiblePokemonName: "Aerodactyl", megaPokemonId: 10042, megaPokemonName: "Mega Aerodactyl", minLevel: 50, price: MEGA_STONE_PRICE },
@@ -67,7 +68,11 @@ export const MEGA_STONES: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_SWAMPERTITE", stoneName: "Swampertite", compatiblePokemonId: 260, compatiblePokemonName: "Swampert", megaPokemonId: 10064, megaPokemonName: "Mega Swampert", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_TYRANITARITE", stoneName: "Tyranitarite", compatiblePokemonId: 248, compatiblePokemonName: "Tyranitar", megaPokemonId: 10049, megaPokemonName: "Mega Tyranitar", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_VENUSAURITE", stoneName: "Venusaurite", compatiblePokemonId: 3, compatiblePokemonName: "Venusaur", megaPokemonId: 10033, megaPokemonName: "Mega Venusaur", minLevel: 50, price: MEGA_STONE_PRICE },
-] as const;
+];
+
+// Inclui as pedras das formas mega custom (10278–10326). A visibilidade delas no
+// shop/bazar é controlada pelo toggle EggPokemonToggle (ver mega-shop.ts).
+export const MEGA_STONES: readonly MegaStoneConfig[] = [...MEGA_STONES_OFFICIAL, ...EXTRA_MEGA_STONES];
 
 export const MEGA_STONE_SHOP_ITEM_TYPES = MEGA_STONES.map((stone) => stone.type);
 export const MEGA_FORM_IDS = new Set(MEGA_STONES.map((stone) => stone.megaPokemonId));
