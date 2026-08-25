@@ -5,6 +5,7 @@ import {
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getPokemonName, getMascotRarity,
 } from "@/lib/mascot-data";
 import { COMBAT_ROLE_LABELS, COMBAT_ROLE_DESCRIPTIONS } from "@/lib/combat-roles";
+import { PERSONALITY_AFFINITY } from "@/lib/personality-design";
 
 // Mesmo fator usado em mascot.ts (LEVEL_STAT_GAIN_MULTIPLIER)
 const LEVEL_GAIN = 0.55;
@@ -19,7 +20,7 @@ export type MascotRating = "SSS" | "SS" | "S" | "A" | "B" | "C" | "D" | "E";
 
 // Incremente quando a formula permanente de classificacao mudar. Analises de
 // versoes anteriores sao recalculadas gratuitamente na proxima consulta.
-export const MASCOT_ANALYSIS_VERSION = 3;
+export const MASCOT_ANALYSIS_VERSION = 4;
 
 export interface AnalysisInput {
   pokemonId: number;
@@ -222,16 +223,35 @@ const softWeight = (stat: number) => Math.pow(Math.max(0, stat), GROWTH_WEIGHT_E
 
 /** Distribui pontos com garantia anti-freeze — réplica de
  *  distributeStatPointsAntiFreeze() de mascot.ts. */
-function distributeAntiFreeze(points: number, weights: MascotStats, currentStats: MascotStats, cadenceLevel: number): MascotStats {
+function distributeAntiFreeze(points: number, weights: MascotStats, currentStats: MascotStats, cadenceLevel: number, protectKey: StatKey | null = null): MascotStats {
   const dist = distributeFaithful(points, weights);
   if (points < 2) return dist;
   const avg = STAT_KEYS.reduce((s, k) => s + currentStats[k], 0) / STAT_KEYS.length;
   const weakest = STAT_KEYS.reduce((a, b) => (currentStats[b] < currentStats[a] ? b : a), STAT_KEYS[0]);
   if (currentStats[weakest] < avg * 0.55 && cadenceLevel % 3 === 0 && dist[weakest] === 0) {
-    const top = STAT_KEYS.reduce((a, b) => (dist[b] > dist[a] ? b : a), STAT_KEYS[0]);
-    if (dist[top] > 0) { dist[top] -= 1; dist[weakest] += 1; }
+    // Espelha a correção de mascot.ts: nunca drena o atributo-foco (protectKey) e
+    // desempata pelo status mais alto, não pela ordem da lista.
+    const candidates = STAT_KEYS.filter((k) => k !== weakest && k !== protectKey && dist[k] > 0);
+    if (candidates.length) {
+      const top = candidates.reduce((a, b) =>
+        dist[b] !== dist[a] ? (dist[b] > dist[a] ? b : a) : (currentStats[b] > currentStats[a] ? b : a),
+      candidates[0]);
+      dist[top] -= 1; dist[weakest] += 1;
+    }
   }
   return dist;
+}
+
+// Afinidade por personalidade — mesma tabela e multiplicadores do motor real
+// (veryUseful ×1.10, useful ×1.08; Dramático reduz Vitalidade em 15%).
+function applyAffinity(weights: MascotStats, personality: string): StatKey | null {
+  const aff = PERSONALITY_AFFINITY[personality];
+  const very = (aff?.veryUseful ?? null) as StatKey | null;
+  const useful = (aff?.useful ?? null) as StatKey | null;
+  if (very) weights[very] *= 1.10;
+  if (useful) weights[useful] *= 1.08;
+  if (personality === "DRAMATIC") weights.vitality *= 0.85;
+  return very;
 }
 
 /** Ganho de atributos de UM nível — réplica de levelStatBonuses() de mascot.ts. */
@@ -243,36 +263,12 @@ function levelBonus(pokemonId: number, level: number, personality: string, stats
     force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
     instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
   };
-  if (personality === "COMPETITIVE") weights.force *= 1.15;
-  if (personality === "LOYAL") weights.charisma *= 1.15;
-  if (personality === "DRAMATIC") weights.vitality *= 0.85;
+  const protectKey = applyAffinity(weights, personality);
   STAT_KEYS.forEach((key, index) => {
     const wobble = 0.92 + (((pokemonId * (index + 3) + level * 11) % 17) / 100);
     weights[key] *= wobble;
   });
-  return distributeAntiFreeze(points, weights, stats, level);
-}
-
-/** Ganho de atributos para saltos de vários níveis.
- *  Isto replica o comportamento real de addExp(): quando o mascote ganha vários níveis
- *  de uma vez, os pontos de level-up são calculados em bloco usando os stats de partida.
- */
-function levelBonusBatch(pokemonId: number, level: number, levelsGained: number, personality: string, stats: MascotStats): MascotStats {
-  const raw = rawPointsPerLevel(personality) * Math.max(0, levelsGained);
-  const growthMult = getMascotStatusGrowthMultiplier(pokemonId);
-  const points = raw > 0 ? Math.max(1, Math.round(raw * LEVEL_GAIN * growthMult)) : 0;
-  const weights: MascotStats = {
-    force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
-    instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
-  };
-  if (personality === "COMPETITIVE") weights.force *= 1.15;
-  if (personality === "LOYAL") weights.charisma *= 1.15;
-  if (personality === "DRAMATIC") weights.vitality *= 0.85;
-  STAT_KEYS.forEach((key, index) => {
-    const wobble = 0.92 + (((pokemonId * (index + 3) + level * 11) % 17) / 100);
-    weights[key] *= wobble;
-  });
-  return distributeAntiFreeze(points, weights, stats, level);
+  return distributeAntiFreeze(points, weights, stats, level, protectKey);
 }
 
 const addStats = (a: MascotStats, b: MascotStats): MascotStats => ({
@@ -281,9 +277,11 @@ const addStats = (a: MascotStats, b: MascotStats): MascotStats => ({
 });
 
 /**
- * Simula a progressão usando a mesma ordem do addExp real:
- * 1) descobre níveis/evolução;
- * 2) aplica o ganho de level-up em bloco;
+ * Simula a progressão o mais próximo do real possível:
+ * 1) cresce NÍVEL A NÍVEL (recomputando pesos a partir dos stats atuais e da
+ *    espécie corrente a cada nível), como o mascote realmente sobe ao longo de
+ *    muitos ganhos de EXP — em vez de aplicar tudo em bloco com os stats iniciais;
+ * 2) evolui a espécie no nível certo (afetando o multiplicador de crescimento);
  * 3) aplica marcos de maturidade/evolução ainda não conquistados.
  */
 function simulateGrowth(
@@ -292,12 +290,12 @@ function simulateGrowth(
   const evolutionLocked = input.evolutionLocked ?? false;
   let pokemonId = input.pokemonId;
   let stats: MascotStats = { ...currentStats };
+  const protectKey = (PERSONALITY_AFFINITY[input.personality]?.veryUseful ?? null) as StatKey | null;
 
   // Marcos já conquistados no nível atual — não reaplicar na projeção.
   const applied = new Set<string>();
   for (const m of getMascotProgressMilestones(pokemonId, currentLevel, false)) applied.add(m.key);
 
-  const levelsGained = Math.max(0, targetLevel - currentLevel);
   let evolved = false;
   for (let lvl = currentLevel; lvl < targetLevel; lvl++) {
     const newLevel = lvl + 1;
@@ -308,10 +306,9 @@ function simulateGrowth(
         evolved = true;
       }
     }
-  }
-
-  if (levelsGained > 0) {
-    stats = addStats(stats, levelBonusBatch(input.pokemonId, currentLevel, levelsGained, input.personality, stats));
+    // Ganho real do nível: pesos recalculados a partir dos stats atuais e da
+    // espécie corrente (compõe como no jogo, sem "achatar" a distribuição).
+    stats = addStats(stats, levelBonus(pokemonId, lvl, input.personality, stats));
   }
 
   for (const m of getMascotProgressMilestones(pokemonId, targetLevel, evolved)) {
@@ -321,7 +318,7 @@ function simulateGrowth(
       force: softWeight(stats.force), agility: softWeight(stats.agility), charisma: softWeight(stats.charisma),
       instinct: softWeight(stats.instinct), vitality: softWeight(stats.vitality),
     };
-    stats = addStats(stats, distributeAntiFreeze(m.points, w, stats, m.level));
+    stats = addStats(stats, distributeAntiFreeze(m.points, w, stats, m.level, protectKey));
   }
 
   return { finalPokemonId: pokemonId, projectedStats: stats };

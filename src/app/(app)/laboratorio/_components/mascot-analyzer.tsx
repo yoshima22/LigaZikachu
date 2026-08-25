@@ -102,6 +102,9 @@ export function MascotAnalyzer({
   const [viewPending, startView] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
+  // Reaparece toda vez que a aba de análise é aberta (o componente remonta ao
+  // trocar de aba), até o jogador dispensar naquela visita.
+  const [showDisclaimer, setShowDisclaimer] = useState(true);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
@@ -148,6 +151,29 @@ export function MascotAnalyzer({
 
   return (
     <div className="space-y-5">
+      {showDisclaimer && (
+        <div className="rounded-2xl border border-amber-500/40 bg-amber-950/20 p-4">
+          <div className="flex items-start gap-3">
+            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-amber-500/15 text-lg">⚠️</div>
+            <div className="flex-1 text-xs leading-relaxed text-amber-100/90">
+              <p className="text-sm font-bold text-amber-200">Aviso sobre a análise</p>
+              <p className="mt-1">
+                Mais de <strong>50% dos jogadores questionam a eficácia</strong> da análise do Laboratório.
+                Ela é uma <strong>estimativa</strong> do potencial e da projeção de atributos — <strong>não é uma garantia</strong>.
+                O crescimento real é procedural e influenciado pela personalidade, então o <strong>total de status</strong> e o
+                <strong> foco em qualquer atributo</strong> podem sair diferentes do projetado.
+              </p>
+              <p className="mt-1 text-amber-200/80">Use por sua conta e risco, como referência aproximada — teste você mesmo antes de tomar decisões definitivas.</p>
+            </div>
+            <button
+              onClick={() => setShowDisclaimer(false)}
+              className="shrink-0 rounded-lg border border-amber-500/40 px-2.5 py-1 text-[11px] font-semibold text-amber-200 hover:bg-amber-500/10"
+            >
+              Entendi
+            </button>
+          </div>
+        </div>
+      )}
       <div className="rounded-2xl border border-purple-500/20 bg-purple-950/10 p-4">
         <div className="flex items-start gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-purple-500/10 text-xl">🔬</div>

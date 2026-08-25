@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction, tradeFoodInLabAction } from "../actions";
 import type { MascotRarity } from "../rarity";
@@ -120,6 +120,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
   const [foodTrades, setFoodTrades] = useState(initialFoodTrades);
   const [search, setSearch] = useState("");
   const [perfFilter, setPerfFilter] = useState("");
+  const [rarityFilter, setRarityFilter] = useState<"" | MascotRarity>("");
   const [page, setPage] = useState(0);
   const [isPending, start] = useTransition();
   const [feedback, setFeedback] = useState<{ ok: boolean; message: string } | null>(null);
@@ -133,12 +134,21 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
     const inSlots = new Set(filledSlots.map((m) => m.id));
     let base = mascots.filter((m) => m.recyclable && !inSlots.has(m.id));
     if (perfFilter) base = base.filter((m) => (m.performanceTag ?? "NEUTRO") === perfFilter);
+    if (rarityFilter) base = base.filter((m) => m.rarity === rarityFilter);
     const q = search.trim().toLowerCase();
     if (q) base = base.filter((m) => m.name.toLowerCase().includes(q) || (m.nickname ?? "").toLowerCase().includes(q));
-    return base;
-  }, [mascots, filledSlots, search, perfFilter]);
+    // Ordena por nome (alfabético, pt-BR) e agrupa cópias da MESMA espécie
+    // (mesmo pokemonId) lado a lado — assim fica fácil montar o combo de
+    // multiplicador com mascotes iguais. Empate final por nível (maior primeiro).
+    return [...base].sort((a, b) =>
+      a.name.localeCompare(b.name, "pt-BR") || a.pokemonId - b.pokemonId || b.level - a.level || a.id.localeCompare(b.id),
+    );
+  }, [mascots, filledSlots, search, perfFilter, rarityFilter]);
 
-  const totalPages = Math.ceil(filtered.length / PAGE_SIZE);
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  // Se a lista encolher (ao adicionar mascotes) e a página atual sair do intervalo,
+  // recua para a última página válida em vez de mostrar uma página vazia.
+  useEffect(() => { if (page > totalPages - 1) setPage(totalPages - 1); }, [page, totalPages]);
   const paged = filtered.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const showFeedback = (ok: boolean, message: string) => {
@@ -462,6 +472,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                   </button>
                 )}
               </div>
+              <select
+                value={rarityFilter}
+                onChange={(e) => { setRarityFilter(e.target.value as "" | MascotRarity); setPage(0); }}
+                className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-300 outline-none focus:border-[#FFCB05]"
+              >
+                <option value="">Raridade: todas</option>
+                <option value="COMMON">⚪ Comum</option>
+                <option value="RARE">🔵 Raro</option>
+                <option value="SPECIAL">🟡 Especial</option>
+              </select>
               <select
                 value={perfFilter}
                 onChange={(e) => { setPerfFilter(e.target.value); setPage(0); }}
