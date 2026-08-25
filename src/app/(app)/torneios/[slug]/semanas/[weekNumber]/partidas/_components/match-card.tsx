@@ -481,7 +481,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
 
       {/* Actions */}
       <div className="mt-3 space-y-2">
-        {isParticipant && opponentIntent?.gymBadgeId && match.status === "PENDING_CONFIRMATION" && (
+        {isParticipant && showDeckIntent && opponentIntent?.gymBadgeId && match.status === "PENDING_CONFIRMATION" && (
           <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
             <div className="flex items-start gap-2"><ShieldCheck size={16} className="mt-0.5 shrink-0 text-amber-300"/><div><p className="text-xs font-bold text-amber-100">Confirmação da Jornada adversária</p><p className="mt-1 text-[10px] leading-4 text-slate-400">O deck de {isPlayerA ? match.playerB.displayName : match.playerA.displayName} está buscando <b className="text-amber-200">{opponentIntent.gymBadgeName}</b>. Sua declaração será considerada válida, a menos que a organização faça uma correção.</p></div></div>
             <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs text-slate-200"><input type="checkbox" checked={opponentGymBadgeValid} onChange={(event)=>setOpponentGymBadgeValid(event.target.checked)} className="h-4 w-4 accent-amber-400"/><span>Confirmo que o deck adversário conta para esta insígnia</span></label>

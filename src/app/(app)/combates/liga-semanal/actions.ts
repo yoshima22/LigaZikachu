@@ -936,6 +936,28 @@ export async function swapTeamMascotPositionsAction(
     if (targetRole) sourceRoles[targetMascotId] = targetRole;
     if (sourceRole) targetRoles[sourceMascotId] = sourceRole;
 
+    // Revalida a divisão (limite de Megas) nos DOIS times resultantes. Sem isto,
+    // dava para furar o teto de 2 Megas movendo um Mega para um time que já tinha
+    // 2 — a troca entre times não passava pela validação da seleção convencional.
+    if (fromSlot !== toSlot) {
+      const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([
+        import("@/lib/battle-division-settings"),
+        import("@/lib/battle-divisions"),
+      ]);
+      const division = await getBattleModeDivision("WEEKLY_LEAGUE");
+      const allIds = [...new Set([...sourceIds, ...targetIds].filter(Boolean))];
+      const mons = await prisma.mascot.findMany({
+        where: { id: { in: allIds }, playerId: player.id },
+        select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+      });
+      const byId = new Map(mons.map((m) => [m.id, m]));
+      for (const ids of [sourceIds, targetIds]) {
+        const team = ids.map((id) => byId.get(id)).filter(Boolean) as { id: string; megaEvolvedAt: Date | null; megaEvolvedFromPokemonId: number | null }[];
+        const check = validateBattleDivision(team, division);
+        if (!check.valid) return { error: check.message };
+      }
+    }
+
     await prisma.$transaction(async (tx) => {
       await tx.weeklyMascotLeagueDailyTeam.upsert({
         where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player.id, battleDate, battleSlot: fromSlot } },

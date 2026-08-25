@@ -310,6 +310,16 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     const division = validateBattleDivision(mascots, normalizeBattleDivision(league.division));
     if (!division.valid) return { error: division.message };
     const rules = ruleData(league.ruleJson);
+    // Trava de horário: quando as partidas do dia começam, as equipes ficam
+    // congeladas. Assim os mascotes registrados são exatamente os que vão lutar —
+    // impede lutar, trocar e escapar do bloqueio de repetição entre os dias, e
+    // impede alterar a equipe entre um horário de combate e o seguinte.
+    const battleTimes = Array.isArray(rules.battleTimes) && rules.battleTimes.length
+      ? (rules.battleTimes as string[]) : ["19:00", "19:10", "19:20"];
+    const firstBattleAt = new Date(`${input.battleDate}T${battleTimes[0]}:00-03:00`);
+    if (Date.now() >= firstBattleAt.getTime()) {
+      return { error: `As equipes do dia ${input.battleDate} ficam travadas a partir das ${battleTimes[0]} (início das partidas). Não é possível alterar depois disso.` };
+    }
     const requiredPersonality = typeof rules.requiredPersonality === "string" && rules.requiredPersonality ? rules.requiredPersonality : null;
     if (requiredPersonality && mascots.some((m) => m.personality !== requiredPersonality)) return { error: `Esta semana aceita apenas mascotes de personalidade ${requiredPersonality}.` };
     const repetition = repeatMode(rules, league.uniqueSpecies);
