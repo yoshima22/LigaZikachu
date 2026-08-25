@@ -402,6 +402,7 @@ function distributeStatPointsAntiFreeze(
   weights: Record<MascotStatKey, number>,
   currentStats: Record<MascotStatKey, number>,
   cadenceLevel: number,
+  protectKey: MascotStatKey | null = null,
 ): Record<MascotStatKey, number> {
   const dist = distributeStatPoints(points, weights);
   if (points < 2) return dist;
@@ -411,8 +412,19 @@ function distributeStatPointsAntiFreeze(
   const laggingBadly = currentStats[weakest] < avg * 0.55;
   const onCadence = cadenceLevel % 3 === 0;
   if (laggingBadly && onCadence && dist[weakest] === 0) {
-    const topGainer = keys.reduce((a, b) => (dist[b] > dist[a] ? b : a), keys[0]);
-    if (dist[topGainer] > 0) { dist[topGainer] -= 1; dist[weakest] += 1; }
+    // Doa 1 ponto do maior ganhador para o mais fraco — mas NUNCA sacrifica o
+    // atributo-foco da personalidade (protectKey), e entre empates tira do que
+    // está mais "inchado" (maior status atual), não do primeiro da lista.
+    // Sem isso, o desempate caía sempre em statForce (keys[0]) e drenava a Força
+    // dos mascotes cuja afinidade É a Força (Competitivo/Orgulhoso), que nunca
+    // conseguiam manter a Força como atributo dominante.
+    const candidates = keys.filter((k) => k !== weakest && k !== protectKey && dist[k] > 0);
+    if (candidates.length) {
+      const topGainer = candidates.reduce((a, b) =>
+        dist[b] !== dist[a] ? (dist[b] > dist[a] ? b : a) : (currentStats[b] > currentStats[a] ? b : a),
+      candidates[0]);
+      dist[topGainer] -= 1; dist[weakest] += 1;
+    }
   }
   return dist;
 }
@@ -472,7 +484,8 @@ function levelStatBonuses(
     statForce: mascot.statForce, statAgility: mascot.statAgility, statCharisma: mascot.statCharisma,
     statInstinct: mascot.statInstinct, statVitality: mascot.statVitality,
   };
-  return distributeStatPointsAntiFreeze(pointsToAdd, weights, currentStats, mascot.level);
+  const protectKey = aff?.veryUseful ? STAT_KEY_TO_WEIGHT[aff.veryUseful] : null;
+  return distributeStatPointsAntiFreeze(pointsToAdd, weights, currentStats, mascot.level, protectKey);
 }
 
 function addStatRecords(
