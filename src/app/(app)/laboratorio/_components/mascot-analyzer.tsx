@@ -309,13 +309,49 @@ function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
               <div className="group/tip relative cursor-help text-center">
                 <p className="text-[10px] uppercase tracking-widest text-slate-400">Poder Nv.{a.targetLevel}</p>
                 <p className="text-2xl font-bold text-slate-100">{a.projectedPower}</p>
-                <TipBubble text="Estimativa do poder de combate no nível-alvo, ponderando todos os atributos projetados (Força e Vitalidade pesam mais)." />
+                <TipBubble text="Estimativa do poder de combate no nível-alvo. NÃO é a soma dos status: cada atributo entra com um peso (Força e Vitalidade pesam mais). Veja o cálculo detalhado abaixo." />
               </div>
             </>
           )}
         </div>
         <p className="mt-3 border-t border-white/5 pt-3 text-sm text-slate-200">{a.verdict}</p>
       </div>
+
+      {/* Como a Pontuação de Poder é calculada */}
+      {a.powerBreakdown && a.powerBreakdown.length > 0 && (
+        <div className="rounded-2xl border border-border bg-slate-900/60 p-4">
+          <div className="flex items-center justify-between gap-2">
+            <p className="text-sm font-semibold text-slate-100">Pontuação de Poder Nv.{a.targetLevel}</p>
+            <p className="text-xl font-bold text-slate-100">{a.projectedPower}</p>
+          </div>
+          <p className="mt-1 text-xs leading-relaxed text-slate-400">
+            <strong className="text-amber-300">Não é a soma dos status.</strong> Cada atributo entra com um
+            <strong> peso</strong> diferente, conforme o impacto em combate: <strong>Força</strong> pesa mais e
+            <strong> Carisma</strong>, menos. A pontuação é a soma de <em>(status × peso)</em> de cada atributo.
+          </p>
+          <div className="mt-3 space-y-1">
+            {a.powerBreakdown.map((part) => (
+              <div key={part.key} className="flex items-center gap-2 text-xs">
+                <span className="w-20 shrink-0 text-slate-300">{part.label}</span>
+                <span className="tabular-nums text-slate-400">{part.value}</span>
+                <span className="text-slate-600">×</span>
+                <span className="tabular-nums text-slate-400">{part.weight.toFixed(2)}</span>
+                <span className="text-slate-600">=</span>
+                <span className="ml-auto tabular-nums font-semibold text-slate-100">{part.contribution.toLocaleString("pt-BR")}</span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 flex items-center justify-between border-t border-white/10 pt-2 text-xs">
+            <span className="text-slate-400">
+              Soma das contribuições
+              <span className="ml-1 text-slate-600">
+                (para referência, a soma simples dos status é {a.perStat.reduce((s, p) => s + p.projected, 0).toLocaleString("pt-BR")})
+              </span>
+            </span>
+            <span className="text-base font-bold text-[#FFCB05]">{a.projectedPower.toLocaleString("pt-BR")}</span>
+          </div>
+        </div>
+      )}
 
       {/* Detalhamento do potencial */}
       <div className="grid grid-cols-3 gap-2 text-center text-xs">

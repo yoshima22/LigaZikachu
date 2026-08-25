@@ -20,7 +20,7 @@ export type MascotRating = "SSS" | "SS" | "S" | "A" | "B" | "C" | "D" | "E";
 
 // Incremente quando a formula permanente de classificacao mudar. Analises de
 // versoes anteriores sao recalculadas gratuitamente na proxima consulta.
-export const MASCOT_ANALYSIS_VERSION = 4;
+export const MASCOT_ANALYSIS_VERSION = 5;
 
 export interface AnalysisInput {
   pokemonId: number;
@@ -59,6 +59,7 @@ export interface MascotAnalysis {
   balanceLabel: string;
   personalityNote: string | null;
   projectedPower: number;
+  powerBreakdown?: { key: StatKey; label: string; value: number; weight: number; contribution: number }[];
   roleSuggestions: { role: string; label: string; statLabel: string; value: number; description: string }[];
   progressMilestones?: {
     kind: "EVOLUTION" | "MATURITY";
@@ -87,6 +88,12 @@ export interface MascotAnalysis {
 
 const STAT_LABELS: Record<StatKey, string> = {
   force: "Força", agility: "Agilidade", charisma: "Carisma", instinct: "Instinto", vitality: "Vitalidade",
+};
+
+// Pesos de cada atributo na Pontuação de Poder. A soma NÃO é o total de status:
+// cada status contribui multiplicado pelo seu peso (Força pesa mais que Carisma).
+export const POWER_WEIGHTS: Record<StatKey, number> = {
+  force: 1.1, vitality: 1.0, agility: 0.95, instinct: 0.95, charisma: 0.9,
 };
 
 // Pontos brutos por nível (antes do multiplicador), conforme levelStatBonuses de mascot.ts
@@ -508,11 +515,15 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
       description: COMBAT_ROLE_DESCRIPTIONS[r.role as keyof typeof COMBAT_ROLE_DESCRIPTIONS],
     }));
 
-  // Poder de combate estimado (aproximação: soma ponderada dos atributos projetados)
-  const projectedPower = Math.round(
-    projectedStats.force * 1.1 + projectedStats.vitality * 1.0 + projectedStats.agility * 0.95 +
-    projectedStats.instinct * 0.95 + projectedStats.charisma * 0.9,
-  );
+  // Poder de combate estimado. NÃO é a soma dos status: cada atributo entra com um
+  // peso diferente (Força pesa mais; Carisma, menos), refletindo o impacto de cada
+  // um em combate. O detalhamento (powerBreakdown) alimenta a explicação na UI.
+  const powerBreakdown = STAT_KEYS.map((key) => {
+    const value = projectedStats[key];
+    const weight = POWER_WEIGHTS[key];
+    return { key, label: STAT_LABELS[key], value, weight, contribution: Math.round(value * weight * 10) / 10 };
+  });
+  const projectedPower = Math.round(powerBreakdown.reduce((sum, part) => sum + part.value * part.weight, 0));
   const progressMilestones = futureProgressMilestones(input.pokemonId, currentLevel, targetLevel, evolutionLocked);
   const maturityPoints = progressMilestones
     .filter((milestone) => milestone.kind === "MATURITY")
@@ -551,6 +562,7 @@ export function computeMascotAnalysis(input: AnalysisInput, targetLevelRaw?: num
     balanceLabel,
     personalityNote,
     projectedPower,
+    powerBreakdown,
     roleSuggestions,
     progressMilestones,
     maturityPoints,
