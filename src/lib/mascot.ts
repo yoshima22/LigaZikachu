@@ -113,6 +113,17 @@ async function includeCustomSpeciesInRoll(result: EggRollResult, excludedPokemon
   return { ...result, pokemonId: randomFrom(eligible).pokemonId };
 }
 
+// Formas desligadas no admin (tabela EggPokemonToggle) — removidas do drop.
+// Cache curto para não bater no banco a cada sorteio.
+let _disabledEggCache: { ids: number[]; at: number } | null = null;
+export async function getDisabledEggPokemonIds(): Promise<number[]> {
+  if (_disabledEggCache && Date.now() - _disabledEggCache.at < 60_000) return _disabledEggCache.ids;
+  const rows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
+  const ids = rows.map((r) => r.pokemonId);
+  _disabledEggCache = { ids, at: Date.now() };
+  return ids;
+}
+
 export async function rollEggChoicesForPlayer(
   playerId: string,
   eggType: string,
@@ -124,6 +135,7 @@ export async function rollEggChoicesForPlayer(
   const { getActiveEggRarityBonusPct } = await import("@/lib/timed-game-bonuses");
   const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
+  const disabledIds = await getDisabledEggPokemonIds();
   const choices: number[] = [];
   while (choices.length < count) {
     const result = await includeCustomSpeciesInRoll(rollEggPokemon(eggType, {
@@ -131,7 +143,7 @@ export async function rollEggChoicesForPlayer(
       rarityBonusPct: rarityBonusPct + eventRarityBonusPct,
       randomGenerationBonus: randomGeneration,
       ownedBaseCounts,
-      excludedPokemonIds: choices,
+      excludedPokemonIds: [...choices, ...disabledIds],
     }), choices);
     choices.push(result.pokemonId);
   }
@@ -175,6 +187,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     rarityBonusPct: incubator.egg.hatchRarityBonusPct + eventRarityBonusPct,
     randomGenerationBonus: rollContext.randomGeneration,
     ownedBaseCounts,
+    excludedPokemonIds: await getDisabledEggPokemonIds(),
   }));
   const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();

@@ -19,6 +19,7 @@ import {
   LEGENDARY_POOL,
   getMascotRarity,
 } from "@/lib/mascot-data";
+import { EXTRA_FORM_GENERATION } from "@/lib/extra-forms-data";
 
 export type EggPokemonTier = "COMMON" | "PSEUDO_LEGENDARY" | "PARADOX" | "ELITE";
 
@@ -68,6 +69,8 @@ function generationForSpecialPokemonId(pokemonId: number): number | null {
   if (pokemonId >= 10091 && pokemonId <= 10115) return 7;
   if (pokemonId >= 10158 && pokemonId <= 10180) return 8;
   if (pokemonId >= 10229 && pokemonId <= 10244) return 8;
+  // Formas alternativas adicionadas + Unown (dados gerados).
+  if (EXTRA_FORM_GENERATION[pokemonId]) return EXTRA_FORM_GENERATION[pokemonId];
   return null;
 }
 

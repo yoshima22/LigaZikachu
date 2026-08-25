@@ -1215,3 +1215,56 @@ export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error
     return { deleted: 0, error: err instanceof Error ? err.message : "Erro desconhecido" };
   }
 }
+
+// ── Formas alternativas: liga/desliga nas pools de ovo ────────────────────────
+export type ManagedForm = {
+  id: number; name: string; types: string[]; generation: number | null; spriteUrl: string; enabled: boolean;
+};
+
+export async function listManagedForms(): Promise<ManagedForm[]> {
+  await requirePlatformAdmin();
+  const { EXTRA_FORM_IDS, EXTRA_FORM_GENERATION } = await import("@/lib/extra-forms-data");
+  const { getPokemonName, getPokemonTypes, getStaticSpriteUrl } = await import("@/lib/mascot-data");
+  const disabledRows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
+  const disabled = new Set(disabledRows.map((r) => r.pokemonId));
+  return EXTRA_FORM_IDS.map((id) => ({
+    id,
+    name: getPokemonName(id),
+    types: getPokemonTypes(id),
+    generation: EXTRA_FORM_GENERATION[id] ?? null,
+    spriteUrl: getStaticSpriteUrl(id),
+    enabled: !disabled.has(id),
+  }));
+}
+
+export type MascotSpriteHit = { id: number; name: string; types: string[]; spriteUrl: string };
+
+export async function searchMascotSprites(query: string): Promise<MascotSpriteHit[]> {
+  await requirePlatformAdmin();
+  const q = query.trim().toLowerCase();
+  if (!q) return [];
+  const { POKEMON_PT_NAMES, getPokemonName, getPokemonTypes, getStaticSpriteUrl } = await import("@/lib/mascot-data");
+  const hit = (id: number): MascotSpriteHit => ({ id, name: getPokemonName(id), types: getPokemonTypes(id), spriteUrl: getStaticSpriteUrl(id) });
+  if (/^\d+$/.test(q)) return [hit(Number(q))];
+  const ids = Object.keys(POKEMON_PT_NAMES).map(Number)
+    .filter((id) => getPokemonName(id).toLowerCase().includes(q))
+    .sort((a, b) => a - b)
+    .slice(0, 60);
+  return ids.map(hit);
+}
+
+export async function setEggPokemonEnabled(pokemonId: number, enabled: boolean): Promise<{ error?: string; enabled?: boolean }> {
+  try {
+    const admin = await requirePlatformAdmin();
+    if (!Number.isInteger(pokemonId)) return { error: "ID inválido." };
+    await prisma.eggPokemonToggle.upsert({
+      where: { pokemonId },
+      update: { disabled: !enabled, updatedById: admin.id },
+      create: { pokemonId, disabled: !enabled, updatedById: admin.id },
+    });
+    revalidatePath("/admin");
+    return { enabled };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}

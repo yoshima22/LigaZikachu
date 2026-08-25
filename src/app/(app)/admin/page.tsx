@@ -39,6 +39,9 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
+import { listManagedForms } from "./actions";
+import { FormsPoolManager } from "./_components/forms-pool-manager";
+import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
 
 const adminCards = [
   {
@@ -152,6 +155,8 @@ export default async function AdminPage() {
     orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
     select: { id: true, name: true, type: true, rarity: true, active: true }
   });
+
+  const managedForms = await listManagedForms();
 
   return (
     <div className="space-y-8">
@@ -309,110 +314,27 @@ export default async function AdminPage() {
       />
       <MigrateImagesPanel />
 
-      {/* ── Referência: IDs especiais de Pokémon ── */}
+      {/* ── Formas de Pokémon: pools de ovo + visualizador ── */}
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
         <div className="flex items-center gap-2">
           <BookOpen size={16} className="text-[#FFCB05]" />
-          <h3 className="font-semibold text-slate-200">Referência — IDs especiais de Pokémon</h3>
+          <h3 className="font-semibold text-slate-200">Formas alternativas — liga/desliga nas pools de ovo</h3>
         </div>
         <p className="text-xs text-slate-500">
-          IDs fora do range 1–1025 usados no sistema de mascotes. Use-os no painel "Adicionar Mascote" ou nos pools de ovo.
-          Lendários (marcados ★) entram no pool lendário e ganham +30% de pontos de stat por nível.
+          Marque para <strong className="text-slate-300">ligar</strong> a forma no drop da sua pool de ovo respectiva; desmarque para removê-la do sorteio.
+          As formas recém-adicionadas entram <strong className="text-slate-300">desligadas</strong>. As espécies que já estavam no jogo continuam normais.
         </p>
-        <div className="overflow-x-auto">
-          <table className="w-full text-xs">
-            <thead>
-              <tr className="border-b border-border text-left text-slate-500">
-                <th className="pb-2 pr-4 font-semibold">ID</th>
-                <th className="pb-2 pr-4 font-semibold">Nome</th>
-                <th className="pb-2 pr-4 font-semibold">Tipos</th>
-                <th className="pb-2 pr-4 font-semibold">Lendário</th>
-                <th className="pb-2 font-semibold">Observação</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {[
-                // ── Formas especiais clássicas ──────────────────────────────────
-                { id: 10004, name: "Wormadam-Arenosa",   types: "Bug / Ground",          legendary: false, note: "Wormadam capa de areia" },
-                { id: 10005, name: "Wormadam-Lata",      types: "Bug / Steel",           legendary: false, note: "Wormadam capa de lata" },
-                { id: 10006, name: "Shaymin-Céu",        types: "Grass / Flying",        legendary: true,  note: "Forma celeste do Shaymin" },
-                { id: 10007, name: "Giratina-Origem",    types: "Ghost / Dragon",        legendary: true,  note: "Forma de origem do Giratina" },
-                { id: 10008, name: "Rotom-Calor",        types: "Electric / Fire",       legendary: false, note: "Forma do forno micro-ondas" },
-                { id: 10009, name: "Rotom-Lavagem",      types: "Electric / Water",      legendary: false, note: "Forma da lavadora" },
-                { id: 10010, name: "Rotom-Gelo",         types: "Electric / Ice",        legendary: false, note: "Forma da geladeira" },
-                { id: 10011, name: "Rotom-Ventilador",   types: "Electric / Flying",     legendary: false, note: "Forma do ventilador" },
-                { id: 10012, name: "Rotom-Corte",        types: "Electric / Grass",      legendary: false, note: "Forma do cortador de grama" },
-                // ── Formas Alolan (Gen 7) ────────────────────────────────────────
-                { id: 10091, name: "Rattata-Alola",      types: "Dark / Normal",         legendary: false, note: "Base — evolui em 10092 (Nv.20)" },
-                { id: 10092, name: "Raticate-Alola",     types: "Dark / Normal",         legendary: false, note: "Evolução de 10091" },
-                { id: 10100, name: "Raichu-Alola",       types: "Electric / Psychic",    legendary: false, note: "Evolução de Pikachu (25)" },
-                { id: 10101, name: "Sandshrew-Alola",    types: "Ice / Steel",           legendary: false, note: "Base — evolui em 10102 (Nv.22)" },
-                { id: 10102, name: "Sandslash-Alola",    types: "Ice / Steel",           legendary: false, note: "Evolução de 10101" },
-                { id: 10103, name: "Vulpix-Alola",       types: "Ice",                   legendary: false, note: "Base — evolui em 10104 (Nv.36)" },
-                { id: 10104, name: "Ninetales-Alola",    types: "Ice / Fairy",           legendary: false, note: "Evolução de 10103" },
-                { id: 10105, name: "Diglett-Alola",      types: "Ground / Steel",        legendary: false, note: "Base — evolui em 10106 (Nv.26)" },
-                { id: 10106, name: "Dugtrio-Alola",      types: "Ground / Steel",        legendary: false, note: "Evolução de 10105" },
-                { id: 10107, name: "Meowth-Alola",       types: "Dark",                  legendary: false, note: "Base — evolui em 10108 (Nv.28)" },
-                { id: 10108, name: "Persian-Alola",      types: "Dark",                  legendary: false, note: "Evolução de 10107" },
-                { id: 10109, name: "Geodude-Alola",      types: "Rock / Electric",       legendary: false, note: "Base — evolui em 10110 (Nv.25)" },
-                { id: 10110, name: "Graveler-Alola",     types: "Rock / Electric",       legendary: false, note: "Evolução de 10109 — evolui em 10111 (Nv.36)" },
-                { id: 10111, name: "Golem-Alola",        types: "Rock / Electric",       legendary: false, note: "Evolução de 10110" },
-                { id: 10112, name: "Grimer-Alola",       types: "Poison / Dark",         legendary: false, note: "Base — evolui em 10113 (Nv.38)" },
-                { id: 10113, name: "Muk-Alola",          types: "Poison / Dark",         legendary: false, note: "Evolução de 10112" },
-                { id: 10114, name: "Exeggutor-Alola",    types: "Grass / Dragon",        legendary: false, note: "Forma final (evolui de Exeggcute 102)" },
-                { id: 10115, name: "Marowak-Alola",      types: "Fire / Ghost",          legendary: false, note: "Forma final (evolui de Cubone 104)" },
-                // ── Formas Galar (Gen 8) ─────────────────────────────────────────
-                { id: 10158, name: "Meowth-Galar",       types: "Steel",                 legendary: false, note: "Base — evolui em Perrserker 863 (Nv.28)" },
-                { id: 10159, name: "Ponyta-Galar",       types: "Psychic",               legendary: false, note: "Base — evolui em 10160 (Nv.40)" },
-                { id: 10160, name: "Rapidash-Galar",     types: "Psychic / Fairy",       legendary: false, note: "Evolução de 10159" },
-                { id: 10161, name: "Slowpoke-Galar",     types: "Psychic",               legendary: false, note: "Base — evolui em 10162 (Nv.37)" },
-                { id: 10162, name: "Slowbro-Galar",      types: "Poison / Psychic",      legendary: false, note: "Evolução de 10161" },
-                { id: 10163, name: "Farfetch'd-Galar",   types: "Fighting",              legendary: false, note: "Base — evolui em Sirfetch'd 865 (Nv.30)" },
-                { id: 10164, name: "Weezing-Galar",      types: "Poison / Fairy",        legendary: false, note: "Forma final (sem evolução)" },
-                { id: 10165, name: "Mr. Mime-Galar",     types: "Ice / Psychic",         legendary: false, note: "Base — evolui em Mr. Rime 866 (Nv.42)" },
-                { id: 10166, name: "Articuno-Galar",     types: "Psychic / Flying",      legendary: true,  note: "Lendário Galar" },
-                { id: 10167, name: "Zapdos-Galar",       types: "Fighting / Flying",     legendary: true,  note: "Lendário Galar" },
-                { id: 10168, name: "Moltres-Galar",      types: "Dark / Flying",         legendary: true,  note: "Lendário Galar" },
-                { id: 10169, name: "Slowking-Galar",     types: "Poison / Psychic",      legendary: false, note: "Evolução alternativa de 10161" },
-                { id: 10170, name: "Corsola-Galar",      types: "Ghost",                 legendary: false, note: "Base — evolui em Cursola 864 (Nv.38)" },
-                { id: 10171, name: "Zigzagoon-Galar",    types: "Dark / Normal",         legendary: false, note: "Base — evolui em 10172 (Nv.20)" },
-                { id: 10172, name: "Linoone-Galar",      types: "Dark / Normal",         legendary: false, note: "Evolução de 10171 — evolui em Obstagoon 862 (Nv.35)" },
-                { id: 10173, name: "Darumaka-Galar",     types: "Ice",                   legendary: false, note: "Base — evolui em 10174 (Nv.38)" },
-                { id: 10174, name: "Darmanitan-Galar",   types: "Ice",                   legendary: false, note: "Evolução de 10173" },
-                { id: 10175, name: "Yamask-Galar",       types: "Ground / Ghost",        legendary: false, note: "Base — evolui em Runerigus 867 (Nv.34)" },
-                { id: 10176, name: "Stunfisk-Galar",     types: "Ground / Steel",        legendary: false, note: "Forma final (sem evolução)" },
-                // ── Formas Hisui (Lendas Pokémon: Arceus) ───────────────────────
-                { id: 10229, name: "Growlithe-Hisui",    types: "Fire / Rock",           legendary: false, note: "Base — evolui em 10230 (Nv.38)" },
-                { id: 10230, name: "Arcanine-Hisui",     types: "Fire / Rock",           legendary: false, note: "Evolução de 10229" },
-                { id: 10231, name: "Voltorb-Hisui",      types: "Electric / Grass",      legendary: false, note: "Base — evolui em 10232 (Nv.30)" },
-                { id: 10232, name: "Electrode-Hisui",    types: "Electric / Grass",      legendary: false, note: "Evolução de 10231" },
-                { id: 10233, name: "Typhlosion-Hisui",   types: "Fire / Ghost",          legendary: false, note: "Forma final Hisui de Cyndaquil (155)" },
-                { id: 10234, name: "Qwilfish-Hisui",     types: "Dark / Poison",         legendary: false, note: "Base — evolui em Overqwil 904 (Nv.40)" },
-                { id: 10235, name: "Sneasel-Hisui",      types: "Fighting / Poison",     legendary: false, note: "Base — evolui em Sneasler 903 (Nv.40)" },
-                { id: 10236, name: "Samurott-Hisui",     types: "Water / Dark",          legendary: false, note: "Forma final Hisui de Oshawott (501)" },
-                { id: 10237, name: "Lilligant-Hisui",    types: "Grass / Fighting",      legendary: false, note: "Forma final Hisui de Petilil (548)" },
-                { id: 10238, name: "Zorua-Hisui",        types: "Normal / Ghost",        legendary: false, note: "Base — evolui em 10239 (Nv.30)" },
-                { id: 10239, name: "Zoroark-Hisui",      types: "Normal / Ghost",        legendary: false, note: "Evolução de 10238" },
-                { id: 10240, name: "Braviary-Hisui",     types: "Psychic / Flying",      legendary: false, note: "Forma final Hisui de Rufflet (627)" },
-                { id: 10241, name: "Sliggoo-Hisui",      types: "Steel / Dragon",        legendary: false, note: "Evolução de Goomy 704 (forma Hisui)" },
-                { id: 10242, name: "Goodra-Hisui",       types: "Steel / Dragon",        legendary: false, note: "Evolução de 10241" },
-                { id: 10243, name: "Avalugg-Hisui",      types: "Ice / Rock",            legendary: false, note: "Evolução de Bergmite 712 (forma Hisui)" },
-                { id: 10244, name: "Decidueye-Hisui",    types: "Grass / Fighting",      legendary: false, note: "Forma final Hisui de Rowlet (722)" },
-              ].map(row => (
-                <tr key={row.id} className="text-slate-300">
-                  <td className="py-2 pr-4 font-mono text-[#FFCB05]">{row.id}</td>
-                  <td className="py-2 pr-4 font-medium">{row.name}</td>
-                  <td className="py-2 pr-4 text-slate-400">{row.types}</td>
-                  <td className="py-2 pr-4 text-center">{row.legendary ? <span className="text-yellow-400">★</span> : <span className="text-slate-600">—</span>}</td>
-                  <td className="py-2 text-slate-500">{row.note}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <FormsPoolManager forms={managedForms} />
+      </div>
+
+      {/* ── Visualizador de sprites de mascotes ── */}
+      <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
+        <div className="flex items-center gap-2">
+          <BookOpen size={16} className="text-[#FFCB05]" />
+          <h3 className="font-semibold text-slate-200">Visualizador de mascotes</h3>
         </div>
-        <p className="text-[10px] text-slate-600">
-          SQL de referência: <code className="bg-slate-800 px-1 rounded">SELECT id, &quot;displayName&quot; FROM players WHERE &quot;displayName&quot; ILIKE &apos;%nome%&apos;;</code>
-        </p>
+        <p className="text-xs text-slate-500">Digite o nome ou o ID de um mascote para ver o sprite (inclui as novas formas).</p>
+        <MascotSpriteViewer />
       </div>
 
       <GlobalResetPanel />

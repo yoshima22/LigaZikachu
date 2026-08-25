@@ -1,4 +1,5 @@
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+import { EXTRA_FORM_NAMES, EXTRA_FORM_ELEMENTS, EXTRA_FORM_POOL_BY_GEN } from "@/lib/extra-forms-data";
 
 /**
  * Dados estáticos do sistema de mascotes.
@@ -2288,6 +2289,17 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10301:"water",                               // Mega Feraligatr custom
   10302:"fighting/flying",                     // Mega Hawlucha custom
 };
+
+// ── Formas alternativas + Unown (dados gerados) ───────────────────────────────
+// Passa a existir na dex (nome/tipo) e nas pools de ovo. Cada forma entra
+// DESLIGADA por padrão: o filtro real do drop é a tabela EggPokemonToggle,
+// aplicada no sorteio via `excludedPokemonIds`. As já existentes não são tocadas.
+Object.assign(POKEMON_PT_NAMES, EXTRA_FORM_NAMES);
+Object.assign(POKEMON_ELEMENT, EXTRA_FORM_ELEMENTS);
+for (const [gen, ids] of Object.entries(EXTRA_FORM_POOL_BY_GEN)) {
+  const key = `EGG_GEN${gen}`;
+  (EGG_POOLS[key] ??= []).push(...ids);
+}
 
 export function getPokemonElement(pokemonId: number): string {
   const eventPrimary = ({210001:"electric",210002:"fighting",210003:"dark",210004:"ghost",210005:"ghost",210006:"normal",210007:"psychic",210008:"ghost"} as Record<number,string>)[pokemonId];

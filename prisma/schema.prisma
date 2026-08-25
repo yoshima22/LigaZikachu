@@ -4080,3 +4080,15 @@ model TowerFeat {
   @@index([userId])
   @@map("tower_feats")
 }
+
+// Liga/desliga de espécies (formas alternativas + Unown) nas pools de ovo.
+// Linha presente com disabled=true => a espécie NÃO entra no drop. Formas novas
+// entram como disabled=true; ligar remove do drop-block (disabled=false).
+model EggPokemonToggle {
+  pokemonId   Int      @id @map("pokemon_id")
+  disabled    Boolean  @default(true)
+  updatedById String?  @map("updated_by_id")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("egg_pokemon_toggle")
+}
