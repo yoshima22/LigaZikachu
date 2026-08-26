@@ -20,6 +20,7 @@ import {
   getMascotRarity,
 } from "@/lib/mascot-data";
 import { EXTRA_FORM_GENERATION } from "@/lib/extra-forms-data";
+import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 
 export type EggPokemonTier = "COMMON" | "PSEUDO_LEGENDARY" | "PARADOX" | "ELITE";
 
@@ -110,7 +111,10 @@ export function tierForPokemon(pokemonId: number): EggPokemonTier {
 function candidatesForGeneration(generation: number) {
   const generationPool = EGG_POOLS[`EGG_GEN${generation}`] ?? [];
   const elitePool = eliteInitialForms().filter((id) => generationForEggPokemon(id) === generation);
-  return uniquePokemonIds([...generationPool, ...elitePool]).filter((id) => !ALL_EVOLVED_IDS.has(id));
+  // Evoluções nunca vêm em ovo — inclui as formas MEGA (oficiais e custom):
+  // megas só são obtidos usando a pedra correspondente, nunca por drop.
+  return uniquePokemonIds([...generationPool, ...elitePool])
+    .filter((id) => !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_IDS.has(id));
 }
 
 export function getEggCandidatesForGeneration(generation: number, tier?: EggPokemonTier) {
