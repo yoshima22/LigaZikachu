@@ -17,6 +17,8 @@ import { isStandbyActive } from "@/lib/account-standby";
 import { getActiveWeeklyLeagueSabotage } from "@/lib/raid-event";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { getWeeklyTeamEditWindow, WEEKLY_TEAM_LOCK_MESSAGE } from "./team-edit-window";
+import { isMegaEvolvedMascot, type MegaCandidate } from "@/lib/battle-divisions";
+import { getBattleModeDivision } from "@/lib/battle-division-settings";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -76,6 +78,22 @@ function recommendedRolesForMascots(mascots: RoleRecommendMascot[]) {
 
 function resolveMascotRole(mascot: RoleRecommendMascot, roles?: Record<string, string>) {
   return roles?.[mascot.id] ?? defaultCombatRoleFor(mascot);
+}
+
+function buildDivisionValidTeam<T extends MegaCandidate>(preferred: T[], fallback: T[], maxSize = 6, maxMegas = 2) {
+  const selected: T[] = [];
+  const seen = new Set<string>();
+  let megaCount = 0;
+  for (const mascot of [...preferred, ...fallback]) {
+    if (seen.has(mascot.id)) continue;
+    const mega = isMegaEvolvedMascot(mascot);
+    if (mega && megaCount >= maxMegas) continue;
+    selected.push(mascot);
+    seen.add(mascot.id);
+    if (mega) megaCount++;
+    if (selected.length >= maxSize) break;
+  }
+  return selected;
 }
 
 async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
@@ -574,7 +592,7 @@ export async function saveDailyTeamAction(
     // Verify mascots belong to player
     const owned = await prisma.mascot.findMany({
       where: { id: { in: mascotIds }, playerId: player.id },
-      select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+      select: { id: true, pokemonId: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
     });
     if (owned.length !== 6) return { error: "Algum mascote selecionado não pertence a você." };
     const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
@@ -1110,6 +1128,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
   const roundNumber = await prisma.weeklyMascotLeagueMatch.count({ where: { leagueId } }) + 1;
   const modifier = league.modifierJson as unknown as WeeklyModifier | null;
   const weeklySabotage = await getActiveWeeklyLeagueSabotage();
+  const limitedDivision = await getBattleModeDivision("WEEKLY_LEAGUE") === "LIMITED";
 
   // Use pre-generated matchups or create Swiss pairings
   let pairings: Array<{ aId: string; bId: string | null; existingMatchId?: string }> = [];
@@ -1194,18 +1213,17 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
             .map(id => mascots.find(m => m.id === id))
             .filter((mascot) => mascot && !alreadyUsedToday.has(mascot.id));
 
-          // If mascots were lost (sold/transferred), fill remaining slots
-          if (ordered.length < 6) {
-            const existingIds = new Set(ordered.map(m => m!.id));
-            const fillers = await prisma.mascot.findMany({
-              where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...existingIds])] } },
-              orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
-              take: 6 - ordered.length,
-            });
-            ordered.push(...fillers);
-          }
+          // Revalida também equipes herdadas/antigas. Formas Mega históricas podem
+          // estar gravadas apenas no pokemonId, por isso a checagem é autoritativa.
+          const fillers = await prisma.mascot.findMany({
+            where: { playerId, id: { notIn: [...alreadyUsedToday] } },
+            orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+          });
+          const validTeam = limitedDivision
+            ? buildDivisionValidTeam(ordered.filter(Boolean) as typeof mascots, fillers, 6, 2)
+            : buildDivisionValidTeam(ordered.filter(Boolean) as typeof mascots, fillers, 6, Number.POSITIVE_INFINITY);
 
-          return ordered.map((m, i) => toLeagueMascot(m!, i + 1, resolveMascotRole(m!, roles)));
+          return validTeam.map((m, i) => toLeagueMascot(m, i + 1, resolveMascotRole(m, roles)));
         }
       }
 
@@ -1215,15 +1233,14 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         orderBy: { level: "desc" },
         take: 6,
       });
-      if (favs.length >= 6) return favs.slice(0, 6).map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
-
       const usedIds = new Set(favs.map(m => m.id));
       const rest = await prisma.mascot.findMany({
         where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...usedIds])] } },
         orderBy: { level: "desc" },
-        take: 6 - favs.length,
       });
-      const all = [...favs, ...rest];
+      const all = limitedDivision
+        ? buildDivisionValidTeam(favs, rest, 6, 2)
+        : buildDivisionValidTeam(favs, rest, 6, Number.POSITIVE_INFINITY);
       return all.map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
     }
 
@@ -1918,6 +1935,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
   if (league.status === "FINISHED") return { success: true, skipped: "finished" };
 
   const battleDate = new Intl.DateTimeFormat("en-CA", { timeZone: "America/Sao_Paulo" }).format(now);
+  const limitedDivision = await getBattleModeDivision("WEEKLY_LEAGUE") === "LIMITED";
   const storedModifier = (league.modifierJson ?? {}) as Record<string, unknown>;
   if (storedModifier.dailyDate !== battleDate) {
     const history = Array.isArray(storedModifier.dailyHistory) ? storedModifier.dailyHistory.filter((id): id is string => typeof id === "string") : [];
@@ -2014,6 +2032,9 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
           statVitality: true,
           statInstinct: true,
           statCharisma: true,
+          pokemonId: true,
+          megaEvolvedAt: true,
+          megaEvolvedFromPokemonId: true,
         },
         orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
       }),
@@ -2045,13 +2066,11 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
             const mascot = mascotById.get(id);
             return mascot && !used.has(mascot.id) ? [mascot] : [];
           });
-          const selected = inherited.slice(0, 6);
-          if (selected.length < 6) {
-            const selectedIds = new Set(selected.map((mascot) => mascot.id));
-            selected.push(...(mascotsByPlayer.get(participant.playerId) ?? [])
-              .filter((mascot) => !used.has(mascot.id) && !selectedIds.has(mascot.id))
-              .slice(0, 6 - selected.length));
-          }
+          const available = (mascotsByPlayer.get(participant.playerId) ?? [])
+            .filter((mascot) => !used.has(mascot.id));
+          const selected = limitedDivision
+            ? buildDivisionValidTeam(inherited, available, 6, 2)
+            : buildDivisionValidTeam(inherited, available, 6, Number.POSITIVE_INFINITY);
           for (const mascot of selected) used.add(mascot.id);
           const rolesJson = {
             ...recommendedRolesForMascots(selected),

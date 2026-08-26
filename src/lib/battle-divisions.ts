@@ -1,7 +1,10 @@
+import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+
 export type BattleDivision = "LIMITED" | "UNLIMITED";
 
 export type MegaCandidate = {
   id: string;
+  pokemonId?: number | null;
   megaEvolvedAt?: Date | string | null;
   megaEvolvedFromPokemonId?: number | null;
 };
@@ -24,7 +27,11 @@ export function normalizeBattleDivision(value: unknown): BattleDivision {
 }
 
 export function isMegaEvolvedMascot(mascot: MegaCandidate): boolean {
-  return Boolean(mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId);
+  return Boolean(
+    mascot.megaEvolvedAt
+    || mascot.megaEvolvedFromPokemonId
+    || (mascot.pokemonId != null && MEGA_FORM_IDS.has(Number(mascot.pokemonId))),
+  );
 }
 
 export function countMegaEvolvedMascots(mascots: MegaCandidate[]): number {
@@ -53,5 +60,5 @@ export const OFFICIAL_BATTLE_DIVISION_MODES = [
   { mode: "Liga Rush", division: "Configurável por semana", detail: "O admin escolhe Limitado ou Ilimitado ao criar a edição." },
   { mode: "Arena-Z", division: "Ilimitado", detail: "Sem limite de megas na equipe." },
   { mode: "Desafio Sincronizado", division: "Limitado", detail: "Até 3 megas entre os 9 enviados por jogador e até 1 por jogador em cada partida (2 no time da dupla)." },
-  { mode: "Liga Semanal", division: "Ilimitado (atual)", detail: "Mantém a regra existente até uma edição adotar explicitamente a divisão Limitada." },
+  { mode: "Liga Semanal", division: "Limitado", detail: "No máximo 2 mascotes mega evoluídos por equipe em cada combate." },
 ] as const;
