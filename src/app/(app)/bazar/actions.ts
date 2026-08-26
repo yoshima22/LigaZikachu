@@ -11,6 +11,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
+import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
@@ -182,6 +183,8 @@ function sanitizePayloadImageUrl(url: string | null | undefined): string | null 
 const MIAUVADAO_ELIGIBLE_TYPES = [
   ...MASCOT_SHOP_ITEM_TYPES,
   "ZIKALOOT_TICKET",
+  // Pedras de mega custom (liberadas pelo toggle do admin) também entram no pool.
+  ...CUSTOM_MEGA_POKEMON_IDS.map((id) => `MEGA_STONE_CUSTOM_${id}`),
 ];
 
 const MIAUVADAO_MAX_DISCOUNT = 70;

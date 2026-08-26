@@ -6,9 +6,10 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
-import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getActiveShopItems, getEnabledShopPromotions, invalidateShopCache } from "@/lib/shop-cache";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
+import { isMegaStoneType } from "@/lib/mega-evolution";
 import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
@@ -72,7 +73,10 @@ export default async function ShopPage() {
   const safeRawItems = rawItems.filter((item) =>
     platformAdmin ||
     megaUnlocked ||
-    !MEGA_STONE_SHOP_ITEM_TYPES.includes(item.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
+    // Pedras de mega CUSTOM são liberadas pelo toggle do admin (ShopItem.active),
+    // não pelo evento da Ordem da Trapaça — então não dependem do megaUnlocked.
+    String(item.type).startsWith("MEGA_STONE_CUSTOM_") ||
+    !isMegaStoneType(item.type)
   );
   const now = new Date();
   const promotedItems = safeRawItems.map((item) => ({
@@ -100,12 +104,12 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
-  const megaItems = items.filter((i) => MEGA_STONE_SHOP_ITEM_TYPES.includes(i.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number]));
+  const megaItems = items.filter((i) => isMegaStoneType(i.type));
   const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
   const mascotItems = items.filter((i) =>
     MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&
     !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]) &&
-    !MEGA_STONE_SHOP_ITEM_TYPES.includes(i.type as typeof MEGA_STONE_SHOP_ITEM_TYPES[number])
+    !isMegaStoneType(i.type)
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
@@ -213,7 +217,7 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
             ) : null,
           },
-          ...((megaItems.length > 0 && (megaUnlocked || platformAdmin)) ? [{
+          ...((megaItems.length > 0) ? [{
             id: "mega", label: "Mega Evolução", icon: TAB_ICONS.buffs,
             count: megaItems.length,
             content: (

@@ -571,8 +571,9 @@ export async function purchaseItem(
       return { error: `O preço de ${item.name} mudou para ${effectiveUnitPrice.toLocaleString("pt-BR")} ZC. Revise o valor antes de confirmar novamente.` };
     }
 
-    // Itens consumíveis (ovos, comida) podem ser comprados várias vezes
-    if (isMegaStoneType(item.type) && !(await isMegaStoneShopUnlocked())) {
+    // Pedras de mega custom são liberadas pelo toggle (ShopItem.active); só as
+    // oficiais dependem do evento da Ordem da Trapaça.
+    if (isMegaStoneType(item.type) && !String(item.type).startsWith("MEGA_STONE_CUSTOM_") && !(await isMegaStoneShopUnlocked())) {
       return { error: "As Pedras de Mega EvoluÃ§Ã£o ainda nÃ£o foram liberadas." };
     }
 
