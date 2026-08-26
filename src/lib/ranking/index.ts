@@ -1,9 +1,23 @@
 import { prisma } from "@/lib/prisma";
 import { ChallengeStatus, MatchStatus, type Prisma } from "@prisma/client";
 
+// Anexa o nick do PTCG Live (identificador único) a cada entrada do ranking,
+// numa única query — usado como identificador anti-impersonação na UI.
+async function attachPtcglNicks(entries: PlayerRankingEntry[]): Promise<PlayerRankingEntry[]> {
+  if (!entries.length) return entries;
+  const players = await prisma.player.findMany({
+    where: { id: { in: entries.map((e) => e.playerId) } },
+    select: { id: true, ptcglNick: true },
+  });
+  const nick = new Map(players.map((p) => [p.id, p.ptcglNick]));
+  for (const e of entries) e.ptcglNick = nick.get(e.playerId) ?? null;
+  return entries;
+}
+
 export interface PlayerRankingEntry {
   playerId: string;
   displayName: string;
+  ptcglNick?: string | null;
   position: number;
   equippedMascot?: {
     pokemonId: number;
@@ -274,7 +288,7 @@ export async function computeTournamentRanking(
   );
   finalEntries.forEach((e, i) => { e.position = i + 1; });
 
-  return finalEntries;
+  return attachPtcglNicks(finalEntries);
 }
 
 export async function computeWeeklyRanking(
@@ -331,7 +345,7 @@ export async function computeTournamentWeekTopOfDay(
       a.displayName.localeCompare(b.displayName, "pt-BR")
   );
 
-  return withAvg.map((e, i) => ({ ...e, position: i + 1 }));
+  return attachPtcglNicks(withAvg.map((e, i) => ({ ...e, position: i + 1 })));
 }
 
 function dayBounds(date: Date) {
@@ -595,7 +609,7 @@ async function computeRankingFromMatches({
       a.displayName.localeCompare(b.displayName, "pt-BR")
   );
 
-  return entries.map((entry, i) => ({ ...entry, position: i + 1 }));
+  return attachPtcglNicks(entries.map((entry, i) => ({ ...entry, position: i + 1 })));
 }
 
 function emptyStats(playerId: string): RankingStats {

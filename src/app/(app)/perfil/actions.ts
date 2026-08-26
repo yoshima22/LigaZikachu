@@ -181,7 +181,7 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
 
   const player = await prisma.player.findUnique({
     where: { userId: user.id },
-    select: { id: true }
+    select: { id: true, displayName: true, nameChangeCount: true }
   });
   if (!player) return { error: "Jogador nao encontrado" };
 
@@ -190,6 +190,13 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
     return { error: parsed.error.issues[0]?.message ?? "Dados inválidos." };
   }
   const data = parsed.data;
+
+  // Troca de nome: apenas 1 por conta (admin pode liberar outra). Só conta quando
+  // o displayName realmente muda — editar avatar/nick/prefs não consome a troca.
+  const nameChanged = data.displayName.trim() !== player.displayName.trim();
+  if (nameChanged && player.nameChangeCount >= 1) {
+    return { error: "Você já usou sua troca de nome. Peça a um admin para liberar outra." };
+  }
 
   // Verifica unicidade do nick PTCG Live (case-insensitive, excluindo o próprio jogador)
   if (data.ptcglNick) {
@@ -221,6 +228,7 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
       where: { id: player.id },
       data: {
         displayName: data.displayName,
+        ...(nameChanged ? { nameChangeCount: { increment: 1 } } : {}),
         ptcglNick: data.ptcglNick || null,
         popId: data.popId || null,
         avatarUrl,

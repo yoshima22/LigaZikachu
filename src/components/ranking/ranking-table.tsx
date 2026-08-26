@@ -1,5 +1,6 @@
 import type { PlayerRankingEntry } from "@/lib/ranking";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import { PlayerTag } from "@/components/player/player-tag";
 
 interface RankingTableProps {
   ranking: PlayerRankingEntry[];
@@ -34,7 +35,7 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
 
   const renderPlayer = (entry: PlayerRankingEntry) => {
     const mascot = entry.equippedMascot;
-    if (!mascot) return entry.displayName;
+    if (!mascot) return <PlayerTag id={entry.playerId} displayName={entry.displayName} ptcglNick={entry.ptcglNick} />;
 
     const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
 
@@ -48,7 +49,7 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
           className="h-6 w-6 shrink-0 object-contain [image-rendering:pixelated]"
           title={`${mascotName} Nv.${mascot.level}`}
         />
-        <span className="truncate">{entry.displayName}</span>
+        <PlayerTag id={entry.playerId} displayName={entry.displayName} ptcglNick={entry.ptcglNick} className="truncate" />
       </div>
     );
   };

@@ -230,6 +230,8 @@ model Player {
   whatsapp                    String?
   ptcglNick                   String?                        @unique
   popId                       String? // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
+  nameChangeCount             Int                            @default(0) // trocas de displayName já usadas (limite 1; admin reseta)
+  lastAckedNoticeVersion      Int                            @default(0) // versão do aviso com confirmação já lido pelo jogador
   avatarUrl                   String?
   active                      Boolean                        @default(true)
   notes                       String?

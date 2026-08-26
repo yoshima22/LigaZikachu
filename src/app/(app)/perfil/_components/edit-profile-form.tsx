@@ -18,6 +18,7 @@ interface EditProfileFormProps {
     casualMode: boolean;
     mascotSpritePreference: string | null;
     megaSpritePreference: string | null;
+    nameChangeCount?: number;
   };
 }
 
@@ -34,6 +35,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [standbyLoading, setStandbyLoading] = useState(false);
   const [standbyDays, setStandbyDays] = useState<7 | 14 | 30 | 60 | 90>(7);
   const [casualMode, setCasualMode] = useState(player.casualMode);
+  const nameLocked = (player.nameChangeCount ?? 0) >= 1;
   const [casualLoading, setCasualLoading] = useState(false);
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -193,8 +195,14 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
           onChange={(e) => setDisplayName(e.target.value)}
           required
           maxLength={60}
-          className="bg-slate-900/70 border-border text-slate-100"
+          disabled={nameLocked}
+          className="bg-slate-900/70 border-border text-slate-100 disabled:opacity-60 disabled:cursor-not-allowed"
         />
+        <p className="mt-1 text-[11px] text-slate-500">
+          {nameLocked
+            ? "Você já usou sua troca de nome. Peça a um admin para liberar outra."
+            : "Atenção: você só pode trocar o nome de exibição uma vez. Seu nick do PTCG Live aparece ao lado do nome para identificar sua conta."}
+        </p>
       </div>
 
       <div>

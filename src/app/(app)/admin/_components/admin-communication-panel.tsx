@@ -4,10 +4,17 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { BellRing, Coins, Megaphone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice } from "../actions";
+import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice } from "../actions";
 
-export function AdminCommunicationPanel({ initialNotice }: { initialNotice: string }) {
+export function AdminCommunicationPanel({ initialNotice, initialAck }: {
+  initialNotice: string;
+  initialAck?: { title: string; content: string; buttonText: string; active: boolean; version: number };
+}) {
   const [notice, setNotice] = useState(initialNotice);
+  const [ackTitle, setAckTitle] = useState(initialAck?.title ?? "");
+  const [ackContent, setAckContent] = useState(initialAck?.content ?? "");
+  const [ackButton, setAckButton] = useState(initialAck?.buttonText ?? "Entendi");
+  const [pendingAck, startAck] = useTransition();
   const [coins, setCoins] = useState("");
   const [description, setDescription] = useState("Presente global da Liga");
   const [professorMessage, setProfessorMessage] = useState("");
@@ -165,6 +172,66 @@ export function AdminCommunicationPanel({ initialNotice }: { initialNotice: stri
           <Coins size={13} />
           {pendingCoins ? "Enviando..." : "Enviar ZC para todos"}
         </Button>
+      </div>
+
+      {/* Aviso com confirmação — modal único que todos precisam ler e fechar */}
+      <div className="rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-5 lg:col-span-2">
+        <div className="flex items-center gap-2">
+          <BellRing size={16} className="text-[#FFCB05]" />
+          <h3 className="font-semibold text-slate-200">Aviso com confirmação (modal único)</h3>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Aparece uma única vez em qualquer página até o jogador ler e apertar o botão. Publicar de novo faz o aviso reaparecer para todos.
+          {initialAck ? ` Versão atual: ${initialAck.version}${initialAck.active ? " (ativo)" : " (inativo)"}.` : ""}
+        </p>
+        <input
+          value={ackTitle}
+          onChange={(e) => setAckTitle(e.target.value)}
+          maxLength={120}
+          placeholder="Título (ex.: Regras atualizadas da liga)"
+          className="mt-3 w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+        />
+        <textarea
+          value={ackContent}
+          onChange={(e) => setAckContent(e.target.value)}
+          maxLength={2000}
+          rows={4}
+          placeholder="Conteúdo do aviso que todos devem ler."
+          className="mt-2 w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+        />
+        <input
+          value={ackButton}
+          onChange={(e) => setAckButton(e.target.value)}
+          maxLength={40}
+          placeholder='Texto do botão (ex.: "Li e concordo")'
+          className="mt-2 w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+        />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Button
+            disabled={pendingAck}
+            onClick={() => startAck(async () => {
+              const res = await updateAckNotice({ title: ackTitle, content: ackContent, buttonText: ackButton, active: true });
+              if (res.error) toast.error(res.error);
+              else toast.success(`Aviso publicado (versão ${res.version}). Aparecerá para todos.`);
+            })}
+            className="gap-2 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40"
+          >
+            <Send size={13} />
+            {pendingAck ? "Publicando..." : "Publicar aviso (mostra p/ todos)"}
+          </Button>
+          <Button
+            disabled={pendingAck}
+            variant="outline"
+            onClick={() => startAck(async () => {
+              const res = await updateAckNotice({ title: ackTitle, content: ackContent, buttonText: ackButton, active: false });
+              if (res.error) toast.error(res.error);
+              else toast.success("Aviso desativado.");
+            })}
+            className="gap-2"
+          >
+            Desativar
+          </Button>
+        </div>
       </div>
     </div>
   );

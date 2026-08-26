@@ -1216,6 +1216,44 @@ export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error
   }
 }
 
+// ── Aviso com confirmação (modal único) ───────────────────────────────────────
+export async function updateAckNotice(input: { title: string; content: string; buttonText: string; active: boolean }): Promise<{ error?: string; version?: number }> {
+  try {
+    await requireAdmin();
+    const { ACK_NOTICE_KEY, getAckNotice, revalidateAckNotice } = await import("@/lib/app-settings");
+    const title = input.title.trim();
+    const content = input.content.trim();
+    const buttonText = input.buttonText.trim() || "Entendi";
+    if (input.active && (!title || !content)) return { error: "Informe título e conteúdo para publicar o aviso." };
+    const current = await getAckNotice();
+    // Publicar/atualizar um aviso ATIVO incrementa a versão → reaparece para todos.
+    const version = input.active ? current.version + 1 : current.version;
+    const value = { version, title, content, buttonText, active: input.active, updatedAt: new Date().toISOString() };
+    await prisma.appSetting.upsert({
+      where: { key: ACK_NOTICE_KEY },
+      update: { value },
+      create: { key: ACK_NOTICE_KEY, value },
+    });
+    revalidateAckNotice();
+    revalidatePath("/admin");
+    return { version };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
+export async function adminResetPlayerNameChange(playerId: string): Promise<{ error?: string; ok?: boolean }> {
+  try {
+    await requirePlatformAdmin();
+    if (!playerId) return { error: "Jogador inválido." };
+    await prisma.player.update({ where: { id: playerId }, data: { nameChangeCount: 0 } });
+    revalidatePath("/admin");
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro desconhecido" };
+  }
+}
+
 // ── Formas alternativas: liga/desliga nas pools de ovo ────────────────────────
 export type ManagedForm = {
   id: number; name: string; types: string[]; generation: number | null; spriteUrl: string; enabled: boolean;

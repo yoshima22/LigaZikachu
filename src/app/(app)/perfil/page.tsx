@@ -198,6 +198,7 @@ export default async function PerfilPage() {
       popId: true,
       avatarUrl: true,
       notes: true,
+      nameChangeCount: true,
       casualMode: true,
       mascotSpritePreference: true,
       megaSpritePreference: true,

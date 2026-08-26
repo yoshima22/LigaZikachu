@@ -10,7 +10,8 @@ import {
   getManualSessionUser,
   MANUAL_SESSION_COOKIE,
 } from "@/lib/manual-session";
-import { getGlobalNotice } from "@/lib/app-settings";
+import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
+import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
 import { Button } from "@/components/ui/button";
 import { Download, Megaphone, Zap } from "lucide-react";
 import { Toaster } from "sonner";
@@ -133,8 +134,17 @@ export default async function AppLayout({
       birthdayGiftYear: true,
       birthdayGiftPendingKit: true,
       birthdayGiftReplayKit: true,
+      lastAckedNoticeVersion: true,
     },
   }).catch(() => null);
+
+  // Aviso com confirmação: aparece se houver aviso ativo com versão maior que a
+  // última confirmada por este jogador.
+  const ackNotice = await getAckNotice().catch(() => null);
+  const showAckNotice = Boolean(
+    ackNotice?.active && ackNotice.title.trim() &&
+    ackNotice.version > (birthdayPlayer?.lastAckedNoticeVersion ?? 0),
+  );
   const birthdayPendingKit = birthdayPlayer?.birthdayGiftPendingKit ?? null;
   const birthdayReplayKit = birthdayPlayer?.birthdayGiftReplayKit ?? null;
   const birthdayEligible = Boolean(birthdayPlayer) && (
@@ -243,6 +253,14 @@ export default async function AppLayout({
         <BirthdayRouletteLauncher
           pendingKitId={birthdayPendingKit}
           replayKitId={birthdayReplayKit}
+        />
+      )}
+      {showAckNotice && ackNotice && (
+        <AcknowledgeNoticeModal
+          version={ackNotice.version}
+          title={ackNotice.title}
+          content={ackNotice.content}
+          buttonText={ackNotice.buttonText}
         />
       )}
       {shouldShowOrderIntro && (
