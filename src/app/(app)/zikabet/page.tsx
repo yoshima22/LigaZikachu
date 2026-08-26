@@ -45,8 +45,9 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       weeks: {
         where: {
           status: { in: ["OPEN", "PLANNED"] },
-          startDate: { lt: currentBetWeek.lt },
-          endDate: { gte: currentBetWeek.gte },
+          // Regra universal: a semana entra na ZikaBet se TIVER partidas agendadas
+          // nesta semana (fonte de verdade = scheduledAt das partidas), sem depender
+          // das datas de metadata da week (que podem estar defasadas após reagendar).
           matches: {
             some: {
               isBye: false,
