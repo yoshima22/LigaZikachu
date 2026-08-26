@@ -587,6 +587,8 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const multiplier = week ? Number(week.multiplier) : 1;
   const winPoints = 3 * multiplier;
   const now = new Date();
+  const reporterPlayerId = player.id;
+  const opponentPlayerId = reporterPlayerId === match.playerAId ? match.playerBId : match.playerAId;
 
   await prisma.$transaction(async (tx) => {
     await tx.match.update({
@@ -617,9 +619,28 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
         matchId,
       });
     }
+    // O resultado e o estado de confirmação precisam nascer juntos. Antes estas
+    // confirmações eram gravadas depois da transação; qualquer falha de UI ou de
+    // anúncio podia deixar um resultado salvo pela metade.
+    if (!isInPerson) {
+      await tx.matchConfirmation.upsert({
+        where: { matchId_playerId: { matchId, playerId: reporterPlayerId } },
+        update: { status: "CONFIRMED", confirmedAt: now },
+        create: { matchId, playerId: reporterPlayerId, status: "CONFIRMED", confirmedAt: now },
+      });
+      await tx.matchConfirmation.upsert({
+        where: { matchId_playerId: { matchId, playerId: opponentPlayerId } },
+        update: { status: "PENDING", confirmedAt: null },
+        create: { matchId, playerId: opponentPlayerId, status: "PENDING" },
+      });
+    }
   });
 
-  await announceTournamentResult(match, winnerId, match.playerAId, "REGISTERED");
+  // O megafone é complementar: uma indisponibilidade nele nunca pode fazer a
+  // interface dizer que o registro principal falhou depois de já ter sido salvo.
+  await announceTournamentResult(match, winnerId, match.playerAId, "REGISTERED").catch((error) => {
+    console.error("[TournamentResult] Resultado salvo, mas o anúncio falhou", { matchId, error });
+  });
 
   if (isInPerson) {
     // Partida presencial já confirmada — credita ZikaCoins imediatamente
@@ -644,20 +665,6 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     revalidatePath("/dashboard");
     return { success: true, confirmed: true };
   }
-
-  const reporterPlayerId = player.id;
-  const opponentPlayerId = reporterPlayerId === match.playerAId ? match.playerBId : match.playerAId;
-
-  await prisma.matchConfirmation.upsert({
-    where: { matchId_playerId: { matchId, playerId: reporterPlayerId } },
-    update: { status: "CONFIRMED", confirmedAt: now },
-    create: { matchId, playerId: reporterPlayerId, status: "CONFIRMED", confirmedAt: now },
-  });
-  await prisma.matchConfirmation.upsert({
-    where: { matchId_playerId: { matchId, playerId: opponentPlayerId } },
-    update: { status: "PENDING", confirmedAt: null },
-    create: { matchId, playerId: opponentPlayerId, status: "PENDING" },
-  });
 
   revalidatePath(`/torneios/${match.tournamentWeek?.tournament.slug}/semanas/${match.tournamentWeek?.weekNumber}/partidas`);
 
@@ -1242,6 +1249,44 @@ export async function revealEnguicaContract(tournamentId: string, weekNumber: nu
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
   return { success: true, contractKey: contract.key };
+}
+
+// Admin: marca/desmarca a conclusão do contrato de UM jogador específico da
+// partida (cada jogador tem a sua). Desmarcar só é possível antes de o prêmio
+// ter sido pago (rewardedAt nulo).
+export async function adminSetEnguicaCompletion(matchId: string, playerId: string, completed: boolean) {
+  const admin = await requireAdmin();
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { tournamentWeek: { include: { tournament: true } } },
+  });
+  if (!match?.tournamentWeek) throw new Error("Partida não encontrada.");
+  if (![match.playerAId, match.playerBId].includes(playerId)) throw new Error("Jogador não participa desta partida.");
+  await prisma.$transaction(async (tx) => {
+    if (completed) {
+      await recordEnguicaCompletion(tx, match, playerId, true);
+    } else {
+      const removed = await tx.tournamentEnguicaCompletion.deleteMany({
+        where: { tournamentWeekId: match.tournamentWeek!.id, matchId, playerId, rewardedAt: null },
+      });
+      if (removed.count === 0) {
+        const rewarded = await tx.tournamentEnguicaCompletion.findFirst({
+          where: { tournamentWeekId: match.tournamentWeek!.id, matchId, playerId, rewardedAt: { not: null } },
+          select: { id: true },
+        });
+        if (rewarded) throw new Error("Esta conclusão já recebeu recompensa e não pode mais ser desmarcada.");
+      }
+    }
+    await tx.auditLog.create({
+      data: {
+        actorUserId: admin.id, entityType: "match", entityId: matchId,
+        action: completed ? "enguica_contract.admin_marked" : "enguica_contract.admin_unmarked",
+        after: { playerId, completed },
+      },
+    });
+  });
+  revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
+  return { success: true };
 }
 
 export async function declareEnguicaContractCompletion(matchId: string) {

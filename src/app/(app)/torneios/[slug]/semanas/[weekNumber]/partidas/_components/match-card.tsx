@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion, updateMatchSchedule } from "../actions";
+import { chooseMatchDeck, correctMatchResult, reportMatchResult, confirmMatchResult, disputeMatchResult, adminResolveMatch, declareEnguicaContractCompletion, adminSetEnguicaCompletion, updateMatchSchedule } from "../actions";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { useRouter } from "next/navigation";
 import { Award, CalendarClock, PawPrint, ShieldCheck } from "lucide-react";
@@ -164,7 +164,6 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
         enguicaContractCompleted,
         opponentGymBadgeValid: opponentIntent?.gymBadgeId ? opponentGymBadgeValid : undefined,
       });
-      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
     } finally {
@@ -180,7 +179,6 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
         enguicaContractCompleted,
         opponentGymBadgeValid: opponentIntent?.gymBadgeId ? opponentGymBadgeValid : undefined,
       });
-      router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
     } finally {
@@ -208,11 +206,14 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
     }
   }
 
-  async function handleDeclareContract() {
+  // Marca/desmarca a conclusão do contrato de um jogador específico. Admin pode
+  // ambos; um participante marca só a própria (via declaração).
+  async function handleTogglePlayerContract(playerId: string, completed: boolean) {
     setLoading(true);
     try {
-      await declareEnguicaContractCompletion(match.id);
-      setEnguicaContractCompleted(true);
+      if (isAdmin) await adminSetEnguicaCompletion(match.id, playerId, completed);
+      else await declareEnguicaContractCompletion(match.id);
+      if (playerId === currentPlayerId) setEnguicaContractCompleted(completed);
       router.refresh();
     } catch (e) {
       alert(e instanceof Error ? e.message : "Erro");
@@ -528,34 +529,33 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
           <div className="space-y-2 rounded-xl border border-cyan-400/25 bg-cyan-500/5 p-3">
             <p className="text-[10px] font-bold uppercase tracking-widest text-cyan-300">📋 Contrato: {enguicaContract.title}</p>
             <p className="text-[11px] leading-5 text-slate-400">{enguicaContract.description}</p>
-            {match.enguicaCompletionPlayerIds.length > 0 && (
-              <p className="text-[11px] text-emerald-300">
-                Conclusão declarada por {match.enguicaCompletionPlayerIds.map((playerId) => playerId === match.playerAId ? match.playerA.displayName : match.playerB.displayName).join(" e ")}.
-              </p>
-            )}
-            {isParticipant && !enguicaContract.weekClosed && (
-              enguicaContract.myCompletionMatchId ? (
-                <p className="text-[11px] font-semibold text-emerald-300">
-                  ✓ Você já registrou este contrato {enguicaContract.myCompletionMatchId === match.id ? "nesta partida" : "em outra partida da semana"}.
-                </p>
-              ) : (
-                <label className="flex cursor-pointer items-start gap-2 text-xs text-slate-200">
-                  <input
-                    type="checkbox"
-                    checked={enguicaContractCompleted}
-                    onChange={(event) => setEnguicaContractCompleted(event.target.checked)}
-                    className="mt-0.5 h-4 w-4 accent-cyan-400"
-                  />
-                  <span>Completei o Contrato do Professor Enguiça nesta partida.</span>
-                </label>
-              )
-            )}
-            {isParticipant && !enguicaContract.weekClosed && match.winnerPlayerId && !enguicaContract.myCompletionMatchId && (
-              <Button size="sm" variant="outline" className="w-full border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/10" onClick={handleDeclareContract} disabled={loading || !enguicaContractCompleted}>
-                Registrar contrato nesta partida
-              </Button>
-            )}
-            <p className="text-[10px] text-slate-500">A declaração será aceita somente se o resultado terminar confirmado. O pagamento ocorre no encerramento do dia.</p>
+            {/* Cada jogador tem a sua própria marcação de conclusão do contrato. */}
+            <div className="grid gap-1.5">
+              {([
+                { id: match.playerAId, name: match.playerA.displayName },
+                ...(match.playerBId ? [{ id: match.playerBId, name: match.playerB.displayName }] : []),
+              ] as { id: string; name: string }[]).map((pl) => {
+                const done = match.enguicaCompletionPlayerIds.includes(pl.id);
+                const isMe = currentPlayerId === pl.id;
+                const completedElsewhere = isMe && Boolean(enguicaContract.myCompletionMatchId) && enguicaContract.myCompletionMatchId !== match.id;
+                const canToggle = !enguicaContract.weekClosed && (isAdmin || (isMe && !done && !completedElsewhere));
+                return (
+                  <label key={pl.id} className={`flex items-center gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${done ? "border-emerald-400/30 bg-emerald-500/5 text-emerald-200" : "border-slate-700 bg-slate-950/40 text-slate-300"} ${canToggle ? "cursor-pointer" : "cursor-default"}`}>
+                    <input
+                      type="checkbox"
+                      checked={done}
+                      disabled={!canToggle || loading}
+                      onChange={(event) => handleTogglePlayerContract(pl.id, event.target.checked)}
+                      className="h-4 w-4 accent-cyan-400 disabled:opacity-60"
+                    />
+                    <span className="min-w-0 flex-1 truncate">{pl.name}{isMe ? " (você)" : ""}</span>
+                    {done && <span className="shrink-0 font-semibold text-emerald-300">Concluído ✓</span>}
+                    {completedElsewhere && <span className="shrink-0 text-[10px] font-semibold text-cyan-300">Registrado em outra partida</span>}
+                  </label>
+                );
+              })}
+            </div>
+            <p className="text-[10px] text-slate-500">Cada jogador marca a própria conclusão. Só vale se o resultado ficar confirmado; o pagamento ocorre no encerramento do dia.</p>
           </div>
         )}
 
