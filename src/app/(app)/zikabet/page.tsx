@@ -150,6 +150,29 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
   const dailySpent = (dailyTcg._sum.amount ?? 0) + (dailyWeekly._sum.amount ?? 0);
   const dailyLimit = 2000;
 
+  // Limite SEMANAL do campeonato (betConfig do torneio): soma só as apostas desta
+  // semana neste torneio, excluindo canceladas/reembolsadas.
+  const weeklyBetTournament = tournaments.find((t) => parseBetConfig(t.betConfig).maxWeeklyBet > 0);
+  const weekLimit = weeklyBetTournament ? parseBetConfig(weeklyBetTournament.betConfig).maxWeeklyBet : 0;
+  const weekAgg = (player && weeklyBetTournament)
+    ? await prisma.zikaBet.aggregate({
+        where: {
+          playerId: player.id,
+          placedAt: { gte: startOfBetWeek() },
+          status: { notIn: ["REFUNDED", "CANCELLED"] },
+          match: { tournamentWeek: { tournamentId: weeklyBetTournament.id } },
+        },
+        _sum: { amount: true },
+      })
+    : { _sum: { amount: null as number | null } };
+  const weekSpent = weekAgg._sum.amount ?? 0;
+  // Se o campeonato tem teto semanal, a UI mostra o semanal; senão, o diário.
+  const useWeekly = weekLimit > 0;
+  const limitLabel = useWeekly ? "Limite semanal de apostas" : "Limite diário de apostas";
+  const limitAvailLabel = useWeekly ? "Disponível nesta semana" : "Disponível hoje";
+  const limitValue = useWeekly ? weekLimit : dailyLimit;
+  const limitSpent = useWeekly ? weekSpent : dailySpent;
+
   return (
     <div className="space-y-8">
       {/* Header */}
@@ -180,19 +203,19 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
           <div className="mt-4 space-y-3 border-t border-border/50 pt-4">
             <div className="space-y-1">
               <div className="flex items-center justify-between text-xs">
-                <span className="text-slate-400">Limite diário de apostas</span>
-                <span className={`font-bold ${dailySpent >= dailyLimit ? "text-red-400" : "text-[#FFCB05]"}`}>
-                  {dailySpent.toLocaleString("pt-BR")} / {dailyLimit.toLocaleString("pt-BR")} ZC
+                <span className="text-slate-400">{limitLabel}</span>
+                <span className={`font-bold ${limitSpent >= limitValue ? "text-red-400" : "text-[#FFCB05]"}`}>
+                  {limitSpent.toLocaleString("pt-BR")} / {limitValue.toLocaleString("pt-BR")} ZC
                 </span>
               </div>
               <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
                 <div
-                  className={`h-full rounded-full transition-all ${dailySpent >= dailyLimit ? "bg-red-500" : dailySpent >= dailyLimit * 0.75 ? "bg-yellow-500" : "bg-[#FFCB05]"}`}
-                  style={{ width: `${Math.min(100, (dailySpent / dailyLimit) * 100)}%` }}
+                  className={`h-full rounded-full transition-all ${limitSpent >= limitValue ? "bg-red-500" : limitSpent >= limitValue * 0.75 ? "bg-yellow-500" : "bg-[#FFCB05]"}`}
+                  style={{ width: `${Math.min(100, (limitSpent / limitValue) * 100)}%` }}
                 />
               </div>
               <p className="text-[10px] text-slate-600">
-                Disponível hoje: {Math.max(0, dailyLimit - dailySpent).toLocaleString("pt-BR")} ZC
+                {limitAvailLabel}: {Math.max(0, limitValue - limitSpent).toLocaleString("pt-BR")} ZC
               </p>
             </div>
             {(wonStat || lostStat) && (

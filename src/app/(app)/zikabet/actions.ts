@@ -137,11 +137,16 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     if (data.betOnPlayerId !== match.playerAId && data.betOnPlayerId !== match.playerBId)
       return { error: "Jogador inválido para esta partida." };
 
-    // Verificar aposta já existente
+    // Verificar aposta já existente. Uma aposta CANCELADA/REEMBOLSADA não conta —
+    // remove o registro antigo para permitir apostar de novo nesta partida.
     const existing = await prisma.zikaBet.findUnique({
       where: { playerId_matchId: { playerId: player.id, matchId: data.matchId } }
     });
-    if (existing) return { error: "Você já fez uma aposta nesta partida." };
+    if (existing && existing.status !== ZikaBetStatus.CANCELLED && existing.status !== ZikaBetStatus.REFUNDED)
+      return { error: "Você já fez uma aposta nesta partida." };
+    if (existing && (existing.status === ZikaBetStatus.CANCELLED || existing.status === ZikaBetStatus.REFUNDED)) {
+      await prisma.zikaBet.delete({ where: { id: existing.id } });
+    }
 
     // Verificar limite diário
     const startOfDay = new Date();
