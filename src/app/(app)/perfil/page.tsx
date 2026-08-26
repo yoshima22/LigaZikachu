@@ -199,6 +199,7 @@ export default async function PerfilPage() {
       avatarUrl: true,
       notes: true,
       nameChangeCount: true,
+      disableProfileIntro: true,
       casualMode: true,
       mascotSpritePreference: true,
       megaSpritePreference: true,
@@ -299,9 +300,9 @@ export default async function PerfilPage() {
     }).catch(() => [] as ProfileMascot[]),
     prisma.playerPokemonWishlist.findMany({
       where: { playerId: player.id },
-      select: { pokemonId: true },
+      select: { pokemonId: true, eggRarities: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    }).catch(() => [] as { pokemonId: number }[]),
+    }).catch(() => [] as { pokemonId: number; eggRarities: string[] }[]),
     prisma.playerItemWishlist.findMany({
       where: { playerId: player.id },
       select: { itemId: true, item: { select: { name: true, type: true, rarity: true, imageUrl: true, description: true } } },
@@ -321,6 +322,7 @@ export default async function PerfilPage() {
   const wishlist = wishlistRows.map((entry) => ({
     pokemonId: entry.pokemonId,
     name: getPokemonName(entry.pokemonId),
+    eggRarities: entry.eggRarities ?? [],
   }));
   const pokemonOptions = getWishlistPokemonOptions();
   const itemWishlist = itemWishlistRows.map((entry) => ({

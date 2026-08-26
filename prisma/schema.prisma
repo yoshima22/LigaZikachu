@@ -232,6 +232,7 @@ model Player {
   popId                       String? // ID do jogador em torneios oficiais Pokémon (Play! Pokémon ID)
   nameChangeCount             Int                            @default(0) // trocas de displayName já usadas (limite 1; admin reseta)
   lastAckedNoticeVersion      Int                            @default(0) // versão do aviso com confirmação já lido pelo jogador
+  disableProfileIntro         Boolean                        @default(false) // espectador desligou a animação de intro dos perfis
   avatarUrl                   String?
   active                      Boolean                        @default(true)
   notes                       String?
@@ -2477,11 +2478,12 @@ model PlayerPokemonDex {
 }
 
 model PlayerPokemonWishlist {
-  id        String   @id @default(cuid())
-  playerId  String
-  pokemonId Int
-  note      String?
-  sortOrder Int      @default(0)
+  id          String   @id @default(cuid())
+  playerId    String
+  pokemonId   Int
+  note        String?
+  eggRarities String[] @default([]) // raridades de ovo que o jogador procura para este mascote
+  sortOrder   Int      @default(0)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)

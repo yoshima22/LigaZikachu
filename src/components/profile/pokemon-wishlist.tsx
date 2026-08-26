@@ -6,7 +6,15 @@ import { toast } from "sonner";
 import { updatePokemonWishlist } from "@/app/(app)/perfil/actions";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
-type WishlistPokemon = { pokemonId: number; name: string };
+type WishlistPokemon = { pokemonId: number; name: string; eggRarities: string[] };
+
+// Raridades de ovo procuradas por mascote (mesmas do ícone de origem).
+const EGG_RARITIES = ["COMMON", "RARE", "SPECIAL", "EVENT", "LAB"] as const;
+const EGG_RARITY_LABEL: Record<string, string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial", EVENT: "Evento", LAB: "Lab" };
+const EGG_RARITY_CLASS: Record<string, string> = {
+  COMMON: "border-slate-500/40 text-slate-300", RARE: "border-blue-400/50 text-blue-300",
+  SPECIAL: "border-[#FFCB05]/50 text-[#FFCB05]", EVENT: "border-fuchsia-400/50 text-fuchsia-300", LAB: "border-emerald-400/50 text-emerald-300",
+};
 type PokemonOption = { id: number; name: string };
 export type WishlistItem = {
   itemId: string;
@@ -29,19 +37,42 @@ function spriteUrl(pokemonId: number) {
   return `/sprites/pokemon/${pokemonId}.png`;
 }
 
-function PokemonPill({ pokemon, canRemove, onRemove }: { pokemon: WishlistPokemon; canRemove?: boolean; onRemove?: () => void }) {
+function PokemonPill({ pokemon, canRemove, onRemove, onToggleRarity }: { pokemon: WishlistPokemon; canRemove?: boolean; onRemove?: () => void; onToggleRarity?: (rarity: string) => void }) {
+  const selected = new Set(pokemon.eggRarities ?? []);
   return (
-    <div className="group flex items-center gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
-      {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={spriteUrl(pokemon.pokemonId)} alt={pokemon.name} className="h-10 w-10 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
-      <div className="min-w-0 flex-1">
-        <p className="truncate text-sm font-semibold text-slate-100">{pokemon.name}</p>
-        <p className="text-[10px] text-slate-500">#{String(pokemon.pokemonId).padStart(4, "0")}</p>
+    <div className="group rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
+      <div className="flex items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={spriteUrl(pokemon.pokemonId)} alt={pokemon.name} className="h-10 w-10 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-sm font-semibold text-slate-100">{pokemon.name}</p>
+          <p className="text-[10px] text-slate-500">#{String(pokemon.pokemonId).padStart(4, "0")}</p>
+        </div>
+        {canRemove && (
+          <button type="button" onClick={onRemove} className="rounded-lg border border-red-500/20 p-1.5 text-red-300 opacity-80 transition hover:bg-red-500/10 hover:opacity-100" aria-label={`Remover ${pokemon.name} da wishlist`}>
+            <Trash2 size={13} />
+          </button>
+        )}
       </div>
-      {canRemove && (
-        <button type="button" onClick={onRemove} className="rounded-lg border border-red-500/20 p-1.5 text-red-300 opacity-80 transition hover:bg-red-500/10 hover:opacity-100" aria-label={`Remover ${pokemon.name} da wishlist`}>
-          <Trash2 size={13} />
-        </button>
+      {/* Raridades de ovo procuradas: editável no próprio perfil; só leitura ao ver o de outro. */}
+      {(onToggleRarity || selected.size > 0) && (
+        <div className="mt-1.5 flex flex-wrap gap-1">
+          {(onToggleRarity ? EGG_RARITIES : (EGG_RARITIES.filter((r) => selected.has(r)))).map((r) => {
+            const on = selected.has(r);
+            return (
+              <button
+                key={r}
+                type="button"
+                disabled={!onToggleRarity}
+                onClick={() => onToggleRarity?.(r)}
+                className={`rounded-full border px-1.5 py-0.5 text-[9px] font-bold transition ${EGG_RARITY_CLASS[r]} ${on ? "bg-white/10 opacity-100" : "opacity-40 hover:opacity-70"} ${onToggleRarity ? "cursor-pointer" : "cursor-default"}`}
+                title={onToggleRarity ? `Procura em ovo ${EGG_RARITY_LABEL[r]}` : `Procura em ovo ${EGG_RARITY_LABEL[r]}`}
+              >
+                {EGG_RARITY_LABEL[r]}
+              </button>
+            );
+          })}
+        </div>
       )}
     </div>
   );
@@ -123,7 +154,7 @@ export function PokemonWishlist({
     setItemWishlist(nextItems);
     startTransition(async () => {
       const result = await updatePokemonWishlist({
-        pokemonIds: nextPokemon.map((pokemon) => pokemon.pokemonId),
+        pokemon: nextPokemon.map((pokemon) => ({ pokemonId: pokemon.pokemonId, eggRarities: (pokemon.eggRarities ?? []) as ("COMMON" | "RARE" | "SPECIAL" | "EVENT" | "LAB")[] })),
         itemIds: nextItems.map((item) => item.itemId),
       });
       if (result?.error) {
@@ -138,8 +169,15 @@ export function PokemonWishlist({
 
   function addPokemon(option: PokemonOption) {
     if (wishlist.length >= MAX_POKEMON) return toast.error(`A wishlist aceita ate ${MAX_POKEMON} Pokemon.`);
-    persist([...wishlist, { pokemonId: option.id, name: option.name }], itemWishlist);
+    persist([...wishlist, { pokemonId: option.id, name: option.name, eggRarities: [] }], itemWishlist);
     setPokemonQuery("");
+  }
+
+  function toggleRarity(pokemonId: number, rarity: string) {
+    persist(wishlist.map((p) => p.pokemonId !== pokemonId ? p : ({
+      ...p,
+      eggRarities: p.eggRarities.includes(rarity) ? p.eggRarities.filter((r) => r !== rarity) : [...p.eggRarities, rarity],
+    })), itemWishlist);
   }
 
   function addItem(option: ItemOption) {
@@ -189,7 +227,7 @@ export function PokemonWishlist({
             </div>
           )}
 
-          {wishlist.length > 0 && <WishlistGroup icon={<Heart size={13} />} title={`Pokemon (${wishlist.length})`}><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{wishlist.map((pokemon) => <PokemonPill key={pokemon.pokemonId} pokemon={pokemon} canRemove={editable} onRemove={() => persist(wishlist.filter((entry) => entry.pokemonId !== pokemon.pokemonId), itemWishlist)} />)}</div></WishlistGroup>}
+          {wishlist.length > 0 && <WishlistGroup icon={<Heart size={13} />} title={`Pokemon (${wishlist.length})`}><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{wishlist.map((pokemon) => <PokemonPill key={pokemon.pokemonId} pokemon={pokemon} canRemove={editable} onRemove={() => persist(wishlist.filter((entry) => entry.pokemonId !== pokemon.pokemonId), itemWishlist)} onToggleRarity={editable ? (r) => toggleRarity(pokemon.pokemonId, r) : undefined} />)}</div></WishlistGroup>}
           {itemWishlist.length > 0 && <WishlistGroup icon={<Package size={13} />} title={`Itens (${itemWishlist.length})`}><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{itemWishlist.map((item) => <ItemPill key={item.itemId} item={item} canRemove={editable} onRemove={() => persist(wishlist, itemWishlist.filter((entry) => entry.itemId !== item.itemId))} />)}</div></WishlistGroup>}
 
           {total === 0 && <div className="rounded-xl border border-dashed border-border p-4 text-sm text-slate-500">{editable ? "Sua wishlist ainda esta vazia. Busque Pokemon ou itens para mostrar aos outros jogadores." : "Este jogador ainda nao publicou uma wishlist."}</div>}

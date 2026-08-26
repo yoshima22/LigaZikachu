@@ -37,7 +37,8 @@ export function resolveMascotOriginRarity(type?: string | null, origin?: string 
   }
   if (type === "LAB" || type.startsWith("EGG_GEN")) return "LAB";
   if (type === "RARE" || type === "SPECIAL" || type === "EVENT" || type === "COMMON") return type;
-  return "COMMON";
+  // Sem raridade reconhecida (ovo antigo/legado sem tipo registrado) → sem ícone.
+  return null;
 }
 
 export function mascotOriginIcon(type?: string | null, origin?: string | null): { url: string; rarity: MascotOriginRarity; label: string } | null {

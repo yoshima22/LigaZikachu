@@ -19,6 +19,7 @@ interface EditProfileFormProps {
     mascotSpritePreference: string | null;
     megaSpritePreference: string | null;
     nameChangeCount?: number;
+    disableProfileIntro?: boolean;
   };
 }
 
@@ -30,6 +31,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
   const [avatarUrl, setAvatarUrl] = useState(player.avatarUrl ?? "");
   const [mascotSpritePreference, setMascotSpritePreference] = useState(player.mascotSpritePreference === "STATIC" ? "STATIC" : "ANIMATED");
   const [megaSpritePreference, setMegaSpritePreference] = useState(player.megaSpritePreference === "STATIC" ? "STATIC" : "ANIMATED");
+  const [disableProfileIntro, setDisableProfileIntro] = useState(Boolean(player.disableProfileIntro));
   const [loading, setLoading] = useState(false);
   const [passwordLoading, setPasswordLoading] = useState(false);
   const [standbyLoading, setStandbyLoading] = useState(false);
@@ -82,6 +84,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
         avatarUrl: avatarUrl || undefined,
         mascotSpritePreference: mascotSpritePreference as "ANIMATED" | "STATIC",
         megaSpritePreference: megaSpritePreference as "ANIMATED" | "STATIC",
+        disableProfileIntro,
       });
       if (result?.error) {
         toast.error(result.error);
@@ -281,6 +284,22 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
           value={megaSpritePreference}
           onChange={setMegaSpritePreference}
         />
+
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-border bg-slate-900/40 px-3 py-2.5">
+          <div className="min-w-0">
+            <p className="text-sm font-medium text-slate-200">Animação de intro dos perfis</p>
+            <p className="text-[11px] text-slate-500">A animação de entrada do título equipado ao abrir um perfil. Desligue para ver os perfis sem animação.</p>
+          </div>
+          <button
+            type="button"
+            role="switch"
+            aria-checked={!disableProfileIntro}
+            onClick={() => setDisableProfileIntro((v) => !v)}
+            className={`relative h-6 w-11 shrink-0 rounded-full transition-colors ${!disableProfileIntro ? "bg-[#FFCB05]" : "bg-slate-600"}`}
+          >
+            <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white transition-all ${!disableProfileIntro ? "left-[22px]" : "left-0.5"}`} />
+          </button>
+        </div>
       </div>
 
       <div className="space-y-3 rounded-2xl border border-cyan-500/20 bg-cyan-500/5 p-4">

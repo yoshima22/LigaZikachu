@@ -46,6 +46,8 @@ interface Props {
    * Só funciona em context="profile" ou "inventory".
    */
   repeatEvery?: number;
+  /** Desliga a animação de entrada (preferência do espectador). Renderiza o título estático. */
+  disableIntro?: boolean;
 }
 
 // ── Hash deterministico do nome → seleciona variante ─────────────────────────
@@ -231,6 +233,7 @@ export function TitleDisplay({
   staggerDelay = 0,
   entranceEffect = "NONE",
   repeatEvery,
+  disableIntro = false,
 }: Props) {
   const [animated,     setAnimated]     = useState(false);
   const [glowing,      setGlowing]      = useState(false);
@@ -256,7 +259,7 @@ export function TitleDisplay({
   const isCharByChar = variant.animation === null;
   const charKeyframe = CHAR_KEYFRAME[variant.charMode ?? "slide"];
   const themeBadge  = THEME_BADGE[theme ?? "NEUTRAL"] ?? "";
-  const animate     = context === "profile" || context === "inventory";
+  const animate     = !disableIntro && (context === "profile" || context === "inventory");
   const useGradient  = !!cfg.gradient;
 
   // Intervalo de replay: usa prop ou padrão por raridade

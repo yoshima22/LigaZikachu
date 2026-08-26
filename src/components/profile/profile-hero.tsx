@@ -31,8 +31,10 @@ export function ProfileHero({
   graffiti = false,
   actionHref,
   actionLabel,
+  disableIntro = false,
 }: {
   player: { displayName: string; ptcglNick: string | null; avatarUrl: string | null };
+  disableIntro?: boolean;
   banner?: VisualItem;
   frame?: VisualItem;
   title?: VisualItem;
@@ -119,6 +121,7 @@ export function ProfileHero({
                 flavorText={title.flavorText ?? null}
                 context="profile"
                 entranceEffect={title.entranceEffect ?? "NONE"}
+                disableIntro={disableIntro}
               />
             </div>
           )}

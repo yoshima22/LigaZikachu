@@ -91,8 +91,9 @@ export default async function PlayerDetailPage({
   if (!player) notFound();
   const viewerPlayer = await prisma.player.findUnique({
     where: { userId: session.user.id },
-    select: { mascotSpritePreference: true, megaSpritePreference: true },
+    select: { mascotSpritePreference: true, megaSpritePreference: true, disableProfileIntro: true },
   }).catch(() => null);
+  const viewerDisableIntro = Boolean(viewerPlayer?.disableProfileIntro);
   const spritePreferences = viewerPlayer
     ? {
         mascotSpritePreference: viewerPlayer.mascotSpritePreference,
@@ -178,9 +179,9 @@ export default async function PlayerDetailPage({
       : [],
     prisma.playerPokemonWishlist.findMany({
       where: { playerId },
-      select: { pokemonId: true },
+      select: { pokemonId: true, eggRarities: true },
       orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }],
-    }).catch(() => [] as { pokemonId: number }[]),
+    }).catch(() => [] as { pokemonId: number; eggRarities: string[] }[]),
     prisma.playerItemWishlist.findMany({
       where: { playerId },
       select: { itemId: true, item: { select: { name: true, type: true, rarity: true, imageUrl: true, description: true } } },
@@ -201,6 +202,7 @@ export default async function PlayerDetailPage({
   const wishlist = wishlistRows.map((entry) => ({
     pokemonId: entry.pokemonId,
     name: getPokemonName(entry.pokemonId),
+    eggRarities: entry.eggRarities ?? [],
   }));
   const pokemonOptions = isSelf ? getWishlistPokemonOptions() : [];
   const itemWishlist = itemWishlistRows.map((entry) => ({
@@ -304,6 +306,7 @@ export default async function PlayerDetailPage({
         role={player.user.role}
         seasonName={activeSeason?.season.name}
         orderStamp={orderPasswordStamp}
+        disableIntro={viewerDisableIntro}
         graffiti={Boolean(profileGraffiti)}
         actionHref={isSelf ? "/perfil" : `/mensagens/${player.id}`}
         actionLabel={isSelf ? "Configurações" : "Enviar mensagem"}

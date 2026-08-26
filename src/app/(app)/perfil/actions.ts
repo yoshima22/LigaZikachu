@@ -28,6 +28,7 @@ const updateProfileSchema = z.object({
   popId: z.string().max(30).optional(),
   mascotSpritePreference: z.enum(["ANIMATED", "STATIC"]).optional(),
   megaSpritePreference: z.enum(["ANIMATED", "STATIC"]).optional(),
+  disableProfileIntro: z.boolean().optional(),
   avatarUrl: z
     .string()
     .max(1_200_000, "A imagem esta muito grande. Use uma imagem menor.")
@@ -42,8 +43,12 @@ const updateProfileSchema = z.object({
     .optional(),
 });
 
+const WISHLIST_EGG_RARITY = z.enum(["COMMON", "RARE", "SPECIAL", "EVENT", "LAB"]);
 const updatePokemonWishlistSchema = z.object({
-  pokemonIds: z.array(z.number().int().min(1).max(1025)).max(MAX_WISHLIST_POKEMON),
+  pokemon: z.array(z.object({
+    pokemonId: z.number().int().min(1).max(1025),
+    eggRarities: z.array(WISHLIST_EGG_RARITY).max(5).default([]),
+  })).max(MAX_WISHLIST_POKEMON),
   itemIds: z.array(z.string().min(1)).max(MAX_WISHLIST_ITEMS).default([]),
 });
 
@@ -234,6 +239,7 @@ export async function updatePlayerProfile(input: z.infer<typeof updateProfileSch
         avatarUrl,
         mascotSpritePreference: data.mascotSpritePreference ?? "ANIMATED",
         megaSpritePreference: data.megaSpritePreference ?? "ANIMATED",
+        ...(data.disableProfileIntro !== undefined ? { disableProfileIntro: data.disableProfileIntro } : {}),
       },
     }),
     prisma.user.update({
@@ -297,7 +303,11 @@ export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonW
   if (!player) return { error: "Jogador nao encontrado" };
 
   const data = updatePokemonWishlistSchema.parse(input);
-  const pokemonIds = Array.from(new Set(data.pokemonIds));
+  // Dedup por pokemonId, preservando a ordem e as raridades escolhidas.
+  const pokemonMap = new Map<number, string[]>();
+  for (const entry of data.pokemon) if (!pokemonMap.has(entry.pokemonId)) pokemonMap.set(entry.pokemonId, [...new Set(entry.eggRarities)]);
+  const pokemonList = [...pokemonMap.entries()].map(([pokemonId, eggRarities]) => ({ pokemonId, eggRarities }));
+  const pokemonIds = pokemonList.map((p) => p.pokemonId);
   const requestedItemIds = Array.from(new Set(data.itemIds));
 
   const validItems = requestedItemIds.length > 0
@@ -314,11 +324,11 @@ export async function updatePokemonWishlist(input: z.infer<typeof updatePokemonW
       where: { playerId: player.id, pokemonId: { notIn: pokemonIds.length ? pokemonIds : [0] } },
     });
 
-    for (const [index, pokemonId] of pokemonIds.entries()) {
+    for (const [index, { pokemonId, eggRarities }] of pokemonList.entries()) {
       await tx.playerPokemonWishlist.upsert({
         where: { playerId_pokemonId: { playerId: player.id, pokemonId } },
-        create: { playerId: player.id, pokemonId, sortOrder: index },
-        update: { sortOrder: index },
+        create: { playerId: player.id, pokemonId, sortOrder: index, eggRarities },
+        update: { sortOrder: index, eggRarities },
       });
     }
 
