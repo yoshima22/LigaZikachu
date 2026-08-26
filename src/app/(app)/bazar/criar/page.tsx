@@ -106,6 +106,7 @@ function CreateListingForm() {
             imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
+            premium,
           });
           if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         } else {

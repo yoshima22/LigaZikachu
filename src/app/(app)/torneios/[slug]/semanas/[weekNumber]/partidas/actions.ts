@@ -17,6 +17,7 @@ import { drawEnguicaContract, ENGUICA_BOX_REWARD_LABEL } from "@/lib/tcg-enguica
 import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
 import { computeTournamentRanking } from "@/lib/ranking";
 import { announceTournamentDispute, announceTournamentResult } from "@/lib/tournament-ticker";
+import { parseBetConfig } from "@/lib/zikabet";
 
 const MATCH_WIN_COINS  = 180;
 const MATCH_LOSS_COINS = 120;
@@ -313,6 +314,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
     tournamentWeekId: string;
     createdById: string;
     scheduledAt?: Date;
+    betsEnabled?: boolean;
   }> = [];
 
   const n = players.length;
@@ -449,6 +451,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
   await prisma.match.createMany({
     data: matches.map((m) => ({
       ...m,
+      betsEnabled: parseBetConfig(week.tournament.betConfig).enabled,
       scheduledAt: m.scheduledAt ?? week.startDate,
       status: "PENDING_CONFIRMATION",
       bestOf: 1,

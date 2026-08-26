@@ -13,6 +13,7 @@ import {
 } from "@/lib/decks";
 import { rewardEquippedMascot } from "@/lib/mascot";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
+import { parseBetConfig } from "@/lib/zikabet";
 
 // ─── Schemas de validação ────────────────────────────────────────────────────
 
@@ -746,6 +747,7 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
 
       let createdMatches = 0;
       if (existingMatches === 0) {
+        const betsEnabled = parseBetConfig(tournament.betConfig).enabled;
         const playerIds = tournament.registrations.map((registration) => registration.player.id);
         const matches =
           tournament.format === TournamentFormat.IN_PERSON
@@ -761,6 +763,7 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
                 status: MatchStatus.PENDING_CONFIRMATION,
                 resultSource: ResultSource.MANUAL,
                 topOfDayEligible: true,
+                betsEnabled,
                 createdById: actor.id
               }))
             : buildRoundRobinRounds(playerIds).flatMap((round, roundIndex) => {
@@ -778,6 +781,7 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
                   status: MatchStatus.PENDING_CONFIRMATION,
                   resultSource: ResultSource.MANUAL,
                   topOfDayEligible: true,
+                  betsEnabled,
                   createdById: actor.id
                 }));
               });

@@ -34,15 +34,16 @@ export function BetConfigForm({ tournamentId, config }: { tournamentId: string; 
           <span className="text-sm text-slate-300">Permitir apostar na própria partida</span>
         </label>
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
+      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: "Aposta mínima (ZC)", key: "minBet" as const },
           { label: "Aposta máxima (ZC)", key: "maxBet" as const },
-          { label: "Limite diário (ZC)", key: "maxDailyBet" as const }
+          { label: "Limite diário (ZC)", key: "maxDailyBet" as const },
+          { label: "Limite semanal do campeonato (0 = ilimitado)", key: "maxWeeklyBet" as const }
         ].map(({ label, key }) => (
           <label key={key} className="space-y-1 text-xs text-slate-400">
             <span>{label}</span>
-            <input type="number" min={1} value={form[key]}
+            <input type="number" min={key === "maxWeeklyBet" ? 0 : 1} value={form[key]}
               onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
           </label>

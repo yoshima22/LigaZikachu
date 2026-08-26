@@ -7,7 +7,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
-import { parseBetConfig } from "@/lib/zikabet";
+import { parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
 const WEEKLY_LEAGUE_BET_CONFIG = {
   minBet: 10,
   maxBet: 500,
@@ -23,14 +23,25 @@ const betConfigSchema = z.object({
   allowBetOnSelf: z.boolean(),
   minBet: z.number().int().min(1),
   maxBet: z.number().int().min(1),
-  maxDailyBet: z.number().int().min(1)
+  maxDailyBet: z.number().int().min(1),
+  maxWeeklyBet: z.number().int().min(0).default(0) // teto semanal por campeonato (0 = sem limite)
 });
 
 export async function updateBetConfig(raw: z.infer<typeof betConfigSchema>): Promise<{ error?: string }> {
   try {
     await requireAdmin();
     const { tournamentId, ...config } = betConfigSchema.parse(raw);
-    await prisma.tournament.update({ where: { id: tournamentId }, data: { betConfig: config } });
+    await prisma.$transaction(async (tx) => {
+      await tx.tournament.update({ where: { id: tournamentId }, data: { betConfig: config } });
+      await tx.match.updateMany({
+        where: {
+          tournamentWeek: { tournamentId },
+          isBye: false,
+          status: { in: ["DRAFT", "PENDING_CONFIRMATION"] },
+        },
+        data: { betsEnabled: config.enabled },
+      });
+    });
     revalidatePath("/zikabet");
     return {};
   } catch (err) {
@@ -109,6 +120,7 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
       return { error: "Esta partida já foi encerrada — apostas fechadas." };
 
     const config = parseBetConfig(match.tournamentWeek?.tournament?.betConfig);
+    const tournamentId = match.tournamentWeek?.tournament?.id;
     if (!config.enabled) return { error: "ZikaBet não está habilitada neste torneio." };
     if (data.amount < config.minBet) return { error: `Aposta mínima: ${config.minBet} ZC.` };
     if (data.amount > config.maxBet) return { error: `Aposta máxima: ${config.maxBet} ZC.` };
@@ -137,6 +149,22 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     if ((dailySpent._sum.amount ?? 0) + data.amount > config.maxDailyBet)
       return { error: `Limite diário de apostas: ${config.maxDailyBet} ZC.` };
 
+    // Teto SEMANAL por campeonato (soma das apostas do jogador nas partidas deste
+    // torneio desde segunda-feira). Ex.: Liga Zikachu 3ª Edição = 1500 ZC/semana.
+    if (config.maxWeeklyBet > 0) {
+      const weeklySpent = await prisma.zikaBet.aggregate({
+        where: {
+          playerId: player.id,
+          placedAt: { gte: startOfBetWeek() },
+          status: { notIn: [ZikaBetStatus.REFUNDED, ZikaBetStatus.CANCELLED] },
+          match: { tournamentWeek: { tournamentId } },
+        },
+        _sum: { amount: true },
+      });
+      if ((weeklySpent._sum.amount ?? 0) + data.amount > config.maxWeeklyBet)
+        return { error: `Limite semanal de apostas deste campeonato: ${config.maxWeeklyBet} ZC.` };
+    }
+
     const isOnA = data.betOnPlayerId === match.playerAId;
     const odds = isOnA
       ? Number(match.playerAOdds ?? 1.5)
@@ -144,6 +172,20 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     const potentialReturn = Math.floor(data.amount * odds);
 
     await prisma.$transaction(async (tx) => {
+      if (config.maxWeeklyBet > 0 && tournamentId) {
+        await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`zikabet-week:${player.id}:${tournamentId}`}))`;
+        const weeklySpent = await tx.zikaBet.aggregate({
+          where: {
+            playerId: player.id,
+            placedAt: { gte: startOfBetWeek() },
+            status: { notIn: [ZikaBetStatus.REFUNDED, ZikaBetStatus.CANCELLED] },
+            match: { tournamentWeek: { tournamentId } },
+          },
+          _sum: { amount: true },
+        });
+        if ((weeklySpent._sum.amount ?? 0) + data.amount > config.maxWeeklyBet)
+          throw new Error(`Limite semanal de apostas deste campeonato: ${config.maxWeeklyBet} ZC.`);
+      }
       const wallet = await getOrCreateWallet(player.id);
       if (wallet.balance < data.amount) throw new Error(`Saldo insuficiente. Você tem ${wallet.balance} ZC.`);
 

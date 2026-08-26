@@ -2713,6 +2713,7 @@ export interface CreateAuctionInput {
   imageUrl?: string;
   quantity?: number;
   displayName?: string;
+  premium?: boolean; // leilão em destaque na vitrine premium do Miauvadão
 }
 
 export async function createAuctionListing(input: CreateAuctionInput): Promise<{ error?: string; id?: string }> {
@@ -2735,7 +2736,8 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
     }
 
     const config = await getMiauvadaoConfig();
-    const fee = config.listingFee;
+    const premium = Boolean(input.premium);
+    const fee = premium ? PREMIUM_LISTING_FEE : config.listingFee;
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < fee) {
       return { error: `Saldo insuficiente para a taxa de anúncio (${fee} ZC).` };
@@ -2743,10 +2745,21 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
 
     const durationMs = input.auctionDuration === "12h" ? 12 * 3600_000 : 24 * 3600_000;
     const auctionEndsAt = new Date(Date.now() + durationMs);
+    const premiumUntil = premium ? new Date(Date.now() + PREMIUM_LISTING_HOURS * 3_600_000) : null;
 
     let payload: Record<string, unknown> = {};
 
     await prisma.$transaction(async (tx) => {
+      if (premium) {
+        await tx.$queryRaw`SELECT 1 AS acquired FROM pg_advisory_xact_lock(hashtext('bazar-premium-listings'))`;
+        const premiumWhere = { status: { in: ["ACTIVE", "RESERVED"] as BazarListingStatus[] }, premiumUntil: { gt: new Date() } };
+        const [globalPremiumCount, ownPremiumCount] = await Promise.all([
+          tx.bazarListing.count({ where: premiumWhere }),
+          tx.bazarListing.count({ where: { ...premiumWhere, playerId: player.id } }),
+        ]);
+        if (ownPremiumCount > 0) throw new Error("Você já possui um anúncio premium ativo. Aguarde o destaque terminar ou encerre o anúncio atual.");
+        if (globalPremiumCount >= MAX_ACTIVE_PREMIUM_LISTINGS) throw new Error("As 6 vitrines premium do Miauvadão estão ocupadas no momento. Tente novamente mais tarde.");
+      }
       await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: fee } } });
       await tx.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: fee } } });
 
@@ -2802,9 +2815,14 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           priceCoins: null, description: input.description,
           feeCharged: fee, expiresAt: auctionEndsAt,
           minBidCoins: input.minBidCoins, auctionEndsAt,
+          premiumUntil,
         },
       });
     });
+
+    if (premium) {
+      await publishDuePremiumBazarTicker().catch((error) => console.error("[Bazar Premium] Falha no chamariz inicial do leilão", error));
+    }
 
     if (input.category === "MASCOT") {
       const mascotName = fullMascotPayloadName(payload);
