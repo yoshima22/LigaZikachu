@@ -314,8 +314,9 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     // congeladas. Assim os mascotes registrados são exatamente os que vão lutar —
     // impede lutar, trocar e escapar do bloqueio de repetição entre os dias, e
     // impede alterar a equipe entre um horário de combate e o seguinte.
-    const battleTimes = Array.isArray(rules.battleTimes) && rules.battleTimes.length
-      ? (rules.battleTimes as string[]) : ["19:00", "19:10", "19:20"];
+    // Usa o MESMO horário dos combates/prêmios (getRushTimes = config global
+    // editável), não o ruleJson.battleTimes que pode estar defasado.
+    const { battleTimes } = await getRushTimes();
     const firstBattleAt = new Date(`${input.battleDate}T${battleTimes[0]}:00-03:00`);
     if (Date.now() >= firstBattleAt.getTime()) {
       return { error: `As equipes do dia ${input.battleDate} ficam travadas a partir das ${battleTimes[0]} (início das partidas). Não é possível alterar depois disso.` };
