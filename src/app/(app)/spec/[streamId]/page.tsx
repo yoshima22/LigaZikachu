@@ -36,6 +36,22 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
   const [view] = await enrichSpecStreams([stream]);
   const isLive = stream.status === "LIVE";
+  const bettingPool = stream.matchId ? await prisma.zikaBet.groupBy({
+    by: ["betOnPlayerId"],
+    where: {
+      matchId: stream.matchId,
+      status: { notIn: ["CANCELLED", "REFUNDED"] },
+    },
+    _sum: { amount: true },
+  }).catch(() => []) : [];
+  const matchPlayers = stream.matchId ? await prisma.match.findUnique({
+    where: { id: stream.matchId },
+    select: {
+      playerA: { select: { id: true, displayName: true } },
+      playerB: { select: { id: true, displayName: true } },
+    },
+  }).catch(() => null) : null;
+  const poolByPlayer = new Map(bettingPool.map((entry) => [entry.betOnPlayerId, entry._sum.amount ?? 0]));
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-1 py-3">
@@ -50,6 +66,24 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
       {isLive ? (
         <>
+          {matchPlayers?.playerB && (
+            <section className="overflow-hidden rounded-2xl border border-[#FFCB05]/25 bg-gradient-to-r from-slate-950 via-[#FFCB05]/5 to-slate-950">
+              <div className="border-b border-[#FFCB05]/15 px-4 py-2 text-center text-[10px] font-black uppercase tracking-[0.2em] text-[#FFCB05]">
+                ZikaBet ao vivo · total apostado
+              </div>
+              <div className="grid grid-cols-[1fr_auto_1fr] items-center gap-3 px-4 py-3">
+                <div className="min-w-0 text-center">
+                  <p className="truncate text-sm font-black text-white">{matchPlayers.playerA.displayName}</p>
+                  <p className="mt-1 text-lg font-black text-emerald-300">{(poolByPlayer.get(matchPlayers.playerA.id) ?? 0).toLocaleString("pt-BR")} ZC</p>
+                </div>
+                <span className="text-xs font-black text-slate-600">VS</span>
+                <div className="min-w-0 text-center">
+                  <p className="truncate text-sm font-black text-white">{matchPlayers.playerB.displayName}</p>
+                  <p className="mt-1 text-lg font-black text-emerald-300">{(poolByPlayer.get(matchPlayers.playerB.id) ?? 0).toLocaleString("pt-BR")} ZC</p>
+                </div>
+              </div>
+            </section>
+          )}
           <SpecMiniPlayerActivator data={{ streamId: stream.id, title: view?.matchLabel ?? "Zika TV", provider: stream.provider, broadcasterUserId: stream.broadcasterUserId, youtubeVideoId: stream.youtubeVideoId }} />
           {stream.youtubeVideoId ? (
             <div className="relative w-full overflow-hidden rounded-2xl border border-border bg-black" style={{ aspectRatio: "16 / 9" }}>

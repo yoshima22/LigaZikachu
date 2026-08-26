@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { Coins, Crown, Heart, MessageSquare, Clock, Gavel } from "lucide-react";
+import { Coins, Crown, Heart, MessageSquare, Clock, Gavel, Handshake } from "lucide-react";
 import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
@@ -60,8 +60,11 @@ interface Listing {
 
 export function BazarListingCard({ listing }: { listing: Listing }) {
   const isAuction = listing.listingType === "AUCTION";
-  const type = LISTING_TYPE_LABEL[listing.listingType] ?? LISTING_TYPE_LABEL.SALE;
   const payload = listing.payload as Record<string, unknown>;
+  const isDirectNegotiation = payload.directNegotiation === true;
+  const type = isDirectNegotiation
+    ? { label: "Negociação direta", color: "text-cyan-300 border-cyan-500/30 bg-cyan-500/10" }
+    : LISTING_TYPE_LABEL[listing.listingType] ?? LISTING_TYPE_LABEL.SALE;
   const daysLeft = Math.max(0, Math.ceil((new Date(listing.expiresAt).getTime() - Date.now()) / 86400000));
   const auctionEnd = listing.auctionEndsAt ? new Date(listing.auctionEndsAt) : null;
   const mascotRarity = listing.category === "MASCOT" ? getMascotRarity(Number(payload.pokemonId)) : null;
@@ -92,7 +95,12 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
 
       {/* Preview */}
       <div className="flex items-center justify-center bg-slate-900/80 h-32 relative">
-        {listing.category === "MASCOT" ? (
+        {isDirectNegotiation ? (
+          <div className="flex flex-col items-center gap-2 text-cyan-200">
+            <Handshake size={54} strokeWidth={1.4}/>
+            <span className="text-[10px] font-bold uppercase tracking-[0.18em]">Mesa aberta</span>
+          </div>
+        ) : listing.category === "MASCOT" ? (
           <>
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
@@ -203,7 +211,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
           <p className="text-[11px] text-slate-400 line-clamp-2">{listing.description}</p>
         )}
 
-        {isAuction ? (
+        {isDirectNegotiation ? (
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-2 text-[10px] leading-relaxed text-cyan-100/75">
+            Entre, monte sua oferta e confirme a troca com o anunciante.
+          </div>
+        ) : isAuction ? (
           <div className="space-y-1 pt-1">
             <div className="flex items-center justify-between">
               <div>

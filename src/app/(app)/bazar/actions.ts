@@ -63,6 +63,35 @@ type ProposalOfferItem = {
   escrowed?: boolean;
 };
 
+type DirectNegotiationState = {
+  kind: "DIRECT_NEGOTIATION";
+  accepted: boolean;
+  ownerReady: boolean;
+  participantReady: boolean;
+  ownerCoins: number;
+  ownerCoinsEscrowed: boolean;
+  ownerItems: ProposalOfferItem[];
+  ownerLoan: boolean;
+  ownerInterestPct: number;
+  participantLoan: boolean;
+  participantInterestPct: number;
+};
+
+const EMPTY_DIRECT_STATE: DirectNegotiationState = {
+  kind: "DIRECT_NEGOTIATION", accepted: false, ownerReady: false, participantReady: false,
+  ownerCoins: 0, ownerCoinsEscrowed: false, ownerItems: [], ownerLoan: false,
+  ownerInterestPct: 0, participantLoan: false, participantInterestPct: 0,
+};
+
+function parseDirectState(value: string | null | undefined): DirectNegotiationState | null {
+  if (!value) return null;
+  try {
+    const parsed = JSON.parse(value) as Partial<DirectNegotiationState>;
+    if (parsed.kind !== "DIRECT_NEGOTIATION") return null;
+    return { ...EMPTY_DIRECT_STATE, ...parsed, ownerItems: Array.isArray(parsed.ownerItems) ? parsed.ownerItems : [] };
+  } catch { return null; }
+}
+
 const EGG_OFFER_TYPES = [
   "COMMON","RARE","SPECIAL","EVENT","LAB",
   "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
@@ -563,6 +592,8 @@ export interface CreateListingInput {
   quantity?: number;
   displayName?: string;
   premium?: boolean;
+  /** Cria uma sala sem ativo inicial; as duas ofertas serão reservadas depois. */
+  directNegotiation?: boolean;
 }
 
 export async function createListing(input: CreateListingInput): Promise<{ error?: string; id?: string }> {
@@ -576,7 +607,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     await prepareBazarMascotAvailability(player.id);
 
     // Validação básica
-    if (input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1)) {
+    if (!input.directNegotiation && input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1)) {
       return { error: "Defina um preço válido em ZikaCoins." };
     }
     const loanEnabled = Boolean(input.loanEnabled);
@@ -607,7 +638,9 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
       return { error: `Saldo insuficiente para pagar a taxa de anúncio (${fee} ZC).` };
     }
 
-    let payload: Record<string, unknown> = {};
+    let payload: Record<string, unknown> = input.directNegotiation
+      ? { directNegotiation: true, itemType: "DIRECT_NEGOTIATION", displayName: "Negociação direta", quantity: 0 }
+      : {};
     const expiresAt = new Date(Date.now() + input.durationDays * 86400000);
 
     const premiumUntil = premium ? new Date(Date.now() + PREMIUM_LISTING_HOURS * 3_600_000) : null;
@@ -638,7 +671,10 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         update: { vaultBalance: { increment: fee } },
       });
 
-      if (input.category === "MASCOT" && input.mascotId) {
+      if (input.directNegotiation) {
+        // A sala nasce vazia. Cada lado monta a própria oferta depois que o
+        // anunciante aceitar um participante; nenhum ativo é retirado aqui.
+      } else if (input.category === "MASCOT" && input.mascotId) {
         const mascot = await tx.mascot.findUnique({ where: { id: input.mascotId } });
         if (!mascot) throw new Error("Mascote não encontrado.");
         await assertMascotTradeableInBazar(tx, mascot, player.id);
@@ -818,15 +854,22 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
       await _returnEscrow(tx, listing, player.id);
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
-        where: { listingId, status: "PENDING" },
-        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, proposer: { select: { userId: true } } },
+        where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
+        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
       });
       rejectedProposerUserIds = pendingProposals.map((proposal) => proposal.proposer.userId);
       for (const proposal of pendingProposals) {
         await _releaseProposalEscrow(tx, proposal);
+        const direct = parseDirectState(proposal.message);
+        if (direct) {
+          await _releaseProposalOffers(tx, direct.ownerItems, player.id);
+          if (direct.ownerCoinsEscrowed && direct.ownerCoins > 0) {
+            await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: direct.ownerCoins } }, create: { playerId: player.id, balance: direct.ownerCoins, totalEarned: 0 } });
+          }
+        }
       }
       await tx.bazarProposal.updateMany({
-        where: { listingId, status: "PENDING" },
+        where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
         data: { status: "REJECTED" },
       });
     });
@@ -1052,6 +1095,182 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
 }
 
 // ── Proposta ──────────────────────────────────────────────────────────────────
+
+function isDirectNegotiationListing(listing: { payload: unknown }) {
+  return (listing.payload as Record<string, unknown> | null)?.directNegotiation === true;
+}
+
+export async function requestDirectNegotiation(listingId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const listing = await prisma.bazarListing.findUnique({ where: { id: listingId }, include: { player: { select: { userId: true } } } });
+    if (!listing || !isDirectNegotiationListing(listing) || listing.status !== "ACTIVE") return { error: "Sala de negociação indisponível." };
+    if (listing.playerId === player.id) return { error: "Você já é o anunciante desta sala." };
+    await assertBazarPairAllowed(prisma, player.id, listing.playerId);
+    const exists = await prisma.bazarProposal.findFirst({ where: { listingId, proposerId: player.id, status: "PENDING" } });
+    if (exists) return { error: "Seu pedido de entrada já está pendente." };
+    const proposal = await prisma.bazarProposal.create({
+      data: { listingId, proposerId: player.id, message: JSON.stringify(EMPTY_DIRECT_STATE) },
+    });
+    await createPlayerNotification(prisma, {
+      playerId: listing.playerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_REQUEST",
+      title: "Pedido para negociar", body: `${player.displayName} quer entrar na sua mesa de negociação.`,
+      href: `/bazar/${listingId}`, entityId: listingId, eventKey: `bazar:direct:request:${proposal.id}`,
+    });
+    revalidateBazar(); revalidateTag(`nav-${listing.player.userId}`);
+    return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao solicitar entrada." }; }
+}
+
+export async function acceptDirectNegotiationParticipant(proposalId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const owner = await getSessionPlayer(user.id);
+    if (!owner) return { error: "Perfil não encontrado." };
+    const proposal = await prisma.bazarProposal.findUnique({ where: { id: proposalId }, include: { listing: true, proposer: { select: { userId: true, displayName: true } } } });
+    if (!proposal || proposal.listing.playerId !== owner.id || !isDirectNegotiationListing(proposal.listing)) return { error: "Pedido inválido." };
+    if (proposal.status !== "PENDING" || proposal.listing.status !== "ACTIVE") return { error: "Este pedido não está mais disponível." };
+    const state = parseDirectState(proposal.message) ?? { ...EMPTY_DIRECT_STATE };
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
+      const claimed = await tx.bazarListing.updateMany({ where: { id: proposal.listingId, status: "ACTIVE" }, data: { status: "RESERVED" } });
+      if (claimed.count !== 1) throw new Error("Outro participante já ocupou esta mesa.");
+      const accepted = await tx.bazarProposal.updateMany({ where: { id: proposal.id, status: "PENDING" }, data: { status: "ACCEPTED", message: JSON.stringify({ ...state, accepted: true }) } });
+      if (accepted.count !== 1) throw new Error("Este pedido não está mais pendente.");
+      const others = await tx.bazarProposal.findMany({ where: { listingId: proposal.listingId, id: { not: proposal.id }, status: "PENDING" } });
+      for (const other of others) {
+        await _releaseProposalEscrow(tx, other);
+        await createPlayerNotification(tx, { playerId: other.proposerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_CLOSED", title: "Mesa ocupada", body: "O anunciante aceitou outro jogador. Nenhum ativo seu ficou reservado.", href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:closed:${other.id}` });
+      }
+      await tx.bazarProposal.updateMany({ where: { listingId: proposal.listingId, id: { not: proposal.id }, status: "PENDING" }, data: { status: "REJECTED" } });
+      await createPlayerNotification(tx, { playerId: proposal.proposerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_ACCEPTED", title: "Entrada aceita", body: `${owner.displayName} abriu a mesa para você montar sua oferta.`, href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:accepted:${proposal.id}` });
+    });
+    revalidateBazar(); revalidateTag(`nav-${proposal.proposer.userId}`); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao aceitar participante." }; }
+}
+
+export async function updateDirectNegotiationOffer(input: {
+  proposalId: string; coins: number; items: ProposalOfferItem[]; loan?: boolean; interestPct?: number;
+}): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    await prepareBazarMascotAvailability(player.id);
+    const proposal = await prisma.bazarProposal.findUnique({ where: { id: input.proposalId }, include: { listing: true } });
+    if (!proposal || proposal.status !== "ACCEPTED" || proposal.listing.status !== "RESERVED" || !isDirectNegotiationListing(proposal.listing)) return { error: "Negociação não está ativa." };
+    const isOwner = proposal.listing.playerId === player.id;
+    if (!isOwner && proposal.proposerId !== player.id) return { error: "Sem permissão." };
+    const coins = Math.max(0, Math.floor(Number(input.coins) || 0));
+    const loan = Boolean(input.loan);
+    const interestPct = Math.max(0, Math.min(100, Math.floor(Number(input.interestPct) || 0)));
+    if (loan && coins < 1) return { error: "Informe o valor do empréstimo." };
+    const cleanItems = (input.items ?? []).map((item) => ({ ...item, quantity: item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1)) }));
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
+      const fresh = await tx.bazarProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+      const state = parseDirectState(fresh.message);
+      if (!state?.accepted) throw new Error("A mesa ainda não foi aceita.");
+      const oldItems = isOwner ? state.ownerItems : (fresh.itemsOffer as ProposalOfferItem[] | null) ?? [];
+      const oldCoins = isOwner ? state.ownerCoins : fresh.coinsOffer;
+      const oldCoinsEscrowed = isOwner ? state.ownerCoinsEscrowed : fresh.coinsEscrowed;
+      await _releaseProposalOffers(tx, oldItems, player.id);
+      if (oldCoinsEscrowed && oldCoins > 0) {
+        await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: oldCoins } }, create: { playerId: player.id, balance: oldCoins, totalEarned: 0 } });
+      }
+      const reservedItems = await _reserveProposalOffers(tx, player.id, cleanItems);
+      if (!loan && coins > 0) {
+        const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+        if (!wallet || wallet.balance < coins) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
+        await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: coins } } });
+      }
+      const reset = { ...state, ownerReady: false, participantReady: false };
+      if (isOwner) {
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...reset, ownerCoins: coins, ownerCoinsEscrowed: !loan && coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
+      } else {
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: !loan && coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...reset, participantLoan: loan, participantInterestPct: interestPct }) } });
+      }
+      await createPlayerNotification(tx, {
+        playerId: isOwner ? fresh.proposerId : proposal.listing.playerId,
+        category: "BAZAR", type: "DIRECT_NEGOTIATION_OFFER_UPDATED", title: "Oferta atualizada",
+        body: `${player.displayName} alterou a oferta da negociação. Revise antes de confirmar novamente.`,
+        href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId,
+        eventKey: `bazar:direct:offer:${fresh.id}:${Date.now()}`,
+      });
+    });
+    revalidateBazar(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao reservar a oferta." }; }
+}
+
+export async function confirmDirectNegotiation(proposalId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
+    const proposal = await prisma.bazarProposal.findUnique({ where: { id: proposalId }, include: { listing: true } });
+    if (!proposal || proposal.status !== "ACCEPTED") return { error: "Negociação indisponível." };
+    const isOwner = proposal.listing.playerId === player.id;
+    if (!isOwner && proposal.proposerId !== player.id) return { error: "Sem permissão." };
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
+      const fresh = await tx.bazarProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+      const state = parseDirectState(fresh.message);
+      if (!state?.accepted) throw new Error("Mesa ainda não aceita.");
+      const next = { ...state, ownerReady: isOwner ? true : state.ownerReady, participantReady: isOwner ? state.participantReady : true };
+      await tx.bazarProposal.update({ where: { id: proposalId }, data: { message: JSON.stringify(next) } });
+      await createPlayerNotification(tx, {
+        playerId: isOwner ? proposal.proposerId : proposal.listing.playerId,
+        category: "BAZAR", type: "DIRECT_NEGOTIATION_CONFIRMED", title: "Oferta confirmada",
+        body: `${player.displayName} deu OK na negociação${next.ownerReady && next.participantReady ? ". As duas ofertas estão prontas para finalizar." : "."}`,
+        href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId,
+        eventKey: `bazar:direct:confirmed:${proposal.id}:${isOwner ? "owner" : "participant"}:${Date.now()}`,
+      });
+    });
+    revalidateBazar(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao confirmar." }; }
+}
+
+export async function finalizeDirectNegotiation(proposalId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
+    const owner = await getSessionPlayer(user.id); if (!owner) return { error: "Perfil não encontrado." };
+    const proposal = await prisma.bazarProposal.findUnique({ where: { id: proposalId }, include: { listing: true, proposer: { select: { displayName: true, userId: true } } } });
+    if (!proposal || proposal.listing.playerId !== owner.id || !isDirectNegotiationListing(proposal.listing)) return { error: "Somente o anunciante pode concluir." };
+    await assertBazarPairAllowed(prisma, owner.id, proposal.proposerId);
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
+      const fresh = await tx.bazarListing.findUniqueOrThrow({ where: { id: proposal.listingId } });
+      if (fresh.status !== "RESERVED") throw new Error("A negociação já foi concluída ou cancelada.");
+      const freshProposal = await tx.bazarProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+      const freshState = parseDirectState(freshProposal.message);
+      if (!freshState?.ownerReady || !freshState.participantReady) throw new Error("Os dois jogadores precisam confirmar as ofertas.");
+      if (freshState.ownerLoan && freshState.participantLoan) throw new Error("Apenas um dos lados pode usar empréstimo na mesma negociação.");
+      await _deliverProposalOffers(tx, freshState.ownerItems, owner.id, proposal.proposerId);
+      await _deliverProposalOffers(tx, (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [], proposal.proposerId, owner.id);
+      if (!freshState.ownerLoan && freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, proposal.proposerId, freshState.ownerCoins);
+      if (!freshState.participantLoan && freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, owner.id, freshProposal.coinsOffer);
+      const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
+      if (loanSide) {
+        const principal = loanSide === "owner" ? freshState.ownerCoins : freshProposal.coinsOffer;
+        const interest = loanSide === "owner" ? freshState.ownerInterestPct : freshState.participantInterestPct;
+        const borrowerId = loanSide === "owner" ? owner.id : proposal.proposerId;
+        const lenderId = loanSide === "owner" ? proposal.proposerId : owner.id;
+        await tx.bazarLoan.create({ data: { listingId: proposal.listingId, proposalId: proposal.id, lenderId, borrowerId, principalCoins: principal, interestPct: interest, totalDueCoins: Math.ceil(principal * (100 + interest) / 100), itemSnapshot: { directNegotiation: true, ownerItems: freshState.ownerItems, participantItems: freshProposal.itemsOffer } } });
+      }
+      await tx.bazarListing.update({ where: { id: proposal.listingId }, data: { status: "SOLD" } });
+      await tx.bazarTransaction.create({ data: { listingId: proposal.listingId, sellerId: owner.id, buyerId: proposal.proposerId, sellerName: owner.displayName, buyerName: proposal.proposer.displayName, description: "Negociação direta concluída", coinsAmount: freshState.ownerCoins + freshProposal.coinsOffer, category: "ITEM" } });
+      await Promise.all([
+        createPlayerNotification(tx, { playerId: owner.id, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${proposal.proposer.displayName} foi concluída e os ativos foram entregues.`, href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:done:owner:${proposal.id}` }),
+        createPlayerNotification(tx, { playerId: proposal.proposerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${owner.displayName} foi concluída e os ativos foram entregues.`, href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:done:participant:${proposal.id}` }),
+      ]);
+    });
+    revalidateBazar(); revalidateTag(`nav-${proposal.proposer.userId}`); revalidateTag(`nav-${user.id}`); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao concluir negociação." }; }
+}
 
 export async function createProposal(
   listingId: string,
@@ -2242,6 +2461,44 @@ async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] |
   }
 }
 
+async function _creditEscrowedCoins(tx: TxClient, playerId: string, amount: number) {
+  if (amount <= 0) return;
+  await tx.zikaCoinWallet.upsert({
+    where: { playerId },
+    update: { balance: { increment: amount }, totalEarned: { increment: amount } },
+    create: { playerId, balance: amount, totalEarned: amount },
+  });
+  await creditMiauvadaoVaultFromPlayerTransaction(tx, amount);
+}
+
+/** Entrega uma oferta que já foi reservada, sem descontá-la novamente. */
+async function _deliverProposalOffers(tx: TxClient, items: ProposalOfferItem[], fromPlayerId: string, toPlayerId: string) {
+  for (const item of items) {
+    const quantity = item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1));
+    if (item.mascotId) {
+      const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
+      if (!mascot || mascot.playerId !== fromPlayerId || !mascot.bazarListed) throw new Error(`${item.displayName} não está mais reservado.`);
+      if (mascot.primordialBoundPlayerId) throw new Error("Mascote vinculado pela Pena Arco-Íris Primordial não pode ser transferido.");
+      await tx.mascot.update({ where: { id: mascot.id }, data: { playerId: toPlayerId, bazarListed: false, isEquipped: false } });
+      await registerPokemonDiscovery({ playerId: toPlayerId, pokemonId: mascot.pokemonId, source: "bazar-direct-negotiation" }, tx);
+      continue;
+    }
+    if (item.type === "FOOD" || item.type === "SWEET") {
+      await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId: toPlayerId, type: item.type as "FOOD" | "SWEET" } }, update: { quantity: { increment: quantity } }, create: { playerId: toPlayerId, type: item.type as "FOOD" | "SWEET", quantity } });
+      continue;
+    }
+    if (isEggOfferType(item.type)) {
+      const eggIds = [...new Set(item.escrowed_egg_ids ?? [])];
+      if (eggIds.length !== quantity) throw new Error(`A reserva de ${item.displayName} está inconsistente.`);
+      const moved = await tx.mascotEgg.updateMany({ where: { id: { in: eggIds }, playerId: fromPlayerId, origin: { startsWith: "bazar-proposal:" } }, data: { playerId: toPlayerId, origin: "Negociação direta do Bazar" } });
+      if (moved.count !== quantity) throw new Error(`Não foi possível entregar ${item.displayName}.`);
+      continue;
+    }
+    if (!item.shopItemId) throw new Error(`A reserva de ${item.displayName} não foi encontrada.`);
+    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: toPlayerId, itemId: item.shopItemId } }, update: { quantity: { increment: quantity } }, create: { playerId: toPlayerId, itemId: item.shopItemId, quantity } });
+  }
+}
+
 async function _refundProposalCoins(
   tx: TxClient,
   proposal: { proposerId: string; coinsOffer: number; coinsEscrowed: boolean },
@@ -3125,7 +3382,7 @@ export async function finalizeExpiredListings(limit = 25) {
   const listings = await prisma.bazarListing.findMany({
     where: {
       listingType: { not: "AUCTION" },
-      status: "ACTIVE",
+      status: { in: ["ACTIVE", "RESERVED"] },
       expiresAt: { lte: now },
     },
     orderBy: { expiresAt: "asc" },
@@ -3142,7 +3399,7 @@ export async function finalizeExpiredListings(limit = 25) {
       const result = await prisma.$transaction(async (tx) => {
         await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listing.id}))`;
         const update = await tx.bazarListing.updateMany({
-          where: { id: listing.id, status: "ACTIVE", expiresAt: { lte: now } },
+          where: { id: listing.id, status: { in: ["ACTIVE", "RESERVED"] }, expiresAt: { lte: now } },
           data: { status: "EXPIRED" },
         });
         if (update.count !== 1) return { changed: false, proposerUserIds: [] as string[] };
@@ -3152,14 +3409,21 @@ export async function finalizeExpiredListings(limit = 25) {
 
         // Rejeita propostas pendentes e estorna seus escrows
         const pendingProposals = await tx.bazarProposal.findMany({
-          where: { listingId: listing.id, status: "PENDING" },
-          select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, proposer: { select: { userId: true } } },
+          where: { listingId: listing.id, status: { in: ["PENDING", "ACCEPTED"] } },
+          select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
         });
         for (const proposal of pendingProposals) {
           await _releaseProposalEscrow(tx, proposal);
+          const direct = parseDirectState(proposal.message);
+          if (direct) {
+            await _releaseProposalOffers(tx, direct.ownerItems, listing.playerId);
+            if (direct.ownerCoinsEscrowed && direct.ownerCoins > 0) {
+              await tx.zikaCoinWallet.upsert({ where: { playerId: listing.playerId }, update: { balance: { increment: direct.ownerCoins } }, create: { playerId: listing.playerId, balance: direct.ownerCoins, totalEarned: 0 } });
+            }
+          }
         }
         await tx.bazarProposal.updateMany({
-          where: { listingId: listing.id, status: "PENDING" },
+          where: { listingId: listing.id, status: { in: ["PENDING", "ACCEPTED"] } },
           data: { status: "REJECTED" },
         });
 

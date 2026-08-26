@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useCallback, useRef } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Crown, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown } from "lucide-react";
+import { ArrowLeft, Coins, Crown, Heart, MessageSquare, Check, X, ShoppingCart, Gavel, Clock, Search, ChevronDown, Handshake, RefreshCw } from "lucide-react";
 import Link from "next/link";
 import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
@@ -11,6 +11,8 @@ import { getHatchedEggLabel } from "@/lib/egg-origin";
 import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
+  requestDirectNegotiation, acceptDirectNegotiationParticipant, updateDirectNegotiationOffer,
+  confirmDirectNegotiation, finalizeDirectNegotiation,
 } from "../actions";
 import { PremiumCountdown } from "../_components/premium-countdown";
 
@@ -37,6 +39,17 @@ interface ProposalItem {
   proposer: { id: string; displayName: string; avatarUrl: string | null };
   itemsOffer?: ProposalOfferedItem[] | null;
   loanRequested: boolean;
+}
+
+interface DirectState {
+  kind: "DIRECT_NEGOTIATION"; accepted: boolean; ownerReady: boolean; participantReady: boolean;
+  ownerCoins: number; ownerItems: ProposalOfferedItem[]; ownerLoan: boolean; ownerInterestPct: number;
+  participantLoan: boolean; participantInterestPct: number;
+}
+
+function readDirectState(message: string | null): DirectState | null {
+  try { const value = JSON.parse(message ?? "") as DirectState; return value.kind === "DIRECT_NEGOTIATION" ? value : null; }
+  catch { return null; }
 }
 
 interface AuctionBidItem {
@@ -140,6 +153,10 @@ export default function BazarListingPage(): React.JSX.Element {
   const [bidAmount, setBidAmount] = useState("");
   const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
   const [sellerWishlistOpen, setSellerWishlistOpen] = useState(false);
+  const [directCoins, setDirectCoins] = useState("");
+  const [directItems, setDirectItems] = useState<ProposalOfferedItem[]>([]);
+  const [directLoan, setDirectLoan] = useState(false);
+  const [directInterest, setDirectInterest] = useState("0");
   // Evita chamar finalizeAuction repetidamente a cada tick do countdown
   const finalizeRequestedRef = useRef(false);
 
@@ -194,6 +211,12 @@ export default function BazarListingPage(): React.JSX.Element {
       .then((d: { playerId?: string } | null) => { if (d?.playerId) setCurrentPlayerId(d.playerId); });
   }, [reloadListing]);
 
+  useEffect(() => {
+    if ((listing?.payload as Record<string, unknown> | undefined)?.directNegotiation !== true) return;
+    const timer = setInterval(reloadListing, 5000);
+    return () => clearInterval(timer);
+  }, [listing?.payload, reloadListing]);
+
   // Auto-finalizar leilão encerrado e countdown
   useEffect(() => {
     if (!listing || listing.listingType !== "AUCTION") return;
@@ -242,6 +265,28 @@ export default function BazarListingPage(): React.JSX.Element {
       reloadListing();
     });
   };
+
+  const handleDirectRequest = () => startTransition(async () => {
+    const r = await requestDirectNegotiation(id); if (r.error) { toast.error(r.error); return; }
+    toast.success("Pedido enviado ao anunciante."); reloadListing();
+  });
+  const handleDirectAccept = (proposalId: string) => startTransition(async () => {
+    const r = await acceptDirectNegotiationParticipant(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success("Participante aceito. A mesa está aberta."); reloadListing();
+  });
+  const handleDirectSaveOffer = (proposalId: string) => startTransition(async () => {
+    const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0 });
+    if (r.error) { toast.error(r.error); return; }
+    toast.success("Oferta reservada. As confirmações anteriores foram reiniciadas."); setDirectItems([]); reloadListing();
+  });
+  const handleDirectConfirm = (proposalId: string) => startTransition(async () => {
+    const r = await confirmDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success("Você confirmou sua oferta."); reloadListing();
+  });
+  const handleDirectFinalize = (proposalId: string) => startTransition(async () => {
+    const r = await finalizeDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success("Negociação concluída e ativos entregues."); reloadListing();
+  });
 
   const handleBuy = () => {
     if (!listing?.priceCoins) return;
@@ -388,6 +433,79 @@ export default function BazarListingPage(): React.JSX.Element {
   const myProposals = currentPlayerId
     ? listing.proposals.filter(p => p.proposer.id === currentPlayerId)
     : [];
+
+  const isDirectNegotiation = payload.directNegotiation === true;
+  if (isDirectNegotiation) {
+    const activeRoom = listing.proposals.find((proposal) => proposal.status === "ACCEPTED" && readDirectState(proposal.message)?.accepted);
+    const roomState = activeRoom ? readDirectState(activeRoom.message) : null;
+    const isParticipant = Boolean(activeRoom && activeRoom.proposer.id === currentPlayerId);
+    const canEditRoom = Boolean(activeRoom && (isOwner || isParticipant) && listing.status === "RESERVED");
+    const myReady = isOwner ? roomState?.ownerReady : roomState?.participantReady;
+    const pendingEntry = myProposals.some((proposal) => proposal.status === "PENDING");
+    const ownerItems = roomState?.ownerItems ?? [];
+    const participantItems = activeRoom?.itemsOffer ?? [];
+    return (
+      <div className="mx-auto max-w-4xl space-y-5">
+        <div className="flex items-center justify-between gap-3">
+          <Link href="/bazar" className="rounded-lg border border-border p-2 text-slate-400 hover:text-white"><ArrowLeft size={16}/></Link>
+          <button type="button" onClick={reloadListing} className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-white"><RefreshCw size={13}/> Atualizar mesa</button>
+        </div>
+        <div className="overflow-hidden rounded-3xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-purple-500/10">
+          <div className="flex flex-col gap-4 border-b border-cyan-400/20 p-6 sm:flex-row sm:items-center">
+            <div className="flex h-16 w-16 items-center justify-center rounded-2xl border border-cyan-400/30 bg-cyan-400/10 text-cyan-200"><Handshake size={36}/></div>
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] font-black uppercase tracking-[0.22em] text-cyan-300">Mesa do Miauvadão</p>
+              <h1 className="text-2xl font-black text-white">Negociação direta com {listing.player.displayName}</h1>
+              <p className="mt-1 text-xs text-slate-400">Ativos são reservados ao salvar a oferta. Qualquer alteração remove os dois OKs; a entrega só acontece quando o anunciante finaliza.</p>
+            </div>
+            <span className="rounded-full border border-cyan-400/30 bg-cyan-400/10 px-3 py-1 text-[10px] font-bold uppercase text-cyan-200">{listing.status === "ACTIVE" ? "Aguardando participante" : listing.status === "RESERVED" ? "Em negociação" : "Encerrada"}</span>
+          </div>
+
+          <div className="space-y-5 p-5">
+            {!isOwner && listing.status === "ACTIVE" && !pendingEntry && (
+              <button disabled={pending} onClick={handleDirectRequest} className="w-full rounded-xl bg-cyan-400 py-3 text-sm font-black text-slate-950 disabled:opacity-50">Pedir para entrar na negociação</button>
+            )}
+            {!isOwner && pendingEntry && <div className="rounded-xl border border-amber-400/25 bg-amber-400/5 p-4 text-sm text-amber-200">Seu pedido foi enviado. Aguardando {listing.player.displayName} aceitar.</div>}
+
+            {isOwner && listing.status === "ACTIVE" && pendingProposals.length > 0 && (
+              <div className="space-y-2">
+                <h2 className="text-sm font-bold text-white">Jogadores querendo entrar</h2>
+                {pendingProposals.map((proposal) => <div key={proposal.id} className="flex items-center justify-between rounded-xl border border-border bg-slate-950/60 p-3"><span className="text-sm font-semibold text-slate-200">{proposal.proposer.displayName}</span><div className="flex gap-2"><button disabled={pending} onClick={() => handleDirectAccept(proposal.id)} className="rounded-lg bg-green-500/15 px-3 py-2 text-xs font-bold text-green-300">Aceitar</button><button disabled={pending} onClick={() => handleReject(proposal.id)} className="rounded-lg bg-red-500/10 px-3 py-2 text-xs font-bold text-red-300">Recusar</button></div></div>)}
+              </div>
+            )}
+
+            {activeRoom && roomState && (isOwner || isParticipant) && (
+              <>
+                <div className="grid gap-4 md:grid-cols-2">
+                  {[
+                    { title: listing.player.displayName, ready: roomState.ownerReady, coins: roomState.ownerCoins, loan: roomState.ownerLoan, interest: roomState.ownerInterestPct, items: ownerItems },
+                    { title: activeRoom.proposer.displayName, ready: roomState.participantReady, coins: activeRoom.coinsOffer, loan: roomState.participantLoan, interest: roomState.participantInterestPct, items: participantItems },
+                  ].map((side) => <div key={side.title} className={`rounded-2xl border p-4 ${side.ready ? "border-green-400/40 bg-green-400/5" : "border-border bg-slate-950/50"}`}><div className="flex items-center justify-between"><h3 className="font-bold text-white">Oferta de {side.title}</h3><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${side.ready ? "bg-green-500/15 text-green-300" : "bg-slate-800 text-slate-500"}`}>{side.ready ? "OK confirmado" : "Editando"}</span></div>{side.coins > 0 && <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FFCB05]"><Coins size={13}/>{side.coins.toLocaleString("pt-BR")} ZC {side.loan && <span className="ml-1 text-[10px] font-semibold text-cyan-300">como empréstimo · {side.interest}%</span>}</p>}<div className="mt-3">{side.items.length ? <ProposalItemsInline items={side.items}/> : <p className="text-xs text-slate-600">Nenhum item ou mascote reservado.</p>}</div></div>)}
+                </div>
+
+                {canEditRoom && (
+                  <div className="rounded-2xl border border-blue-500/25 bg-blue-500/5 p-4 space-y-3">
+                    <h2 className="font-bold text-blue-200">Editar minha oferta</h2>
+                    <div className="flex items-center gap-2"><Coins size={14} className="text-[#FFCB05]"/><input value={directCoins} onChange={(event) => setDirectCoins(event.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ZikaCoins (0 = nenhum)" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none"/></div>
+                    <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span>Registrar esses ZC como empréstimo de boa-fé, sem cobrança automática.</span></label>
+                    {directLoan && <input value={directInterest} onChange={(event) => setDirectInterest(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Juros totais (%)" className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none"/>}
+                    <OfferItemsPicker onItemsChange={setDirectItems}/>
+                    <button disabled={pending} onClick={() => handleDirectSaveOffer(activeRoom.id)} className="w-full rounded-xl border border-blue-400/30 bg-blue-400/10 py-2.5 text-xs font-bold text-blue-200 disabled:opacity-50">Reservar e salvar minha oferta</button>
+                    <button disabled={pending || Boolean(myReady)} onClick={() => handleDirectConfirm(activeRoom.id)} className="w-full rounded-xl bg-green-500 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40">{myReady ? "✓ Minha oferta está confirmada" : "Dar OK nesta oferta"}</button>
+                  </div>
+                )}
+                {isOwner && roomState.ownerReady && roomState.participantReady && listing.status === "RESERVED" && <button disabled={pending} onClick={() => handleDirectFinalize(activeRoom.id)} className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-slate-950 disabled:opacity-50">Finalizar e trocar os ativos</button>}
+              </>
+            )}
+            {activeRoom && !isOwner && !isParticipant && listing.status === "RESERVED" && (
+              <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-5 text-center text-sm text-slate-400">Esta mesa já está ocupada por dois jogadores.</div>
+            )}
+            {listing.status === "SOLD" && <div className="rounded-xl border border-green-400/30 bg-green-400/10 p-4 text-center font-bold text-green-200">Negociação concluída. Os ativos já foram entregues aos dois jogadores.</div>}
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="max-w-2xl mx-auto space-y-5">

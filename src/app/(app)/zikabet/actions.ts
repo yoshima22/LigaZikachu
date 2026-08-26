@@ -7,7 +7,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
-import { isInCurrentBetWeek, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
+import { isInCurrentBetWeek, isTournamentBettingLocked, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
 const WEEKLY_LEAGUE_BET_CONFIG = {
   minBet: 10,
   maxBet: 500,
@@ -118,8 +118,10 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     if (!match.betsEnabled) return { error: "Apostas não estão habilitadas nesta partida." };
     if (match.status !== "DRAFT" && match.status !== "PENDING_CONFIRMATION")
       return { error: "Esta partida já foi encerrada — apostas fechadas." };
-    if (!isInCurrentBetWeek(match.scheduledAt))
+    if (!match.scheduledAt || !isInCurrentBetWeek(match.scheduledAt))
       return { error: "As apostas desta partida serão abertas somente na semana em que ela acontecer." };
+    if (isTournamentBettingLocked(match.tournamentWeek))
+      return { error: "Os decks desta rodada já foram revelados. Novas apostas estão bloqueadas." };
 
     const config = parseBetConfig(match.tournamentWeek?.tournament?.betConfig);
     const tournamentId = match.tournamentWeek?.tournament?.id;
@@ -531,13 +533,16 @@ export async function undoBet(betId: string): Promise<{ error?: string }> {
       where: { id: betId },
       include: {
         match: {
-          include: { tournamentWeek: { select: { status: true } } }
+          include: { tournamentWeek: { select: { status: true, deckLockAt: true, lockAt: true, endDate: true } } }
         }
       }
     });
     if (!bet) return { error: "Aposta não encontrada." };
     if (bet.playerId !== player.id) return { error: "Esta aposta não é sua." };
     if (bet.status !== ZikaBetStatus.OPEN) return { error: "Só é possível desfazer apostas abertas." };
+
+    if (isTournamentBettingLocked(bet.match.tournamentWeek))
+      return { error: "Os decks desta rodada já foram revelados. A aposta não pode mais ser retirada." };
 
     const weekStatus = bet.match.tournamentWeek?.status;
     if (weekStatus !== "OPEN" && weekStatus !== "PLANNED")

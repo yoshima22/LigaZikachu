@@ -1,7 +1,7 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { endOfBetWeek, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
+import { endOfBetWeek, isTournamentBettingLocked, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, Swords, TrendingUp } from "lucide-react";
@@ -45,6 +45,8 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       weeks: {
         where: {
           status: { in: ["OPEN", "PLANNED"] },
+          startDate: { lt: currentBetWeek.lt },
+          endDate: { gte: currentBetWeek.gte },
           matches: {
             some: {
               isBye: false,
@@ -389,6 +391,7 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
                       balance={wallet?.balance ?? 0}
                       config={{ minBet: config.minBet, maxBet: config.maxBet }}
                       isLoggedIn={!!player}
+                      bettingLocked={isTournamentBettingLocked(m.week)}
                     />
                   );
                 })}

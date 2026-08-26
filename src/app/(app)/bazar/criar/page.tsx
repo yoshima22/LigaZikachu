@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { ArrowLeft, Coins, Crown, Info, Search } from "lucide-react";
+import { ArrowLeft, Coins, Crown, Handshake, Info, Search } from "lucide-react";
 import Link from "next/link";
 import { createListing, createAuctionListing } from "../actions";
 import { getSpriteUrl, getPokemonName, shortMascotCode } from "@/lib/mascot-data";
@@ -57,7 +57,7 @@ function CreateListingForm() {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [category, setCategory] = useState<BazarItemCategory | "">("");
-  const [listingType, setListingType] = useState<BazarListingType>("SALE");
+  const [listingType, setListingType] = useState<BazarListingType | "DIRECT_NEGOTIATION">("SALE");
   const [priceCoins, setPriceCoins] = useState("");
   const [loanEnabled, setLoanEnabled] = useState(false);
   const [loanAmountCoins, setLoanAmountCoins] = useState("");
@@ -89,12 +89,23 @@ function CreateListingForm() {
   };
 
   const isAuction = listingType === ("AUCTION" as BazarListingType);
+  const isDirectNegotiation = listingType === "DIRECT_NEGOTIATION";
 
   const handleSubmit = () => {
     setSubmitError(null);
     startTransition(async () => {
       try {
-        if (isAuction) {
+        if (isDirectNegotiation) {
+          const r = await createListing({
+            category: "ITEM",
+            listingType: "TRADE",
+            durationDays: duration,
+            wantedDesc: wantedDesc || undefined,
+            description: description || undefined,
+            directNegotiation: true,
+          });
+          if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
+        } else if (isAuction) {
           const r = await createAuctionListing({
             category: category as BazarItemCategory,
             minBidCoins: parseInt(minBid) || 0,
@@ -112,7 +123,7 @@ function CreateListingForm() {
         } else {
           const r = await createListing({
             category: category as BazarItemCategory,
-            listingType,
+            listingType: listingType as BazarListingType,
             priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
             loanEnabled,
             loanAmountCoins: loanEnabled ? parseInt(loanAmountCoins || priceCoins) : undefined,
@@ -141,6 +152,7 @@ function CreateListingForm() {
   };
 
   const canProceed = () => {
+    if (isDirectNegotiation) return true;
     if (!category) return false;
     if (category === "MASCOT" && !selectedMascotId) return false;
     if (category === "ITEM" && (!selectedItem || itemQuantity < 1)) return false;
@@ -211,14 +223,16 @@ function CreateListingForm() {
                 { value: "TRADE",        label: "Troca",       color: "blue" },
                 { value: "SALE_OR_TRADE",label: "Venda/Troca", color: "purple" },
                 { value: "AUCTION",      label: "🔨 Leilão",   color: "amber" },
+                { value: "DIRECT_NEGOTIATION", label: "🤝 Negociação direta", color: "cyan" },
               ] as const).map(t => (
-                <button key={t.value} type="button" onClick={() => { setListingType(t.value as BazarListingType); if (t.value === "AUCTION") setPremium(false); }}
+                <button key={t.value} type="button" onClick={() => setListingType(t.value as BazarListingType | "DIRECT_NEGOTIATION")}
                   className={`rounded-xl border py-2 text-xs font-semibold transition-colors ${
                     listingType === t.value
                       ? t.color === "green"  ? "border-green-500/50 bg-green-500/10 text-green-400"
                       : t.color === "blue"   ? "border-blue-500/50 bg-blue-500/10 text-blue-400"
                       : t.color === "purple" ? "border-purple-500/50 bg-purple-500/10 text-purple-400"
-                      : "border-amber-500/50 bg-amber-500/10 text-amber-400"
+                      : t.color === "amber" ? "border-amber-500/50 bg-amber-500/10 text-amber-400"
+                      : "border-cyan-500/50 bg-cyan-500/10 text-cyan-300"
                       : "border-border text-slate-500"
                   }`}>
                   {t.label}
@@ -233,11 +247,17 @@ function CreateListingForm() {
                 <p>• Lance superado? Os ZC são devolvidos automaticamente.</p>
               </div>
             )}
+            {isDirectNegotiation && (
+              <div className="rounded-xl border border-cyan-500/25 bg-cyan-500/5 px-3 py-3 text-[11px] leading-relaxed text-cyan-100/80">
+                <p className="flex items-center gap-1 font-bold text-cyan-200"><Handshake size={12}/> Mesa de negociação por 10 ZC</p>
+                <p className="mt-1">Outro jogador pede para entrar. Depois de aceito, os dois montam ofertas reservadas com mascotes, quantidades de itens e ZC; ambos confirmam e somente o anunciante conclui.</p>
+              </div>
+            )}
           </div>
         )}
 
         {/* Seleção de mascote — busca, paginação e stats base */}
-        {category === "MASCOT" && (
+        {!isDirectNegotiation && category === "MASCOT" && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200">Escolha o mascote</label>
             {loadingInventory ? <p className="text-xs text-slate-500">Carregando…</p>
@@ -329,7 +349,7 @@ function CreateListingForm() {
         )}
 
         {/* Seleção de item — tudo do inventário com dados do shop */}
-        {category === "ITEM" && (
+        {!isDirectNegotiation && category === "ITEM" && (
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200">Escolha o item</label>
             {!inventory ? (
@@ -453,7 +473,7 @@ function CreateListingForm() {
         )}
 
         {/* Campos específicos de leilão */}
-        {category && isAuction && (
+        {category && !isDirectNegotiation && isAuction && (
           <>
             <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
@@ -481,7 +501,7 @@ function CreateListingForm() {
         )}
 
         {/* Preço (apenas anúncios normais) */}
-        {category && !isAuction && listingType !== "TRADE" && (
+        {category && !isDirectNegotiation && !isAuction && listingType !== "TRADE" && (
           <div className="space-y-2">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
               <Coins size={14}/> Preço (ZikaCoins)
@@ -493,7 +513,7 @@ function CreateListingForm() {
           </div>
         )}
 
-        {category && !isAuction && (
+        {category && !isDirectNegotiation && !isAuction && (
           <div className="space-y-3 rounded-xl border border-cyan-500/25 bg-cyan-500/5 p-4">
             <label className="flex cursor-pointer items-start gap-3">
               <input type="checkbox" checked={loanEnabled} onChange={(event) => setLoanEnabled(event.target.checked)} className="mt-0.5 h-4 w-4 accent-cyan-400" />
@@ -520,7 +540,7 @@ function CreateListingForm() {
           </div>
         )}
 
-        {category && !isAuction && inventory && (
+        {category && !isDirectNegotiation && inventory && (
           <div className={`rounded-2xl border p-4 transition-all ${premium ? "border-amber-300/70 bg-gradient-to-br from-amber-400/15 via-yellow-500/5 to-purple-500/10 shadow-[0_0_28px_rgba(250,204,21,0.12)]" : "border-amber-500/25 bg-amber-500/5"}`}>
             <label className={`flex items-start gap-3 ${(inventory.hasActivePremium || inventory.premiumActiveCount >= inventory.premiumSlots) ? "cursor-not-allowed opacity-60" : "cursor-pointer"}`}>
               <input

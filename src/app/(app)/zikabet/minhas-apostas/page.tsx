@@ -4,6 +4,7 @@ import { Swords } from "lucide-react";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
 import { UndoBetButton } from "./_components/undo-bet-button";
+import { isTournamentBettingLocked } from "@/lib/zikabet";
 
 export const dynamic = "force-dynamic";
 
@@ -93,7 +94,7 @@ export default async function MinhasApostasPage() {
       betOnName: b.betOnPlayer.displayName,
       winnerName: b.match.winnerPlayer?.displayName ?? null,
       context: b.match.tournamentWeek?.tournament?.name ?? "Torneio",
-      canCancel: b.status === "OPEN" && ["OPEN", "PLANNED"].includes(b.match.tournamentWeek?.status ?? ""),
+      canCancel: b.status === "OPEN" && !isTournamentBettingLocked(b.match.tournamentWeek),
     })),
     ...leagueBets.map((b: any): UnifiedBet => ({
       id: b.id, source: "LEAGUE", status: b.status,

@@ -38,9 +38,10 @@ interface Props {
   config: { minBet: number; maxBet: number };
   isLoggedIn: boolean;
   source?: "tcg" | "weekly";
+  bettingLocked?: boolean;
 }
 
-export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source = "tcg" }: Props) {
+export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source = "tcg", bettingLocked = false }: Props) {
   const [pending, startTransition] = useTransition();
   const [selectedPlayer, setSelectedPlayer] = useState<string | null>(null);
   const [amount, setAmount] = useState(config.minBet);
@@ -94,7 +95,7 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
             <button
               key={player.id}
               type="button"
-              disabled={!!myBet || pending || !isLoggedIn}
+              disabled={!!myBet || pending || !isLoggedIn || bettingLocked}
               onClick={() => setSelectedPlayer(selected ? null : player.id)}
               className={`rounded-xl border p-4 text-left transition-all ${
                 isMyBetOn
@@ -183,6 +184,12 @@ export function ZikaBetCard({ match, myBet, balance, config, isLoggedIn, source 
 
       {!isLoggedIn && (
         <p className="text-xs text-slate-500 text-center">Faça login para apostar.</p>
+      )}
+
+      {bettingLocked && (
+        <p className="rounded-lg border border-amber-400/20 bg-amber-400/5 px-3 py-2 text-center text-xs font-semibold text-amber-200">
+          Decks revelados: apostas e retiradas encerradas nesta rodada.
+        </p>
       )}
 
     </div>

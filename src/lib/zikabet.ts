@@ -54,3 +54,22 @@ export function endOfBetWeek(now = new Date()): Date {
 export function isInCurrentBetWeek(date: Date, now = new Date()): boolean {
   return date >= startOfBetWeek(now) && date < endOfBetWeek(now);
 }
+
+type TournamentBetWeek = {
+  status?: string | null;
+  deckLockAt?: Date | null;
+  lockAt?: Date | null;
+  endDate?: Date | null;
+};
+
+/**
+ * A revelacao das listas encerra definitivamente o mercado daquela rodada.
+ * Usamos a mesma fonte de verdade da pagina de decks: status bloqueado/fechado
+ * ou o primeiro prazo configurado ja alcancado.
+ */
+export function isTournamentBettingLocked(week: TournamentBetWeek | null | undefined, now = new Date()): boolean {
+  if (!week) return true;
+  if (week.status === "LOCKED" || week.status === "CLOSED") return true;
+  const revealAt = week.deckLockAt ?? week.lockAt ?? week.endDate ?? null;
+  return Boolean(revealAt && now >= revealAt);
+}
