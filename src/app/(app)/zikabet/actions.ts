@@ -7,7 +7,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
-import { parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
+import { isInCurrentBetWeek, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
 const WEEKLY_LEAGUE_BET_CONFIG = {
   minBet: 10,
   maxBet: 500,
@@ -118,6 +118,8 @@ export async function placeBet(raw: z.infer<typeof placeBetSchema>): Promise<{ e
     if (!match.betsEnabled) return { error: "Apostas não estão habilitadas nesta partida." };
     if (match.status !== "DRAFT" && match.status !== "PENDING_CONFIRMATION")
       return { error: "Esta partida já foi encerrada — apostas fechadas." };
+    if (!isInCurrentBetWeek(match.scheduledAt))
+      return { error: "As apostas desta partida serão abertas somente na semana em que ela acontecer." };
 
     const config = parseBetConfig(match.tournamentWeek?.tournament?.betConfig);
     const tournamentId = match.tournamentWeek?.tournament?.id;

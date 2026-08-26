@@ -44,3 +44,13 @@ export function startOfBetWeek(now = new Date()): Date {
   const monday = noonUtc.toISOString().slice(0, 10);
   return new Date(`${monday}T00:00:00-03:00`);
 }
+
+export function endOfBetWeek(now = new Date()): Date {
+  const end = startOfBetWeek(now);
+  end.setUTCDate(end.getUTCDate() + 7);
+  return end;
+}
+
+export function isInCurrentBetWeek(date: Date, now = new Date()): boolean {
+  return date >= startOfBetWeek(now) && date < endOfBetWeek(now);
+}

@@ -1,7 +1,7 @@
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { parseBetConfig } from "@/lib/zikabet";
+import { endOfBetWeek, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { Coins, Swords, TrendingUp } from "lucide-react";
@@ -29,6 +29,10 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
   });
 
   const wallet = player ? await getOrCreateWallet(player.id) : null;
+  const currentBetWeek = {
+    gte: startOfBetWeek(),
+    lt: endOfBetWeek(),
+  };
 
   // Torneios em andamento com apostas habilitadas
   const tournaments = await prisma.tournament.findMany({
@@ -39,16 +43,24 @@ export default async function ZikaBetPage({ searchParams }: { searchParams: Prom
       slug: true,
       betConfig: true,
       weeks: {
-        where: { status: { in: ["OPEN", "PLANNED"] } },
+        where: {
+          status: { in: ["OPEN", "PLANNED"] },
+          matches: {
+            some: {
+              isBye: false,
+              scheduledAt: currentBetWeek,
+              status: { in: ["DRAFT", "PENDING_CONFIRMATION"] },
+            },
+          },
+        },
         orderBy: { weekNumber: "asc" },
-        take: 5,
         include: {
           // Admin vê todas as partidas para poder configurar odds
           // Jogador vê só as que têm apostas habilitadas
           matches: {
             where: admin
-              ? { isBye: false, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } }
-              : { betsEnabled: true, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } },
+              ? { isBye: false, scheduledAt: currentBetWeek, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } }
+              : { isBye: false, scheduledAt: currentBetWeek, betsEnabled: true, status: { in: ["DRAFT", "PENDING_CONFIRMATION"] } },
             include: {
               playerA: { select: { id: true, displayName: true } },
               playerB: { select: { id: true, displayName: true } },
