@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save, ShieldBan } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, adminUpdateMiauvadaoPurchaseSettings, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings, adminGetBazarTradeBanData, adminSetBazarTradeBan } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, adminUpdateMiauvadaoPurchaseSettings, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings, adminGetBazarTradeBanData, adminSetBazarTradeBan, adminGetMiauvadaoStockDefaults, adminSetMiauvadaoStockDefaults } from "../actions";
 import type { MiauvadaoOffer, BazarTradeBanAdminData } from "../actions";
 import { MEGA_STONES, isMegaStoneType } from "@/lib/mega-evolution";
 
@@ -50,6 +50,26 @@ export default function MiauvadaoAdminPage() {
   const [banPlayerAId, setBanPlayerAId] = useState("");
   const [banPlayerBId, setBanPlayerBId] = useState("");
   const [banReason, setBanReason] = useState("");
+  const [stockDefaults, setStockDefaults] = useState<Record<string, string>>({});
+
+  useEffect(() => {
+    adminGetMiauvadaoStockDefaults().then((d) => {
+      setStockDefaults(Object.fromEntries(Object.entries(d).map(([k, v]) => [k, String(v)])));
+    }).catch(() => {});
+  }, []);
+
+  const saveStockDefaults = () => {
+    startTransition(async () => {
+      const payload: Record<string, number> = {};
+      for (const [type, val] of Object.entries(stockDefaults)) {
+        const n = parseInt(val);
+        payload[type] = Number.isFinite(n) && n >= 1 ? n : 0; // 0 = volta ao padrão (5)
+      }
+      const r = await adminSetMiauvadaoStockDefaults(payload);
+      if (r.error) toast.error(r.error);
+      else toast.success("Quantidades padrão salvas!");
+    });
+  };
 
   useEffect(() => {
     getMiauvadaoConfig().then(c => {
@@ -272,6 +292,32 @@ export default function MiauvadaoAdminPage() {
             <Save size={14}/> Ajustar cofre
           </button>
         </div>
+      </div>
+
+      {/* Quantidade padrão por tipo de item */}
+      <div className="rounded-2xl border border-border bg-slate-950/60 p-5 space-y-3">
+        <div>
+          <h2 className="font-semibold text-slate-200">📦 Quantidade padrão por item</h2>
+          <p className="mt-0.5 text-xs text-slate-500">Define quantas unidades cada tipo de item traz quando é sorteado na vitrine. Vazio ou 0 = padrão de 5.</p>
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+          {ITEM_TYPES.map((t) => (
+            <label key={t.value} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-slate-900/50 px-3 py-2">
+              <span className="min-w-0 flex-1 truncate text-[11px] text-slate-300" title={t.label}>{t.label}</span>
+              <input
+                type="number" min={1} max={999} inputMode="numeric"
+                value={stockDefaults[t.value] ?? ""}
+                onChange={(e) => setStockDefaults((s) => ({ ...s, [t.value]: e.target.value.replace(/\D/g, "") }))}
+                placeholder="5"
+                className="w-16 shrink-0 rounded border border-border bg-slate-950 px-2 py-1 text-center text-xs text-white outline-none focus:border-[#FFCB05]"
+              />
+            </label>
+          ))}
+        </div>
+        <button onClick={saveStockDefaults} disabled={pending}
+          className="w-full rounded-lg bg-[#FFCB05] py-2 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+          Salvar quantidades padrão
+        </button>
       </div>
 
       {/* Daily Offers */}

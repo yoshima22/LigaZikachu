@@ -2346,6 +2346,37 @@ export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise
   }
 }
 
+// Quantidade padrão (estoque) por TIPO de item que pode aparecer na vitrine do
+// Miauvadão. Substitui o 5 fixo: qualquer item sorteado daquele tipo passa a
+// entrar com a quantidade definida aqui.
+export async function adminGetMiauvadaoStockDefaults(): Promise<Record<string, number>> {
+  await requireAdmin();
+  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" }, select: { offerStockOverrides: true } });
+  return stockOverridesFromJson(config?.offerStockOverrides ?? {});
+}
+
+export async function adminSetMiauvadaoStockDefaults(defaultsByType: Record<string, number>): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const current = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+    const overrides = stockOverridesFromJson(current.offerStockOverrides);
+    for (const [type, qty] of Object.entries(defaultsByType)) {
+      const n = Math.floor(Number(qty));
+      if (!type) continue;
+      if (!Number.isFinite(n) || n < 1) { delete overrides[type]; continue; } // vazio/0 = volta ao padrão 5
+      overrides[type] = Math.min(999, n);
+    }
+    await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: { offerStockOverrides: overrides as Prisma.InputJsonValue },
+    });
+    revalidateTag("miauvadao-config");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
 export async function adminUpdateListingFee(fee: number): Promise<{ error?: string }> {
   try {
     await requireAdmin();
