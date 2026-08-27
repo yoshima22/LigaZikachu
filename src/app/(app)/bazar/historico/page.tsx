@@ -138,10 +138,16 @@ export default async function BazarHistoryPage({
       ) : (
         <div className="space-y-3">
           {result.transactions.map((transaction) => {
-            const sellerAsset = listedAsset(transaction.payload, transaction.description);
-            const buyerAssets = offeredAssets(transaction.offerItems);
-            if (transaction.offerCoins > 0) buyerAssets.push(`${transaction.offerCoins.toLocaleString("pt-BR")} ZC`);
-            const received = buyerAssets.length > 0 ? buyerAssets : ["Sem contrapartida registrada"];
+            // Negociação direta: as duas pontas ofereceram itens/ZC (snapshot).
+            const sellerGave = transaction.direct
+              ? (() => { const a = offeredAssets(transaction.sellerItems); if (transaction.sellerCoins > 0) a.push(`${transaction.sellerCoins.toLocaleString("pt-BR")} ZC`); return a; })()
+              : [listedAsset(transaction.payload, transaction.description)];
+            const buyerGave = transaction.direct
+              ? (() => { const a = offeredAssets(transaction.buyerItems); if (transaction.buyerCoins > 0) a.push(`${transaction.buyerCoins.toLocaleString("pt-BR")} ZC`); return a; })()
+              : (() => { const a = offeredAssets(transaction.offerItems); if (transaction.offerCoins > 0) a.push(`${transaction.offerCoins.toLocaleString("pt-BR")} ZC`); return a; })();
+            const sellerAsset = sellerGave.length > 0 ? sellerGave.join(" + ") : (transaction.description || "Sem itens registrados");
+            const sellerList = sellerGave.length > 0 ? sellerGave : ["Sem itens registrados"];
+            const received = buyerGave.length > 0 ? buyerGave : ["Sem contrapartida registrada"];
 
             return (
               <article key={transaction.id} className="rounded-2xl border border-border/70 bg-slate-950/45 p-4">
@@ -156,7 +162,7 @@ export default async function BazarHistoryPage({
                     </p>
                   </div>
                   <span className="rounded-full border border-border px-2 py-1 text-[9px] uppercase tracking-wide text-slate-500">
-                    {transaction.listingType === "AUCTION" ? "Leilão" : transaction.offerItems ? "Troca" : "Venda"}
+                    {transaction.direct ? "Negociação direta" : transaction.listingType === "AUCTION" ? "Leilão" : transaction.offerItems ? "Troca" : "Venda"}
                   </span>
                 </div>
 
@@ -165,7 +171,14 @@ export default async function BazarHistoryPage({
                     <p className="flex items-center gap-1.5 text-[10px] uppercase tracking-wide text-slate-500">
                       <UserRound size={11} /> {transaction.sellerName} enviou
                     </p>
-                    <p className="mt-1.5 text-xs font-medium text-slate-200">{sellerAsset}</p>
+                    <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      {sellerList.map((asset, index) => (
+                        <span key={`s-${asset}-${index}`} className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/15 bg-cyan-400/5 px-2 py-1 text-xs text-slate-300">
+                          {asset.endsWith(" ZC") && <Coins size={10} className="text-[#FFCB05]" />}
+                          {asset}
+                        </span>
+                      ))}
+                    </div>
                   </div>
                   <ArrowRight size={16} className="hidden self-center text-slate-600 sm:block" />
                   <div className="rounded-xl bg-slate-900/70 p-3">
@@ -183,7 +196,7 @@ export default async function BazarHistoryPage({
                   </div>
                 </div>
                 <p className="mt-2 text-[10px] text-slate-600">
-                  Resultado: {transaction.buyerName} recebeu {sellerAsset}; {transaction.sellerName} recebeu {received.join(" + ")}.
+                  Resultado: {transaction.buyerName} recebeu {sellerList.join(" + ")}; {transaction.sellerName} recebeu {received.join(" + ")}.
                 </p>
               </article>
             );

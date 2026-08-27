@@ -3012,6 +3012,9 @@ model BazarTransaction {
   description String // ex: "Pikachu Nv.5 vendido por 1500 ZC"
   coinsAmount Int               @default(0)
   category    BazarItemCategory
+  // Detalhe das duas pontas (usado no histórico, principalmente em negociação
+  // direta): { direct?, sellerItems: [], sellerCoins, buyerItems: [], buyerCoins }
+  detailsJson Json?
 
   createdAt DateTime @default(now())
 

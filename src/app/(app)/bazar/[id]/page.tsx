@@ -12,7 +12,7 @@ import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
   requestDirectNegotiation, acceptDirectNegotiationParticipant, updateDirectNegotiationOffer,
-  confirmDirectNegotiation, finalizeDirectNegotiation,
+  confirmDirectNegotiation, finalizeDirectNegotiation, cancelDirectNegotiation,
 } from "../actions";
 import { PremiumCountdown } from "../_components/premium-countdown";
 
@@ -157,11 +157,14 @@ export default function BazarListingPage(): React.JSX.Element {
   const [directItems, setDirectItems] = useState<ProposalOfferedItem[]>([]);
   const [directLoan, setDirectLoan] = useState(false);
   const [directInterest, setDirectInterest] = useState("0");
+  // Incrementado para limpar a seleção do OfferItemsPicker após salvar/cancelar.
+  const [directReset, setDirectReset] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
   // Evita chamar finalizeAuction repetidamente a cada tick do countdown
   const finalizeRequestedRef = useRef(false);
 
   const reloadListing = useCallback(() => {
-    getListing(id).then(raw => {
+    return getListing(id).then(raw => {
       if (!raw) { setListing(null); return; }
       // Normalise to explicit type — avoids Prisma Json inference cascade
       setListing({
@@ -266,6 +269,12 @@ export default function BazarListingPage(): React.JSX.Element {
     });
   };
 
+  const handleManualRefresh = () => {
+    if (refreshing) return;
+    setRefreshing(true);
+    reloadListing().then(() => toast.success("Mesa atualizada.")).finally(() => setRefreshing(false));
+  };
+
   const handleDirectRequest = () => startTransition(async () => {
     const r = await requestDirectNegotiation(id); if (r.error) { toast.error(r.error); return; }
     toast.success("Pedido enviado ao anunciante."); reloadListing();
@@ -277,15 +286,20 @@ export default function BazarListingPage(): React.JSX.Element {
   const handleDirectSaveOffer = (proposalId: string) => startTransition(async () => {
     const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0 });
     if (r.error) { toast.error(r.error); return; }
-    toast.success("Oferta reservada. As confirmações anteriores foram reiniciadas."); setDirectItems([]); reloadListing();
+    toast.success("Oferta reservada. Os OKs foram reiniciados — travem novamente."); setDirectItems([]); setDirectReset((n) => n + 1); reloadListing();
   });
-  const handleDirectConfirm = (proposalId: string) => startTransition(async () => {
-    const r = await confirmDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
-    toast.success("Você confirmou sua oferta."); reloadListing();
+  const handleDirectToggleReady = (proposalId: string, ready: boolean) => startTransition(async () => {
+    const r = await confirmDirectNegotiation(proposalId, ready); if (r.error) { toast.error(r.error); return; }
+    toast.success(ready ? "Você travou sua oferta (OK dado)." : "Você destravou sua oferta para editar."); reloadListing();
   });
   const handleDirectFinalize = (proposalId: string) => startTransition(async () => {
     const r = await finalizeDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
     toast.success("Negociação concluída e ativos entregues."); reloadListing();
+  });
+  const handleDirectCancel = (proposalId: string) => startTransition(async () => {
+    if (!confirm("Cancelar esta negociação? Os itens e ZC reservados dos dois lados voltam para os donos e a mesa reabre para outros jogadores (sem novo anúncio).")) return;
+    const r = await cancelDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success("Negociação cancelada. A mesa foi reaberta."); setDirectItems([]); setDirectCoins(""); setDirectReset((n) => n + 1); reloadListing();
   });
 
   const handleBuy = () => {
@@ -448,7 +462,7 @@ export default function BazarListingPage(): React.JSX.Element {
       <div className="mx-auto max-w-4xl space-y-5">
         <div className="flex items-center justify-between gap-3">
           <Link href="/bazar" className="rounded-lg border border-border p-2 text-slate-400 hover:text-white"><ArrowLeft size={16}/></Link>
-          <button type="button" onClick={reloadListing} className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-white"><RefreshCw size={13}/> Atualizar mesa</button>
+          <button type="button" onClick={handleManualRefresh} disabled={refreshing} className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-white disabled:opacity-60"><RefreshCw size={13} className={refreshing ? "animate-spin" : ""}/> {refreshing ? "Atualizando…" : "Atualizar mesa"}</button>
         </div>
         <div className="overflow-hidden rounded-3xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-purple-500/10">
           <div className="flex flex-col gap-4 border-b border-cyan-400/20 p-6 sm:flex-row sm:items-center">
@@ -485,13 +499,27 @@ export default function BazarListingPage(): React.JSX.Element {
 
                 {canEditRoom && (
                   <div className="rounded-2xl border border-blue-500/25 bg-blue-500/5 p-4 space-y-3">
-                    <h2 className="font-bold text-blue-200">Editar minha oferta</h2>
-                    <div className="flex items-center gap-2"><Coins size={14} className="text-[#FFCB05]"/><input value={directCoins} onChange={(event) => setDirectCoins(event.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ZikaCoins (0 = nenhum)" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none"/></div>
-                    <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span>Registrar esses ZC como empréstimo de boa-fé, sem cobrança automática.</span></label>
-                    {directLoan && <input value={directInterest} onChange={(event) => setDirectInterest(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Juros totais (%)" className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none"/>}
-                    <OfferItemsPicker onItemsChange={setDirectItems}/>
-                    <button disabled={pending} onClick={() => handleDirectSaveOffer(activeRoom.id)} className="w-full rounded-xl border border-blue-400/30 bg-blue-400/10 py-2.5 text-xs font-bold text-blue-200 disabled:opacity-50">Reservar e salvar minha oferta</button>
-                    <button disabled={pending || Boolean(myReady)} onClick={() => handleDirectConfirm(activeRoom.id)} className="w-full rounded-xl bg-green-500 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40">{myReady ? "✓ Minha oferta está confirmada" : "Dar OK nesta oferta"}</button>
+                    <div>
+                      <h2 className="font-bold text-blue-200">Sua oferta</h2>
+                      <p className="mt-0.5 text-[11px] text-slate-400">
+                        <span className="font-semibold text-slate-300">1)</span> monte e <span className="font-semibold text-blue-200">reserve</span> seus itens/ZC · <span className="font-semibold text-slate-300">2)</span> <span className="font-semibold text-green-300">trave</span> a proposta para dar seu OK. Travar de novo no mesmo botão destrava para editar. A troca só ocorre quando os dois estão travados e o anunciante finaliza.
+                      </p>
+                    </div>
+                    {myReady ? (
+                      <div className="rounded-xl border border-green-400/30 bg-green-400/5 p-3 text-xs text-green-200">
+                        Sua oferta está <span className="font-black">travada (OK dado)</span>. Para mudar itens ou ZC, destrave abaixo primeiro.
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex items-center gap-2"><Coins size={14} className="text-[#FFCB05]"/><input value={directCoins} onChange={(event) => setDirectCoins(event.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ZikaCoins (0 = nenhum)" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none"/></div>
+                        <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span>Registrar esses ZC como empréstimo de boa-fé, sem cobrança automática.</span></label>
+                        {directLoan && <input value={directInterest} onChange={(event) => setDirectInterest(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Juros totais (%)" className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none"/>}
+                        <OfferItemsPicker onItemsChange={setDirectItems} resetSignal={directReset}/>
+                        <button disabled={pending} onClick={() => handleDirectSaveOffer(activeRoom.id)} className="w-full rounded-xl border border-blue-400/30 bg-blue-400/10 py-2.5 text-xs font-bold text-blue-200 disabled:opacity-50">1) Reservar itens/ZC da minha oferta</button>
+                      </>
+                    )}
+                    <button disabled={pending} onClick={() => handleDirectToggleReady(activeRoom.id, !myReady)} className={`w-full rounded-xl py-2.5 text-xs font-black disabled:opacity-40 ${myReady ? "border border-amber-400/40 bg-amber-400/10 text-amber-200" : "bg-green-500 text-slate-950"}`}>{myReady ? "🔓 Destravar minha oferta (editar)" : "🔒 2) Travar minha proposta (dar OK)"}</button>
+                    <button disabled={pending} onClick={() => handleDirectCancel(activeRoom.id)} className="w-full rounded-xl border border-red-400/30 bg-red-500/5 py-2 text-[11px] font-bold text-red-300 disabled:opacity-40">Cancelar negociação e reabrir a mesa</button>
                   </div>
                 )}
                 {isOwner && roomState.ownerReady && roomState.participantReady && listing.status === "RESERVED" && <button disabled={pending} onClick={() => handleDirectFinalize(activeRoom.id)} className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-slate-950 disabled:opacity-50">Finalizar e trocar os ativos</button>}
@@ -1128,17 +1156,17 @@ interface InventoryData {
   inventoryItems: InventoryShopItem[];
 }
 
-function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOfferedItem[]) => void }) {
+type OfferCategory = "ALL" | "MASCOT" | "EGG" | "FOOD" | "ITEM";
+
+function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (items: ProposalOfferedItem[]) => void; resetSignal?: number }) {
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [selected, setSelected] = useState<ProposalOfferedItem[]>([]);
-  const [loaded, setLoaded] = useState(false);
-  const [mascotSearch, setMascotSearch] = useState("");
+  const [search, setSearch] = useState("");
+  const [category, setCategory] = useState<OfferCategory>("ALL");
 
   const TRADEABLE = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
-  const loadInventory = async () => {
-    if (loaded) return;
-    setLoaded(true);
+  const loadInventory = useCallback(async () => {
     const res = await fetch("/api/bazar/inventory");
     if (res.ok) {
       const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"]; inventoryItems?: InventoryShopItem[] };
@@ -1153,7 +1181,19 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
         inventoryItems: (data.inventoryItems ?? []).filter(i => TRADEABLE.has(i.type)),
       });
     }
-  };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Auto-carrega o inventário na primeira montagem do editor.
+  useEffect(() => { loadInventory(); }, [loadInventory]);
+
+  // Limpa a seleção quando o pai sinaliza (após salvar/cancelar).
+  useEffect(() => {
+    if (resetSignal === 0) return;
+    setSelected([]);
+    onItemsChange([]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resetSignal]);
 
   const toggleItem = (key: string, item: ProposalOfferedItem) => {
     setSelected(prev => {
@@ -1179,49 +1219,77 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
   };
 
   const selectedKeys = new Set(selected.map(i => i.mascotId ?? i.type));
-  const mascotQuery = mascotSearch.trim().toLowerCase();
+  const query = search.trim().toLowerCase();
+  const matches = (text: string) => !query || text.toLowerCase().includes(query);
+  const showCat = (cat: OfferCategory) => category === "ALL" || category === cat;
   const visibleMascots = (inventory?.mascots ?? []).filter((m) => {
-    if (!mascotQuery) return true;
+    if (!query) return true;
     const pokeName = getPokemonName(m.pokemonId);
     const name = m.nickname ?? pokeName;
     return (
-      name.toLowerCase().includes(mascotQuery) ||
-      pokeName.toLowerCase().includes(mascotQuery) ||
-      String(m.pokemonId).includes(mascotQuery) ||
-      shortMascotCode(m.id).toLowerCase().includes(mascotQuery)
+      name.toLowerCase().includes(query) ||
+      pokeName.toLowerCase().includes(query) ||
+      String(m.pokemonId).includes(query) ||
+      shortMascotCode(m.id).toLowerCase().includes(query)
     );
   });
+  const EGG_LABELS_FILTER: Record<string, string> = {
+    COMMON:"Ovo Comum",RARE:"Ovo Raro",SPECIAL:"Ovo Especial",EVENT:"Ovo de Evento",
+    EGG_GEN1:"Ovo Gen 1",EGG_GEN2:"Ovo Gen 2",EGG_GEN3:"Ovo Gen 3",EGG_GEN4:"Ovo Gen 4",
+    EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",
+  };
+  const visibleEggs = (inventory?.eggs ?? []).filter((e) => matches(EGG_LABELS_FILTER[e.type] ?? e.type));
+  const visibleFoods = (inventory?.foods ?? []).filter((f) => f.quantity > 0 && matches(f.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote"));
+  const visibleItems = (inventory?.inventoryItems ?? []).filter((i) => matches(i.name) || matches(i.type));
+
+  const CATEGORIES: Array<{ key: OfferCategory; label: string; count: number }> = [
+    { key: "ALL", label: "Tudo", count: visibleMascots.length + visibleEggs.length + visibleFoods.length + visibleItems.length },
+    { key: "MASCOT", label: "🐾 Mascotes", count: visibleMascots.length },
+    { key: "EGG", label: "🥚 Ovos", count: visibleEggs.length },
+    { key: "FOOD", label: "🍖 Comida", count: visibleFoods.length },
+    { key: "ITEM", label: "✨ Itens", count: visibleItems.length },
+  ];
 
   return (
     <div className="space-y-2">
       <div className="flex items-center justify-between">
         <label className="text-xs text-slate-400">Também ofereço (opcional):</label>
-        {!loaded && (
-          <button type="button" onClick={loadInventory} className="text-[10px] underline" style={{ color: "#5a4700" }}>
-            Ver meu inventário
-          </button>
+        {selected.length > 0 && (
+          <button type="button" onClick={() => { setSelected([]); onItemsChange([]); }} className="text-[10px] text-red-300 underline">Limpar seleção</button>
         )}
       </div>
 
       {inventory && (
-        <div className="rounded-xl border border-border/40 bg-slate-900/50 p-2 space-y-3 max-h-52 overflow-y-auto">
+        <>
+          <div className="relative">
+            <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar item, mascote, apelido ou número..."
+              className="w-full rounded-lg border border-border bg-slate-950 py-1.5 pl-7 pr-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+            />
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {CATEGORIES.map((c) => (
+              <button key={c.key} type="button" onClick={() => setCategory(c.key)}
+                className={`rounded-full px-2.5 py-1 text-[10px] font-semibold transition-colors ${category === c.key ? "bg-[#FFCB05] text-slate-950" : "border border-border bg-slate-950/60 text-slate-400 hover:text-white"}`}>
+                {c.label} <span className="opacity-70">{c.count}</span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {inventory && (
+        <div className="rounded-xl border border-border/40 bg-slate-900/50 p-2 space-y-3 max-h-64 overflow-y-auto">
 
           {/* Mascotes disponíveis */}
-          {inventory.mascots.length > 0 && (
+          {showCat("MASCOT") && inventory.mascots.length > 0 && (
             <div className="space-y-2">
-              <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🐾 Mascotes</p>
               <div className="flex items-center justify-between gap-2 px-1">
-                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">Mascotes</p>
+                <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide">🐾 Mascotes</p>
                 <span className="text-[9px] text-slate-600">{visibleMascots.length}/{inventory.mascots.length}</span>
-              </div>
-              <div className="relative">
-                <Search size={13} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
-                <input
-                  value={mascotSearch}
-                  onChange={(e) => setMascotSearch(e.target.value)}
-                  placeholder="Buscar por nome, apelido ou numero..."
-                  className="w-full rounded-lg border border-border bg-slate-950 py-1.5 pl-7 pr-2 text-[11px] text-slate-200 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
-                />
               </div>
               {visibleMascots.map(m => {
                 const pokeName = getPokemonName(m.pokemonId);
@@ -1262,10 +1330,10 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
           )}
 
           {/* Ovos */}
-          {inventory.eggs.length > 0 && (
+          {showCat("EGG") && visibleEggs.length > 0 && (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🥚 Ovos</p>
-              {inventory.eggs.map(egg => {
+              {visibleEggs.map(egg => {
                 const sel = selected.find(i => i.type === egg.type && !i.mascotId);
                 const label = EGG_LABELS[egg.type] ?? egg.type;
                 return (
@@ -1288,10 +1356,10 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
           )}
 
           {/* Comida/Doces */}
-          {inventory.foods.filter(f => f.quantity > 0).length > 0 && (
+          {showCat("FOOD") && visibleFoods.length > 0 && (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🍖 Comida</p>
-              {inventory.foods.filter(f => f.quantity > 0).map(food => {
+              {visibleFoods.map(food => {
                 const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
                 const sel = selected.find(i => i.type === food.type && !i.mascotId);
                 return (
@@ -1314,10 +1382,10 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
           )}
 
           {/* Itens do inventário com dados do shop (buffs, tickets) */}
-          {inventory.inventoryItems && inventory.inventoryItems.length > 0 && (
+          {showCat("ITEM") && visibleItems.length > 0 && (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">✨ Itens Especiais</p>
-              {inventory.inventoryItems.map(item => {
+              {visibleItems.map(item => {
                 const key = item.type;
                 const sel = selectedKeys.has(key);
                 const emoji = getShopItemEmoji(item.type);
@@ -1347,8 +1415,8 @@ function OfferItemsPicker({ onItemsChange }: { onItemsChange: (items: ProposalOf
             </div>
           )}
 
-          {inventory.mascots.length === 0 && inventory.eggs.length === 0 && inventory.foods.filter(f => f.quantity > 0).length === 0 && (!inventory.inventoryItems || inventory.inventoryItems.length === 0) && (
-            <p className="text-center text-[11px] text-slate-600 py-2">Nenhum item disponível para oferecer.</p>
+          {visibleMascots.length === 0 && visibleEggs.length === 0 && visibleFoods.length === 0 && visibleItems.length === 0 && (
+            <p className="text-center text-[11px] text-slate-600 py-2">{query || category !== "ALL" ? "Nada encontrado com esse filtro/busca." : "Nenhum item disponível para oferecer."}</p>
           )}
         </div>
       )}
