@@ -8,7 +8,7 @@ import { isStaff } from "@/lib/auth/permissions";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
-import { normalizeBattleDivision, validateBattleDivision } from "@/lib/battle-divisions";
+import { normalizeBattleDivision, validateBattleDivision, evaluateBattleTeam } from "@/lib/battle-divisions";
 import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
@@ -575,12 +575,25 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
     for (const match of matches) {
       const teams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate, battleSlot: match.battleSlot, playerId: { in: [match.playerAId, match.playerBId!] } } });
       const teamA = teams.find((t) => t.playerId === match.playerAId); const teamB = teams.find((t) => t.playerId === match.playerBId);
-      const idsA = Array.isArray(teamA?.mascotIdsJson) ? teamA.mascotIdsJson as string[] : [];
-      const idsB = Array.isArray(teamB?.mascotIdsJson) ? teamB.mascotIdsJson as string[] : [];
-      const mascots = await prisma.mascot.findMany({ where: { id: { in: [...idsA, ...idsB] } } });
+      const rawIdsA = Array.isArray(teamA?.mascotIdsJson) ? teamA.mascotIdsJson as string[] : [];
+      const rawIdsB = Array.isArray(teamB?.mascotIdsJson) ? teamB.mascotIdsJson as string[] : [];
+      const mascots = await prisma.mascot.findMany({ where: { id: { in: [...rawIdsA, ...rawIdsB] } } });
       const map = new Map(mascots.map((m) => [m.id, m]));
-      const validA = idsA.length > 0 && idsA.every((id) => map.get(id)?.playerId === match.playerAId);
-      const validB = idsB.length > 0 && idsB.every((id) => map.get(id)?.playerId === match.playerBId);
+      // Proteção pré-combate: remove mascotes que ficaram inválidos após a montagem
+      // (subiu de nível além do limite, ou mega excedente em divisão Limitada).
+      // Respeita a divisão Ilimitada (não remove megas). Slot removido fica vazio.
+      const rule = { maxLevel: league.maxLevel, division: normalizeBattleDivision(league.division) };
+      const sanitize = (ids: string[], owner: string) => {
+        const owned = ids.map((id) => map.get(id)).filter((m): m is NonNullable<typeof m> => !!m && m.playerId === owner);
+        const { valid, invalid } = evaluateBattleTeam(owned, rule);
+        return { validIds: valid.map((m) => m.id), removed: invalid.map((x) => ({ id: x.mascot.id, name: x.mascot.nickname ?? getPokemonName(x.mascot.pokemonId), reasons: x.reasons })) };
+      };
+      const sanA = sanitize(rawIdsA, match.playerAId);
+      const sanB = sanitize(rawIdsB, match.playerBId!);
+      const idsA = sanA.validIds;
+      const idsB = sanB.validIds;
+      const validA = idsA.length > 0;
+      const validB = idsB.length > 0;
       if (!validA || !validB) {
         const winnerId = validA ? match.playerAId : validB ? match.playerBId : null;
         const loserId = validA === validB ? null : validA ? match.playerBId : match.playerAId;
@@ -614,7 +627,7 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
       const winnerId = result.winner === "A" ? match.playerAId : result.winner === "B" ? match.playerBId : null;
       const loserId = winnerId ? (winnerId === match.playerAId ? match.playerBId : match.playerAId) : null;
       const applied = await prisma.$transaction(async (tx) => {
-        const claimed = await tx.rushLeagueMatch.updateMany({ where: { id: match.id, status: "SCHEDULED" }, data: { status: "RESOLVED", winnerId, loserId, isDraw: result.winner === "DRAW", playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors, playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt, replayJson: result.log as unknown as Prisma.InputJsonValue, resultJson: { rounds: result.rounds, lineupA: result.lineupA, lineupB: result.lineupB } as unknown as Prisma.InputJsonValue, resolvedAt: new Date() } });
+        const claimed = await tx.rushLeagueMatch.updateMany({ where: { id: match.id, status: "SCHEDULED" }, data: { status: "RESOLVED", winnerId, loserId, isDraw: result.winner === "DRAW", playerASurvivors: result.teamASurvivors, playerBSurvivors: result.teamBSurvivors, playerADamageDealt: result.teamADamageDealt, playerBDamageDealt: result.teamBDamageDealt, replayJson: result.log as unknown as Prisma.InputJsonValue, resultJson: { rounds: result.rounds, lineupA: result.lineupA, lineupB: result.lineupB, ...(sanA.removed.length || sanB.removed.length ? { removedInvalid: { A: sanA.removed, B: sanB.removed } } : {}) } as unknown as Prisma.InputJsonValue, resolvedAt: new Date() } });
         if (!claimed.count) return false;
         for (const side of [{ id: match.playerAId, won: winnerId === match.playerAId, lost: loserId === match.playerAId, survivors: result.teamASurvivors, dealt: result.teamADamageDealt, taken: result.teamBDamageDealt }, { id: match.playerBId!, won: winnerId === match.playerBId, lost: loserId === match.playerBId, survivors: result.teamBSurvivors, dealt: result.teamBDamageDealt, taken: result.teamADamageDealt }]) {
           await tx.rushLeagueParticipant.update({ where: { leagueId_playerId: { leagueId, playerId: side.id } }, data: { points: { increment: side.won ? 3 : (!side.lost ? 1 : 0) }, wins: { increment: side.won ? 1 : 0 }, losses: { increment: side.lost ? 1 : 0 }, draws: { increment: !side.won && !side.lost ? 1 : 0 }, survivorsScore: { increment: side.survivors }, damageDealt: { increment: side.dealt }, damageTaken: { increment: side.taken } } });
