@@ -170,6 +170,7 @@ export async function startIncubation(playerId: string, eggId: string) {
 
 export async function hatchEgg(playerId: string, forcedPokemonId?: number, forcedShiny?: boolean): Promise<{
   mascotId: string; pokemonId: number; name: string; isNew: boolean; isShiny: boolean; isStatBuffed: boolean;
+  personality: string;
   stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
   statRange: [number, number];
 }> {
@@ -292,6 +293,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     isNew: true,
     isShiny,
     isStatBuffed,
+    personality,
     /** Stats reais ao nascer */
     stats: {
       force:    m.statForce,

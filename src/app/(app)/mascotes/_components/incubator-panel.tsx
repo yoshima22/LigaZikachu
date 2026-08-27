@@ -14,7 +14,7 @@ import {
   type IncubatorDropPreview,
 } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
-import { getPokemonName } from "@/lib/mascot-data";
+import { getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 
 interface IncubatorData {
   id: string;
@@ -118,6 +118,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     name: string;
     isShiny?: boolean;
     isStatBuffed?: boolean;
+    personality?: string;
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
@@ -174,6 +175,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       name: result.name,
       isShiny: result.isShiny,
       isStatBuffed: result.isStatBuffed,
+      personality: result.personality,
       stats: result.stats,
       statRange: result.statRange,
     });
@@ -440,6 +442,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 {hatchResult.name} nasceu!
                 {hatchResult.isShiny && <span className="ml-1.5 text-base">✦</span>}
               </p>
+              {hatchResult.personality && (
+                <p className="text-xs font-semibold text-[#FFCB05]">
+                  Personalidade: {PERSONALITY_LABEL[hatchResult.personality] ?? hatchResult.personality}
+                </p>
+              )}
               {hatchResult.isShiny && (
                 <p className="text-xs text-yellow-400 font-semibold">⚡ Shiny! Raridade extrema.</p>
               )}
