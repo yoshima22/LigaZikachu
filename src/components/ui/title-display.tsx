@@ -290,7 +290,12 @@ export function TitleDisplay({
     // para a edição do perfil (que remonta o componente).
     if (context === "profile" && entranceEffect && entranceEffect !== "NONE" && !entrancePlayed.current) {
       entrancePlayed.current = true;
-      const entranceKey = `title-entrance-played:${name}:${entranceEffect}`;
+      // O mesmo título pode estar equipado por vários jogadores. A chave
+      // antiga considerava apenas título/efeito e, depois de visitar outro
+      // perfil, bloqueava indevidamente a intro do perfil próprio. O caminho
+      // identifica cada perfil sem guardar qualquer dado pessoal adicional.
+      const profileScope = typeof window !== "undefined" ? window.location.pathname : "profile";
+      const entranceKey = `title-entrance-played:${profileScope}:${name}:${entranceEffect}`;
       let alreadyPlayed = false;
       try { alreadyPlayed = sessionStorage.getItem(entranceKey) === "1"; } catch { /* sem storage */ }
       if (!alreadyPlayed) {

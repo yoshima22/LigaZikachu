@@ -389,6 +389,7 @@ export default async function PerfilPage() {
         banner={equippedBanner?.item}
         frame={equippedFrame?.item}
         title={equippedTitle?.item}
+        disableIntro={Boolean(player.disableProfileIntro)}
         status={profileStatus}
         role={player.user.role}
         seasonName={activeSeason?.season.name}
