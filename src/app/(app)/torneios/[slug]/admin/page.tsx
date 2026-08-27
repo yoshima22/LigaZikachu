@@ -31,6 +31,7 @@ import { TournamentAchievementsPanel } from "./_components/tournament-achievemen
 import { TournamentBadgeManager } from "./_components/tournament-badge-manager";
 import { PostseasonControl } from "./_components/postseason-control";
 import { closeTournamentWeek } from "./daily-actions";
+import { WeekReportExportButton } from "./_components/week-report-export-button";
 import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
 
 interface Props {
@@ -554,6 +555,7 @@ export default async function TournamentAdminPage({ params }: Props) {
                       <div><p className="font-semibold text-white">{weekLabel}</p><p className="text-xs text-slate-400">{entry.matches.length} partida(s) · {entry.participants.length} participante(s)</p></div>
                       <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${entry.closure ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : unresolved ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"}`}>{entry.closure ? "FECHADO" : unresolved ? `${unresolved} PENDENTE(S)` : "PRONTO"}</span>
                     </div>
+                    <WeekReportExportButton tournamentWeekId={entry.week.id} />
                     {entry.closure ? (
                       <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {entry.closure.closedAt.toLocaleString("pt-BR")}.</p>
                     ) : (

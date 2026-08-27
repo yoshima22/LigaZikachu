@@ -782,6 +782,13 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
   const loserId = winnerId === match.playerAId ? match.playerBId : match.playerAId;
   const points = getMatchPoints(match, winnerId);
   const isInPerson = match.tournamentWeek.tournament.format === TournamentFormat.IN_PERSON;
+  // Correção feita por admin/dono do torneio confirma na hora (sai de pendente
+  // para confirmada), sem depender do aceite do oponente.
+  const isAdminCorrector =
+    user.role === Role.ADMIN ||
+    user.role === Role.SUPER_ADMIN ||
+    match.tournamentWeek.tournament.createdById === user.id;
+  const shouldConfirm = isInPerson || isAdminCorrector;
   const now = new Date();
 
   await prisma.$transaction(async (tx) => {
@@ -795,17 +802,19 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
         winnerDefendedPrizes,
         rankingPointsA: points.rankingPointsA,
         rankingPointsB: points.rankingPointsB,
-        status: isInPerson ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
+        status: shouldConfirm ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
         resultSource: ResultSource.ADMIN_ADJUSTMENT,
         reportedById: user.id,
         reportedAt: now,
-        confirmedById: isInPerson ? user.id : null,
-        confirmedAt: isInPerson ? now : null,
+        confirmedById: shouldConfirm ? user.id : null,
+        confirmedAt: shouldConfirm ? now : null,
         notes: notes || match.notes,
       },
     });
 
-    if (!isInPerson) {
+    if (shouldConfirm) {
+      await tx.matchConfirmation.deleteMany({ where: { matchId: match.id } });
+    } else {
       await tx.matchConfirmation.deleteMany({ where: { matchId: match.id } });
       if (player) {
         const opponentPlayerId = player.id === match.playerAId ? playerBId : match.playerAId;
@@ -834,7 +843,7 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
     });
   });
 
-  if (isInPerson && match.status !== MatchStatus.CONFIRMED) {
+  if (shouldConfirm && match.status !== MatchStatus.CONFIRMED) {
     await rewardMascotsForConfirmedMatch({
       playerAId: match.playerAId,
       playerBId: match.playerBId,
