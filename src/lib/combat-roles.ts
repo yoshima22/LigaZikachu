@@ -16,6 +16,17 @@ export const COMBAT_ROLE_VALUES = [
 
 export type CombatRole = typeof COMBAT_ROLE_VALUES[number];
 
+export const OPPORTUNIST_INSTINCT_CAP = 250;
+
+/** Escala linearmente entre os valores publicados no manual até 250 de Instinto. */
+export function getOpportunistProfile(instinct: number) {
+  const ratio = Math.min(1, Math.max(0, instinct) / OPPORTUNIST_INSTINCT_CAP);
+  return {
+    procChance: 0.22 + ratio * 0.40,
+    debuffPct: 0.08 + ratio * 0.17,
+  };
+}
+
 // Posturas consideradas "suporte" em todo o jogo: Provocador, Encorajador e
 // Cuidador. Usadas, por exemplo, nas reduções do Sabotador.
 export const SUPPORT_ROLES: CombatRole[] = ["PROVOKER", "ENCOURAGER", "HEALER"];
@@ -43,7 +54,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   DEFENDER: "Atributo direto: Vitalidade. Atrai 62% a 78% dos ataques e reduz entre 8% e 35% do dano recebido, conforme a Vitalidade.",
   ATTACKER: "Atributo direto: Força. Recebe de +8% a +26% de dano conforme a Força e mais +15% contra Defensores.",
   FLANK: "Atributo direto: Agilidade. Ganha de +4% a +18% de dano, tem 35% a 82% de chance de furar a defesa e causa +12% contra suportes.",
-  OPPORTUNIST: "Atributo direto: Instinto. Tem 22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; causa +10% se superar o Instinto do alvo.",
+  OPPORTUNIST: "Atributo direto: Instinto. De 0 a 250 de Instinto, escala progressivamente de 22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; causa +10% se superar o Instinto do alvo.",
   ENCOURAGER: "Atributo direto: Carisma. Enquanto estiver ativo, concede de +4% a +18% de dano para toda a equipe. Sabotadores inimigos reduzem esse bônus.",
   GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Intercepta de 15% a 40% do dano de um aliado e recebe de 5% a 20% menos dano; causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",

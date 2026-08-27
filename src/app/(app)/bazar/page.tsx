@@ -10,7 +10,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { autoRefreshMiauvadaoIfNeeded, getMiauvadaoConfig, getMiauvadaoPurchaseStatus } from "./actions";
+import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus } from "./actions";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
 import { getCachedListings, getCachedPremiumAvailability, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
@@ -73,22 +73,20 @@ export default async function BazarPage({
     rarity: searchParams.rarity as MascotRarity | undefined,
     page: searchParams.page ? parseInt(searchParams.page) : 1,
   };
-  const [listingsResult, premiumResult, premiumAvailability, transactions, miauvadao, raidSabotages, bazarStepState] = await Promise.all([
+  // Resolve a rotação antes de ler a vitrine. Assim nenhuma requisição perto do
+  // limite reutiliza os itens cinza do ciclo anterior vindos do cache.
+  await autoRefreshMiauvadaoIfNeeded().catch(() => null);
+  const [listingsResult, premiumResult, premiumAvailability, transactions, freshMiauvadao, raidSabotages, bazarStepState] = await Promise.all([
     getCachedListings(listingFilters),
     getCachedPremiumListings(listingFilters),
     getCachedPremiumAvailability(),
     getCachedRecentTransactions(6),
-    getMiauvadaoConfig(),
+    getCurrentMiauvadaoConfig(),
     getActiveRaidSabotages("BAZAR"),
     getOrderStepUnlockState("BAZAR_SLOT_SIX_CLICKS"),
   ]);
   const blockedSlotSabotage = raidSabotages.find((s) => s.sabotageType === "BLOCK_BAZAR_SLOT");
   const shouldShowBazarAnomaly = Boolean(blockedSlotSabotage) || (bazarStepState.active && bazarStepState.unlocked && !bazarStepState.resolved);
-
-  // Auto-refresh ofertas do Miauvadão se o timer expirou.
-  // Usa o config retornado diretamente (sem passar pelo cache) quando houve roll.
-  const refreshResult = await autoRefreshMiauvadaoIfNeeded().catch(() => null);
-  const freshMiauvadao = refreshResult?.freshConfig ?? miauvadao;
 
   const { listings, total, page, totalPages } = listingsResult;
   const premiumListings = premiumResult.listings;

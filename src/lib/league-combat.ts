@@ -1,7 +1,7 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
 import { PERSONALITY_AFFINITY, DEBUFF_RESISTANCE } from "./personality-design";
-import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, isSupportRole, type CombatRole } from "./combat-roles";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, isSupportRole, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
@@ -604,9 +604,9 @@ export function runLeagueCombat(
       // Opportunist debuff
       let debuffEffect: string | null = null;
       if (actor.combatRole === "OPPORTUNIST") {
-        const chance = Math.min(0.62, 0.22 + actor.instinct / 220);
-        if (Math.random() < chance) {
-          const amount = Math.min(0.25, 0.08 + actor.instinct / 500) * debuffResistanceFactor(actor, target);
+        const opportunist = getOpportunistProfile(instinct);
+        if (Math.random() < opportunist.procChance) {
+          const amount = opportunist.debuffPct * debuffResistanceFactor(actor, target);
           const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
           const stat = stats[rand(0, 3)];
           const cur = debuffs.get(target.id) ?? {};

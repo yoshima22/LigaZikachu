@@ -3,7 +3,7 @@ import { DEFAULT_ARENA_DAILY_ZC_LIMIT, getActiveArenaDailyZcLimit } from "@/lib/
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, isSupportRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, isSupportRole, type CombatRole } from "@/lib/combat-roles";
 import { personalityOffenseMult, personalityDefenseMult, debuffResistanceFactor, personalityAgilityMult, rollPlayfulTeamBuff, rollTravessoDebuff } from "@/lib/personality-combat";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
@@ -409,10 +409,10 @@ function roleDamageMultiplier(actor: ArenaMascot, target: ArenaMascot) {
 
 function tryApplyOpportunistDebuff(actor: ArenaMascot, target: ArenaMascot, debuffs: Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>) {
   if (actor.combatRole !== "OPPORTUNIST") return null;
-  const chance = Math.min(0.62, 0.22 + actor.instinct / 220);
-  if (Math.random() > chance) return null;
+  const opportunist = getOpportunistProfile(getEffectiveStat(actor, debuffs, "instinct"));
+  if (Math.random() > opportunist.procChance) return null;
   const current = debuffs.get(target.id) ?? {};
-  const amount = Math.min(0.25, 0.08 + actor.instinct / 500) * debuffResistanceFactor(actor, target);
+  const amount = opportunist.debuffPct * debuffResistanceFactor(actor, target);
   const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
   const stat = stats[Math.floor(Math.random() * stats.length)];
   debuffs.set(target.id, { ...current, [stat]: Math.max(current[stat] ?? 0, amount) });

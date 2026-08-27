@@ -3043,6 +3043,8 @@ model MiauvadaoConfig {
   id                         String    @id @default("singleton")
   vaultBalance               Int       @default(0)
   listingFee                 Int       @default(10)
+  purchaseRechargeMinutes    Int       @default(10)
+  offerStockOverrides        Json      @default("{}")
   dailyOffers                Json      @default("[]")
   offersRefreshedAt          DateTime?
   playerRefreshData          Json      @default("{}") // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }

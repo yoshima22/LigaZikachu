@@ -208,7 +208,19 @@ const MIAUVADAO_ELIGIBLE_TYPES = [
 const MIAUVADAO_MAX_DISCOUNT = 70;
 const MIAUVADAO_MEGA_STONE_MAX_DISCOUNT = 20;
 const MIAUVADAO_SLOT_REFRESH_COST = 250;
-const MIAUVADAO_PURCHASE_RECHARGE_MS = 10 * 60_000;
+const DEFAULT_MIAUVADAO_PURCHASE_RECHARGE_MINUTES = 10;
+
+function normalizedRechargeMinutes(value: number | null | undefined) {
+  return Math.min(24 * 60, Math.max(1, Math.floor(value ?? DEFAULT_MIAUVADAO_PURCHASE_RECHARGE_MINUTES)));
+}
+
+function stockOverridesFromJson(value: Prisma.JsonValue): Record<string, number> {
+  if (!value || Array.isArray(value) || typeof value !== "object") return {};
+  return Object.fromEntries(Object.entries(value).flatMap(([key, stock]) => {
+    const parsed = Math.floor(Number(stock));
+    return Number.isFinite(parsed) && parsed > 0 ? [[key, parsed]] : [];
+  }));
+}
 
 // Faixa de desconto por raridade do item
 const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
@@ -222,7 +234,11 @@ const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
 };
 
 /** Sorteia 3 itens do shop ativo e aplica descontos */
-async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promise<MiauvadaoOffer[]> {
+async function rollMiauvadaoOffers(
+  vaultBalance: number,
+  extraBonus = 0,
+  stockOverrides: Record<string, number> = {},
+): Promise<MiauvadaoOffer[]> {
   // Busca itens elegíveis do shop
   const shopItems = await prisma.shopItem.findMany({
     where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
@@ -270,7 +286,7 @@ async function rollMiauvadaoOffers(vaultBalance: number, extraBonus = 0): Promis
       originalPrice: item.price,
       discountPct,
       finalPrice,
-      stock:         5,
+      stock:         stockOverrides[item.id] ?? stockOverrides[item.type] ?? 5,
       sold:          0,
       validUntil,
     } satisfies MiauvadaoOffer;
@@ -293,23 +309,32 @@ export async function autoRefreshMiauvadaoIfNeeded(options?: {
     const firstOffer = offers[0];
     const expired = !firstOffer
       || !config.offersRefreshedAt
-      || config.offersRefreshedAt < rotation.start
-      || !firstOffer.shopItemId;
+      || config.offersRefreshedAt < rotation.start;
 
     if (!expired) return null;
 
-    const newOffers = await rollMiauvadaoOffers(config.vaultBalance);
+    const newOffers = await rollMiauvadaoOffers(
+      config.vaultBalance,
+      0,
+      stockOverridesFromJson(config.offerStockOverrides),
+    );
     if (newOffers.length === 0) return null;
 
     // Retorna o resultado do update diretamente — sem precisar re-buscar pelo cache
-    const freshConfig = await prisma.miauvadaoConfig.update({
-      where: { id: "singleton" },
+    // Compare-and-swap: apenas a primeira requisição do ciclo publica o sorteio.
+    // As demais recebem exatamente o conjunto vencedor, sem vitrine divergente.
+    await prisma.miauvadaoConfig.updateMany({
+      where: {
+        id: "singleton",
+        OR: [{ offersRefreshedAt: null }, { offersRefreshedAt: { lt: rotation.start } }],
+      },
       data: {
         dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
         offersRefreshedAt: rotation.start,
         slotRefreshUsedCycle: null,
       },
     });
+    const freshConfig = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
     try {
       revalidateTag("miauvadao-config");
     } catch (cacheError) {
@@ -647,6 +672,12 @@ const _getMiauvadaoConfigCached = unstable_cache(
 
 export async function getMiauvadaoConfig() {
   return _getMiauvadaoConfigCached();
+}
+
+/** Leitura autoritativa usada no limite da rotação; não pode reutilizar a vitrine anterior. */
+export async function getCurrentMiauvadaoConfig() {
+  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+  return config ?? prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
 }
 
 export async function invalidateMiauvadaoCache() {
@@ -1947,10 +1978,12 @@ export type MiauvadaoPurchaseStatus = { available: number; rechargeAt: string[] 
 function purchaseStatusFromQuota(
   quota: { chargeOneUsedAt: Date | null; chargeTwoUsedAt: Date | null } | null,
   now = new Date(),
+  rechargeMinutes = DEFAULT_MIAUVADAO_PURCHASE_RECHARGE_MINUTES,
 ): MiauvadaoPurchaseStatus {
+  const rechargeMs = normalizedRechargeMinutes(rechargeMinutes) * 60_000;
   const rechargeAt = [quota?.chargeOneUsedAt, quota?.chargeTwoUsedAt]
     .filter((value): value is Date => Boolean(value))
-    .map((value) => new Date(value.getTime() + MIAUVADAO_PURCHASE_RECHARGE_MS))
+    .map((value) => new Date(value.getTime() + rechargeMs))
     .filter((value) => value > now)
     .sort((a, b) => a.getTime() - b.getTime());
   return { available: 2 - rechargeAt.length, rechargeAt: rechargeAt.map((value) => value.toISOString()) };
@@ -2050,9 +2083,11 @@ export async function payBazarLoan(loanId: string, requestedAmount: number): Pro
 
 export async function getMiauvadaoPurchaseStatus(playerId: string | null): Promise<MiauvadaoPurchaseStatus> {
   if (!playerId) return { available: 0, rechargeAt: [] };
-  return purchaseStatusFromQuota(
-    await prisma.miauvadaoPurchaseQuota.findUnique({ where: { playerId } }),
-  );
+  const [quota, config] = await Promise.all([
+    prisma.miauvadaoPurchaseQuota.findUnique({ where: { playerId } }),
+    prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" }, select: { purchaseRechargeMinutes: true } }),
+  ]);
+  return purchaseStatusFromQuota(quota, new Date(), config?.purchaseRechargeMinutes);
 }
 
 const MIAUVADAO_EGG_FUSION_VAULT_COST = 250;
@@ -2193,12 +2228,13 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         update: {},
         create: { playerId: player.id },
       });
+      const rechargeMs = normalizedRechargeMinutes(config.purchaseRechargeMinutes) * 60_000;
       const chargeOneAvailable = !quota.chargeOneUsedAt
-        || now.getTime() - quota.chargeOneUsedAt.getTime() >= MIAUVADAO_PURCHASE_RECHARGE_MS;
+        || now.getTime() - quota.chargeOneUsedAt.getTime() >= rechargeMs;
       const chargeTwoAvailable = !quota.chargeTwoUsedAt
-        || now.getTime() - quota.chargeTwoUsedAt.getTime() >= MIAUVADAO_PURCHASE_RECHARGE_MS;
+        || now.getTime() - quota.chargeTwoUsedAt.getTime() >= rechargeMs;
       if (!chargeOneAvailable && !chargeTwoAvailable) {
-        const status = purchaseStatusFromQuota(quota, now);
+        const status = purchaseStatusFromQuota(quota, now, config.purchaseRechargeMinutes);
         throw new Error(`Suas duas compras estão recarregando. Próxima disponível às ${new Date(status.rechargeAt[0]).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}.`);
       }
       await tx.miauvadaoPurchaseQuota.update({
@@ -2252,7 +2288,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         });
       }
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
-      return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now) };
+      return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes) };
     }, { isolationLevel: "Serializable" });
 
     revalidateTag("miauvadao-config");
@@ -2290,9 +2326,18 @@ export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise
       const finalPrice = Math.max(1, Math.round(o.originalPrice * (1 - discountPct / 100)));
       return { ...o, discountPct, finalPrice, validUntil, sold: 0 };
     });
+    const current = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+    const stockOverrides = stockOverridesFromJson(current.offerStockOverrides);
+    for (const offer of offersWithExpiry) {
+      stockOverrides[offer.shopItemId ?? offer.itemType] = Math.max(1, Math.floor(offer.stock));
+    }
     await prisma.miauvadaoConfig.update({
       where: { id: "singleton" },
-      data: { dailyOffers: offersWithExpiry as unknown as import("@prisma/client").Prisma.InputJsonValue, offersRefreshedAt: new Date() },
+      data: {
+        dailyOffers: offersWithExpiry as unknown as import("@prisma/client").Prisma.InputJsonValue,
+        offerStockOverrides: stockOverrides as Prisma.InputJsonValue,
+        offersRefreshedAt: new Date(),
+      },
     });
     revalidatePath("/bazar");
     return {};
@@ -2306,6 +2351,21 @@ export async function adminUpdateListingFee(fee: number): Promise<{ error?: stri
     await requireAdmin();
     await prisma.miauvadaoConfig.update({ where: { id: "singleton" }, data: { listingFee: fee } });
     revalidateTag("miauvadao-config");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro." };
+  }
+}
+
+export async function adminUpdateMiauvadaoPurchaseSettings(rechargeMinutes: number): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    await prisma.miauvadaoConfig.update({
+      where: { id: "singleton" },
+      data: { purchaseRechargeMinutes: normalizedRechargeMinutes(rechargeMinutes) },
+    });
+    revalidateTag("miauvadao-config");
+    revalidatePath("/bazar");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -2332,7 +2392,7 @@ export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ e
       }
       const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
       if (!offers[offerIndex]) throw new Error("Slot não encontrado.");
-      const candidates = await rollMiauvadaoOffers(config.vaultBalance);
+      const candidates = await rollMiauvadaoOffers(config.vaultBalance, 0, stockOverridesFromJson(config.offerStockOverrides));
       const existingIds = new Set(offers.map((offer) => offer.shopItemId));
       const anotherMegaStoneExists = offers.some((offer, index) => index !== offerIndex && isMegaStoneType(offer.itemType));
       const eligibleCandidates = candidates.filter((offer) => !anotherMegaStoneExists || !isMegaStoneType(offer.itemType));
@@ -2380,7 +2440,7 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
   try {
     await requireAdmin();
     const config = await getMiauvadaoConfig();
-    const newOffers = await rollMiauvadaoOffers(config.vaultBalance, 10);
+    const newOffers = await rollMiauvadaoOffers(config.vaultBalance, 10, stockOverridesFromJson(config.offerStockOverrides));
     if (newOffers.length === 0) {
       return { error: "Nenhum item elegível ativo encontrado na ZikaShop." };
     }

@@ -431,7 +431,7 @@ export default async function ManualPage() {
               ["Defensor", "Vitalidade", "Atrai 62% a 78% dos ataques e reduz 8% a 35% do dano recebido."],
               ["Atacante", "Força", "+8% a +26% de dano; +15% extra contra Defensores."],
               ["Flanco", "Agilidade", "+4% a +18% de dano, 35% a 82% de chance de furar defesa e +12% contra suportes."],
-              ["Oportunista", "Instinto", "22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; +10% dano se superar Instinto do alvo."],
+              ["Oportunista", "Instinto", "De 0 a 250 de Instinto, escala progressivamente de 22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; +10% dano se superar Instinto do alvo."],
               ["Encorajador", "Carisma", "Enquanto ativo, concede +4% a +18% de dano para a equipe."],
               ["Guardião", "Vitalidade + Carisma", "Intercepta 15% a 40% do dano de aliados; recebe 5% a 20% menos dano; causa 10% menos dano."],
               ["Duelista", "Força + Instinto", "+6% a +18% de dano base; +12% enquanto mantém duelo no mesmo alvo."],

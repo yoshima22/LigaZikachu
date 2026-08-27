@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowLeft, Plus, Trash2, Save, ShieldBan } from "lucide-react";
 import Link from "next/link";
-import { adminSetMiauvadaoOffers, adminUpdateListingFee, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings, adminGetBazarTradeBanData, adminSetBazarTradeBan } from "../actions";
+import { adminSetMiauvadaoOffers, adminUpdateListingFee, adminUpdateMiauvadaoPurchaseSettings, getMiauvadaoConfig, adminAdjustVault, adminRefreshMiauvadaoShopNow, adminCleanupStaleBazarListings, adminGetBazarTradeBanData, adminSetBazarTradeBan } from "../actions";
 import type { MiauvadaoOffer, BazarTradeBanAdminData } from "../actions";
 import { MEGA_STONES, isMegaStoneType } from "@/lib/mega-evolution";
 
@@ -43,6 +43,7 @@ export default function MiauvadaoAdminPage() {
   const [pending, startTransition] = useTransition();
   const [offers, setOffers] = useState<Partial<MiauvadaoOffer>[]>([emptyOffer(), emptyOffer(), emptyOffer()]);
   const [fee, setFee] = useState("10");
+  const [purchaseRechargeMinutes, setPurchaseRechargeMinutes] = useState("10");
   const [vaultBalance, setVaultBalance] = useState(0);
   const [vaultAdjust, setVaultAdjust] = useState("");
   const [tradeBanData, setTradeBanData] = useState<BazarTradeBanAdminData>({ players: [], bans: [] });
@@ -53,6 +54,7 @@ export default function MiauvadaoAdminPage() {
   useEffect(() => {
     getMiauvadaoConfig().then(c => {
       setFee(String(c.listingFee));
+      setPurchaseRechargeMinutes(String(c.purchaseRechargeMinutes));
       setVaultBalance(c.vaultBalance);
       const existing = (c.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
       if (existing.length > 0) {
@@ -126,6 +128,14 @@ export default function MiauvadaoAdminPage() {
       const r = await adminUpdateListingFee(parseInt(fee) || 10);
       if (r.error) toast.error(r.error);
       else toast.success("Taxa atualizada!");
+    });
+  };
+
+  const handleSavePurchaseSettings = () => {
+    startTransition(async () => {
+      const result = await adminUpdateMiauvadaoPurchaseSettings(parseInt(purchaseRechargeMinutes) || 10);
+      if (result.error) toast.error(result.error);
+      else toast.success("Recarga de compras atualizada!");
     });
   };
 
@@ -206,6 +216,19 @@ export default function MiauvadaoAdminPage() {
           <button type="button" disabled={pending} onClick={handleSaveFee}
             className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
             <Save size={12}/> Salvar taxa
+          </button>
+        </div>
+        <div className="flex items-end gap-3 border-t border-border/60 pt-4">
+          <div className="flex-1 space-y-1">
+            <label className="text-xs text-slate-400">Recarga de cada compra (minutos)</label>
+            <input type="number" min={1} max={1440} value={purchaseRechargeMinutes}
+              onChange={e => setPurchaseRechargeMinutes(e.target.value)}
+              className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+            <p className="text-[10px] text-slate-500">Cada jogador continua com duas cargas; este tempo vale separadamente para cada carga usada.</p>
+          </div>
+          <button type="button" disabled={pending} onClick={handleSavePurchaseSettings}
+            className="flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
+            <Save size={12}/> Salvar recarga
           </button>
         </div>
       </div>
@@ -295,10 +318,11 @@ export default function MiauvadaoAdminPage() {
                     className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none" />
                 </div>
                 <div className="space-y-1">
-                  <label className="text-[10px] text-slate-500">Estoque</label>
+                  <label className="text-[10px] text-slate-500">Quantidade padrão deste item</label>
                   <input type="number" min={1} value={offer.stock ?? ""}
                     onChange={e => updateOffer(idx, "stock", parseInt(e.target.value) || 1)}
                     className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none" />
+                  <p className="text-[9px] text-slate-600">Fica salva e será reutilizada quando este item voltar em uma rotação automática.</p>
                 </div>
               </div>
             </div>
