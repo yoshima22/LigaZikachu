@@ -15,11 +15,20 @@ const BRT_OFFSET_HOURS = 3; // UTC-3 fixo
  */
 export function parseBrtLocal(value: string | null | undefined): Date | null {
   if (!value) return null;
-  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(value.trim());
+  const s = value.trim();
+  if (!s) return null;
+  // Se a string já tem fuso explícito (Z ou ±hh:mm), o instante já está definido
+  // — NÃO reinterpretar como BRT (evita somar 3h a valores já corretos, ex.: um
+  // form que reenvia o deckLockAt existente como ISO).
+  if (/([zZ]|[+-]\d{2}:?\d{2})$/.test(s)) {
+    const d = new Date(s);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?/.exec(s);
   if (!m) return null;
-  const [, y, mo, d, h, mi, s] = m;
+  const [, y, mo, d, h, mi, sec] = m;
   // BRT = UTC-3 → o instante UTC é +3h do relógio BRT.
-  return new Date(Date.UTC(+y, +mo - 1, +d, +h + BRT_OFFSET_HOURS, +mi, s ? +s : 0, 0));
+  return new Date(Date.UTC(+y, +mo - 1, +d, +h + BRT_OFFSET_HOURS, +mi, sec ? +sec : 0, 0));
 }
 
 /**
