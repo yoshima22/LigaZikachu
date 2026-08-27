@@ -6,7 +6,7 @@
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { EXTRA_FORM_NAMES, EXTRA_FORM_POOL_BY_GEN } from "../src/lib/extra-forms-data";
+import { EXTRA_FORM_NAMES, EXTRA_FORM_POOL_BY_GEN, EXTRA_FORM_IDS } from "../src/lib/extra-forms-data";
 import { getPokemonName } from "../src/lib/mascot-data";
 import { MEGA_FORM_IDS } from "../src/lib/mega-evolution";
 
@@ -52,6 +52,20 @@ if (unmatched.length) {
   console.warn("Formas sem base resolvida:", unmatched);
 }
 
+// Base de TODAS as formas (incluindo megas e Unown) — usado para AGRUPAR na
+// Pokédex/painel admin (não afeta o sorteio, que usa só EXTRA_FORM_BASE).
+const formBaseAll: Record<number, number> = {};
+const unmatchedAll: Array<{ id: number; name: string }> = [];
+for (const id of [...EXTRA_FORM_IDS].sort((a, b) => a - b)) {
+  const name = EXTRA_FORM_NAMES[id];
+  if (!name) continue;
+  const base = resolveBase(id, name);
+  if (!base) { unmatchedAll.push({ id, name }); continue; }
+  if (base === id) continue;
+  formBaseAll[id] = base;
+}
+if (unmatchedAll.length) console.warn("Formas (todas) sem base:", unmatchedAll.length, unmatchedAll.slice(0, 10));
+
 const header = `// GERADO por scripts/generate-form-variants.ts — não editar à mão.
 // Mapa de formas alternativas NÃO-mega (que estavam nas pools) para a espécie
 // base. No sorteio de ovo, só a base entra na pool; a forma é decidida numa
@@ -61,6 +75,9 @@ const header = `// GERADO por scripts/generate-form-variants.ts — não editar 
 const body = `export const EXTRA_FORM_BASE: Record<number, number> = ${JSON.stringify(formBase)};
 
 export const FORM_VARIANTS_BY_BASE: Record<number, number[]> = ${JSON.stringify(variantsByBase)};
+
+// Base de TODAS as formas (megas e Unown inclusos) — só para AGRUPAR na UI.
+export const EXTRA_FORM_BASE_ALL: Record<number, number> = ${JSON.stringify(formBaseAll)};
 `;
 
 const OUT = resolve("src/lib/form-variants-data.ts");

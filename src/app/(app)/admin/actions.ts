@@ -1257,22 +1257,32 @@ export async function adminResetPlayerNameChange(playerId: string): Promise<{ er
 // ── Formas alternativas: liga/desliga nas pools de ovo ────────────────────────
 export type ManagedForm = {
   id: number; name: string; types: string[]; generation: number | null; spriteUrl: string; enabled: boolean;
+  // Espécie base (Pokédex) para agrupar as formas. baseId === id quando é a
+  // própria espécie/forma sem base conhecida.
+  baseId: number; baseName: string; baseSpriteUrl: string;
 };
 
 export async function listManagedForms(): Promise<ManagedForm[]> {
   await requirePlatformAdmin();
   const { EXTRA_FORM_IDS, EXTRA_FORM_GENERATION } = await import("@/lib/extra-forms-data");
+  const { EXTRA_FORM_BASE_ALL } = await import("@/lib/form-variants-data");
   const { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeLabelPt } = await import("@/lib/mascot-data");
   const disabledRows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
   const disabled = new Set(disabledRows.map((r) => r.pokemonId));
-  return EXTRA_FORM_IDS.map((id) => ({
-    id,
-    name: getPokemonName(id),
-    types: getPokemonTypes(id).map(getTypeLabelPt),
-    generation: EXTRA_FORM_GENERATION[id] ?? null,
-    spriteUrl: getStaticSpriteUrl(id),
-    enabled: !disabled.has(id),
-  }));
+  return EXTRA_FORM_IDS.map((id) => {
+    const baseId = EXTRA_FORM_BASE_ALL[id] ?? id;
+    return {
+      id,
+      name: getPokemonName(id),
+      types: getPokemonTypes(id).map(getTypeLabelPt),
+      generation: EXTRA_FORM_GENERATION[id] ?? null,
+      spriteUrl: getStaticSpriteUrl(id),
+      enabled: !disabled.has(id),
+      baseId,
+      baseName: getPokemonName(baseId),
+      baseSpriteUrl: getStaticSpriteUrl(baseId),
+    };
+  });
 }
 
 export type MascotSpriteHit = { id: number; name: string; types: string[]; spriteUrl: string };
