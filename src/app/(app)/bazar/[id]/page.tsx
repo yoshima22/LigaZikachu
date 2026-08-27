@@ -12,7 +12,7 @@ import {
   getListing, buyListing, createProposal, acceptProposal,
   rejectProposal, toggleFavorite, editListing, placeBid, finalizeAuction,
   requestDirectNegotiation, acceptDirectNegotiationParticipant, updateDirectNegotiationOffer,
-  confirmDirectNegotiation, finalizeDirectNegotiation, cancelDirectNegotiation,
+  confirmDirectNegotiation, unlockDirectNegotiation, cancelDirectNegotiation,
 } from "../actions";
 import { PremiumCountdown } from "../_components/premium-countdown";
 
@@ -43,6 +43,7 @@ interface ProposalItem {
 
 interface DirectState {
   kind: "DIRECT_NEGOTIATION"; accepted: boolean; ownerReady: boolean; participantReady: boolean;
+  ownerConfirmed?: boolean; participantConfirmed?: boolean;
   ownerCoins: number; ownerItems: ProposalOfferedItem[]; ownerLoan: boolean; ownerInterestPct: number;
   participantLoan: boolean; participantInterestPct: number;
 }
@@ -283,18 +284,18 @@ export default function BazarListingPage(): React.JSX.Element {
     const r = await acceptDirectNegotiationParticipant(proposalId); if (r.error) { toast.error(r.error); return; }
     toast.success("Participante aceito. A mesa está aberta."); reloadListing();
   });
-  const handleDirectSaveOffer = (proposalId: string) => startTransition(async () => {
-    const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0 });
+  const handleDirectLock = (proposalId: string) => startTransition(async () => {
+    const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0, lock: true });
     if (r.error) { toast.error(r.error); return; }
-    toast.success("Oferta reservada. Os OKs foram reiniciados — travem novamente."); setDirectItems([]); setDirectReset((n) => n + 1); reloadListing();
+    toast.success("Oferta reservada e travada. Quando os dois travarem, confirmem o fechamento."); setDirectItems([]); setDirectReset((n) => n + 1); reloadListing();
   });
-  const handleDirectToggleReady = (proposalId: string, ready: boolean) => startTransition(async () => {
-    const r = await confirmDirectNegotiation(proposalId, ready); if (r.error) { toast.error(r.error); return; }
-    toast.success(ready ? "Você travou sua oferta (OK dado)." : "Você destravou sua oferta para editar."); reloadListing();
+  const handleDirectUnlock = (proposalId: string) => startTransition(async () => {
+    const r = await unlockDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success("Oferta destravada. Você pode editar e travar novamente."); reloadListing();
   });
-  const handleDirectFinalize = (proposalId: string) => startTransition(async () => {
-    const r = await finalizeDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
-    toast.success("Negociação concluída e ativos entregues."); reloadListing();
+  const handleDirectConfirm = (proposalId: string) => startTransition(async () => {
+    const r = await confirmDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
+    toast.success(r.done ? "Negócio fechado! Ativos entregues aos dois lados." : "Confirmação registrada. Falta o outro lado confirmar."); reloadListing();
   });
   const handleDirectCancel = (proposalId: string) => startTransition(async () => {
     if (!confirm("Cancelar esta negociação? Os itens e ZC reservados dos dois lados voltam para os donos e a mesa reabre para outros jogadores (sem novo anúncio).")) return;
@@ -455,6 +456,8 @@ export default function BazarListingPage(): React.JSX.Element {
     const isParticipant = Boolean(activeRoom && activeRoom.proposer.id === currentPlayerId);
     const canEditRoom = Boolean(activeRoom && (isOwner || isParticipant) && listing.status === "RESERVED");
     const myReady = isOwner ? roomState?.ownerReady : roomState?.participantReady;
+    const myConfirmed = isOwner ? roomState?.ownerConfirmed : roomState?.participantConfirmed;
+    const bothReady = Boolean(roomState?.ownerReady && roomState?.participantReady);
     const pendingEntry = myProposals.some((proposal) => proposal.status === "PENDING");
     const ownerItems = roomState?.ownerItems ?? [];
     const participantItems = activeRoom?.itemsOffer ?? [];
@@ -492,9 +495,9 @@ export default function BazarListingPage(): React.JSX.Element {
               <>
                 <div className="grid gap-4 md:grid-cols-2">
                   {[
-                    { title: listing.player.displayName, ready: roomState.ownerReady, coins: roomState.ownerCoins, loan: roomState.ownerLoan, interest: roomState.ownerInterestPct, items: ownerItems },
-                    { title: activeRoom.proposer.displayName, ready: roomState.participantReady, coins: activeRoom.coinsOffer, loan: roomState.participantLoan, interest: roomState.participantInterestPct, items: participantItems },
-                  ].map((side) => <div key={side.title} className={`rounded-2xl border p-4 ${side.ready ? "border-green-400/40 bg-green-400/5" : "border-border bg-slate-950/50"}`}><div className="flex items-center justify-between"><h3 className="font-bold text-white">Oferta de {side.title}</h3><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${side.ready ? "bg-green-500/15 text-green-300" : "bg-slate-800 text-slate-500"}`}>{side.ready ? "OK confirmado" : "Editando"}</span></div>{side.coins > 0 && <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FFCB05]"><Coins size={13}/>{side.coins.toLocaleString("pt-BR")} ZC {side.loan && <span className="ml-1 text-[10px] font-semibold text-cyan-300">como empréstimo · {side.interest}%</span>}</p>}<div className="mt-3">{side.items.length ? <ProposalItemsInline items={side.items}/> : <p className="text-xs text-slate-600">Nenhum item ou mascote reservado.</p>}</div></div>)}
+                    { title: listing.player.displayName, ready: roomState.ownerReady, confirmed: Boolean(roomState.ownerConfirmed), coins: roomState.ownerCoins, loan: roomState.ownerLoan, interest: roomState.ownerInterestPct, items: ownerItems },
+                    { title: activeRoom.proposer.displayName, ready: roomState.participantReady, confirmed: Boolean(roomState.participantConfirmed), coins: activeRoom.coinsOffer, loan: roomState.participantLoan, interest: roomState.participantInterestPct, items: participantItems },
+                  ].map((side) => <div key={side.title} className={`rounded-2xl border p-4 ${side.confirmed ? "border-[#FFCB05]/50 bg-[#FFCB05]/5" : side.ready ? "border-green-400/40 bg-green-400/5" : "border-border bg-slate-950/50"}`}><div className="flex items-center justify-between gap-2"><h3 className="font-bold text-white">Oferta de {side.title}</h3><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${side.confirmed ? "bg-[#FFCB05]/20 text-[#FFCB05]" : side.ready ? "bg-green-500/15 text-green-300" : "bg-slate-800 text-slate-500"}`}>{side.confirmed ? "✓ Confirmado" : side.ready ? "🔒 Travado" : "Editando"}</span></div>{side.coins > 0 && <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FFCB05]"><Coins size={13}/>{side.coins.toLocaleString("pt-BR")} ZC {side.loan && <span className="ml-1 text-[10px] font-semibold text-cyan-300">como empréstimo · {side.interest}%</span>}</p>}<div className="mt-3">{side.items.length ? <ProposalItemsInline items={side.items}/> : <p className="text-xs text-slate-600">Nenhum item ou mascote reservado.</p>}</div></div>)}
                 </div>
 
                 {canEditRoom && (
@@ -502,12 +505,16 @@ export default function BazarListingPage(): React.JSX.Element {
                     <div>
                       <h2 className="font-bold text-blue-200">Sua oferta</h2>
                       <p className="mt-0.5 text-[11px] text-slate-400">
-                        <span className="font-semibold text-slate-300">1)</span> monte e <span className="font-semibold text-blue-200">reserve</span> seus itens/ZC · <span className="font-semibold text-slate-300">2)</span> <span className="font-semibold text-green-300">trave</span> a proposta para dar seu OK. Travar de novo no mesmo botão destrava para editar. A troca só ocorre quando os dois estão travados e o anunciante finaliza.
+                        <span className="font-semibold text-green-300">1) Travar</span>: monte seus itens/ZC e trave num clique (os ativos ficam reservados). Quando <span className="font-semibold text-slate-300">os dois</span> estiverem travados, <span className="font-semibold text-[#FFCB05]">2) Confirmar</span>: cada um confirma o fechamento — quando <span className="font-semibold text-slate-300">os dois</span> confirmarem, a troca é concluída.
                       </p>
                     </div>
                     {myReady ? (
-                      <div className="rounded-xl border border-green-400/30 bg-green-400/5 p-3 text-xs text-green-200">
-                        Sua oferta está <span className="font-black">travada (OK dado)</span>. Para mudar itens ou ZC, destrave abaixo primeiro.
+                      <div className="space-y-3">
+                        <div className={`rounded-xl border p-3 text-xs ${myConfirmed ? "border-[#FFCB05]/40 bg-[#FFCB05]/5 text-[#FFCB05]" : "border-green-400/30 bg-green-400/5 text-green-200"}`}>
+                          Sua oferta está <span className="font-black">travada</span>{myConfirmed ? " e confirmada. Aguardando o outro lado confirmar." : bothReady ? ". Agora confirme o fechamento abaixo." : ". Aguardando o outro lado travar a oferta dele."}
+                        </div>
+                        <button disabled={pending || !bothReady || Boolean(myConfirmed)} onClick={() => handleDirectConfirm(activeRoom.id)} className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-xs font-black text-slate-950 disabled:opacity-40">{myConfirmed ? "✓ Confirmado — aguardando o outro" : bothReady ? "2) Confirmar fechamento do negócio" : "Aguardando os dois travarem…"}</button>
+                        {!myConfirmed && <button disabled={pending} onClick={() => handleDirectUnlock(activeRoom.id)} className="w-full rounded-xl border border-amber-400/40 bg-amber-400/10 py-2 text-[11px] font-bold text-amber-200 disabled:opacity-40">🔓 Destravar para editar minha oferta</button>}
                       </div>
                     ) : (
                       <>
@@ -515,14 +522,12 @@ export default function BazarListingPage(): React.JSX.Element {
                         <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span>Registrar esses ZC como empréstimo de boa-fé, sem cobrança automática.</span></label>
                         {directLoan && <input value={directInterest} onChange={(event) => setDirectInterest(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Juros totais (%)" className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none"/>}
                         <OfferItemsPicker onItemsChange={setDirectItems} resetSignal={directReset}/>
-                        <button disabled={pending} onClick={() => handleDirectSaveOffer(activeRoom.id)} className="w-full rounded-xl border border-blue-400/30 bg-blue-400/10 py-2.5 text-xs font-bold text-blue-200 disabled:opacity-50">1) Reservar itens/ZC da minha oferta</button>
+                        <button disabled={pending} onClick={() => handleDirectLock(activeRoom.id)} className="w-full rounded-xl bg-green-500 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">🔒 1) Reservar e travar minha proposta</button>
                       </>
                     )}
-                    <button disabled={pending} onClick={() => handleDirectToggleReady(activeRoom.id, !myReady)} className={`w-full rounded-xl py-2.5 text-xs font-black disabled:opacity-40 ${myReady ? "border border-amber-400/40 bg-amber-400/10 text-amber-200" : "bg-green-500 text-slate-950"}`}>{myReady ? "🔓 Destravar minha oferta (editar)" : "🔒 2) Travar minha proposta (dar OK)"}</button>
                     <button disabled={pending} onClick={() => handleDirectCancel(activeRoom.id)} className="w-full rounded-xl border border-red-400/30 bg-red-500/5 py-2 text-[11px] font-bold text-red-300 disabled:opacity-40">Cancelar negociação e reabrir a mesa</button>
                   </div>
                 )}
-                {isOwner && roomState.ownerReady && roomState.participantReady && listing.status === "RESERVED" && <button disabled={pending} onClick={() => handleDirectFinalize(activeRoom.id)} className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-slate-950 disabled:opacity-50">Finalizar e trocar os ativos</button>}
               </>
             )}
             {activeRoom && !isOwner && !isParticipant && listing.status === "RESERVED" && (

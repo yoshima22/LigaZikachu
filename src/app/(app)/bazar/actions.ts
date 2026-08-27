@@ -67,8 +67,12 @@ type ProposalOfferItem = {
 type DirectNegotiationState = {
   kind: "DIRECT_NEGOTIATION";
   accepted: boolean;
+  // Fase 1 (trava): cada lado trava sua oferta reservando os ativos.
   ownerReady: boolean;
   participantReady: boolean;
+  // Fase 2 (confirmação pós-trava): só liberada quando os dois estão travados.
+  ownerConfirmed: boolean;
+  participantConfirmed: boolean;
   ownerCoins: number;
   ownerCoinsEscrowed: boolean;
   ownerItems: ProposalOfferItem[];
@@ -80,9 +84,17 @@ type DirectNegotiationState = {
 
 const EMPTY_DIRECT_STATE: DirectNegotiationState = {
   kind: "DIRECT_NEGOTIATION", accepted: false, ownerReady: false, participantReady: false,
+  ownerConfirmed: false, participantConfirmed: false,
   ownerCoins: 0, ownerCoinsEscrowed: false, ownerItems: [], ownerLoan: false,
   ownerInterestPct: 0, participantLoan: false, participantInterestPct: 0,
 };
+
+// Assinatura canônica de uma oferta, para detectar mudança real (e só então
+// invalidar a trava/confirmação do outro lado).
+function directOfferSignature(items: ProposalOfferItem[] | null | undefined, coins: number, loan: boolean, interest: number) {
+  const norm = (items ?? []).map((i) => `${i.mascotId ?? i.type}:${i.mascotId ? 1 : i.quantity}`).sort();
+  return JSON.stringify({ norm, coins, loan, interest });
+}
 
 function parseDirectState(value: string | null | undefined): DirectNegotiationState | null {
   if (!value) return null;
@@ -1168,8 +1180,12 @@ export async function acceptDirectNegotiationParticipant(proposalId: string): Pr
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao aceitar participante." }; }
 }
 
+// Botão único "Travar minha proposta": reserva os ativos/ZC informados E trava
+// o lado de quem chama (fase 1). Se a oferta mudou de fato, invalida a trava e a
+// confirmação do outro lado (precisa reavaliar). Sempre zera a própria
+// confirmação de fase 2 (é preciso reconfirmar após travar).
 export async function updateDirectNegotiationOffer(input: {
-  proposalId: string; coins: number; items: ProposalOfferItem[]; loan?: boolean; interestPct?: number;
+  proposalId: string; coins: number; items: ProposalOfferItem[]; loan?: boolean; interestPct?: number; lock?: boolean;
 }): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -1181,6 +1197,7 @@ export async function updateDirectNegotiationOffer(input: {
     if (!proposal || proposal.status !== "ACCEPTED" || proposal.listing.status !== "RESERVED" || !isDirectNegotiationListing(proposal.listing)) return { error: "Negociação não está ativa." };
     const isOwner = proposal.listing.playerId === player.id;
     if (!isOwner && proposal.proposerId !== player.id) return { error: "Sem permissão." };
+    const lock = input.lock !== false; // padrão: travar ao salvar (botão único)
     const coins = Math.max(0, Math.floor(Number(input.coins) || 0));
     const loan = Boolean(input.loan);
     const interestPct = Math.max(0, Math.min(100, Math.floor(Number(input.interestPct) || 0)));
@@ -1194,6 +1211,9 @@ export async function updateDirectNegotiationOffer(input: {
       const oldItems = isOwner ? state.ownerItems : (fresh.itemsOffer as ProposalOfferItem[] | null) ?? [];
       const oldCoins = isOwner ? state.ownerCoins : fresh.coinsOffer;
       const oldCoinsEscrowed = isOwner ? state.ownerCoinsEscrowed : fresh.coinsEscrowed;
+      const oldLoan = isOwner ? state.ownerLoan : state.participantLoan;
+      const oldInterest = isOwner ? state.ownerInterestPct : state.participantInterestPct;
+      const changed = directOfferSignature(oldItems, oldCoins, oldLoan, oldInterest) !== directOfferSignature(cleanItems, coins, loan, interestPct);
       await _releaseProposalOffers(tx, oldItems, player.id);
       if (oldCoinsEscrowed && oldCoins > 0) {
         await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: oldCoins } }, create: { playerId: player.id, balance: oldCoins, totalEarned: 0 } });
@@ -1204,16 +1224,26 @@ export async function updateDirectNegotiationOffer(input: {
         if (!wallet || wallet.balance < coins) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
         await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: coins } } });
       }
-      const reset = { ...state, ownerReady: false, participantReady: false };
+      // Travar/editar o MEU lado nunca mexe na trava do outro (a trava é da
+      // própria oferta). Mas, se a MINHA oferta mudou, a CONFIRMAÇÃO de fase 2 do
+      // outro lado cai — ele concordou com um acordo que mudou.
+      const base = { ...state };
       if (isOwner) {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...reset, ownerCoins: coins, ownerCoinsEscrowed: !loan && coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
+        base.ownerReady = lock; base.ownerConfirmed = false;
+        if (changed) base.participantConfirmed = false;
       } else {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: !loan && coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...reset, participantLoan: loan, participantInterestPct: interestPct }) } });
+        base.participantReady = lock; base.participantConfirmed = false;
+        if (changed) base.ownerConfirmed = false;
+      }
+      if (isOwner) {
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...base, ownerCoins: coins, ownerCoinsEscrowed: !loan && coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
+      } else {
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: !loan && coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...base, participantLoan: loan, participantInterestPct: interestPct }) } });
       }
       await createPlayerNotification(tx, {
         playerId: isOwner ? fresh.proposerId : proposal.listing.playerId,
-        category: "BAZAR", type: "DIRECT_NEGOTIATION_OFFER_UPDATED", title: "Oferta atualizada",
-        body: `${player.displayName} alterou a oferta da negociação. Revise antes de confirmar novamente.`,
+        category: "BAZAR", type: "DIRECT_NEGOTIATION_OFFER_UPDATED", title: lock ? "Oferta travada" : "Oferta atualizada",
+        body: `${player.displayName} ${lock ? "travou" : "atualizou"} a oferta${changed ? ". Reavalie e trave a sua novamente." : "."}`,
         href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId,
         eventKey: `bazar:direct:offer:${fresh.id}:${Date.now()}`,
       });
@@ -1222,10 +1252,10 @@ export async function updateDirectNegotiationOffer(input: {
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao reservar a oferta." }; }
 }
 
-// Trava (ready=true) ou destrava (ready=false) o OK do lado de quem chama. O
-// mesmo botão verde na UI alterna: travar a proposta e depois destravar para
-// editar. Destravar a própria oferta não mexe no OK do outro lado.
-export async function confirmDirectNegotiation(proposalId: string, ready = true): Promise<{ error?: string }> {
+// Destrava a própria oferta (fase 1) e zera a própria confirmação (fase 2). O
+// escrow reservado é mantido; ao travar de novo a oferta é reavaliada. Não mexe
+// no lado do outro jogador.
+export async function unlockDirectNegotiation(proposalId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
@@ -1240,22 +1270,117 @@ export async function confirmDirectNegotiation(proposalId: string, ready = true)
       if (!state?.accepted) throw new Error("Mesa ainda não aceita.");
       const next = {
         ...state,
-        ownerReady: isOwner ? ready : state.ownerReady,
-        participantReady: isOwner ? state.participantReady : ready,
+        ownerReady: isOwner ? false : state.ownerReady,
+        participantReady: isOwner ? state.participantReady : false,
+        ownerConfirmed: isOwner ? false : state.ownerConfirmed,
+        participantConfirmed: isOwner ? state.participantConfirmed : false,
       };
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { message: JSON.stringify(next) } });
       await createPlayerNotification(tx, {
         playerId: isOwner ? proposal.proposerId : proposal.listing.playerId,
-        category: "BAZAR", type: "DIRECT_NEGOTIATION_CONFIRMED", title: ready ? "Oferta travada" : "OK removido",
-        body: ready
-          ? `${player.displayName} travou a oferta${next.ownerReady && next.participantReady ? ". As duas ofertas estão prontas para finalizar." : "."}`
-          : `${player.displayName} destravou a oferta para editar. Revise antes de travar novamente.`,
+        category: "BAZAR", type: "DIRECT_NEGOTIATION_CONFIRMED", title: "Trava removida",
+        body: `${player.displayName} destravou a oferta para editar. Revise antes de travar novamente.`,
         href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId,
-        eventKey: `bazar:direct:confirmed:${proposal.id}:${isOwner ? "owner" : "participant"}:${Date.now()}`,
+        eventKey: `bazar:direct:unlock:${proposal.id}:${isOwner ? "owner" : "participant"}:${Date.now()}`,
       });
     });
     revalidateBazar(); return {};
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao destravar." }; }
+}
+
+// Fase 2 — confirmação pós-trava. Só é permitida quando OS DOIS estão travados.
+// Marca a confirmação do lado de quem chama; quando os dois confirmam, a troca
+// é fechada e os ativos entregues automaticamente.
+export async function confirmDirectNegotiation(proposalId: string): Promise<{ error?: string; done?: boolean }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
+    const proposal = await prisma.bazarProposal.findUnique({
+      where: { id: proposalId },
+      include: { listing: { include: { player: { select: { id: true, displayName: true, userId: true } } } }, proposer: { select: { id: true, displayName: true, userId: true } } },
+    });
+    if (!proposal || proposal.status !== "ACCEPTED" || !isDirectNegotiationListing(proposal.listing)) return { error: "Negociação indisponível." };
+    const isOwner = proposal.listing.playerId === player.id;
+    if (!isOwner && proposal.proposerId !== player.id) return { error: "Sem permissão." };
+    const ownerId = proposal.listing.playerId;
+    const proposerId = proposal.proposerId;
+    await assertBazarPairAllowed(prisma, ownerId, proposerId);
+    let done = false;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
+      const listing = await tx.bazarListing.findUniqueOrThrow({ where: { id: proposal.listingId } });
+      if (listing.status !== "RESERVED") throw new Error("A negociação já foi concluída ou cancelada.");
+      const fresh = await tx.bazarProposal.findUniqueOrThrow({ where: { id: proposal.id } });
+      const state = parseDirectState(fresh.message);
+      if (!state?.accepted) throw new Error("Mesa ainda não aceita.");
+      if (!state.ownerReady || !state.participantReady) throw new Error("Os dois lados precisam TRAVAR a oferta antes de confirmar.");
+      const next = {
+        ...state,
+        ownerConfirmed: isOwner ? true : state.ownerConfirmed,
+        participantConfirmed: isOwner ? state.participantConfirmed : true,
+      };
+      await tx.bazarProposal.update({ where: { id: proposal.id }, data: { message: JSON.stringify(next) } });
+      if (next.ownerConfirmed && next.participantConfirmed) {
+        await _deliverDirectNegotiation(tx, {
+          listingId: proposal.listingId, proposalId: proposal.id,
+          ownerId, ownerName: proposal.listing.player.displayName,
+          proposerId, proposerName: proposal.proposer.displayName,
+        });
+        done = true;
+      } else {
+        await createPlayerNotification(tx, {
+          playerId: isOwner ? proposerId : ownerId,
+          category: "BAZAR", type: "DIRECT_NEGOTIATION_CONFIRMED", title: "Confirmação registrada",
+          body: `${player.displayName} confirmou o fechamento. Falta o outro lado confirmar para concluir.`,
+          href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId,
+          eventKey: `bazar:direct:confirm2:${proposal.id}:${isOwner ? "owner" : "participant"}:${Date.now()}`,
+        });
+      }
+    });
+    revalidateBazar();
+    if (done) { revalidateTag(`nav-${proposal.proposer.userId}`); revalidateTag(`nav-${proposal.listing.player.userId}`); }
+    return { done };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao confirmar." }; }
+}
+
+// Entrega os ativos das duas pontas e conclui a negociação direta. Exige os dois
+// travados E os dois confirmados. Reutilizado pela confirmação de fase 2.
+async function _deliverDirectNegotiation(tx: TxClient, args: {
+  listingId: string; proposalId: string; ownerId: string; ownerName: string; proposerId: string; proposerName: string;
+}) {
+  const freshProposal = await tx.bazarProposal.findUniqueOrThrow({ where: { id: args.proposalId } });
+  const freshState = parseDirectState(freshProposal.message);
+  if (!freshState?.ownerReady || !freshState.participantReady) throw new Error("Os dois jogadores precisam travar as ofertas.");
+  if (!freshState.ownerConfirmed || !freshState.participantConfirmed) throw new Error("Os dois jogadores precisam confirmar o fechamento.");
+  if (freshState.ownerLoan && freshState.participantLoan) throw new Error("Apenas um dos lados pode usar empréstimo na mesma negociação.");
+  await _deliverProposalOffers(tx, freshState.ownerItems, args.ownerId, args.proposerId);
+  await _deliverProposalOffers(tx, (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [], args.proposerId, args.ownerId);
+  if (!freshState.ownerLoan && freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins);
+  if (!freshState.participantLoan && freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer);
+  const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
+  if (loanSide) {
+    const principal = loanSide === "owner" ? freshState.ownerCoins : freshProposal.coinsOffer;
+    const interest = loanSide === "owner" ? freshState.ownerInterestPct : freshState.participantInterestPct;
+    const borrowerId = loanSide === "owner" ? args.ownerId : args.proposerId;
+    const lenderId = loanSide === "owner" ? args.proposerId : args.ownerId;
+    await tx.bazarLoan.create({ data: { listingId: args.listingId, proposalId: args.proposalId, lenderId, borrowerId, principalCoins: principal, interestPct: interest, totalDueCoins: Math.ceil(principal * (100 + interest) / 100), itemSnapshot: { directNegotiation: true, ownerItems: freshState.ownerItems, participantItems: freshProposal.itemsOffer } } });
+  }
+  await tx.bazarListing.update({ where: { id: args.listingId }, data: { status: "SOLD" } });
+  const participantItems = (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [];
+  await tx.bazarTransaction.create({ data: {
+    listingId: args.listingId, sellerId: args.ownerId, buyerId: args.proposerId,
+    sellerName: args.ownerName, buyerName: args.proposerName,
+    description: "Negociação direta concluída", coinsAmount: freshState.ownerCoins + freshProposal.coinsOffer, category: "ITEM",
+    detailsJson: {
+      direct: true,
+      sellerItems: freshState.ownerItems, sellerCoins: freshState.ownerCoins, sellerLoan: freshState.ownerLoan,
+      buyerItems: participantItems, buyerCoins: freshProposal.coinsOffer, buyerLoan: freshState.participantLoan,
+    } as unknown as Prisma.InputJsonValue,
+  } });
+  await Promise.all([
+    createPlayerNotification(tx, { playerId: args.ownerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${args.proposerName} foi concluída e os ativos foram entregues.`, href: `/bazar/${args.listingId}`, entityId: args.listingId, eventKey: `bazar:direct:done:owner:${args.proposalId}` }),
+    createPlayerNotification(tx, { playerId: args.proposerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${args.ownerName} foi concluída e os ativos foram entregues.`, href: `/bazar/${args.listingId}`, entityId: args.listingId, eventKey: `bazar:direct:done:participant:${args.proposalId}` }),
+  ]);
 }
 
 // Cancela a negociação em andamento (dono OU participante). Libera os ativos/ZC
@@ -1308,6 +1433,8 @@ export async function cancelDirectNegotiation(proposalId: string): Promise<{ err
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao cancelar negociação." }; }
 }
 
+// Conclusão direta pelo anunciante (fallback). Continua exigindo os dois
+// travados E os dois confirmados (mesma regra do fechamento por confirmação).
 export async function finalizeDirectNegotiation(proposalId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
@@ -1319,38 +1446,11 @@ export async function finalizeDirectNegotiation(proposalId: string): Promise<{ e
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
       const fresh = await tx.bazarListing.findUniqueOrThrow({ where: { id: proposal.listingId } });
       if (fresh.status !== "RESERVED") throw new Error("A negociação já foi concluída ou cancelada.");
-      const freshProposal = await tx.bazarProposal.findUniqueOrThrow({ where: { id: proposal.id } });
-      const freshState = parseDirectState(freshProposal.message);
-      if (!freshState?.ownerReady || !freshState.participantReady) throw new Error("Os dois jogadores precisam confirmar as ofertas.");
-      if (freshState.ownerLoan && freshState.participantLoan) throw new Error("Apenas um dos lados pode usar empréstimo na mesma negociação.");
-      await _deliverProposalOffers(tx, freshState.ownerItems, owner.id, proposal.proposerId);
-      await _deliverProposalOffers(tx, (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [], proposal.proposerId, owner.id);
-      if (!freshState.ownerLoan && freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, proposal.proposerId, freshState.ownerCoins);
-      if (!freshState.participantLoan && freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, owner.id, freshProposal.coinsOffer);
-      const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
-      if (loanSide) {
-        const principal = loanSide === "owner" ? freshState.ownerCoins : freshProposal.coinsOffer;
-        const interest = loanSide === "owner" ? freshState.ownerInterestPct : freshState.participantInterestPct;
-        const borrowerId = loanSide === "owner" ? owner.id : proposal.proposerId;
-        const lenderId = loanSide === "owner" ? proposal.proposerId : owner.id;
-        await tx.bazarLoan.create({ data: { listingId: proposal.listingId, proposalId: proposal.id, lenderId, borrowerId, principalCoins: principal, interestPct: interest, totalDueCoins: Math.ceil(principal * (100 + interest) / 100), itemSnapshot: { directNegotiation: true, ownerItems: freshState.ownerItems, participantItems: freshProposal.itemsOffer } } });
-      }
-      await tx.bazarListing.update({ where: { id: proposal.listingId }, data: { status: "SOLD" } });
-      const participantItems = (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [];
-      await tx.bazarTransaction.create({ data: {
-        listingId: proposal.listingId, sellerId: owner.id, buyerId: proposal.proposerId,
-        sellerName: owner.displayName, buyerName: proposal.proposer.displayName,
-        description: "Negociação direta concluída", coinsAmount: freshState.ownerCoins + freshProposal.coinsOffer, category: "ITEM",
-        detailsJson: {
-          direct: true,
-          sellerItems: freshState.ownerItems, sellerCoins: freshState.ownerCoins, sellerLoan: freshState.ownerLoan,
-          buyerItems: participantItems, buyerCoins: freshProposal.coinsOffer, buyerLoan: freshState.participantLoan,
-        } as unknown as Prisma.InputJsonValue,
-      } });
-      await Promise.all([
-        createPlayerNotification(tx, { playerId: owner.id, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${proposal.proposer.displayName} foi concluída e os ativos foram entregues.`, href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:done:owner:${proposal.id}` }),
-        createPlayerNotification(tx, { playerId: proposal.proposerId, category: "BAZAR", type: "DIRECT_NEGOTIATION_DONE", title: "Negociação concluída", body: `Sua troca com ${owner.displayName} foi concluída e os ativos foram entregues.`, href: `/bazar/${proposal.listingId}`, entityId: proposal.listingId, eventKey: `bazar:direct:done:participant:${proposal.id}` }),
-      ]);
+      await _deliverDirectNegotiation(tx, {
+        listingId: proposal.listingId, proposalId: proposal.id,
+        ownerId: owner.id, ownerName: owner.displayName,
+        proposerId: proposal.proposerId, proposerName: proposal.proposer.displayName,
+      });
     });
     revalidateBazar(); revalidateTag(`nav-${proposal.proposer.userId}`); revalidateTag(`nav-${user.id}`); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao concluir negociação." }; }

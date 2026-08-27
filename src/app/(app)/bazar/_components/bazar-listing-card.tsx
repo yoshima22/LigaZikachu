@@ -212,9 +212,18 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         )}
 
         {isDirectNegotiation ? (
-          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-2 text-[10px] leading-relaxed text-cyan-100/75">
-            Entre, monte sua oferta e confirme a troca com o anunciante.
-          </div>
+          <>
+            <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-2 py-2 text-[10px] leading-relaxed text-cyan-100/75">
+              Mesa de {listing.player.displayName}. Entre, monte sua oferta e confirme a troca.
+            </div>
+            <div className="flex items-center justify-between text-[9px] text-slate-500 border-t border-cyan-500/20 pt-1.5">
+              <span className="truncate">Anunciante: {listing.player.displayName}</span>
+              <span className="flex items-center gap-2">
+                <span className="flex items-center gap-0.5"><Heart size={9}/>{listing._count.favorites}</span>
+                <span className="flex items-center gap-0.5"><Clock size={8}/> {daysLeft}d</span>
+              </span>
+            </div>
+          </>
         ) : isAuction ? (
           <div className="space-y-1 pt-1">
             <div className="flex items-center justify-between">
