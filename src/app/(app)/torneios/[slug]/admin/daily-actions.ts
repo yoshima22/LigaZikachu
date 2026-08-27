@@ -205,6 +205,16 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
     }));
   }
 
+  const badgePoints = week.matches.flatMap((match) => {
+    if (!match.winnerPlayerId) return [];
+    const submissionId = match.winnerPlayerId === match.playerAId
+      ? match.playerADeckSubmissionId
+      : match.playerBDeckSubmissionId;
+    const submission = submissionId ? submissionById.get(submissionId) : null;
+    if (!submission?.gymBadgeId || submission.gymBadgeValid !== true) return [];
+    return [{ matchId: match.id, playerId: match.winnerPlayerId, badgeId: submission.gymBadgeId, submissionId: submission.id }];
+  });
+
   const closure = await prisma.$transaction(async (tx) => {
     const created = await tx.tournamentDayClosure.create({
       data: {
@@ -227,10 +237,24 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
     for (const completion of completionByPlayer.values()) {
       await tx.tournamentEnguicaCompletion.updateMany({ where: { id: completion.id, rewardedAt: null }, data: { rewardedAt: new Date() } });
     }
+    for (const point of badgePoints) {
+      await tx.badgeProgress.upsert({
+        where: { badgeId_playerId: { badgeId: point.badgeId, playerId: point.playerId } },
+        update: { points: { increment: 1 }, notes: `Ponto validado no fechamento de ${input.dateKey}` },
+        create: { badgeId: point.badgeId, playerId: point.playerId, points: 1, notes: `Ponto validado no fechamento de ${input.dateKey}` },
+      });
+      await tx.tournamentDayReward.create({
+        data: {
+          closureId: created.id, playerId: point.playerId, kind: "GYM_BADGE_POINT",
+          dedupeKey: `gym-badge:${point.matchId}:${point.playerId}`, matchId: point.matchId,
+          payload: { badgeId: point.badgeId, submissionId: point.submissionId, points: 1 },
+        },
+      });
+    }
     await tx.auditLog.create({
       data: {
         actorUserId: admin.id, entityType: "tournament_day", entityId: created.id, action: "tournament_day.closed",
-        after: { tournamentWeekId: week.id, dateKey: input.dateKey, topPlayerId, rafflePlayerId, rewards: rewards.length },
+        after: { tournamentWeekId: week.id, dateKey: input.dateKey, topPlayerId, rafflePlayerId, rewards: rewards.length, badgePoints: badgePoints.length },
       },
     });
     return created;
@@ -257,22 +281,6 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
       });
     }
 
-    if (!match.winnerPlayerId) continue;
-    const winnerSubmissionId = match.winnerPlayerId === match.playerAId ? match.playerADeckSubmissionId : match.playerBDeckSubmissionId;
-    const winnerSubmission = winnerSubmissionId ? submissionById.get(winnerSubmissionId) : null;
-    if (!winnerSubmission?.gymBadgeId || winnerSubmission.gymBadgeValid !== true) continue;
-    const progress = await prisma.badgeProgress.findUnique({
-      where: { badgeId_playerId: { badgeId: winnerSubmission.gymBadgeId, playerId: match.winnerPlayerId } },
-    });
-    const current = progress?.points ?? 0;
-    const next = current < 2 || match.winnerDefendedPrizes >= 3 ? Math.min(3, current + 1) : current;
-    if (next > current) {
-      await prisma.badgeProgress.upsert({
-        where: { badgeId_playerId: { badgeId: winnerSubmission.gymBadgeId, playerId: match.winnerPlayerId } },
-        update: { points: next, notes: `Progresso validado em ${input.dateKey}` },
-        create: { badgeId: winnerSubmission.gymBadgeId, playerId: match.winnerPlayerId, points: next, notes: `Progresso validado em ${input.dateKey}` },
-      });
-    }
   }
 
   const playerNameById = new Map(week.matches.flatMap((match) => [
@@ -301,6 +309,7 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
 
   revalidatePath(`/torneios/${week.tournament.slug}`);
   revalidatePath(`/torneios/${week.tournament.slug}/admin`);
+  revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
   revalidatePath("/caixa-de-presentes");
   return { success: true, closureId: closure.id, rewards: rewards.length, mascotMissionExp, topPlayerId, rafflePlayerId };

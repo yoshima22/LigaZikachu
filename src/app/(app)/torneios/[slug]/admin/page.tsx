@@ -70,7 +70,7 @@ export default async function TournamentAdminPage({ params }: Props) {
     where: { slug },
     include: {
       _count: { select: { registrations: true, challenges: true } },
-      badges: { orderBy: { name: "asc" } },
+      badges: { orderBy: { name: "asc" }, include: { owners: { include: { player: { select: { id: true, displayName: true } } }, orderBy: { awardedAt: "desc" } } } },
       postseasonEntries: { include: { player: true }, orderBy: [{ stage: "asc" }, { seed: "asc" }] },
       weeks: {
         orderBy: { weekNumber: "asc" },
@@ -778,7 +778,7 @@ export default async function TournamentAdminPage({ params }: Props) {
           <CardHeader><CardTitle className="flex items-center gap-2 text-base text-white"><Award size={18} className="text-[#FFCB05]" /> Insignias e imagens</CardTitle></CardHeader>
           <CardContent className="space-y-3">
             <p className="text-xs text-slate-500">As imagens ficam no bucket publico do Supabase com cache de um ano. Use este controle para substituir qualquer arte sem alterar a Jornada associada.</p>
-            <TournamentBadgeManager badges={tournament.badges.map((badge) => ({ id: badge.id, name: badge.name, imageUrl: badge.imageUrl }))} />
+            <TournamentBadgeManager badges={tournament.badges.map((badge) => ({ id: badge.id, name: badge.name, imageUrl: badge.imageUrl, owners: badge.owners.map((owner) => ({ id: owner.player.id, displayName: owner.player.displayName })) }))} />
           </CardContent>
         </Card>
       )}
