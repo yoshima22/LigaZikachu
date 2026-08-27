@@ -70,7 +70,12 @@ export default async function DashboardPage() {
     const availableCodesCount = await prisma.boosterCode.count({ where: { status: "AVAILABLE", ...(seasonId ? { seasonId } : {}) } }).catch(() => 0);
     const recentMatches = seasonId ? await prisma.match.findMany({
       where: { seasonId, status: MatchStatus.CONFIRMED },
-      orderBy: { playedAt: "desc" }, take: 5,
+      orderBy: [
+        { confirmedAt: { sort: "desc", nulls: "last" } },
+        { reportedAt: { sort: "desc", nulls: "last" } },
+        { playedAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ], take: 5,
       include: {
         playerA: { select: { displayName: true } },
         playerB: { select: { displayName: true } },

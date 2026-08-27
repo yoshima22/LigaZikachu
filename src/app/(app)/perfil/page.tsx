@@ -270,7 +270,13 @@ export default async function PerfilPage() {
         // Apenas partidas de torneios reais (não rascunho)
         tournamentWeek: { tournament: { status: { not: "DRAFT" } } }
       },
-      orderBy: { playedAt: "desc" },
+      orderBy: [
+        { confirmedAt: { sort: "desc", nulls: "last" } },
+        { reportedAt: { sort: "desc", nulls: "last" } },
+        { playedAt: { sort: "desc", nulls: "last" } },
+        { scheduledAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       take: 5,
       include: {
         playerA: { select: { id: true, displayName: true } },
@@ -562,6 +568,7 @@ export default async function PerfilPage() {
                 const opponent = match.playerAId === player.id ? match.playerB : match.playerA;
                 const won = match.winnerPlayerId === player.id;
                 const lost = match.loserPlayerId === player.id;
+                const matchDate = match.playedAt ?? match.confirmedAt ?? match.reportedAt ?? match.scheduledAt;
                 return (
                   <li key={match.id}>
                     <Link
@@ -578,6 +585,7 @@ export default async function PerfilPage() {
                           {match.tournamentWeek?.tournament.name ?? "Liga Zikachu"}
                           {match.tournamentWeek ? ` - Semana ${match.tournamentWeek.weekNumber}` : ""}
                         </p>
+                        {matchDate && <p className="mt-0.5 text-[10px] text-slate-600">{new Date(matchDate).toLocaleString("pt-BR", { day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>}
                       </div>
                       <StatusBadge
                         variant={won ? "success" : lost ? "danger" : "info"}

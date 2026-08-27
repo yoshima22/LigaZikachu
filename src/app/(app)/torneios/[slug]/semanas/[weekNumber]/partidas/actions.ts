@@ -605,6 +605,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
         status: autoConfirmed ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
         reportedById: user.id,
         reportedAt: now,
+        playedAt: match.playedAt ?? now,
         confirmedById: autoConfirmed ? user.id : null,
         confirmedAt: autoConfirmed ? now : null,
         rankingPointsA: autoConfirmed && winnerId === match.playerAId ? winPoints : 0,
@@ -806,6 +807,7 @@ export async function correctMatchResult(input: z.infer<typeof correctResultSche
         resultSource: ResultSource.ADMIN_ADJUSTMENT,
         reportedById: user.id,
         reportedAt: now,
+        playedAt: match.playedAt ?? now,
         confirmedById: shouldConfirm ? user.id : null,
         confirmedAt: shouldConfirm ? now : null,
         notes: notes || match.notes,
@@ -972,6 +974,7 @@ export async function confirmMatchResult(input: z.infer<typeof confirmResultSche
         where: { id: matchId },
         data: {
           status: "CONFIRMED",
+          playedAt: match.playedAt ?? match.reportedAt ?? now,
           confirmedById: user.id,
           confirmedAt: now,
           rankingPointsA: match.winnerPlayerId === match.playerAId ? points.rankingPointsA : lossPoints,

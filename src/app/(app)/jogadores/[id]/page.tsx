@@ -120,7 +120,13 @@ export default async function PlayerDetailPage({
         status: MatchStatus.CONFIRMED,
         tournamentWeek: { tournament: { status: { not: "DRAFT" } } }
       },
-      orderBy: { playedAt: "desc" },
+      orderBy: [
+        { confirmedAt: { sort: "desc", nulls: "last" } },
+        { reportedAt: { sort: "desc", nulls: "last" } },
+        { playedAt: { sort: "desc", nulls: "last" } },
+        { scheduledAt: { sort: "desc", nulls: "last" } },
+        { createdAt: "desc" },
+      ],
       take: 10,
       include: {
         playerA: { select: { id: true, displayName: true } },
@@ -638,6 +644,7 @@ export default async function PlayerDetailPage({
                 const matchHref = match.tournamentWeek?.tournament?.slug && match.tournamentWeek?.weekNumber
                   ? `/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`
                   : null;
+                const matchDate = match.playedAt ?? match.confirmedAt ?? match.reportedAt ?? match.scheduledAt;
                 const prizes = won ? match.winnerDefendedPrizes : null;
                 const inner = (
                   <li key={match.id} className={`flex items-center justify-between gap-3 py-3 text-sm ${matchHref ? "cursor-pointer hover:bg-slate-800/40 rounded-lg px-2 -mx-2 transition-colors" : ""}`}>
@@ -651,9 +658,9 @@ export default async function PlayerDetailPage({
                           {match.tournamentWeek.tournament && ` · ${match.tournamentWeek.tournament.name}`}
                         </span>
                       )}
-                      {match.playedAt && (
+                      {matchDate && (
                         <span className="ml-2 text-xs text-slate-600">
-                          {new Date(match.playedAt).toLocaleDateString("pt-BR", { day:"2-digit", month:"2-digit" })}
+                          {new Date(matchDate).toLocaleString("pt-BR", { day:"2-digit", month:"2-digit", hour:"2-digit", minute:"2-digit" })}
                         </span>
                       )}
                     </div>
