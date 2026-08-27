@@ -129,6 +129,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const [dropCategory, setDropCategory] = useState("ALL");
   const [dropSearch, setDropSearch] = useState("");
   const [dropPage, setDropPage] = useState(1);
+  const [expandedForms, setExpandedForms] = useState<Set<number>>(new Set());
   // Modal de seleção de geração
   const [genPickEggId, setGenPickEggId] = useState<string | null>(null); // ID do ovo esperando confirmação
   // useTimerExpiry: atualiza automaticamente — botão "Chocar" aparece quando o tempo acaba
@@ -290,24 +291,53 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-5">
                 {visibleDrops.length ? (
                   <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                    {visibleDrops.map((drop) => (
-                      <div key={drop.pokemonId} className="flex items-center gap-3 rounded-xl border border-border bg-slate-900/65 p-3">
-                        {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={drop.spriteUrl} alt={drop.name} className="h-14 w-14 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-start justify-between gap-2">
-                            <p className="truncate text-xs font-bold text-white">{drop.name}</p>
-                            <span className="shrink-0 text-[11px] font-black text-[#FFCB05]">{formatDropChance(drop.chancePct)}</span>
+                    {visibleDrops.map((drop) => {
+                      const hasForms = Boolean(drop.forms && drop.forms.length > 1);
+                      const isExpanded = expandedForms.has(drop.pokemonId);
+                      return (
+                      <div key={drop.pokemonId} className={`rounded-xl border bg-slate-900/65 p-3 ${hasForms ? "border-cyan-400/30" : "border-border"} ${hasForms && isExpanded ? "sm:col-span-2 lg:col-span-3" : ""}`}>
+                        <div
+                          className={`flex items-center gap-3 ${hasForms ? "cursor-pointer" : ""}`}
+                          onClick={hasForms ? () => setExpandedForms((prev) => { const next = new Set(prev); if (next.has(drop.pokemonId)) next.delete(drop.pokemonId); else next.add(drop.pokemonId); return next; }) : undefined}
+                        >
+                          {/* eslint-disable-next-line @next/next/no-img-element */}
+                          <img src={drop.spriteUrl} alt={drop.name} className="h-14 w-14 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                          <div className="min-w-0 flex-1">
+                            <div className="flex items-start justify-between gap-2">
+                              <p className="truncate text-xs font-bold text-white">{drop.name}</p>
+                              <span className="shrink-0 text-[11px] font-black text-[#FFCB05]">{formatDropChance(drop.chancePct)}</span>
+                            </div>
+                            <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-300">{drop.categoryLabel}</p>
+                            <div className="mt-1 flex flex-wrap gap-1">
+                              {drop.types.map((type) => <span key={type} className="rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[8px] text-slate-400">{TYPE_LABEL[type.toLowerCase()] ?? type}</span>)}
+                              {drop.custom && <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[8px] text-cyan-300">Customizado</span>}
+                              {hasForms && <span className="rounded border border-cyan-400/40 bg-cyan-400/10 px-1.5 py-0.5 text-[8px] font-bold text-cyan-300">{drop.forms!.length} formas {isExpanded ? "▲" : "▼"}</span>}
+                            </div>
+                            <p className="mt-1 text-[9px] text-slate-600">Você possui {drop.ownedCopies} desta forma inicial</p>
                           </div>
-                          <p className="mt-0.5 text-[9px] font-semibold uppercase tracking-wide text-purple-300">{drop.categoryLabel}</p>
-                          <div className="mt-1 flex flex-wrap gap-1">
-                            {drop.types.map((type) => <span key={type} className="rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[8px] text-slate-400">{TYPE_LABEL[type.toLowerCase()] ?? type}</span>)}
-                            {drop.custom && <span className="rounded border border-cyan-400/30 bg-cyan-400/10 px-1.5 py-0.5 text-[8px] text-cyan-300">Customizado</span>}
-                          </div>
-                          <p className="mt-1 text-[9px] text-slate-600">Você possui {drop.ownedCopies} desta forma inicial</p>
                         </div>
+                        {hasForms && isExpanded && (
+                          <div className="mt-3 rounded-lg border border-cyan-400/20 bg-slate-950/60 p-2">
+                            <p className="mb-2 text-[9px] font-semibold uppercase tracking-wide text-cyan-300">Segunda rolagem — forma sorteada ({drop.forms!.length} formas, peso igual)</p>
+                            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
+                              {drop.forms!.map((form) => (
+                                <div key={form.pokemonId} className="flex items-center gap-2 rounded-lg border border-border bg-slate-900/60 px-2 py-1.5">
+                                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                                  <img src={form.spriteUrl} alt={form.name} className="h-9 w-9 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                                  <div className="min-w-0 flex-1">
+                                    <p className="truncate text-[10px] font-semibold text-white">{form.name}{form.isBase && <span className="ml-1 text-[8px] font-bold text-slate-500">base</span>}</p>
+                                    <p className="text-[8px] text-slate-500">{form.types.map((t) => TYPE_LABEL[t.toLowerCase()] ?? t).join(" / ")}</p>
+                                  </div>
+                                  <span className="shrink-0 text-[10px] font-black text-cyan-300">{form.internalPct.toFixed(1)}%</span>
+                                </div>
+                              ))}
+                            </div>
+                            <p className="mt-2 text-[8px] text-slate-600">Essas % são a rolagem interna entre as formas desta espécie. A chance de cair a espécie ({formatDropChance(drop.chancePct)}) é dividida entre elas.</p>
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 ) : (
                   <div className="flex min-h-40 items-center justify-center rounded-xl border border-dashed border-border text-xs text-slate-500">Nenhum mascote encontrado nesta categoria.</div>

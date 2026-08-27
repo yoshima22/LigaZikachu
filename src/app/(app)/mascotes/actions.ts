@@ -20,6 +20,7 @@ import type { ExpeditionMode } from "@/lib/mascot-data";
 import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
+  eligibleFormVariants,
   getEggCandidatesForGeneration,
   getEggTierWeightsForGeneration,
   type EggPokemonTier,
@@ -523,6 +524,10 @@ export type IncubatorDropPreview = {
     chancePct: number;
     ownedCopies: number;
     custom: boolean;
+    // Formas alternativas ligadas: quando a base é sorteada, roda uma segunda
+    // rolagem interna (peso igual) entre a base e essas formas. Presente só
+    // quando há forma ligada além da base.
+    forms?: Array<{ pokemonId: number; name: string; types: string[]; spriteUrl: string; internalPct: number; isBase: boolean }>;
   }>;
 };
 
@@ -628,6 +633,18 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
         const rarity = getMascotRarity(item.pokemonId);
         const category = previewCategory(rarity);
         const override = speciesOverrides.get(item.pokemonId);
+        // Segunda rolagem interna: formas alternativas ligadas desta base.
+        const variantIds = eligibleFormVariants(item.pokemonId, disabledIds);
+        const forms = variantIds.length > 0
+          ? [item.pokemonId, ...variantIds].map((fid) => ({
+              pokemonId: fid,
+              name: fid === item.pokemonId ? (override?.name ?? getPokemonName(fid)) : getPokemonName(fid),
+              types: getPokemonTypes(fid),
+              spriteUrl: getSpriteUrl(fid),
+              internalPct: 100 / (variantIds.length + 1),
+              isBase: fid === item.pokemonId,
+            }))
+          : undefined;
         drops.push({
           pokemonId: item.pokemonId,
           name: override?.name ?? getPokemonName(item.pokemonId),
@@ -640,6 +657,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
           chancePct: tierChance * officialShare * (item.weight / officialWeightTotal) * 100,
           ownedCopies: item.copies,
           custom: false,
+          forms,
         });
       }
       for (const species of custom) {

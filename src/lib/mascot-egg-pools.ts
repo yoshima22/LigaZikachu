@@ -20,7 +20,12 @@ import {
   getMascotRarity,
 } from "@/lib/mascot-data";
 import { EXTRA_FORM_GENERATION } from "@/lib/extra-forms-data";
+import { EXTRA_FORM_BASE, FORM_VARIANTS_BY_BASE } from "@/lib/form-variants-data";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+
+// Formas alternativas (não-mega) que colapsam na espécie base: nunca entram na
+// pool diretamente; a forma é decidida numa segunda rolagem interna.
+const COLLAPSED_FORM_IDS = new Set(Object.keys(EXTRA_FORM_BASE).map(Number));
 
 export type EggPokemonTier = "COMMON" | "PSEUDO_LEGENDARY" | "PARADOX" | "ELITE";
 
@@ -112,9 +117,30 @@ function candidatesForGeneration(generation: number) {
   const generationPool = EGG_POOLS[`EGG_GEN${generation}`] ?? [];
   const elitePool = eliteInitialForms().filter((id) => generationForEggPokemon(id) === generation);
   // Evoluções nunca vêm em ovo — inclui as formas MEGA (oficiais e custom):
-  // megas só são obtidos usando a pedra correspondente, nunca por drop.
+  // megas só são obtidos usando a pedra correspondente, nunca por drop. Formas
+  // alternativas (Unown, Deoxys, Therian, Groudon-Primal, Giratina-Origin,
+  // Shaymin-Sky, etc.) também não entram diretamente: colapsam na base e a forma
+  // sai numa segunda rolagem interna, para não poluir a pool.
   return uniquePokemonIds([...generationPool, ...elitePool])
-    .filter((id) => !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_IDS.has(id));
+    .filter((id) => !ALL_EVOLVED_IDS.has(id) && !MEGA_FORM_IDS.has(id) && !COLLAPSED_FORM_IDS.has(id));
+}
+
+/**
+ * Segunda rolagem: dado uma espécie base já sorteada, decide entre a forma base
+ * e as formas alternativas LIGADAS (não presentes em `excluded`). Peso igual
+ * entre { base, ...formas ligadas }. Se não houver forma ligada, retorna a base.
+ */
+export function eligibleFormVariants(baseId: number, excluded?: ReadonlySet<number>): number[] {
+  const variants = FORM_VARIANTS_BY_BASE[baseId];
+  if (!variants || variants.length === 0) return [];
+  return variants.filter((id) => !(excluded?.has(id)));
+}
+
+export function rollFormVariant(baseId: number, excluded: ReadonlySet<number>, random: () => number): number {
+  const enabled = eligibleFormVariants(baseId, excluded);
+  if (enabled.length === 0) return baseId;
+  const pool = [baseId, ...enabled];
+  return pool[Math.floor(random() * pool.length)];
 }
 
 export function getEggCandidatesForGeneration(generation: number, tier?: EggPokemonTier) {
@@ -279,8 +305,12 @@ export function rollEggPokemon(eggType: string, options: EggRollOptions = {}): E
   }
   if (candidates.length === 0) throw new Error(`A geração ${generation} não possui formas iniciais elegíveis.`);
 
+  const baseId = weightedSpeciesChoice(candidates, options.ownedBaseCounts, random);
+  // Segunda rolagem interna entre a base e as formas alternativas ligadas.
+  const pokemonId = rollFormVariant(baseId, excluded, random);
+
   return {
-    pokemonId: weightedSpeciesChoice(candidates, options.ownedBaseCounts, random),
+    pokemonId,
     generation,
     generationType,
     tier,
