@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
-import { buyMiauvadaoOffer, refreshMiauvadaoOfferSlot } from "../actions";
+import { buyMiauvadaoOffer, refreshMiauvadaoOfferSlot, buyPersonalMiauvadaoSlot } from "../actions";
 import type { MiauvadaoOffer, MiauvadaoPurchaseStatus } from "../actions";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
@@ -232,9 +232,10 @@ interface Props {
   purchaseStatus: MiauvadaoPurchaseStatus;
   rotationEndsAt: string;
   sabotagedOfferIndex?: number | null;
+  personalOffer?: { offer: MiauvadaoOffer; sold: number } | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null, personalOffer = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -290,6 +291,22 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
         router.refresh();
       }
       setBuyingIdx(null);
+    });
+  };
+
+  const [buyingPersonal, setBuyingPersonal] = useState(false);
+  const handleBuyPersonal = () => {
+    const p = personalOffer;
+    if (!p) return;
+    if (!playerId) { toast.error("Faça login para comprar."); return; }
+    if (p.sold >= p.offer.stock) { toast.error("Você já esgotou sua oferta pessoal desta rotação."); return; }
+    if (!confirm(`Comprar sua oferta pessoal "${p.offer.name}" por ${p.offer.finalPrice.toLocaleString("pt-BR")} ZC?`)) return;
+    setBuyingPersonal(true);
+    startTransition(async () => {
+      const r = await buyPersonalMiauvadaoSlot();
+      if (r.error) toast.error(r.error);
+      else { toast.success(`"${p.offer.name}" adicionado ao inventário! 🎉`); router.refresh(); }
+      setBuyingPersonal(false);
     });
   };
 
@@ -455,6 +472,45 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
               ))}
             </div>
           )}
+
+          {personalOffer && (() => {
+            const { offer, sold } = personalOffer;
+            const remaining = Math.max(0, offer.stock - sold);
+            const soldOut = remaining <= 0;
+            const cantAfford = balance < offer.finalPrice;
+            return (
+              <div className="relative overflow-hidden rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/10 via-slate-950/40 to-purple-500/10 p-4" style={{ zIndex: 15 }}>
+                <div className="mb-2 flex items-center gap-2">
+                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-200">✨ Só pra você</span>
+                  <span className="text-[10px] font-semibold text-cyan-100/70">Oferta pessoal do Miauvadão · roleta exclusiva</span>
+                </div>
+                <div className="flex items-center gap-3">
+                  {offer.imageUrl
+                    // eslint-disable-next-line @next/next/no-img-element
+                    ? <img src={offer.imageUrl} alt={offer.name} className="h-14 w-14 shrink-0 object-contain [image-rendering:pixelated]" />
+                    : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-2xl">🎁</div>}
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-bold text-white">{offer.name}</p>
+                    {offer.description && <p className="truncate text-[10px] text-slate-400">{offer.description}</p>}
+                    <div className="mt-1 flex items-center gap-2 text-xs">
+                      <span className="font-black text-[#FFCB05]">{offer.finalPrice.toLocaleString("pt-BR")} ZC</span>
+                      {offer.discountPct > 0 && <span className="text-[10px] text-slate-500 line-through">{offer.originalPrice.toLocaleString("pt-BR")}</span>}
+                      {offer.discountPct > 0 && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">-{offer.discountPct}%</span>}
+                    </div>
+                    <p className="mt-0.5 text-[9px] text-cyan-200/70">Estoque exclusivo: {remaining}/{offer.stock} · só você compra este slot</p>
+                  </div>
+                  <button
+                    onClick={handleBuyPersonal}
+                    disabled={pending || buyingPersonal || soldOut || cantAfford || !playerId}
+                    className="shrink-0 rounded-xl bg-cyan-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+                    title={soldOut ? "Esgotada nesta rotação" : cantAfford ? "Saldo insuficiente" : "Comprar oferta pessoal"}
+                  >
+                    {buyingPersonal ? "..." : soldOut ? "Esgotada" : "Comprar"}
+                  </button>
+                </div>
+              </div>
+            );
+          })()}
 
           <div className="flex items-center justify-between gap-3 flex-wrap">
             <p className="text-[10px]" style={{ color: "#3a2c00" }}>

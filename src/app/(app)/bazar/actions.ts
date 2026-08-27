@@ -2262,31 +2262,7 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
       });
 
       // Entregar item (mesmo esquema da shop)
-      if (offer.itemType.startsWith("EGG_") || ["EGG_COMMON","EGG_RARE","EGG_SPECIAL"].includes(offer.itemType)) {
-        const eggType = EGG_SHOP_TO_EGG_TYPE[offer.itemType];
-        if (!eggType) throw new Error(`Tipo de ovo não suportado pelo Miauvadão: ${offer.itemType}`);
-        await tx.mascotEgg.create({
-          data: { playerId: player.id, type: eggType as never, origin: "Miauvadão" },
-        });
-      } else if (offer.itemType === "MASCOT_FOOD") {
-        await tx.mascotFoodItem.upsert({
-          where: { playerId_type: { playerId: player.id, type: "FOOD" } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, type: "FOOD", quantity: 1 },
-        });
-      } else if (offer.itemType === "MASCOT_SWEET") {
-        await tx.mascotFoodItem.upsert({
-          where: { playerId_type: { playerId: player.id, type: "SWEET" } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, type: "SWEET", quantity: 1 },
-        });
-      } else if (offer.shopItemId) {
-        await tx.playerInventory.upsert({
-          where: { playerId_itemId: { playerId: player.id, itemId: offer.shopItemId } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: player.id, itemId: offer.shopItemId, quantity: 1 },
-        });
-      }
+      await _deliverMiauvadaoItem(tx, player.id, offer);
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
       return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes) };
     }, { isolationLevel: "Serializable" });
@@ -2311,6 +2287,114 @@ export interface MiauvadaoOffer {
   stock: number;
   sold: number;
   validUntil: string;
+  /** Marca a oferta pessoal (roleta exclusiva do jogador). */
+  personal?: boolean;
+}
+
+// Entrega 1 unidade do item de uma oferta do Miauvadão ao jogador.
+async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: string, offer: MiauvadaoOffer) {
+  if (offer.itemType.startsWith("EGG_") || ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL"].includes(offer.itemType)) {
+    const eggType = EGG_SHOP_TO_EGG_TYPE[offer.itemType];
+    if (!eggType) throw new Error(`Tipo de ovo não suportado pelo Miauvadão: ${offer.itemType}`);
+    await tx.mascotEgg.create({ data: { playerId, type: eggType as never, origin: "Miauvadão" } });
+  } else if (offer.itemType === "MASCOT_FOOD") {
+    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "FOOD", quantity: 1 } });
+  } else if (offer.itemType === "MASCOT_SWEET") {
+    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "SWEET", quantity: 1 } });
+  } else if (offer.shopItemId) {
+    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1 } });
+  }
+}
+
+// ── Slot pessoal do Miauvadão (roleta exclusiva por jogador) ──────────────────
+// Cada jogador tem uma oferta própria, determinística por (jogador + rotação),
+// que só aparece para ele e não pode ser trocada/resetada por outros. Estoque
+// fixo de 2 (independente da quantidade padrão da vitrine geral).
+const PERSONAL_SLOT_STOCK = 2;
+
+function _hashSeed(str: string): number {
+  let h = 2166136261 >>> 0;
+  for (let i = 0; i < str.length; i++) { h ^= str.charCodeAt(i); h = Math.imul(h, 16777619) >>> 0; }
+  return h >>> 0;
+}
+function _mulberry32(seed: number) {
+  let a = seed >>> 0;
+  return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+}
+
+async function _computePersonalOffer(playerId: string, vaultBalance: number): Promise<MiauvadaoOffer | null> {
+  const shopItems = await prisma.shopItem.findMany({
+    where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
+    select: { id: true, name: true, type: true, price: true, imageUrl: true, description: true, rarity: true },
+  });
+  if (shopItems.length === 0) return null;
+  const rotation = getMiauvadaoRotation();
+  const rng = _mulberry32(_hashSeed(`${playerId}|${rotation.start.toISOString()}`));
+  const sorted = [...shopItems].sort((a, b) => a.id.localeCompare(b.id)); // ordem base estável
+  const item = sorted[Math.floor(rng() * sorted.length)];
+  const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
+  const maxAllowed = isMegaStoneType(item.type) ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT;
+  const vaultBonus = Math.min(14, Math.floor(Math.sqrt(Math.max(0, vaultBalance) / 500) * 3));
+  const discountPct = Math.min(maxAllowed, minDisc + Math.floor(rng() * (maxDisc - minDisc + 1)) + vaultBonus);
+  const finalPrice = Math.max(1, Math.round(item.price * (1 - discountPct / 100)));
+  return {
+    shopItemId: item.id, itemType: item.type, name: item.name,
+    imageUrl: item.imageUrl ?? undefined, description: item.description ?? undefined,
+    originalPrice: item.price, discountPct, finalPrice,
+    stock: PERSONAL_SLOT_STOCK, sold: 0, validUntil: rotation.next.toISOString(), personal: true,
+  };
+}
+
+function _personalSoldCount(prd: unknown, playerId: string, rotationStartIso: string): number {
+  const entry = (prd as Record<string, { personalCycle?: string; personalSold?: number }> | null)?.[playerId];
+  if (!entry || entry.personalCycle !== rotationStartIso) return 0;
+  return Math.max(0, Math.floor(Number(entry.personalSold ?? 0)));
+}
+
+/** Oferta pessoal do jogador logado + quantas ele já comprou nesta rotação. */
+export async function getPersonalMiauvadaoOffer(): Promise<{ offer: MiauvadaoOffer; sold: number } | null> {
+  const user = await getSessionUser(); if (!user) return null;
+  const player = await getSessionPlayer(user.id); if (!player) return null;
+  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
+  if (!config) return null;
+  const offer = await _computePersonalOffer(player.id, config.vaultBalance);
+  if (!offer) return null;
+  const rotation = getMiauvadaoRotation();
+  return { offer, sold: _personalSoldCount(config.playerRefreshData, player.id, rotation.start.toISOString()) };
+}
+
+/** Compra 1 unidade da oferta pessoal (até o estoque de 2 por rotação). */
+export async function buyPersonalMiauvadaoSlot(): Promise<{ error?: string; sold?: number }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
+    const rotation = getMiauvadaoRotation();
+    const rotationIso = rotation.start.toISOString();
+    let soldAfter = 0;
+    await prisma.$transaction(async (tx) => {
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+      const offer = await _computePersonalOffer(player.id, config.vaultBalance);
+      if (!offer) throw new Error("Você não tem oferta pessoal disponível agora.");
+      if (new Date() > new Date(offer.validUntil)) throw new Error("Sua oferta pessoal expirou. Recarregue a página.");
+      const prd = (config.playerRefreshData as Record<string, { personalCycle?: string; personalSold?: number }>) ?? {};
+      const already = _personalSoldCount(prd, player.id, rotationIso);
+      if (already >= PERSONAL_SLOT_STOCK) throw new Error("Você já esgotou sua oferta pessoal desta rotação.");
+      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < offer.finalPrice) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC, oferta custa ${offer.finalPrice} ZC).`);
+      const coinsToVault = Math.floor(offer.finalPrice * 0.25);
+      await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: offer.finalPrice } } });
+      await _deliverMiauvadaoItem(tx, player.id, offer);
+      soldAfter = already + 1;
+      const nextPrd = { ...prd, [player.id]: { ...(prd[player.id] ?? {}), personalCycle: rotationIso, personalSold: soldAfter } };
+      await tx.miauvadaoConfig.update({
+        where: { id: "singleton" },
+        data: { playerRefreshData: nextPrd as Prisma.InputJsonValue, vaultBalance: { increment: coinsToVault } },
+      });
+    }, { isolationLevel: "Serializable" });
+    revalidateTag("miauvadao-config");
+    revalidatePath("/bazar");
+    return { sold: soldAfter };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao comprar." }; }
 }
 
 // Admin: definir ofertas do dia

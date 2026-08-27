@@ -10,7 +10,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus } from "./actions";
+import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus, getPersonalMiauvadaoOffer } from "./actions";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
 import { getCachedListings, getCachedPremiumAvailability, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
@@ -96,6 +96,7 @@ export default async function BazarPage({
   const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
 
   const purchaseStatus = await getMiauvadaoPurchaseStatus(playerId);
+  const personalOffer = playerId ? await getPersonalMiauvadaoOffer().catch(() => null) : null;
   const rotation = getMiauvadaoRotation();
   const slotRefreshAvailable = !freshMiauvadao.slotRefreshUsedCycle
     || freshMiauvadao.slotRefreshUsedCycle < rotation.start;
@@ -220,6 +221,7 @@ export default async function BazarPage({
         purchaseStatus={purchaseStatus}
         rotationEndsAt={rotation.next.toISOString()}
         sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
+        personalOffer={personalOffer as never}
       />
 
       {shouldShowBazarAnomaly && (
