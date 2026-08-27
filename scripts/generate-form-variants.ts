@@ -7,7 +7,7 @@
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { EXTRA_FORM_NAMES, EXTRA_FORM_POOL_BY_GEN, EXTRA_FORM_IDS } from "../src/lib/extra-forms-data";
-import { getPokemonName } from "../src/lib/mascot-data";
+import { getPokemonName, EGG_POOLS, LEGENDARY_POOL } from "../src/lib/mascot-data";
 import { MEGA_FORM_IDS } from "../src/lib/mega-evolution";
 
 // Nomes das espécies base reais (ids 1..1025) via getPokemonName (cobre todas).
@@ -28,8 +28,13 @@ function resolveBase(formId: number, formName: string): number | null {
   return null;
 }
 
+// Formas (ids >= 10000) que aparecem em QUALQUER pool: EXTRA_FORM_POOL_BY_GEN +
+// EGG_POOLS (já com extras mesclados) + LEGENDARY_POOL (formas estáticas como
+// Shaymin-Céu 10006, Giratina-Origem 10007, aves de Galar 10166-8).
 const poolable = new Set<number>();
 for (const ids of Object.values(EXTRA_FORM_POOL_BY_GEN)) for (const id of ids) poolable.add(id);
+for (const ids of Object.values(EGG_POOLS)) for (const id of ids) if (id >= 10000 && id < 200000) poolable.add(id);
+for (const id of LEGENDARY_POOL) if (id >= 10000 && id < 200000) poolable.add(id);
 
 const formBase: Record<number, number> = {};
 const variantsByBase: Record<number, number[]> = {};
@@ -37,7 +42,7 @@ const unmatched: Array<{ id: number; name: string }> = [];
 
 for (const id of [...poolable].sort((a, b) => a - b)) {
   if (MEGA_FORM_IDS.has(id)) continue; // megas não colapsam (só via pedra)
-  const name = EXTRA_FORM_NAMES[id];
+  const name = EXTRA_FORM_NAMES[id] ?? getPokemonName(id);
   if (!name) continue;
   const base = resolveBase(id, name);
   if (!base) { unmatched.push({ id, name }); continue; }
