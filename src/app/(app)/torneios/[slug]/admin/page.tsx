@@ -30,8 +30,8 @@ import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "../desafios/conf
 import { TournamentAchievementsPanel } from "./_components/tournament-achievements-panel";
 import { TournamentBadgeManager } from "./_components/tournament-badge-manager";
 import { PostseasonControl } from "./_components/postseason-control";
-import { closeTournamentDay } from "./daily-actions";
-import { brtDateKey, parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
+import { closeTournamentWeek } from "./daily-actions";
+import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
 
 interface Props {
   params: Promise<{ slug: string }>;
@@ -130,28 +130,32 @@ export default async function TournamentAdminPage({ params }: Props) {
     0
   );
   const pendingMatches = totalMatches - confirmedMatches - disputedMatches;
-  const tournamentDays = tournament.weeks.flatMap((week) => {
-    const dateKeys = Array.from(new Set(week.matches.map((match) => match.scheduledAt ? brtDateKey(match.scheduledAt) : null).filter(Boolean) as string[])).sort();
-    return dateKeys.map((dateKey) => {
-      const matches = week.matches.filter((match) => match.scheduledAt && brtDateKey(match.scheduledAt) === dateKey);
-      const participantMap = new Map<string, string>();
-      for (const match of matches) {
-        participantMap.set(match.playerA.id, match.playerA.displayName);
-        if (match.playerB) participantMap.set(match.playerB.id, match.playerB.displayName);
-      }
-      const stats = Array.from(participantMap, ([playerId, displayName]) => ({
-        playerId,
-        displayName,
-        matchesPlayed: matches.filter((match) => match.playerAId === playerId || match.playerBId === playerId).length,
-        wins: matches.filter((match) => match.winnerPlayerId === playerId).length,
-        defended: matches.filter((match) => match.winnerPlayerId === playerId).reduce((sum, match) => sum + match.winnerDefendedPrizes, 0),
-      })).map((entry) => ({
-        ...entry,
-        performance: entry.matchesPlayed > 0 ? (entry.wins * 3 + entry.defended) / entry.matchesPlayed : 0,
-      })).sort((a, b) => b.performance - a.performance || b.wins - a.wins || b.defended - a.defended || a.matchesPlayed - b.matchesPlayed || a.displayName.localeCompare(b.displayName, "pt-BR"));
-      return { week, dateKey, matches, participants: Array.from(participantMap, ([id, displayName]) => ({ id, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR")), stats, closure: week.dayClosures.find((item) => item.dateKey === dateKey) ?? null };
-    });
-  });
+  const tournamentWeeksForRewards = tournament.weeks.map((week) => {
+    const matches = week.matches.filter((match) => !match.isBye);
+    const participantMap = new Map<string, string>();
+    for (const match of matches) {
+      participantMap.set(match.playerA.id, match.playerA.displayName);
+      if (match.playerB) participantMap.set(match.playerB.id, match.playerB.displayName);
+    }
+    const stats = Array.from(participantMap, ([playerId, displayName]) => ({
+      playerId,
+      displayName,
+      matchesPlayed: matches.filter((match) => match.playerAId === playerId || match.playerBId === playerId).length,
+      wins: matches.filter((match) => match.winnerPlayerId === playerId).length,
+      defended: matches.filter((match) => match.winnerPlayerId === playerId).reduce((sum, match) => sum + match.winnerDefendedPrizes, 0),
+    })).map((entry) => ({
+      ...entry,
+      performance: entry.matchesPlayed > 0 ? (entry.wins * 3 + entry.defended) / entry.matchesPlayed : 0,
+    })).sort((a, b) => b.performance - a.performance || b.wins - a.wins || b.defended - a.defended || a.matchesPlayed - b.matchesPlayed || a.displayName.localeCompare(b.displayName, "pt-BR"));
+    return {
+      week,
+      matches,
+      participants: Array.from(participantMap, ([id, displayName]) => ({ id, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR")),
+      stats,
+      // Qualquer closure existente (semanal novo ou diario legado) marca a semana como fechada.
+      closure: week.dayClosures[0] ?? null,
+    };
+  }).filter((entry) => entry.matches.length > 0);
   const postseasonMatches = tournament.weeks.flatMap((week) => week.matches.filter((match) => match.postseasonStage !== null));
 
   const toDateTimeLocal = (value: Date | null | undefined) => {
@@ -532,30 +536,31 @@ export default async function TournamentAdminPage({ params }: Props) {
         />
       </section>
 
-      {dailyRewardConfig && tournamentDays.length > 0 && (
+      {dailyRewardConfig && tournamentWeeksForRewards.length > 0 && (
         <section className="space-y-3">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><Award size={18} className="text-[#FFCB05]" /> Fechamento diario e recompensas</h2>
-            <p className="mt-1 text-xs text-slate-500">As caixas, EXP da Missao de Mascote, Contrato Enguica e progresso de Jornada so sao liberados aqui. O fechamento e idempotente e nao duplica premios.</p>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><Award size={18} className="text-[#FFCB05]" /> Fechamento semanal e recompensas</h2>
+            <p className="mt-1 text-xs text-slate-500">Cada semana é fechada uma única vez, somando todos os jogos daquela semana. O Top é o Top da Semana. As caixas, EXP da Missao de Mascote, Contrato Enguica e progresso de Jornada so sao liberados aqui. O fechamento e idempotente e nao duplica premios.</p>
           </div>
           <div className="grid gap-3 lg:grid-cols-2">
-            {tournamentDays.map((day) => {
-              const unresolved = day.matches.filter((match) => match.status !== "CONFIRMED").length;
-              const defaultTop = day.stats[0]?.playerId ?? "";
+            {tournamentWeeksForRewards.map((entry) => {
+              const unresolved = entry.matches.filter((match) => match.status !== "CONFIRMED").length;
+              const defaultTop = entry.stats[0]?.playerId ?? "";
+              const weekLabel = entry.week.label ?? `Semana ${entry.week.weekNumber}`;
               return (
-                <Card key={`${day.week.id}:${day.dateKey}`} className="border-slate-800 bg-slate-900/50">
+                <Card key={entry.week.id} className="border-slate-800 bg-slate-900/50">
                   <CardContent className="space-y-3 p-4">
                     <div className="flex items-start justify-between gap-3">
-                      <div><p className="font-semibold text-white">{day.week.label ?? `Semana ${day.week.weekNumber}`}</p><p className="text-xs text-slate-400">{new Date(`${day.dateKey}T12:00:00-03:00`).toLocaleDateString("pt-BR", { weekday: "long", day: "2-digit", month: "long" })} · {day.matches.length} partidas</p></div>
-                      <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${day.closure ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : unresolved ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"}`}>{day.closure ? "FECHADO" : unresolved ? `${unresolved} PENDENTE(S)` : "PRONTO"}</span>
+                      <div><p className="font-semibold text-white">{weekLabel}</p><p className="text-xs text-slate-400">{entry.matches.length} partida(s) · {entry.participants.length} participante(s)</p></div>
+                      <span className={`rounded-full border px-2 py-1 text-[10px] font-bold ${entry.closure ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300" : unresolved ? "border-amber-400/30 bg-amber-500/10 text-amber-300" : "border-cyan-400/30 bg-cyan-500/10 text-cyan-300"}`}>{entry.closure ? "FECHADO" : unresolved ? `${unresolved} PENDENTE(S)` : "PRONTO"}</span>
                     </div>
-                    {day.closure ? (
-                      <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {day.closure.closedAt.toLocaleString("pt-BR")}.</p>
+                    {entry.closure ? (
+                      <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {entry.closure.closedAt.toLocaleString("pt-BR")}.</p>
                     ) : (
-                      <form className="grid gap-3 sm:grid-cols-2" action={async (formData) => { "use server"; await closeTournamentDay({ tournamentWeekId: day.week.id, dateKey: day.dateKey, topPlayerId: String(formData.get("topPlayerId") || "") || undefined, rafflePlayerId: String(formData.get("rafflePlayerId") || "") || undefined }); }}>
-                        <label className="space-y-1 text-xs text-slate-400"><span>Top do Dia por performance média</span><select name="topPlayerId" defaultValue={defaultTop} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{day.stats.map((entry) => <option key={entry.playerId} value={entry.playerId}>{entry.displayName} · média {entry.performance.toFixed(2)} · {entry.wins}V · {entry.defended} prêmios</option>)}</select></label>
-                        <label className="space-y-1 text-xs text-slate-400"><span>Sorteio (opcional)</span><select name="rafflePlayerId" defaultValue="" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="">Sortear automaticamente</option>{day.participants.filter((entry) => entry.id !== defaultTop).map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}</option>)}</select></label>
-                        <Button type="submit" disabled={unresolved > 0} className="sm:col-span-2 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Fechar dia e distribuir recompensas</Button>
+                      <form className="grid gap-3 sm:grid-cols-2" action={async (formData) => { "use server"; await closeTournamentWeek({ tournamentWeekId: entry.week.id, topPlayerId: String(formData.get("topPlayerId") || "") || undefined, rafflePlayerId: String(formData.get("rafflePlayerId") || "") || undefined }); }}>
+                        <label className="space-y-1 text-xs text-slate-400"><span>Top da Semana por performance média</span><select name="topPlayerId" defaultValue={defaultTop} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{entry.stats.map((stat) => <option key={stat.playerId} value={stat.playerId}>{stat.displayName} · média {stat.performance.toFixed(2)} · {stat.wins}V · {stat.defended} prêmios</option>)}</select></label>
+                        <label className="space-y-1 text-xs text-slate-400"><span>Sorteio (opcional)</span><select name="rafflePlayerId" defaultValue="" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="">Sortear automaticamente</option>{entry.participants.filter((p) => p.id !== defaultTop).map((p) => <option key={p.id} value={p.id}>{p.displayName}</option>)}</select></label>
+                        <Button type="submit" disabled={unresolved > 0} className="sm:col-span-2 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Fechar semana e distribuir recompensas</Button>
                       </form>
                     )}
                   </CardContent>
