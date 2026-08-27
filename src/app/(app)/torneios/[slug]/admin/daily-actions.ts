@@ -609,10 +609,28 @@ export async function closeTournamentWeek(raw: z.infer<typeof closeWeekRewardsSc
     }),
   ]);
 
+  // Liquida as apostas da ZikaBet desta semana no mesmo fechamento (idempotente:
+  // so mexe em apostas OPEN/CLOSED; ganhas/perdidas/canceladas ficam como estao).
+  // Evita apostas presas em aberto quando o admin nao roda o "Encerrar semana".
+  let betsSettled: { won: number; lost: number; refunded: number } = { won: 0, lost: 0, refunded: 0 };
+  try {
+    const { settleDayBets } = await import("@/app/(app)/zikabet/actions");
+    await settleDayBets(week.id, admin.id);
+    const [won, lost, refunded] = await Promise.all([
+      prisma.zikaBet.count({ where: { match: { tournamentWeekId: week.id }, status: "WON" } }),
+      prisma.zikaBet.count({ where: { match: { tournamentWeekId: week.id }, status: "LOST" } }),
+      prisma.zikaBet.count({ where: { match: { tournamentWeekId: week.id }, status: "REFUNDED" } }),
+    ]);
+    betsSettled = { won, lost, refunded };
+  } catch (err) {
+    console.error("[closeTournamentWeek:settleDayBets]", err);
+  }
+
   revalidatePath(`/torneios/${week.tournament.slug}`);
   revalidatePath(`/torneios/${week.tournament.slug}/admin`);
   revalidatePath(`/torneios/${week.tournament.slug}/ranking`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
+  revalidatePath("/zikabet");
   revalidatePath("/caixa-de-presentes");
-  return { success: true, closureId: closure.id, rewards: rewards.length, mascotMissionExp, topPlayerId, rafflePlayerId };
+  return { success: true, closureId: closure.id, rewards: rewards.length, mascotMissionExp, topPlayerId, rafflePlayerId, betsSettled };
 }
