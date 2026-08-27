@@ -59,6 +59,12 @@ type ProposalOfferItem = {
   mascotId?: string;
   pokemonId?: number;
   level?: number;
+  personality?: string | null;
+  statForce?: number;
+  statAgility?: number;
+  statCharisma?: number;
+  statInstinct?: number;
+  statVitality?: number;
   shopItemId?: string;
   escrowed_egg_ids?: string[];
   escrowed?: boolean;
@@ -464,6 +470,55 @@ export async function getListing(id: string) {
       _count: { select: { favorites: true } },
     },
   });
+  if (!listing) return null;
+
+  // Propostas antigas guardavam apenas id/nome do mascote. Hidratamos o
+  // snapshot na leitura para que atributos e personalidade apareçam também em
+  // mesas já abertas, sem alterar a reserva nem o conteúdo assinado da oferta.
+  const mascotIds = new Set<string>();
+  const collectMascotIds = (value: unknown) => {
+    if (!Array.isArray(value)) return;
+    for (const entry of value) {
+      if (entry && typeof entry === "object" && "mascotId" in entry && typeof entry.mascotId === "string") mascotIds.add(entry.mascotId);
+    }
+  };
+  for (const proposal of listing.proposals) {
+    collectMascotIds(proposal.itemsOffer);
+    try {
+      const state = JSON.parse(proposal.message ?? "") as { ownerItems?: unknown };
+      collectMascotIds(state.ownerItems);
+    } catch { /* mensagens comuns não são JSON */ }
+  }
+  const mascotDetails = mascotIds.size > 0
+    ? await prisma.mascot.findMany({
+        where: { id: { in: [...mascotIds] } },
+        select: {
+          id: true, level: true, personality: true,
+          statForce: true, statAgility: true, statCharisma: true,
+          statInstinct: true, statVitality: true,
+        },
+      })
+    : [];
+  const mascotById = new Map(mascotDetails.map((mascot) => [mascot.id, mascot]));
+  const enrichItems = (value: unknown): unknown => {
+    if (!Array.isArray(value)) return value;
+    return value.map((entry) => {
+      if (!entry || typeof entry !== "object" || !("mascotId" in entry) || typeof entry.mascotId !== "string") return entry;
+      const details = mascotById.get(entry.mascotId);
+      return details ? { ...entry, ...details } : entry;
+    });
+  };
+  const hydratedListing = {
+    ...listing,
+    proposals: listing.proposals.map((proposal) => {
+      let message = proposal.message;
+      try {
+        const state = JSON.parse(message ?? "") as Record<string, unknown>;
+        if (state.kind === "DIRECT_NEGOTIATION") message = JSON.stringify({ ...state, ownerItems: enrichItems(state.ownerItems) });
+      } catch { /* mantém mensagens comuns exatamente como estão */ }
+      return { ...proposal, message, itemsOffer: enrichItems(proposal.itemsOffer) };
+    }),
+  };
   // Não incrementar `views` aqui. Writes fire-and-forget em Server Actions podem
   // deixar transações abertas no runtime serverless e bloquear a oferta inteira
   // quando vários jogadores acompanham o mesmo leilão.
@@ -476,7 +531,7 @@ export async function getListing(id: string) {
     }).catch(() => undefined);
     revalidateTag(`nav-${user!.id}`);
   }
-  return listing;
+  return hydratedListing;
 }
 
 export async function getRecentTransactions(take = 10) {

@@ -25,6 +25,12 @@ interface ProposalOfferedItem {
   mascotId?: string; // para ofertas de mascote
   pokemonId?: number;
   level?: number;
+  personality?: string | null;
+  statForce?: number;
+  statAgility?: number;
+  statCharisma?: number;
+  statInstinct?: number;
+  statVitality?: number;
   shopItemId?: string;
   escrowed_egg_ids?: string[];
   escrowed?: boolean;
@@ -108,24 +114,42 @@ const PROPOSAL_STATUS_LABEL: Record<string, string> = {
 
 function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
   return (
-    <div className="flex flex-wrap gap-1.5">
+    <div className="space-y-2">
       {items.map((item) => {
         if (!item.mascotId) {
           return (
-            <span key={`${item.type}-${item.displayName}`} className="rounded-full border border-border bg-slate-950/60 px-2 py-1 text-[10px] text-slate-300">
+            <span key={`${item.type}-${item.displayName}`} className="mr-1.5 inline-flex rounded-full border border-border bg-slate-950/60 px-2 py-1 text-[10px] text-slate-300">
               {item.quantity}x {item.displayName}
             </span>
           );
         }
 
         return (
-          <span key={item.mascotId} className="inline-flex items-center gap-1.5 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-semibold text-[#FFCB05]">
-            {item.pokemonId && (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={getSpriteUrl(item.pokemonId, true)} alt="" className="h-5 w-5 object-contain" style={{ imageRendering: "pixelated" }} />
-            )}
-            Mascote: {item.displayName}
-          </span>
+          <div key={item.mascotId} className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-2.5">
+            <div className="flex items-center gap-2.5">
+              {item.pokemonId && (
+                // eslint-disable-next-line @next/next/no-img-element
+                <img src={getStaticSpriteUrl(item.pokemonId)} alt="" className="h-11 w-11 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+              )}
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-xs font-black text-[#FFCB05]">{item.displayName}</p>
+                <p className="mt-0.5 text-[10px] text-slate-400">
+                  Personalidade: <span className="font-semibold text-slate-200">{item.personality ? (PERSONALITY_LABEL[item.personality] ?? item.personality) : "Não informada"}</span>
+                </p>
+              </div>
+            </div>
+            <div className="mt-2 grid grid-cols-5 gap-1">
+              {[
+                ["FOR", item.statForce], ["AGI", item.statAgility], ["CAR", item.statCharisma],
+                ["INS", item.statInstinct], ["VIT", item.statVitality],
+              ].map(([label, value]) => (
+                <div key={String(label)} className="rounded-md border border-white/5 bg-slate-950/70 px-1 py-1 text-center">
+                  <p className="text-[8px] font-bold text-slate-600">{label}</p>
+                  <p className="text-[10px] font-black text-slate-200">{typeof value === "number" ? value : "—"}</p>
+                </div>
+              ))}
+            </div>
+          </div>
         );
       })}
     </div>
@@ -161,11 +185,17 @@ export default function BazarListingPage(): React.JSX.Element {
   // Incrementado para limpar a seleção do OfferItemsPicker após salvar/cancelar.
   const [directReset, setDirectReset] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const reloadSequenceRef = useRef(0);
   // Evita chamar finalizeAuction repetidamente a cada tick do countdown
   const finalizeRequestedRef = useRef(false);
 
   const reloadListing = useCallback(() => {
+    const sequence = ++reloadSequenceRef.current;
     return getListing(id).then(raw => {
+      // Polling e atualização manual podem terminar fora de ordem. Somente a
+      // resposta mais recente pode substituir o estado visível da mesa.
+      if (sequence !== reloadSequenceRef.current) return;
       if (!raw) { setListing(null); return; }
       // Normalise to explicit type — avoids Prisma Json inference cascade
       setListing({
@@ -205,6 +235,7 @@ export default function BazarListingPage(): React.JSX.Element {
         currentBidPlayerId: raw.currentBidPlayerId,
         auctionEndsAt: raw.auctionEndsAt,
       });
+      setLastRefreshedAt(new Date());
     }).finally(() => setLoading(false));
   }, [id]);
 
@@ -465,7 +496,10 @@ export default function BazarListingPage(): React.JSX.Element {
       <div className="mx-auto max-w-4xl space-y-5">
         <div className="flex items-center justify-between gap-3">
           <Link href="/bazar" className="rounded-lg border border-border p-2 text-slate-400 hover:text-white"><ArrowLeft size={16}/></Link>
-          <button type="button" onClick={handleManualRefresh} disabled={refreshing} className="ml-auto inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-white disabled:opacity-60"><RefreshCw size={13} className={refreshing ? "animate-spin" : ""}/> {refreshing ? "Atualizando…" : "Atualizar mesa"}</button>
+          <div className="ml-auto flex items-center gap-2">
+            {lastRefreshedAt && <span className="hidden text-[9px] text-slate-600 sm:inline">Atualizada às {lastRefreshedAt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</span>}
+            <button type="button" onClick={handleManualRefresh} disabled={refreshing} className="inline-flex items-center gap-2 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-white disabled:opacity-60"><RefreshCw size={13} className={refreshing ? "animate-spin" : ""}/> {refreshing ? "Atualizando…" : "Atualizar mesa"}</button>
+          </div>
         </div>
         <div className="overflow-hidden rounded-3xl border border-cyan-400/30 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-purple-500/10">
           <div className="flex flex-col gap-4 border-b border-cyan-400/20 p-6 sm:flex-row sm:items-center">
@@ -514,7 +548,7 @@ export default function BazarListingPage(): React.JSX.Element {
                           Sua oferta está <span className="font-black">travada</span>{myConfirmed ? " e confirmada. Aguardando o outro lado confirmar." : bothReady ? ". Agora confirme o fechamento abaixo." : ". Aguardando o outro lado travar a oferta dele."}
                         </div>
                         <button disabled={pending || !bothReady || Boolean(myConfirmed)} onClick={() => handleDirectConfirm(activeRoom.id)} className="w-full rounded-xl bg-[#FFCB05] py-2.5 text-xs font-black text-slate-950 disabled:opacity-40">{myConfirmed ? "✓ Confirmado — aguardando o outro" : bothReady ? "2) Confirmar fechamento do negócio" : "Aguardando os dois travarem…"}</button>
-                        {!myConfirmed && <button disabled={pending} onClick={() => handleDirectUnlock(activeRoom.id)} className="w-full rounded-xl border border-amber-400/40 bg-amber-400/10 py-2 text-[11px] font-bold text-amber-200 disabled:opacity-40">🔓 Destravar para editar minha oferta</button>}
+                        {!myConfirmed && <button disabled={pending} onClick={() => handleDirectUnlock(activeRoom.id)} className="w-full rounded-xl bg-green-500 py-2.5 text-xs font-black text-slate-950 disabled:opacity-40">🔓 Destravar minha proposta</button>}
                       </div>
                     ) : (
                       <>
@@ -1172,7 +1206,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
   const TRADEABLE = new Set<string>(CONSUMABLE_SHOP_ITEM_TYPES);
 
   const loadInventory = useCallback(async () => {
-    const res = await fetch("/api/bazar/inventory");
+    const res = await fetch("/api/bazar/inventory", { cache: "no-store" });
     if (res.ok) {
       const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"]; inventoryItems?: InventoryShopItem[] };
       const eggGroups: Record<string, number> = {};
@@ -1308,6 +1342,13 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                       displayName: label,
                       mascotId: m.id,
                       pokemonId: m.pokemonId,
+                      level: m.level,
+                      personality: m.personality,
+                      statForce: m.statForce,
+                      statAgility: m.statAgility,
+                      statCharisma: m.statCharisma,
+                      statInstinct: m.statInstinct,
+                      statVitality: m.statVitality,
                     })}
                     className={`w-full text-left text-[11px] rounded-lg px-2 py-2 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                     {/* Static sprite — no GIF */}
