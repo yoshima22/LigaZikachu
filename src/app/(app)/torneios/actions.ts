@@ -12,6 +12,7 @@ import {
   isDeckRegistrationLocked
 } from "@/lib/decks";
 import { rewardEquippedMascot } from "@/lib/mascot";
+import { parseBrtLocal, atBrtHour } from "@/lib/brt";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
 import { parseBetConfig } from "@/lib/zikabet";
 
@@ -906,7 +907,7 @@ export async function updateTournamentWeekDeckLock(
     const actor = await requireAdmin();
     const data = updateWeekDeckLockSchema.parse(raw);
     const rawDate = data.deckLockAt?.trim();
-    const deckLockAt = rawDate ? new Date(rawDate) : null;
+    const deckLockAt = parseBrtLocal(rawDate);
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
@@ -949,7 +950,7 @@ export async function updateTournamentWeekSettings(
     const actor = await requireAdmin();
     const data = updateTournamentWeekSettingsSchema.parse(raw);
     const rawDate = data.deckLockAt?.trim();
-    const deckLockAt = rawDate ? new Date(rawDate) : null;
+    const deckLockAt = parseBrtLocal(rawDate);
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
@@ -1025,8 +1026,8 @@ export async function addTournamentWeek(
     const endDate = new Date(startDate);
     endDate.setUTCDate(endDate.getUTCDate() + 6);
     endDate.setUTCHours(23, 59, 59, 999);
-    const deckLockAt = new Date(startDate);
-    deckLockAt.setUTCHours(21, 0, 0, 0);
+    // 21:00 BRT do dia de início (não 21:00 UTC, que seria 18:00 BRT).
+    const deckLockAt = atBrtHour(startDate, 21, 0);
 
     const week = await prisma.tournamentWeek.create({
       data: {
@@ -2086,9 +2087,9 @@ export async function seedDefaultWeeks(tournamentId: string): Promise<{ error?: 
       endDate.setUTCDate(endDate.getUTCDate() + 6);
       endDate.setUTCHours(23, 59, 59, 999);
 
-      const lockAt = new Date(endDate);
-      lockAt.setUTCDate(lockAt.getUTCDate() - 2);
-      lockAt.setUTCHours(21, 0, 0, 0);
+      const lockAtDay = new Date(endDate);
+      lockAtDay.setUTCDate(lockAtDay.getUTCDate() - 2);
+      const lockAt = atBrtHour(lockAtDay, 21, 0); // 21:00 BRT
 
       await prisma.tournamentWeek.upsert({
         where: { tournamentId_weekNumber: { tournamentId, weekNumber: wk.weekNumber } },

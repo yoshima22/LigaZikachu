@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { prisma } from "@/lib/prisma";
+import { formatBrtLocalInput } from "@/lib/brt";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -159,12 +160,9 @@ export default async function TournamentAdminPage({ params }: Props) {
   }).filter((entry) => entry.matches.length > 0);
   const postseasonMatches = tournament.weeks.flatMap((week) => week.matches.filter((match) => match.postseasonStage !== null));
 
-  const toDateTimeLocal = (value: Date | null | undefined) => {
-    if (!value) return "";
-    const date = new Date(value);
-    const localDate = new Date(date.getTime() - date.getTimezoneOffset() * 60_000);
-    return localDate.toISOString().slice(0, 16);
-  };
+  // Preenche o input datetime-local com o RELÓGIO BRT (não UTC), para o admin
+  // ver/editar o horário que os jogadores realmente enxergam.
+  const toDateTimeLocal = (value: Date | null | undefined) => formatBrtLocalInput(value);
 
   return (
     <div className="space-y-6">
@@ -557,7 +555,7 @@ export default async function TournamentAdminPage({ params }: Props) {
                     </div>
                     <WeekReportExportButton tournamentWeekId={entry.week.id} />
                     {entry.closure ? (
-                      <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {entry.closure.closedAt.toLocaleString("pt-BR")}.</p>
+                      <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {entry.closure.closedAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.</p>
                     ) : (
                       <form className="grid gap-3 sm:grid-cols-2" action={async (formData) => { "use server"; await closeTournamentWeek({ tournamentWeekId: entry.week.id, topPlayerId: String(formData.get("topPlayerId") || "") || undefined, rafflePlayerId: String(formData.get("rafflePlayerId") || "") || undefined }); }}>
                         <label className="space-y-1 text-xs text-slate-400"><span>Top da Semana por performance média</span><select name="topPlayerId" defaultValue={defaultTop} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{entry.stats.map((stat) => <option key={stat.playerId} value={stat.playerId}>{stat.displayName} · média {stat.performance.toFixed(2)} · {stat.wins}V · {stat.defended} prêmios</option>)}</select></label>

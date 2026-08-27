@@ -104,7 +104,7 @@ export default async function TorneioDetailPage({
   });
 
   const fmt = (d: Date | null | undefined) =>
-    d ? new Date(d).toLocaleDateString("pt-BR", { day: "2-digit", month: "short", year: "numeric" }) : "—";
+    d ? new Date(d).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "short", year: "numeric" }) : "—";
 
   const statusColors: Record<string, string> = {
     DRAFT:             "bg-slate-500/15 text-slate-400 border-slate-500/30",
