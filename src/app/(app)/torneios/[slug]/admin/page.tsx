@@ -142,9 +142,13 @@ export default async function TournamentAdminPage({ params }: Props) {
       const stats = Array.from(participantMap, ([playerId, displayName]) => ({
         playerId,
         displayName,
+        matchesPlayed: matches.filter((match) => match.playerAId === playerId || match.playerBId === playerId).length,
         wins: matches.filter((match) => match.winnerPlayerId === playerId).length,
         defended: matches.filter((match) => match.winnerPlayerId === playerId).reduce((sum, match) => sum + match.winnerDefendedPrizes, 0),
-      })).sort((a, b) => b.wins - a.wins || b.defended - a.defended || a.displayName.localeCompare(b.displayName, "pt-BR"));
+      })).map((entry) => ({
+        ...entry,
+        performance: entry.matchesPlayed > 0 ? (entry.wins * 3 + entry.defended) / entry.matchesPlayed : 0,
+      })).sort((a, b) => b.performance - a.performance || b.wins - a.wins || b.defended - a.defended || a.matchesPlayed - b.matchesPlayed || a.displayName.localeCompare(b.displayName, "pt-BR"));
       return { week, dateKey, matches, participants: Array.from(participantMap, ([id, displayName]) => ({ id, displayName })).sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR")), stats, closure: week.dayClosures.find((item) => item.dateKey === dateKey) ?? null };
     });
   });
@@ -549,7 +553,7 @@ export default async function TournamentAdminPage({ params }: Props) {
                       <p className="rounded-lg border border-emerald-400/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-200">Recompensas distribuidas em {day.closure.closedAt.toLocaleString("pt-BR")}.</p>
                     ) : (
                       <form className="grid gap-3 sm:grid-cols-2" action={async (formData) => { "use server"; await closeTournamentDay({ tournamentWeekId: day.week.id, dateKey: day.dateKey, topPlayerId: String(formData.get("topPlayerId") || "") || undefined, rafflePlayerId: String(formData.get("rafflePlayerId") || "") || undefined }); }}>
-                        <label className="space-y-1 text-xs text-slate-400"><span>Top do Dia</span><select name="topPlayerId" defaultValue={defaultTop} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{day.stats.map((entry) => <option key={entry.playerId} value={entry.playerId}>{entry.displayName} · {entry.wins}V · {entry.defended} premios</option>)}</select></label>
+                        <label className="space-y-1 text-xs text-slate-400"><span>Top do Dia por performance média</span><select name="topPlayerId" defaultValue={defaultTop} className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white">{day.stats.map((entry) => <option key={entry.playerId} value={entry.playerId}>{entry.displayName} · média {entry.performance.toFixed(2)} · {entry.wins}V · {entry.defended} prêmios</option>)}</select></label>
                         <label className="space-y-1 text-xs text-slate-400"><span>Sorteio (opcional)</span><select name="rafflePlayerId" defaultValue="" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white"><option value="">Sortear automaticamente</option>{day.participants.filter((entry) => entry.id !== defaultTop).map((entry) => <option key={entry.id} value={entry.id}>{entry.displayName}</option>)}</select></label>
                         <Button type="submit" disabled={unresolved > 0} className="sm:col-span-2 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Fechar dia e distribuir recompensas</Button>
                       </form>

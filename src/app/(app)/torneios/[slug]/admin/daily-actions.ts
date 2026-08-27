@@ -90,8 +90,13 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
       wins: matches.filter((match) => match.winnerPlayerId === playerId).length,
       defendedPrizes: matches.filter((match) => match.winnerPlayerId === playerId).reduce((sum, match) => sum + match.winnerDefendedPrizes, 0),
       points: matches.reduce((sum, match) => sum + Number(match.playerAId === playerId ? match.rankingPointsA : match.rankingPointsB), 0),
+      matchesPlayed: matches.length,
     };
-  }).sort((a, b) => b.wins - a.wins || b.defendedPrizes - a.defendedPrizes || b.points - a.points || a.playerId.localeCompare(b.playerId));
+  }).sort((a, b) => {
+    const performanceA = a.matchesPlayed > 0 ? (a.wins * 3 + a.defendedPrizes) / a.matchesPlayed : 0;
+    const performanceB = b.matchesPlayed > 0 ? (b.wins * 3 + b.defendedPrizes) / b.matchesPlayed : 0;
+    return performanceB - performanceA || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes || a.matchesPlayed - b.matchesPlayed || a.playerId.localeCompare(b.playerId);
+  });
 
   const topPlayerId = input.topPlayerId && participantIds.includes(input.topPlayerId) ? input.topPlayerId : stats[0]?.playerId;
   const rafflePool = participantIds.filter((playerId) => playerId !== topPlayerId);
@@ -171,8 +176,8 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
       description: "Contrato confirmado no fechamento oficial do dia.",
       payload: {
         rewardKind: "TOURNAMENT_BOX", origin, coins: config.enguica.coins, food: config.enguica.food,
-        sweet: config.enguica.sweet, creationDust: config.enguica.creationDust,
-        eggs: chance(config.enguica.rareEggChance) ? [{ type: EggType.RARE, quantity: 1 }] : [],
+        sweet: config.enguica.sweet,
+        shopItems: [{ type: "ZIKALOOT_TICKET", quantity: config.enguica.lootTickets }],
       },
     }));
   }
@@ -288,6 +293,7 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
     ...(match.playerBId && match.playerB ? [[match.playerBId, match.playerB.displayName] as const] : []),
   ]));
   const topPlayer = stats.find((entry) => entry.playerId === topPlayerId);
+  const topPerformance = topPlayer && topPlayer.matchesPlayed > 0 ? (topPlayer.wins * 3 + topPlayer.defendedPrizes) / topPlayer.matchesPlayed : 0;
   const topName = playerNameById.get(topPlayerId) ?? "Top do Dia";
   const raffleName = playerNameById.get(rafflePlayerId) ?? "Participante sorteado";
   const dateLabel = new Date(`${input.dateKey}T12:00:00-03:00`).toLocaleDateString("pt-BR", { day: "2-digit", month: "2-digit" });
@@ -295,7 +301,7 @@ export async function closeTournamentDay(raw: z.infer<typeof closeDaySchema>) {
   await Promise.all([
     publishLeagueTicker({
       type: "TOURNAMENT_TOP_OF_DAY", eventKey: `tournament-day:${week.id}:${input.dateKey}:top`, href, priority: 7, ttlHours: 24,
-      message: `👑 Top do Dia ${dateLabel}: ${topName} liderou com ${topPlayer?.wins ?? 0} vitória(s) e ${topPlayer?.defendedPrizes ?? 0} prêmio(s) defendido(s). Professor Enguiça confirma: dia de respeito!`,
+      message: `👑 Top do Dia ${dateLabel}: ${topName} liderou com média ${topPerformance.toFixed(2)} — ${topPlayer?.wins ?? 0} vitória(s), ${topPlayer?.defendedPrizes ?? 0} prêmio(s) defendido(s) em ${topPlayer?.matchesPlayed ?? 0} partida(s).`,
     }),
     publishLeagueTicker({
       type: "TOURNAMENT_DAILY_RAFFLE", eventKey: `tournament-day:${week.id}:${input.dateKey}:raffle`, href, priority: 6, ttlHours: 24,

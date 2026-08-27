@@ -114,10 +114,12 @@ async function applyGiftReward(
   }
 
   if (rewardKind === "ENGUICA_BOX") {
-    const coins = typeof payload.coins === "number" ? Math.max(0, Math.floor(payload.coins)) : 150;
-    const food = typeof payload.food === "number" ? Math.max(0, Math.floor(payload.food)) : 1;
-    const sweet = typeof payload.sweet === "number" ? Math.max(0, Math.floor(payload.sweet)) : 1;
-    const creationDust = typeof payload.creationDust === "number" ? Math.max(0, Math.floor(payload.creationDust)) : 3;
+    // Conteúdo oficial fixo, inclusive para caixas antigas ainda não abertas.
+    const coins = 250;
+    const food = 30;
+    const sweet = 15;
+    const creationDust = 0;
+    const zikalootTickets = 2;
 
     if (coins > 0) {
       await creditCoins(tx, {
@@ -144,13 +146,14 @@ async function applyGiftReward(
     if (creationDust > 0) {
       await tx.player.update({ where: { id: playerId }, data: { creationDust: { increment: creationDust } } });
     }
-    if (payload.ticketAwarded === true) {
+    const ticketQuantity = zikalootTickets;
+    if (ticketQuantity > 0) {
       const ticket = await tx.shopItem.findFirst({ where: { type: "ZIKALOOT_TICKET" }, select: { id: true } });
       if (ticket) {
         await tx.playerInventory.upsert({
           where: { playerId_itemId: { playerId, itemId: ticket.id } },
-          create: { playerId, itemId: ticket.id, quantity: 1, source: "EVENT_REWARD" },
-          update: { quantity: { increment: 1 } },
+          create: { playerId, itemId: ticket.id, quantity: ticketQuantity, source: "EVENT_REWARD" },
+          update: { quantity: { increment: ticketQuantity } },
         });
       }
     }

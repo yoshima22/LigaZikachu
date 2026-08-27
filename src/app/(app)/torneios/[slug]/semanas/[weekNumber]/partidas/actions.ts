@@ -85,7 +85,6 @@ async function awardEnguicaBoxesAtWeekClose(weekId: string) {
   let rewardedPlayers = 0;
   let ticketWinners = 0;
   for (const completion of completions) {
-    const ticketAwarded = Math.random() < 0.05;
     const result = await prisma.$transaction(async (tx) => {
       const reserved = await tx.tournamentEnguicaCompletion.updateMany({
         where: { id: completion.id, rewardedAt: null },
@@ -102,11 +101,10 @@ async function awardEnguicaBoxesAtWeekClose(weekId: string) {
           payload: {
             rewardKind: "ENGUICA_BOX",
             rewardLabel: ENGUICA_BOX_REWARD_LABEL,
-            coins: 150,
-            food: 1,
-            sweet: 1,
-            creationDust: 3,
-            ticketAwarded,
+            coins: 250,
+            food: 30,
+            sweet: 15,
+            zikalootTickets: 2,
             contractKey: completion.contractKey,
           },
         },
@@ -119,7 +117,7 @@ async function awardEnguicaBoxesAtWeekClose(weekId: string) {
     });
     if (result) {
       rewardedPlayers++;
-      if (ticketAwarded) ticketWinners++;
+      ticketWinners += 2;
     }
   }
   return { rewardedPlayers, ticketWinners };

@@ -31,7 +31,7 @@ export const ENGUICA_CONTRACTS: readonly EnguicaContract[] = [
   { key: "ROTA_ALTERNATIVA", title: "Rota Alternativa", description: "Vença sem usar o ataque de maior dano impresso entre os Pokémon do seu deck." },
 ] as const;
 
-export const ENGUICA_BOX_REWARD_LABEL = "150 ZC · 1 Comida · 1 Doce · 3 Pós de Criação · 5% de chance de Ticket ZikaLoot";
+export const ENGUICA_BOX_REWARD_LABEL = "250 ZC · 30 Comidas · 15 Doces · 2 Tickets ZikaLoot garantidos";
 
 export function getEnguicaContract(key?: string | null) {
   return ENGUICA_CONTRACTS.find((contract) => contract.key === key) ?? null;

@@ -19,7 +19,7 @@ export type TournamentRewardConfig = {
   loss: { coins: number; food: number; sweet: number; creationDust: number };
   top: { coins: number; lootTickets: number; sweet: number; eventEggs: number; labEggChance: number };
   raffle: { coins: number; sweet: number; specialEggChance: number };
-  enguica: { coins: number; food: number; sweet: number; creationDust: number; rareEggChance: number };
+  enguica: { coins: number; food: number; sweet: number; lootTickets: number };
   badge: { coins: number; weaknessPolicy: number; creationDust: number; specialEggChance: number };
   guardian: { coins: number; shockingVitamin: number; creationDust: number; specialEggChance: number };
 };
@@ -31,7 +31,7 @@ export const JOHTO_REWARD_CONFIG: TournamentRewardConfig = {
   loss: { coins: 120, food: 1, sweet: 1, creationDust: 2 },
   top: { coins: 1_000, lootTickets: 2, sweet: 2, eventEggs: 2, labEggChance: 0.10 },
   raffle: { coins: 550, sweet: 1, specialEggChance: 0.15 },
-  enguica: { coins: 450, food: 1, sweet: 1, creationDust: 3, rareEggChance: 0.50 },
+  enguica: { coins: 250, food: 30, sweet: 15, lootTickets: 2 },
   badge: { coins: 450, weaknessPolicy: 1, creationDust: 10, specialEggChance: 0.25 },
   guardian: { coins: 400, shockingVitamin: 1, creationDust: 10, specialEggChance: 0.50 },
 };
@@ -48,7 +48,8 @@ export function parseTournamentRewardConfig(value: Prisma.JsonValue | null | und
     loss: { ...JOHTO_REWARD_CONFIG.loss, ...(raw.loss ?? {}) },
     top: { ...JOHTO_REWARD_CONFIG.top, ...(raw.top ?? {}) },
     raffle: { ...JOHTO_REWARD_CONFIG.raffle, ...(raw.raffle ?? {}) },
-    enguica: { ...JOHTO_REWARD_CONFIG.enguica, ...(raw.enguica ?? {}) },
+    // Conteúdo oficial fixo: ignora configurações antigas persistidas no torneio.
+    enguica: { ...JOHTO_REWARD_CONFIG.enguica },
     badge: { ...JOHTO_REWARD_CONFIG.badge, ...(raw.badge ?? {}) },
     guardian: { ...JOHTO_REWARD_CONFIG.guardian, ...(raw.guardian ?? {}) },
   };

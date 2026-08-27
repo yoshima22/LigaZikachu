@@ -5,7 +5,6 @@ import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import Link from "next/link";
 import { ChevronRight, CalendarDays, Clock, Crown, Eye, Info, Lock, Swords } from "lucide-react";
 import { computeTournamentWeekTopOfDay } from "@/lib/ranking";
-import { RankingTable } from "@/components/ranking/ranking-table";
 import {
   canSubmitTournamentWeekDeck,
   canViewTournamentWeekDecklist,
@@ -735,10 +734,10 @@ export default async function WeekDetailPage({
           <div>
             <h2 className="flex items-center gap-2 font-semibold text-slate-200">
               <Crown size={16} className="text-[#FFCB05]" />
-              Top do Dia
+              Performance da semana para Top do Dia
             </h2>
             <p className="mt-1 text-xs text-slate-400">
-              Previa calculada somente com partidas validadas desta semana/dia.
+              Tabela informativa da semana. Ela não distribui recompensas automaticamente e serve de referência pública para jogadores e administração.
             </p>
           </div>
           <div className="flex items-center gap-2">
@@ -760,10 +759,50 @@ export default async function WeekDetailPage({
 
         {topDoDiaRanking.length === 0 ? (
           <p className="text-sm text-slate-500">
-            Nenhum resultado validado neste dia ainda. O Top do Dia so deve ser calculado depois da validacao.
+            Nenhum resultado validado nesta semana ainda. A performance só aparece depois da confirmação das partidas.
           </p>
         ) : (
-          <RankingTable ranking={topDoDiaRanking} compact />
+          <div className="space-y-3">
+            <div className="rounded-xl border border-cyan-400/20 bg-cyan-500/5 p-3 text-xs leading-5 text-cyan-100">
+              <strong>Fórmula:</strong> performance média = ((vitórias × 3) + prêmios defendidos) ÷ partidas jogadas. Primeiro comparamos a média; em empate, usamos mais vitórias, mais prêmios defendidos e depois menos partidas.
+            </div>
+            <div className="overflow-x-auto rounded-xl border border-slate-800">
+              <table className="min-w-full text-left text-xs">
+                <thead className="bg-slate-950/80 text-[10px] uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-3 py-3">Pos.</th>
+                    <th className="min-w-40 px-3 py-3">Jogador</th>
+                    <th className="px-3 py-3 text-center">Partidas</th>
+                    <th className="px-3 py-3 text-center">Vitórias</th>
+                    <th className="px-3 py-3 text-center">Prêmios defendidos</th>
+                    <th className="px-3 py-3 text-center">Média de vitórias</th>
+                    <th className="px-3 py-3 text-center">Média de prêmios</th>
+                    <th className="px-3 py-3 text-center">Performance</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800 bg-slate-950/30">
+                  {topDoDiaRanking.map((entry, index) => {
+                    const matches = entry.matchesPlayed || 0;
+                    const winAverage = matches > 0 ? entry.wins / matches : 0;
+                    const prizeAverage = matches > 0 ? entry.defendedPrizes / matches : 0;
+                    const performance = winAverage * 3 + prizeAverage;
+                    return (
+                      <tr key={entry.playerId} className={index === 0 ? "bg-[#FFCB05]/10" : "hover:bg-white/[0.03]"}>
+                        <td className="px-3 py-3 font-bold text-[#FFCB05]">{index === 0 ? "👑 1º" : `${index + 1}º`}</td>
+                        <td className="px-3 py-3 font-semibold text-white">{entry.displayName}</td>
+                        <td className="px-3 py-3 text-center text-slate-300">{matches}</td>
+                        <td className="px-3 py-3 text-center text-emerald-300">{entry.wins}</td>
+                        <td className="px-3 py-3 text-center text-violet-300">{entry.defendedPrizes}</td>
+                        <td className="px-3 py-3 text-center text-slate-300">{winAverage.toFixed(2)}</td>
+                        <td className="px-3 py-3 text-center text-slate-300">{prizeAverage.toFixed(2)}</td>
+                        <td className="px-3 py-3 text-center font-black text-cyan-300">{performance.toFixed(2)}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
         )}
       </div>
 
