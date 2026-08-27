@@ -561,6 +561,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
 
   const isPlayer = match.playerAId === player.id || match.playerBId === player.id;
   const isInPerson = match.tournamentWeek?.tournament.format === TournamentFormat.IN_PERSON;
+  const isAdminReporter = user.role === Role.ADMIN || user.role === Role.SUPER_ADMIN;
   const registeredInTournament = isInPerson
     ? await prisma.tournamentRegistration.findUnique({
         where: {
@@ -579,7 +580,10 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
       match.tournamentWeek?.tournament.createdById === user.id ||
       registeredInTournament?.status === "APPROVED");
 
-  if (!isPlayer && !canReportInPerson) throw new Error("Voce nao pode reportar esta partida");
+  // O painel sempre oferece esta ação ao admin, inclusive em torneios online.
+  // Um registro administrativo é autoritativo e não deve criar uma confirmação
+  // em nome do Player vinculado à conta administrativa.
+  if (!isPlayer && !canReportInPerson && !isAdminReporter) throw new Error("Voce nao pode reportar esta partida");
   if (winnerId !== match.playerAId && winnerId !== match.playerBId) throw new Error("Vencedor invalido");
 
   const loserId = winnerId === match.playerAId ? match.playerBId : match.playerAId;
@@ -587,6 +591,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
   const multiplier = week ? Number(week.multiplier) : 1;
   const winPoints = 3 * multiplier;
   const now = new Date();
+  const autoConfirmed = isInPerson || isAdminReporter;
   const reporterPlayerId = player.id;
   const opponentPlayerId = reporterPlayerId === match.playerAId ? match.playerBId : match.playerAId;
 
@@ -599,14 +604,14 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
         playerAWins: winnerId === match.playerAId ? 1 : 0,
         playerBWins: winnerId === match.playerBId ? 1 : 0,
         winnerDefendedPrizes,
-        status: isInPerson ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
+        status: autoConfirmed ? MatchStatus.CONFIRMED : MatchStatus.PENDING_CONFIRMATION,
         reportedById: user.id,
         reportedAt: now,
-        confirmedById: isInPerson ? user.id : null,
-        confirmedAt: isInPerson ? now : null,
-        rankingPointsA: isInPerson && winnerId === match.playerAId ? winPoints : 0,
-        rankingPointsB: isInPerson && winnerId === match.playerBId ? winPoints : 0,
-        resultSource: isInPerson ? ResultSource.MANUAL : undefined,
+        confirmedById: autoConfirmed ? user.id : null,
+        confirmedAt: autoConfirmed ? now : null,
+        rankingPointsA: autoConfirmed && winnerId === match.playerAId ? winPoints : 0,
+        rankingPointsB: autoConfirmed && winnerId === match.playerBId ? winPoints : 0,
+        resultSource: autoConfirmed ? ResultSource.MANUAL : undefined,
         notes: notes || null,
       },
     });
@@ -622,7 +627,7 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     // O resultado e o estado de confirmação precisam nascer juntos. Antes estas
     // confirmações eram gravadas depois da transação; qualquer falha de UI ou de
     // anúncio podia deixar um resultado salvo pela metade.
-    if (!isInPerson) {
+    if (!autoConfirmed) {
       await tx.matchConfirmation.upsert({
         where: { matchId_playerId: { matchId, playerId: reporterPlayerId } },
         update: { status: "CONFIRMED", confirmedAt: now },
@@ -642,8 +647,8 @@ export async function reportMatchResult(input: z.infer<typeof reportResultSchema
     console.error("[TournamentResult] Resultado salvo, mas o anúncio falhou", { matchId, error });
   });
 
-  if (isInPerson) {
-    // Partida presencial já confirmada — credita ZikaCoins imediatamente
+  if (autoConfirmed) {
+    // Partida presencial ou registrada pelo admin já nasce confirmada.
     const matchForCoins = {
       id: matchId,
       playerAId: match.playerAId,
