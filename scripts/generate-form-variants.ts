@@ -6,9 +6,28 @@
  */
 import { writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { EXTRA_FORM_NAMES, EXTRA_FORM_POOL_BY_GEN, EXTRA_FORM_IDS } from "../src/lib/extra-forms-data";
+import { EXTRA_FORM_NAMES, EXTRA_FORM_POOL_BY_GEN, EXTRA_FORM_IDS, EXTRA_FORM_GENERATION } from "../src/lib/extra-forms-data";
 import { getPokemonName, EGG_POOLS, LEGENDARY_POOL } from "../src/lib/mascot-data";
 import { MEGA_FORM_IDS } from "../src/lib/mega-evolution";
+
+// Geração de uma espécie/forma (espelha generationForEggPokemon do runtime).
+function genOf(id: number): number | null {
+  if (id >= 1 && id <= 151) return 1;
+  if (id <= 251) return 2;
+  if (id <= 386) return 3;
+  if (id <= 493) return 4;
+  if (id <= 649) return 5;
+  if (id <= 721) return 6;
+  if (id <= 809) return 7;
+  if (id <= 905) return 8;
+  if (id <= 1025) return 9;
+  if (id === 10006 || id === 10007) return 4;
+  if (id >= 10091 && id <= 10115) return 7;
+  if (id >= 10158 && id <= 10180) return 8;
+  if (id >= 10229 && id <= 10244) return 8;
+  if (id >= 201001 && id <= 201027) return 2; // Unown letras
+  return EXTRA_FORM_GENERATION[id] ?? null;
+}
 
 // Nomes das espécies base reais (ids 1..1025) via getPokemonName (cobre todas).
 const baseNameToId = new Map<string, number>();
@@ -40,6 +59,7 @@ const formBase: Record<number, number> = {};
 const variantsByBase: Record<number, number[]> = {};
 const unmatched: Array<{ id: number; name: string }> = [];
 
+const crossGen: Array<{ id: number; name: string; gf: number | null; base: number; gb: number | null }> = [];
 for (const id of [...poolable].sort((a, b) => a - b)) {
   if (MEGA_FORM_IDS.has(id)) continue; // megas não colapsam (só via pedra)
   const name = EXTRA_FORM_NAMES[id] ?? getPokemonName(id);
@@ -47,9 +67,14 @@ for (const id of [...poolable].sort((a, b) => a - b)) {
   const base = resolveBase(id, name);
   if (!base) { unmatched.push({ id, name }); continue; }
   if (base === id) continue;
+  // Regra: NÃO misturar gerações. Formas regionais (Alola/Galar/Hisui) têm
+  // geração própria e ficam separadas na geração delas, sem colapsar na base.
+  const gf = genOf(id), gb = genOf(base);
+  if (gf !== gb) { crossGen.push({ id, name, gf, base, gb }); continue; }
   formBase[id] = base;
   (variantsByBase[base] ??= []).push(id);
 }
+if (crossGen.length) console.warn(`Formas NÃO colapsadas por geração diferente (ficam separadas): ${crossGen.length}`);
 
 for (const base of Object.keys(variantsByBase)) variantsByBase[Number(base)].sort((a, b) => a - b);
 
@@ -67,6 +92,8 @@ for (const id of [...EXTRA_FORM_IDS].sort((a, b) => a - b)) {
   const base = resolveBase(id, name);
   if (!base) { unmatchedAll.push({ id, name }); continue; }
   if (base === id) continue;
+  // Mesma trava de geração: formas regionais não agrupam sob base de outra gen.
+  if (genOf(id) !== genOf(base)) continue;
   formBaseAll[id] = base;
 }
 if (unmatchedAll.length) console.warn("Formas (todas) sem base:", unmatchedAll.length, unmatchedAll.slice(0, 10));
