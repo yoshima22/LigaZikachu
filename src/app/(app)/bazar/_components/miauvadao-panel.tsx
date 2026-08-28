@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Zap, ShoppingCart, Clock, RefreshCw } from "lucide-react";
+import { Zap, ShoppingCart, Clock, RefreshCw, Sparkles, Gift } from "lucide-react";
 import { buyMiauvadaoOffer, refreshMiauvadaoOfferSlot, buyPersonalMiauvadaoSlot } from "../actions";
 import type { MiauvadaoOffer, MiauvadaoPurchaseStatus } from "../actions";
 import { getShopItemEmoji } from "@/lib/shop-config";
@@ -479,33 +479,35 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
             const soldOut = remaining <= 0;
             const cantAfford = balance < offer.finalPrice;
             return (
-              <div className="relative overflow-hidden rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/10 via-slate-950/40 to-purple-500/10 p-4" style={{ zIndex: 15 }}>
-                <div className="mb-2 flex items-center gap-2">
-                  <span className="rounded-full border border-cyan-400/40 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-200">✨ Só pra você</span>
-                  <span className="text-[10px] font-semibold text-cyan-100/70">Oferta pessoal do Miauvadão · roleta exclusiva</span>
+              <div className="relative overflow-hidden rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/10 via-slate-950/40 to-purple-500/10 p-3 sm:p-4" style={{ zIndex: 15 }}>
+                <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <span className="inline-flex items-center gap-1 rounded-full border border-cyan-400/40 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-widest text-cyan-200"><Sparkles size={10}/> Só pra você</span>
+                  <span className="text-[10px] font-semibold text-cyan-100/70">Oferta pessoal · roleta exclusiva</span>
                 </div>
-                <div className="flex items-center gap-3">
-                  {offer.imageUrl
-                    // eslint-disable-next-line @next/next/no-img-element
-                    ? <img src={offer.imageUrl} alt={offer.name} className="h-14 w-14 shrink-0 object-contain [image-rendering:pixelated]" />
-                    : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-900 text-2xl">🎁</div>}
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-sm font-bold text-white">{offer.name}</p>
-                    {offer.description && <p className="truncate text-[10px] text-slate-400">{offer.description}</p>}
-                    <div className="mt-1 flex items-center gap-2 text-xs">
-                      <span className="font-black text-[#FFCB05]">{offer.finalPrice.toLocaleString("pt-BR")} ZC</span>
-                      {offer.discountPct > 0 && <span className="text-[10px] text-slate-500 line-through">{offer.originalPrice.toLocaleString("pt-BR")}</span>}
-                      {offer.discountPct > 0 && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">-{offer.discountPct}%</span>}
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                  <div className="flex min-w-0 items-center gap-3">
+                    {offer.imageUrl
+                      // eslint-disable-next-line @next/next/no-img-element
+                      ? <img src={offer.imageUrl} alt={offer.name} className="h-14 w-14 shrink-0 object-contain [image-rendering:pixelated]" />
+                      : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-xl bg-slate-900"><Gift size={26} className="text-cyan-300"/></div>}
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-bold text-white">{offer.name}</p>
+                      {offer.description && <p className="text-[10px] leading-snug text-slate-400 line-clamp-2">{offer.description}</p>}
+                      <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs">
+                        <span className="font-black text-[#FFCB05]">{offer.finalPrice.toLocaleString("pt-BR")} ZC</span>
+                        {offer.discountPct > 0 && <span className="text-[10px] text-slate-500 line-through">{offer.originalPrice.toLocaleString("pt-BR")}</span>}
+                        {offer.discountPct > 0 && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">-{offer.discountPct}%</span>}
+                      </div>
+                      <p className="mt-0.5 text-[9px] text-cyan-200/70">Estoque exclusivo: {remaining}/{offer.stock} · só você compra</p>
                     </div>
-                    <p className="mt-0.5 text-[9px] text-cyan-200/70">Estoque exclusivo: {remaining}/{offer.stock} · só você compra este slot</p>
                   </div>
                   <button
                     onClick={handleBuyPersonal}
                     disabled={pending || buyingPersonal || soldOut || cantAfford || !playerId}
-                    className="shrink-0 rounded-xl bg-cyan-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="w-full shrink-0 rounded-xl bg-cyan-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
                     title={soldOut ? "Esgotada nesta rotação" : cantAfford ? "Saldo insuficiente" : "Comprar oferta pessoal"}
                   >
-                    {buyingPersonal ? "..." : soldOut ? "Esgotada" : "Comprar"}
+                    {buyingPersonal ? "..." : soldOut ? "Esgotada" : cantAfford ? "Sem saldo" : "Comprar"}
                   </button>
                 </div>
               </div>
