@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { Megaphone, ChevronLeft, ChevronRight } from "lucide-react";
+import { SimpleFormattedText } from "@/components/ui/simple-formatted-text";
 
 type PatchNote = { title: string; content: string };
 
@@ -42,9 +43,8 @@ export function PatchNotesCard({ notes }: { notes: PatchNote[] }) {
         )}
       </div>
       {note.title && <p className="text-sm font-bold text-white">{note.title}</p>}
-      <div className="mt-1 max-h-28 overflow-y-auto whitespace-pre-wrap pr-1 text-xs leading-relaxed text-slate-300">
-        {note.content}
-      </div>
+      <SimpleFormattedText text={note.content} className="mt-1 max-h-28 space-y-1 overflow-y-auto pr-1 text-xs leading-relaxed text-slate-300" />
+
       {total > 1 && (
         <div className="mt-2 flex items-center justify-center gap-1.5">
           {notes.map((_, i) => (

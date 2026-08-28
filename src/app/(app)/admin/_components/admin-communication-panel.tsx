@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { BellRing, Coins, Megaphone, Send, Sparkles } from "lucide-react";
+import { BellRing, Bold, Coins, Italic, List, Megaphone, Send, Sparkles, Underline } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice, updatePatchNotes } from "../actions";
 
@@ -21,6 +21,31 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
     [0, 1, 2].map((i) => ({ title: initialPatchNotes?.[i]?.title ?? "", content: initialPatchNotes?.[i]?.content ?? "" })),
   );
   const [pendingPatch, startPatch] = useTransition();
+  const patchRefs = useRef<(HTMLTextAreaElement | null)[]>([]);
+
+  // Aplica formatação à seleção da nota `i` (envolve com `before`/`after`, ou
+  // prefixa linhas no caso de lista). Depois reposiciona o cursor.
+  const applyPatchFormat = (i: number, before: string, after: string, linePrefix?: string) => {
+    const ta = patchRefs.current[i];
+    if (!ta) return;
+    const start = ta.selectionStart ?? 0;
+    const end = ta.selectionEnd ?? 0;
+    const value = patch[i].content;
+    const sel = value.slice(start, end);
+    let next: string;
+    let cursor: number;
+    if (linePrefix) {
+      const block = sel || "";
+      const formatted = block.split(/\r?\n/).map((l) => (l.trim() ? `${linePrefix}${l.replace(/^\s*[-•]\s+/, "")}` : l)).join("\n");
+      next = value.slice(0, start) + formatted + value.slice(end);
+      cursor = start + formatted.length;
+    } else {
+      next = value.slice(0, start) + before + sel + after + value.slice(end);
+      cursor = start + before.length + sel.length + after.length;
+    }
+    setPatch((p) => p.map((n, j) => (j === i ? { ...n, content: next } : n)));
+    requestAnimationFrame(() => { ta.focus(); ta.setSelectionRange(cursor, cursor); });
+  };
   const [coins, setCoins] = useState("");
   const [description, setDescription] = useState("Presente global da Liga");
   const [professorMessage, setProfessorMessage] = useState("");
@@ -51,15 +76,23 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
                 onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, title: e.target.value } : n))}
                 placeholder="Título (opcional)"
                 maxLength={80}
-                className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
+                className="mb-2 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
               />
+              <div className="mb-1.5 flex items-center gap-1">
+                <button type="button" title="Negrito (**texto**)" onClick={() => applyPatchFormat(i, "**", "**")} className="rounded border border-slate-700 bg-slate-800 p-1 text-slate-300 hover:text-white"><Bold size={13}/></button>
+                <button type="button" title="Itálico (*texto*)" onClick={() => applyPatchFormat(i, "*", "*")} className="rounded border border-slate-700 bg-slate-800 p-1 text-slate-300 hover:text-white"><Italic size={13}/></button>
+                <button type="button" title="Sublinhado (__texto__)" onClick={() => applyPatchFormat(i, "__", "__")} className="rounded border border-slate-700 bg-slate-800 p-1 text-slate-300 hover:text-white"><Underline size={13}/></button>
+                <button type="button" title="Lista (- item)" onClick={() => applyPatchFormat(i, "", "", "- ")} className="rounded border border-slate-700 bg-slate-800 p-1 text-slate-300 hover:text-white"><List size={13}/></button>
+                <span className="ml-1 text-[9px] text-slate-500">selecione o texto e clique</span>
+              </div>
               <textarea
+                ref={(el) => { patchRefs.current[i] = el; }}
                 value={note.content}
                 onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, content: e.target.value } : n))}
-                placeholder="Texto curto do patch note..."
+                placeholder="Texto curto do patch note... (use **negrito**, *itálico*, __sublinhado__, - listas)"
                 maxLength={600}
-                rows={2}
-                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
+                rows={3}
+                className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
               />
             </div>
           ))}
@@ -183,20 +216,20 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
         <p className="mt-2 text-xs text-slate-500">
           Credita ZC na carteira de todos os jogadores ativos e registra transação admin.
         </p>
-        <div className="mt-3 grid gap-3 sm:grid-cols-[140px_1fr]">
+        <div className="mt-3 grid gap-3 sm:grid-cols-[130px_1fr]">
           <input
             value={coins}
             onChange={(e) => setCoins(e.target.value.replace(/\D/g, ""))}
             inputMode="numeric"
             placeholder="Quantidade"
-            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+            className="w-full min-w-0 rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
           />
           <input
             value={description}
             onChange={(e) => setDescription(e.target.value)}
             maxLength={160}
             placeholder="Descrição da transação"
-            className="rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
+            className="w-full min-w-0 rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-white outline-none placeholder:text-slate-600 focus:border-[#FFCB05]/50"
           />
         </div>
         <Button

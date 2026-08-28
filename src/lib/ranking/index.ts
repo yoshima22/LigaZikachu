@@ -99,7 +99,18 @@ export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRan
     return computeSeasonRanking(seasonId);
   }
 
+  // "Todas": somatória de todas as temporadas. Nº de eventos = total de torneios
+  // (inscrições aprovadas) em que o jogador participou em toda a história.
+  const registrations = await prisma.tournamentRegistration.findMany({
+    where: { status: "APPROVED", player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } },
+    select: { playerId: true }
+  });
+  const eventsCountByPlayer = new Map<string, number>();
+  for (const r of registrations) eventsCountByPlayer.set(r.playerId, (eventsCountByPlayer.get(r.playerId) ?? 0) + 1);
+
   return computeRankingFromMatches({
+    eventsCountByPlayer,
+    sortByGameplay: true,
     matchWhere: {
       status: MatchStatus.CONFIRMED,
       tournamentWeekId: { not: null }
