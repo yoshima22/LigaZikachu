@@ -13,6 +13,7 @@ import {
   updateTowerLobbyMascotsAction,
   updateTowerLobbyStanceAction,
   removeTowerLobbyMemberAction,
+  leaveTowerRoomAction,
 } from "../actions";
 import { TowerBattleGrid } from "./tower-battle-grid";
 import { TowerNarrative } from "./tower-narrative";
@@ -257,13 +258,33 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
 
       {ended && <div className="mt-4 space-y-3"><p className={`text-sm ${run.status==="FAILED"?"text-red-300":"text-slate-400"}`}>Esta expedição foi {run.status === "FINISHED" ? "concluída" : run.status==="FAILED"?"derrotada — novas informações podem ter surgido no Arquivo da Torre":"abandonada"}.</p>{state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Rever o último combate completo</button>}{showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}</div>}
 
-      <button type="button" disabled={pending} onClick={() => start(async () => {
-        const res = await abandonTowerRunAction(runId);
-        if ("error" in res) { toast.error(res.error); return; }
-        toast.success("Expedição encerrada."); onLeft();
-      })} className="mt-4 rounded-xl border border-slate-700 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-40">
-        {ended ? "Voltar ao lobby" : "Encerrar expedição"}
-      </button>
+      {(() => {
+        const isLobby = state.run.status === "LOBBY";
+        const amHost = state.lobby?.hostId === state.mine.userId;
+        // Membro (não-dono) no lobby: sai só a si, sem encerrar a sala.
+        if (isLobby && !amHost) {
+          return (
+            <button type="button" disabled={pending} onClick={() => start(async () => {
+              const res = await leaveTowerRoomAction(runId);
+              if ("error" in res) { toast.error(res.error); return; }
+              toast.success("Você saiu da sala."); onLeft();
+            })} className="mt-4 rounded-xl border border-amber-400/40 bg-amber-400/5 px-4 py-2 text-xs font-bold text-amber-200 hover:bg-amber-400/10 disabled:opacity-40">
+              Sair da sala
+            </button>
+          );
+        }
+        // Dono (cancela a sala) / run ativa (encerra) / encerrada (voltar).
+        return (
+          <button type="button" disabled={pending} onClick={() => start(async () => {
+            if (!ended && !confirm(isLobby ? "Cancelar a sala? Todos os membros serão liberados." : "Encerrar a expedição em andamento?")) return;
+            const res = await abandonTowerRunAction(runId);
+            if ("error" in res) { toast.error(res.error); return; }
+            toast.success(isLobby ? "Sala cancelada." : "Expedição encerrada."); onLeft();
+          })} className="mt-4 rounded-xl border border-slate-700 px-4 py-2 text-xs font-bold text-slate-300 hover:bg-slate-800 disabled:opacity-40">
+            {ended ? "Voltar ao lobby" : isLobby ? "Cancelar sala" : "Encerrar expedição"}
+          </button>
+        );
+      })()}
     </section>
   );
 }

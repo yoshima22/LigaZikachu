@@ -186,6 +186,10 @@ export async function getTowerLobbyDataAction() {
   });
   const roomUserIds = [...new Set(openRuns.flatMap((run) => run.members.map((member) => member.userId)))];
   const roomUsers = new Map((await prisma.user.findMany({ where: { id: { in: roomUserIds } }, select: { id: true, name: true } })).map((u) => [u.id, u.name ?? "Jogador"]));
+  // Detalhes dos mascotes de cada membro das salas abertas (para mostrar quem
+  // leva o quê antes de entrar).
+  const roomMascotIds = [...new Set(openRuns.flatMap((run) => run.members.flatMap((member) => member.mascots.map((mascot) => mascot.mascotId))))];
+  const roomMascotById = new Map((await prisma.mascot.findMany({ where: { id: { in: roomMascotIds } }, select: { id: true, pokemonId: true, nickname: true, level: true } })).map((m) => [m.id, m]));
   const lastAt = await lastEntryAt(user.id);
   const nextEntryMs = lastAt !== null ? lastAt + config.entryCooldownMinutes * 60_000 : 0;
 
@@ -224,13 +228,29 @@ export async function getTowerLobbyDataAction() {
     activeRun: active?.run ?? null,
     nextEntryAt: nextEntryMs > Date.now() ? new Date(nextEntryMs).toISOString() : null,
     roles: TOWER_EXPEDITION_ROLES.map((r) => ({
-      key: r.key, label: r.label, exploration: r.exploration, benefit: r.benefit, stances: r.stances,
+      key: r.key, label: r.label, exploration: r.exploration, benefit: r.benefit, gameplayTip: r.gameplayTip, stances: r.stances,
     })),
     mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId) })),
     rooms: openRuns.filter((run) => run.members.length < 3).map((run) => {
       const lobby = ((run.volatileState ?? {}) as { lobby?: { code?: string; hostId?: string; ready?: Record<string, boolean> } }).lobby;
       const host = run.members.find((member) => member.userId === lobby?.hostId) ?? run.members[0];
-      return { id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace, host: roomUsers.get(host?.userId ?? "") ?? "Jogador", hostSetup: host ? { expeditionRole: host.expeditionRole, stances: host.mascots.map((mascot) => mascot.currentStance) } : null, members: run.members.map((m) => ({ userId: m.userId, name: roomUsers.get(m.userId) ?? "Jogador", ready: Boolean(lobby?.ready?.[m.userId]), expeditionRole: m.expeditionRole })) };
+      return {
+        id: run.id, code: lobby?.code ?? run.id.slice(-6).toUpperCase(), pace: run.pace,
+        hostId: host?.userId ?? null,
+        host: roomUsers.get(host?.userId ?? "") ?? "Jogador",
+        hostSetup: host ? { expeditionRole: host.expeditionRole, stances: host.mascots.map((mascot) => mascot.currentStance) } : null,
+        members: run.members.map((m) => ({
+          userId: m.userId,
+          name: roomUsers.get(m.userId) ?? "Jogador",
+          ready: Boolean(lobby?.ready?.[m.userId]),
+          expeditionRole: m.expeditionRole,
+          roleLabel: TOWER_ROLE_BY_KEY[m.expeditionRole]?.label ?? m.expeditionRole,
+          mascots: m.mascots.map((mascot) => {
+            const detail = roomMascotById.get(mascot.mascotId);
+            return { pokemonId: detail?.pokemonId ?? 0, name: detail?.nickname ?? (detail ? getPokemonName(detail.pokemonId) : "Mascote"), level: detail?.level ?? 0, stance: mascot.currentStance };
+          }),
+        })),
+      };
     }),
   };
 }
@@ -441,6 +461,24 @@ export async function removeTowerLobbyMemberAction(runId: string, targetUserId: 
   const target = run.members.find((member) => member.userId === targetUserId); if (!target) return { error: "Jogador não está na sala." };
   const ready = { ...(vol.lobby?.ready ?? {}) }; delete ready[targetUserId];
   await prisma.$transaction([prisma.towerRunMember.delete({ where: { id: target.id } }), prisma.towerRun.update({ where: { id: runId }, data: { resolutionOrder: run.members.filter((member) => member.userId !== targetUserId).map((member) => member.userId), volatileState: { ...vol, lobby: { ...vol.lobby, hostId, ready } } as Prisma.InputJsonValue } })]);
+  revalidatePath(PATH); return { ok: true as const };
+}
+
+/** Um membro (não-dono) sai da sala por conta própria, sem encerrar a run. */
+export async function leaveTowerRoomAction(runId: string) {
+  const user = await requireTowerAdmin(); if (!user) return { error: "Acesso restrito." };
+  const run = await prisma.towerRun.findUnique({ where: { id: runId }, include: { members: true } });
+  if (!run || run.status !== "LOBBY") return { error: "Sala indisponível." };
+  const vol = (run.volatileState ?? {}) as { lobby?: { hostId?: string; ready?: Record<string, boolean> } };
+  const hostId = vol.lobby?.hostId ?? run.members[0]?.userId;
+  const me = run.members.find((member) => member.userId === user.id);
+  if (!me) return { error: "Você não está nesta sala." };
+  if (hostId === user.id) return { error: "O dono deve cancelar a sala para sair." };
+  const ready = { ...(vol.lobby?.ready ?? {}) }; delete ready[user.id];
+  await prisma.$transaction([
+    prisma.towerRunMember.delete({ where: { id: me.id } }),
+    prisma.towerRun.update({ where: { id: runId }, data: { resolutionOrder: run.members.filter((member) => member.userId !== user.id).map((member) => member.userId), volatileState: { ...vol, lobby: { ...vol.lobby, hostId, ready } } as Prisma.InputJsonValue } }),
+  ]);
   revalidatePath(PATH); return { ok: true as const };
 }
 
