@@ -652,6 +652,89 @@ export async function getStoredAnalysisAction(
   return { ok: true as const, analysis };
 }
 
+export type MascotGrowthHistory = {
+  mascot: {
+    id: string;
+    pokemonId: number;
+    name: string;
+    level: number;
+    personality: string;
+    current: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+  };
+  trackedFrom: string | null;
+  entries: Array<{
+    id: string;
+    fromLevel: number;
+    toLevel: number;
+    gained: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+    after: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+    pokemonIdBefore: number;
+    pokemonIdAfter: number;
+    source: string;
+    recordedAt: string;
+  }>;
+};
+
+/**
+ * Histórico real carregado somente quando o jogador abre o painel. Aceita no
+ * máximo dois mascotes para manter o comparativo pequeno mesmo em uso intenso.
+ */
+export async function getMascotGrowthHistoryAction(
+  mascotIds: string[],
+): Promise<{ ok: false; error: string } | { ok: true; histories: MascotGrowthHistory[] }> {
+  const me = await requirePlayer();
+  const ids = [...new Set(mascotIds.filter(Boolean))].slice(0, 2);
+  if (!ids.length) return { ok: false as const, error: "Selecione ao menos um mascote." };
+
+  const mascots = await prisma.mascot.findMany({
+    where: { id: { in: ids }, playerId: me.id },
+    select: {
+      id: true, pokemonId: true, nickname: true, level: true, personality: true,
+      statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+      statGrowthHistory: {
+        orderBy: [{ recordedAt: "asc" }, { id: "asc" }],
+        take: 110,
+        select: {
+          id: true, fromLevel: true, toLevel: true,
+          forceGained: true, agilityGained: true, charismaGained: true, instinctGained: true, vitalityGained: true,
+          forceAfter: true, agilityAfter: true, charismaAfter: true, instinctAfter: true, vitalityAfter: true,
+          pokemonIdBefore: true, pokemonIdAfter: true, source: true, recordedAt: true,
+        },
+      },
+    },
+  });
+  if (mascots.length !== ids.length) return { ok: false as const, error: "Mascote não encontrado na sua conta." };
+
+  const byId = new Map(mascots.map((mascot) => [mascot.id, mascot]));
+  const histories: MascotGrowthHistory[] = ids.map((id) => {
+    const mascot = byId.get(id)!;
+    const entries = mascot.statGrowthHistory.map((entry) => ({
+      id: entry.id,
+      fromLevel: entry.fromLevel,
+      toLevel: entry.toLevel,
+      gained: { force: entry.forceGained, agility: entry.agilityGained, charisma: entry.charismaGained, instinct: entry.instinctGained, vitality: entry.vitalityGained },
+      after: { force: entry.forceAfter, agility: entry.agilityAfter, charisma: entry.charismaAfter, instinct: entry.instinctAfter, vitality: entry.vitalityAfter },
+      pokemonIdBefore: entry.pokemonIdBefore,
+      pokemonIdAfter: entry.pokemonIdAfter,
+      source: entry.source,
+      recordedAt: entry.recordedAt.toISOString(),
+    }));
+    return {
+      mascot: {
+        id: mascot.id,
+        pokemonId: mascot.pokemonId,
+        name: mascot.nickname ?? getPokemonName(mascot.pokemonId),
+        level: mascot.level,
+        personality: mascot.personality,
+        current: { force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality },
+      },
+      trackedFrom: entries[0]?.recordedAt ?? null,
+      entries,
+    };
+  });
+  return { ok: true as const, histories };
+}
+
 // ── Re-roll caótico de status (Laboratório, disponível até 26/08/2026) ─────────
 // Só mascotes CAÓTICOS que nunca usaram. Redistribui o TOTAL atual de status pela
 // regra de crescimento caótico nível a nível (sem inflar), preservando o total.

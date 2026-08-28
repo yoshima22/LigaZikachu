@@ -741,9 +741,49 @@ export async function addExp(
       }
     : statUpdates;
 
-  await prisma.mascot.update({
-    where: { id: mascotId },
-    data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate }
+  const growthTrackingStartedAt = new Date("2026-08-28T00:00:00-03:00");
+  const shouldRecordGrowth = leveled && Date.now() >= growthTrackingStartedAt.getTime();
+  const finalStats: Record<MascotStatKey, number> = {
+    statForce: typeof finalStatUpdates.statForce === "number" ? finalStatUpdates.statForce : mascot.statForce,
+    statAgility: typeof finalStatUpdates.statAgility === "number" ? finalStatUpdates.statAgility : mascot.statAgility,
+    statCharisma: typeof finalStatUpdates.statCharisma === "number" ? finalStatUpdates.statCharisma : mascot.statCharisma,
+    statInstinct: typeof finalStatUpdates.statInstinct === "number" ? finalStatUpdates.statInstinct : mascot.statInstinct,
+    statVitality: typeof finalStatUpdates.statVitality === "number" ? finalStatUpdates.statVitality : mascot.statVitality,
+  };
+
+  await prisma.$transaction(async (tx) => {
+    await tx.mascot.update({
+      where: { id: mascotId },
+      data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate },
+    });
+    if (shouldRecordGrowth) {
+      await tx.mascotStatGrowthEntry.create({
+        data: {
+          mascotId,
+          fromLevel: mascot.level,
+          toLevel: level,
+          forceGained: finalStats.statForce - mascot.statForce,
+          agilityGained: finalStats.statAgility - mascot.statAgility,
+          charismaGained: finalStats.statCharisma - mascot.statCharisma,
+          instinctGained: finalStats.statInstinct - mascot.statInstinct,
+          vitalityGained: finalStats.statVitality - mascot.statVitality,
+          forceAfter: finalStats.statForce,
+          agilityAfter: finalStats.statAgility,
+          charismaAfter: finalStats.statCharisma,
+          instinctAfter: finalStats.statInstinct,
+          vitalityAfter: finalStats.statVitality,
+          pokemonIdBefore: mascot.pokemonId,
+          pokemonIdAfter: pokemonId,
+          source: (options.source ?? "SYSTEM").slice(0, 80),
+          metadata: {
+            expGranted: amount,
+            levelsGained,
+            evolved,
+            milestoneKeys: newMilestones.map((milestone) => milestone.key),
+          },
+        },
+      });
+    }
   });
 
   await recordPlayerActivity(prisma, {

@@ -2403,7 +2403,7 @@ model Mascot {
   expLocked                 Boolean                   @default(false)
   operationsLocked          Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
   isShiny                   Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
-  primordialBoundPlayerId   String?                   // conta fixada pela Pena Primordial; o banco impede troca de playerId
+  primordialBoundPlayerId   String? // conta fixada pela Pena Primordial; o banco impede troca de playerId
   megaEvolvedFromPokemonId  Int?
   megaStoneItemId           String?
   megaEvolvedAt             DateTime?
@@ -2433,6 +2433,7 @@ model Mascot {
   socialDecisionLogsAsB     MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
   events                    MascotEvent[]
   progressMilestones        MascotProgressMilestone[]
+  statGrowthHistory         MascotStatGrowthEntry[]
   buffs                     MascotBuff[]
   syncLineups               SyncEventLineup[]         @relation("SyncEventLineupMascot")
   traceRoomsAsHider         TraceRoom[]               @relation("TraceRoomHiderMascot")
@@ -2484,9 +2485,9 @@ model PlayerPokemonWishlist {
   note        String?
   eggRarities String[] @default([]) // raridades de ovo que o jogador procura para este mascote
   sortOrder   Int      @default(0)
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  player    Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, pokemonId])
   @@index([playerId, sortOrder])
@@ -2645,6 +2646,35 @@ model MascotProgressMilestone {
   @@unique([mascotId, key])
   @@index([mascotId])
   @@map("mascot_progress_milestones")
+}
+
+// Histórico compacto de crescimento real. Uma linha representa uma operação
+// de level-up (normalmente um nível; ganhos encadeados ficam identificados pelo
+// intervalo), evitando carregar ou regravar um JSON grande no Mascot.
+model MascotStatGrowthEntry {
+  id              String   @id @default(cuid())
+  mascotId        String
+  fromLevel       Int
+  toLevel         Int
+  forceGained     Int
+  agilityGained   Int
+  charismaGained  Int
+  instinctGained  Int
+  vitalityGained  Int
+  forceAfter      Int
+  agilityAfter    Int
+  charismaAfter   Int
+  instinctAfter   Int
+  vitalityAfter   Int
+  pokemonIdBefore Int
+  pokemonIdAfter  Int
+  source          String   @default("SYSTEM")
+  metadata        Json?
+  recordedAt      DateTime @default(now())
+  mascot          Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@index([mascotId, recordedAt])
+  @@map("mascot_stat_growth_entries")
 }
 
 model MascotExpedition {
@@ -3228,8 +3258,8 @@ model WeeklyLeagueTeamPreset {
   id            String   @id @default(cuid())
   playerId      String
   name          String
-  mascotIdsJson Json     // string[] ordenado por slot
-  rolesJson     Json     // Record<mascotId, CombatRole>
+  mascotIdsJson Json // string[] ordenado por slot
+  rolesJson     Json // Record<mascotId, CombatRole>
   createdAt     DateTime @default(now())
   updatedAt     DateTime @updatedAt
 
@@ -3891,17 +3921,17 @@ enum SpecStreamStatus {
 
 model SpecStream {
   id                 String           @id @default(cuid())
-  matchId            String?          // nulo em lives avulsas (fora de partida)
-  tournamentId       String?          // nulo em lives avulsas
-  title              String?          // título livre das lives avulsas
+  matchId            String? // nulo em lives avulsas (fora de partida)
+  tournamentId       String? // nulo em lives avulsas
+  title              String? // título livre das lives avulsas
   broadcasterUserId  String
   status             SpecStreamStatus @default(PREPARING)
   provider           String           @default("stub")
   videoTrackId       String?
   audioTrackId       String?
   broadcastSessionId String?
-  youtubeVideoId     String?          // id do vídeo/live do YouTube (modo "youtube")
-  youtubeBroadcastId String?          // id do liveBroadcast na YouTube Data API (gerência via site)
+  youtubeVideoId     String? // id do vídeo/live do YouTube (modo "youtube")
+  youtubeBroadcastId String? // id do liveBroadcast na YouTube Data API (gerência via site)
   startedAt          DateTime?
   endedAt            DateTime?
   lastSeenAt         DateTime?
@@ -3923,7 +3953,7 @@ model SpecSignal {
   streamId   String
   fromUserId String
   toUserId   String
-  kind       String   // JOIN | OFFER | ANSWER | BYE
+  kind       String // JOIN | OFFER | ANSWER | BYE
   payload    Json?
   createdAt  DateTime @default(now())
 
@@ -3956,7 +3986,7 @@ model SpecPoll {
   id              String         @id @default(cuid())
   streamId        String
   question        String
-  options         Json           // string[] com as alternativas
+  options         Json // string[] com as alternativas
   status          SpecPollStatus @default(OPEN)
   createdByUserId String
   createdAt       DateTime       @default(now())
@@ -4031,21 +4061,21 @@ enum TowerMascotState {
 }
 
 model TowerRun {
-  id              String         @id @default(cuid())
-  mode            TowerRunMode   @default(EXPEDITION)
+  id              String           @id @default(cuid())
+  mode            TowerRunMode     @default(EXPEDITION)
   pace            TowerPaceMode
-  status          TowerRunStatus @default(LOBBY)
+  status          TowerRunStatus   @default(LOBBY)
   seed            String
-  currentFloor    Int            @default(1)
-  globalTurn      Int            @default(0)
-  resolutionOrder Json?          // rotação de resolução (ex.: ["userA","userB"])
-  volatileState   Json?          // grid, fog, tiles, encounters, portas, loot
-  ticketConsumed  Boolean        @default(false)
+  currentFloor    Int              @default(1)
+  globalTurn      Int              @default(0)
+  resolutionOrder Json? // rotação de resolução (ex.: ["userA","userB"])
+  volatileState   Json? // grid, fog, tiles, encounters, portas, loot
+  ticketConsumed  Boolean          @default(false)
   nextDeadline    DateTime?
   startedAt       DateTime?
   endedAt         DateTime?
-  createdAt       DateTime       @default(now())
-  updatedAt       DateTime       @updatedAt
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
   members         TowerRunMember[]
 
   @@index([status])
@@ -4079,8 +4109,8 @@ model TowerRunMascot {
   currentHp      Int
   maxHp          Int
   currentStance  String
-  allowedStances Json?            // posturas permitidas pela Função de Expedição
-  statusEffects  Json?            // buffs/debuffs persistentes (Survivor)
+  allowedStances Json? // posturas permitidas pela Função de Expedição
+  statusEffects  Json? // buffs/debuffs persistentes (Survivor)
   state          TowerMascotState @default(IN_TOWER)
   member         TowerRunMember   @relation(fields: [memberId], references: [id], onDelete: Cascade)
 
@@ -4094,7 +4124,7 @@ model TowerLostMascot {
   ownerUserId   String
   lostRunId     String
   floor         Int
-  recoveredById String?   // quem resgatou (nunca muda o dono)
+  recoveredById String? // quem resgatou (nunca muda o dono)
   recoveredAt   DateTime?
   createdAt     DateTime  @default(now())
 
@@ -4115,8 +4145,8 @@ model TowerCommunityProgress {
 
 model TowerCodexEntry {
   id             String   @id @default(cuid())
-  userId         String?  // null = descoberta comunitária
-  subjectType    String   // ENEMY | MECHANISM | TRAP | LEADER ...
+  userId         String? // null = descoberta comunitária
+  subjectType    String // ENEMY | MECHANISM | TRAP | LEADER ...
   subjectKey     String
   discoveryLevel Int      @default(0)
   data           Json?

@@ -1,8 +1,9 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
-import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield } from "lucide-react";
-import { analyzeMascotAction, getStoredAnalysisAction } from "../actions";
+import { useState, useTransition, useMemo, useRef } from "react";
+import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield, History, GitCompareArrows } from "lucide-react";
+import { analyzeMascotAction, getStoredAnalysisAction, getMascotGrowthHistoryAction } from "../actions";
+import type { MascotGrowthHistory } from "../actions";
 import { RATING_STYLE, type MascotAnalysis, type MascotRating } from "@/lib/mascot-analysis";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
@@ -100,8 +101,13 @@ export function MascotAnalyzer({
   const [analysis, setAnalysis] = useState<MascotAnalysis | null>(null);
   const [pending, start] = useTransition();
   const [viewPending, startView] = useTransition();
+  const [historyPending, startHistory] = useTransition();
   const [error, setError] = useState<string | null>(null);
   const [fromCache, setFromCache] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [compareId, setCompareId] = useState("");
+  const [histories, setHistories] = useState<MascotGrowthHistory[]>([]);
+  const historyCache = useRef(new Map<string, MascotGrowthHistory[]>());
   // Reaparece toda vez que a aba de análise é aberta (o componente remonta ao
   // trocar de aba), até o jogador dispensar naquela visita.
   const [showDisclaimer, setShowDisclaimer] = useState(true);
@@ -121,6 +127,24 @@ export function MascotAnalyzer({
     setError(null);
     setFromCache(false);
     setTargetLevel(100);
+    setHistoryOpen(false);
+    setCompareId("");
+    setHistories([]);
+  };
+
+  const loadHistory = (secondaryId = compareId) => {
+    if (!selected) return;
+    const ids = [selected.id, secondaryId].filter(Boolean);
+    const key = [...ids].sort().join(":");
+    setHistoryOpen(true);
+    const cached = historyCache.current.get(key);
+    if (cached) { setHistories(cached); return; }
+    startHistory(async () => {
+      const result = await getMascotGrowthHistoryAction(ids);
+      if (!result.ok) { setError(result.error); return; }
+      historyCache.current.set(key, result.histories);
+      setHistories(result.histories);
+    });
   };
 
   const runAnalysis = () => {
@@ -259,6 +283,11 @@ export function MascotAnalyzer({
                 {pending ? <Loader2 size={15} className="animate-spin" /> : <Sparkles size={15} />}
                 {pending ? "Analisando..." : selected.analyzed ? "Simular grátis" : `Analisar (${analysisCost} ZC)`}
               </button>
+              <button onClick={() => historyOpen ? setHistoryOpen(false) : loadHistory()} disabled={historyPending}
+                className="flex items-center gap-2 rounded-xl border border-cyan-500/40 px-3 py-2 text-sm font-semibold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">
+                {historyPending ? <Loader2 size={14} className="animate-spin" /> : <History size={14} />}
+                Crescimento
+              </button>
             </div>
           </div>
 
@@ -266,6 +295,22 @@ export function MascotAnalyzer({
             <p className="text-xs text-red-400">Saldo insuficiente para desbloquear a análise ({analysisCost} ZC).</p>
           )}
           {error && <p className="text-xs text-red-400">{error}</p>}
+
+          {historyOpen && (
+            <GrowthHistoryPanel
+              primaryId={selected.id}
+              histories={histories}
+              mascots={mascots}
+              compareId={compareId}
+              pending={historyPending}
+              onCompare={(id) => { setCompareId(id); loadHistory(id); }}
+              onRefresh={() => {
+                const ids = [selected.id, compareId].filter(Boolean);
+                historyCache.current.delete([...ids].sort().join(":"));
+                loadHistory(compareId);
+              }}
+            />
+          )}
 
           {analysis && (
             <>
@@ -279,6 +324,109 @@ export function MascotAnalyzer({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+const GROWTH_STATS = [
+  ["force", "Força", "text-red-300"],
+  ["agility", "Agilidade", "text-yellow-300"],
+  ["charisma", "Carisma", "text-pink-300"],
+  ["instinct", "Instinto", "text-cyan-300"],
+  ["vitality", "Vitalidade", "text-emerald-300"],
+] as const;
+
+function GrowthHistoryPanel({
+  primaryId, histories, mascots, compareId, pending, onCompare, onRefresh,
+}: {
+  primaryId: string;
+  histories: MascotGrowthHistory[];
+  mascots: AnalyzerMascot[];
+  compareId: string;
+  pending: boolean;
+  onCompare: (id: string) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <div className="space-y-3 rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4">
+      <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
+        <p className="font-bold text-amber-200">Histórico em implantação</p>
+        <p className="mt-1">O registro real começou em <strong>28/08/2026</strong>. Níveis e alterações anteriores a essa data não aparecem e não são reconstruídos como se fossem dados reais.</p>
+      </div>
+      <div className="flex flex-wrap items-end gap-2">
+        <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
+          Comparar lado a lado com
+          <select value={compareId} onChange={(event) => onCompare(event.target.value)} disabled={pending}
+            className="mt-1 w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-200">
+            <option value="">Nenhum mascote</option>
+            {mascots.filter((mascot) => mascot.id !== primaryId).map((mascot) => (
+              <option key={mascot.id} value={mascot.id}>{mascot.nickname || mascot.name} · Nv.{mascot.level}</option>
+            ))}
+          </select>
+        </label>
+        <button type="button" onClick={onRefresh} disabled={pending}
+          className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-slate-300 hover:border-cyan-500/40 disabled:opacity-50">
+          {pending ? <Loader2 size={13} className="animate-spin" /> : <GitCompareArrows size={13} />} Atualizar
+        </button>
+      </div>
+      {pending && histories.length === 0 ? (
+        <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Carregando somente os mascotes escolhidos...</div>
+      ) : (
+        <div className={`grid gap-3 ${histories.length > 1 ? "lg:grid-cols-2" : ""}`}>
+          {histories.map((history) => <GrowthHistoryCard key={history.mascot.id} history={history} />)}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GrowthHistoryCard({ history }: { history: MascotGrowthHistory }) {
+  const totals = history.entries.reduce((sum, entry) => ({
+    force: sum.force + entry.gained.force,
+    agility: sum.agility + entry.gained.agility,
+    charisma: sum.charisma + entry.gained.charisma,
+    instinct: sum.instinct + entry.gained.instinct,
+    vitality: sum.vitality + entry.gained.vitality,
+  }), { force: 0, agility: 0, charisma: 0, instinct: 0, vitality: 0 });
+  const maxCurrent = Math.max(...Object.values(history.mascot.current), 1);
+  return (
+    <div className="min-w-0 rounded-2xl border border-border bg-slate-950/55 p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="font-bold text-white">{history.mascot.name}</p>
+          <p className="text-[10px] text-slate-500">Nv.{history.mascot.level} · {history.mascot.personality} · {history.entries.length} registro(s)</p>
+        </div>
+        <span className="rounded-lg bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-300">+{Object.values(totals).reduce((a, b) => a + b, 0)} pts registrados</span>
+      </div>
+      <div className="mt-3 grid grid-cols-5 gap-1">
+        {GROWTH_STATS.map(([key, label, color]) => (
+          <div key={key} className="rounded-lg border border-white/5 bg-slate-900/70 p-1.5 text-center">
+            <p className="truncate text-[8px] uppercase text-slate-600">{label}</p>
+            <p className={`text-sm font-bold ${color}`}>{history.mascot.current[key]}</p>
+            <div className="mt-1 h-1 overflow-hidden rounded bg-slate-800"><div className="h-full bg-current opacity-70" style={{ width: `${history.mascot.current[key] / maxCurrent * 100}%` }} /></div>
+            <p className="mt-1 text-[8px] text-emerald-400">+{totals[key]}</p>
+          </div>
+        ))}
+      </div>
+      {history.entries.length === 0 ? (
+        <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-center text-xs text-slate-500">Ainda não houve subida de nível registrada depois de 28/08/2026.</p>
+      ) : (
+        <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
+          <table className="w-full text-[10px]">
+            <thead className="sticky top-0 bg-slate-900 text-slate-500"><tr><th className="px-2 py-2 text-left">Nível</th>{GROWTH_STATS.map(([key, label]) => <th key={key} className="px-1 py-2 text-center">{label.slice(0, 3)}</th>)}<th className="px-2 py-2 text-right">Origem</th></tr></thead>
+            <tbody className="divide-y divide-white/5">
+              {history.entries.map((entry) => (
+                <tr key={entry.id} className="text-slate-300">
+                  <td className="whitespace-nowrap px-2 py-2 font-semibold">{entry.fromLevel} → {entry.toLevel}</td>
+                  {GROWTH_STATS.map(([key]) => <td key={key} className="px-1 py-2 text-center text-emerald-300">+{entry.gained[key]}</td>)}
+                  <td className="max-w-24 truncate px-2 py-2 text-right text-slate-500" title={entry.source}>{entry.source}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {history.trackedFrom && <p className="mt-2 text-[9px] text-slate-600">Primeiro registro real: {new Date(history.trackedFrom).toLocaleString("pt-BR")}</p>}
     </div>
   );
 }
