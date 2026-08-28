@@ -2,40 +2,433 @@
 
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
-type Exploration = NonNullable<Extract<Awaited<ReturnType<typeof import("../actions").getTowerRunStateAction>>, { ok: true }>["exploration"]>;
-const kindLabel: Record<string, string> = { ENTRANCE: "Entrada", PUZZLE: "Enigma", COMBAT: "Combate", REST: "Descanso", EVENT: "Evento", RESCUE: "Resgate", LUCK: "Sorte", BOSS: "Líder", UNKNOWN: "Desconhecida" };
+type Exploration = NonNullable<
+  Extract<
+    Awaited<ReturnType<typeof import("../actions").getTowerRunStateAction>>,
+    { ok: true }
+  >["exploration"]
+>;
+const kindLabel: Record<string, string> = {
+  ENTRANCE: "Entrada",
+  PUZZLE: "Enigma",
+  COMBAT: "Combate",
+  REST: "Descanso",
+  EVENT: "Evento",
+  RESCUE: "Resgate",
+  LUCK: "Sorte",
+  BOSS: "Líder",
+  UNKNOWN: "Desconhecida",
+};
 
-export function TowerRoomView({ exploration, routeId, puzzleChoice, roomAction, disabled, onRoute, onPuzzle, onRoomAction }: { exploration: Exploration; routeId?: string; puzzleChoice?: string; roomAction?: string; disabled: boolean; onRoute: (id: string) => void; onPuzzle: (id: string) => void; onRoomAction: (action: "INTERACT" | "SKIP" | "FIGHT" | "WAIT") => void }) {
+export function TowerRoomView({
+  exploration,
+  routeId,
+  puzzleChoice,
+  roomAction,
+  disabled,
+  onRoute,
+  onPuzzle,
+  onRoomAction,
+}: {
+  exploration: Exploration;
+  routeId?: string;
+  puzzleChoice?: string;
+  roomAction?: string;
+  disabled: boolean;
+  onRoute: (id: string) => void;
+  onPuzzle: (id: string) => void;
+  onRoomAction: (action: "INTERACT" | "SKIP" | "FIGHT" | "WAIT") => void;
+}) {
   const room = exploration.currentRoom;
-  const routeIds = new Set(exploration.routes.map((route) => route?.id).filter((id): id is string => Boolean(id)));
-  const visibleIds = new Set(exploration.rooms.filter((node) => node.visited || node.current || node.kind !== "UNKNOWN" || routeIds.has(node.id)).map((node) => node.id));
-  const positions = Object.fromEntries(exploration.rooms.map((node) => [node.id, [node.x, node.y] as [number, number]]));
+  const routeIds = new Set(
+    exploration.routes
+      .map((route) => route?.id)
+      .filter((id): id is string => Boolean(id)),
+  );
+  const visibleIds = new Set(
+    exploration.rooms
+      .filter(
+        (node) =>
+          node.visited ||
+          node.current ||
+          node.kind !== "UNKNOWN" ||
+          routeIds.has(node.id),
+      )
+      .map((node) => node.id),
+  );
+  const positions = Object.fromEntries(
+    exploration.rooms.map((node) => [
+      node.id,
+      [node.x, node.y] as [number, number],
+    ]),
+  );
   // Só desenha corredores já percorridos ou que saem da sala atual. As conexões
   // futuras ocultas criavam uma teia cruzada e davam a impressão de rotas erradas.
-  const edges = exploration.rooms.flatMap((node) => node.connections
-    .filter((target) => (node.visited || node.current) && visibleIds.has(target))
-    .map((target) => [node.id, target] as [string, string]));
-  return <div className="space-y-4">
-    {exploration.votes.some((vote) => vote.confirmed) && <div className="rounded-2xl border border-cyan-400/25 bg-cyan-950/10 p-4"><p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Votação do grupo</p><div className="mt-2 grid gap-2 sm:grid-cols-3">{exploration.votes.map((vote) => <div key={vote.userId} className="rounded-lg border border-slate-700 bg-black/25 p-2 text-xs"><b className="text-white">{vote.name}</b><p className="mt-1 text-slate-400">{vote.confirmed ? vote.routeId ? `Rota: ${exploration.rooms.find((node) => node.id === vote.routeId)?.title ?? "desconhecida"}` : vote.puzzleChoice ? `Mecanismo: opção ${vote.puzzleChoice}` : vote.action === "WAIT" ? "Voto: esperar" : vote.action === "FIGHT" ? "Voto: lutar" : vote.action === "INTERACT" ? "Voto: interagir" : "Voto: ignorar" : "Ainda decidindo"}</p></div>)}</div>{new Set(exploration.votes.map((vote) => vote.routeId).filter(Boolean)).size > 1 && <p className="mt-3 rounded-lg border border-red-400/25 bg-red-500/10 p-2 text-xs font-bold text-red-200">⚠ Caminhos diferentes foram marcados: a maioria prevalece e a Pressão desta ação será dobrada.</p>}</div>}
-    <div className="relative min-h-[280px] overflow-hidden rounded-3xl border border-purple-400/35 bg-slate-950 shadow-[0_0_42px_rgba(126,34,206,.2)]">
-      {/* eslint-disable-next-line @next/next/no-img-element */}<img src={room.backgroundUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-45" />
-      <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-purple-950/30" />
-      <div className="relative p-5 sm:p-7"><div className="flex flex-wrap items-start justify-between gap-3"><div><span className="rounded-full border border-purple-300/30 bg-purple-950/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-purple-200">{kindLabel[room.kind] ?? room.kind}</span><h2 className="mt-3 text-2xl font-black text-white">{room.title}</h2><p className="mt-2 max-w-2xl text-sm text-slate-200">{room.description}</p></div><div className="rounded-2xl border border-red-400/30 bg-red-950/65 px-4 py-3 text-right"><p className="text-[9px] font-black uppercase tracking-widest text-red-300">Pressão</p><p className="text-2xl font-black text-red-200">{exploration.pressure}</p>{exploration.pressureShield > 0 && <p className="text-[9px] text-cyan-200">Proteção: {exploration.pressureShield}</p>}</div></div></div>
+  const edges = exploration.rooms.flatMap((node) =>
+    node.connections
+      .filter(
+        (target) => (node.visited || node.current) && visibleIds.has(target),
+      )
+      .map((target) => [node.id, target] as [string, string]),
+  );
+  return (
+    <div className="space-y-4">
+      {exploration.votes.some((vote) => vote.confirmed) && (
+        <div className="rounded-2xl border border-cyan-400/25 bg-cyan-950/10 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+            Votação do grupo
+          </p>
+          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+            {exploration.votes.map((vote) => (
+              <div
+                key={vote.userId}
+                className="rounded-lg border border-slate-700 bg-black/25 p-2 text-xs"
+              >
+                <b className="text-white">{vote.name}</b>
+                <p className="mt-1 text-slate-400">
+                  {vote.confirmed
+                    ? vote.routeId
+                      ? `Rota: ${exploration.rooms.find((node) => node.id === vote.routeId)?.title ?? "desconhecida"}`
+                      : vote.puzzleChoice
+                        ? `Mecanismo: opção ${vote.puzzleChoice}`
+                        : vote.action === "WAIT"
+                          ? "Voto: esperar"
+                          : vote.action === "FIGHT"
+                            ? "Voto: lutar"
+                            : vote.action === "INTERACT"
+                              ? "Voto: interagir"
+                              : "Voto: ignorar"
+                    : "Ainda decidindo"}
+                </p>
+              </div>
+            ))}
+          </div>
+          {new Set(
+            exploration.votes.map((vote) => vote.routeId).filter(Boolean),
+          ).size > 1 && (
+            <p className="mt-3 rounded-lg border border-red-400/25 bg-red-500/10 p-2 text-xs font-bold text-red-200">
+              ⚠ Caminhos diferentes foram marcados: a maioria prevalece e a
+              Pressão desta ação será dobrada.
+            </p>
+          )}
+        </div>
+      )}
+      <div className="relative min-h-[280px] overflow-hidden rounded-3xl border border-purple-400/35 bg-slate-950 shadow-[0_0_42px_rgba(126,34,206,.2)]">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={room.backgroundUrl}
+          alt=""
+          className="absolute inset-0 h-full w-full object-cover opacity-45"
+        />
+        <div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/40 to-purple-950/30" />
+        <div className="relative p-5 sm:p-7">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <span className="rounded-full border border-purple-300/30 bg-purple-950/70 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-purple-200">
+                {kindLabel[room.kind] ?? room.kind}
+              </span>
+              <h2 className="mt-3 text-2xl font-black text-white">
+                {room.title}
+              </h2>
+              <p className="mt-2 max-w-2xl text-sm text-slate-200">
+                {room.description}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-red-400/30 bg-red-950/65 px-4 py-3 text-right">
+              <p className="text-[9px] font-black uppercase tracking-widest text-red-300">
+                Pressão
+              </p>
+              <p className="text-2xl font-black text-red-200">
+                {exploration.pressure}
+              </p>
+              {exploration.pressureShield > 0 && (
+                <p className="text-[9px] text-cyan-200">
+                  Proteção: {exploration.pressureShield}
+                </p>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="rounded-2xl border border-slate-700 bg-[#070b18] p-3 sm:p-5">
+        <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+          Mapa vivo do andar
+        </p>
+        <p className="mb-3 text-[11px] text-slate-500">
+          A subida acontece de cima para baixo. Linhas iluminadas são passagens
+          conhecidas; nomes em ciano mostram escolhas dos aliados.
+        </p>
+        <div className="h-[72vh] min-h-[520px] overflow-auto rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)]">
+          <div className="relative h-[1280px] min-w-[620px]">
+            <svg
+              className="absolute inset-0 h-full w-full"
+              viewBox="0 0 100 100"
+              preserveAspectRatio="none"
+              aria-hidden
+            >
+              {edges.map(([a, b]) => {
+                const [x1, y1] = positions[a],
+                  [x2, y2] = positions[b];
+                const travelled = exploration.rooms.find(
+                  (node) => node.id === b,
+                )?.visited;
+                const route = exploration.routes.find(
+                  (candidate) => candidate?.id === b,
+                );
+                const blocked = route?.available === false;
+                return (
+                  <path
+                    key={`${a}-${b}`}
+                    d={`M ${x1} ${y1} C ${x1} ${(y1 + y2) / 2}, ${x2} ${(y1 + y2) / 2}, ${x2} ${y2}`}
+                    fill="none"
+                    stroke={
+                      blocked ? "#ef4444" : travelled ? "#a78bfa" : "#53627a"
+                    }
+                    strokeWidth={blocked ? 1.4 : travelled ? 1.2 : 0.8}
+                    strokeDasharray={
+                      blocked ? ".8 1.2" : travelled ? "0" : "1.5 1.5"
+                    }
+                  />
+                );
+              })}
+            </svg>
+            {exploration.rooms.map((node) => {
+              const [x, y] = positions[node.id] ?? [50, 50];
+              const route = exploration.routes.find(
+                (candidate) => candidate?.id === node.id,
+              );
+              const selectable = Boolean(route?.available);
+              const blockedReason = route?.blockedReason;
+              const voters = exploration.votes.filter(
+                (vote) => vote.routeId === node.id,
+              );
+              return (
+                <button
+                  type="button"
+                  key={node.id}
+                  disabled={disabled || !selectable}
+                  title={blockedReason ?? undefined}
+                  onClick={() => selectable && onRoute(node.id)}
+                  style={{ left: `${x}%`, top: `${y}%` }}
+                  className={`absolute w-28 -translate-x-1/2 -translate-y-1/2 rounded-xl border px-2 py-2 text-center transition sm:w-36 ${node.current ? "z-20 scale-110 border-[#FFCB05] bg-[#2a2104] text-[#FFCB05] shadow-[0_0_24px_rgba(255,203,5,.45)]" : routeId === node.id ? "border-cyan-300 bg-cyan-300/20 text-cyan-100" : selectable ? "border-purple-300 bg-purple-950/90 text-purple-100 hover:scale-105" : blockedReason ? "border-red-500/60 bg-red-950/80 text-red-200" : node.visited ? "border-purple-700 bg-slate-950/90 text-slate-300" : "border-slate-700 bg-slate-950/85 text-slate-600"}`}
+                >
+                  <span className="block text-[9px] font-black uppercase">
+                    {node.current
+                      ? "● Equipe nesta sala"
+                      : selectable
+                        ? "→ Ir para"
+                        : blockedReason
+                          ? "🔒 Passagem bloqueada"
+                          : "○"}
+                  </span>
+                  <b className="mt-1 block truncate text-[10px] sm:text-xs">
+                    {node.title}
+                  </b>
+                  {blockedReason && (
+                    <span className="mt-1 block text-[8px] leading-tight text-red-300">
+                      {blockedReason}
+                    </span>
+                  )}
+                  {node.current && (
+                    <span className="mt-1 block truncate text-[8px] font-bold text-amber-100">
+                      {exploration.votes.map((vote) => vote.name).join(", ")}
+                    </span>
+                  )}
+                  {voters.length > 0 && (
+                    <span className="mt-1 block truncate text-[8px] font-bold text-cyan-200">
+                      {voters.map((voter) => voter.name).join(", ")} →
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {routeId && (
+          <p className="mt-3 rounded-lg bg-cyan-400/10 p-2 text-center text-xs font-bold text-cyan-200">
+            Rota marcada. Confirme abaixo para percorrer esta passagem.
+          </p>
+        )}
+      </div>
+
+      {exploration.modifiers.length > 0 && (
+        <div>
+          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-red-300">
+            Por que a Torre está mais perigosa
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            {exploration.modifiers.map((mod) => (
+              <div
+                key={mod.key}
+                className="rounded-xl border border-red-400/25 bg-red-950/20 p-3"
+              >
+                <b className="text-sm text-red-200">⚠ {mod.name}</b>
+                <p className="mt-1 text-xs text-red-100/70">
+                  {mod.description}
+                </p>
+              </div>
+            ))}
+          </div>
+          <p className="mt-2 text-[11px] text-slate-500">
+            Cada ação confirmada por um jogador adiciona Pressão. Esperar
+            inimigos adiciona mais 1 além do custo normal.
+          </p>
+        </div>
+      )}
+      {exploration.relics.length > 0 && (
+        <div className="flex flex-wrap gap-2">
+          {exploration.relics.map((relic) => (
+            <span
+              key={relic.key}
+              title={relic.description}
+              className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1 text-[10px] font-bold text-fuchsia-200"
+            >
+              ✦ {relic.name}
+            </span>
+          ))}
+        </div>
+      )}
+
+      {exploration.encounter && (
+        <div className="overflow-hidden rounded-2xl border border-red-400/40 bg-gradient-to-r from-red-950/50 to-purple-950/40">
+          <div className="border-b border-red-300/15 p-4">
+            <p className="text-[10px] font-black uppercase tracking-[.2em] text-red-300">
+              ⚔ Encontro hostil — decisão coletiva
+            </p>
+            <h3 className="mt-1 text-lg font-black text-white">
+              A passagem foi bloqueada
+            </h3>
+            <p className="mt-1 text-xs text-slate-300">
+              Será uma única batalha com todos os aliados presentes. A
+              quantidade inimiga não precisa ser igual à do grupo. Cada ponto de
+              Pressão fortalece seus atributos em 3%, além dos modificadores
+              ativos.
+            </p>
+          </div>
+          <div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">
+            {exploration.encounter.enemies.map((enemy, index) => (
+              <div
+                key={`${enemy.pokemonId}-${index}`}
+                className="rounded-xl border border-red-300/20 bg-black/30 p-3 text-center"
+              >
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={getStaticSpriteUrl(enemy.pokemonId)}
+                  alt=""
+                  className={`mx-auto h-16 w-16 object-contain ${enemy.pokemonId >= 210001 && enemy.pokemonId <= 210008 ? "" : "[image-rendering:pixelated]"}`}
+                />
+                <b className="mt-1 block text-sm text-red-100">{enemy.name}</b>
+                <span className="text-[10px] text-red-300">
+                  Nv.{enemy.level}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="grid gap-2 border-t border-red-300/15 p-4 sm:grid-cols-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("FIGHT")}
+              className={`rounded-xl border py-3 text-sm font-black ${roomAction === "FIGHT" ? "border-red-300 bg-red-300/20 text-red-100" : "border-slate-700 text-slate-300"}`}
+            >
+              ⚔ Lutar agora
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("WAIT")}
+              className={`rounded-xl border py-3 text-sm font-black ${roomAction === "WAIT" ? "border-amber-300 bg-amber-300/20 text-amber-100" : "border-slate-700 text-slate-300"}`}
+            >
+              ⌛ Esperar aliados · +1 Pressão
+            </button>
+          </div>
+        </div>
+      )}
+
+      {!room.cleared && room.kind === "PUZZLE" && room.puzzle && (
+        <div className="rounded-2xl border border-amber-300/30 bg-amber-950/15 p-5">
+          <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">
+            Enigma coletivo
+          </p>
+          <h3 className="mt-2 font-bold text-white">{room.puzzle.prompt}</h3>
+          <p className="mt-1 text-xs text-slate-400">
+            Escolha uma resposta ou deixe passar. A maioria das escolhas do
+            grupo prevalece.
+          </p>
+          {room.puzzle.hint && (
+            <p className="mt-2 rounded-lg bg-cyan-400/10 p-2 text-xs text-cyan-200">
+              📖 Pista: {room.puzzle.hint}
+            </p>
+          )}
+          <div className="mt-4 grid gap-2 sm:grid-cols-3">
+            {room.puzzle.options.map((option) => (
+              <button
+                type="button"
+                disabled={disabled}
+                key={option.id}
+                onClick={() => onPuzzle(option.id)}
+                className={`rounded-xl border p-3 text-sm font-bold ${puzzleChoice === option.id ? "border-amber-300 bg-amber-300/20 text-amber-100" : "border-slate-700 bg-slate-950/70 text-slate-300 hover:border-amber-300/50"}`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {!room.cleared && room.kind === "REST" && !exploration.encounter && (
+        <div className="rounded-2xl border border-purple-400/25 bg-purple-950/15 p-4">
+          <p className="text-sm text-purple-100">
+            Uma chama desconhecida oferece descanso. O grupo decide
+            conscientemente se interage ou segue adiante.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("INTERACT")}
+              className={`rounded-lg border py-2 text-xs font-black ${roomAction === "INTERACT" ? "border-emerald-300 bg-emerald-300/15 text-emerald-200" : "border-slate-700 text-slate-300"}`}
+            >
+              Investigar e usar
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("SKIP")}
+              className={`rounded-lg border py-2 text-xs font-black ${roomAction === "SKIP" ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-300"}`}
+            >
+              Ignorar e seguir
+            </button>
+          </div>
+        </div>
+      )}
+      {!room.cleared && (room.kind === "EVENT" || room.kind === "LUCK") && (
+        <div className="rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/15 p-4">
+          <p className="text-sm text-fuchsia-100">
+            Um objeto ativável foi encontrado. Interagir pode conceder uma
+            relíquia ou acionar uma sabotagem; ignorar preserva o estado atual.
+          </p>
+          <div className="mt-3 grid grid-cols-2 gap-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("INTERACT")}
+              className={`rounded-lg border py-2 text-xs font-black ${roomAction === "INTERACT" ? "border-fuchsia-300 bg-fuchsia-300/15 text-fuchsia-100" : "border-slate-700 text-slate-300"}`}
+            >
+              Ativar objeto
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => onRoomAction("SKIP")}
+              className={`rounded-lg border py-2 text-xs font-black ${roomAction === "SKIP" ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-300"}`}
+            >
+              Não interagir
+            </button>
+          </div>
+        </div>
+      )}
     </div>
-
-    <div className="rounded-2xl border border-slate-700 bg-[#070b18] p-3 sm:p-5"><p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Mapa vivo do andar</p><p className="mb-3 text-[11px] text-slate-500">A subida acontece de cima para baixo. Linhas iluminadas são passagens conhecidas; nomes em ciano mostram escolhas dos aliados.</p><div className="h-[72vh] min-h-[520px] overflow-auto rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)]"><div className="relative h-[1280px] min-w-[620px]">
-      <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>{edges.map(([a,b]) => { const [x1,y1]=positions[a], [x2,y2]=positions[b]; const travelled=exploration.rooms.find(node=>node.id===b)?.visited; return <path key={`${a}-${b}`} d={`M ${x1} ${y1} C ${x1} ${(y1+y2)/2}, ${x2} ${(y1+y2)/2}, ${x2} ${y2}`} fill="none" stroke={travelled?"#a78bfa":"#53627a"} strokeWidth={travelled?1.2:.8} strokeDasharray={travelled?"0":"1.5 1.5"}/>; })}</svg>
-      {exploration.rooms.map((node) => { const [x,y]=positions[node.id]??[50,50]; const selectable=exploration.routes.some((route)=>route?.id===node.id); const voters=exploration.votes.filter((vote)=>vote.routeId===node.id); return <button type="button" key={node.id} disabled={disabled||!selectable} onClick={()=>selectable&&onRoute(node.id)} style={{left:`${x}%`,top:`${y}%`}} className={`absolute w-28 -translate-x-1/2 -translate-y-1/2 rounded-xl border px-2 py-2 text-center transition sm:w-36 ${node.current?"z-20 scale-110 border-[#FFCB05] bg-[#2a2104] text-[#FFCB05] shadow-[0_0_24px_rgba(255,203,5,.45)]":routeId===node.id?"border-cyan-300 bg-cyan-300/20 text-cyan-100":selectable?"border-purple-300 bg-purple-950/90 text-purple-100 hover:scale-105":node.visited?"border-purple-700 bg-slate-950/90 text-slate-300":"border-slate-700 bg-slate-950/85 text-slate-600"}`}><span className="block text-[9px] font-black uppercase">{node.current?"● Equipe nesta sala":selectable?"→ Ir para":"○"}</span><b className="mt-1 block truncate text-[10px] sm:text-xs">{node.title}</b>{node.current&&<span className="mt-1 block truncate text-[8px] font-bold text-amber-100">{exploration.votes.map(vote=>vote.name).join(", ")}</span>}{voters.length>0&&<span className="mt-1 block truncate text-[8px] font-bold text-cyan-200">{voters.map(voter=>voter.name).join(", ")} →</span>}</button>; })}
-    </div></div>{routeId && <p className="mt-3 rounded-lg bg-cyan-400/10 p-2 text-center text-xs font-bold text-cyan-200">Rota marcada. Confirme abaixo para percorrer esta passagem.</p>}</div>
-
-    {exploration.modifiers.length > 0 && <div><p className="mb-2 text-[10px] font-black uppercase tracking-widest text-red-300">Por que a Torre está mais perigosa</p><div className="grid gap-2 sm:grid-cols-2">{exploration.modifiers.map((mod) => <div key={mod.key} className="rounded-xl border border-red-400/25 bg-red-950/20 p-3"><b className="text-sm text-red-200">⚠ {mod.name}</b><p className="mt-1 text-xs text-red-100/70">{mod.description}</p></div>)}</div><p className="mt-2 text-[11px] text-slate-500">Cada ação confirmada por um jogador adiciona Pressão. Esperar inimigos adiciona mais 1 além do custo normal.</p></div>}
-    {exploration.relics.length > 0 && <div className="flex flex-wrap gap-2">{exploration.relics.map((relic)=><span key={relic.key} title={relic.description} className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1 text-[10px] font-bold text-fuchsia-200">✦ {relic.name}</span>)}</div>}
-
-    {exploration.encounter && <div className="overflow-hidden rounded-2xl border border-red-400/40 bg-gradient-to-r from-red-950/50 to-purple-950/40"><div className="border-b border-red-300/15 p-4"><p className="text-[10px] font-black uppercase tracking-[.2em] text-red-300">⚔ Encontro hostil — decisão coletiva</p><h3 className="mt-1 text-lg font-black text-white">A passagem foi bloqueada</h3><p className="mt-1 text-xs text-slate-300">Será uma única batalha com todos os aliados presentes. A quantidade inimiga não precisa ser igual à do grupo. Cada ponto de Pressão fortalece seus atributos em 3%, além dos modificadores ativos.</p></div><div className="grid gap-2 p-4 sm:grid-cols-2 lg:grid-cols-4">{exploration.encounter.enemies.map((enemy,index)=><div key={`${enemy.pokemonId}-${index}`} className="rounded-xl border border-red-300/20 bg-black/30 p-3 text-center">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={getStaticSpriteUrl(enemy.pokemonId)} alt="" className={`mx-auto h-16 w-16 object-contain ${enemy.pokemonId>=210001&&enemy.pokemonId<=210008?"":"[image-rendering:pixelated]"}`}/><b className="mt-1 block text-sm text-red-100">{enemy.name}</b><span className="text-[10px] text-red-300">Nv.{enemy.level}</span></div>)}</div><div className="grid gap-2 border-t border-red-300/15 p-4 sm:grid-cols-2"><button type="button" disabled={disabled} onClick={()=>onRoomAction("FIGHT")} className={`rounded-xl border py-3 text-sm font-black ${roomAction==="FIGHT"?"border-red-300 bg-red-300/20 text-red-100":"border-slate-700 text-slate-300"}`}>⚔ Lutar agora</button><button type="button" disabled={disabled} onClick={()=>onRoomAction("WAIT")} className={`rounded-xl border py-3 text-sm font-black ${roomAction==="WAIT"?"border-amber-300 bg-amber-300/20 text-amber-100":"border-slate-700 text-slate-300"}`}>⌛ Esperar aliados · +1 Pressão</button></div></div>}
-
-    {!room.cleared && room.kind === "PUZZLE" && room.puzzle && <div className="rounded-2xl border border-amber-300/30 bg-amber-950/15 p-5"><p className="text-[10px] font-black uppercase tracking-widest text-amber-300">Enigma coletivo</p><h3 className="mt-2 font-bold text-white">{room.puzzle.prompt}</h3><p className="mt-1 text-xs text-slate-400">Escolha uma resposta ou deixe passar. A maioria das escolhas do grupo prevalece.</p>{room.puzzle.hint && <p className="mt-2 rounded-lg bg-cyan-400/10 p-2 text-xs text-cyan-200">📖 Pista: {room.puzzle.hint}</p>}<div className="mt-4 grid gap-2 sm:grid-cols-3">{room.puzzle.options.map((option) => <button type="button" disabled={disabled} key={option.id} onClick={() => onPuzzle(option.id)} className={`rounded-xl border p-3 text-sm font-bold ${puzzleChoice === option.id ? "border-amber-300 bg-amber-300/20 text-amber-100" : "border-slate-700 bg-slate-950/70 text-slate-300 hover:border-amber-300/50"}`}>{option.label}</button>)}</div></div>}
-
-    {!room.cleared && room.kind === "REST" && !exploration.encounter && <div className="rounded-2xl border border-purple-400/25 bg-purple-950/15 p-4"><p className="text-sm text-purple-100">Uma chama desconhecida oferece descanso. O grupo decide conscientemente se interage ou segue adiante.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={disabled} onClick={()=>onRoomAction("INTERACT")} className={`rounded-lg border py-2 text-xs font-black ${roomAction==="INTERACT"?"border-emerald-300 bg-emerald-300/15 text-emerald-200":"border-slate-700 text-slate-300"}`}>Investigar e usar</button><button type="button" disabled={disabled} onClick={()=>onRoomAction("SKIP")} className={`rounded-lg border py-2 text-xs font-black ${roomAction==="SKIP"?"border-amber-300 bg-amber-300/15 text-amber-200":"border-slate-700 text-slate-300"}`}>Ignorar e seguir</button></div></div>}
-    {!room.cleared && (room.kind === "EVENT" || room.kind === "LUCK") && <div className="rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/15 p-4"><p className="text-sm text-fuchsia-100">Um objeto ativável foi encontrado. Interagir pode conceder uma relíquia ou acionar uma sabotagem; ignorar preserva o estado atual.</p><div className="mt-3 grid grid-cols-2 gap-2"><button type="button" disabled={disabled} onClick={()=>onRoomAction("INTERACT")} className={`rounded-lg border py-2 text-xs font-black ${roomAction==="INTERACT"?"border-fuchsia-300 bg-fuchsia-300/15 text-fuchsia-100":"border-slate-700 text-slate-300"}`}>Ativar objeto</button><button type="button" disabled={disabled} onClick={()=>onRoomAction("SKIP")} className={`rounded-lg border py-2 text-xs font-black ${roomAction==="SKIP"?"border-amber-300 bg-amber-300/15 text-amber-200":"border-slate-700 text-slate-300"}`}>Não interagir</button></div></div>}
-  </div>;
+  );
 }

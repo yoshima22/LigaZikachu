@@ -22,6 +22,10 @@ import {
 } from "./tower-narrative";
 import { TowerAdminSettings } from "./tower-admin-settings";
 import { TowerIntro } from "./tower-intro";
+import {
+  TOWER_COMMUNITY_STUDIES,
+  TOWER_STUDY_TARGET,
+} from "@/lib/tower/studies";
 
 type LobbyData = Extract<
   Awaited<ReturnType<typeof getTowerLobbyDataAction>>,
@@ -551,97 +555,96 @@ export function TowerLobby() {
           </div>
         </section>
       )}
-      {view === "LEGACY" && (
-      <section className={card}>
-        <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">
-          Preparação entre runs · Estudos da comunidade
-        </p>
-        <h2 className="mt-1 text-lg font-black text-white">
-          O conhecimento da comunidade enfraquece a Torre
-        </h2>
-        <p className="mt-2 text-xs leading-relaxed text-slate-400">
-          Estas são <strong className="text-cyan-200">contramedidas coletivas</strong>, diferentes dos talentos abaixo.
-          Cada jogador pode <strong className="text-[#FFCB05]">contribuir 1 vez por dia</strong> em UMA frente
-          clicando em <em>&quot;Contribuir hoje&quot;</em>. As contribuições de todos <strong className="text-white">somam
-          no mesmo contador compartilhado</strong>: ao chegar a <strong className="text-white">5/5</strong>, a
-          contramedida é <strong className="text-emerald-300">liberada para todas as próximas expedições</strong> (de
-          qualquer jogador). Não custa nada além do estudo diário.
-        </p>
-        <div className="mt-4 grid gap-3 md:grid-cols-3">
-          {[
-            [
-              "WARD",
-              "Reforçar proteções",
-              "Absorve os dois primeiros pontos de Pressão.",
-            ] as const,
-            [
-              "INSIGHT",
-              "Decifrar mecanismos",
-              "Prepara pistas mais claras para enigmas descobertos.",
-            ] as const,
-            [
-              "MAP",
-              "Mapear corredores",
-              "Amplia o conhecimento das rotas futuras.",
-            ] as const,
-          ].map(([key, title, text]) => {
-            const value =
-              data.communityProgress.find((entry) => entry.metricKey === key)
-                ?.value ?? 0;
-            return (
-              <article
-                key={key}
-                className="rounded-xl border border-cyan-400/20 bg-cyan-950/10 p-3"
-              >
-                <div className="flex items-center justify-between gap-2">
-                  <b className="text-sm text-cyan-100">{title}</b>
-                  <span className="text-xs font-black text-[#FFCB05]">
-                    {Math.min(5, value)}/5
-                  </span>
-                </div>
-                <p className="mt-1 min-h-10 text-[11px] text-slate-400">
-                  {text}
-                </p>
-                <button
-                  type="button"
-                  disabled={pending || value >= 5}
-                  onClick={() =>
-                    start(async () => {
-                      const res = await contributeTowerPreparationAction(key);
-                      if ("error" in res) toast.error(res.error);
-                      else {
-                        toast.success(
-                          "Estudo registrado no Arquivo comunitário.",
-                        );
-                        load();
-                      }
-                    })
-                  }
-                  className="mt-3 w-full rounded-lg border border-cyan-300/30 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40"
+      {view === "ARCHIVE" && (
+        <section className={card}>
+          <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">
+            Preparação entre runs · Estudos da comunidade
+          </p>
+          <h2 className="mt-1 text-lg font-black text-white">
+            O conhecimento da comunidade enfraquece a Torre
+          </h2>
+          <p className="mt-2 text-xs leading-relaxed text-slate-400">
+            Estas são{" "}
+            <strong className="text-cyan-200">contramedidas coletivas</strong>,
+            diferentes dos talentos do Legado. Cada jogador pode contribuir{" "}
+            <strong className="text-[#FFCB05]">
+              uma única vez por dia, em apenas uma frente
+            </strong>
+            . As contribuições de todos somam no mesmo contador e o efeito só é
+            ativado ao completar{" "}
+            <strong className="text-white">
+              {TOWER_STUDY_TARGET}/{TOWER_STUDY_TARGET}
+            </strong>
+            . Um reforço ativo não recebe pontos adicionais; quem já gastou a
+            contribuição do dia precisa aguardar o próximo dia.
+          </p>
+          <div className="mt-4 grid gap-3 md:grid-cols-3">
+            {TOWER_COMMUNITY_STUDIES.map(({ key, title, effect: text }) => {
+              const value =
+                data.communityProgress.find((entry) => entry.metricKey === key)
+                  ?.value ?? 0;
+              return (
+                <article
+                  key={key}
+                  className="rounded-xl border border-cyan-400/20 bg-cyan-950/10 p-3"
                 >
-                  {value >= 5 ? "CONTRAMEDIDA LIBERADA" : "CONTRIBUIR HOJE"}
-                </button>
-              </article>
-            );
-          })}
-        </div>
-        {data.communityCodex.length > 0 && (
-          <div className="mt-4 rounded-xl border border-purple-400/20 bg-purple-950/15 p-3">
-            <b className="text-xs uppercase tracking-wider text-purple-200">
-              Descobertas compartilhadas
-            </b>
-            {data.communityCodex.slice(0, 6).map((entry) => (
-              <p key={entry.id} className="mt-2 text-xs text-slate-300">
-                ✦{" "}
-                {String(
-                  (entry.data as { text?: string } | null)?.text ??
-                    entry.subjectKey,
-                )}
-              </p>
-            ))}
+                  <div className="flex items-center justify-between gap-2">
+                    <b className="text-sm text-cyan-100">{title}</b>
+                    <span className="text-xs font-black text-[#FFCB05]">
+                      {Math.min(TOWER_STUDY_TARGET, value)}/{TOWER_STUDY_TARGET}
+                    </span>
+                  </div>
+                  <p className="mt-1 min-h-10 text-[11px] text-slate-400">
+                    {text}
+                  </p>
+                  <button
+                    type="button"
+                    disabled={pending || value >= TOWER_STUDY_TARGET}
+                    onClick={() =>
+                      start(async () => {
+                        const res = await contributeTowerPreparationAction(key);
+                        if ("error" in res) toast.error(res.error);
+                        else {
+                          toast.success(
+                            "Estudo registrado no Arquivo comunitário.",
+                          );
+                          load();
+                        }
+                      })
+                    }
+                    className="mt-3 w-full rounded-lg border border-cyan-300/30 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40"
+                  >
+                    {value >= TOWER_STUDY_TARGET
+                      ? "REFORÇO ATIVO"
+                      : "CONTRIBUIR HOJE"}
+                  </button>
+                </article>
+              );
+            })}
           </div>
-        )}
-      </section>
+          {data.communityCodex.length > 0 && (
+            <div className="mt-4 rounded-xl border border-purple-400/20 bg-purple-950/15 p-3">
+              <b className="text-xs uppercase tracking-wider text-purple-200">
+                Descobertas compartilhadas
+              </b>
+              <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
+                São escolhas corretas feitas pela comunidade diante dos enigmas
+                da Torre. Elas registram dicas gerais para reconhecer e superar
+                o mecanismo quando ele aparecer novamente; não resolvem o enigma
+                automaticamente.
+              </p>
+              {data.communityCodex.slice(0, 10).map((entry) => (
+                <p key={entry.id} className="mt-2 text-xs text-slate-300">
+                  ✦{" "}
+                  {String(
+                    (entry.data as { text?: string } | null)?.text ??
+                      entry.subjectKey,
+                  )}
+                </p>
+              ))}
+            </div>
+          )}
+        </section>
       )}
       {view === "OVERVIEW" && <TowerNarrativeAdmin initial={data.scenes} />}
       {view === "LEGACY" && data.controlledMascots.length > 0 && (
@@ -693,119 +696,212 @@ export function TowerLobby() {
       )}
 
       {view === "LEGACY" && (
-      <section className={card}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <div>
-            <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-              Árvore de talentos compartilhada
+        <>
+          <section className="rounded-2xl border border-emerald-400/25 bg-emerald-950/10 p-5">
+            <p className="text-[10px] font-black uppercase tracking-[.22em] text-emerald-300">
+              Melhorias permanentes
             </p>
-            <h2 className="text-lg font-black text-white">Legado das runs</h2>
-          </div>
-          <span className="rounded-full bg-[#FFCB05] px-3 py-1 text-xs font-black text-slate-950">
-            {data.talents.points} disponível(is)
-          </span>
-        </div>
-        <p className="mt-2 text-xs text-slate-400">
-          Escolher um talento aplica de uma vez todos os pontos possíveis nele,
-          respeitando o nível máximo 5. Assim a distribuição precisa de apenas
-          uma requisição.
-        </p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
-          {(
-            [
-              [
-                "PRESSURE",
-                "Controle da Pressão",
-                "+1 proteção inicial contra Pressão.",
-              ],
-              ["COMBAT", "Treino de combate", "+2% de atributos por nível."],
-              ["BOSS", "Caçador de chefes", "+3% contra chefes por nível."],
-              [
-                "LUCK",
-                "Destino dobrado",
-                "Melhora futuras rerrolagens de sorte.",
-              ],
-              ["RESCUE", "Equipe de resgate", "Melhora salas Anti-Psicose."],
-            ] as const
-          ).map(([key, title, text]) => {
-            const rank = Number(data.talents.ranks[key] ?? 0);
-            const amount = Math.max(0, Math.min(data.talents.points, 5 - rank));
-            return (
-              <article
-                key={key}
-                className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3"
-              >
-                <div className="flex items-center justify-between">
-                  <b className="text-xs text-emerald-100">{title}</b>
-                  <span className="text-[10px] font-black text-[#FFCB05]">
-                    Nv.{rank}/5
-                  </span>
-                </div>
-                <p className="mt-1 min-h-10 text-[10px] text-slate-400">
-                  {text}
+            <h2 className="mt-1 text-xl font-black text-white">
+              O Legado transforma conhecimento em vantagem
+            </h2>
+            <p className="mt-3 text-xs leading-6 text-slate-300">
+              Pontos de Legado são conquistados pela comunidade durante as runs
+              e permanecem após derrotas. Ao investi-los, o efeito escolhido
+              passa a alterar mecanicamente as expedições futuras — reduzindo
+              Pressão, fortalecendo a equipe, melhorando resgates ou
+              oportunidades. Isso é diferente do Arquivo, que registra
+              informações, e dos Estudos, que exigem {TOWER_STUDY_TARGET}{" "}
+              colaborações para ativar uma contramedida específica.
+            </p>
+          </section>
+          <section className={card}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                  Árvore de talentos compartilhada
                 </p>
-                <button
-                  disabled={pending || amount <= 0}
-                  onClick={() =>
-                    start(async () => {
-                      const res = await spendTowerTalentAction(key, amount);
-                      if ("error" in res) toast.error(res.error);
-                      else {
-                        toast.success(`${res.amount} ponto(s) aplicados.`);
-                        load();
-                      }
-                    })
-                  }
-                  className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35"
-                >
-                  {amount > 0
-                    ? `Aplicar ${amount} ponto(s) de uma vez`
-                    : "Máximo ou sem pontos"}
-                </button>
-              </article>
-            );
-          })}
-        </div>
-
-        {/* 15 talentos adicionais, agrupados por categoria */}
-        <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
-          <p className="text-xs text-slate-400">Talentos avançados — melhoram os atributos dos seus mascotes, o controle da Pressão e a movimentação pelo mapa. Cada rank soma o efeito descrito.</p>
-          {(["STATUS", "PRESSAO", "MOVIMENTO"] as const).map((cat) => {
-            const list = data.talents.catalog.filter((talent) => talent.category === cat);
-            if (list.length === 0) return null;
-            const catLabel = cat === "STATUS" ? "⚔ Atributos" : cat === "PRESSAO" ? "🛡 Controle de Pressão" : "🧭 Mapa & Movimento";
-            return (
-              <div key={cat}>
-                <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-emerald-300">{catLabel}</p>
-                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                  {list.map((talent) => {
-                    const rank = Number(data.talents.ranks[talent.key] ?? 0);
-                    const amount = Math.max(0, Math.min(data.talents.points, talent.maxRank - rank));
-                    return (
-                      <article key={talent.key} className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <b className="text-xs text-emerald-100">{talent.name}</b>
-                          <span className="shrink-0 text-[10px] font-black text-[#FFCB05]">Nv.{rank}/{talent.maxRank}</span>
-                        </div>
-                        <p className="mt-1 min-h-[3rem] text-[10px] leading-snug text-slate-400">{talent.description}</p>
-                        <button
-                          disabled={pending || amount <= 0}
-                          onClick={() => start(async () => { const res = await spendTowerTalentAction(talent.key, amount); if ("error" in res) toast.error(res.error); else { toast.success(`${res.amount} ponto(s) aplicados.`); load(); } })}
-                          className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35"
-                        >
-                          {amount > 0 ? `Aplicar ${amount}` : rank >= talent.maxRank ? "Máximo" : "Sem pontos"}
-                        </button>
-                      </article>
-                    );
-                  })}
-                </div>
+                <h2 className="text-lg font-black text-white">
+                  Legado das runs
+                </h2>
               </div>
-            );
-          })}
-        </div>
-      </section>
+              <span className="rounded-full bg-[#FFCB05] px-3 py-1 text-xs font-black text-slate-950">
+                {data.talents.points} disponível(is)
+              </span>
+            </div>
+            <p className="mt-2 text-xs text-slate-400">
+              Escolher um talento aplica de uma vez todos os pontos possíveis
+              nele, respeitando o nível máximo 5. Assim a distribuição precisa
+              de apenas uma requisição.
+            </p>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
+              {(
+                [
+                  [
+                    "PRESSURE",
+                    "Controle da Pressão",
+                    "+1 proteção inicial contra Pressão.",
+                  ],
+                  [
+                    "COMBAT",
+                    "Treino de combate",
+                    "+2% de atributos por nível.",
+                  ],
+                  ["BOSS", "Caçador de chefes", "+3% contra chefes por nível."],
+                  [
+                    "LUCK",
+                    "Destino dobrado",
+                    "Melhora futuras rerrolagens de sorte.",
+                  ],
+                  [
+                    "RESCUE",
+                    "Equipe de resgate",
+                    "Melhora salas Anti-Psicose.",
+                  ],
+                ] as const
+              ).map(([key, title, text]) => {
+                const rank = Number(data.talents.ranks[key] ?? 0);
+                const amount = Math.max(
+                  0,
+                  Math.min(data.talents.points, 5 - rank),
+                );
+                return (
+                  <article
+                    key={key}
+                    className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3"
+                  >
+                    <div className="flex items-center justify-between">
+                      <b className="text-xs text-emerald-100">{title}</b>
+                      <span className="text-[10px] font-black text-[#FFCB05]">
+                        Nv.{rank}/5
+                      </span>
+                    </div>
+                    <p className="mt-1 min-h-10 text-[10px] text-slate-400">
+                      {text}
+                    </p>
+                    <button
+                      disabled={pending || amount <= 0}
+                      onClick={() =>
+                        start(async () => {
+                          const res = await spendTowerTalentAction(key, amount);
+                          if ("error" in res) toast.error(res.error);
+                          else {
+                            toast.success(`${res.amount} ponto(s) aplicados.`);
+                            load();
+                          }
+                        })
+                      }
+                      className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35"
+                    >
+                      {amount > 0
+                        ? `Aplicar ${amount} ponto(s) de uma vez`
+                        : "Máximo ou sem pontos"}
+                    </button>
+                  </article>
+                );
+              })}
+            </div>
+
+            {/* 15 talentos adicionais, agrupados por categoria */}
+            <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
+              <p className="text-xs text-slate-400">
+                Talentos avançados — melhoram os atributos dos seus mascotes, o
+                controle da Pressão e a movimentação pelo mapa. Cada rank soma o
+                efeito descrito.
+              </p>
+              {(["STATUS", "PRESSAO", "MOVIMENTO"] as const).map((cat) => {
+                const list = data.talents.catalog.filter(
+                  (talent) => talent.category === cat,
+                );
+                if (list.length === 0) return null;
+                const catLabel =
+                  cat === "STATUS"
+                    ? "⚔ Atributos"
+                    : cat === "PRESSAO"
+                      ? "🛡 Controle de Pressão"
+                      : "🧭 Mapa & Movimento";
+                return (
+                  <div key={cat}>
+                    <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                      {catLabel}
+                    </p>
+                    <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                      {list.map((talent) => {
+                        const rank = Number(
+                          data.talents.ranks[talent.key] ?? 0,
+                        );
+                        const amount = Math.max(
+                          0,
+                          Math.min(data.talents.points, talent.maxRank - rank),
+                        );
+                        return (
+                          <article
+                            key={talent.key}
+                            className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3"
+                          >
+                            <div className="flex items-center justify-between gap-2">
+                              <b className="text-xs text-emerald-100">
+                                {talent.name}
+                              </b>
+                              <span className="shrink-0 text-[10px] font-black text-[#FFCB05]">
+                                Nv.{rank}/{talent.maxRank}
+                              </span>
+                            </div>
+                            <p className="mt-1 min-h-[3rem] text-[10px] leading-snug text-slate-400">
+                              {talent.description}
+                            </p>
+                            <button
+                              disabled={pending || amount <= 0}
+                              onClick={() =>
+                                start(async () => {
+                                  const res = await spendTowerTalentAction(
+                                    talent.key,
+                                    amount,
+                                  );
+                                  if ("error" in res) toast.error(res.error);
+                                  else {
+                                    toast.success(
+                                      `${res.amount} ponto(s) aplicados.`,
+                                    );
+                                    load();
+                                  }
+                                })
+                              }
+                              className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35"
+                            >
+                              {amount > 0
+                                ? `Aplicar ${amount}`
+                                : rank >= talent.maxRank
+                                  ? "Máximo"
+                                  : "Sem pontos"}
+                            </button>
+                          </article>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        </>
       )}
 
+      {view === "ROOMS" && (
+        <section className="rounded-2xl border border-cyan-400/25 bg-gradient-to-r from-cyan-950/20 to-purple-950/20 p-5">
+          <p className="text-[10px] font-black uppercase tracking-[.22em] text-cyan-300">
+            Central de expedições
+          </p>
+          <h2 className="mt-1 text-xl font-black text-white">
+            Salas, classe e equipe em um só lugar
+          </h2>
+          <p className="mt-2 text-xs leading-6 text-slate-300">
+            Prepare sua classe, dois mascotes e suas posturas logo abaixo. A
+            mesma seleção serve para criar uma sala ou entrar em uma já aberta.
+            Os cards mostram quem está dentro, a classe escolhida, os mascotes
+            levados e o estado de Pronto de cada jogador.
+          </p>
+        </section>
+      )}
       {view === "ROOMS" && data.rooms.length > 0 && (
         <section className={card}>
           <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
@@ -846,20 +942,42 @@ export function TowerLobby() {
                       <div className="flex items-center justify-between gap-2 text-[10px]">
                         <span className="min-w-0 truncate font-bold text-slate-200">
                           {m.name}
-                          {room.hostId === m.userId && <span className="ml-1 text-[8px] font-black uppercase text-[#FFCB05]">dono</span>}
+                          {room.hostId === m.userId && (
+                            <span className="ml-1 text-[8px] font-black uppercase text-[#FFCB05]">
+                              dono
+                            </span>
+                          )}
                         </span>
-                        <span className={m.ready ? "shrink-0 text-emerald-300" : "shrink-0 text-slate-500"}>
+                        <span
+                          className={
+                            m.ready
+                              ? "shrink-0 text-emerald-300"
+                              : "shrink-0 text-slate-500"
+                          }
+                        >
                           {m.ready ? "✓ Pronto" : "Preparando"}
                         </span>
                       </div>
-                      <p className="mt-0.5 text-[9px] font-bold text-cyan-300">Classe: {m.roleLabel}</p>
+                      <p className="mt-0.5 text-[9px] font-bold text-cyan-300">
+                        Classe: {m.roleLabel}
+                      </p>
                       {m.mascots.length > 0 && (
                         <div className="mt-1.5 flex flex-wrap gap-1.5">
                           {m.mascots.map((mascot, idx) => (
-                            <span key={`${m.userId}-${idx}`} title={`${mascot.name} · Nv.${mascot.level} · ${getCombatRoleLabel(mascot.stance)}`} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900/70 px-1.5 py-0.5 text-[9px] text-slate-300">
+                            <span
+                              key={`${m.userId}-${idx}`}
+                              title={`${mascot.name} · Nv.${mascot.level} · ${getCombatRoleLabel(mascot.stance)}`}
+                              className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900/70 px-1.5 py-0.5 text-[9px] text-slate-300"
+                            >
                               {/* eslint-disable-next-line @next/next/no-img-element */}
-                              <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-6 w-6 object-contain [image-rendering:pixelated]" />
-                              <span className="max-w-20 truncate">{mascot.name}</span>
+                              <img
+                                src={getStaticSpriteUrl(mascot.pokemonId)}
+                                alt=""
+                                className="h-6 w-6 object-contain [image-rendering:pixelated]"
+                              />
+                              <span className="max-w-20 truncate">
+                                {mascot.name}
+                              </span>
                             </span>
                           ))}
                         </div>
@@ -896,244 +1014,278 @@ export function TowerLobby() {
       )}
 
       {view === "ROOMS" && (
-      <>
-      {/* Ritmo */}
-      <section className={card}>
-        <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
-          Ritmo
-        </h2>
-        <p className="mt-1 text-[11px] text-slate-500">
-          O <strong className="text-[#FFCB05]">Online</strong> é mais intenso e{" "}
-          <strong className="text-[#FFCB05]">rende mais recompensas</strong> (Legado e
-          prêmios maiores); o <strong className="text-slate-300">Lento</strong> é
-          confortável, com janelas longas, porém com recompensas menores.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2">
-          {(
-            [
-              ["ONLINE", "Online · 5 minutos por ação", "Recompensas maiores"],
-              ["SLOW", "Lento · 4h por ação", "Recompensas menores"],
-            ] as const
-          ).map(([value, label, note]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => setPace(value)}
-              className={`rounded-lg border px-3 py-2 text-left text-xs font-bold transition-colors ${pace === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 text-slate-300 hover:border-slate-500"}`}
-            >
-              <span className="block">{label}</span>
-              <span className={`mt-0.5 block text-[9px] font-semibold ${value === "ONLINE" ? "text-emerald-300" : "text-slate-500"}`}>{note}</span>
-            </button>
-          ))}
-        </div>
-      </section>
-
-      {/* Função de Expedição */}
-      <section className={card}>
-        <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
-          Função de Expedição
-        </h2>
-        <p className="mt-1 text-[11px] text-slate-500">
-          A Função limita as posturas que seus mascotes podem usar dentro da
-          Torre.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-          {data.roles.map((r) => (
-            <button
-              key={r.key}
-              type="button"
-              onClick={() => setRole(r.key)}
-              className={`rounded-xl border p-3 text-left transition-colors ${role === r.key ? "border-[#FFCB05]/60 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}
-            >
-              <p className="text-xs font-black text-white">{r.label}</p>
-              <p className="mt-1 text-[10px] leading-snug text-slate-400">
-                {r.benefit}
-              </p>
-              <p className="mt-1 text-[9px] text-cyan-300">
-                {r.stances.map((s) => getCombatRoleLabel(s)).join(" · ")}
-              </p>
-            </button>
-          ))}
-        </div>
-        {selectedRole && (
-          <div className="mt-3 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-[11px] leading-relaxed text-slate-400">
-            <p><strong className="text-slate-200">Propósito:</strong> {selectedRole.exploration}</p>
-            <p><strong className="text-cyan-300">Efeito:</strong> {selectedRole.benefit}</p>
-            <p><strong className="text-[#FFCB05]">Como usar a seu favor:</strong> {selectedRole.gameplayTip}</p>
-          </div>
-        )}
-      </section>
-
-      {/* Mascotes */}
-      <section className={card}>
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
-            Seus 2 mascotes
-          </h2>
-          <span
-            className={`text-xs font-bold ${picks.length === 2 ? "text-[#FFCB05]" : "text-slate-500"}`}
-          >
-            {picks.length}/2
-          </span>
-        </div>
-        <p className="mt-1 text-[11px] text-slate-500">
-          Eles entram em Survivor e carregam o estado entre combates dentro da
-          Torre.
-        </p>
-        <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_220px]">
-          <input
-            value={search}
-            onChange={(e) => {
-              setSearch(e.target.value);
-              setMascotPage(1);
-            }}
-            placeholder="Buscar mascote pelo nome..."
-            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
-          />
-          <select
-            value={typeFilter}
-            onChange={(e) => {
-              setTypeFilter(e.target.value);
-              setMascotPage(1);
-            }}
-            className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
-          >
-            <option value="ALL">Todos os tipos</option>
-            {[
-              "Normal",
-              "Fogo",
-              "Água",
-              "Elétrico",
-              "Planta",
-              "Gelo",
-              "Lutador",
-              "Veneno",
-              "Terra",
-              "Voador",
-              "Psíquico",
-              "Inseto",
-              "Pedra",
-              "Fantasma",
-              "Dragão",
-              "Sombrio",
-              "Aço",
-              "Fada",
-            ].map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </div>
-        {data.mascots.length === 0 ? (
-          <p className="mt-3 text-xs text-slate-500">
-            Nenhum mascote livre disponível. Libere mascotes (fora de
-            arena/expedição/bazar) para entrar.
-          </p>
-        ) : (
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
-            {visibleMascots.map((m: Mascot) => {
-              const checked = picks.includes(m.id);
-              return (
+        <>
+          {/* Ritmo */}
+          <section className={card}>
+            <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
+              Ritmo
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-500">
+              O <strong className="text-[#FFCB05]">Online</strong> é mais
+              intenso e{" "}
+              <strong className="text-[#FFCB05]">rende mais recompensas</strong>{" "}
+              (Legado e prêmios maiores); o{" "}
+              <strong className="text-slate-300">Lento</strong> é confortável,
+              com janelas longas, porém com recompensas menores.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {(
+                [
+                  [
+                    "ONLINE",
+                    "Online · 5 minutos por ação",
+                    "Recompensas maiores",
+                  ],
+                  ["SLOW", "Lento · 4h por ação", "Recompensas menores"],
+                ] as const
+              ).map(([value, label, note]) => (
                 <button
-                  key={m.id}
+                  key={value}
                   type="button"
-                  onClick={() => toggle(m.id)}
-                  className={`flex items-center gap-2 rounded-xl border p-2 text-left ${checked ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-900/50 hover:border-slate-600"}`}
+                  onClick={() => setPace(value)}
+                  className={`rounded-lg border px-3 py-2 text-left text-xs font-bold transition-colors ${pace === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 text-slate-300 hover:border-slate-500"}`}
                 >
-                  {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img
-                    src={getStaticSpriteUrl(m.pokemonId)}
-                    alt=""
-                    className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
-                  />
-                  <span className="min-w-0">
-                    <strong className="block truncate text-[11px] text-white">
-                      {m.name}
-                    </strong>
-                    <small className="text-[10px] text-slate-500">
-                      Nv.{m.level}
-                    </small>
-                    <span className="mt-0.5 grid grid-cols-5 gap-0.5 text-[8px] font-semibold leading-tight">
-                      <span className="text-red-400" title="Força">F{m.statForce}</span>
-                      <span className="text-blue-400" title="Agilidade">A{m.statAgility}</span>
-                      <span className="text-purple-400" title="Instinto">I{m.statInstinct}</span>
-                      <span className="text-green-400" title="Vitalidade">V{m.statVitality}</span>
-                      <span className="text-pink-400" title="Carisma">C{m.statCharisma}</span>
-                    </span>
-                    {checked && selectedRole && (
-                      <select
-                        value={stances[m.id] ?? selectedRole.stances[0]}
-                        onClick={(e) => e.stopPropagation()}
-                        onChange={(e) =>
-                          setStances((cur) => ({
-                            ...cur,
-                            [m.id]: e.target.value,
-                          }))
-                        }
-                        className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-950 p-1 text-[9px] text-cyan-200"
-                      >
-                        {selectedRole.stances.map((s) => (
-                          <option key={s} value={s}>
-                            {getCombatRoleLabel(s)}
-                          </option>
-                        ))}
-                      </select>
-                    )}
+                  <span className="block">{label}</span>
+                  <span
+                    className={`mt-0.5 block text-[9px] font-semibold ${value === "ONLINE" ? "text-emerald-300" : "text-slate-500"}`}
+                  >
+                    {note}
                   </span>
                 </button>
-              );
-            })}
-          </div>
-        )}
-        {filteredMascots.length > 16 && (
-          <div className="mt-3 flex items-center justify-center gap-3">
-            <button
-              disabled={mascotPage <= 1}
-              onClick={() => setMascotPage((p) => p - 1)}
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30"
-            >
-              Anterior
-            </button>
-            <span className="text-xs text-slate-500">
-              Página {mascotPage}/{mascotPages}
-            </span>
-            <button
-              disabled={mascotPage >= mascotPages}
-              onClick={() => setMascotPage((p) => p + 1)}
-              className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30"
-            >
-              Próxima
-            </button>
-          </div>
-        )}
-      </section>
+              ))}
+            </div>
+          </section>
 
-      <div
-        className={`rounded-xl border p-3 text-xs ${!data.config.requireTicket || data.towerTicketQuantity > 0 ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200"}`}
-      >
-        <b>Ticket da Torre: {data.towerTicketQuantity}</b>
-        <p className="mt-1 opacity-70">
-          {data.config.requireTicket
-            ? "O ticket não é gasto ao criar ou entrar na sala. Cada jogador gasta 1 somente quando o dono inicia a partida."
-            : "A exigência de ticket está desligada pelo administrador."}
-        </p>
-      </div>
-      <button
-        type="button"
-        onClick={create}
-        disabled={
-          pending || picks.length !== 2 || !role || Boolean(data.nextEntryAt)
-        }
-        className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-[#1A1A2E] transition hover:bg-[#FFD700] disabled:opacity-40"
-      >
-        {data.nextEntryAt
-          ? `Cooldown até ${new Date(data.nextEntryAt).toLocaleString("pt-BR")}`
-          : pending
-            ? "Criando…"
-            : "🗼 Criar sala de expedição"}
-      </button>
-      </>
+          {/* Função de Expedição */}
+          <section className={card}>
+            <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
+              Função de Expedição
+            </h2>
+            <p className="mt-1 text-[11px] text-slate-500">
+              A Função limita as posturas que seus mascotes podem usar dentro da
+              Torre.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+              {data.roles.map((r) => (
+                <button
+                  key={r.key}
+                  type="button"
+                  onClick={() => setRole(r.key)}
+                  className={`rounded-xl border p-3 text-left transition-colors ${role === r.key ? "border-[#FFCB05]/60 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-900/40 hover:border-slate-600"}`}
+                >
+                  <p className="text-xs font-black text-white">{r.label}</p>
+                  <p className="mt-1 text-[10px] leading-snug text-slate-400">
+                    {r.benefit}
+                  </p>
+                  <p className="mt-1 text-[9px] text-cyan-300">
+                    {r.stances.map((s) => getCombatRoleLabel(s)).join(" · ")}
+                  </p>
+                </button>
+              ))}
+            </div>
+            {selectedRole && (
+              <div className="mt-3 space-y-1.5 rounded-lg border border-slate-800 bg-slate-900/50 p-3 text-[11px] leading-relaxed text-slate-400">
+                <p>
+                  <strong className="text-slate-200">Propósito:</strong>{" "}
+                  {selectedRole.exploration}
+                </p>
+                <p>
+                  <strong className="text-cyan-300">Efeito:</strong>{" "}
+                  {selectedRole.benefit}
+                </p>
+                <p>
+                  <strong className="text-[#FFCB05]">
+                    Como usar a seu favor:
+                  </strong>{" "}
+                  {selectedRole.gameplayTip}
+                </p>
+              </div>
+            )}
+          </section>
+
+          {/* Mascotes */}
+          <section className={card}>
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
+                Seus 2 mascotes
+              </h2>
+              <span
+                className={`text-xs font-bold ${picks.length === 2 ? "text-[#FFCB05]" : "text-slate-500"}`}
+              >
+                {picks.length}/2
+              </span>
+            </div>
+            <p className="mt-1 text-[11px] text-slate-500">
+              Eles entram em Survivor e carregam o estado entre combates dentro
+              da Torre.
+            </p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_220px]">
+              <input
+                value={search}
+                onChange={(e) => {
+                  setSearch(e.target.value);
+                  setMascotPage(1);
+                }}
+                placeholder="Buscar mascote pelo nome..."
+                className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+              />
+              <select
+                value={typeFilter}
+                onChange={(e) => {
+                  setTypeFilter(e.target.value);
+                  setMascotPage(1);
+                }}
+                className="rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-sm text-white"
+              >
+                <option value="ALL">Todos os tipos</option>
+                {[
+                  "Normal",
+                  "Fogo",
+                  "Água",
+                  "Elétrico",
+                  "Planta",
+                  "Gelo",
+                  "Lutador",
+                  "Veneno",
+                  "Terra",
+                  "Voador",
+                  "Psíquico",
+                  "Inseto",
+                  "Pedra",
+                  "Fantasma",
+                  "Dragão",
+                  "Sombrio",
+                  "Aço",
+                  "Fada",
+                ].map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
+            </div>
+            {data.mascots.length === 0 ? (
+              <p className="mt-3 text-xs text-slate-500">
+                Nenhum mascote livre disponível. Libere mascotes (fora de
+                arena/expedição/bazar) para entrar.
+              </p>
+            ) : (
+              <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+                {visibleMascots.map((m: Mascot) => {
+                  const checked = picks.includes(m.id);
+                  return (
+                    <button
+                      key={m.id}
+                      type="button"
+                      onClick={() => toggle(m.id)}
+                      className={`flex items-center gap-2 rounded-xl border p-2 text-left ${checked ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-900/50 hover:border-slate-600"}`}
+                    >
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={getStaticSpriteUrl(m.pokemonId)}
+                        alt=""
+                        className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
+                      />
+                      <span className="min-w-0">
+                        <strong className="block truncate text-[11px] text-white">
+                          {m.name}
+                        </strong>
+                        <small className="text-[10px] text-slate-500">
+                          Nv.{m.level}
+                        </small>
+                        <span className="mt-0.5 grid grid-cols-5 gap-0.5 text-[8px] font-semibold leading-tight">
+                          <span className="text-red-400" title="Força">
+                            F{m.statForce}
+                          </span>
+                          <span className="text-blue-400" title="Agilidade">
+                            A{m.statAgility}
+                          </span>
+                          <span className="text-purple-400" title="Instinto">
+                            I{m.statInstinct}
+                          </span>
+                          <span className="text-green-400" title="Vitalidade">
+                            V{m.statVitality}
+                          </span>
+                          <span className="text-pink-400" title="Carisma">
+                            C{m.statCharisma}
+                          </span>
+                        </span>
+                        {checked && selectedRole && (
+                          <select
+                            value={stances[m.id] ?? selectedRole.stances[0]}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={(e) =>
+                              setStances((cur) => ({
+                                ...cur,
+                                [m.id]: e.target.value,
+                              }))
+                            }
+                            className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-950 p-1 text-[9px] text-cyan-200"
+                          >
+                            {selectedRole.stances.map((s) => (
+                              <option key={s} value={s}>
+                                {getCombatRoleLabel(s)}
+                              </option>
+                            ))}
+                          </select>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+            {filteredMascots.length > 16 && (
+              <div className="mt-3 flex items-center justify-center gap-3">
+                <button
+                  disabled={mascotPage <= 1}
+                  onClick={() => setMascotPage((p) => p - 1)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30"
+                >
+                  Anterior
+                </button>
+                <span className="text-xs text-slate-500">
+                  Página {mascotPage}/{mascotPages}
+                </span>
+                <button
+                  disabled={mascotPage >= mascotPages}
+                  onClick={() => setMascotPage((p) => p + 1)}
+                  className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-slate-300 disabled:opacity-30"
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
+          </section>
+
+          <div
+            className={`rounded-xl border p-3 text-xs ${!data.config.requireTicket || data.towerTicketQuantity > 0 ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200"}`}
+          >
+            <b>Ticket da Torre: {data.towerTicketQuantity}</b>
+            <p className="mt-1 opacity-70">
+              {data.config.requireTicket
+                ? "O ticket não é gasto ao criar ou entrar na sala. Cada jogador gasta 1 somente quando o dono inicia a partida."
+                : "A exigência de ticket está desligada pelo administrador."}
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={create}
+            disabled={
+              pending ||
+              picks.length !== 2 ||
+              !role ||
+              Boolean(data.nextEntryAt)
+            }
+            className="w-full rounded-xl bg-[#FFCB05] py-3 text-sm font-black text-[#1A1A2E] transition hover:bg-[#FFD700] disabled:opacity-40"
+          >
+            {data.nextEntryAt
+              ? `Cooldown até ${new Date(data.nextEntryAt).toLocaleString("pt-BR")}`
+              : pending
+                ? "Criando…"
+                : "🗼 Criar sala de expedição"}
+          </button>
+        </>
       )}
     </div>
   );
