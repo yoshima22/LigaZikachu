@@ -11,6 +11,7 @@ import { runLeagueCombat, toLeagueMascot, type LeagueMascot } from "@/lib/league
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { normalizeCombatRole } from "@/lib/combat-roles";
 import { TOWER_EXCLUSIVE_MASCOTS, towerRewardForFloor, XANDINHO } from "./exclusive-mascots";
+import { resolveTowerTalents } from "./talents";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -40,7 +41,11 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
   const room = currentTowerRoom(state);
   const choices = Object.values(submissions).map((s) => (s.actions ?? {}) as { routeId?: string; puzzleChoice?: string; action?: string; _roomId?: string }).filter((choice) => !choice._roomId || choice._roomId === room.id);
   const distinctRoutes = new Set(choices.map((choice) => choice.routeId).filter(Boolean));
-  const splitPathPenalty = distinctRoutes.size > 1 ? 2 : 1;
+  // Efeitos dos 15 talentos novos (status/pressão/movimento) — resolvidos uma vez.
+  const talentRowsAll = await tx.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { startsWith: "TALENT:" } } });
+  const talentValue = (key: string) => talentRowsAll.find((row) => row.metricKey === `TALENT:${key}`)?.value ?? 0;
+  const talentFx = resolveTowerTalents(talentValue);
+  const splitPathPenalty = distinctRoutes.size > 1 ? talentFx.splitPenalty : 1;
   const majority = (values: (string | undefined)[]) => {
     const count = new Map<string, number>();
     for (const value of values) if (value) count.set(value, (count.get(value) ?? 0) + 1);
@@ -142,12 +147,18 @@ async function resolveRoom(tx: Prisma.TransactionClient, run: Awaited<ReturnType
       return [fighter];
     });
     const avg = Math.max(1, Math.round(allies.reduce((sum, m) => sum + m.level, 0) / Math.max(1, allies.length)));
-    const talentRows = await tx.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { in: ["TALENT:COMBAT", "TALENT:BOSS"] } } });
-    const combatTalent = talentRows.find((row) => row.metricKey === "TALENT:COMBAT")?.value ?? 0;
-    const bossTalent = room.kind === "BOSS" ? talentRows.find((row) => row.metricKey === "TALENT:BOSS")?.value ?? 0 : 0;
+    // Talentos originais COMBAT/BOSS (efeito antigo) + novos talentos por atributo.
+    const combatTalent = talentValue("COMBAT");
+    const bossTalent = room.kind === "BOSS" ? talentValue("BOSS") : 0;
     const allyTalentMult = 1 + combatTalent * .02 + bossTalent * .03;
-    for (const ally of allies) { ally.force = Math.round(ally.force * allyTalentMult); ally.agility = Math.round(ally.agility * allyTalentMult); ally.instinct = Math.round(ally.instinct * allyTalentMult); ally.vitality = Math.round(ally.vitality * allyTalentMult); }
-    const pressureMult = state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1) * (1 + state.pressure * .03);
+    const bossFx = room.kind === "BOSS" ? talentFx.bossMult : 1;
+    for (const ally of allies) {
+      ally.force = Math.round(ally.force * allyTalentMult * talentFx.forceMult * bossFx);
+      ally.agility = Math.round(ally.agility * allyTalentMult * talentFx.agilityMult * bossFx);
+      ally.instinct = Math.round(ally.instinct * allyTalentMult * talentFx.instinctMult * bossFx);
+      ally.vitality = Math.round(ally.vitality * allyTalentMult * talentFx.vitalityMult * bossFx);
+    }
+    const pressureMult = state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1) * (1 + state.pressure * talentFx.enemyPressureScale);
     // A composição é congelada ao entrar na sala. Esperar pode fortalecer os
     // inimigos pela Pressão, mas nunca inserir espécies que não apareceram no preview.
     const frozenPreview = state.encounter?.enemies ?? towerEncounterPreview(room, avg, allies.length);

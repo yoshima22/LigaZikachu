@@ -19,6 +19,7 @@ import {
   TOWER_SETTINGS_KEY,
   type TowerConfig,
 } from "@/lib/tower/config";
+import { resolveTowerTalents, TOWER_TALENTS, TOWER_TALENT_KEYS } from "@/lib/tower/talents";
 import { MascotPersonality, Prisma, type TowerExpeditionRole, type TowerPaceMode } from "@prisma/client";
 import { windowMsFor, resolveTowerTurnLocked, runLockKey, type TowerVolatile } from "@/lib/tower/turn";
 import { generateEncounter, generateBossEncounter, visibleTiles, objectsView, type MemberMascotInput } from "@/lib/tower/encounter";
@@ -164,7 +165,7 @@ export async function getTowerLobbyDataAction() {
     prisma.towerLostMascot.findMany({ where: { recoveredAt: null }, orderBy: { createdAt: "desc" }, take: 60 }),
   ]);
   const progressValue = (key: string) => communityProgress.find((entry) => entry.metricKey === key)?.value ?? 0;
-  const talentRanks = Object.fromEntries(["PRESSURE","COMBAT","BOSS","LUCK","RESCUE"].map((key) => [key, progressValue(`TALENT:${key}`)]));
+  const talentRanks = Object.fromEntries([...["PRESSURE","COMBAT","BOSS","LUCK","RESCUE"], ...TOWER_TALENT_KEYS].map((key) => [key, progressValue(`TALENT:${key}`)]));
   const talentSpent = Object.values(talentRanks).reduce((sum, value) => sum + Number(value), 0);
   const controlledMascotRows = await prisma.mascot.findMany({ where: { id: { in: controlledEntries.map((entry) => entry.mascotId) } }, select: { id: true, pokemonId: true, nickname: true, level: true } });
   const controlledMascotsById = new Map(controlledMascotRows.map((mascot) => [mascot.id, mascot]));
@@ -218,7 +219,7 @@ export async function getTowerLobbyDataAction() {
     failures,
     communityProgress,
     communityCodex,
-    talents: { points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent), ranks: talentRanks },
+    talents: { points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent), ranks: talentRanks, catalog: TOWER_TALENTS },
     controlledMascots: controlledEntries.map((entry) => { const mascot = controlledMascotsById.get(entry.mascotId); return mascot ? { id: mascot.id, pokemonId: mascot.pokemonId, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), level: mascot.level, owner: controlledOwners.get(entry.ownerUserId) ?? "Jogador", floor: entry.floor } : null; }).filter(Boolean),
     ranking: rankingUserIds.map((userId) => ({ userId, name: rankingNames.get(userId) ?? "Jogador", entries: entryGroups.find((row) => row.userId === userId)?._count._all ?? 0, rescues: rescueGroups.find((row) => row.recoveredById === userId)?._count._all ?? 0, talentPoints: talentGroups.find((row) => row.userId === userId)?._count._all ?? 0 })),
     pendingMascotRewards: pendingMascotRewards.map((feat) => { const reward = feat.data as { pokemonId:number; basePokemonId:number; name:string; floor?:number; reason?:string }; return { id: feat.id, ...reward, sprite: TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === reward.pokemonId)?.sprite ?? "" }; }),
@@ -301,9 +302,14 @@ export async function debugTowerMascotRewardPreviewAction(pokemonId: number, per
   } };
 }
 
-export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS" | "LUCK" | "RESCUE", requested = 1) {
+const LEGACY_TALENT_KEYS = ["PRESSURE", "COMBAT", "BOSS", "LUCK", "RESCUE"] as const;
+export async function spendTowerTalentAction(key: string, requested = 1) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito." };
+  const isLegacy = (LEGACY_TALENT_KEYS as readonly string[]).includes(key);
+  const catalog = TOWER_TALENTS.find((talent) => talent.key === key);
+  if (!isLegacy && !catalog) return { error: "Talento inválido." };
+  const maxRank = catalog?.maxRank ?? 5;
   const rows = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1, metricKey: { startsWith: "TALENT" } } });
   const value = (metric: string) => rows.find((row) => row.metricKey === metric)?.value ?? 0;
   const earned = value("TALENT_POINTS");
@@ -311,8 +317,8 @@ export async function spendTowerTalentAction(key: "PRESSURE" | "COMBAT" | "BOSS"
   const rank = value(`TALENT:${key}`);
   const available = Math.max(0, Math.floor(earned - spent));
   if (available <= 0) return { error: "Você não possui pontos de talento disponíveis." };
-  if (rank >= 5) return { error: "Este talento já atingiu o nível máximo." };
-  const amount = Math.max(1, Math.min(available, 5 - Math.floor(rank), Math.floor(requested || 1)));
+  if (rank >= maxRank) return { error: "Este talento já atingiu o nível máximo." };
+  const amount = Math.max(1, Math.min(available, maxRank - Math.floor(rank), Math.floor(requested || 1)));
   await prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: `TALENT:${key}` } }, create: { floorId: 1, metricKey: `TALENT:${key}`, value: amount }, update: { value: { increment: amount } } });
   revalidatePath(PATH);
   return { ok: true as const, amount };
@@ -568,8 +574,9 @@ export async function startTowerExpeditionAction(runId: string): Promise<{ error
   const progress = await prisma.towerCommunityProgress.findMany({ where: { floorId: 1 } });
   const unlocked = progress.filter((entry) => entry.value >= 5).map((entry) => entry.metricKey);
   const roleCounters = [...new Set(run.members.map((member) => `ROLE:${member.expeditionRole}`))];
-  const pressureTalent = (await prisma.towerCommunityProgress.findUnique({ where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT:PRESSURE" } } }))?.value ?? 0;
-  const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: [...unlocked, ...roleCounters], pressureShield: (unlocked.includes("WARD") ? 2 : 0) + pressureTalent };
+  const pressureTalent = progress.find((row) => row.metricKey === "TALENT:PRESSURE")?.value ?? 0;
+  const talentFx = resolveTowerTalents((key) => progress.find((row) => row.metricKey === `TALENT:${key}`)?.value ?? 0);
+  const exploration = { ...generateTowerRoomGraph(run.seed), countermeasures: [...unlocked, ...roleCounters], pressureShield: (unlocked.includes("WARD") ? 2 : 0) + pressureTalent + talentFx.pressureShieldStart };
   const order = [...run.members].sort((a, b) => a.resolutionIndex - b.resolutionIndex).map((m) => m.userId);
   await prisma.$transaction(async (tx) => {
     if (config.requireTicket) for (const player of memberPlayers) {

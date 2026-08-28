@@ -766,6 +766,43 @@ export function TowerLobby() {
             );
           })}
         </div>
+
+        {/* 15 talentos adicionais, agrupados por categoria */}
+        <div className="mt-5 space-y-4 border-t border-slate-800 pt-4">
+          <p className="text-xs text-slate-400">Talentos avançados — melhoram os atributos dos seus mascotes, o controle da Pressão e a movimentação pelo mapa. Cada rank soma o efeito descrito.</p>
+          {(["STATUS", "PRESSAO", "MOVIMENTO"] as const).map((cat) => {
+            const list = data.talents.catalog.filter((talent) => talent.category === cat);
+            if (list.length === 0) return null;
+            const catLabel = cat === "STATUS" ? "⚔ Atributos" : cat === "PRESSAO" ? "🛡 Controle de Pressão" : "🧭 Mapa & Movimento";
+            return (
+              <div key={cat}>
+                <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-emerald-300">{catLabel}</p>
+                <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+                  {list.map((talent) => {
+                    const rank = Number(data.talents.ranks[talent.key] ?? 0);
+                    const amount = Math.max(0, Math.min(data.talents.points, talent.maxRank - rank));
+                    return (
+                      <article key={talent.key} className="rounded-xl border border-emerald-400/20 bg-emerald-950/10 p-3">
+                        <div className="flex items-center justify-between gap-2">
+                          <b className="text-xs text-emerald-100">{talent.name}</b>
+                          <span className="shrink-0 text-[10px] font-black text-[#FFCB05]">Nv.{rank}/{talent.maxRank}</span>
+                        </div>
+                        <p className="mt-1 min-h-[3rem] text-[10px] leading-snug text-slate-400">{talent.description}</p>
+                        <button
+                          disabled={pending || amount <= 0}
+                          onClick={() => start(async () => { const res = await spendTowerTalentAction(talent.key, amount); if ("error" in res) toast.error(res.error); else { toast.success(`${res.amount} ponto(s) aplicados.`); load(); } })}
+                          className="mt-2 w-full rounded-lg border border-emerald-300/25 py-1.5 text-[10px] font-black text-emerald-200 disabled:opacity-35"
+                        >
+                          {amount > 0 ? `Aplicar ${amount}` : rank >= talent.maxRank ? "Máximo" : "Sem pontos"}
+                        </button>
+                      </article>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       </section>
       )}
 
