@@ -10,7 +10,7 @@ import { SPEC_PRESENCE_HEARTBEAT_SECONDS } from "@/lib/spec/constants";
 // Janela para considerar um espectador "online" na arquibancada (ms).
 const PRESENCE_WINDOW_MS = 60_000;
 
-type StandsState = {
+export type StandsState = {
   spectators: Array<{ userId: string; name: string }>;
   count: number;
   canManage: boolean;
@@ -25,6 +25,10 @@ type StandsState = {
     status: "OPEN" | "CLOSED";
   } | null;
 };
+
+export type StandsResponse =
+  | (StandsState & { unchanged: false; revision: string })
+  | { unchanged: true; revision: string };
 
 async function loadStreamOwner(streamId: string) {
   return prisma.specStream.findUnique({
@@ -61,19 +65,22 @@ export async function leaveSpecPresenceAction(streamId: string): Promise<void> {
 }
 
 /** Estado da arquibancada + enquete ativa (para o watch e o painel do transmissor). */
-export async function getSpecStandsAction(streamId: string): Promise<StandsState> {
+export async function getSpecStandsAction(streamId: string, knownRevision?: string): Promise<StandsResponse> {
   const empty: StandsState = { spectators: [], count: 0, canManage: false, chat: [], poll: null };
   const session = await getAppSession();
-  if (!session?.user?.id) return empty;
+  if (!session?.user?.id) return { ...empty, unchanged: false, revision: "anonymous" };
   const config = await getSpecConfig();
-  if (!config.enabled) return empty;
+  if (!config.enabled) return { ...empty, unchanged: false, revision: "disabled" };
 
   const stream = await loadStreamOwner(streamId);
-  if (!stream) return empty;
+  if (!stream) return { ...empty, unchanged: false, revision: "missing" };
   const canManage = stream.broadcasterUserId === session.user.id || isStaff(session.user.role);
 
   const since = new Date(Date.now() - PRESENCE_WINDOW_MS);
-  const [spectators, poll, chat] = await Promise.all([
+  // O snapshot é consultado frequentemente durante uma live. Primeiro buscamos
+  // somente os marcadores pequenos necessários para detectar uma alteração. O
+  // histórico do chat só é transferido quando a revisão realmente mudou.
+  const [spectators, poll, latestChat] = await Promise.all([
     prisma.specSpectator.findMany({
       where: { streamId, lastSeenAt: { gte: since } },
       orderBy: { joinedAt: "asc" },
@@ -84,13 +91,14 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
       orderBy: { createdAt: "desc" },
       select: { id: true, question: true, options: true, status: true },
     }).catch(() => null),
-    prisma.specChatMessage.findMany({
-      where: { streamId }, orderBy: { createdAt: "desc" }, take: 50,
-      select: { id: true, userId: true, userName: true, message: true, createdAt: true },
-    }).catch(() => []),
+    prisma.specChatMessage.findFirst({
+      where: { streamId }, orderBy: { createdAt: "desc" },
+      select: { id: true, createdAt: true },
+    }).catch(() => null),
   ]);
 
   let pollState: StandsState["poll"] = null;
+  let voteRevision = "";
   if (poll) {
     const options = Array.isArray(poll.options) ? (poll.options as unknown[]).map((o) => String(o)) : [];
     const votes = await prisma.specPollVote.findMany({
@@ -103,8 +111,29 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
       if (v.optionIndex >= 0 && v.optionIndex < counts.length) counts[v.optionIndex]++;
       if (v.userId === session.user.id) myVote = v.optionIndex;
     }
+    voteRevision = votes
+      .map((vote) => `${vote.userId}:${vote.optionIndex}`)
+      .sort()
+      .join(",");
     pollState = { id: poll.id, question: poll.question, options, counts, totalVotes: votes.length, myVote, status: poll.status };
   }
+
+  const revision = [
+    stream.status,
+    latestChat?.id ?? "no-chat",
+    poll?.id ?? "no-poll",
+    voteRevision,
+    // O heartbeat altera lastSeenAt, mas não altera o que aparece na tela. A
+    // revisão acompanha apenas entrada/saída/nome para não reenviar 50 mensagens
+    // de chat a cada heartbeat de cada espectador.
+    ...spectators.map((spectator) => `${spectator.userId}:${spectator.displayName}`),
+  ].join("|");
+  if (knownRevision === revision) return { unchanged: true, revision };
+
+  const chat = await prisma.specChatMessage.findMany({
+    where: { streamId }, orderBy: { createdAt: "desc" }, take: 50,
+    select: { id: true, userId: true, userName: true, message: true, createdAt: true },
+  }).catch(() => []);
 
   return {
     spectators: spectators.map((s) => ({ userId: s.userId, name: s.displayName })),
@@ -112,6 +141,8 @@ export async function getSpecStandsAction(streamId: string): Promise<StandsState
     canManage,
     chat: chat.reverse(),
     poll: pollState,
+    unchanged: false,
+    revision,
   };
 }
 

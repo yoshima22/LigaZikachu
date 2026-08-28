@@ -248,8 +248,20 @@ export default function BazarListingPage(): React.JSX.Element {
 
   useEffect(() => {
     if ((listing?.payload as Record<string, unknown> | undefined)?.directNegotiation !== true) return;
-    const timer = setInterval(reloadListing, 5000);
-    return () => clearInterval(timer);
+    // Uma mesa aberta precisa continuar sincronizada, mas abas em segundo plano
+    // não precisam baixar repetidamente a proposta completa. Ao voltar para a
+    // aba fazemos uma atualização imediata, preservando a experiência em tempo real.
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === "visible") void reloadListing();
+    };
+    const timer = setInterval(refreshWhenVisible, 5000);
+    document.addEventListener("visibilitychange", refreshWhenVisible);
+    window.addEventListener("focus", refreshWhenVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", refreshWhenVisible);
+      window.removeEventListener("focus", refreshWhenVisible);
+    };
   }, [listing?.payload, reloadListing]);
 
   // Auto-finalizar leilão encerrado e countdown

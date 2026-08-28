@@ -7,8 +7,9 @@ import {
   createSpecPollAction, voteSpecPollAction, closeSpecPollAction,
   sendSpecChatMessageAction,
 } from "@/app/(app)/spec/stands-actions";
+import type { StandsState } from "@/app/(app)/spec/stands-actions";
 
-type Stands = Awaited<ReturnType<typeof getSpecStandsAction>>;
+type Stands = StandsState;
 
 function initials(name: string) {
   const parts = name.trim().split(/\s+/).filter(Boolean);
@@ -22,10 +23,23 @@ function initials(name: string) {
 // espectador, mas vê a lista e gerencia enquetes).
 export function SpecStands({ streamId, sendPresence }: { streamId: string; sendPresence: boolean }) {
   const [stands, setStands] = useState<Stands | null>(null);
+  const revisionRef = useRef<string | undefined>(undefined);
+  const refreshInFlightRef = useRef(false);
 
   const refresh = useCallback(async () => {
-    const s = await getSpecStandsAction(streamId).catch(() => null);
-    if (s) setStands(s);
+    if (refreshInFlightRef.current) return;
+    refreshInFlightRef.current = true;
+    try {
+      const response = await getSpecStandsAction(streamId, revisionRef.current).catch(() => null);
+      if (!response) return;
+      revisionRef.current = response.revision;
+      if (!response.unchanged) {
+        const { unchanged: _unchanged, revision: _revision, ...snapshot } = response;
+        setStands(snapshot);
+      }
+    } finally {
+      refreshInFlightRef.current = false;
+    }
   }, [streamId]);
 
   // Heartbeat abaixo da janela de presença, mas sem escrever no banco a cada 15s.

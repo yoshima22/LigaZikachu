@@ -796,7 +796,12 @@ function splitDefeatedLoot(loot: ArenaLoot) {
   };
 }
 
-export async function getArenaBotPreview(playerId: string, teamId: string, difficulty: ArenaDifficulty = "normal") {
+export async function getArenaBotPreview(
+  playerId: string,
+  teamId: string,
+  difficulty: ArenaDifficulty = "normal",
+  options?: { lastBattleAt?: Date | null },
+) {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
     include: { members: { include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true, arenaState: true, restingUntil: true, preferredCombatRole: true, personality: true } } }, orderBy: { slot: "asc" } } },
@@ -809,11 +814,14 @@ export async function getArenaBotPreview(playerId: string, teamId: string, diffi
   const bot = buildBotOpponent(attackers, difficulty, seed);
   const diff = DIFFICULTY_CONFIG[difficulty];
   // Último combate da equipe (para mostrar cooldown)
-  const lastBattle = await prisma.arenaBattle.findFirst({
-    where: { attackTeamId: teamId, type: "BOT" },
-    orderBy: { createdAt: "desc" },
-    select: { createdAt: true },
-  });
+  const hasPrefetchedCooldown = options && Object.prototype.hasOwnProperty.call(options, "lastBattleAt");
+  const lastBattle = hasPrefetchedCooldown
+    ? (options?.lastBattleAt ? { createdAt: options.lastBattleAt } : null)
+    : await prisma.arenaBattle.findFirst({
+        where: { attackTeamId: teamId, type: "BOT" },
+        orderBy: { createdAt: "desc" },
+        select: { createdAt: true },
+      });
   // Retorna timestamp absoluto para o cliente calcular remaining = until - Date.now()
   // Isso evita dessincronização quando a página demora a chegar ao cliente
   const cooldownUntil = lastBattle

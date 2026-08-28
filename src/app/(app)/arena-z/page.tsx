@@ -384,22 +384,41 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const readyActiveTeams = activeTeams.filter(t => !teamBlockReasons.get(t.id));
   const readyOpponentTeams = opponentTeams.filter(t => !getTeamBlockedReason(t));
 
+  // Uma consulta agrupada substitui até duas consultas por equipe (BOT e PVP)
+  // em cada abertura da Arena-Z. Isso preserva os mesmos cooldowns e elimina o
+  // principal volume repetitivo observado nas estatísticas do banco.
+  const cooldownTeamIds = readyActiveTeams.map((team) => team.id);
+  const latestBattlesByTeamAndType = new Map<string, Date>();
+  if (cooldownTeamIds.length > 0 && (activeTab === "equipes" || needsRoomsData)) {
+    const latestBattles = await prisma.arenaBattle.groupBy({
+      by: ["attackTeamId", "type"],
+      where: {
+        attackTeamId: { in: cooldownTeamIds },
+        type: { in: ["BOT", "PVP"] },
+      },
+      _max: { createdAt: true },
+    });
+    for (const battle of latestBattles) {
+      if (battle.attackTeamId && battle._max.createdAt) {
+        latestBattlesByTeamAndType.set(`${battle.attackTeamId}:${battle.type}`, battle._max.createdAt);
+      }
+    }
+  }
+
   const botPreviews = new Map<string, Awaited<ReturnType<typeof getArenaBotPreview>>>();
   await Promise.all((activeTab === "equipes" ? readyActiveTeams : []).map(async (team) => {
-    botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal"));
+    botPreviews.set(team.id, await getArenaBotPreview(player.id, team.id, "normal", {
+      lastBattleAt: latestBattlesByTeamAndType.get(`${team.id}:BOT`) ?? null,
+    }));
   }));
   const pvpCooldowns = new Map<string, Date | null>();
   // Só usado nos botões de ataque da tab "salas"
-  await Promise.all((needsRoomsData ? readyActiveTeams : []).map(async (team) => {
-    const lastPvp = await prisma.arenaBattle.findFirst({
-      where: { type: "PVP", attackTeamId: team.id },
-      orderBy: { createdAt: "desc" },
-      select: { createdAt: true },
-    });
-    pvpCooldowns.set(team.id, lastPvp
-      ? new Date(lastPvp.createdAt.getTime() + ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000)
+  (needsRoomsData ? readyActiveTeams : []).forEach((team) => {
+    const lastPvpAt = latestBattlesByTeamAndType.get(`${team.id}:PVP`) ?? null;
+    pvpCooldowns.set(team.id, lastPvpAt
+      ? new Date(lastPvpAt.getTime() + ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000)
       : null);
-  }));
+  });
 
   const opportunisticBattles = injuredRivals.length > 0
     ? await prisma.arenaBattle.findMany({
