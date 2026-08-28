@@ -857,20 +857,27 @@ export function TowerLobby() {
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
           Ritmo
         </h2>
-        <div className="mt-3 flex flex-wrap gap-2">
+        <p className="mt-1 text-[11px] text-slate-500">
+          O <strong className="text-[#FFCB05]">Online</strong> é mais intenso e{" "}
+          <strong className="text-[#FFCB05]">rende mais recompensas</strong> (Legado e
+          prêmios maiores); o <strong className="text-slate-300">Lento</strong> é
+          confortável, com janelas longas, porém com recompensas menores.
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
           {(
             [
-              ["ONLINE", "Online · 5 minutos por ação"],
-              ["SLOW", "Lento · 4h por ação"],
+              ["ONLINE", "Online · 5 minutos por ação", "Recompensas maiores"],
+              ["SLOW", "Lento · 4h por ação", "Recompensas menores"],
             ] as const
-          ).map(([value, label]) => (
+          ).map(([value, label, note]) => (
             <button
               key={value}
               type="button"
               onClick={() => setPace(value)}
-              className={`rounded-lg border px-3 py-1.5 text-xs font-bold transition-colors ${pace === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 text-slate-300 hover:border-slate-500"}`}
+              className={`rounded-lg border px-3 py-2 text-left text-xs font-bold transition-colors ${pace === value ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 text-slate-300 hover:border-slate-500"}`}
             >
-              {label}
+              <span className="block">{label}</span>
+              <span className={`mt-0.5 block text-[9px] font-semibold ${value === "ONLINE" ? "text-emerald-300" : "text-slate-500"}`}>{note}</span>
             </button>
           ))}
         </div>
@@ -1002,6 +1009,13 @@ export function TowerLobby() {
                     <small className="text-[10px] text-slate-500">
                       Nv.{m.level}
                     </small>
+                    <span className="mt-0.5 grid grid-cols-5 gap-0.5 text-[8px] font-semibold leading-tight">
+                      <span className="text-red-400" title="Força">F{m.statForce}</span>
+                      <span className="text-blue-400" title="Agilidade">A{m.statAgility}</span>
+                      <span className="text-purple-400" title="Instinto">I{m.statInstinct}</span>
+                      <span className="text-green-400" title="Vitalidade">V{m.statVitality}</span>
+                      <span className="text-pink-400" title="Carisma">C{m.statCharisma}</span>
+                    </span>
                     {checked && selectedRole && (
                       <select
                         value={stances[m.id] ?? selectedRole.stances[0]}

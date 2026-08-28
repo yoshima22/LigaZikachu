@@ -53,7 +53,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Investigador",
     exploration: "Identifica pistas, mecanismos, objetos falsos e armadilhas.",
     benefit: "Revela pista adicional em mecanismos e concede +8% de Instinto nos combates da Torre.",
-    gameplayTip: "Leve o Investigador na frente em salas de Enigma: a pista extra reduz o risco de errar mecanismos e ganhar Pressão. Bom para grupos que exploram muito.",
+    gameplayTip: "A pista extra reduz o risco de errar mecanismos (e ganhar Pressão). Escolha se o grupo pretende explorar muitas salas de Enigma.",
     stances: ["SCOUT", "SPECIALIST", "OPPORTUNIST", "PROVOKER"],
   },
   {
@@ -61,7 +61,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Navegador",
     exploration: "Lê melhor as conexões do labirinto.",
     benefit: "Concede +3% de Agilidade nos combates e reduz em 1 a Pressão da primeira espera da run.",
-    gameplayTip: "Ideal quando o grupo vai se dividir pelo mapa: a leitura das conexões e o desconto na 1ª espera seguram a Pressão que a divisão gera.",
+    gameplayTip: "Ajuda quando o grupo vai se dividir pelo mapa: segura a Pressão extra da divisão e dá desconto na 1ª espera diante de inimigos.",
     stances: ["FLANK", "SCOUT", "DUELIST"],
   },
   {
@@ -69,7 +69,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Protetor",
     exploration: "Protege aliados durante interações e resgates.",
     benefit: "Concede +6% de Vitalidade aos seus mascotes em todos os combates da Torre.",
-    gameplayTip: "É a âncora do grupo: mantenha o Protetor onde o encontro vai acontecer. Com mais Vitalidade, seus mascotes seguram a Pressão alta dos andares.",
+    gameplayTip: "Dá mais Vitalidade aos seus mascotes: aguentam melhor a Pressão alta dos andares. Bom para grupos que enfrentam muitos encontros.",
     stances: ["DEFENDER", "GUARDIAN", "SURVIVOR"],
   },
   {
@@ -77,7 +77,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Artífice",
     exploration: "Especialista em Geradores, Portas, Alavancas e Placas.",
     benefit: "Falhas em mecanismos geram 1 Pressão a menos e seus mascotes recebem +4% de Força.",
-    gameplayTip: "Coloque o Artífice para resolver mecanismos arriscados: errar custa menos Pressão. Excelente em runs longas com muitos Geradores/Portas.",
+    gameplayTip: "Errar mecanismos custa menos Pressão. Excelente em runs longas com muitos Geradores, Portas e Alavancas.",
     stances: ["SPECIALIST", "SABOTEUR", "ENCOURAGER", "ATTACKER"],
   },
   {
@@ -85,7 +85,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Ritualista",
     exploration: "Especialista em Altares, Runas, Máscaras e Espelhos.",
     benefit: "Melhora curas de sala e Carisma dos seus mascotes em 10%.",
-    gameplayTip: "Priorize salas de Descanso e objetos rituais com o Ritualista: as curas rendem mais, sustentando o grupo entre encontros difíceis.",
+    gameplayTip: "Curas de sala rendem mais e sustentam o grupo entre encontros difíceis. Bom em runs com salas de Descanso e objetos rituais.",
     stances: ["HEALER", "ENCOURAGER", "PROVOKER", "SURVIVOR"],
   },
   {
@@ -93,7 +93,7 @@ export const TOWER_EXPEDITION_ROLES: {
     label: "Batedor",
     exploration: "Reconhece áreas e presença hostil.",
     benefit: "Concede +7% de Agilidade aos seus mascotes nos combates da Torre.",
-    gameplayTip: "Use o Batedor para abrir caminho e chegar primeiro nos encontros: a Agilidade alta garante iniciativa e ajuda a alcançar aliados distantes.",
+    gameplayTip: "Agilidade alta garante iniciativa nos combates: seus mascotes tendem a agir primeiro nos encontros da Torre.",
     stances: ["FLANK", "SCOUT", "OPPORTUNIST", "DUELIST"],
   },
 ];

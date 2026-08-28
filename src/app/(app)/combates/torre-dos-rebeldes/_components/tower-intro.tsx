@@ -92,17 +92,9 @@ export function TowerIntro({ forceKey = 0 }: { forceKey?: number }) {
           <img
             src="/events/torre-dos-rebeldes/cover.png"
             alt="Torre dos Rebeldes"
-            className="absolute inset-0 h-full w-full object-cover object-[center_58%]"
+            className="absolute inset-0 h-full w-full object-cover object-[center_18%]"
           />
           <div className="absolute inset-0 bg-gradient-to-t from-[#07040d] via-transparent to-black/20 lg:bg-gradient-to-r lg:from-transparent lg:to-[#07040d]/20" />
-          <div className="absolute inset-x-5 bottom-5 rounded-2xl border border-white/10 bg-black/65 p-4 backdrop-blur-md">
-            <p className="text-[10px] font-black uppercase tracking-[.28em] text-purple-200">
-              Torre dos Rebeldes
-            </p>
-            <p className="mt-1 text-xs text-slate-300">
-              Suba. Supere. Desobedeça aos planos da Torre.
-            </p>
-          </div>
         </div>
         <div className="relative flex min-h-[520px] flex-col p-5 sm:p-8 lg:min-h-[640px] lg:p-10">
           <button
