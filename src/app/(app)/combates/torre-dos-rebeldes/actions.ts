@@ -2013,7 +2013,8 @@ export async function getTowerRunStateAction(
                       title: exploration.countermeasures?.includes("MAP")
                         ? node.title
                         : "Rota desconhecida",
-                      kind: exploration.countermeasures?.includes("MAP")
+                      kind: exploration.countermeasures?.includes("MAP") ||
+                        exploration.countermeasures?.includes("SCOUT")
                         ? node.kind
                         : "UNKNOWN",
                       visited: exploration.visited.includes(node.id),

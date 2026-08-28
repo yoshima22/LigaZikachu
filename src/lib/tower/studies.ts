@@ -35,7 +35,7 @@ export const TOWER_COMMUNITY_STUDIES = [
   {
     key: "SCOUT",
     title: "Rede de observadores",
-    effect: "Rotas bloqueadas exibem a causa do bloqueio no mapa.",
+    effect: "Rotas adjacentes indicam o tipo de sala mesmo quando o nome continua oculto.",
   },
   {
     key: "FORTUNE",
