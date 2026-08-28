@@ -466,7 +466,7 @@ export function TowerLobby() {
           </div>
         </section>
       )}
-      {data.ranking.length > 0 && (
+      {view === "LEGACY" && data.ranking.length > 0 && (
         <section className={card}>
           <p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">
             Rankings da Torre
@@ -508,7 +508,7 @@ export function TowerLobby() {
           </div>
         </section>
       )}
-      {data.controlledMascots.length > 0 && (
+      {view === "LEGACY" && data.controlledMascots.length > 0 && (
         <section className={card}>
           <p className="text-[10px] font-black uppercase tracking-widest text-red-300">
             Resgate administrativo
@@ -551,18 +551,21 @@ export function TowerLobby() {
           </div>
         </section>
       )}
+      {view === "LEGACY" && (
       <section className={card}>
         <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">
-          Preparação entre runs
+          Preparação entre runs · Estudos da comunidade
         </p>
         <h2 className="mt-1 text-lg font-black text-white">
           O conhecimento da comunidade enfraquece a Torre
         </h2>
         <p className="mt-2 text-xs leading-relaxed text-slate-400">
-          No começo, mecanismos e objetos não explicam o que fazem. Acertos
-          entram no Arquivo compartilhado. Fora da run, cada jogador pode
-          estudar uma frente por dia; com 5 contribuições, a contramedida passa
-          a valer nas próximas expedições.
+          Estas são <strong className="text-cyan-200">contramedidas coletivas</strong>, diferentes dos talentos abaixo.
+          Cada jogador pode <strong className="text-[#FFCB05]">contribuir 1 vez por dia</strong> em UMA frente
+          clicando em <em>&quot;Contribuir hoje&quot;</em>. As contribuições de todos <strong className="text-white">somam
+          no mesmo contador compartilhado</strong>: ao chegar a <strong className="text-white">5/5</strong>, a
+          contramedida é <strong className="text-emerald-300">liberada para todas as próximas expedições</strong> (de
+          qualquer jogador). Não custa nada além do estudo diário.
         </p>
         <div className="mt-4 grid gap-3 md:grid-cols-3">
           {[
@@ -639,8 +642,9 @@ export function TowerLobby() {
           </div>
         )}
       </section>
-      <TowerNarrativeAdmin initial={data.scenes} />
-      {data.controlledMascots.length > 0 && (
+      )}
+      {view === "OVERVIEW" && <TowerNarrativeAdmin initial={data.scenes} />}
+      {view === "LEGACY" && data.controlledMascots.length > 0 && (
         <section className={card}>
           <div className="flex items-center justify-between">
             <div>
@@ -688,6 +692,7 @@ export function TowerLobby() {
         </section>
       )}
 
+      {view === "LEGACY" && (
       <section className={card}>
         <div className="flex flex-wrap items-center justify-between gap-2">
           <div>
@@ -762,8 +767,9 @@ export function TowerLobby() {
           })}
         </div>
       </section>
+      )}
 
-      {data.rooms.length > 0 && (
+      {view === "ROOMS" && data.rooms.length > 0 && (
         <section className={card}>
           <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
             Salas aguardando jogadores
@@ -852,6 +858,8 @@ export function TowerLobby() {
         </section>
       )}
 
+      {view === "ROOMS" && (
+      <>
       {/* Ritmo */}
       <section className={card}>
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
@@ -1088,6 +1096,8 @@ export function TowerLobby() {
             ? "Criando…"
             : "🗼 Criar sala de expedição"}
       </button>
+      </>
+      )}
     </div>
   );
 }
