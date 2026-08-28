@@ -9,6 +9,10 @@ export function AutoRestoreSession() {
 
   useEffect(() => {
     const attempt = async () => {
+      const requestedReturnTo = new URLSearchParams(window.location.search).get("returnTo");
+      const returnTo = requestedReturnTo?.startsWith("/") && !requestedReturnTo.startsWith("//")
+        ? requestedReturnTo
+        : "/dashboard";
       const backup = localStorage.getItem(STORAGE_KEY);
       if (!backup) { setStatus("done"); return; }
 
@@ -22,7 +26,7 @@ export function AutoRestoreSession() {
         });
         const data = await res.json();
         if (data.ok) {
-          window.location.replace("/dashboard");
+          window.location.replace(returnTo);
           return;
         }
       } catch {}

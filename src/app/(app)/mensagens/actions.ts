@@ -9,9 +9,14 @@ import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot
 import { sendNotificationToUser } from "@/lib/notifications";
 import { after } from "next/server";
 
-async function requirePlayer() {
+async function requirePlayer(returnTo?: string) {
   const user = await getSessionUser();
-  if (!user) redirect("/login");
+  if (!user) {
+    const destination = returnTo?.startsWith("/") && !returnTo.startsWith("//")
+      ? `/login?returnTo=${encodeURIComponent(returnTo)}`
+      : "/login";
+    redirect(destination);
+  }
   const player = await getSessionPlayer(user.id);
   if (!player) redirect("/dashboard");
   return { id: player.id, displayName: player.displayName, userId: user.id };
@@ -67,17 +72,25 @@ async function hydrateItemAttachments<T extends ChatMessageRow>(messages: T[]): 
 }
 
 export async function getConversationAction(otherPlayerId: string) {
-  const me = await requirePlayer();
+  const safePlayerId = otherPlayerId.trim();
+  const me = await requirePlayer(`/mensagens/${encodeURIComponent(safePlayerId)}`);
 
-  const [messages, other, unread] = await Promise.all([
+  if (!safePlayerId || safePlayerId.length > 80) {
+    return { ok: false as const, error: "Conversa inválida.", retryable: false as const };
+  }
+
+  try {
+    const [newestMessages, other, unread] = await Promise.all([
     prisma.directMessage.findMany({
       where: {
         OR: [
-          { senderId: me.id, receiverId: otherPlayerId },
-          { senderId: otherPlayerId, receiverId: me.id },
+          { senderId: me.id, receiverId: safePlayerId },
+          { senderId: safePlayerId, receiverId: me.id },
         ],
       },
-      orderBy: { createdAt: "asc" },
+      // Busca a janela mais recente e só então a coloca em ordem cronológica.
+      // `asc + take` mantinha para sempre as 50 mensagens mais antigas.
+      orderBy: { createdAt: "desc" },
       take: 50,
       // sender join removido: numa conversa 1-a-1 os dois participantes são
       // conhecidos — repetir avatar (potencialmente base64) por mensagem
@@ -88,25 +101,37 @@ export async function getConversationAction(otherPlayerId: string) {
       },
     }),
     prisma.player.findUnique({
-      where: { id: otherPlayerId },
+      where: { id: safePlayerId },
       select: { id: true, displayName: true, avatarUrl: true },
     }),
     prisma.directMessage.count({
-      where: { senderId: otherPlayerId, receiverId: me.id, readAt: null },
+      where: { senderId: safePlayerId, receiverId: me.id, readAt: null },
     }),
-  ]);
+    ]);
 
-  if (!other) return { ok: false as const, error: "Jogador não encontrado." };
+    if (!other) return { ok: false as const, error: "Jogador não encontrado.", retryable: false as const };
 
-  if (unread > 0) {
-    await prisma.directMessage.updateMany({
-      where: { senderId: otherPlayerId, receiverId: me.id, readAt: null },
-      data: { readAt: new Date() },
+    if (unread > 0) {
+      await prisma.directMessage.updateMany({
+        where: { senderId: safePlayerId, receiverId: me.id, readAt: null },
+        data: { readAt: new Date() },
+      });
+      revalidateTag(`nav-${me.userId}`);
+    }
+
+    const messages = newestMessages.reverse();
+    return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages) };
+  } catch (error) {
+    console.error("[messages] failed to load conversation", {
+      otherPlayerId: safePlayerId,
+      error: error instanceof Error ? error.message : String(error),
     });
-    revalidateTag(`nav-${me.userId}`);
+    return {
+      ok: false as const,
+      error: "Não foi possível sincronizar esta conversa agora.",
+      retryable: true as const,
+    };
   }
-
-  return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages) };
 }
 
 export async function sendMessageAction(
@@ -212,13 +237,15 @@ export async function sendGeneralMessageAction(content: string, attachment?: Att
 }
 
 export async function getInboxAction() {
-  const me = await requirePlayer();
+  const me = await requirePlayer("/mensagens");
 
-  const [lastSent, lastReceived] = await Promise.all([
+  try {
+    const [lastSent, lastReceived] = await Promise.all([
     prisma.directMessage.findMany({
       where: { senderId: me.id },
       orderBy: { createdAt: "desc" },
       distinct: ["receiverId"],
+      take: 80,
       select: {
         id: true, content: true, createdAt: true, attachmentType: true,
         receiver: { select: { id: true, displayName: true, avatarUrl: true } },
@@ -228,12 +255,13 @@ export async function getInboxAction() {
       where: { receiverId: me.id },
       orderBy: { createdAt: "desc" },
       distinct: ["senderId"],
+      take: 80,
       select: {
         id: true, content: true, createdAt: true, attachmentType: true,
         sender: { select: { id: true, displayName: true, avatarUrl: true } },
       },
     }),
-  ]);
+    ]);
 
   const map = new Map<string, {
     partnerId: string; partnerName: string; partnerAvatar: string | null;
@@ -275,7 +303,13 @@ export async function getInboxAction() {
   const totalUnread = unreadCounts.reduce((s, u) => s + u._count.id, 0);
   const conversations = Array.from(map.values()).sort((a, b) => b.lastAt.getTime() - a.lastAt.getTime());
 
-  return { ok: true as const, me, conversations, totalUnread };
+    return { ok: true as const, me, conversations, totalUnread };
+  } catch (error) {
+    console.error("[messages] failed to load inbox", {
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { ok: false as const, error: "Não foi possível sincronizar suas conversas agora." };
+  }
 }
 
 /** Busca destinatarios sem exigir que ja exista uma conversa entre as contas. */
@@ -377,7 +411,8 @@ export async function getUnreadCountAction() {
 
 export async function pollNewMessagesAction(otherPlayerId: string, afterIso: string) {
   const me = await requirePlayer();
-  const after = new Date(afterIso);
+  const parsedAfter = new Date(afterIso);
+  const after = Number.isNaN(parsedAfter.getTime()) ? new Date(0) : parsedAfter;
 
   const messages = await prisma.directMessage.findMany({
     where: {
