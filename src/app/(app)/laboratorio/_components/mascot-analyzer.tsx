@@ -395,7 +395,13 @@ function GrowthHistoryPanel({
         ) : (
           <div className={`grid gap-3 ${histories.length > 1 ? "lg:grid-cols-2" : ""}`}>
             {histories.map((history, index) => (
-              <GrowthHistoryCard key={history.mascot.id} history={history} mascot={mascots.find((item) => item.id === history.mascot.id)} comparison={index > 0} />
+              <GrowthHistoryCard
+                key={history.mascot.id}
+                history={history}
+                mascot={mascots.find((item) => item.id === history.mascot.id)}
+                comparison={index > 0}
+                compact={histories.length > 1}
+              />
             ))}
           </div>
         )}
@@ -404,7 +410,14 @@ function GrowthHistoryPanel({
   );
 }
 
-function GrowthHistoryCard({ history, mascot, comparison = false }: { history: MascotGrowthHistory; mascot?: AnalyzerMascot; comparison?: boolean }) {
+function GrowthHistoryCard({
+  history, mascot, comparison = false, compact = false,
+}: {
+  history: MascotGrowthHistory;
+  mascot?: AnalyzerMascot;
+  comparison?: boolean;
+  compact?: boolean;
+}) {
   const totals = history.entries.reduce((sum, entry) => ({
     force: sum.force + entry.gained.force,
     agility: sum.agility + entry.gained.agility,
@@ -435,12 +448,12 @@ function GrowthHistoryCard({ history, mascot, comparison = false }: { history: M
             <p className="text-[8px] font-bold uppercase tracking-wider text-slate-600">pontos registrados</p>
           </div>
         </div>
-        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-2 xl:grid-cols-5">
-          {GROWTH_STATS.map(([key, label, color]) => (
-            <div key={key} className="rounded-xl border border-white/[.06] bg-slate-900/70 px-2.5 py-2.5">
-              <div className="flex items-baseline justify-between gap-2">
-                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
-                <p className={`text-base font-black tabular-nums ${color}`}>{history.mascot.current[key]}</p>
+        <div className={`mt-4 grid gap-2 ${compact ? "grid-cols-2 sm:grid-cols-3" : "grid-cols-2 sm:grid-cols-5"}`}>
+          {GROWTH_STATS.map(([key, label, color], index) => (
+            <div key={key} className={`min-w-0 rounded-xl border border-white/[.06] bg-slate-900/70 px-2.5 py-2.5 ${compact && index === GROWTH_STATS.length - 1 ? "sm:col-span-2" : ""}`}>
+              <div className="flex min-w-0 items-baseline justify-between gap-2">
+                <p className="min-w-0 truncate text-[9px] font-bold uppercase tracking-wide text-slate-500" title={label}>{label}</p>
+                <p className={`shrink-0 text-base font-black tabular-nums ${color}`}>{history.mascot.current[key]}</p>
               </div>
               <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${comparison ? "bg-violet-400" : "bg-cyan-400"}`} style={{ width: `${history.mascot.current[key] / maxCurrent * 100}%` }} /></div>
               <p className={`mt-1.5 text-right text-[9px] font-semibold ${totals[key] > 0 ? "text-emerald-400" : "text-slate-600"}`}>+{totals[key]} desde 28/08</p>
