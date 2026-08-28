@@ -39,6 +39,31 @@ export interface PlayerRankingEntry {
   defendedChallenges: number;
   badgesOwned: number;
   badgePoints: number;
+  /** Nº de eventos (torneios) da temporada em que o jogador está inscrito. */
+  eventsCount: number;
+  /** "Nível de Gameplay": índice que ordena o ranking geral (ver computeGameplayScore). */
+  gameplayScore: number;
+}
+
+/**
+ * "Nível de Gameplay" — índice que ordena o ranking geral da temporada.
+ * Recompensa VOLUME (mais jogos) com retorno decrescente (raiz), então quem joga
+ * mais tem preferência, mas nem sempre fica na frente: qualidade (winrate) e
+ * prêmios defendidos pesam bastante. Considera também participação em eventos e
+ * penaliza derrotas de forma leve.
+ */
+export function computeGameplayScore(s: {
+  matchesPlayed: number; wins: number; losses: number; defendedPrizes: number; eventsCount: number;
+}): number {
+  const games = Math.max(0, s.matchesPlayed);
+  const winratePct = games > 0 ? (s.wins / games) * 100 : 0;
+  const raw =
+      winratePct * 0.6                    // qualidade (0..60)
+    + Math.sqrt(games) * 8                // volume, com retorno decrescente
+    + Math.max(0, s.defendedPrizes) * 1.5 // prêmios defendidos
+    + Math.max(0, s.eventsCount) * 5      // participação em eventos da temporada
+    - Math.max(0, s.losses) * 1.2;        // penalidade leve por derrota
+  return Math.max(0, Math.round(raw * 10) / 10);
 }
 
 interface RankingScope {
@@ -63,6 +88,10 @@ interface RankingInput {
   bonusWeekWhere?: Prisma.TournamentWeekWhereInput;
   seedPlayers?: RankingSeedPlayer[];
   onlyPlayersWithMatches?: boolean;
+  /** Nº de eventos da temporada por jogador (para o Nível de Gameplay). */
+  eventsCountByPlayer?: Map<string, number>;
+  /** Ordena pelo Nível de Gameplay (ranking geral) em vez de pontos. */
+  sortByGameplay?: boolean;
 }
 
 export async function computeGlobalRanking(seasonId?: string): Promise<PlayerRankingEntry[]> {
@@ -108,14 +137,20 @@ export async function computeSeasonRanking(seasonId: string): Promise<PlayerRank
   for (const sp of seasonPlayers) {
     seedPlayers.set(sp.playerId, { playerId: sp.playerId, displayName: sp.player.displayName });
   }
+  // Nº de eventos (torneios) da temporada por jogador — cada inscrição aprovada
+  // é um torneio distinto (unique por tournamentId+playerId).
+  const eventsCountByPlayer = new Map<string, number>();
   for (const registration of tournamentRegistrations) {
     seedPlayers.set(registration.playerId, {
       playerId: registration.playerId,
       displayName: registration.player.displayName
     });
+    eventsCountByPlayer.set(registration.playerId, (eventsCountByPlayer.get(registration.playerId) ?? 0) + 1);
   }
 
   return computeRankingFromMatches({
+    eventsCountByPlayer,
+    sortByGameplay: true,
     matchWhere: {
       status: MatchStatus.CONFIRMED,
       tournamentWeek: { tournament: { seasonId } }
@@ -400,7 +435,9 @@ async function computeRankingFromMatches({
   badgeWhere,
   bonusWeekWhere,
   seedPlayers = [],
-  onlyPlayersWithMatches = false
+  onlyPlayersWithMatches = false,
+  eventsCountByPlayer,
+  sortByGameplay = false
 }: RankingInput): Promise<PlayerRankingEntry[]> {
   const [matches, challenges, badges, bonusWeeks] = await Promise.all([
     prisma.match.findMany({
@@ -595,18 +632,28 @@ async function computeRankingFromMatches({
   const mascotByPlayerId = new Map(equippedMascots.map((mascot) => [mascot.playerId, mascot]));
   for (const entry of entries) {
     entry.equippedMascot = mascotByPlayerId.get(entry.playerId) ?? null;
+    entry.eventsCount = eventsCountByPlayer?.get(entry.playerId) ?? (entry.matchesPlayed > 0 ? 1 : 0);
+    entry.gameplayScore = computeGameplayScore(entry);
   }
 
-  entries.sort(
-    (a, b) =>
-      b.points - a.points ||
-      b.wins - a.wins ||
-      b.defendedPrizes - a.defendedPrizes ||
-      b.successfulChallenges - a.successfulChallenges ||
-      b.defendedChallenges - a.defendedChallenges ||
-      b.gymChallenges - a.gymChallenges ||
-      a.byeCount - b.byeCount ||
-      a.displayName.localeCompare(b.displayName, "pt-BR")
+  entries.sort(sortByGameplay
+    ? (a, b) =>
+        b.gameplayScore - a.gameplayScore ||
+        b.points - a.points ||
+        b.wins - a.wins ||
+        b.defendedPrizes - a.defendedPrizes ||
+        a.losses - b.losses ||
+        a.byeCount - b.byeCount ||
+        a.displayName.localeCompare(b.displayName, "pt-BR")
+    : (a, b) =>
+        b.points - a.points ||
+        b.wins - a.wins ||
+        b.defendedPrizes - a.defendedPrizes ||
+        b.successfulChallenges - a.successfulChallenges ||
+        b.defendedChallenges - a.defendedChallenges ||
+        b.gymChallenges - a.gymChallenges ||
+        a.byeCount - b.byeCount ||
+        a.displayName.localeCompare(b.displayName, "pt-BR")
   );
 
   return attachPtcglNicks(entries.map((entry, i) => ({ ...entry, position: i + 1 })));
@@ -628,7 +675,9 @@ function emptyStats(playerId: string): RankingStats {
     failedChallenges: 0,
     defendedChallenges: 0,
     badgesOwned: 0,
-    badgePoints: 0
+    badgePoints: 0,
+    eventsCount: 0,
+    gameplayScore: 0
   };
 }
 

@@ -72,6 +72,26 @@ export default async function RankingPage({
         </form>
       </Card>
 
+      <details className="rounded-2xl border border-cyan-400/25 bg-cyan-500/5 p-4 text-sm">
+        <summary className="cursor-pointer font-bold text-cyan-200">Como funciona o “Nível de Gameplay” (ordem do ranking)</summary>
+        <div className="mt-2 space-y-2 text-xs leading-relaxed text-slate-300">
+          <p>
+            O ranking geral é ordenado pelo <strong className="text-cyan-300">Nível de Gameplay</strong> — um índice que valoriza quem joga mais, <em>mas nem sempre</em> coloca quem tem mais partidas na frente. Quem joga muito tem preferência, porém desempenho e consistência pesam bastante.
+          </p>
+          <p className="font-semibold text-slate-200">O cálculo considera:</p>
+          <ul className="ml-4 list-disc space-y-1">
+            <li><strong className="text-slate-100">Winrate</strong> (taxa de vitórias) — o fator de maior peso.</li>
+            <li><strong className="text-slate-100">Número de jogos</strong> — com retorno decrescente (raiz): jogar mais ajuda, mas cada jogo extra vale um pouco menos.</li>
+            <li><strong className="text-slate-100">Prêmios defendidos</strong> — recompensa vitórias sólidas.</li>
+            <li><strong className="text-slate-100">Eventos da temporada</strong> em que você está inscrito — recompensa a participação.</li>
+            <li><strong className="text-slate-100">Derrotas</strong> — penalidade leve.</li>
+          </ul>
+          <p className="text-slate-400">
+            Assim, um jogador com muitas partidas e winrate baixo não passa automaticamente à frente de quem tem menos jogos porém desempenho melhor. A coluna <strong className="text-cyan-300">Nível</strong> mostra esse índice; <strong>Pts</strong> continua sendo os pontos acumulados de torneio.
+          </p>
+        </div>
+      </details>
+
       {ranking.length === 0 ? (
         <Card>
           <EmptyState
