@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useTransition, useMemo, useRef } from "react";
-import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield, History, GitCompareArrows } from "lucide-react";
+import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield, History, GitCompareArrows, CalendarClock, DatabaseZap } from "lucide-react";
 import { analyzeMascotAction, getStoredAnalysisAction, getMascotGrowthHistoryAction } from "../actions";
 import type { MascotGrowthHistory } from "../actions";
 import { RATING_STYLE, type MascotAnalysis, type MascotRating } from "@/lib/mascot-analysis";
@@ -348,39 +348,63 @@ function GrowthHistoryPanel({
   onRefresh: () => void;
 }) {
   return (
-    <div className="space-y-3 rounded-2xl border border-cyan-500/25 bg-cyan-950/10 p-4">
-      <div className="rounded-xl border border-amber-500/35 bg-amber-500/10 p-3 text-xs leading-relaxed text-amber-100">
-        <p className="font-bold text-amber-200">Histórico em implantação</p>
-        <p className="mt-1">O registro real começou em <strong>28/08/2026</strong>. Níveis e alterações anteriores a essa data não aparecem e não são reconstruídos como se fossem dados reais.</p>
-      </div>
-      <div className="flex flex-wrap items-end gap-2">
-        <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">
-          Comparar lado a lado com
-          <select value={compareId} onChange={(event) => onCompare(event.target.value)} disabled={pending}
-            className="mt-1 w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm font-normal normal-case tracking-normal text-slate-200">
-            <option value="">Nenhum mascote</option>
-            {mascots.filter((mascot) => mascot.id !== primaryId).map((mascot) => (
-              <option key={mascot.id} value={mascot.id}>{mascot.nickname || mascot.name} · Nv.{mascot.level}</option>
-            ))}
-          </select>
-        </label>
-        <button type="button" onClick={onRefresh} disabled={pending}
-          className="flex items-center gap-1.5 rounded-xl border border-border px-3 py-2 text-xs font-semibold text-slate-300 hover:border-cyan-500/40 disabled:opacity-50">
-          {pending ? <Loader2 size={13} className="animate-spin" /> : <GitCompareArrows size={13} />} Atualizar
-        </button>
-      </div>
-      {pending && histories.length === 0 ? (
-        <div className="flex items-center justify-center gap-2 py-8 text-sm text-slate-400"><Loader2 size={16} className="animate-spin" /> Carregando somente os mascotes escolhidos...</div>
-      ) : (
-        <div className={`grid gap-3 ${histories.length > 1 ? "lg:grid-cols-2" : ""}`}>
-          {histories.map((history) => <GrowthHistoryCard key={history.mascot.id} history={history} />)}
+    <div className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-[linear-gradient(145deg,rgba(8,47,73,.24),rgba(2,6,23,.72)_45%)] shadow-[0_18px_55px_rgba(8,145,178,.08)]">
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-cyan-400/15 px-4 py-3.5">
+        <div className="flex items-center gap-3">
+          <span className="grid size-10 place-items-center rounded-xl border border-cyan-400/25 bg-cyan-400/10 text-cyan-300 shadow-inner">
+            <History size={19} />
+          </span>
+          <div>
+            <p className="font-bold text-white">Linha de crescimento</p>
+            <p className="text-[11px] text-slate-400">Acompanhe e compare cada evolução registrada</p>
+          </div>
         </div>
-      )}
+        <span className="inline-flex items-center gap-1.5 rounded-full border border-emerald-400/20 bg-emerald-400/10 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider text-emerald-300">
+          <DatabaseZap size={11} /> Sob demanda
+        </span>
+      </div>
+      <div className="space-y-4 p-4">
+        <div className="flex gap-3 rounded-xl border border-amber-400/25 bg-gradient-to-r from-amber-400/10 to-orange-400/[.04] p-3 text-xs leading-relaxed text-amber-50">
+          <CalendarClock size={18} className="mt-0.5 shrink-0 text-amber-300" />
+          <div>
+            <p className="font-bold text-amber-200">Histórico em implantação desde 28/08/2026</p>
+            <p className="mt-0.5 text-amber-100/75">Somente mudanças reais posteriores à implantação são exibidas. O sistema não inventa nem reconstrói níveis anteriores.</p>
+          </div>
+        </div>
+        <div className="flex flex-wrap items-end gap-2 rounded-xl border border-white/[.06] bg-slate-950/35 p-3">
+          <label className="min-w-0 flex-1 text-[10px] font-bold uppercase tracking-[.14em] text-slate-500">
+            Comparar com outro mascote
+            <select value={compareId} onChange={(event) => onCompare(event.target.value)} disabled={pending}
+              className="mt-1.5 w-full rounded-xl border border-slate-700/80 bg-slate-950 px-3 py-2.5 text-sm font-medium normal-case tracking-normal text-slate-100 outline-none transition focus:border-cyan-400/60 focus:ring-2 focus:ring-cyan-400/10">
+              <option value="">Visualizar apenas este mascote</option>
+              {mascots.filter((mascot) => mascot.id !== primaryId).map((mascot) => (
+                <option key={mascot.id} value={mascot.id}>{mascot.nickname || mascot.name} · Nv.{mascot.level}</option>
+              ))}
+            </select>
+          </label>
+          <button type="button" onClick={onRefresh} disabled={pending}
+            className="flex min-h-10 items-center gap-1.5 rounded-xl border border-slate-700/80 bg-slate-900/70 px-3 py-2 text-xs font-semibold text-slate-300 transition hover:border-cyan-400/40 hover:bg-cyan-400/5 hover:text-cyan-200 disabled:opacity-50">
+            {pending ? <Loader2 size={13} className="animate-spin" /> : <GitCompareArrows size={13} />} Atualizar dados
+          </button>
+        </div>
+        {pending && histories.length === 0 ? (
+          <div className="flex min-h-48 flex-col items-center justify-center gap-3 rounded-2xl border border-dashed border-cyan-400/20 bg-slate-950/30 text-sm text-slate-400">
+            <Loader2 size={24} className="animate-spin text-cyan-300" />
+            Carregando somente os mascotes escolhidos...
+          </div>
+        ) : (
+          <div className={`grid gap-3 ${histories.length > 1 ? "lg:grid-cols-2" : ""}`}>
+            {histories.map((history, index) => (
+              <GrowthHistoryCard key={history.mascot.id} history={history} mascot={mascots.find((item) => item.id === history.mascot.id)} comparison={index > 0} />
+            ))}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
 
-function GrowthHistoryCard({ history }: { history: MascotGrowthHistory }) {
+function GrowthHistoryCard({ history, mascot, comparison = false }: { history: MascotGrowthHistory; mascot?: AnalyzerMascot; comparison?: boolean }) {
   const totals = history.entries.reduce((sum, entry) => ({
     force: sum.force + entry.gained.force,
     agility: sum.agility + entry.gained.agility,
@@ -389,29 +413,48 @@ function GrowthHistoryCard({ history }: { history: MascotGrowthHistory }) {
     vitality: sum.vitality + entry.gained.vitality,
   }), { force: 0, agility: 0, charisma: 0, instinct: 0, vitality: 0 });
   const maxCurrent = Math.max(...Object.values(history.mascot.current), 1);
+  const totalGained = Object.values(totals).reduce((a, b) => a + b, 0);
   return (
-    <div className="min-w-0 rounded-2xl border border-border bg-slate-950/55 p-3">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="font-bold text-white">{history.mascot.name}</p>
-          <p className="text-[10px] text-slate-500">Nv.{history.mascot.level} · {history.mascot.personality} · {history.entries.length} registro(s)</p>
-        </div>
-        <span className="rounded-lg bg-cyan-500/10 px-2 py-1 text-[10px] font-bold text-cyan-300">+{Object.values(totals).reduce((a, b) => a + b, 0)} pts registrados</span>
-      </div>
-      <div className="mt-3 grid grid-cols-5 gap-1">
-        {GROWTH_STATS.map(([key, label, color]) => (
-          <div key={key} className="rounded-lg border border-white/5 bg-slate-900/70 p-1.5 text-center">
-            <p className="truncate text-[8px] uppercase text-slate-600">{label}</p>
-            <p className={`text-sm font-bold ${color}`}>{history.mascot.current[key]}</p>
-            <div className="mt-1 h-1 overflow-hidden rounded bg-slate-800"><div className="h-full bg-current opacity-70" style={{ width: `${history.mascot.current[key] / maxCurrent * 100}%` }} /></div>
-            <p className="mt-1 text-[8px] text-emerald-400">+{totals[key]}</p>
+    <div className={`min-w-0 overflow-hidden rounded-2xl border bg-slate-950/60 shadow-lg ${comparison ? "border-violet-400/25 shadow-violet-950/10" : "border-cyan-400/25 shadow-cyan-950/10"}`}>
+      <div className={`h-1 w-full ${comparison ? "bg-gradient-to-r from-violet-500 to-fuchsia-400" : "bg-gradient-to-r from-cyan-500 to-emerald-400"}`} />
+      <div className="p-3.5">
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-3">
+            <span className={`grid size-14 shrink-0 place-items-center rounded-2xl border ${comparison ? "border-violet-400/20 bg-violet-400/10" : "border-cyan-400/20 bg-cyan-400/10"}`}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={mascot?.spriteUrl || getStaticSpriteUrl(history.mascot.pokemonId)} alt="" className="size-11 object-contain [image-rendering:auto]" />
+            </span>
+            <div className="min-w-0">
+              <span className={`text-[9px] font-bold uppercase tracking-[.15em] ${comparison ? "text-violet-300" : "text-cyan-300"}`}>{comparison ? "Comparativo" : "Mascote analisado"}</span>
+              <p className="truncate text-base font-bold text-white">{history.mascot.name}</p>
+              <p className="text-[10px] text-slate-500">Nível {history.mascot.level} · {history.mascot.personality} · {history.entries.length} registro(s)</p>
+            </div>
           </div>
-        ))}
-      </div>
-      {history.entries.length === 0 ? (
-        <p className="mt-3 rounded-xl border border-dashed border-border p-3 text-center text-xs text-slate-500">Ainda não houve subida de nível registrada depois de 28/08/2026.</p>
-      ) : (
-        <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
+          <div className="shrink-0 text-right">
+            <p className={`text-lg font-black tabular-nums ${totalGained > 0 ? "text-emerald-300" : "text-slate-400"}`}>+{totalGained}</p>
+            <p className="text-[8px] font-bold uppercase tracking-wider text-slate-600">pontos registrados</p>
+          </div>
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-5 lg:grid-cols-2 xl:grid-cols-5">
+          {GROWTH_STATS.map(([key, label, color]) => (
+            <div key={key} className="rounded-xl border border-white/[.06] bg-slate-900/70 px-2.5 py-2.5">
+              <div className="flex items-baseline justify-between gap-2">
+                <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">{label}</p>
+                <p className={`text-base font-black tabular-nums ${color}`}>{history.mascot.current[key]}</p>
+              </div>
+              <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={`h-full rounded-full ${comparison ? "bg-violet-400" : "bg-cyan-400"}`} style={{ width: `${history.mascot.current[key] / maxCurrent * 100}%` }} /></div>
+              <p className={`mt-1.5 text-right text-[9px] font-semibold ${totals[key] > 0 ? "text-emerald-400" : "text-slate-600"}`}>+{totals[key]} desde 28/08</p>
+            </div>
+          ))}
+        </div>
+        {history.entries.length === 0 ? (
+          <div className="mt-3 flex min-h-24 flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/70 bg-slate-900/25 px-4 text-center">
+            <TrendingUp size={18} className="mb-2 text-slate-600" />
+            <p className="text-xs font-semibold text-slate-400">Aguardando a primeira subida registrada</p>
+            <p className="mt-1 max-w-xs text-[10px] leading-relaxed text-slate-600">Quando este mascote subir de nível, os ganhos aparecerão aqui automaticamente.</p>
+          </div>
+        ) : (
+          <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
           <table className="w-full text-[10px]">
             <thead className="sticky top-0 bg-slate-900 text-slate-500"><tr><th className="px-2 py-2 text-left">Nível</th>{GROWTH_STATS.map(([key, label]) => <th key={key} className="px-1 py-2 text-center">{label.slice(0, 3)}</th>)}<th className="px-2 py-2 text-right">Origem</th></tr></thead>
             <tbody className="divide-y divide-white/5">
@@ -424,9 +467,10 @@ function GrowthHistoryCard({ history }: { history: MascotGrowthHistory }) {
               ))}
             </tbody>
           </table>
-        </div>
-      )}
-      {history.trackedFrom && <p className="mt-2 text-[9px] text-slate-600">Primeiro registro real: {new Date(history.trackedFrom).toLocaleString("pt-BR")}</p>}
+          </div>
+        )}
+        {history.trackedFrom && <p className="mt-2 text-[9px] text-slate-600">Primeiro registro real: {new Date(history.trackedFrom).toLocaleString("pt-BR")}</p>}
+      </div>
     </div>
   );
 }
