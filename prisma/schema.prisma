@@ -2388,7 +2388,7 @@ model Mascot {
   // Timestamps
   hatchedAt                 DateTime                  @default(now())
   // Preserva a procedencia depois que o registro do ovo e consumido ao chocar.
-  hatchedFromEggType        EggType?
+  hatchedFromEggType        EggType?                  @default(RARE)
   hatchedFromEggOrigin      String?
   // Especie exata que nasceu, preservada mesmo depois de evolucoes.
   hatchedPokemonId          Int?

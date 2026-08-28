@@ -120,7 +120,7 @@ export async function getLabDataAction() {
         id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
         isFavorite: true, arenaState: true, bazarListed: true,
         operationsLocked: true, primordialBoundPlayerId: true,
-        analyzedAt: true, ivRating: true, ivScore: true, analysisJson: true, performanceTag: true,
+        analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -145,8 +145,6 @@ export async function getLabDataAction() {
     const inWeeklyLeague = weeklyLeagueLockedIds.has(m.id);
     const recyclable = !m.operationsLocked && !m.primordialBoundPlayerId && !m.isFavorite && !m.bazarListed && !inWeeklyLeague && (!m.arenaState || m.arenaState === "FREE");
 
-    const savedAnalysis = m.analysisJson as { analysisVersion?: number } | null;
-    const currentAnalysis = savedAnalysis?.analysisVersion === MASCOT_ANALYSIS_VERSION;
     return {
       id: m.id,
       pokemonId: m.pokemonId,
@@ -163,8 +161,11 @@ export async function getLabDataAction() {
       bazarListed: m.bazarListed ?? false,
       operationsLocked: m.operationsLocked ?? false,
       analyzed: !!m.analyzedAt,
-      ivRating: currentAnalysis ? m.ivRating : null,
-      ivScore: currentAnalysis ? m.ivScore : null,
+      // O selo permanente continua visível mesmo quando a análise foi criada
+      // numa versão anterior da fórmula. A versão só controla se o snapshot
+      // detalhado pode ser reutilizado, não se o ranking salvo deve desaparecer.
+      ivRating: m.ivRating,
+      ivScore: m.ivScore,
       performanceTag: m.performanceTag,
     };
   });
