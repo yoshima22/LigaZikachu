@@ -547,15 +547,25 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
   }
 
   try {
-    allMascots = await prisma.mascot.findMany({
+    const rows = await prisma.mascot.findMany({
       where: { playerId },
       select: {
         id: true, pokemonId: true, nickname: true, level: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+        megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
       },
       orderBy: { level: "desc" },
     });
+    const { isMegaEvolvedMascot } = await import("@/lib/battle-divisions");
+    allMascots = rows.map((m) => ({ ...m, isMega: isMegaEvolvedMascot(m) }));
   } catch { /* should always work */ }
+
+  // Divisão atual do modo (LIMITED/UNLIMITED) para o client validar/avisar.
+  let weeklyDivision: "LIMITED" | "UNLIMITED" = "LIMITED";
+  try {
+    const { getBattleModeDivision } = await import("@/lib/battle-division-settings");
+    weeklyDivision = await getBattleModeDivision("WEEKLY_LEAGUE");
+  } catch { /* keep default */ }
 
   return {
     player: { id: playerId, displayName, walletBalance, isAdmin: admin },
@@ -566,6 +576,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     todayMatches,
     previousMatches,
     availableMascots: allMascots,
+    weeklyDivision,
     leagueInventory,
     selectedBattleItems,
     orderSabotage,

@@ -89,6 +89,7 @@ type PageData = {
   todayMatches: any[];
   previousMatches?: any[];
   availableMascots: any[];
+  weeklyDivision?: "LIMITED" | "UNLIMITED";
   leagueInventory: { type: string; quantity: number }[];
   selectedBattleItems: { battleSlot: number; effectType: string }[];
   orderSabotage: {
@@ -156,7 +157,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
       )}
       <div className="flex items-center justify-between">
         <div>
-          <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1><BattleDivisionControl mode="WEEKLY_LEAGUE" isAdmin={data.player.isAdmin} initialDivision="UNLIMITED"/></div>
+          <div className="flex flex-wrap items-center gap-2"><h1 className="text-lg font-bold text-slate-100">🏆 Liga Semanal dos Mascotes</h1><BattleDivisionControl mode="WEEKLY_LEAGUE" isAdmin={data.player.isAdmin} initialDivision={data.weeklyDivision ?? "UNLIMITED"}/></div>
           <p className="text-xs text-slate-400">Liga automática de segunda a sexta · aberta a todos os jogadores</p>
           {!data.player.isAdmin && <span className="mt-1 inline-flex rounded-full border border-green-500/25 bg-green-500/10 px-2 py-0.5 text-[9px] font-bold uppercase tracking-wide text-green-300">Visão do jogador</span>}
         </div>
@@ -1074,6 +1075,22 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         const isCleared = team?.source === "CLEARED" || (team && mascotIds.length === 0);
         const hasTeam = team && mascotIds.length > 0;
         const teamRoles = team?.rolesJson as Record<string, string> | undefined;
+        // Aviso: em divisão Limitada, megas além do 2º ficam inválidos (serão
+        // removidos antes do combate). Em Ilimitado, nada é marcado.
+        const invalidInfo = new Map<string, string>();
+        if (data.weeklyDivision === "LIMITED") {
+          let megaCount = 0;
+          for (const id of mascotIds) {
+            const mm = data.availableMascots.find((x: any) => x.id === id) as any;
+            if (!mm?.isMega) continue;
+            if (megaCount >= 2) invalidInfo.set(id, "Mega excedente: a divisão Limitada permite no máximo 2 megas na equipe.");
+            else megaCount++;
+          }
+        }
+        const invalidNames = mascotIds.filter((id: string) => invalidInfo.has(id)).map((id: string) => {
+          const mm = data.availableMascots.find((x: any) => x.id === id) as any;
+          return mm?.nickname ?? (mm ? getPokemonName(mm.pokemonId) : "mascote");
+        });
         return (
           <React.Fragment key={slot}>
           <div className="rounded-2xl border border-border bg-slate-900/60 p-4 space-y-3">
@@ -1120,6 +1137,12 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 )}
               </div>
             </div>
+            {hasTeam && invalidNames.length > 0 && (
+              <div className="rounded-xl border border-red-400/40 bg-red-500/10 p-2.5 text-[11px] leading-relaxed text-red-200">
+                <strong>⚠ Seu time tem elementos inválidos:</strong> {invalidNames.join(", ")} — mega excedente (a divisão Limitada permite no máximo 2 megas).
+                <span className="mt-1 block text-red-300/80">Caso não altere, o mega excedente será removido antes do combate. O sistema tenta preencher a vaga com outro mascote seu; se você não tiver mascotes suficientes, o time entra incompleto.</span>
+              </div>
+            )}
             {hasTeam && (
               <div className="grid grid-cols-2 gap-2 sm:grid-cols-6">
                 {mascotIds.map((id: string, i: number) => {
@@ -1129,28 +1152,37 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   const role = teamRoles?.[id] || recommendCombatRole(m as any);
                   const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
                   const isMoving = movingMascot?.slot === slot && movingMascot.index === i;
+                  const invalidReason = invalidInfo.get(id);
                   return (
                     <button
                       key={id}
                       type="button"
                       disabled={pending}
                       onClick={() => handleMascotPositionClick(slot, i, mascotName)}
-                      title={isMoving ? "Clique novamente para cancelar" : "Clique para escolher este mascote para reposicionar"}
+                      title={invalidReason ? invalidReason : isMoving ? "Clique novamente para cancelar" : "Clique para escolher este mascote para reposicionar"}
                       className={`relative rounded-xl border p-2 flex flex-col items-center gap-0.5 text-left transition-all disabled:opacity-50 ${
-                        isMoving
-                          ? "border-yellow-300 bg-yellow-400/20 shadow-[0_0_18px_rgba(255,203,5,0.35)]"
-                          : "border-[#FFCB05]/20 bg-[#FFCB05]/5 hover:border-yellow-400/60 hover:bg-yellow-400/10"
+                        invalidReason
+                          ? "border-red-400/60 bg-red-500/10 ring-1 ring-red-400/40"
+                          : isMoving
+                            ? "border-yellow-300 bg-yellow-400/20 shadow-[0_0_18px_rgba(255,203,5,0.35)]"
+                            : "border-[#FFCB05]/20 bg-[#FFCB05]/5 hover:border-yellow-400/60 hover:bg-yellow-400/10"
                       }`}
                     >
                       <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 sm:h-9 sm:w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                      <p className="text-[11px] sm:text-[8px] text-slate-300 truncate w-full text-center">{mascotName}</p>
+                      <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className={`h-12 w-12 sm:h-9 sm:w-9 object-contain ${invalidReason ? "opacity-70 grayscale" : ""}`} style={{ imageRendering: "pixelated" }} />
+                      <p className={`text-[11px] sm:text-[8px] truncate w-full text-center ${invalidReason ? "font-bold text-red-200" : "text-slate-300"}`}>{mascotName}</p>
                       <p className="text-[10px] sm:text-[8px] text-slate-500">Nv.{m.level}</p>
-                      <div className="flex flex-wrap justify-center gap-0.5">
-                        {types.map(t => <span key={t} className={`rounded-full px-1.5 py-px text-[9px] sm:text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
-                      </div>
-                      <p className={`text-[11px] sm:text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
+                      {invalidReason ? (
+                        <p className="text-[9px] sm:text-[7px] font-semibold text-red-300">Mega excedente · será removido</p>
+                      ) : (
+                        <>
+                          <div className="flex flex-wrap justify-center gap-0.5">
+                            {types.map(t => <span key={t} className={`rounded-full px-1.5 py-px text-[9px] sm:text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
+                          </div>
+                          <p className={`text-[11px] sm:text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
+                        </>
+                      )}
                     </button>
                   );
                 })}
