@@ -125,20 +125,121 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
         </div>
       </div>
 
-      {run.status === "LOBBY" && (
-        <div className="mt-4 space-y-4">
-          <div className="rounded-2xl border border-purple-400/25 bg-purple-950/20 p-4"><div className="flex flex-wrap items-center justify-between gap-2"><div><p className="text-[10px] font-black uppercase tracking-widest text-purple-300">Sala {state.lobby.code}</p><h2 className="text-lg font-black text-white">Preparação da equipe</h2></div><span className="rounded-full border border-purple-300/30 px-3 py-1 text-[10px] font-black text-purple-200">{run.pace === "ONLINE" ? "ONLINE · 5 MINUTOS" : "LENTO · 4 HORAS"}</span></div><div className="mt-4 grid gap-3 sm:grid-cols-3">{state.members.map(member=><article key={member.userId} className={`rounded-xl border p-3 ${state.lobby.ready[member.userId]?"border-emerald-400/45 bg-emerald-400/10":"border-slate-700 bg-black/25"}`}><div className="flex items-start justify-between gap-2"><div><b className="text-sm text-white">{member.name}</b><p className="text-[10px] font-bold text-cyan-300">{member.expeditionRole}</p></div><span className={`rounded-full px-2 py-1 text-[9px] font-black ${state.lobby.ready[member.userId]?"bg-emerald-400 text-emerald-950":"bg-slate-800 text-slate-400"}`}>{state.lobby.ready[member.userId]?"✓ PRONTO":"PREPARANDO"}</span></div>{member.mascots.map(mascot=><div key={mascot.id} className="mt-2 flex items-center gap-2 rounded-lg bg-slate-900/80 p-2">{/* eslint-disable-next-line @next/next/no-img-element */}<img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-10 w-10 object-contain"/><span className="min-w-0 text-[10px] text-slate-400"><b className="block truncate text-white">{mascot.name} · Nv.{mascot.level}</b>{getCombatRoleLabel(mascot.stance)}</span></div>)}{state.lobby.hostId===state.mine.userId&&member.userId!==state.mine.userId&&<button onClick={()=>start(async()=>{const result=await removeTowerLobbyMemberAction(runId,member.userId);if("error"in result)toast.error(result.error);else{toast.success("Jogador removido da sala.");void refresh()}})} className="mt-3 w-full rounded-lg border border-red-400/30 py-1.5 text-[10px] font-black text-red-300">Remover da sala</button>}</article>)}</div></div>
-          <label className="block rounded-xl border border-purple-400/25 bg-purple-950/15 p-3 text-xs text-purple-100"><span className="mb-2 block font-black">Sua classe nesta run</span><select disabled={pending || state.lobby.ready[state.mine.userId]} value={state.members.find((member)=>member.userId===state.mine.userId)?.expeditionRole} onChange={(event)=>start(async()=>{const res=await updateTowerLobbyClassAction(runId,event.target.value as never);if("error" in res)toast.error(res.error);else{toast.success("Classe e posturas compatíveis atualizadas.");void refresh()}})} className="w-full rounded-lg border border-purple-300/30 bg-slate-950 p-2 text-white disabled:opacity-50">{state.roles.map(role=><option key={role.key} value={role.key}>{role.label}</option>)}</select><small className="mt-2 block text-slate-400">Cancele o Pronto para alterar. Posturas incompatíveis são ajustadas automaticamente.</small></label>
-          <div className="rounded-xl border border-cyan-400/25 bg-cyan-950/10 p-3"><button disabled={state.lobby.ready[state.mine.userId]} onClick={()=>{const current=state.members.find(member=>member.userId===state.mine.userId)?.mascots.map(mascot=>mascot.id)??[];setLobbyPicks(current);setEditingTeam(value=>!value)}} className="w-full rounded-lg border border-cyan-300/30 py-2 text-xs font-black text-cyan-200 disabled:opacity-40">{editingTeam?"Fechar seleção":"Atualizar meus mascotes e posturas"}</button>{editingTeam&&<div className="mt-3"><input value={lobbySearch} onChange={event=>setLobbySearch(event.target.value)} placeholder="Buscar mascote..." className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white"/><div className="mt-2 grid max-h-64 gap-2 overflow-y-auto sm:grid-cols-2 lg:grid-cols-3">{state.lobbyMascots.filter(mascot=>mascot.name.toLowerCase().includes(lobbySearch.toLowerCase())).map(mascot=>{const selected=lobbyPicks.includes(mascot.id);return <button key={mascot.id} onClick={()=>setLobbyPicks(current=>selected?current.filter(id=>id!==mascot.id):current.length<2?[...current,mascot.id]:current)} className={`flex items-center gap-2 rounded-lg border p-2 text-left ${selected?"border-[#FFCB05] bg-[#FFCB05]/10":"border-slate-700"}`}>{/* eslint-disable-next-line @next/next/no-img-element */}<img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-10 w-10 object-contain"/><span className="text-[10px] text-white">{mascot.name}<small className="block text-slate-500">Nv.{mascot.level}</small></span></button>})}</div><button disabled={pending||lobbyPicks.length!==2} onClick={()=>start(async()=>{const result=await updateTowerLobbyMascotsAction(runId,lobbyPicks);if("error"in result)toast.error(result.error);else{toast.success("Equipe atualizada para todos na sala.");setEditingTeam(false);void refresh()}})} className="mt-3 w-full rounded-lg bg-cyan-300 py-2 text-xs font-black text-cyan-950 disabled:opacity-40">Salvar dois mascotes</button></div>}</div>
-          <div className="grid gap-2 sm:grid-cols-2">{state.members.find(member=>member.userId===state.mine.userId)?.mascots.map(mascot=><label key={mascot.id} className="rounded-xl border border-slate-700 bg-black/20 p-3 text-xs text-white"><b>{mascot.name}</b><select disabled={pending||state.lobby.ready[state.mine.userId]} value={mascot.stance} onChange={event=>start(async()=>{const result=await updateTowerLobbyStanceAction(runId,mascot.id,event.target.value);if("error"in result)toast.error(result.error);else void refresh()})} className="mt-2 w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs">{mascot.allowedStances.map(stance=><option key={stance} value={stance}>{getCombatRoleLabel(stance)}</option>)}</select></label>)}</div>
-          <button type="button" disabled={pending} onClick={() => start(async()=>{const next=!state.lobby.ready[state.mine.userId];const res=await setTowerReadyAction(runId,next);if("error" in res)toast.error(res.error);else void refresh()})} className="w-full rounded-xl border border-emerald-400/40 bg-emerald-400/10 py-2.5 text-sm font-black text-emerald-200 disabled:opacity-40">{state.lobby.ready[state.mine.userId]?"Cancelar pronto":"✓ Estou pronto"}</button>
-          {state.lobby.hostId===state.mine.userId&&<button type="button" disabled={pending || !state.members.every(m=>state.lobby.ready[m.userId])} onClick={() => start(async () => {
-            const res = await startTowerExpeditionAction(runId);
-            if ("error" in res) { toast.error(res.error); return; }
-            toast.success("Expedição iniciada!"); void refresh();
-          })} className="w-full rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">🗼 Iniciar — todos confirmaram</button>}
-        </div>
-      )}
+      {run.status === "LOBBY" && (() => {
+        const me = state.members.find((member) => member.userId === state.mine.userId);
+        const amHost = state.lobby.hostId === state.mine.userId;
+        const iReady = Boolean(state.lobby.ready[state.mine.userId]);
+        const allReady = state.members.every((member) => state.lobby.ready[member.userId]);
+        const roleLabel = (key: string) => state.roles.find((role) => role.key === key)?.label ?? key;
+        return (
+          <div className="mt-4 space-y-4">
+            <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-purple-400/25 bg-purple-950/20 px-4 py-3">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-widest text-purple-300">Sala {state.lobby.code}</p>
+                <h2 className="text-base font-black text-white">Preparação da equipe</h2>
+              </div>
+              <span className="rounded-full border border-purple-300/30 px-3 py-1 text-[10px] font-black text-purple-200">{run.pace === "ONLINE" ? "ONLINE · 5 MIN" : "LENTO · 4 H"}</span>
+            </div>
+
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
+              {/* Equipe na sala */}
+              <div className="space-y-2">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-400">Equipe na sala · {state.members.length}/3</p>
+                {state.members.map((member) => {
+                  const mReady = Boolean(state.lobby.ready[member.userId]);
+                  return (
+                    <article key={member.userId} className={`rounded-xl border p-2.5 ${mReady ? "border-emerald-400/45 bg-emerald-400/10" : "border-slate-700 bg-black/25"}`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <div className="min-w-0">
+                          <b className="text-sm text-white">{member.name}{member.userId === state.mine.userId && <span className="ml-1 text-[9px] text-cyan-300">(você)</span>}{state.lobby.hostId === member.userId && <span className="ml-1 text-[8px] font-black uppercase text-[#FFCB05]">dono</span>}</b>
+                          <p className="text-[10px] font-bold text-cyan-300">{roleLabel(member.expeditionRole)}</p>
+                        </div>
+                        <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${mReady ? "bg-emerald-400 text-emerald-950" : "bg-slate-800 text-slate-400"}`}>{mReady ? "✓ PRONTO" : "PREPARANDO"}</span>
+                      </div>
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        {member.mascots.map((mascot) => (
+                          <span key={mascot.id} title={`${mascot.name} · Nv.${mascot.level} · ${getCombatRoleLabel(mascot.stance)}`} className="inline-flex items-center gap-1 rounded-md border border-slate-700 bg-slate-900/70 px-1.5 py-0.5 text-[9px] text-slate-300">
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-6 w-6 object-contain [image-rendering:pixelated]" />
+                            <span className="max-w-24 truncate"><b className="text-white">{mascot.name}</b> · {getCombatRoleLabel(mascot.stance)}</span>
+                          </span>
+                        ))}
+                      </div>
+                      {amHost && member.userId !== state.mine.userId && (
+                        <button onClick={() => start(async () => { const result = await removeTowerLobbyMemberAction(runId, member.userId); if ("error" in result) toast.error(result.error); else { toast.success("Jogador removido da sala."); void refresh(); } })} className="mt-2 rounded-lg border border-red-400/30 px-2 py-1 text-[9px] font-black text-red-300 hover:bg-red-500/10">Expulsar</button>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+
+              {/* Minha preparação */}
+              <div className="space-y-3 rounded-xl border border-cyan-400/20 bg-cyan-950/10 p-3 sm:p-4">
+                <div className="flex items-center justify-between gap-2">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Minha preparação</p>
+                  {iReady && <span className="text-[9px] font-black text-emerald-300">Travado no Pronto — cancele para editar</span>}
+                </div>
+
+                {/* Classe + trocar mascotes lado a lado */}
+                <div className="grid gap-2 sm:grid-cols-2">
+                  <label className="text-[10px] text-slate-400">
+                    <span className="mb-1 block font-black uppercase tracking-wider text-slate-300">Classe</span>
+                    <select disabled={pending || iReady} value={me?.expeditionRole} onChange={(event) => start(async () => { const res = await updateTowerLobbyClassAction(runId, event.target.value as never); if ("error" in res) toast.error(res.error); else { toast.success("Classe atualizada."); void refresh(); } })} className="w-full rounded-lg border border-purple-300/30 bg-slate-950 p-2 text-xs text-white disabled:opacity-50">
+                      {state.roles.map((role) => <option key={role.key} value={role.key}>{role.label}</option>)}
+                    </select>
+                  </label>
+                  <div className="text-[10px] text-slate-400">
+                    <span className="mb-1 block font-black uppercase tracking-wider text-slate-300">Mascotes</span>
+                    <button disabled={iReady} onClick={() => { setLobbyPicks(me?.mascots.map((mascot) => mascot.id) ?? []); setEditingTeam((value) => !value); }} className="w-full rounded-lg border border-cyan-300/30 bg-cyan-300/5 p-2 text-xs font-black text-cyan-200 disabled:opacity-40">{editingTeam ? "Fechar troca" : "Trocar meus 2 mascotes"}</button>
+                  </div>
+                </div>
+
+                {/* Picker de mascotes (só ao trocar) */}
+                {editingTeam && (
+                  <div className="rounded-lg border border-slate-800 bg-black/30 p-2">
+                    <input value={lobbySearch} onChange={(event) => setLobbySearch(event.target.value)} placeholder="Buscar mascote..." className="w-full rounded-lg border border-slate-700 bg-slate-950 p-2 text-xs text-white" />
+                    <div className="mt-2 grid max-h-56 gap-1.5 overflow-y-auto sm:grid-cols-2">
+                      {state.lobbyMascots.filter((mascot) => mascot.name.toLowerCase().includes(lobbySearch.toLowerCase())).map((mascot) => {
+                        const selected = lobbyPicks.includes(mascot.id);
+                        return (
+                          <button key={mascot.id} onClick={() => setLobbyPicks((current) => selected ? current.filter((id) => id !== mascot.id) : current.length < 2 ? [...current, mascot.id] : current)} className={`flex items-center gap-2 rounded-lg border p-1.5 text-left ${selected ? "border-[#FFCB05] bg-[#FFCB05]/10" : "border-slate-700 hover:border-slate-500"}`}>
+                            {/* eslint-disable-next-line @next/next/no-img-element */}
+                            <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain [image-rendering:pixelated]" />
+                            <span className="min-w-0 text-[10px] text-white"><b className="block truncate">{mascot.name}</b><small className="text-slate-500">Nv.{mascot.level}</small></span>
+                          </button>
+                        );
+                      })}
+                    </div>
+                    <button disabled={pending || lobbyPicks.length !== 2} onClick={() => start(async () => { const result = await updateTowerLobbyMascotsAction(runId, lobbyPicks); if ("error" in result) toast.error(result.error); else { toast.success("Equipe atualizada."); setEditingTeam(false); void refresh(); } })} className="mt-2 w-full rounded-lg bg-cyan-300 py-1.5 text-xs font-black text-cyan-950 disabled:opacity-40">Salvar ({lobbyPicks.length}/2)</button>
+                  </div>
+                )}
+
+                {/* Meus 2 mascotes com postura inline */}
+                <div className="space-y-1.5">
+                  {me?.mascots.map((mascot) => (
+                    <div key={mascot.id} className="flex items-center gap-2 rounded-lg border border-slate-700 bg-black/25 p-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
+                      <span className="min-w-0 flex-1 text-[11px] text-white"><b className="block truncate">{mascot.name}</b><small className="text-slate-500">Nv.{mascot.level}</small></span>
+                      <select disabled={pending || iReady} value={mascot.stance} onChange={(event) => start(async () => { const result = await updateTowerLobbyStanceAction(runId, mascot.id, event.target.value); if ("error" in result) toast.error(result.error); else void refresh(); })} className="shrink-0 rounded-lg border border-slate-700 bg-slate-950 p-1.5 text-[11px] text-cyan-200 disabled:opacity-50">
+                        {mascot.allowedStances.map((stance) => <option key={stance} value={stance}>{getCombatRoleLabel(stance)}</option>)}
+                      </select>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Ações */}
+                <div className="grid gap-2">
+                  <button type="button" disabled={pending} onClick={() => start(async () => { const next = !iReady; const res = await setTowerReadyAction(runId, next); if ("error" in res) toast.error(res.error); else void refresh(); })} className={`rounded-xl border py-2.5 text-sm font-black disabled:opacity-40 ${iReady ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"}`}>{iReady ? "Cancelar pronto" : "✓ Estou pronto"}</button>
+                  {amHost && (
+                    <button type="button" disabled={pending || !allReady} onClick={() => start(async () => { const res = await startTowerExpeditionAction(runId); if ("error" in res) { toast.error(res.error); return; } toast.success("Expedição iniciada!"); void refresh(); })} className="rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">{allReady ? "🗼 Iniciar — todos confirmaram" : "Aguardando todos ficarem prontos…"}</button>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {run.status === "ACTIVE" && (
         <div className="mt-4 space-y-4">
