@@ -3,6 +3,8 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getCachedPlayerRanking } from "@/lib/ranking-cache";
+import { getPatchNotes } from "@/lib/app-settings";
+import { PatchNotesCard } from "./_components/patch-notes-card";
 import { getManualSessionUser } from "@/lib/manual-session";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -322,6 +324,7 @@ export default async function DashboardPage() {
       })
     : [];
   const myEntry = ranking.find(r => r.playerId === player.id);
+  const patchNotes = await getPatchNotes().catch(() => ({ notes: [] as { title: string; content: string }[] }));
 
   const codesCount = seasonId
     ? await prisma.codeDistribution.count({ where: { playerId: player.id, seasonId, status: { not: "REVOKED" } } }).catch((error) => {
@@ -367,6 +370,8 @@ export default async function DashboardPage() {
         <StatCard label="Derrotas" value={myEntry?.losses ?? 0} icon={<Swords size={22} />} />
         <StatCard label="Códigos recebidos" value={codesCount} icon={<Package size={22} />} description="nesta temporada" />
       </div>
+
+      {patchNotes.notes.length > 0 && <PatchNotesCard notes={patchNotes.notes} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Próximas Partidas — apenas os jogos da semana atual, separados por dia */}

@@ -1217,6 +1217,28 @@ export async function cleanAdminMascotEvents(): Promise<{ deleted: number; error
 }
 
 // ── Aviso com confirmação (modal único) ───────────────────────────────────────
+export async function updatePatchNotes(input: { notes: { title: string; content: string }[] }): Promise<{ error?: string }> {
+  try {
+    await requireAdmin();
+    const { PATCH_NOTES_KEY, revalidatePatchNotes } = await import("@/lib/app-settings");
+    const notes = (input.notes ?? [])
+      .slice(0, 3)
+      .map((n) => ({ title: (n.title ?? "").trim().slice(0, 80), content: (n.content ?? "").trim().slice(0, 600) }))
+      .filter((n) => n.content.length > 0);
+    const value = { notes, updatedAt: new Date().toISOString() };
+    await prisma.appSetting.upsert({
+      where: { key: PATCH_NOTES_KEY },
+      update: { value },
+      create: { key: PATCH_NOTES_KEY, value },
+    });
+    revalidatePatchNotes();
+    revalidatePath("/admin");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao salvar patch notes." };
+  }
+}
+
 export async function updateAckNotice(input: { title: string; content: string; buttonText: string; active: boolean }): Promise<{ error?: string; version?: number }> {
   try {
     await requireAdmin();

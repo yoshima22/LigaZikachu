@@ -4,17 +4,23 @@ import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { BellRing, Coins, Megaphone, Send, Sparkles } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice } from "../actions";
+import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice, updatePatchNotes } from "../actions";
 
-export function AdminCommunicationPanel({ initialNotice, initialAck }: {
+export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatchNotes }: {
   initialNotice: string;
   initialAck?: { title: string; content: string; buttonText: string; active: boolean; version: number };
+  initialPatchNotes?: { title: string; content: string }[];
 }) {
   const [notice, setNotice] = useState(initialNotice);
   const [ackTitle, setAckTitle] = useState(initialAck?.title ?? "");
   const [ackContent, setAckContent] = useState(initialAck?.content ?? "");
   const [ackButton, setAckButton] = useState(initialAck?.buttonText ?? "Entendi");
   const [pendingAck, startAck] = useTransition();
+  // Patch notes: 3 páginas (título + conteúdo). Página 1 = mais recente.
+  const [patch, setPatch] = useState<{ title: string; content: string }[]>(() =>
+    [0, 1, 2].map((i) => ({ title: initialPatchNotes?.[i]?.title ?? "", content: initialPatchNotes?.[i]?.content ?? "" })),
+  );
+  const [pendingPatch, startPatch] = useTransition();
   const [coins, setCoins] = useState("");
   const [description, setDescription] = useState("Presente global da Liga");
   const [professorMessage, setProfessorMessage] = useState("");
@@ -28,6 +34,48 @@ export function AdminCommunicationPanel({ initialNotice, initialAck }: {
 
   return (
     <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-2xl border border-border bg-slate-950/50 p-5 lg:col-span-2">
+        <div className="flex items-center gap-2">
+          <Sparkles size={16} className="text-cyan-300" />
+          <h3 className="font-semibold text-slate-200">Patch notes (dashboard)</h3>
+        </div>
+        <p className="mt-2 text-xs text-slate-500">
+          Até 3 notas curtas exibidas no dashboard dos jogadores (paginadas). A Página 1 é a mais recente. Deixe o conteúdo vazio para ocultar aquela página.
+        </p>
+        <div className="mt-3 space-y-3">
+          {patch.map((note, i) => (
+            <div key={i} className="rounded-xl border border-border/60 bg-slate-900/40 p-3">
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-cyan-300">Página {i + 1}{i === 0 ? " · mais recente" : ""}</p>
+              <input
+                value={note.title}
+                onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, title: e.target.value } : n))}
+                placeholder="Título (opcional)"
+                maxLength={80}
+                className="mb-2 w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
+              />
+              <textarea
+                value={note.content}
+                onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, content: e.target.value } : n))}
+                placeholder="Texto curto do patch note..."
+                maxLength={600}
+                rows={2}
+                className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
+              />
+            </div>
+          ))}
+        </div>
+        <Button
+          disabled={pendingPatch}
+          className="mt-3 w-full bg-cyan-400 text-slate-950 hover:bg-cyan-300"
+          onClick={() => startPatch(async () => {
+            const r = await updatePatchNotes({ notes: patch });
+            if (r.error) toast.error(r.error); else toast.success("Patch notes atualizados!");
+          })}
+        >
+          Salvar patch notes
+        </Button>
+      </div>
+
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
         <div className="flex items-center gap-2">
           <Megaphone size={16} className="text-[#FFCB05]" />
