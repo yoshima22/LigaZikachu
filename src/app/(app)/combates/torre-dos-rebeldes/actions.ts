@@ -57,7 +57,7 @@ import {
   type TowerSceneTrigger,
 } from "@/lib/tower/narrative";
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
-import { currentTowerRoom, generateTowerRoomGraph } from "@/lib/tower/rooms";
+import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from "@/lib/tower/rooms";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -65,6 +65,7 @@ import {
 } from "@/lib/tower/exclusive-mascots";
 import {
   isTowerStudyKey,
+  TOWER_COMMUNITY_STUDIES,
   TOWER_STUDY_TARGET,
   type TowerStudyKey,
 } from "@/lib/tower/studies";
@@ -229,6 +230,73 @@ export async function adminResetTowerEventAction(confirmation: string) {
   return { ok: true as const };
 }
 
+export async function adminControlTowerRunAction(runId: string, operation: "PRESSURE_ADD" | "PRESSURE_REMOVE" | "PRESSURE_RESET" | "BUFFS_RESET" | "SHIELD_ADD") {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  const run = await prisma.towerRun.findUnique({ where: { id: runId }, select: { volatileState: true } });
+  if (!run) return { error: "Run não encontrada." };
+  const state = (run.volatileState ?? {}) as TowerVolatile;
+  if (!state.exploration) return { error: "A run ainda não possui exploração ativa." };
+  const exploration = { ...state.exploration };
+  if (operation === "PRESSURE_ADD") exploration.pressure += 1;
+  if (operation === "PRESSURE_REMOVE") exploration.pressure = Math.max(0, exploration.pressure - 1);
+  if (operation === "PRESSURE_RESET") exploration.pressure = 0;
+  if (operation === "SHIELD_ADD") exploration.pressureShield = (exploration.pressureShield ?? 0) + 1;
+  if (operation === "BUFFS_RESET") {
+    exploration.countermeasures = [];
+    exploration.pressureShield = 0;
+  }
+  exploration.activeModifiers = towerPressureModifiers(exploration.pressure);
+  await prisma.towerRun.update({ where: { id: runId }, data: { volatileState: { ...state, exploration } as unknown as Prisma.InputJsonValue } });
+  revalidatePath(PATH);
+  return { ok: true as const, pressure: exploration.pressure, pressureShield: exploration.pressureShield ?? 0 };
+}
+
+export async function adminControlTowerStudyAction(metricKey: TowerStudyKey | "ALL", operation: "INCREMENT" | "COMPLETE" | "RESET") {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  if (metricKey !== "ALL" && !isTowerStudyKey(metricKey)) return { error: "Reforço inválido." };
+  if (metricKey === "ALL") {
+    if (operation !== "RESET") return { error: "Use um reforço específico para incrementar." };
+    await prisma.towerCommunityProgress.deleteMany({ where: { floorId: 1, metricKey: { in: TOWER_COMMUNITY_STUDIES.map((study) => study.key) } } });
+  } else if (operation === "RESET") {
+    await prisma.towerCommunityProgress.deleteMany({ where: { floorId: 1, metricKey } });
+  } else {
+    const amount = operation === "COMPLETE" ? TOWER_STUDY_TARGET : 1;
+    await prisma.towerCommunityProgress.upsert({
+      where: { floorId_metricKey: { floorId: 1, metricKey } },
+      create: { floorId: 1, metricKey, value: amount },
+      update: operation === "COMPLETE" ? { value: TOWER_STUDY_TARGET } : { value: { increment: 1 } },
+    });
+  }
+  revalidatePath(PATH);
+  return { ok: true as const };
+}
+
+export async function adminControlTowerNarrativeAction(operation: "UNLOCK_SCENE" | "UNLOCK_GROUP" | "UNLOCK_FLOOR" | "UNLOCK_ALL" | "RESET", value?: string) {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  if (operation === "RESET") {
+    await prisma.towerCodexEntry.deleteMany({ where: { userId: null, subjectType: "NARRATIVE_SCENE" } });
+    await prisma.towerCommunityProgress.deleteMany({ where: { floorId: 1, metricKey: "ADMIN_UNLOCKED_FLOOR" } });
+    revalidatePath(PATH);
+    return { ok: true as const, count: 0 };
+  }
+  const scenes = await getTowerNarrativeScenes();
+  let selected = scenes;
+  if (operation === "UNLOCK_SCENE") selected = scenes.filter((scene) => scene.id === value);
+  if (operation === "UNLOCK_GROUP") selected = scenes.filter((scene) => scene.groupId === value);
+  if (operation === "UNLOCK_FLOOR") {
+    const floor = Math.max(1, Math.min(7, Number(value) || 1));
+    selected = scenes.filter((scene) => scene.floor === floor);
+    await prisma.towerCommunityProgress.upsert({ where: { floorId_metricKey: { floorId: 1, metricKey: "ADMIN_UNLOCKED_FLOOR" } }, create: { floorId: 1, metricKey: "ADMIN_UNLOCKED_FLOOR", value: floor }, update: { value: floor } });
+  }
+  if (selected.length === 0) return { error: "Nenhum diálogo corresponde à seleção." };
+  for (const scene of selected) await recordTowerSceneUnlock(scene, user.id);
+  revalidatePath(PATH);
+  return { ok: true as const, count: selected.length };
+}
+
 /** Interações de metaprogressão feitas fora das runs. Cada estudo vale uma vez por dia. */
 export async function contributeTowerPreparationAction(
   metricKey: TowerStudyKey,
@@ -319,6 +387,8 @@ export async function getTowerLobbyDataAction() {
     ]);
   const progressValue = (key: string) =>
     communityProgress.find((entry) => entry.metricKey === key)?.value ?? 0;
+  const reachedFloorAggregate = await prisma.towerRun.aggregate({ _max: { currentFloor: true } });
+  const highestReachedFloor = Math.max(1, reachedFloorAggregate._max.currentFloor ?? 1, Math.floor(progressValue("ADMIN_UNLOCKED_FLOOR")));
   const talentRanks = Object.fromEntries(
     [
       ...["PRESSURE", "COMBAT", "BOSS", "LUCK", "RESCUE"],
@@ -493,7 +563,8 @@ export async function getTowerLobbyDataAction() {
     config,
     scenes,
     lobbyScene,
-    narrativeGroups: groupTowerScenes(scenes, narrativeUnlockedIds),
+    narrativeGroups: groupTowerScenes(scenes, narrativeUnlockedIds, highestReachedFloor),
+    highestReachedFloor,
     failures,
     communityProgress,
     communityCodex,
@@ -556,7 +627,7 @@ export async function getTowerLobbyDataAction() {
     ),
     towerTicketQuantity,
     knowledge: unlockedTowerScenes(scenes, failures)
-      .filter((scene) => scene.knowledgeTitle?.trim())
+      .filter((scene) => narrativeUnlockedIds.has(scene.id) && scene.knowledgeTitle?.trim())
       .map((scene) => ({
         id: scene.id,
         title: scene.knowledgeTitle!,

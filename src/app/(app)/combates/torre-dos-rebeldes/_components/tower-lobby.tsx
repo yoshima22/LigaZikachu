@@ -129,7 +129,7 @@ export function TowerLobby() {
         >
           ▶ Testar introdução do evento
         </button>
-        <TowerAdminSettings initial={data.config} onSaved={load} />
+        <TowerAdminSettings initial={data.config} onSaved={load} activeRunId={data.activeRun.id} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
         <TowerNarrativeAdmin initial={data.scenes} />
         <TowerRunPanel
           runId={data.activeRun.id}
@@ -152,7 +152,7 @@ export function TowerLobby() {
     const when = new Date(data.nextEntryAt).toLocaleString("pt-BR");
     return (
       <div className="space-y-4">
-        <TowerAdminSettings initial={data.config} onSaved={load} />
+        <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
         <TowerNarrativeAdmin initial={data.scenes} />
         <section className={card}>
           <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
@@ -387,7 +387,7 @@ export function TowerLobby() {
         </>
       )}
       {view === "OVERVIEW" && (
-        <TowerAdminSettings initial={data.config} onSaved={load} />
+        <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
       )}
       {view === "ARCHIVE" && (
         <>

@@ -69,11 +69,14 @@ export async function recordTowerSceneUnlock(scene: TowerNarrativeScene | null, 
   if (!prior) await prisma.towerFeat.create({ data: { userId, runId, featKey: "TOWER_SCENE_UNLOCK", data } });
 }
 
-export function groupTowerScenes(scenes: TowerNarrativeScene[], unlockedIds: Set<string>) {
+export function groupTowerScenes(scenes: TowerNarrativeScene[], unlockedIds: Set<string>, highestVisibleFloor = 1) {
   const groups = new Map<string, { id: string; title: string; scenes: Array<TowerNarrativeScene & { unlocked: boolean }> }>();
   for (const scene of scenes) {
-    const group = groups.get(scene.groupId) ?? { id: scene.groupId, title: scene.groupTitle, scenes: [] };
-    group.scenes.push({ ...scene, unlocked: unlockedIds.has(scene.id) });
+    const unlocked = unlockedIds.has(scene.id);
+    const future = scene.floor > 0 && scene.floor > highestVisibleFloor && !unlocked;
+    const group = groups.get(scene.groupId) ?? { id: scene.groupId, title: future ? "???" : scene.groupTitle, scenes: [] };
+    if (!future && group.title === "???") group.title = scene.groupTitle;
+    group.scenes.push(future ? { ...scene, title: "???", speaker: "???", text: "", followup: null, conditionNotes: "", unlocked: false } : { ...scene, unlocked });
     groups.set(scene.groupId, group);
   }
   return [...groups.values()].sort((a, b) => a.id.localeCompare(b.id));
