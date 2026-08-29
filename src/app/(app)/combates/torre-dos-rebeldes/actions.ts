@@ -318,7 +318,10 @@ export async function adminControlTowerNarrativeAction(operation: "UNLOCK_SCENE"
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito." };
   if (operation === "RESET") {
-    await prisma.towerCodexEntry.deleteMany({ where: { userId: null, subjectType: "NARRATIVE_SCENE" } });
+    await prisma.$transaction([
+      prisma.towerCodexEntry.deleteMany({ where: { userId: user.id, subjectType: "NARRATIVE_SCENE" } }),
+      prisma.towerFeat.deleteMany({ where: { userId: user.id, featKey: "TOWER_SCENE_UNLOCK" } }),
+    ]);
     await prisma.towerCommunityProgress.deleteMany({ where: { floorId: 1, metricKey: "ADMIN_UNLOCKED_FLOOR" } });
     revalidatePath(PATH);
     return { ok: true as const, count: 0 };
@@ -397,11 +400,14 @@ export async function getTowerLobbyDataAction() {
       run: { status: { in: ["FAILED", "ABANDONED"] } },
     },
   });
-  const narrativeUnlockRows = await prisma.towerCodexEntry.findMany({
-    where: { userId: null, subjectType: "NARRATIVE_SCENE" },
-    select: { subjectKey: true },
-  });
-  const narrativeUnlockedIds = new Set(narrativeUnlockRows.map((row) => row.subjectKey));
+  const [narrativeUnlockRows, narrativeFeatRows] = await Promise.all([
+    prisma.towerCodexEntry.findMany({ where: { userId: user.id, subjectType: "NARRATIVE_SCENE" }, select: { subjectKey: true } }),
+    prisma.towerFeat.findMany({ where: { userId: user.id, featKey: "TOWER_SCENE_UNLOCK" }, select: { data: true } }),
+  ]);
+  const narrativeUnlockedIds = new Set([
+    ...narrativeUnlockRows.map((row) => row.subjectKey),
+    ...narrativeFeatRows.map((row) => String((row.data as { sceneId?: string } | null)?.sceneId ?? "")).filter(Boolean),
+  ]);
   const lobbyScene = nextTowerSceneFor(
     scenes,
     narrativeUnlockedIds.size === 0 ? ["EVENT_FIRST_OPEN", "LOBBY"] : ["LOBBY", "EVENT_FIRST_OPEN"],
@@ -412,7 +418,8 @@ export async function getTowerLobbyDataAction() {
   if (lobbyScene && !narrativeUnlockedIds.has(lobbyScene.id))
     await recordTowerSceneUnlock(lobbyScene, user.id);
   if (lobbyScene) narrativeUnlockedIds.add(lobbyScene.id);
-  const [communityProgress, communityCodex, controlledEntries] =
+  const today = new Date().toISOString().slice(0, 10);
+  const [communityProgress, communityCodex, controlledEntries, dailyStudyContribution] =
     await Promise.all([
       prisma.towerCommunityProgress.findMany({
         where: { floorId: 1 },
@@ -427,6 +434,10 @@ export async function getTowerLobbyDataAction() {
         where: { recoveredAt: null },
         orderBy: { createdAt: "desc" },
         take: 60,
+      }),
+      prisma.towerFeat.findFirst({
+        where: { userId: user.id, featKey: `TOWER_PREP:${today}` },
+        select: { data: true },
       }),
     ]);
   const progressValue = (key: string) =>
@@ -463,6 +474,7 @@ export async function getTowerLobbyDataAction() {
   const [entryGroups, rescueGroups, talentGroups] = await Promise.all([
     prisma.towerRunMember.groupBy({
       by: ["userId"],
+      where: { run: { startedAt: { not: null } } },
       _count: { _all: true },
       orderBy: { _count: { userId: "desc" } },
       take: 50,
@@ -614,6 +626,9 @@ export async function getTowerLobbyDataAction() {
     failures,
     communityProgress,
     communityCodex,
+    studyContributionToday: dailyStudyContribution
+      ? { used: true as const, metricKey: String((dailyStudyContribution.data as { metricKey?: string } | null)?.metricKey ?? "") }
+      : { used: false as const, metricKey: "" },
     talents: {
       points: Math.max(0, progressValue("TALENT_POINTS") - talentSpent),
       ranks: talentRanks,
@@ -1913,11 +1928,11 @@ export async function getTowerRunStateAction(
   });
   const unlockedNarrative = new Set(
     (
-      await prisma.towerCodexEntry.findMany({
-        where: { userId: null, subjectType: "NARRATIVE_SCENE" },
-        select: { subjectKey: true },
+      await prisma.towerFeat.findMany({
+        where: { userId: user.id, featKey: "TOWER_SCENE_UNLOCK" },
+        select: { data: true },
       })
-    ).map((entry) => entry.subjectKey),
+    ).map((entry) => String((entry.data as { sceneId?: string } | null)?.sceneId ?? "")).filter(Boolean),
   );
   const sceneTriggers: TowerSceneTrigger[] =
     run.status === "FINISHED"

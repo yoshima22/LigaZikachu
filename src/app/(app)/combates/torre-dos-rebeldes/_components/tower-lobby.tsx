@@ -610,6 +610,7 @@ export function TowerLobby() {
             . Um reforço ativo não recebe pontos adicionais; quem já gastou a
             contribuição do dia precisa aguardar o próximo dia.
           </p>
+          {data.studyContributionToday.used && <div className="mt-3 rounded-xl border border-emerald-400/25 bg-emerald-400/10 px-3 py-2 text-xs font-bold text-emerald-200">✓ Sua contribuição comunitária de hoje já foi registrada{TOWER_COMMUNITY_STUDIES.find((study) => study.key === data.studyContributionToday.metricKey)?.title ? ` em ${TOWER_COMMUNITY_STUDIES.find((study) => study.key === data.studyContributionToday.metricKey)?.title}` : ""}. Um novo ponto ficará disponível amanhã.</div>}
           <div className="mt-4 grid gap-3 md:grid-cols-3">
             {TOWER_COMMUNITY_STUDIES.map(({ key, title, effect: text }) => {
               const value =
@@ -631,7 +632,7 @@ export function TowerLobby() {
                   </p>
                   <button
                     type="button"
-                    disabled={pending || value >= TOWER_STUDY_TARGET}
+                    disabled={pending || value >= TOWER_STUDY_TARGET || data.studyContributionToday.used}
                     onClick={() =>
                       start(async () => {
                         const res = await contributeTowerPreparationAction(key);
@@ -646,9 +647,7 @@ export function TowerLobby() {
                     }
                     className="mt-3 w-full rounded-lg border border-cyan-300/30 py-2 text-[10px] font-black text-cyan-200 disabled:opacity-40"
                   >
-                    {value >= TOWER_STUDY_TARGET
-                      ? "REFORÇO ATIVO"
-                      : "CONTRIBUIR HOJE"}
+                    {value >= TOWER_STUDY_TARGET ? "REFORÇO ATIVO" : data.studyContributionToday.used && data.studyContributionToday.metricKey === key ? "✓ SEU PONTO DE HOJE FOI AQUI" : data.studyContributionToday.used ? "CONTRIBUIÇÃO DIÁRIA JÁ USADA" : "CONTRIBUIR HOJE"}
                   </button>
                 </article>
               );
@@ -761,9 +760,10 @@ export function TowerLobby() {
               </span>
             </div>
             <p className="mt-2 text-xs text-slate-400">
+              Esta árvore é única e compartilhada por toda a comunidade. Cada
+              chefe derrotado por qualquer grupo adiciona exatamente 1 ponto.
               Escolher um talento aplica de uma vez todos os pontos possíveis
-              nele, respeitando o nível máximo 5. Assim a distribuição precisa
-              de apenas uma requisição.
+              nele, respeitando o nível máximo 5.
             </p>
             <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-5">
               {(
@@ -943,6 +943,7 @@ export function TowerLobby() {
             Escolha seus dois mascotes e entre em uma sala. O ticket só será
             consumido quando o host iniciar.
           </p>
+          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${picks.length === 2 && role ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}><b>{picks.length === 2 && role ? "✓ Configuração pronta" : "Prepare-se para entrar"}</b><span className="ml-2">Classe {role ? "selecionada" : "pendente"} · {picks.length}/2 mascotes</span></div>
           <div className="mt-4 space-y-5">
             {(["ONLINE", "SLOW"] as const).map((roomPace) => {
               const rooms = data.rooms.filter((room) => room.pace === roomPace);
@@ -1025,10 +1026,14 @@ export function TowerLobby() {
                   ))}
                 </div>
                 <button
-                  disabled={pending || picks.length !== 2 || !role}
+                  disabled={pending || room.members.length >= 3}
                   onClick={() =>
                     start(async () => {
-                      if (!role) return;
+                      if (!role || picks.length !== 2) {
+                        document.getElementById("tower-room-setup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                        toast.info("Escolha a classe e dois mascotes para entrar nesta sala.");
+                        return;
+                      }
                       const res = await joinTowerRoomAction({
                         runId: room.id,
                         expeditionRole: role,
@@ -1044,7 +1049,7 @@ export function TowerLobby() {
                   }
                   className="mt-3 w-full rounded-lg border border-purple-400/40 bg-purple-400/10 py-2 text-xs font-black text-purple-200 disabled:opacity-40"
                 >
-                  Entrar nesta sala
+                  {picks.length === 2 && role ? "Entrar nesta sala" : "Configurar equipe para entrar"}
                 </button>
               </article>
                 ))}</div>}
@@ -1057,7 +1062,7 @@ export function TowerLobby() {
       {view === "ROOMS" && (
         <>
           {/* Ritmo */}
-          <section className={card}>
+          <section id="tower-room-setup" className={`${card} scroll-mt-28`}>
             <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
               Ritmo
             </h2>

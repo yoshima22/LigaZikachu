@@ -801,39 +801,32 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       ].slice(-50);
 
       if (bossVictory) {
-        await tx.towerCommunityProgress.upsert({
-          where: {
-            floorId_metricKey: { floorId: 1, metricKey: "TALENT_POINTS" },
-          },
-          create: { floorId: 1, metricKey: "TALENT_POINTS", value: 1 },
-          update: { value: { increment: 1 } },
+        const bossAlreadyRewarded = await tx.towerFeat.findFirst({
+          where: { runId, featKey: "TOWER_TALENT_CONTRIBUTION", data: { path: ["floor"], equals: run.currentFloor } },
+          select: { id: true },
         });
-        const shardCount = run.pace === "ONLINE" ? 2 : 1;
-        for (const member of active)
-          for (let shard = 0; shard < shardCount; shard++)
+        if (!bossAlreadyRewarded) {
+          await tx.towerCommunityProgress.upsert({
+            where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT_POINTS" } },
+            create: { floorId: 1, metricKey: "TALENT_POINTS", value: 1 },
+            update: { value: { increment: 1 } },
+          });
+          const shardCount = run.pace === "ONLINE" ? 2 : 1;
+          for (const member of active)
+            for (let shard = 0; shard < shardCount; shard++)
+              await tx.towerFeat.create({
+                data: { userId: member.userId, runId, featKey: "TOWER_RELIC_SHARD", data: { floor: run.currentFloor, pace: run.pace } },
+              });
+          for (const member of run.members.filter((entry) => !entry.afkRemoved))
             await tx.towerFeat.create({
               data: {
                 userId: member.userId,
                 runId,
-                featKey: "TOWER_RELIC_SHARD",
-                data: { floor: run.currentFloor, pace: run.pace },
+                featKey: "TOWER_TALENT_CONTRIBUTION",
+                data: { floor: run.currentFloor, source: "BOSS", spectator: !active.some((entry) => entry.userId === member.userId) },
               },
             });
-        for (const member of run.members.filter((entry) => !entry.afkRemoved))
-          await tx.towerFeat.create({
-            data: {
-              userId: member.userId,
-              runId,
-              featKey: "TOWER_TALENT_CONTRIBUTION",
-              data: {
-                floor: run.currentFloor,
-                source: "BOSS",
-                spectator: !active.some(
-                  (entry) => entry.userId === member.userId,
-                ),
-              },
-            },
-          });
+        }
         const prize = TOWER_BOSS_PRIZES[run.currentFloor - 1];
         for (const member of run.members) {
           const prior = await tx.towerFeat.findFirst({

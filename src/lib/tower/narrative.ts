@@ -60,11 +60,11 @@ export function nextTowerSceneFor(scenes: TowerNarrativeScene[], triggers: Tower
 export async function recordTowerSceneUnlock(scene: TowerNarrativeScene | null, userId: string, runId?: string) {
   if (!scene) return;
   const data = { sceneId: scene.id, groupId: scene.groupId, groupTitle: scene.groupTitle, title: scene.title, speaker: scene.speaker, runId: runId ?? null };
-  const shared = await prisma.towerCodexEntry.findFirst({ where: { userId: null, subjectType: "NARRATIVE_SCENE", subjectKey: scene.id }, select: { id: true } });
-  if (shared)
-    await prisma.towerCodexEntry.update({ where: { id: shared.id }, data: { discoveryLevel: 1, data } });
+  const personal = await prisma.towerCodexEntry.findFirst({ where: { userId, subjectType: "NARRATIVE_SCENE", subjectKey: scene.id }, select: { id: true } });
+  if (personal)
+    await prisma.towerCodexEntry.update({ where: { id: personal.id }, data: { discoveryLevel: 1, data } });
   else
-    await prisma.towerCodexEntry.create({ data: { userId: null, subjectType: "NARRATIVE_SCENE", subjectKey: scene.id, discoveryLevel: 1, data } });
+    await prisma.towerCodexEntry.create({ data: { userId, subjectType: "NARRATIVE_SCENE", subjectKey: scene.id, discoveryLevel: 1, data } });
   const prior = await prisma.towerFeat.findFirst({ where: { userId, featKey: "TOWER_SCENE_UNLOCK", data: { path: ["sceneId"], equals: scene.id } }, select: { id: true } });
   if (!prior) await prisma.towerFeat.create({ data: { userId, runId, featKey: "TOWER_SCENE_UNLOCK", data } });
 }
