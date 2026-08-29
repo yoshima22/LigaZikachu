@@ -48,7 +48,9 @@ import { normalizeCombatRole } from "@/lib/combat-roles";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import {
   getTowerNarrativeScenes,
-  towerSceneFor,
+  groupTowerScenes,
+  nextTowerSceneFor,
+  recordTowerSceneUnlock,
   unlockedTowerScenes,
   TOWER_NARRATIVE_KEY,
   type TowerNarrativeScene,
@@ -283,6 +285,21 @@ export async function getTowerLobbyDataAction() {
       run: { status: { in: ["FAILED", "ABANDONED"] } },
     },
   });
+  const narrativeUnlockRows = await prisma.towerCodexEntry.findMany({
+    where: { userId: null, subjectType: "NARRATIVE_SCENE" },
+    select: { subjectKey: true },
+  });
+  const narrativeUnlockedIds = new Set(narrativeUnlockRows.map((row) => row.subjectKey));
+  const lobbyScene = nextTowerSceneFor(
+    scenes,
+    narrativeUnlockedIds.size === 0 ? ["EVENT_FIRST_OPEN", "LOBBY"] : ["LOBBY", "EVENT_FIRST_OPEN"],
+    1,
+    failures,
+    narrativeUnlockedIds,
+  );
+  if (lobbyScene && !narrativeUnlockedIds.has(lobbyScene.id))
+    await recordTowerSceneUnlock(lobbyScene, user.id);
+  if (lobbyScene) narrativeUnlockedIds.add(lobbyScene.id);
   const [communityProgress, communityCodex, controlledEntries] =
     await Promise.all([
       prisma.towerCommunityProgress.findMany({
@@ -290,7 +307,7 @@ export async function getTowerLobbyDataAction() {
         orderBy: { metricKey: "asc" },
       }),
       prisma.towerCodexEntry.findMany({
-        where: { userId: null },
+        where: { userId: null, subjectType: { not: "NARRATIVE_SCENE" } },
         orderBy: { updatedAt: "desc" },
         take: 30,
       }),
@@ -380,7 +397,15 @@ export async function getTowerLobbyDataAction() {
       )?.quantity ?? 0)
     : 0;
   const pendingMascotRewards = await prisma.towerFeat.findMany({
-    where: { userId: user.id, featKey: "TOWER_MASCOT_PENDING" },
+    where: {
+      userId: user.id,
+      featKey: "TOWER_MASCOT_PENDING",
+      data: { path: ["pokemonId"], equals: 210008 },
+    },
+    orderBy: { achievedAt: "asc" },
+  });
+  const bossChoicePending = await prisma.towerFeat.findFirst({
+    where: { userId: user.id, featKey: "TOWER_BOSS_CHOICE_PENDING" },
     orderBy: { achievedAt: "asc" },
   });
   const openRuns = await prisma.towerRun.findMany({
@@ -467,7 +492,8 @@ export async function getTowerLobbyDataAction() {
     ok: true as const,
     config,
     scenes,
-    lobbyScene: towerSceneFor(scenes, "LOBBY", 1, failures),
+    lobbyScene,
+    narrativeGroups: groupTowerScenes(scenes, narrativeUnlockedIds),
     failures,
     communityProgress,
     communityCodex,
@@ -519,6 +545,12 @@ export async function getTowerLobbyDataAction() {
           )?.sprite ?? "",
       };
     }),
+    bossChoice: bossChoicePending
+      ? {
+          id: bossChoicePending.id,
+          options: TOWER_EXCLUSIVE_MASCOTS.slice(0, 7),
+        }
+      : null,
     exclusiveMascotCodes: TOWER_EXCLUSIVE_MASCOTS.map(
       ({ code, pokemonId, name }) => ({ code, pokemonId, name }),
     ),
@@ -691,6 +723,64 @@ export async function claimTowerMascotRewardAction(
   };
 }
 
+/** Escolha única entre os sete regentes, liberada ao concluir o último andar. */
+export async function claimTowerBossChoiceAction(
+  featId: string,
+  pokemonId: number,
+  personality: MascotPersonality,
+) {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  if (!Object.values(MascotPersonality).includes(personality)) return { error: "Personalidade inválida." };
+  const species = TOWER_EXCLUSIVE_MASCOTS.slice(0, 7).find((entry) => entry.pokemonId === pokemonId);
+  if (!species) return { error: "Escolha um dos sete regentes da Torre." };
+  await ensureTowerExclusiveSpecies();
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { error: "Jogador não encontrado." };
+  const stats = computeProceduralStats(species.basePokemonId, 55, personality, [17, 26]);
+  const simulated = await prisma.$transaction(async (tx) => {
+    const pending = await tx.towerFeat.findFirst({ where: { id: featId, userId: user.id, featKey: "TOWER_BOSS_CHOICE_PENDING" } });
+    if (!pending) throw new Error("Esta escolha já foi utilizada ou não existe.");
+    if ((pending.data as { debug?: boolean } | null)?.debug) {
+      await tx.towerFeat.delete({ where: { id: pending.id } });
+      return true;
+    }
+    const mascot = await tx.mascot.create({
+      data: {
+        playerId: player.id, pokemonId: species.pokemonId, nickname: species.name,
+        speciesNameOverride: species.name, primaryTypeOverride: species.primaryType,
+        secondaryTypeOverride: "secondaryType" in species ? species.secondaryType : null,
+        staticSpriteUrlOverride: species.sprite, animatedSpriteUrlOverride: species.sprite,
+        generationOverride: 0, level: 55, personality, ...stats,
+        hatchedFromEggType: "LAB", hatchedFromEggOrigin: "TOWER_REBEL_LAB",
+        hatchedPokemonId: species.pokemonId, happiness: 70,
+      },
+    });
+    await tx.playerPokemonDex.upsert({
+      where: { playerId_pokemonId: { playerId: player.id, pokemonId: species.pokemonId } },
+      create: { playerId: player.id, pokemonId: species.pokemonId, source: "TOWER_FINAL_CHOICE" }, update: {},
+    });
+    await tx.towerFeat.update({
+      where: { id: featId },
+      data: { featKey: "TOWER_BOSS_CHOICE_CLAIMED", data: { pokemonId, name: species.name, personality, mascotId: mascot.id } },
+    });
+    return false;
+  });
+  revalidatePath(PATH); revalidatePath("/mascotes");
+  return { ok: true as const, mascot: { name: species.name, pokemonId, sprite: species.sprite, level: 55, personality, stats, origin: simulated ? "Simulação administrativa · nada foi entregue" : "Ovo de Laboratório · Escolha do último andar" } };
+}
+
+/** Debug: abre a escolha final real para a própria conta admin, sem concluir uma run. */
+export async function debugGrantTowerBossChoiceAction() {
+  const user = await requireTowerAdmin();
+  if (!user) return { error: "Acesso restrito." };
+  const existing = await prisma.towerFeat.findFirst({ where: { userId: user.id, featKey: "TOWER_BOSS_CHOICE_PENDING" } });
+  if (!existing)
+    await prisma.towerFeat.create({ data: { userId: user.id, featKey: "TOWER_BOSS_CHOICE_PENDING", data: { debug: true, unlockedAtFloor: 7 } } });
+  revalidatePath(PATH);
+  return { ok: true as const };
+}
+
 /** Simula o nascimento exclusivo sem criar mascote nem registrar progresso. */
 export async function debugTowerMascotRewardPreviewAction(
   pokemonId: number,
@@ -789,21 +879,14 @@ export async function saveTowerNarrativeScenesAction(
 ) {
   const user = await requireTowerAdmin();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
-  if (!Array.isArray(input) || input.length > 50)
+  if (!Array.isArray(input) || input.length > 250)
     return { error: "Lista de cenas inválida." };
-  const validTriggers = new Set<TowerSceneTrigger>([
-    "LOBBY",
-    "RUN_START",
-    "ENCOUNTER",
-    "BOSS",
-    "VICTORY",
-  ]);
   const scenes: TowerNarrativeScene[] = [];
   for (let index = 0; index < input.length; index++) {
     const raw = input[index];
     if (
       !raw ||
-      !validTriggers.has(raw.trigger) ||
+      !raw.trigger ||
       !raw.speaker?.trim() ||
       !raw.text?.trim()
     ) {
@@ -830,14 +913,21 @@ export async function saveTowerNarrativeScenesAction(
         "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png";
     scenes.push({
       id,
+      groupId: raw.groupId?.trim() || "PERSONALIZADO",
+      groupTitle: raw.groupTitle?.trim() || "Cenas personalizadas",
       trigger: raw.trigger,
-      floor: Math.max(1, Math.min(7, Math.trunc(raw.floor || 1))),
+      floor: Math.max(0, Math.min(7, Math.trunc(raw.floor || 0))),
       title: raw.title?.trim() || "Cena da Torre",
       speaker: raw.speaker.trim(),
+      secondarySpeaker: raw.secondarySpeaker?.trim() || null,
       text: raw.text.trim(),
+      followup: raw.followup?.trim() || null,
       backgroundUrl,
       characterUrl,
       characterSide: raw.characterSide === "LEFT" ? "LEFT" : "RIGHT",
+      tone: raw.tone?.trim() || "misterioso",
+      oncePerPlayer: raw.oncePerPlayer !== false,
+      conditionNotes: raw.conditionNotes?.trim() || "",
       enabled: raw.enabled !== false,
       order: Number.isFinite(raw.order) ? Math.trunc(raw.order) : index * 10,
       minFailures: Math.max(0, Math.trunc(raw.minFailures ?? 0)),
@@ -1704,6 +1794,33 @@ export async function getTowerRunStateAction(
       run: { status: { in: ["FAILED", "ABANDONED"] }, id: { not: run.id } },
     },
   });
+  const unlockedNarrative = new Set(
+    (
+      await prisma.towerCodexEntry.findMany({
+        where: { userId: null, subjectType: "NARRATIVE_SCENE" },
+        select: { subjectKey: true },
+      })
+    ).map((entry) => entry.subjectKey),
+  );
+  const sceneTriggers: TowerSceneTrigger[] =
+    run.status === "FINISHED"
+      ? ["FINAL_VICTORY", "VICTORY", "POSTGAME"]
+      : vol.battle?.isBoss
+        ? ["BOSS_INTRO", "BOSS"]
+        : vol.battle
+          ? ["ENCOUNTER_PREVIEW", "ENCOUNTER"]
+          : run.globalTurn <= 1
+            ? ["RUN_START", "FLOOR_ENTER"]
+            : ["ROOM_ENTER", "ENCOUNTER"];
+  const currentScene = nextTowerSceneFor(
+    scenes,
+    sceneTriggers,
+    run.currentFloor,
+    priorFailures,
+    unlockedNarrative,
+  );
+  if (currentScene && !unlockedNarrative.has(currentScene.id))
+    await recordTowerSceneUnlock(currentScene, user.id, run.id);
   const userNames = new Map(
     (
       await prisma.user.findMany({
@@ -2069,12 +2186,7 @@ export async function getTowerRunStateAction(
     log: (vol.log ?? []).slice(-12),
     lastEvents: vol.lastEvents ?? [],
     lastResolvedTurn: vol.lastResolvedTurn ?? null,
-    scene: towerSceneFor(
-      scenes,
-      battle?.isBoss ? "BOSS" : run.globalTurn <= 1 ? "RUN_START" : "ENCOUNTER",
-      run.currentFloor,
-      priorFailures,
-    ),
+    scene: currentScene,
   };
 }
 

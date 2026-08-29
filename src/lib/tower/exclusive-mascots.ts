@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
-import { TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
-export { TOWER_EXCLUSIVE_MASCOTS, getTowerExclusiveMascot } from "./exclusive-catalog";
+import { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
+export { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS, getTowerExclusiveMascot } from "./exclusive-catalog";
 
 export async function ensureTowerExclusiveSpecies() {
   for (const mascot of TOWER_EXCLUSIVE_MASCOTS) {
@@ -17,7 +17,11 @@ export async function ensureTowerExclusiveSpecies() {
 }
 
 export function towerRewardForFloor(floor: number) {
-  return TOWER_EXCLUSIVE_MASCOTS[Math.max(0, Math.min(6, floor - 1))];
+  // Ordem narrativa oficial: contratos, identidade, vigilância, Psicose,
+  // disciplina, possibilidades e o confronto com o Barão.
+  const order = [210006, 210005, 210003, 210004, 210002, 210007, 210001];
+  return TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === order[Math.max(0, Math.min(6, floor - 1))])!;
 }
+
 
 export const XANDINHO = TOWER_EXCLUSIVE_MASCOTS[7];

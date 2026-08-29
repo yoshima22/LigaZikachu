@@ -13,3 +13,13 @@ export const TOWER_EXCLUSIVE_MASCOTS = [
 export function getTowerExclusiveMascot(pokemonId: number) {
   return TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === pokemonId);
 }
+
+export const TOWER_BOSS_PRIZES = [
+  { floor: 1, boss: "Dom Miano", coins: 250, eggs: [{ type: "COMMON", quantity: 1 }], label: "250 ZC + 1 Ovo Comum" },
+  { floor: 2, boss: "Quase Barão Trapinho", coins: 350, eggs: [{ type: "EVENT", quantity: 1 }], label: "350 ZC + 1 Ovo de Evento" },
+  { floor: 3, boss: "Umbrelord", coins: 450, eggs: [{ type: "RARE", quantity: 1 }], label: "450 ZC + 1 Ovo Raro" },
+  { floor: 4, boss: "Gengartola", coins: 600, eggs: [{ type: "RARE", quantity: 2 }], label: "600 ZC + 2 Ovos Raros" },
+  { floor: 5, boss: "Sir Lucardio", coins: 750, eggs: [{ type: "EVENT", quantity: 1 }, { type: "RARE", quantity: 1 }], label: "750 ZC + 1 Ovo de Evento + 1 Ovo Raro" },
+  { floor: 6, boss: "Madame Espeã", coins: 900, eggs: [{ type: "SPECIAL", quantity: 1 }], label: "900 ZC + 1 Ovo Especial" },
+  { floor: 7, boss: "Barão Pikachuque", coins: 1200, eggs: [{ type: "LAB", quantity: 1 }], label: "1.200 ZC + 1 Ovo de Laboratório + escolha de um Rebelde" },
+] as const;

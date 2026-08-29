@@ -13,11 +13,13 @@ import {
   contributeTowerPreparationAction,
   spendTowerTalentAction,
   claimTowerMascotRewardAction,
+  claimTowerBossChoiceAction,
 } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
 import {
   TowerKnowledge,
   TowerNarrative,
+  TowerNarrativeArchive,
   TowerNarrativeAdmin,
 } from "./tower-narrative";
 import { TowerAdminSettings } from "./tower-admin-settings";
@@ -26,6 +28,7 @@ import {
   TOWER_COMMUNITY_STUDIES,
   TOWER_STUDY_TARGET,
 } from "@/lib/tower/studies";
+import { TOWER_BOSS_PRIZES } from "@/lib/tower/exclusive-catalog";
 
 type LobbyData = Extract<
   Awaited<ReturnType<typeof getTowerLobbyDataAction>>,
@@ -64,6 +67,8 @@ export function TowerLobby() {
   const [rewardPersonalities, setRewardPersonalities] = useState<
     Record<string, string>
   >({});
+  const [selectedBoss, setSelectedBoss] = useState<number | null>(null);
+  const [bossPersonality, setBossPersonality] = useState("LOYAL");
   const [claimedMascot, setClaimedMascot] = useState<{
     name: string;
     sprite: string;
@@ -141,6 +146,7 @@ export function TowerLobby() {
   if (
     data.nextEntryAt &&
     data.pendingMascotRewards.length === 0 &&
+    !data.bossChoice &&
     !claimedMascot
   ) {
     const when = new Date(data.nextEntryAt).toLocaleString("pt-BR");
@@ -296,6 +302,12 @@ export function TowerLobby() {
           </article>
         </section>
       )}
+      {view === "OVERVIEW" && <section className={card}>
+        <p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-300">Recompensas dos regentes</p>
+        <h2 className="mt-1 text-lg font-black text-white">Prêmios imediatos, mascote somente no topo</h2>
+        <p className="mt-2 text-xs leading-5 text-slate-400">Cada pacote abaixo é entregue uma vez por jogador ao derrotar o respectivo chefe. Derrotar chefes intermediários não concede mais a espécie exclusiva. Depois da primeira expedição concluir o sétimo andar, cada integrante que alcançar o topo recebe uma escolha definitiva entre os sete Rebeldes.</p>
+        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{TOWER_BOSS_PRIZES.map(prize=><article key={prize.floor} className="rounded-xl border border-amber-300/15 bg-amber-950/10 p-3"><small className="font-black uppercase text-amber-300">{prize.floor}º andar</small><b className="mt-1 block text-sm text-white">{prize.boss}</b><p className="mt-2 text-[11px] text-slate-300">🎁 {prize.label}</p></article>)}</div>
+      </section>}
       {claimedMascot && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-black/90 p-4">
           <section className="my-auto w-full max-w-2xl overflow-hidden rounded-[2rem] border border-fuchsia-300/50 bg-slate-950 shadow-[0_0_90px_rgba(217,70,239,.35)]">
@@ -470,6 +482,24 @@ export function TowerLobby() {
           </div>
         </section>
       )}
+      {data.bossChoice && (
+        <section className="overflow-hidden rounded-3xl border border-amber-300/50 bg-[radial-gradient(circle_at_top,#4c1d95_0%,#0f172a_52%,#020617_100%)] shadow-[0_0_70px_rgba(251,191,36,.14)]">
+          <div className="border-b border-amber-300/20 p-6 text-center">
+            <p className="text-[10px] font-black uppercase tracking-[.3em] text-amber-300">O selo do último andar foi rompido</p>
+            <h2 className="mt-2 text-3xl font-black text-white">Um Rebelde seguirá a sua escolha</h2>
+            <p className="mx-auto mt-2 max-w-2xl text-xs leading-6 text-slate-300">Os chefes agora entregam prêmios próprios quando são derrotados. O mascote exclusivo não é recebido andar por andar: cada jogador que conclui o topo escolhe <strong className="text-amber-200">uma única vez</strong> entre os sete regentes.</p>
+          </div>
+          <div className="grid gap-3 p-5 sm:grid-cols-2 lg:grid-cols-4">{data.bossChoice.options.map(option=>{const active=selectedBoss===option.pokemonId;return <button key={option.pokemonId} type="button" onClick={()=>setSelectedBoss(option.pokemonId)} className={`group relative overflow-hidden rounded-2xl border p-3 text-center transition ${active?"border-amber-300 bg-amber-300/15 shadow-[0_0_30px_rgba(251,191,36,.25)]":"border-purple-300/20 bg-black/25 hover:border-purple-300/60"}`}>
+            {active&&<span className="absolute right-2 top-2 rounded-full bg-amber-300 px-2 py-1 text-[9px] font-black text-slate-950">ESCOLHIDO</span>}
+            <img src={option.sprite} alt={option.name} className="mx-auto h-32 w-32 object-contain drop-shadow-[0_0_16px_rgba(168,85,247,.45)] transition group-hover:scale-105"/>
+            <b className="block text-sm text-white">{option.name}</b><small className="text-[10px] uppercase tracking-wider text-purple-200">Nv.55 · origem de Laboratório</small>
+          </button>})}</div>
+          <div className="grid gap-3 border-t border-purple-300/15 bg-black/25 p-5 md:grid-cols-[1fr_2fr]">
+            <label className="text-[10px] font-black uppercase tracking-wider text-slate-400">Personalidade de nascimento<select value={bossPersonality} onChange={event=>setBossPersonality(event.target.value)} className="mt-2 w-full rounded-xl border border-purple-300/25 bg-slate-950 p-3 text-xs normal-case text-white">{PERSONALITIES.map(([value,label])=><option key={value} value={value}>{label}</option>)}</select></label>
+            <button disabled={pending||!selectedBoss} onClick={()=>selectedBoss&&start(async()=>{const result=await claimTowerBossChoiceAction(data.bossChoice!.id,selectedBoss,bossPersonality as never);if("error" in result)toast.error(result.error);else{setClaimedMascot(result.mascot);setSelectedBoss(null);load();}})} className="self-end rounded-xl bg-gradient-to-r from-amber-300 via-yellow-300 to-orange-300 py-3 text-sm font-black text-slate-950 shadow-[0_0_28px_rgba(251,191,36,.2)] disabled:opacity-35">✨ Confirmar minha escolha definitiva</button>
+          </div>
+        </section>
+      )}
       {view === "LEGACY" && data.ranking.length > 0 && (
         <section className={card}>
           <p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">
@@ -556,6 +586,8 @@ export function TowerLobby() {
         </section>
       )}
       {view === "ARCHIVE" && (
+        <div className="space-y-4">
+        <TowerNarrativeArchive groups={data.narrativeGroups} />
         <section className={card}>
           <p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-300">
             Preparação entre runs · Estudos da comunidade
@@ -644,7 +676,7 @@ export function TowerLobby() {
               ))}
             </div>
           )}
-        </section>
+        </section></div>
       )}
       {view === "OVERVIEW" && <TowerNarrativeAdmin initial={data.scenes} />}
       {view === "LEGACY" && data.controlledMascots.length > 0 && (

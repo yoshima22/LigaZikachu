@@ -2,7 +2,7 @@
 // 4h). Módulo de servidor comum (NÃO "use server"): usado pelas server actions e
 // pelo cron, sem expor a resolução como action pública.
 
-import { Prisma } from "@prisma/client";
+import { EggType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import {
   resolveEncounterTurn,
@@ -28,6 +28,7 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { normalizeCombatRole } from "@/lib/combat-roles";
 import {
   TOWER_EXCLUSIVE_MASCOTS,
+  TOWER_BOSS_PRIZES,
   towerRewardForFloor,
   XANDINHO,
 } from "./exclusive-mascots";
@@ -833,29 +834,53 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
               },
             },
           });
-        const reward = towerRewardForFloor(run.currentFloor);
+        const prize = TOWER_BOSS_PRIZES[run.currentFloor - 1];
         for (const member of run.members) {
           const prior = await tx.towerFeat.findFirst({
             where: {
               userId: member.userId,
-              featKey: { in: ["TOWER_MASCOT_PENDING", "TOWER_MASCOT_CLAIMED"] },
-              data: { path: ["pokemonId"], equals: reward.pokemonId },
+              featKey: "TOWER_BOSS_PRIZE",
+              data: { path: ["floor"], equals: run.currentFloor },
             },
           });
-          if (!prior)
+          if (!prior && prize) {
+            const player = await tx.player.findUnique({ where: { userId: member.userId }, select: { id: true } });
+            if (player) {
+              await tx.zikaCoinWallet.upsert({
+                where: { playerId: player.id },
+                create: { playerId: player.id, balance: prize.coins, totalEarned: prize.coins },
+                update: { balance: { increment: prize.coins }, totalEarned: { increment: prize.coins } },
+              });
+              for (const egg of prize.eggs)
+                await tx.mascotEgg.createMany({
+                  data: Array.from({ length: egg.quantity }, () => ({ playerId: player.id, type: egg.type as EggType, origin: `Torre dos Rebeldes · ${prize.boss}` })),
+                });
+            }
             await tx.towerFeat.create({
               data: {
                 userId: member.userId,
                 runId,
-                featKey: "TOWER_MASCOT_PENDING",
-                data: {
-                  pokemonId: reward.pokemonId,
-                  basePokemonId: reward.basePokemonId,
-                  name: reward.name,
-                  floor: run.currentFloor,
-                },
+                featKey: "TOWER_BOSS_PRIZE",
+                data: { floor: run.currentFloor, boss: prize.boss, label: prize.label, coins: prize.coins, eggs: prize.eggs },
               },
             });
+          }
+        }
+        if (run.currentFloor === 7) {
+          await tx.towerCommunityProgress.upsert({
+            where: { floorId_metricKey: { floorId: 7, metricKey: "FIRST_FINAL_CLEAR" } },
+            create: { floorId: 7, metricKey: "FIRST_FINAL_CLEAR", value: 1 },
+            update: {},
+          });
+          for (const member of run.members) {
+            const priorChoice = await tx.towerFeat.findFirst({
+              where: { userId: member.userId, featKey: { in: ["TOWER_BOSS_CHOICE_PENDING", "TOWER_BOSS_CHOICE_CLAIMED"] } },
+            });
+            if (!priorChoice)
+              await tx.towerFeat.create({
+                data: { userId: member.userId, runId, featKey: "TOWER_BOSS_CHOICE_PENDING", data: { unlockedAtFloor: 7, firstClearRunId: runId } },
+              });
+          }
         }
       }
 

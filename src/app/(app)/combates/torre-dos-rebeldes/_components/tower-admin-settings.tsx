@@ -2,7 +2,7 @@
 import { useState,useTransition } from "react";
 import { toast } from "sonner";
 import type { TowerConfig } from "@/lib/tower/config";
-import { adminResetTowerEventAction,clearMyTowerCooldownAction,debugTowerMascotRewardPreviewAction,saveTowerConfigAction } from "../actions";
+import { adminResetTowerEventAction,clearMyTowerCooldownAction,debugGrantTowerBossChoiceAction,debugTowerMascotRewardPreviewAction,saveTowerConfigAction } from "../actions";
 import { TOWER_EXCLUSIVE_MASCOTS } from "@/lib/tower/exclusive-catalog";
 
 type DebugPreview = { pokemonId:number; name:string; code:string; sprite:string; level:number; origin:string; alreadyClaimed:boolean; pending:boolean; stats:{statForce:number;statAgility:number;statCharisma:number;statInstinct:number;statVitality:number} };
@@ -28,6 +28,7 @@ export function TowerAdminSettings({initial,onSaved}:{initial:TowerConfig;onSave
      <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{TOWER_EXCLUSIVE_MASCOTS.map(mascot=><button key={mascot.code} disabled={pending} onClick={()=>simulate(mascot.pokemonId)} className="flex items-center gap-2 rounded-xl border border-fuchsia-300/20 bg-black/25 p-2 text-left hover:border-fuchsia-300/60 disabled:opacity-40"><img src={mascot.sprite} alt="" className="h-12 w-12 object-contain"/><span className="min-w-0"><b className="block truncate text-[11px] text-white">{mascot.name}</b><code className="text-[9px] text-fuchsia-300">ID {mascot.pokemonId}</code></span></button>)}</div>
     </div>
     <div className="rounded-xl border border-purple-400/25 bg-purple-950/15 p-3 md:col-span-2"><b className="text-xs text-purple-200">Cola para envio manual</b><div className="mt-2 grid gap-1 sm:grid-cols-2">{TOWER_EXCLUSIVE_MASCOTS.map(mascot=><code key={mascot.code} className="rounded bg-black/30 p-2 text-[10px] text-slate-300">{mascot.code} · ID {mascot.pokemonId} · {mascot.name}</code>)}</div></div>
+    <button disabled={pending} onClick={()=>start(async()=>{const result=await debugGrantTowerBossChoiceAction();if("error" in result)toast.error(result.error);else{toast.success("Janela de escolha final liberada para teste.");onSaved?.()}})} className="rounded-xl border border-amber-300/40 bg-amber-300/10 py-2.5 text-xs font-black text-amber-200 disabled:opacity-50 md:col-span-2">🧪 Testar escolha única após o último andar</button>
     <button disabled={pending} onClick={reset} className="rounded-xl border border-red-400/40 bg-red-400/10 py-2.5 text-xs font-black text-red-200 disabled:opacity-50 md:col-span-2">Resetar evento inteiro</button>
    </div>}
   </section>
