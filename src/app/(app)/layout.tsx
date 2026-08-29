@@ -124,7 +124,17 @@ export default async function AppLayout({
   if (!user) redirect("/login");
 
   const admin = isStaff(user.role);
-  const platformAdmin = isAdmin(user.role); // exclui GM — para itens só de ADMIN (ex.: Torre dos Rebeldes)
+  const isPlatformAdmin = isAdmin(user.role);
+  const towerAccessSetting = !isPlatformAdmin
+    ? await prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }).catch(() => null)
+    : null;
+  const towerTesterIds = Array.isArray(towerAccessSetting?.value)
+    ? towerAccessSetting.value.filter((id): id is string => typeof id === "string")
+    : [];
+  // Atualmente a Torre é o único item com platformAdminOnly. Para contas de
+  // teste, o menu aparece, mas todas as actions administrativas continuam
+  // protegidas por requireTowerAdmin no servidor.
+  const platformAdmin = isPlatformAdmin || towerTesterIds.includes(user.id);
 
   // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
   const birthdayPlayer = await prisma.player.findUnique({

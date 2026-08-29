@@ -1,6 +1,7 @@
 import Link from "next/link";
-import { requirePlatformAdmin } from "@/lib/auth/permissions";
+import { redirect } from "next/navigation";
 import { TowerLobby } from "./_components/tower-lobby";
+import { requireTowerAccess } from "./actions";
 
 export const dynamic = "force-dynamic";
 
@@ -8,7 +9,8 @@ export const dynamic = "force-dynamic";
 // Guard server-side com requirePlatformAdmin (ADMIN/SUPER_ADMIN). GM e USER são
 // redirecionados — a segurança NÃO depende de esconder o link no frontend.
 export default async function TorreDosRebeldesPage() {
-  await requirePlatformAdmin();
+  const user = await requireTowerAccess();
+  if (!user) redirect("/combates");
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
@@ -21,8 +23,8 @@ export default async function TorreDosRebeldesPage() {
           <span className="rounded-full border border-purple-400/40 bg-purple-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-purple-200">
             Evento em construção
           </span>
-          <span className="rounded-full border border-red-400/40 bg-red-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-red-300">
-            Admin only
+          <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-300">
+            Teste fechado
           </span>
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
@@ -43,7 +45,7 @@ export default async function TorreDosRebeldesPage() {
       </details>
 
       <section className="rounded-2xl border border-slate-800 bg-slate-950/70 p-4 text-[11px] text-slate-500">
-        <p>Ambiente restrito para validação do evento. Ações, cenas e encontros podem ser testados sem expor o modo aos jogadores.</p>
+        <p>Ambiente restrito para validação do evento. O administrador pode liberar contas específicas para testes multiplayer sem abrir o modo ao restante da Liga.</p>
         <div className="mt-3">
           <Link href="/combates/liga-rush" className="font-bold text-[#FFCB05] hover:underline">← Voltar aos Combates</Link>
         </div>

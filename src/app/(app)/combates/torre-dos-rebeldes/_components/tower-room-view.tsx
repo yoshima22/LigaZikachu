@@ -1,5 +1,7 @@
 "use client";
 
+import type { ReactNode } from "react";
+import { useState } from "react";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
 type Exploration = NonNullable<
@@ -29,6 +31,7 @@ export function TowerRoomView({
   onRoute,
   onPuzzle,
   onRoomAction,
+  decisionFooter,
 }: {
   exploration: Exploration;
   routeId?: string;
@@ -38,7 +41,9 @@ export function TowerRoomView({
   onRoute: (id: string) => void;
   onPuzzle: (id: string) => void;
   onRoomAction: (action: "INTERACT" | "SKIP" | "FIGHT" | "WAIT") => void;
+  decisionFooter?: ReactNode;
 }) {
+  const [decisionCompact, setDecisionCompact] = useState(false);
   const room = exploration.currentRoom;
   const routeIds = new Set(
     exploration.routes
@@ -160,8 +165,8 @@ export function TowerRoomView({
           A subida acontece de cima para baixo. Linhas iluminadas são passagens
           conhecidas; nomes em ciano mostram escolhas dos aliados.
         </p>
-        <div className="h-[72vh] min-h-[520px] overflow-auto rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)]">
-          <div className="relative h-[1280px] min-w-[620px]">
+        <div className="rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)]">
+          <div className="relative h-[1280px] w-full min-w-0">
             <svg
               className="absolute inset-0 h-full w-full"
               viewBox="0 0 100 100"
@@ -300,8 +305,19 @@ export function TowerRoomView({
         </div>
       )}
 
+      <div className="sticky bottom-3 z-30 overflow-hidden rounded-2xl border border-purple-300/35 bg-slate-950/95 shadow-[0_-20px_55px_rgba(0,0,0,.72)] backdrop-blur-xl">
+        <div className="flex items-center justify-between gap-3 border-b border-white/10 px-4 py-2.5">
+          <div>
+            <p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-200">Decisão atual da expedição</p>
+            <p className="text-[10px] text-slate-500">Escolhas, consequência anterior e confirmação permanecem juntas.</p>
+          </div>
+          <button type="button" onClick={() => setDecisionCompact((value) => !value)} className="shrink-0 rounded-lg border border-purple-300/25 bg-purple-300/10 px-3 py-1.5 text-[10px] font-black text-purple-100">
+            {decisionCompact ? "Expandir" : "Compactar"}
+          </button>
+        </div>
+        {!decisionCompact && <div className="max-h-[58vh] overflow-y-auto">
       {exploration.encounter && (
-        <div className="sticky bottom-[138px] z-20 max-h-[62vh] overflow-auto rounded-2xl border border-red-400/40 bg-gradient-to-r from-red-950 via-slate-950 to-purple-950 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
+        <div className="border-b border-red-400/30 bg-gradient-to-r from-red-950 via-slate-950 to-purple-950">
           <div className="border-b border-red-300/15 p-4">
             <p className="text-[10px] font-black uppercase tracking-[.2em] text-red-300">
               ⚔ Encontro hostil — decisão coletiva
@@ -357,7 +373,7 @@ export function TowerRoomView({
       )}
 
       {!room.cleared && room.kind === "PUZZLE" && room.puzzle && (
-        <div className="sticky bottom-[138px] z-20 max-h-[62vh] overflow-auto rounded-2xl border border-amber-300/30 bg-slate-950 p-5 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
+        <div className="border-b border-amber-300/25 bg-slate-950 p-5">
           <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">
             Enigma coletivo
           </p>
@@ -388,7 +404,7 @@ export function TowerRoomView({
       )}
 
       {!room.cleared && room.kind === "REST" && !exploration.encounter && (
-        <div className="sticky bottom-[138px] z-20 rounded-2xl border border-purple-400/25 bg-slate-950 p-4 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
+        <div className="border-b border-purple-400/25 bg-slate-950 p-4">
           <p className="text-sm text-purple-100">
             Uma chama desconhecida oferece descanso. O grupo decide
             conscientemente se interage ou segue adiante.
@@ -414,7 +430,7 @@ export function TowerRoomView({
         </div>
       )}
       {!room.cleared && (room.kind === "EVENT" || room.kind === "LUCK") && (
-        <div className="sticky bottom-[138px] z-20 rounded-2xl border border-fuchsia-400/25 bg-slate-950 p-4 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
+        <div className="border-b border-fuchsia-400/25 bg-slate-950 p-4">
           <p className="text-sm text-fuchsia-100">
             Um objeto ativável foi encontrado. Interagir pode conceder uma
             relíquia ou acionar uma sabotagem; ignorar preserva o estado atual.
@@ -439,6 +455,9 @@ export function TowerRoomView({
           </div>
         </div>
       )}
+        </div>}
+        {decisionFooter}
+      </div>
     </div>
   );
 }

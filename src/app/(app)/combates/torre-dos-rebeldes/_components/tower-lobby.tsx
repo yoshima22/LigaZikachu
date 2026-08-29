@@ -122,15 +122,15 @@ export function TowerLobby() {
     return (
       <div className="space-y-4">
         <TowerIntro forceKey={introKey} />
-        <button
+        {data.adminView && <button
           type="button"
           onClick={() => setIntroKey(Date.now())}
           className="rounded-xl border border-purple-400/30 bg-purple-400/10 px-4 py-2 text-xs font-black text-purple-200"
         >
           ▶ Testar introdução do evento
-        </button>
-        <TowerAdminSettings initial={data.config} onSaved={load} activeRunId={data.activeRun.id} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
-        <TowerNarrativeAdmin initial={data.scenes} />
+        </button>}
+        {data.adminView && <TowerAdminSettings initial={data.config} onSaved={load} activeRunId={data.activeRun.id} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} allowedPlayers={data.allowedPlayers} />}
+        {data.adminView && <TowerNarrativeAdmin initial={data.scenes} />}
         <TowerRunPanel
           runId={data.activeRun.id}
           onLeft={() => {
@@ -152,8 +152,8 @@ export function TowerLobby() {
     const when = new Date(data.nextEntryAt).toLocaleString("pt-BR");
     return (
       <div className="space-y-4">
-        <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
-        <TowerNarrativeAdmin initial={data.scenes} />
+        {data.adminView && <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} allowedPlayers={data.allowedPlayers} />}
+        {data.adminView && <TowerNarrativeAdmin initial={data.scenes} />}
         <section className={card}>
           <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
             Cooldown de entrada
@@ -386,8 +386,8 @@ export function TowerLobby() {
           </button>
         </>
       )}
-      {view === "OVERVIEW" && (
-        <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} />
+      {view === "OVERVIEW" && data.adminView && (
+        <TowerAdminSettings initial={data.config} onSaved={load} scenes={data.scenes} highestReachedFloor={data.highestReachedFloor} communityProgress={data.communityProgress} allowedPlayers={data.allowedPlayers} />
       )}
       {view === "ARCHIVE" && (
         <>
@@ -678,7 +678,7 @@ export function TowerLobby() {
           )}
         </section></div>
       )}
-      {view === "OVERVIEW" && <TowerNarrativeAdmin initial={data.scenes} />}
+      {view === "OVERVIEW" && data.adminView && <TowerNarrativeAdmin initial={data.scenes} />}
       {view === "LEGACY" && data.controlledMascots.length > 0 && (
         <section className={card}>
           <div className="flex items-center justify-between">

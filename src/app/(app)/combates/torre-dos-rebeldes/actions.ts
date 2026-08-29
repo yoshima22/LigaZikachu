@@ -72,6 +72,12 @@ import {
 
 const PATH = "/combates/torre-dos-rebeldes";
 const TOWER_TICKET_ID = "tower-entry-ticket";
+const TOWER_TESTER_ACCESS_KEY = "tower_rebels_tester_user_ids";
+
+async function towerTesterIds() {
+  const row = await prisma.appSetting.findUnique({ where: { key: TOWER_TESTER_ACCESS_KEY }, select: { value: true } });
+  return Array.isArray(row?.value) ? row.value.filter((id): id is string => typeof id === "string") : [];
+}
 
 async function ensureTowerTicket() {
   return prisma.shopItem.upsert({
@@ -134,6 +140,41 @@ export async function requireTowerAdmin() {
   const user = await getSessionUser();
   if (!user || !isAdmin(user.role)) return null;
   return user;
+}
+
+/** Participante autorizado para o teste: admin ou conta incluída pelo admin. */
+export async function requireTowerAccess() {
+  const user = await getSessionUser();
+  if (!user) return null;
+  if (isAdmin(user.role)) return user;
+  return (await towerTesterIds()).includes(user.id) ? user : null;
+}
+
+export async function adminAddTowerTesterAction(query: string) {
+  const admin = await requireTowerAdmin();
+  if (!admin) return { error: "Acesso restrito." };
+  const term = query.trim();
+  if (term.length < 2) return { error: "Digite ao menos 2 caracteres do nome ou e-mail." };
+  const player = await prisma.player.findFirst({
+    where: { OR: [{ displayName: { contains: term, mode: "insensitive" } }, { user: { email: { contains: term, mode: "insensitive" } } }] },
+    orderBy: { displayName: "asc" },
+    select: { userId: true, displayName: true, user: { select: { email: true } } },
+  });
+  if (!player) return { error: "Jogador não encontrado." };
+  const ids = await towerTesterIds();
+  if (!ids.includes(player.userId)) ids.push(player.userId);
+  await prisma.appSetting.upsert({ where: { key: TOWER_TESTER_ACCESS_KEY }, create: { key: TOWER_TESTER_ACCESS_KEY, value: ids }, update: { value: ids } });
+  revalidatePath(PATH);
+  return { ok: true as const, player: { userId: player.userId, name: player.displayName, email: player.user.email } };
+}
+
+export async function adminRemoveTowerTesterAction(userId: string) {
+  const admin = await requireTowerAdmin();
+  if (!admin) return { error: "Acesso restrito." };
+  const ids = (await towerTesterIds()).filter((id) => id !== userId);
+  await prisma.appSetting.upsert({ where: { key: TOWER_TESTER_ACCESS_KEY }, create: { key: TOWER_TESTER_ACCESS_KEY, value: ids }, update: { value: ids } });
+  revalidatePath(PATH);
+  return { ok: true as const };
 }
 
 type TowerOverview =
@@ -301,7 +342,7 @@ export async function adminControlTowerNarrativeAction(operation: "UNLOCK_SCENE"
 export async function contributeTowerPreparationAction(
   metricKey: TowerStudyKey,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   if (!isTowerStudyKey(metricKey)) return { error: "Preparação inválida." };
   const day = new Date().toISOString().slice(0, 10);
@@ -338,7 +379,7 @@ export async function contributeTowerPreparationAction(
 
 /** Dados para montar o lobby: run ativa, cooldown, mascotes elegíveis, Funções. */
 export async function getTowerLobbyDataAction() {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   await ensureTowerExclusiveSpecies();
   await ensureTowerTicket();
@@ -346,6 +387,9 @@ export async function getTowerLobbyDataAction() {
   if (!player) return { error: "Jogador não encontrado." };
 
   const config = await getTowerConfig();
+  const adminView = isAdmin(user.role);
+  const allowedIds = adminView ? await towerTesterIds() : [];
+  const allowedPlayers = adminView && allowedIds.length > 0 ? await prisma.player.findMany({ where: { userId: { in: allowedIds } }, orderBy: { displayName: "asc" }, select: { userId: true, displayName: true, user: { select: { email: true } } } }) : [];
   const scenes = await getTowerNarrativeScenes();
   const failures = await prisma.towerRunMember.count({
     where: {
@@ -560,6 +604,8 @@ export async function getTowerLobbyDataAction() {
 
   return {
     ok: true as const,
+    adminView,
+    allowedPlayers: allowedPlayers.map((entry) => ({ userId: entry.userId, name: entry.displayName, email: entry.user.email })),
     config,
     scenes,
     lobbyScene,
@@ -704,7 +750,7 @@ export async function claimTowerMascotRewardAction(
   featId: string,
   personality: MascotPersonality,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   if (!Object.values(MascotPersonality).includes(personality))
     return { error: "Personalidade inválida." };
@@ -800,7 +846,7 @@ export async function claimTowerBossChoiceAction(
   pokemonId: number,
   personality: MascotPersonality,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   if (!Object.values(MascotPersonality).includes(personality)) return { error: "Personalidade inválida." };
   const species = TOWER_EXCLUSIVE_MASCOTS.slice(0, 7).find((entry) => entry.pokemonId === pokemonId);
@@ -910,7 +956,7 @@ const LEGACY_TALENT_KEYS = [
   "RESCUE",
 ] as const;
 export async function spendTowerTalentAction(key: string, requested = 1) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const isLegacy = (LEGACY_TALENT_KEYS as readonly string[]).includes(key);
   const catalog = TOWER_TALENTS.find((talent) => talent.key === key);
@@ -1025,7 +1071,7 @@ export async function createTowerRunAction(input: {
   mascotIds: string[];
   stanceByMascot?: Record<string, string>;
 }): Promise<{ error: string } | { ok: true; runId: string }> {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   const player = await getSessionPlayer(user.id);
   if (!player) return { error: "Jogador não encontrado." };
@@ -1130,7 +1176,7 @@ export async function joinTowerRoomAction(input: {
   mascotIds: string[];
   stanceByMascot?: Record<string, string>;
 }) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   const player = await getSessionPlayer(user.id);
   if (!player) return { error: "Jogador não encontrado." };
@@ -1218,7 +1264,7 @@ export async function joinTowerRoomAction(input: {
 
 /** Confirma ou reabre a preparação. Iniciar só é permitido ao host com todos prontos. */
 export async function setTowerReadyAction(runId: string, ready: boolean) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
@@ -1254,7 +1300,7 @@ export async function removeTowerLobbyMemberAction(
   runId: string,
   targetUserId: string,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
@@ -1294,7 +1340,7 @@ export async function removeTowerLobbyMemberAction(
 
 /** Um membro (não-dono) sai da sala por conta própria, sem encerrar a run. */
 export async function leaveTowerRoomAction(runId: string) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
@@ -1334,7 +1380,7 @@ export async function updateTowerLobbyClassAction(
   runId: string,
   expeditionRole: TowerExpeditionRole,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const role = TOWER_ROLE_BY_KEY[expeditionRole];
   if (!role) return { error: "Classe inválida." };
@@ -1378,7 +1424,7 @@ export async function updateTowerLobbyMascotsAction(
   mascotIds: string[],
   stanceByMascot: Record<string, string> = {},
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const player = await getSessionPlayer(user.id);
   if (!player) return { error: "Jogador não encontrado." };
@@ -1447,7 +1493,7 @@ export async function updateTowerLobbyStanceAction(
   mascotId: string,
   stance: string,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
   const snapshot = await prisma.towerRunMascot.findFirst({
     where: { mascotId, member: { runId, userId: user.id } },
@@ -1480,7 +1526,7 @@ export async function updateTowerLobbyStanceAction(
 export async function abandonTowerRunAction(
   runId: string,
 ): Promise<{ error: string } | { ok: true }> {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   const member = await prisma.towerRunMember.findFirst({
     where: { runId, userId: user.id },
@@ -1502,7 +1548,7 @@ export async function abandonTowerRunAction(
 export async function startTowerExpeditionAction(
   runId: string,
 ): Promise<{ error: string } | { ok: true }> {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
@@ -1633,7 +1679,7 @@ export async function startTowerExpeditionAction(
 export async function advanceToBossAction(
   runId: string,
 ): Promise<{ error: string } | { ok: true }> {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
@@ -1753,7 +1799,7 @@ export async function getTowerRunStateAction(
   runId: string,
   knownRevision?: string,
 ) {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
 
   // O cliente consulta com frequência para manter a sala sincronizada. Antes de
@@ -2266,7 +2312,7 @@ export async function submitTowerActionAction(
   runId: string,
   actions: unknown,
 ): Promise<{ error: string } | { ok: true; resolved: boolean }> {
-  const user = await requireTowerAdmin();
+  const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
 
   const resolvedNow = await prisma.$transaction(

@@ -74,11 +74,13 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const [showReplay, setShowReplay] = useState(false);
   const [editingTeam,setEditingTeam]=useState(false); const [lobbyPicks,setLobbyPicks]=useState<string[]>([]); const [lobbySearch,setLobbySearch]=useState("");
   const [phaseFlash,setPhaseFlash]=useState<string|null>(null);
+  const [discoveryFlash,setDiscoveryFlash]=useState<string|null>(null);
   const inFlight = useRef(false);
   const revisionRef = useRef<string | undefined>(undefined);
   const lastTurnRef=useRef<number|null>(null);
   const replayOpenRef = useRef(false);
   const seenReplayRef = useRef<string | null>(null);
+  const seenOutcomeRef = useRef<string | null>(null);
   useEffect(() => { replayOpenRef.current = showReplay; }, [showReplay]);
   useEffect(() => { setShowReplay(false); }, [state?.exploration?.currentRoom.id]);
   useEffect(() => {
@@ -88,6 +90,16 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
     if (seenReplayRef.current !== key) { seenReplayRef.current = key; setShowReplay(true); }
   }, [state?.exploration?.replay]);
   useEffect(()=>{ if(!state||state.run.status!=="ACTIVE")return; if(lastTurnRef.current!==null&&lastTurnRef.current!==state.run.globalTurn){setPhaseFlash(state.exploration?.encounter?"ENCONTRO HOSTIL · DECIDAM LUTAR OU ESPERAR":`NOVO TURNO · ${state.exploration?.currentRoom.title??"TORRE"}`);setTimeout(()=>setPhaseFlash(null),1800)} lastTurnRef.current=state.run.globalTurn; },[state?.run.globalTurn,state?.run.status,state?.exploration?.encounter,state?.exploration?.currentRoom.title]);
+  useEffect(() => {
+    const outcome = state?.exploration?.lastOutcome?.trim();
+    if (!outcome || seenOutcomeRef.current === outcome) return;
+    seenOutcomeRef.current = outcome;
+    if (/pista|descobert|arquivo da torre|conhecimento compartilhado|enigma revel/i.test(outcome)) {
+      setDiscoveryFlash(outcome);
+      const timer = window.setTimeout(() => setDiscoveryFlash(null), 4200);
+      return () => window.clearTimeout(timer);
+    }
+  }, [state?.exploration?.lastOutcome]);
 
   const refresh = useCallback(async () => {
     if (replayOpenRef.current) return;
@@ -131,6 +143,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   return (
     <section className={card}>
       {phaseFlash&&<div className="fixed inset-0 z-[70] flex pointer-events-none items-center justify-center bg-black/45"><div className="animate-pulse rounded-3xl border-2 border-[#FFCB05] bg-slate-950/95 px-8 py-6 text-center text-xl font-black tracking-widest text-[#FFCB05] shadow-[0_0_70px_rgba(255,203,5,.5)]">{phaseFlash}</div></div>}
+      {discoveryFlash&&<div className="pointer-events-none fixed inset-x-3 top-24 z-[75] mx-auto max-w-xl animate-pulse rounded-2xl border-2 border-cyan-300 bg-gradient-to-r from-cyan-950 via-slate-950 to-purple-950 p-4 text-center shadow-[0_0_65px_rgba(34,211,238,.5)]"><p className="text-[10px] font-black uppercase tracking-[.28em] text-cyan-300">✦ Nova pista descoberta</p><h3 className="mt-1 text-lg font-black text-white">Informação adicionada ao Arquivo da Torre</h3><p className="mt-1 line-clamp-2 text-xs text-cyan-100/75">{discoveryFlash}</p></div>}
       <div className="flex flex-wrap items-center justify-between gap-2">
         <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
           {run.status === "LOBBY" ? "Lobby" : ended ? "Encerrada" : "Expedição · Turno " + run.globalTurn}
@@ -261,22 +274,17 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
       {run.status === "ACTIVE" && (
         <div className="mt-4 space-y-4">
           {state.mine.spectator && <div className="rounded-xl border border-amber-300/30 bg-amber-300/10 p-4 text-sm text-amber-100"><b>Modo espectador</b><p className="mt-1 text-xs text-amber-100/70">Seus dois mascotes caíram. A equipe não espera mais sua confirmação, mas você recebe todas as atualizações e poderá voltar a agir se for revivido.</p></div>}
-          {state.exploration && <TowerRoomView exploration={state.exploration} routeId={routeId} puzzleChoice={puzzleChoice} roomAction={roomAction} disabled={state.mine.confirmed || state.mine.spectator || pending} onRoute={setRouteId} onPuzzle={setPuzzleChoice} onRoomAction={setRoomAction} />}
-          {state.exploration && !state.mine.spectator && (
-            <div className="overflow-hidden rounded-2xl border border-[#FFCB05]/40 bg-slate-950 shadow-[0_18px_45px_rgba(0,0,0,.35)]">
-              {state.exploration.lastOutcome && <div className="flex items-center gap-3 border-b border-purple-400/25 bg-purple-950/25 p-3"><img src={state.scene?.characterUrl || "/events/torre-dos-rebeldes/chandelure.png"} alt={state.scene?.speaker || "Xandinho Guia"} className="h-14 w-14 shrink-0 object-contain"/><p className="text-xs leading-relaxed text-purple-100"><b className="mb-1 block text-[9px] uppercase tracking-widest text-purple-300">{state.scene?.speaker || "Xandinho Guia"}</b>{state.exploration.lastOutcome}</p></div>}
-              <div className="p-3">
-                <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">Confirmar esta decisão</p><p className="text-xs text-slate-400">{state.mine.confirmed ? "Sua escolha foi registrada; aguardando os demais." : missingTowerChoice ? "Escolha uma das opções acima antes de confirmar." : "A decisão acima será travada para a resolução coletiva."}</p></div><Countdown deadline={run.nextDeadline} /></div>
-                <button type="button" disabled={pending || state.mine.confirmed || missingTowerChoice} onClick={() => start(async () => {
+          {state.exploration && <TowerRoomView exploration={state.exploration} routeId={routeId} puzzleChoice={puzzleChoice} roomAction={roomAction} disabled={state.mine.confirmed || state.mine.spectator || pending} onRoute={setRouteId} onPuzzle={setPuzzleChoice} onRoomAction={setRoomAction} decisionFooter={!state.mine.spectator ? <div className="bg-slate-950/95 p-3">
+              {state.exploration.lastOutcome && <div className="mb-3 flex items-center gap-3 rounded-xl border border-emerald-300/30 bg-gradient-to-r from-emerald-950/55 to-cyan-950/25 p-3 shadow-[0_0_25px_rgba(52,211,153,.12)]"><img src={state.scene?.characterUrl || "/events/torre-dos-rebeldes/chandelure.png"} alt={state.scene?.speaker || "Xandinho Guia"} className="h-14 w-14 shrink-0 object-contain"/><div className="min-w-0"><b className="block text-[9px] uppercase tracking-widest text-emerald-300">✓ Resultado da ação anterior · {state.scene?.speaker || "Xandinho Guia"}</b><p className="mt-1 text-xs font-semibold leading-relaxed text-emerald-50">{state.exploration.lastOutcome}</p><span className="mt-1 inline-block text-[9px] text-cyan-200">A consequência já foi aplicada ao estado compartilhado da run.</span></div></div>}
+              <div className="mb-2 flex items-center justify-between gap-3"><div><p className="text-[10px] font-black uppercase tracking-widest text-[#FFCB05]">Confirmar esta decisão</p><p className="text-xs text-slate-400">{state.mine.confirmed ? "Sua escolha foi registrada; aguardando os demais." : missingTowerChoice ? "Escolha uma das opções deste painel antes de confirmar." : "A decisão será travada e ficará visível para seus aliados."}</p></div><Countdown deadline={run.nextDeadline} /></div>
+              <button type="button" disabled={pending || state.mine.confirmed || missingTowerChoice} onClick={() => start(async () => {
                   const payload = { routeId, puzzleChoice, action: roomAction ?? "RESOLVE_ROOM" };
                   const res = await submitTowerActionAction(runId, payload);
                   if ("error" in res) { toast.error(res.error); return; }
                   toast.success(res.resolved ? "Todos confirmaram — turno resolvido." : "Decisão confirmada.");
                   setRouteId(undefined); setPuzzleChoice(undefined); setRoomAction(undefined); void refresh();
                 })} className="w-full rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 py-2.5 text-sm font-black text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-40">{state.mine.confirmed ? "Aguardando os demais jogadores" : towerActionLabel}</button>
-              </div>
-            </div>
-          )}
+            </div> : null} />}
           {state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Assistir ao combate convencional completo</button>}
           {showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}
           {!state.exploration && state.battle && <TowerCombatScene
