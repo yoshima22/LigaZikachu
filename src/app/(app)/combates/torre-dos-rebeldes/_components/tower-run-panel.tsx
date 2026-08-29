@@ -44,6 +44,22 @@ function Countdown({ deadline }: { deadline: string | null }) {
   return <span className={`font-mono text-sm font-bold tabular-nums ${ms === 0 ? "text-red-300" : "text-[#FFCB05]"}`}>{ms === 0 ? "resolvendo…" : label}</span>;
 }
 
+function TowerRunReport({ state }: { state: State }) {
+  const report = state.exploration?.runReport;
+  if (!report) return <div className="rounded-2xl border border-slate-700 bg-slate-950/70 p-5 text-sm text-slate-400">Esta run terminou antes do novo relatório detalhado registrar combates.</div>;
+  const mascots = Object.values(report.mascots);
+  const dealt = mascots.reduce((sum, mascot) => sum + mascot.damageDealt, 0);
+  const received = mascots.reduce((sum, mascot) => sum + mascot.damageReceived, 0);
+  const kos = mascots.reduce((sum, mascot) => sum + mascot.kos, 0);
+  const score = Math.max(0, Math.round(dealt + kos * 500 + report.alliesRecovered * 750 + report.bossesDefeated * 2500 + report.roomsCleared * 300 - received * .2));
+  return <section className="overflow-hidden rounded-3xl border border-purple-400/35 bg-gradient-to-br from-purple-950/45 via-slate-950 to-cyan-950/30 shadow-2xl">
+    <div className="border-b border-white/10 p-5 text-center"><p className="text-[10px] font-black uppercase tracking-[.25em] text-purple-300">Relatório final da expedição</p><p className="mt-2 text-4xl font-black text-white">{score.toLocaleString("pt-BR")}</p><p className="text-xs font-bold text-[#FFCB05]">PONTOS DE RUN</p></div>
+    <div className="grid grid-cols-2 gap-2 p-4 sm:grid-cols-5">{[["Dano causado",dealt],["Dano recebido",received],["K.O.",kos],["Resgates",report.alliesRecovered],["Chefes",report.bossesDefeated]].map(([label,value])=><div key={label} className="rounded-xl border border-white/10 bg-black/25 p-3 text-center"><b className="block text-lg text-white">{Number(value).toLocaleString("pt-BR")}</b><span className="text-[9px] uppercase text-slate-400">{label}</span></div>)}</div>
+    <div className="space-y-2 px-4 pb-4">{mascots.map((mascot)=>{const owner=state.members.find((member)=>member.userId===mascot.ownerUserId)?.name??"Jogador";return <div key={mascot.mascotId} className="grid grid-cols-[auto_1fr] gap-3 rounded-xl border border-slate-700 bg-slate-950/80 p-3 sm:grid-cols-[auto_1fr_repeat(4,minmax(70px,auto))] sm:items-center"><img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-12 w-12 object-contain [image-rendering:pixelated]"/><div><b className="text-white">{mascot.name} · Nv.{mascot.level}</b><p className="text-[10px] text-cyan-300">{owner}</p></div>{[["Dano",mascot.damageDealt],["Recebido",mascot.damageReceived],["Cura",mascot.healing],["K.O.",mascot.kos]].map(([label,value])=><div key={label} className="text-xs"><span className="text-slate-500">{label}</span><b className="ml-1 text-slate-100">{Number(value).toLocaleString("pt-BR")}</b></div>)}</div>})}</div>
+    <p className="border-t border-white/10 px-5 py-3 text-[10px] text-slate-500">Score = dano + 500 por K.O. + 750 por resgate + 2.500 por chefe + 300 por sala vencida − 20% do dano recebido. Pontos de talento conquistados: <b className="text-purple-200">{report.talentPoints}</b>.</p>
+  </section>;
+}
+
 export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => void }) {
   const [state, setState] = useState<State | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -64,6 +80,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   const replayOpenRef = useRef(false);
   const seenReplayRef = useRef<string | null>(null);
   useEffect(() => { replayOpenRef.current = showReplay; }, [showReplay]);
+  useEffect(() => { setShowReplay(false); }, [state?.exploration?.currentRoom.id]);
   useEffect(() => {
     const replay = state?.exploration?.replay;
     if (!replay) return;
@@ -357,7 +374,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
         </div>
       )}
 
-      {ended && <div className="mt-4 space-y-3"><p className={`text-sm ${run.status==="FAILED"?"text-red-300":"text-slate-400"}`}>Esta expedição foi {run.status === "FINISHED" ? "concluída" : run.status==="FAILED"?"derrotada — novas informações podem ter surgido no Arquivo da Torre":"abandonada"}.</p>{state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Rever o último combate completo</button>}{showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}</div>}
+      {ended && <div className="mt-4 space-y-3"><p className={`rounded-2xl border p-4 text-center text-lg font-black ${run.status==="FAILED"?"border-red-400/30 bg-red-950/20 text-red-200":"border-emerald-400/30 bg-emerald-950/20 text-emerald-200"}`}>{run.status === "FINISHED" ? "🏆 A Torre foi superada!" : run.status==="FAILED"?"☠️ A expedição caiu — mas deixou conhecimento para a próxima run.":"Expedição encerrada"}</p><TowerRunReport state={state}/>{state.exploration?.replay && <button type="button" onClick={() => setShowReplay(true)} className="w-full rounded-xl border border-cyan-300/35 bg-cyan-300/10 py-3 text-sm font-black text-cyan-100">▶ Rever o último combate completo</button>}{showReplay && state.exploration?.replay && <LeagueBattleReplayModal playerAName="Expedição" playerBName={state.exploration.replay.title} playerAId={state.mine.userId} winnerId={state.exploration.replay.winner === "A" ? state.mine.userId : state.exploration.replay.winner === "B" ? "TORRE" : null} isDraw={state.exploration.replay.winner === "DRAW"} replay={state.exploration.replay.log as TurnLog[]} playerASurvivors={state.exploration.replay.teamASurvivors} playerBSurvivors={state.exploration.replay.teamBSurvivors} lineupA={state.exploration.replay.lineupA as ReplayLineupFighter[]} lineupB={state.exploration.replay.lineupB as ReplayLineupFighter[]} onFinish={() => setShowReplay(false)} />}</div>}
 
       {(() => {
         const isLobby = state.run.status === "LOBBY";

@@ -17,6 +17,7 @@ import {
   generateTowerRoomGraph,
   towerEncounterPreview,
   type TowerExplorationState,
+  type TowerRunReport,
 } from "./rooms";
 import {
   runLeagueCombat,
@@ -62,6 +63,46 @@ function finalHp(
     }
   }
   return hp;
+}
+
+function addCombatToRunReport(
+  report: TowerRunReport | undefined,
+  allies: LeagueMascot[],
+  enemies: LeagueMascot[],
+  log: Array<{ actorId: string; actorOwnerId: string | null; actorName: string; actorPokemonId?: number; actorLevel?: number; targetId: string; targetOwnerId: string | null; action: string; damage: number }>,
+  isBoss: boolean,
+  won: boolean,
+): TowerRunReport {
+  const next: TowerRunReport = report ?? { mascots: {}, monstersDefeated: 0, bossesDefeated: 0, alliesRecovered: 0, talentPoints: 0, roomsCleared: 0 };
+  const hp = new Map([...allies, ...enemies].map((mascot) => [mascot.id, mascot.hp]));
+  const defeated = new Set<string>();
+  for (const ally of allies) if (!next.mascots[ally.id]) next.mascots[ally.id] = {
+    mascotId: ally.id, ownerUserId: ally.ownerId, name: ally.name, pokemonId: ally.pokemonId,
+    level: ally.level, damageDealt: 0, damageReceived: 0, healing: 0, kos: 0,
+  };
+  for (const event of log) {
+    const actor = next.mascots[event.actorId];
+    const target = next.mascots[event.targetId];
+    if (event.action === "HEAL" && actor) actor.healing += Math.max(0, event.damage);
+    if (event.action !== "ATTACK") continue;
+    const damage = Math.max(0, event.damage);
+    if (actor) actor.damageDealt += damage;
+    if (target) {
+      const before = hp.get(event.targetId) ?? 0;
+      const applied = Math.min(before, damage);
+      target.damageReceived += applied;
+      hp.set(event.targetId, Math.max(0, before - damage));
+    }
+    if (actor && event.targetOwnerId === "TORRE" && !defeated.has(event.targetId) && (hp.get(event.targetId) ?? 0) <= 0) {
+      actor.kos += 1; defeated.add(event.targetId);
+    }
+  }
+  if (won) {
+    next.roomsCleared += 1;
+    next.monstersDefeated += defeated.size;
+    if (isBoss) { next.bossesDefeated += 1; next.talentPoints += 1; }
+  }
+  return next;
 }
 
 async function resolveRoom(
@@ -196,6 +237,7 @@ async function resolveRoom(
             ? `O grupo se dividiu entre caminhos. A maioria chegou a ${destination.title}, mas a Pressão desta ação foi dobrada.`
             : `O grupo percorreu a passagem e chegou a ${destination.title}.`,
       };
+      delete state.pendingReplay;
       battleLog.push(state.lastOutcome!);
     } else {
       state = applyTowerPressure({
@@ -338,6 +380,11 @@ async function resolveRoom(
     state = {
       ...state,
       graph: [...state.graph],
+      runReport: {
+        ...(state.runReport ?? { mascots: {}, monstersDefeated: 0, bossesDefeated: 0, alliesRecovered: 0, talentPoints: 0, roomsCleared: 0 }),
+        alliesRecovered: (state.runReport?.alliesRecovered ?? 0) + prisoners.length,
+        roomsCleared: (state.runReport?.roomsCleared ?? 0) + 1,
+      },
       lastOutcome: prisoners.length
         ? `A Sala Anti-Psicose libertou ${prisoners.length} mascote(s) de outras runs e os devolveu aos donos: ${rescuedNames}.`
         : "A Sala Anti-Psicose foi ativada, mas as jaulas estavam vazias. Nenhum mascote precisava de resgate.",
@@ -536,6 +583,7 @@ async function resolveRoom(
         },
       });
     const won = result.winner === "A";
+    const runReport = addCombatToRunReport(state.runReport, allies, enemies, result.log, room.kind === "BOSS", won);
     room.cleared = won;
     state = {
       ...state,
@@ -553,6 +601,7 @@ async function resolveRoom(
         teamBSurvivors: result.teamBSurvivors,
         title: room.title,
       },
+      runReport,
     };
     battleLog.push(state.lastOutcome!);
   }
@@ -816,6 +865,7 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
         nextExploration.countermeasures =
           vol.exploration?.countermeasures ?? [];
         nextExploration.pressureShield = vol.exploration?.pressureShield ?? 0;
+        nextExploration.runReport = vol.exploration?.runReport;
         await tx.towerCodexEntry
           .create({
             data: {

@@ -71,6 +71,7 @@ export function TowerRoomView({
       )
       .map((target) => [node.id, target] as [string, string]),
   );
+  const connectedIds = new Set(edges.flat());
   return (
     <div className="space-y-4">
       {exploration.votes.some((vote) => vote.confirmed) && (
@@ -203,6 +204,10 @@ export function TowerRoomView({
               const voters = exploration.votes.filter(
                 (vote) => vote.routeId === node.id,
               );
+              // Um quadrado alinhado sem corredor não é uma escolha. Ele só
+              // aparece quando a rede real revelar uma ligação até ele.
+              if (!connectedIds.has(node.id) && !node.current && !node.visited)
+                return null;
               return (
                 <button
                   type="button"
@@ -238,6 +243,11 @@ export function TowerRoomView({
                   {voters.length > 0 && (
                     <span className="mt-1 block truncate text-[8px] font-bold text-cyan-200">
                       {voters.map((voter) => voter.name).join(", ")} →
+                    </span>
+                  )}
+                  {!node.current && (
+                    <span className="mt-1 block text-[8px] leading-tight text-slate-400">
+                      {node.roomHint}
                     </span>
                   )}
                 </button>
@@ -291,7 +301,7 @@ export function TowerRoomView({
       )}
 
       {exploration.encounter && (
-        <div className="overflow-hidden rounded-2xl border border-red-400/40 bg-gradient-to-r from-red-950/50 to-purple-950/40">
+        <div className="sticky bottom-[138px] z-20 max-h-[62vh] overflow-auto rounded-2xl border border-red-400/40 bg-gradient-to-r from-red-950 via-slate-950 to-purple-950 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
           <div className="border-b border-red-300/15 p-4">
             <p className="text-[10px] font-black uppercase tracking-[.2em] text-red-300">
               ⚔ Encontro hostil — decisão coletiva
@@ -347,7 +357,7 @@ export function TowerRoomView({
       )}
 
       {!room.cleared && room.kind === "PUZZLE" && room.puzzle && (
-        <div className="rounded-2xl border border-amber-300/30 bg-amber-950/15 p-5">
+        <div className="sticky bottom-[138px] z-20 max-h-[62vh] overflow-auto rounded-2xl border border-amber-300/30 bg-slate-950 p-5 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
           <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">
             Enigma coletivo
           </p>
@@ -378,7 +388,7 @@ export function TowerRoomView({
       )}
 
       {!room.cleared && room.kind === "REST" && !exploration.encounter && (
-        <div className="rounded-2xl border border-purple-400/25 bg-purple-950/15 p-4">
+        <div className="sticky bottom-[138px] z-20 rounded-2xl border border-purple-400/25 bg-slate-950 p-4 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
           <p className="text-sm text-purple-100">
             Uma chama desconhecida oferece descanso. O grupo decide
             conscientemente se interage ou segue adiante.
@@ -404,7 +414,7 @@ export function TowerRoomView({
         </div>
       )}
       {!room.cleared && (room.kind === "EVENT" || room.kind === "LUCK") && (
-        <div className="rounded-2xl border border-fuchsia-400/25 bg-fuchsia-950/15 p-4">
+        <div className="sticky bottom-[138px] z-20 rounded-2xl border border-fuchsia-400/25 bg-slate-950 p-4 shadow-[0_-16px_40px_rgba(0,0,0,.7)]">
           <p className="text-sm text-fuchsia-100">
             Um objeto ativável foi encontrado. Interagir pode conceder uma
             relíquia ou acionar uma sabotagem; ignorar preserva o estado atual.

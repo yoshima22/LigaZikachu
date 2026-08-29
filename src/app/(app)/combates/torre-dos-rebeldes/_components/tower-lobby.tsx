@@ -911,8 +911,15 @@ export function TowerLobby() {
             Escolha seus dois mascotes e entre em uma sala. O ticket só será
             consumido quando o host iniciar.
           </p>
-          <div className="mt-3 grid gap-3 md:grid-cols-2">
-            {data.rooms.map((room) => (
+          <div className="mt-4 space-y-5">
+            {(["ONLINE", "SLOW"] as const).map((roomPace) => {
+              const rooms = data.rooms.filter((room) => room.pace === roomPace);
+              return <div key={roomPace} className={`rounded-2xl border p-3 ${roomPace === "ONLINE" ? "border-emerald-400/25 bg-emerald-950/10" : "border-blue-400/20 bg-blue-950/10"}`}>
+                <div className="mb-3 flex items-center justify-between gap-3">
+                  <div><b className={roomPace === "ONLINE" ? "text-emerald-300" : "text-blue-300"}>{roomPace === "ONLINE" ? "⚡ Salas Online" : "🌙 Salas em modo Lento"}</b><p className="text-[10px] text-slate-500">{roomPace === "ONLINE" ? "5 minutos por ação · progresso em tempo real" : "4 horas por ação · jogue ao longo do dia"}</p></div>
+                  <span className="rounded-full border border-slate-700 px-2 py-1 text-[10px] font-bold text-slate-300">{rooms.length} aberta(s)</span>
+                </div>
+                {rooms.length === 0 ? <p className="rounded-xl border border-dashed border-slate-700 p-4 text-center text-xs text-slate-500">Nenhuma sala deste modo aguarda jogadores.</p> : <div className="grid gap-3 md:grid-cols-2">{rooms.map((room) => (
               <article
                 key={room.id}
                 className="rounded-2xl border border-purple-400/25 bg-gradient-to-br from-purple-950/25 to-slate-950 p-4"
@@ -1008,7 +1015,9 @@ export function TowerLobby() {
                   Entrar nesta sala
                 </button>
               </article>
-            ))}
+                ))}</div>}
+              </div>;
+            })}
           </div>
         </section>
       )}

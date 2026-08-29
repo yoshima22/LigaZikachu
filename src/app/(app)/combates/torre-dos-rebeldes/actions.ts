@@ -1993,6 +1993,19 @@ export async function getTowerRunStateAction(
                 x: node.x,
                 y: node.y,
                 connections: node.connections,
+                roomHint: known
+                  ? node.kind === "COMBAT" || node.kind === "BOSS"
+                    ? "Pode haver uma patrulha ou confronto."
+                    : node.kind === "PUZZLE"
+                      ? "Um mecanismo pode controlar passagens."
+                      : node.kind === "REST"
+                        ? "Pode oferecer recuperação, com algum custo."
+                        : node.kind === "RESCUE"
+                          ? "Há sinais de contenção e possíveis resgates."
+                          : node.kind === "EVENT" || node.kind === "LUCK"
+                            ? "Uma descoberta instável pode exigir uma escolha."
+                            : "A função desta sala será revelada ao entrar."
+                  : "Pode esconder um encontro, mecanismo, descanso, resgate ou descoberta.",
               };
             }),
             routes: room.connections
@@ -2033,6 +2046,7 @@ export async function getTowerRunStateAction(
             relics: exploration.relics ?? [],
             lastOutcome: exploration.lastOutcome ?? null,
             replay: exploration.pendingReplay ?? null,
+            runReport: exploration.runReport ?? null,
             communityDiscoveries,
             votes: run.members.map((member) => {
               const choice = (submissions[member.userId]?.actions ?? {}) as {

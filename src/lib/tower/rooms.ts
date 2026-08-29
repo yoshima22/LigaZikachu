@@ -50,6 +50,28 @@ export type TowerExplorationState = {
   pressureShield?: number;
   encounter?: { roomId: string; preparationTurns: number; enemies: { pokemonId: number; name: string; level: number }[] };
   relics?: { key: string; name: string; description: string }[];
+  runReport?: TowerRunReport;
+};
+
+export type TowerRunMascotReport = {
+  mascotId: string;
+  ownerUserId: string;
+  name: string;
+  pokemonId: number;
+  level: number;
+  damageDealt: number;
+  damageReceived: number;
+  healing: number;
+  kos: number;
+};
+
+export type TowerRunReport = {
+  mascots: Record<string, TowerRunMascotReport>;
+  monstersDefeated: number;
+  bossesDefeated: number;
+  alliesRecovered: number;
+  talentPoints: number;
+  roomsCleared: number;
 };
 
 const BG = "/events/torre-dos-rebeldes/background.png";
