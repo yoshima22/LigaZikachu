@@ -514,7 +514,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
-  const [nameInput, setNameInput] = useState(mascot.nickname ?? "");
+  const currentDisplayName = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
+  const [nameInput, setNameInput] = useState(currentDisplayName);
   const [imgFailed, setImgFailed] = useState(false);
   const [hasFood, setHasFood] = useState(mascot.hasFood);
   const [hasSweet, setHasSweet] = useState(mascot.hasSweet);
@@ -1096,7 +1097,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 >
                   <Star size={12} fill={localIsFavorite ? "currentColor" : "none"} />
                 </button>
-                <button onClick={() => setEditingName(true)} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
+                <button onClick={() => { setNameInput(currentDisplayName); setEditingName(true); }} className="text-slate-600 hover:text-slate-400"><Edit2 size={11}/></button>
               </div>
             )}
             <div className="text-[10px] text-slate-500 flex items-center gap-1 flex-wrap">
