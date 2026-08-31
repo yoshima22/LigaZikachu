@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useMemo, useTransition } from "react";
+import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
 import { Clock, Egg, Eye, FastForward, Search, Sparkles, X } from "lucide-react";
@@ -119,29 +119,35 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
   }, [result.pokemonId]);
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
+  const reelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    let cancelled = false;
-    let timer: ReturnType<typeof setTimeout>;
-    const startedAt = Date.now();
-    const advance = () => {
-      if (cancelled) return;
-      const elapsed = Date.now() - startedAt;
-      if (elapsed >= 3600) {
-        setIndex(candidates.length - 1);
-        setRevealed(true);
-        timer = setTimeout(onComplete, 1800);
-        return;
-      }
-      setIndex((current) => Math.min(current + 1, candidates.length - 2));
-      const delay = elapsed < 1900 ? 90 : elapsed < 2800 ? 160 : 280;
-      timer = setTimeout(advance, delay);
-    };
-    timer = setTimeout(advance, 180);
-    return () => { cancelled = true; clearTimeout(timer); };
-  }, [candidates.length, onComplete]);
+    if (revealed) {
+      const timer = setTimeout(onComplete, 1800);
+      return () => clearTimeout(timer);
+    }
+    if (index >= candidates.length - 1) {
+      const timer = setTimeout(() => setRevealed(true), 720);
+      return () => clearTimeout(timer);
+    }
+    const progress = index / Math.max(1, candidates.length - 1);
+    // Começa veloz e desacelera de maneira contínua. O vencedor passa primeiro
+    // pela lateral direita antes de parar no centro, sem troca artificial.
+    const delay = 75 + Math.round(Math.pow(progress, 3) * 560);
+    const timer = setTimeout(() => setIndex((current) => current + 1), delay);
+    return () => clearTimeout(timer);
+  }, [candidates.length, index, onComplete, revealed]);
 
-  const shown = [-1, 0, 1].map((offset) => candidates[Math.max(0, Math.min(candidates.length - 1, index + offset))]);
+  useEffect(() => {
+    const reel = reelRef.current;
+    const card = reel?.children.item(index) as HTMLElement | null;
+    if (!reel || !card) return;
+    reel.scrollTo({
+      left: card.offsetLeft - (reel.clientWidth - card.clientWidth) / 2,
+      behavior: index === 0 ? "auto" : "smooth",
+    });
+  }, [index]);
+
   const finalSprite = result.isShiny ? getShinySprite(result.pokemonId, true) : getSpriteUrl(result.pokemonId);
 
   return (
@@ -155,17 +161,20 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
           <p className="mt-1 text-xs text-slate-400">O resultado já está protegido no servidor. Agora é só aproveitar a revelação.</p>
         </div>
 
-        <div className="relative my-6 overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(30,41,59,.8),rgba(2,6,23,.9))] px-2 py-7 sm:px-6">
-          <div className="absolute inset-y-0 left-1/2 w-32 -translate-x-1/2 border-x border-yellow-300/30 bg-yellow-300/[.04] shadow-[0_0_45px_rgba(250,204,21,.12)]" />
-          <div className="relative grid grid-cols-3 items-center gap-2 sm:gap-4">
-            {shown.map((pokemonId, slot) => {
-              const center = slot === 1;
-              const isWinner = revealed && center;
+        <div className="relative my-6 overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(30,41,59,.8),rgba(2,6,23,.9))] py-7">
+          <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[34%] -translate-x-1/2 border-x border-yellow-300/30 bg-yellow-300/[.035] shadow-[0_0_45px_rgba(250,204,21,.12)]" />
+          <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-slate-950 to-transparent sm:w-28" />
+          <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-slate-950 to-transparent sm:w-28" />
+          <div ref={reelRef} className="relative flex items-center overflow-x-hidden px-[33.333%] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+            {candidates.map((pokemonId, candidateIndex) => {
+              const distance = Math.abs(candidateIndex - index);
+              const center = distance === 0;
+              const isWinner = revealed && candidateIndex === candidates.length - 1;
               const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
               return (
-                <div key={`${slot}-${pokemonId}-${index}`} className={`flex min-w-0 flex-col items-center rounded-2xl border px-2 py-4 transition-all duration-300 ${center ? "scale-110 border-yellow-300/60 bg-yellow-300/10 opacity-100" : "scale-90 border-white/5 bg-black/20 opacity-35 blur-[.4px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
+                <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-1/3 shrink-0 flex-col items-center rounded-2xl border px-1 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:px-2 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={sprite} alt="" className={`h-24 w-24 object-contain transition-all sm:h-32 sm:w-32 ${center && !revealed ? "animate-bounce" : ""}`} style={{ imageRendering: "pixelated" }} />
+                  <img src={sprite} alt="" className="h-24 w-24 object-contain transition-all sm:h-32 sm:w-32" style={{ imageRendering: "pixelated" }} />
                   <p className={`mt-2 max-w-full truncate text-xs font-bold sm:text-sm ${center ? "text-white" : "text-slate-500"}`}>{isWinner ? result.name : getPokemonName(pokemonId)}</p>
                 </div>
               );
@@ -518,7 +527,10 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               </button>
             ))}
           </div>
-          <p className="text-[10px] text-slate-600 text-center">O Pokémon não escolhido não é perdido — apenas o escolhido nasce.</p>
+          <p className="text-[10px] text-slate-600 text-center">
+            O Pokémon não escolhido não é perdido — apenas o escolhido nasce.
+            {showHatchAnimation && <span className="mt-1 block text-violet-300/80">Depois da confirmação, a revelação animada também será exibida para o escolhido.</span>}
+          </p>
         </div>
       </div>
     )}
