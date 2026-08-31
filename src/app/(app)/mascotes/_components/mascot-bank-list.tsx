@@ -4,7 +4,14 @@ import { useState, useTransition, useCallback } from "react";
 import { ChevronDown, ChevronUp, ChevronLeft, ChevronRight, Loader2, Search } from "lucide-react";
 import { toast } from "sonner";
 import { getPokemonElement, getPokemonTypes, getPokemonName, getStaticSpriteUrl, MOOD_EMOJI } from "@/lib/mascot-data";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { getMascotDetailAction } from "../actions";
+
+// Rótulo coarse de origem do ovo (colapsa variações "· geração sorteada").
+function eggOriginLabel(m: { hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null }): string | null {
+  const label = getHatchedEggLabel(m.hatchedFromEggType, m.hatchedFromEggOrigin);
+  return label ? label.split(" · ")[0] : null;
+}
 import { MascotCard, clearPetted, clearPlayed, markPetted, markPlayed } from "./mascot-card";
 import { queueMascotInteraction } from "./interaction-request-queue";
 
@@ -362,7 +369,22 @@ export function MascotBankList({
   const [search, setSearch]     = useState("");
   const [ocup, setOcup]         = useState<OcupFilter>("all");
   const [typeFilter, setTypeFilter] = useState("");
+  const [originFilter, setOriginFilter] = useState("");
+  const [sortMode, setSortMode] = useState<"default" | "duplicates">("default");
   const [page, setPage]         = useState(1);
+
+  // Opções de origem de ovo presentes no banco (mais "Sem origem" p/ os antigos).
+  const originOptions: string[] = [];
+  let hasUnknownOrigin = false;
+  {
+    const seen = new Set<string>();
+    for (const m of mascots) {
+      const l = eggOriginLabel(m);
+      if (l) { if (!seen.has(l)) { seen.add(l); originOptions.push(l); } }
+      else hasUnknownOrigin = true;
+    }
+    originOptions.sort((a, b) => a.localeCompare(b, "pt-BR"));
+  }
 
   // Filtragem
   const filtered = mascots.filter(m => {
@@ -370,18 +392,35 @@ export function MascotBankList({
     const q    = search.toLowerCase();
     const matchSearch = !q || name.includes(q) || String(m.pokemonId).includes(q);
     const matchType   = !typeFilter || (m.primaryTypeOverride ?? getPokemonElement(m.pokemonId)) === typeFilter;
-    return matchSearch && matchType && matchOcup(m, ocup);
+    const matchOrigin = !originFilter
+      || (originFilter === "__none__" ? !m.hatchedFromEggType : eggOriginLabel(m) === originFilter);
+    return matchSearch && matchType && matchOrigin && matchOcup(m, ocup);
   });
 
+  // Ordenação: "Repetidos" agrupa mascotes da MESMA espécie (pokemonId), mesmo
+  // com apelidos diferentes, e traz as espécies mais repetidas primeiro.
+  let ordered = filtered;
+  if (sortMode === "duplicates") {
+    const counts = new Map<number, number>();
+    for (const m of filtered) counts.set(m.pokemonId, (counts.get(m.pokemonId) ?? 0) + 1);
+    ordered = [...filtered].sort((a, b) =>
+      (counts.get(b.pokemonId)! - counts.get(a.pokemonId)!)
+      || (a.pokemonId - b.pokemonId)
+      || (b.level - a.level)
+      || a.id.localeCompare(b.id));
+  }
+
   // Paginação
-  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(ordered.length / PAGE_SIZE));
   const safePage   = Math.min(page, totalPages);
-  const pageItems  = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+  const pageItems  = ordered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
   // Volta para página 1 quando filtros mudam
   const handleSearch = (v: string) => { setSearch(v); setPage(1); };
   const handleOcup   = (v: OcupFilter) => { setOcup(v); setPage(1); };
   const handleType   = (v: string) => { setTypeFilter(v); setPage(1); };
+  const handleOrigin = (v: string) => { setOriginFilter(v); setPage(1); };
+  const handleSort   = (v: "default" | "duplicates") => { setSortMode(v); setPage(1); };
 
   // Contadores para cada situação (para exibir no select)
   const busyCount = mascots.filter(m => isBusy(m)).length;
@@ -448,6 +487,29 @@ export function MascotBankList({
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
         </select>
+        {/* Origem de ovo */}
+        {(originOptions.length > 0 || hasUnknownOrigin) && (
+          <select
+            value={originFilter}
+            onChange={e => handleOrigin(e.target.value)}
+            className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+          >
+            <option value="">Toda origem de ovo</option>
+            {originOptions.map(o => (
+              <option key={o} value={o}>{o}</option>
+            ))}
+            {hasUnknownOrigin && <option value="__none__">Sem origem registrada</option>}
+          </select>
+        )}
+        {/* Ordenar */}
+        <select
+          value={sortMode}
+          onChange={e => handleSort(e.target.value as "default" | "duplicates")}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="default">Ordem padrão</option>
+          <option value="duplicates">Agrupar repetidos</option>
+        </select>
       </div>
 
       {/* Lista paginada */}
@@ -482,7 +544,7 @@ export function MascotBankList({
           <span className="text-xs text-slate-500">
             Página <span className="font-semibold text-slate-300">{safePage}</span> de{" "}
             <span className="font-semibold text-slate-300">{totalPages}</span>
-            <span className="ml-1 text-slate-600">({filtered.length} mascotes)</span>
+            <span className="ml-1 text-slate-600">({ordered.length} mascotes)</span>
           </span>
 
           <button
