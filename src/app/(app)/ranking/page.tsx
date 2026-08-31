@@ -84,7 +84,7 @@ export default async function RankingPage({
             <li><strong className="text-slate-100">Número de jogos</strong> — com retorno decrescente (raiz): jogar mais ajuda, mas cada jogo extra vale um pouco menos.</li>
             <li><strong className="text-slate-100">Prêmios defendidos</strong> — recompensa vitórias sólidas.</li>
             <li><strong className="text-slate-100">Eventos da temporada</strong> em que você está inscrito — recompensa a participação.</li>
-            <li><strong className="text-slate-100">Derrotas</strong> — penalidade leve.</li>
+            <li><strong className="text-slate-100">Derrotas</strong> — penalizam mais do que cada prêmio defendido recompensa, então acumular derrotas custa caro no índice.</li>
           </ul>
           <p className="text-slate-400">
             Assim, um jogador com muitas partidas e winrate baixo não passa automaticamente à frente de quem tem menos jogos porém desempenho melhor. A coluna <strong className="text-cyan-300">Nível</strong> mostra esse índice; <strong>Pts</strong> continua sendo os pontos acumulados de torneio.

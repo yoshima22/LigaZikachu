@@ -49,8 +49,8 @@ export interface PlayerRankingEntry {
  * "Nível de Gameplay" — índice que ordena o ranking geral da temporada.
  * Recompensa VOLUME (mais jogos) com retorno decrescente (raiz), então quem joga
  * mais tem preferência, mas nem sempre fica na frente: qualidade (winrate) e
- * prêmios defendidos pesam bastante. Considera também participação em eventos e
- * penaliza derrotas de forma leve.
+ * prêmios defendidos contam pontos. Considera também participação em eventos e
+ * penaliza derrotas com peso maior que o dos prêmios defendidos.
  */
 export function computeGameplayScore(s: {
   matchesPlayed: number; wins: number; losses: number; defendedPrizes: number; eventsCount: number;
@@ -62,7 +62,7 @@ export function computeGameplayScore(s: {
     + Math.sqrt(games) * 8                // volume, com retorno decrescente
     + Math.max(0, s.defendedPrizes) * 1.5 // prêmios defendidos
     + Math.max(0, s.eventsCount) * 5      // participação em eventos da temporada
-    - Math.max(0, s.losses) * 1.2;        // penalidade leve por derrota
+    - Math.max(0, s.losses) * 2;          // derrotas pesam mais que os prêmios defendidos
   return Math.max(0, Math.round(raw * 10) / 10);
 }
 

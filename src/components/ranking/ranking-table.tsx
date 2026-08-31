@@ -37,20 +37,22 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
 
   const renderPlayer = (entry: PlayerRankingEntry) => {
     const mascot = entry.equippedMascot;
-    if (!mascot) return <PlayerTag id={entry.playerId} displayName={entry.displayName} ptcglNick={entry.ptcglNick} />;
-
-    const mascotName = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+    const mascotName = mascot ? (mascot.nickname ?? getPokemonName(mascot.pokemonId)) : null;
 
     return (
       <div className="flex min-w-0 items-center gap-1.5">
-        <img
-          src={getSpriteUrl(mascot.pokemonId)}
-          alt={mascotName}
-          width={24}
-          height={24}
-          className="h-6 w-6 shrink-0 object-contain [image-rendering:pixelated]"
-          title={`${mascotName} Nv.${mascot.level}`}
-        />
+        {mascot ? (
+          <img
+            src={getSpriteUrl(mascot.pokemonId)}
+            alt={mascotName ?? ""}
+            width={24}
+            height={24}
+            className="h-6 w-6 shrink-0 object-contain [image-rendering:pixelated]"
+            title={`${mascotName} Nv.${mascot.level}`}
+          />
+        ) : (
+          <span className="h-6 w-6 shrink-0" aria-hidden />
+        )}
         <PlayerTag id={entry.playerId} displayName={entry.displayName} ptcglNick={entry.ptcglNick} className="truncate" />
       </div>
     );
