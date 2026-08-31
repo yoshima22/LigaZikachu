@@ -95,7 +95,13 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
               <Link href="/bazar/criar" className="text-[#FFCB05] underline">Criar agora</Link>
             </div>
           ) : (
-            listings.map(l => (
+            listings.map(l => {
+              const isDirect = (l.payload as Record<string, unknown> | null)?.directNegotiation === true
+                || (l.payload as Record<string, unknown> | null)?.itemType === "DIRECT_NEGOTIATION";
+              // Mesa direta pode ser cancelada mesmo RESERVED (com participante):
+              // as ofertas dos dois lados voltam. Anúncio normal só quando ACTIVE.
+              const canCancel = l.status === "ACTIVE" || (isDirect && l.status === "RESERVED");
+              return (
               <div key={l.id} className="rounded-xl border border-border bg-slate-950/60 overflow-hidden">
                 <div className="flex items-center gap-3 p-3">
                   <div className="min-w-0 flex-1">
@@ -115,14 +121,17 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <Link href={`/bazar/${l.id}`} className="text-[10px] text-slate-400 hover:text-slate-200 underline">Ver</Link>
-                    {l.status === "ACTIVE" && (
+                    {canCancel && (
                       <button type="button" disabled={pending}
                         onClick={() => {
-                          if (!confirm("Cancelar este anúncio? O item será devolvido ao seu inventário.")) return;
+                          const msg = isDirect
+                            ? "Cancelar esta mesa de negociação? As ofertas reservadas dos dois lados (ZC e itens) serão devolvidas."
+                            : "Cancelar este anúncio? O item será devolvido ao seu inventário.";
+                          if (!confirm(msg)) return;
                           startTransition(async () => {
                             const r = await cancelListing(l.id);
                             if (r.error) toast.error(r.error);
-                            else { toast.success("Anúncio cancelado."); router.refresh(); }
+                            else { toast.success(isDirect ? "Mesa cancelada." : "Anúncio cancelado."); router.refresh(); }
                           });
                         }}
                         className="rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1 text-[10px] text-red-400 hover:bg-red-500/10 disabled:opacity-50">
@@ -182,7 +191,8 @@ export function MyListingsClient({ listings, sentProposals }: { listings: MyList
                   </div>
                 )}
               </div>
-            ))
+              );
+            })
           )}
         </div>
       )}

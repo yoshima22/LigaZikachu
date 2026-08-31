@@ -1467,9 +1467,10 @@ async function _deliverDirectNegotiation(tx: TxClient, args: {
   await _deliverProposalOffers(tx, freshState.ownerItems, args.ownerId, args.proposerId);
   await _deliverProposalOffers(tx, (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [], args.proposerId, args.ownerId);
   // Os ZC postos na mesa (já em escrow) são entregues ao OUTRO lado — inclusive
-  // quando são empréstimo: quem empresta entrega o dinheiro agora.
-  if (freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins);
-  if (freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer);
+  // quando são empréstimo: quem empresta entrega o dinheiro agora. O lado que é
+  // empréstimo NÃO alimenta o cofre (o valor volta depois; nada de faucet).
+  if (freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins, !freshState.ownerLoan);
+  if (freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer, !freshState.participantLoan);
   const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
   if (loanSide) {
     // Quem marcou "empréstimo" é o CREDOR (entregou os ZC agora); o outro lado é
@@ -2915,14 +2916,16 @@ async function _releaseProposalOffers(tx: TxClient, items: ProposalOfferItem[] |
   }
 }
 
-async function _creditEscrowedCoins(tx: TxClient, playerId: string, amount: number) {
+async function _creditEscrowedCoins(tx: TxClient, playerId: string, amount: number, feedVault = true) {
   if (amount <= 0) return;
   await tx.zikaCoinWallet.upsert({
     where: { playerId },
     update: { balance: { increment: amount }, totalEarned: { increment: amount } },
     create: { playerId, balance: amount, totalEarned: amount },
   });
-  await creditMiauvadaoVaultFromPlayerTransaction(tx, amount);
+  // Empréstimos de mesa direta não geram o faucet de 10%: o dinheiro vai e volta,
+  // então não deve cunhar ZC no cofre a cada entrega.
+  if (feedVault) await creditMiauvadaoVaultFromPlayerTransaction(tx, amount);
 }
 
 /** Entrega uma oferta que já foi reservada, sem descontá-la novamente. */
@@ -3038,6 +3041,12 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
 
 async function _returnEscrow(tx: TxClient, listing: { id: string; category: string; payload: unknown }, ownerId: string) {
   const payload = listing.payload as Record<string, unknown>;
+
+  // Mesa de negociação direta não tem ativo escrowado no próprio anúncio (as
+  // ofertas dos dois lados são liberadas à parte, pela proposta/estado direto).
+  // Além disso o payload usa quantity:0, que faria getListingQuantity lançar e
+  // reverter silenciosamente o cancelamento. Nada a devolver aqui.
+  if (payload?.directNegotiation === true || payload?.itemType === "DIRECT_NEGOTIATION") return;
 
   if (listing.category === "MASCOT") {
     const mascotId = payload.mascotId as string;
