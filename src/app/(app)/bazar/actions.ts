@@ -1327,7 +1327,10 @@ export async function updateDirectNegotiationOffer(input: {
         await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: oldCoins } }, create: { playerId: player.id, balance: oldCoins, totalEarned: 0 } });
       }
       const reservedItems = await _reserveProposalOffers(tx, player.id, cleanItems);
-      if (!loan && coins > 0) {
+      // ZC postos na mesa saem da carteira AGORA (escrow), seja pagamento ou
+      // empréstimo. No empréstimo o dinheiro é entregue ao outro lado no
+      // fechamento e vira uma dívida dele para com quem emprestou.
+      if (coins > 0) {
         const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
         if (!wallet || wallet.balance < coins) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
         await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: coins } } });
@@ -1344,9 +1347,9 @@ export async function updateDirectNegotiationOffer(input: {
         if (changed) base.ownerConfirmed = false;
       }
       if (isOwner) {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...base, ownerCoins: coins, ownerCoinsEscrowed: !loan && coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...base, ownerCoins: coins, ownerCoinsEscrowed: coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
       } else {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: !loan && coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...base, participantLoan: loan, participantInterestPct: interestPct }) } });
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...base, participantLoan: loan, participantInterestPct: interestPct }) } });
       }
       await createPlayerNotification(tx, {
         playerId: isOwner ? fresh.proposerId : proposal.listing.playerId,
@@ -1463,14 +1466,18 @@ async function _deliverDirectNegotiation(tx: TxClient, args: {
   if (freshState.ownerLoan && freshState.participantLoan) throw new Error("Apenas um dos lados pode usar empréstimo na mesma negociação.");
   await _deliverProposalOffers(tx, freshState.ownerItems, args.ownerId, args.proposerId);
   await _deliverProposalOffers(tx, (freshProposal.itemsOffer as ProposalOfferItem[] | null) ?? [], args.proposerId, args.ownerId);
-  if (!freshState.ownerLoan && freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins);
-  if (!freshState.participantLoan && freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer);
+  // Os ZC postos na mesa (já em escrow) são entregues ao OUTRO lado — inclusive
+  // quando são empréstimo: quem empresta entrega o dinheiro agora.
+  if (freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins);
+  if (freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer);
   const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
   if (loanSide) {
+    // Quem marcou "empréstimo" é o CREDOR (entregou os ZC agora); o outro lado é
+    // o DEVEDOR e passa a dever o principal + juros (acordo de boa-fé).
     const principal = loanSide === "owner" ? freshState.ownerCoins : freshProposal.coinsOffer;
     const interest = loanSide === "owner" ? freshState.ownerInterestPct : freshState.participantInterestPct;
-    const borrowerId = loanSide === "owner" ? args.ownerId : args.proposerId;
-    const lenderId = loanSide === "owner" ? args.proposerId : args.ownerId;
+    const lenderId = loanSide === "owner" ? args.ownerId : args.proposerId;
+    const borrowerId = loanSide === "owner" ? args.proposerId : args.ownerId;
     await tx.bazarLoan.create({ data: { listingId: args.listingId, proposalId: args.proposalId, lenderId, borrowerId, principalCoins: principal, interestPct: interest, totalDueCoins: Math.ceil(principal * (100 + interest) / 100), itemSnapshot: { directNegotiation: true, ownerItems: freshState.ownerItems, participantItems: freshProposal.itemsOffer } } });
   }
   await tx.bazarListing.update({ where: { id: args.listingId }, data: { status: "SOLD" } });

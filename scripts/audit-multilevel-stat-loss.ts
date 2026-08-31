@@ -63,8 +63,8 @@ function speciesWalk(fromLevel: number, toLevel: number, before: number, after: 
 
   for (const e of entries) {
     totalEntries++;
-    firstAt = firstAt && firstAt < e.recordedAt ? firstAt : e.recordedAt;
-    lastAt = lastAt && lastAt > e.recordedAt ? lastAt : e.recordedAt;
+    if (!firstAt || e.recordedAt < firstAt) firstAt = e.recordedAt;
+    if (!lastAt || e.recordedAt > lastAt) lastAt = e.recordedAt;
     const N = e.toLevel - e.fromLevel;
     if (N < 2) continue; // N=1 nunca perde ponto
     multiEntries++;
