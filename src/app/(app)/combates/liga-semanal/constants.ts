@@ -1,3 +1,8 @@
+// Quantidade mínima de mascotes para ser registrado automaticamente na Liga
+// Semanal. Abaixo disso o jogador não entra (mesmo com o casual desligado),
+// evitando filas de W/O durante a semana toda.
+export const MIN_WEEKLY_LEAGUE_MASCOTS = 18;
+
 // ── Modificadores Semanais ──────────────────────────────────────────────────
 
 export type WeeklyModifier = {

@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { WEEKLY_MODIFIERS, LEAGUE_ITEMS } from "./constants";
+import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, MIN_WEEKLY_LEAGUE_MASCOTS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import { swissPairSlot } from "@/lib/league-pairing";
 import { getCombatRoleLabel, defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
@@ -95,13 +95,6 @@ function buildDivisionValidTeam<T extends MegaCandidate>(preferred: T[], fallbac
   }
   return selected;
 }
-
-/**
- * Mínimo de mascotes em posse para ser registrado AUTOMATICAMENTE na Liga
- * Semanal. Abaixo disso o jogador não entra (mesmo com o casual desligado),
- * evitando filas de W/O durante a semana toda.
- */
-export const MIN_WEEKLY_LEAGUE_MASCOTS = 18;
 
 async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
   const players = await client.player.findMany({
