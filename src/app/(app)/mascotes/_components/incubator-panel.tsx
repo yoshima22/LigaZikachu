@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
-import { Clock, Egg, Eye, FastForward, Search, Sparkles, X } from "lucide-react";
+import { Clock, Dna, Egg, Eye, FastForward, FlaskConical, Search, Sparkles, X } from "lucide-react";
 import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
 import {
   putEggInIncubator,
@@ -29,6 +29,7 @@ interface IncubatorData {
 interface EggItem { id: string; type: string; obtainedAt: Date; origin: string | null; hatchRarityBonusPct?: number }
 
 type HatchResult = NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>;
+type LabChoice = { pokemonId: number; isShiny: boolean };
 
 interface Props {
   incubator: IncubatorData | null;
@@ -194,6 +195,83 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
   );
 }
 
+function LabChoiceReveal({ choices, onComplete }: { choices: LabChoice[]; onComplete: () => void }) {
+  const [revealedCount, setRevealedCount] = useState(0);
+  const completed = revealedCount >= choices.length;
+
+  useEffect(() => {
+    if (completed) return;
+    const delay = revealedCount === 0 ? 850 : 1050;
+    const timer = setTimeout(() => setRevealedCount((count) => count + 1), delay);
+    return () => clearTimeout(timer);
+  }, [completed, revealedCount]);
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_35%,rgba(13,148,136,.28),rgba(2,6,23,.97)_68%)] p-4 backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-0 opacity-25 [background-image:linear-gradient(rgba(45,212,191,.12)_1px,transparent_1px),linear-gradient(90deg,rgba(45,212,191,.12)_1px,transparent_1px)] [background-size:42px_42px]" />
+      <div className="relative w-full max-w-3xl overflow-hidden rounded-[2rem] border border-teal-300/45 bg-slate-950/95 p-5 shadow-[0_0_100px_rgba(20,184,166,.22)] sm:p-8">
+        <div className="absolute inset-x-0 top-0 h-1 bg-gradient-to-r from-cyan-400 via-white to-teal-400" />
+        <div className="flex items-center justify-center gap-3 text-center">
+          <span className="grid size-11 place-items-center rounded-2xl border border-teal-300/30 bg-teal-300/10 text-teal-200"><FlaskConical size={22} /></span>
+          <div className="text-left">
+            <p className="text-[9px] font-black uppercase tracking-[.3em] text-teal-300">Protocolo de incubação avançada</p>
+            <h3 className="text-xl font-black text-white sm:text-2xl">Três sinais de vida detectados</h3>
+          </div>
+        </div>
+        <p className="mx-auto mt-3 max-w-xl text-center text-xs leading-relaxed text-slate-400">
+          O laboratório está estabilizando cada possibilidade. Todos os três candidatos serão revelados antes que você decida qual deles nascerá.
+        </p>
+
+        <div className="my-7 grid grid-cols-3 gap-2 sm:gap-5">
+          {choices.map((choice, slot) => {
+            const visible = slot < revealedCount;
+            const scanning = slot === revealedCount;
+            const sprite = choice.isShiny ? getShinySprite(choice.pokemonId, true) : getSpriteUrl(choice.pokemonId);
+            return (
+              <div key={`${slot}-${choice.pokemonId}`} className={`relative min-w-0 overflow-hidden rounded-[1.4rem] border p-2 transition-all duration-700 sm:p-4 ${visible ? "border-teal-300/55 bg-teal-300/[.08] shadow-[0_0_35px_rgba(45,212,191,.18)]" : scanning ? "scale-[1.03] border-cyan-300/60 bg-cyan-300/[.07] shadow-[0_0_45px_rgba(34,211,238,.24)]" : "border-slate-700/70 bg-slate-900/70 opacity-55"}`}>
+                <div className="absolute left-2 top-2 z-10 rounded-full border border-white/10 bg-slate-950/80 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-slate-400">Cápsula {slot + 1}</div>
+                <div className="relative mt-7 flex aspect-[.82] items-center justify-center overflow-hidden rounded-2xl border border-white/[.06] bg-[linear-gradient(180deg,rgba(15,118,110,.12),rgba(2,6,23,.7))]">
+                  {scanning && (
+                    <>
+                      <div className="absolute inset-x-0 top-0 h-1/3 animate-bounce bg-gradient-to-b from-cyan-300/40 to-transparent blur-sm" />
+                      <Dna size={30} className="animate-pulse text-cyan-200" />
+                    </>
+                  )}
+                  {!visible && !scanning && <span className="text-4xl font-black text-slate-700">?</span>}
+                  {visible && (
+                    <>
+                      <div className="absolute inset-0 animate-pulse bg-[radial-gradient(circle,rgba(94,234,212,.18),transparent_65%)]" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img src={sprite} alt="" className="relative h-24 w-24 object-contain drop-shadow-[0_0_18px_rgba(94,234,212,.35)] sm:h-36 sm:w-36" style={{ imageRendering: "pixelated" }} />
+                    </>
+                  )}
+                </div>
+                <div className="min-h-12 pt-2 text-center">
+                  <p className={`truncate text-[10px] font-black sm:text-sm ${visible ? choice.isShiny ? "text-yellow-200" : "text-white" : "text-slate-600"}`}>
+                    {visible ? getPokemonName(choice.pokemonId) : scanning ? "Analisando…" : "Aguardando sinal"}
+                  </p>
+                  {visible && choice.isShiny && <p className="mt-0.5 text-[8px] font-black uppercase tracking-wider text-yellow-300">✦ Assinatura shiny</p>}
+                  {visible && !choice.isShiny && <p className="mt-0.5 text-[8px] uppercase tracking-wider text-teal-300/70">Sinal estabilizado</p>}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-teal-300/15 bg-teal-300/[.04] px-4 py-3">
+          <div className="flex items-center gap-2 text-xs text-slate-300">
+            <span className={`size-2 rounded-full ${completed ? "bg-emerald-300 shadow-[0_0_10px_#6ee7b7]" : "animate-pulse bg-cyan-300"}`} />
+            {completed ? "Análise concluída. Os três candidatos estão prontos." : `Analisando cápsula ${Math.min(revealedCount + 1, choices.length)} de ${choices.length}…`}
+          </div>
+          <button type="button" onClick={onComplete} className={`rounded-xl px-4 py-2 text-xs font-black transition ${completed ? "bg-gradient-to-r from-teal-300 to-cyan-300 text-slate-950 shadow-[0_0_22px_rgba(45,212,191,.22)] hover:brightness-110" : "border border-slate-700 bg-slate-900 text-slate-400 hover:text-white"}`}>
+            {completed ? "Escolher meu mascote" : "Pular análise"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {}, eventRarityBonusPct = 0 }: Props) {
   // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
   const resolveEggImg = (type: string) =>
@@ -201,6 +279,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const [pending, startTransition] = useTransition();
   const [showHatchAnimation, setShowHatchAnimation] = useState(true);
   const [animatedResult, setAnimatedResult] = useState<HatchResult | null>(null);
+  const [labRevealChoices, setLabRevealChoices] = useState<LabChoice[] | null>(null);
   const [hatchResult, setHatchResult] = useState<{
     mascotId: string;
     pokemonId: number;
@@ -211,7 +290,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
-  const [labChoices, setLabChoices] = useState<Array<{ pokemonId: number; isShiny: boolean }> | null>(null);
+  const [labChoices, setLabChoices] = useState<LabChoice[] | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
   const [dropPreview, setDropPreview] = useState<IncubatorDropPreview | null>(null);
   const [dropPreviewOpen, setDropPreviewOpen] = useState(false);
@@ -285,7 +364,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     startTransition(async () => {
       const r = await hatchEggAction();
       if (r.error) { toast.error(r.error); return; }
-      if (r.labChoices) { setLabChoices(r.labChoices); return; }
+      if (r.labChoices) {
+        if (showHatchAnimation) setLabRevealChoices(r.labChoices);
+        else setLabChoices(r.labChoices);
+        return;
+      }
       if (r.result) applyHatchResult(r.result);
     });
   };
@@ -295,7 +378,9 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       const r = await confirmLabChoiceAction(pokemonId);
       if (r.error) { toast.error(r.error); return; }
       setLabChoices(null);
-      if (r.result) applyHatchResult(r.result);
+      // O laboratório já fez sua revelação especial antes da escolha. Depois da
+      // confirmação mostramos diretamente a ficha do mascote escolhido.
+      if (r.result) revealHatchResult(r.result);
     });
   };
 
@@ -332,6 +417,15 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
           const result = animatedResult;
           setAnimatedResult(null);
           revealHatchResult(result);
+        }}
+      />
+    )}
+    {labRevealChoices && (
+      <LabChoiceReveal
+        choices={labRevealChoices}
+        onComplete={() => {
+          setLabChoices(labRevealChoices);
+          setLabRevealChoices(null);
         }}
       />
     )}
@@ -529,7 +623,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
           </div>
           <p className="text-[10px] text-slate-600 text-center">
             O Pokémon não escolhido não é perdido — apenas o escolhido nasce.
-            {showHatchAnimation && <span className="mt-1 block text-violet-300/80">Depois da confirmação, a revelação animada também será exibida para o escolhido.</span>}
+            {showHatchAnimation && <span className="mt-1 block text-teal-300/80">As três cápsulas já foram analisadas. Agora a decisão é sua.</span>}
           </p>
         </div>
       </div>
