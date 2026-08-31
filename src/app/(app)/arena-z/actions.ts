@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidateTag } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin, requireAdmin } from "@/lib/auth/permissions";
@@ -463,6 +463,7 @@ export async function deleteArenaTeamAction(teamId: string): Promise<{ error?: s
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     await deleteArenaTeam(player.id, teamId, isAdminUser);
     revalidateTag("arena-active-teams");
+    revalidatePath("/arena-z");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao remover equipe." };

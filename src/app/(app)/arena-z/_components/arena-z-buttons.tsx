@@ -430,11 +430,15 @@ function useArenaAction() {
   const [pending, startTransition] = useTransition();
   const run = (fn: () => Promise<{ error?: string }>, success: string) => {
     startTransition(async () => {
-      const result = await fn();
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success(success);
-        router.refresh();
+      try {
+        const result = await fn();
+        if (result.error) toast.error(result.error, { duration: 7000 });
+        else {
+          toast.success(success);
+          router.refresh();
+        }
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível concluir a ação.", { duration: 7000 });
       }
     });
   };
@@ -1151,7 +1155,7 @@ export function DeleteTeamButton({ teamId, isAdmin = false, teamStatus = "RETIRE
           : "border-slate-600/40 bg-slate-800/40 text-slate-400 hover:border-red-500/40 hover:text-red-400"
       }`}
     >
-      {isActive ? "🚪 Abandonar" : "🗑 Remover"}
+      {pending ? "Processando…" : isActive ? "🚪 Abandonar" : "🗑 Remover"}
     </button>
   );
 }

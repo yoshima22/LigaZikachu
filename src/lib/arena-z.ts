@@ -1406,7 +1406,12 @@ export async function setArenaTeamMemberCombatRole(playerId: string, teamId: str
 }
 
 
-/** Remove equipe completamente (admin ou dono). Libera mascotes e apaga o registro. */
+/**
+ * Abandona ou remove uma equipe. Equipes ativas do próprio jogador são
+ * encerradas sem recompensa e preservadas como RETIRED para evitar que o
+ * histórico de batalhas bloqueie/falhe durante a exclusão. Admin e equipes já
+ * encerradas continuam podendo ser apagados definitivamente.
+ */
 export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin = false) {
   const team = await prisma.arenaTeam.findUnique({
     where: { id: teamId },
@@ -1423,9 +1428,27 @@ export async function deleteArenaTeam(playerId: string, teamId: string, isAdmin 
       where: { id: { in: team.members.map(m => m.mascotId) }, arenaState: { not: "INJURED" } },
       data: { arenaState: "FREE", restingUntil: null }
     });
-    // Remove a equipe (cascade apaga members via FK)
-    // Nota: abandono NÃO credita o cofre e NÃO define retiredAt (sem penalidade de 10 min)
-    await tx.arenaTeam.delete({ where: { id: teamId } });
+
+    if (!isAdmin && team.status === "ACTIVE") {
+      // Abandono NÃO credita o cofre e NÃO define retiredAt (sem penalidade de
+      // retirada). O registro encerrado mantém referências históricas estáveis.
+      await tx.arenaTeam.update({
+        where: { id: teamId },
+        data: {
+          status: "RETIRED",
+          vaultCoins: 0,
+          vaultExp: 0,
+          vaultFood: 0,
+          vaultSweet: 0,
+          pendingBotJson: Prisma.DbNull,
+          pendingBotDifficulty: null,
+          retiredAt: null,
+        },
+      });
+    } else {
+      // Equipes já encerradas e remoções administrativas são definitivas.
+      await tx.arenaTeam.delete({ where: { id: teamId } });
+    }
   });
 }
 
