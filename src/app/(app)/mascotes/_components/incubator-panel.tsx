@@ -3,7 +3,7 @@
 import { useState, useEffect, useMemo, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
-import { Clock, Egg, Search, Sparkles, X } from "lucide-react";
+import { Clock, Egg, Eye, FastForward, Search, Sparkles, X } from "lucide-react";
 import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
 import {
   putEggInIncubator,
@@ -27,6 +27,8 @@ interface IncubatorData {
 }
 
 interface EggItem { id: string; type: string; obtainedAt: Date; origin: string | null; hatchRarityBonusPct?: number }
+
+type HatchResult = NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>;
 
 interface Props {
   incubator: IncubatorData | null;
@@ -107,11 +109,89 @@ const GEN_OPTIONS = [
   { value: "EGG_GEN9", label: "9️⃣ Gen 9 — Paldea · Sprigatito a Pecharunt" },
 ];
 
+const HATCH_ANIMATION_PREFERENCE_KEY = "liga:incubator:hatch-animation";
+
+function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete: () => void }) {
+  const candidates = useMemo(() => {
+    // A roleta é somente visual. O resultado já foi persistido no servidor antes dela começar.
+    const ids = Array.from({ length: 24 }, (_, index) => ((result.pokemonId * 37 + index * 83 + 151) % 1025) + 1);
+    return [...ids, result.pokemonId];
+  }, [result.pokemonId]);
+  const [index, setIndex] = useState(0);
+  const [revealed, setRevealed] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    let timer: ReturnType<typeof setTimeout>;
+    const startedAt = Date.now();
+    const advance = () => {
+      if (cancelled) return;
+      const elapsed = Date.now() - startedAt;
+      if (elapsed >= 3600) {
+        setIndex(candidates.length - 1);
+        setRevealed(true);
+        timer = setTimeout(onComplete, 1800);
+        return;
+      }
+      setIndex((current) => Math.min(current + 1, candidates.length - 2));
+      const delay = elapsed < 1900 ? 90 : elapsed < 2800 ? 160 : 280;
+      timer = setTimeout(advance, delay);
+    };
+    timer = setTimeout(advance, 180);
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [candidates.length, onComplete]);
+
+  const shown = [-1, 0, 1].map((offset) => candidates[Math.max(0, Math.min(candidates.length - 1, index + offset))]);
+  const finalSprite = result.isShiny ? getShinySprite(result.pokemonId, true) : getSpriteUrl(result.pokemonId);
+
+  return (
+    <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-[radial-gradient(circle_at_center,rgba(88,28,135,.42),rgba(2,6,23,.96)_68%)] p-4 backdrop-blur-md">
+      <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(circle,#fde047_1px,transparent_1.5px)] [background-size:34px_34px]" />
+      <div className={`relative w-full max-w-2xl overflow-hidden rounded-[2rem] border p-5 shadow-[0_0_90px_rgba(168,85,247,.28)] transition-all duration-700 sm:p-8 ${revealed ? "border-yellow-300/70 bg-slate-950" : "border-violet-400/40 bg-slate-950/95"}`}>
+        <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 transition-all duration-700 ${revealed ? "bg-gradient-to-r from-yellow-300 via-white to-yellow-300" : "bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400"}`} />
+        <div className="relative text-center">
+          <p className="text-[10px] font-black uppercase tracking-[.3em] text-violet-300">Incubadora da Liga</p>
+          <h3 className="mt-1 text-xl font-black text-white sm:text-2xl">{revealed ? "O destino escolheu!" : "Quem está dentro deste ovo?"}</h3>
+          <p className="mt-1 text-xs text-slate-400">O resultado já está protegido no servidor. Agora é só aproveitar a revelação.</p>
+        </div>
+
+        <div className="relative my-6 overflow-hidden rounded-3xl border border-white/10 bg-[linear-gradient(180deg,rgba(30,41,59,.8),rgba(2,6,23,.9))] px-2 py-7 sm:px-6">
+          <div className="absolute inset-y-0 left-1/2 w-32 -translate-x-1/2 border-x border-yellow-300/30 bg-yellow-300/[.04] shadow-[0_0_45px_rgba(250,204,21,.12)]" />
+          <div className="relative grid grid-cols-3 items-center gap-2 sm:gap-4">
+            {shown.map((pokemonId, slot) => {
+              const center = slot === 1;
+              const isWinner = revealed && center;
+              const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
+              return (
+                <div key={`${slot}-${pokemonId}-${index}`} className={`flex min-w-0 flex-col items-center rounded-2xl border px-2 py-4 transition-all duration-300 ${center ? "scale-110 border-yellow-300/60 bg-yellow-300/10 opacity-100" : "scale-90 border-white/5 bg-black/20 opacity-35 blur-[.4px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={sprite} alt="" className={`h-24 w-24 object-contain transition-all sm:h-32 sm:w-32 ${center && !revealed ? "animate-bounce" : ""}`} style={{ imageRendering: "pixelated" }} />
+                  <p className={`mt-2 max-w-full truncate text-xs font-bold sm:text-sm ${center ? "text-white" : "text-slate-500"}`}>{isWinner ? result.name : getPokemonName(pokemonId)}</p>
+                </div>
+              );
+            })}
+          </div>
+          {!revealed && <div className="absolute bottom-2 left-1/2 h-1 w-24 -translate-x-1/2 overflow-hidden rounded-full bg-slate-800"><div className="h-full w-1/2 animate-pulse rounded-full bg-gradient-to-r from-cyan-400 to-fuchsia-400" /></div>}
+        </div>
+
+        <div className="relative flex items-center justify-between gap-3">
+          <p className={`text-xs font-semibold ${revealed ? "text-yellow-200" : "text-slate-400"}`}>{revealed ? `${result.name} nasceu! Preparando a ficha completa…` : "As possibilidades estão passando pela incubadora…"}</p>
+          <button type="button" onClick={onComplete} className="flex shrink-0 items-center gap-1.5 rounded-xl border border-slate-700 bg-slate-900 px-3 py-2 text-xs font-bold text-slate-300 transition hover:border-yellow-300/50 hover:text-yellow-200">
+            <FastForward size={13} /> {revealed ? "Ver ficha" : "Pular"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {}, eventRarityBonusPct = 0 }: Props) {
   // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
   const resolveEggImg = (type: string) =>
     eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
   const [pending, startTransition] = useTransition();
+  const [showHatchAnimation, setShowHatchAnimation] = useState(true);
+  const [animatedResult, setAnimatedResult] = useState<HatchResult | null>(null);
   const [hatchResult, setHatchResult] = useState<{
     mascotId: string;
     pokemonId: number;
@@ -149,6 +229,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const visibleDrops = filteredDrops.slice((dropPage - 1) * dropPageSize, dropPage * dropPageSize);
 
   useEffect(() => {
+    const saved = window.localStorage.getItem(HATCH_ANIMATION_PREFERENCE_KEY);
+    if (saved !== null) setShowHatchAnimation(saved !== "false");
+  }, []);
+
+  useEffect(() => {
     setDropPage((current) => Math.min(current, dropPageCount));
   }, [dropPageCount]);
 
@@ -168,7 +253,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     setSelectedGen("");
   };
 
-  const applyHatchResult = (result: NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>) => {
+  const revealHatchResult = (result: HatchResult) => {
     setHatchResult({
       mascotId: result.mascotId,
       pokemonId: result.pokemonId,
@@ -180,6 +265,11 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       statRange: result.statRange,
     });
     onHatched?.(result.pokemonId, result.name);
+  };
+
+  const applyHatchResult = (result: HatchResult) => {
+    if (showHatchAnimation) setAnimatedResult(result);
+    else revealHatchResult(result);
   };
 
   const handleHatch = () => {
@@ -226,6 +316,16 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
 
   return (
     <>
+    {animatedResult && (
+      <HatchRoulette
+        result={animatedResult}
+        onComplete={() => {
+          const result = animatedResult;
+          setAnimatedResult(null);
+          revealHatchResult(result);
+        }}
+      />
+    )}
     {/* Modal calculado sob demanda com a pool real do ovo incubado */}
     {dropPreviewOpen && (
       <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3 sm:p-5" onClick={() => setDropPreviewOpen(false)}>
@@ -426,10 +526,25 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     <div className="space-y-6">
       {/* Incubadora */}
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
-        <h2 className="mb-4 flex items-center gap-2 font-semibold text-slate-200">
-          <span className="text-xl">🥚</span> Incubadora
-          <span className="ml-auto text-[10px] text-slate-600">1 slot</span>
-        </h2>
+        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+          <h2 className="flex items-center gap-2 font-semibold text-slate-200">
+            <span className="text-xl">🥚</span> Incubadora
+            <span className="text-[10px] text-slate-600">1 slot</span>
+          </h2>
+          <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-[11px] text-slate-300 transition hover:border-violet-400/40">
+            <input
+              type="checkbox"
+              checked={showHatchAnimation}
+              onChange={(event) => {
+                setShowHatchAnimation(event.target.checked);
+                window.localStorage.setItem(HATCH_ANIMATION_PREFERENCE_KEY, String(event.target.checked));
+              }}
+              className="size-4 accent-violet-500"
+            />
+            {showHatchAnimation ? <Sparkles size={13} className="text-violet-300" /> : <Eye size={13} className="text-slate-500" />}
+            <span><strong className="text-white">Abertura animada</strong><span className="ml-1 text-slate-500">{showHatchAnimation ? "ativada" : "resultado direto"}</span></span>
+          </label>
+        </div>
 
         {hatchResult ? (
           <div className="flex flex-col items-center gap-3 py-4">
