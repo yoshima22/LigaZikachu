@@ -68,6 +68,8 @@ type ProposalOfferItem = {
   shopItemId?: string;
   escrowed_egg_ids?: string[];
   escrowed?: boolean;
+  /** Bônus de raridade do ovo escolhido (pontos %). Diferencia ovos do mesmo tipo. */
+  eggBonusPct?: number;
 };
 
 type DirectNegotiationState = {
@@ -144,6 +146,16 @@ function canonicalBazarItemName(itemType: string) {
   if (itemType === "FOOD") return "Comida de Mascote";
   if (itemType === "SWEET") return "Doce de Mascote";
   return itemType.replaceAll("_", " ");
+}
+
+/** Sufixo que distingue um ovo com chance de raridade aumentada de um sem nada. */
+function eggBonusSuffix(bonusPct?: number | null) {
+  return typeof bonusPct === "number" && bonusPct > 0 ? ` ★+${bonusPct}% raridade` : "";
+}
+
+/** Nome do ovo já com o marcador de bônus de raridade, quando houver. */
+function eggDisplayName(itemType: string, bonusPct?: number | null) {
+  return `${canonicalBazarItemName(itemType)}${eggBonusSuffix(bonusPct)}`;
 }
 
 function fullMascotPayloadName(payload: Record<string, unknown>) {
@@ -702,6 +714,8 @@ export interface CreateListingInput {
   itemType?: string;
   shopItemId?: string;   // ID do ShopItem (para PlayerInventory — escrow preciso)
   imageUrl?: string;     // Imagem real do shop
+  /** Bônus de raridade do ovo escolhido (pontos %). Escolhe exatamente qual ovo anunciar. */
+  eggBonusPct?: number;
   quantity?: number;
   displayName?: string;
   premium?: boolean;
@@ -835,30 +849,38 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
             data: { quantity: { decrement: qty } },
           });
         } else if (isEggOfferType(input.itemType)) {
-          // Ovos — conta quantos tem (exclui ovos já em escrow do bazar)
+          // Ovos — o jogador escolhe EXATAMENTE qual ovo anunciar (por tipo +
+          // bônus de raridade). Ovos do mesmo tipo com bônus diferente são
+          // distintos; filtramos pelo bônus escolhido quando informado.
+          const bonusPct = typeof input.eggBonusPct === "number" ? input.eggBonusPct : null;
           const eggs = await tx.mascotEgg.findMany({
             where: {
               playerId: player.id,
               type: input.itemType as never,
               incubation: null,
               NOT: { origin: { startsWith: "bazar:" } },
+              ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}),
             },
+            orderBy: { hatchRarityBonusPct: "desc" },
           });
-          if (eggs.length < qty) throw new Error("Ovos insuficientes no inventário.");
+          if (eggs.length < qty) throw new Error("Ovos insuficientes no inventário para o ovo escolhido.");
           // Remove qty ovos do inventário (escrow)
           const escrowedEggs = eggs.slice(0, qty);
           const toRemove = escrowedEggs.map(e => e.id);
           // Captura a origem real antes de sobrescrever para "bazar:" (senão se perde).
           const origins = [...new Set(escrowedEggs.map(e => e.origin).filter(Boolean))];
+          const escrowBonus = bonusPct !== null ? bonusPct : escrowedEggs[0]?.hatchRarityBonusPct ?? 0;
+          canonicalDisplayName = eggDisplayName(input.itemType, escrowBonus);
+          // Guardar IDs, origem e bônus dos ovos no payload (devolução e exibição).
           await tx.mascotEgg.updateMany({
             where: { id: { in: toRemove } },
             data: { origin: `bazar:${player.id}` }, // marca como em bazar para não aparecer na incubadora
           });
-          // Guardar IDs e origem dos ovos no payload (para devolução e exibição).
           payload = {
             ...payload,
             escrowed_egg_ids: toRemove,
             eggType: input.itemType,
+            eggBonusPct: escrowBonus,
             // Só registra origem única quando todos os ovos compartilham a mesma.
             eggOrigin: origins.length === 1 ? origins[0] : null,
           };
@@ -2770,25 +2792,36 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
     }
 
     if (!item.mascotId && isEggOfferType(item.type)) {
+      // Ovo escolhido exatamente (tipo + bônus de raridade), igual ao anúncio.
+      const bonusPct = typeof item.eggBonusPct === "number" ? item.eggBonusPct : null;
       const eggs = await tx.mascotEgg.findMany({
         where: {
           playerId,
           type: item.type as never,
           incubation: null,
           NOT: { origin: { startsWith: "bazar:" } },
+          ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}),
         },
-        select: { id: true },
+        select: { id: true, hatchRarityBonusPct: true },
+        orderBy: { hatchRarityBonusPct: "desc" },
         take: quantity,
       });
       if (eggs.length < quantity) {
         throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
       }
       const eggIds = eggs.map((egg) => egg.id);
+      const escrowBonus = bonusPct !== null ? bonusPct : eggs[0]?.hatchRarityBonusPct ?? 0;
       await tx.mascotEgg.updateMany({
         where: { id: { in: eggIds }, playerId },
         data: { origin: `bazar-proposal:${playerId}` },
       });
-      reserved.push({ ...normalized, escrowed: true, escrowed_egg_ids: eggIds });
+      reserved.push({
+        ...normalized,
+        escrowed: true,
+        escrowed_egg_ids: eggIds,
+        eggBonusPct: escrowBonus,
+        displayName: eggDisplayName(item.type, escrowBonus),
+      });
       continue;
     }
 
@@ -3382,6 +3415,7 @@ export interface CreateAuctionInput {
   itemType?: string;
   shopItemId?: string;
   imageUrl?: string;
+  eggBonusPct?: number;
   quantity?: number;
   displayName?: string;
   premium?: boolean; // leilão em destaque na vitrine premium do Miauvadão
@@ -3462,10 +3496,17 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           if (!food || food.quantity < qty) throw new Error("Itens insuficientes.");
           await tx.mascotFoodItem.update({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } }, data: { quantity: { decrement: qty } } });
         } else if (isEggOfferType(input.itemType)) {
-          const eggs = await tx.mascotEgg.findMany({ where: { playerId: player.id, type: input.itemType as never, incubation: null, NOT: { origin: { startsWith: "bazar:" } } } });
-          if (eggs.length < qty) throw new Error("Ovos insuficientes.");
-          await tx.mascotEgg.updateMany({ where: { id: { in: eggs.slice(0, qty).map(e => e.id) } }, data: { origin: `bazar:${player.id}` } });
-          payload = { ...payload, escrowed_egg_ids: eggs.slice(0, qty).map(e => e.id) };
+          const bonusPct = typeof input.eggBonusPct === "number" ? input.eggBonusPct : null;
+          const eggs = await tx.mascotEgg.findMany({
+            where: { playerId: player.id, type: input.itemType as never, incubation: null, NOT: { origin: { startsWith: "bazar:" } }, ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}) },
+            orderBy: { hatchRarityBonusPct: "desc" },
+          });
+          if (eggs.length < qty) throw new Error("Ovos insuficientes para o ovo escolhido.");
+          const escrowedEggs = eggs.slice(0, qty);
+          const escrowBonus = bonusPct !== null ? bonusPct : escrowedEggs[0]?.hatchRarityBonusPct ?? 0;
+          await tx.mascotEgg.updateMany({ where: { id: { in: escrowedEggs.map(e => e.id) } }, data: { origin: `bazar:${player.id}` } });
+          payload = { ...payload, escrowed_egg_ids: escrowedEggs.map(e => e.id), eggType: input.itemType, eggBonusPct: escrowBonus };
+          canonicalDisplayName = eggDisplayName(input.itemType, escrowBonus);
         } else {
           const inv = input.shopItemId
             ? await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: input.shopItemId } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } })

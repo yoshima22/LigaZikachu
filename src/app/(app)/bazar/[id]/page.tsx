@@ -34,6 +34,7 @@ interface ProposalOfferedItem {
   shopItemId?: string;
   escrowed_egg_ids?: string[];
   escrowed?: boolean;
+  eggBonusPct?: number;
 }
 
 interface ProposalItem {
@@ -1185,8 +1186,15 @@ interface InventoryShopItem {
   name: string; description: string | null; imageUrl: string | null;
   rarity: string; shopPrice: number; quantity: number; equipped: boolean;
 }
+// Chave de seleção única por oferta: mascote pelo id; ovo por tipo + bônus de
+// raridade (para distinguir "ovo com chance aumentada" de "ovo sem nada");
+// demais itens pelo tipo.
+function offerItemKey(i: ProposalOfferedItem) {
+  return i.mascotId ?? `${i.type}#${i.eggBonusPct ?? 0}`;
+}
+
 interface InventoryData {
-  eggs: Array<{type: string; count: number}>;
+  eggs: Array<{type: string; count: number; bonus: number}>;
   foods: Array<{type: string; quantity: number}>;
   mascots: Array<{
     id: string;
@@ -1220,13 +1228,16 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
   const loadInventory = useCallback(async () => {
     const res = await fetch("/api/bazar/inventory", { cache: "no-store" });
     if (res.ok) {
-      const data = await res.json() as { eggs?: Array<{type: string}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"]; inventoryItems?: InventoryShopItem[] };
-      const eggGroups: Record<string, number> = {};
+      const data = await res.json() as { eggs?: Array<{type: string; hatchRarityBonusPct?: number}>; foods?: Array<{type: string; quantity: number}>; mascots?: InventoryData["mascots"]; inventoryItems?: InventoryShopItem[] };
+      const eggGroups: Record<string, { type: string; bonus: number; count: number }> = {};
       for (const egg of (data.eggs ?? [])) {
-        eggGroups[egg.type] = (eggGroups[egg.type] ?? 0) + 1;
+        const bonus = egg.hatchRarityBonusPct ?? 0;
+        const key = `${egg.type}#${bonus}`;
+        if (!eggGroups[key]) eggGroups[key] = { type: egg.type, bonus, count: 0 };
+        eggGroups[key].count += 1;
       }
       setInventory({
-        eggs: Object.entries(eggGroups).map(([type, count]) => ({ type, count })),
+        eggs: Object.values(eggGroups).sort((a, b) => a.type.localeCompare(b.type) || b.bonus - a.bonus),
         foods: data.foods ?? [],
         mascots: (data.mascots ?? []).filter(m => !m.bazarListed && !m.isEquipped && m.arenaState === "FREE"),
         inventoryItems: (data.inventoryItems ?? []).filter(i => TRADEABLE.has(i.type)),
@@ -1246,18 +1257,19 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [resetSignal]);
 
-  const toggleItem = (key: string, item: ProposalOfferedItem) => {
+  const toggleItem = (item: ProposalOfferedItem) => {
+    const key = offerItemKey(item);
     setSelected(prev => {
-      const exists = prev.find(i => (i.mascotId ?? i.type) === key);
-      const next = exists ? prev.filter(i => (i.mascotId ?? i.type) !== key) : [...prev, item];
+      const exists = prev.find(i => offerItemKey(i) === key);
+      const next = exists ? prev.filter(i => offerItemKey(i) !== key) : [...prev, item];
       onItemsChange(next);
       return next;
     });
   };
 
-  const updateQty = (type: string, qty: number) => {
+  const updateQty = (key: string, qty: number) => {
     setSelected(prev => {
-      const next = prev.map(i => i.type === type && !i.mascotId ? { ...i, quantity: Math.max(1, qty) } : i);
+      const next = prev.map(i => offerItemKey(i) === key && !i.mascotId ? { ...i, quantity: Math.max(1, qty) } : i);
       onItemsChange(next);
       return next;
     });
@@ -1269,7 +1281,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
     EGG_GEN5:"Ovo Gen 5",EGG_GEN6:"Ovo Gen 6",EGG_GEN7:"Ovo Gen 7",EGG_GEN8:"Ovo Gen 8",EGG_GEN9:"Ovo Gen 9",
   };
 
-  const selectedKeys = new Set(selected.map(i => i.mascotId ?? i.type));
+  const selectedKeys = new Set(selected.map(offerItemKey));
   const query = search.trim().toLowerCase();
   const matches = (text: string) => !query || text.toLowerCase().includes(query);
   const showCat = (cat: OfferCategory) => category === "ALL" || category === cat;
@@ -1349,7 +1361,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                 const sel = selectedKeys.has(m.id);
                 return (
                   <button key={m.id} type="button"
-                    onClick={() => toggleItem(m.id, {
+                    onClick={() => toggleItem({
                       type: "MASCOT_OFFER", quantity: 1,
                       displayName: label,
                       mascotId: m.id,
@@ -1392,19 +1404,21 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🥚 Ovos</p>
               {visibleEggs.map(egg => {
-                const sel = selected.find(i => i.type === egg.type && !i.mascotId);
-                const label = EGG_LABELS[egg.type] ?? egg.type;
+                const baseLabel = EGG_LABELS[egg.type] ?? egg.type;
+                const label = egg.bonus > 0 ? `${baseLabel} ★+${egg.bonus}% raridade` : baseLabel;
+                const key = `${egg.type}#${egg.bonus}`;
+                const sel = selected.find(i => offerItemKey(i) === key && !i.mascotId);
                 return (
-                  <div key={egg.type} className="flex items-center gap-2">
+                  <div key={key} className="flex items-center gap-2">
                     <button type="button"
-                      onClick={() => toggleItem(egg.type, { type: egg.type, quantity: 1, displayName: label })}
+                      onClick={() => toggleItem({ type: egg.type, quantity: 1, displayName: label, eggBonusPct: egg.bonus })}
                       className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
-                      🥚 {label} ({egg.count})
+                      🥚 {baseLabel}{egg.bonus > 0 && <span className="ml-1 text-amber-300 font-black">★+{egg.bonus}%</span>} ({egg.count})
                     </button>
                     {sel && (
                       <input type="number" min={1} max={egg.count} inputMode="numeric" pattern="[0-9]*"
                         value={sel.quantity}
-                        onChange={e => updateQty(egg.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
+                        onChange={e => updateQty(key, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>
@@ -1419,18 +1433,19 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">🍖 Comida</p>
               {visibleFoods.map(food => {
                 const label = food.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote";
+                const foodKey = `${food.type}#0`;
                 const sel = selected.find(i => i.type === food.type && !i.mascotId);
                 return (
                   <div key={food.type} className="flex items-center gap-2">
                     <button type="button"
-                      onClick={() => toggleItem(food.type, { type: food.type, quantity: 1, displayName: label })}
+                      onClick={() => toggleItem({ type: food.type, quantity: 1, displayName: label })}
                       className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1 transition-colors ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                       {food.type === "FOOD" ? "🍖" : "🍬"} {label} ({food.quantity})
                     </button>
                     {sel && (
                       <input type="number" min={1} max={food.quantity} inputMode="numeric" pattern="[0-9]*"
                         value={sel.quantity}
-                        onChange={e => updateQty(food.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
+                        onChange={e => updateQty(foodKey, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>
@@ -1444,13 +1459,13 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">✨ Itens Especiais</p>
               {visibleItems.map(item => {
-                const key = item.type;
+                const key = `${item.type}#0`;
                 const sel = selectedKeys.has(key);
                 const emoji = getShopItemEmoji(item.type);
                 return (
                   <div key={key} className="flex items-center gap-2">
                     <button type="button"
-                      onClick={() => toggleItem(key, { type: item.type, quantity: 1, displayName: item.name })}
+                      onClick={() => toggleItem({ type: item.type, quantity: 1, displayName: item.name })}
                       className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                       {item.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -1464,7 +1479,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                     {sel && (
                       <input type="number" min={1} max={item.quantity} inputMode="numeric" pattern="[0-9]*"
                         value={selected.find(i => i.type === item.type)?.quantity ?? 1}
-                        onChange={e => updateQty(item.type, parseInt(e.target.value.replace(/\D/g, ""))||1)}
+                        onChange={e => updateQty(key, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
                   </div>

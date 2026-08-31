@@ -32,7 +32,7 @@ interface InventoryData {
     statForce: number; statAgility: number; statCharisma: number;
     statInstinct: number; statVitality: number; battleWins: number;
   }>;
-  eggs: Array<{ id: string; type: string }>;
+  eggs: Array<{ id: string; type: string; hatchRarityBonusPct?: number; origin?: string | null }>;
   foods: Array<{ type: string; quantity: number }>;
   inventoryItems: InventoryItem[];
   listingFee: number;
@@ -68,7 +68,7 @@ function CreateListingForm() {
   const [auctionDuration, setAuctionDuration] = useState<"12h" | "1d">("1d");
   const [minBid, setMinBid] = useState("");
   const [selectedMascotId, setSelectedMascotId] = useState("");
-  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string; maxQty: number } | null>(null);
+  const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string; maxQty: number; eggBonusPct?: number } | null>(null);
   const [itemQuantity, setItemQuantity] = useState(1);
   const [inventory, setInventory] = useState<InventoryData | null>(null);
   const [loadingInventory, setLoadingInventory] = useState(false);
@@ -115,6 +115,7 @@ function CreateListingForm() {
             itemType: category === "ITEM" ? selectedItem?.type : undefined,
             shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
             imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+            eggBonusPct: category === "ITEM" ? selectedItem?.eggBonusPct : undefined,
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
             premium,
@@ -135,6 +136,7 @@ function CreateListingForm() {
             itemType: category === "ITEM" ? selectedItem?.type : undefined,
             shopItemId: category === "ITEM" ? selectedItem?.shopItemId : undefined,
             imageUrl: category === "ITEM" ? selectedItem?.imageUrl : undefined,
+            eggBonusPct: category === "ITEM" ? selectedItem?.eggBonusPct : undefined,
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
             premium,
@@ -162,10 +164,19 @@ function CreateListingForm() {
     return true;
   };
 
-  // Agrupa ovos por tipo
-  const eggGroups = inventory ? Object.entries(
-    inventory.eggs.reduce<Record<string, number>>((acc, e) => { acc[e.type] = (acc[e.type] ?? 0) + 1; return acc; }, {})
-  ) : [];
+  // Agrupa ovos por tipo + bônus de raridade, para que o jogador escolha
+  // EXATAMENTE qual ovo anunciar (com chance aumentada ou sem nada).
+  const eggGroups: Array<{ type: string; bonus: number; count: number }> = inventory
+    ? Object.values(
+        inventory.eggs.reduce<Record<string, { type: string; bonus: number; count: number }>>((acc, e) => {
+          const bonus = e.hatchRarityBonusPct ?? 0;
+          const key = `${e.type}|${bonus}`;
+          if (!acc[key]) acc[key] = { type: e.type, bonus, count: 0 };
+          acc[key].count += 1;
+          return acc;
+        }, {})
+      ).sort((a, b) => a.type.localeCompare(b.type) || b.bonus - a.bonus)
+    : [];
 
   // Itens do inventário que são negociáveis
   const tradeableInventory = (inventory?.inventoryItems ?? []).filter(i => TRADEABLE_TYPES.has(i.type));
@@ -358,7 +369,7 @@ function CreateListingForm() {
               const q = itemSearch.trim().toLowerCase();
               const match = (s: string) => !q || s.toLowerCase().includes(q);
               const fItems = tradeableInventory.filter(i => match(i.name) || match(i.description ?? ""));
-              const fEggs = eggGroups.filter(([type]) => match(EGG_LABELS[type] ?? type));
+              const fEggs = eggGroups.filter(g => match(EGG_LABELS[g.type] ?? g.type));
               const fFoods = inventory.foods.filter(f => f.quantity > 0 && match(f.type === "FOOD" ? "Comida de Mascote" : "Doce de Mascote"));
               return (
               <div className="space-y-3">
@@ -405,17 +416,21 @@ function CreateListingForm() {
                 {fEggs.length > 0 && (
                   <div className="space-y-1.5">
                     <p className="text-[10px] text-slate-500 uppercase tracking-wide sticky top-0 bg-slate-950/80 py-0.5">Ovos</p>
-                    {fEggs.map(([type, count]) => {
-                      const label = EGG_LABELS[type] ?? type;
-                      const isSel = selectedItem?.type === type && !selectedItem?.shopItemId;
+                    {fEggs.map(({ type, bonus, count }) => {
+                      const baseLabel = EGG_LABELS[type] ?? type;
+                      const label = bonus > 0 ? `${baseLabel} ★+${bonus}% raridade` : baseLabel;
+                      const isSel = selectedItem?.type === type && !selectedItem?.shopItemId && (selectedItem?.eggBonusPct ?? 0) === bonus;
                       return (
-                        <button key={type} type="button"
-                          onClick={() => { setSelectedItem({ type, displayName: label, maxQty: count }); setItemQuantity(1); }}
+                        <button key={`${type}|${bonus}`} type="button"
+                          onClick={() => { setSelectedItem({ type, displayName: label, maxQty: count, eggBonusPct: bonus }); setItemQuantity(1); }}
                           className={`w-full flex items-center gap-2 rounded-xl border px-3 py-2 text-left transition-colors ${
                             isSel ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white" : "border-border text-slate-400 hover:border-slate-600"
                           }`}>
                           <span className="text-lg">🥚</span>
-                          <span className="text-sm">{label}</span>
+                          <span className="text-sm">{baseLabel}</span>
+                          {bonus > 0 && (
+                            <span className="rounded bg-amber-400/20 px-1.5 py-0.5 text-[9px] font-black text-amber-300">★ +{bonus}% raridade</span>
+                          )}
                           <span className="ml-auto text-[10px] text-slate-500">{count} disponíveis</span>
                         </button>
                       );

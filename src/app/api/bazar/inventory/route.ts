@@ -71,7 +71,8 @@ export async function GET() {
           incubation: null,
           NOT: { origin: { startsWith: "bazar:" } }
         },
-        select: { id: true, type: true },
+        select: { id: true, type: true, hatchRarityBonusPct: true, origin: true },
+        orderBy: [{ type: "asc" }, { hatchRarityBonusPct: "desc" }],
       }),
       // Comida e doces
       prisma.mascotFoodItem.findMany({ where: { playerId: player.id } }),
