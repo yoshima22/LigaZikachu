@@ -427,6 +427,7 @@ function GrowthHistoryCard({
   }), { force: 0, agility: 0, charisma: 0, instinct: 0, vitality: 0 });
   const maxCurrent = Math.max(...Object.values(history.mascot.current), 1);
   const totalGained = Object.values(totals).reduce((a, b) => a + b, 0);
+  const chainedEntries = history.entries.filter((entry) => entry.toLevel - entry.fromLevel > 1);
   return (
     <div className={`min-w-0 overflow-hidden rounded-2xl border bg-slate-950/60 shadow-lg ${comparison ? "border-violet-400/25 shadow-violet-950/10" : "border-cyan-400/25 shadow-cyan-950/10"}`}>
       <div className={`h-1 w-full ${comparison ? "bg-gradient-to-r from-violet-500 to-fuchsia-400" : "bg-gradient-to-r from-cyan-500 to-emerald-400"}`} />
@@ -467,19 +468,32 @@ function GrowthHistoryCard({
             <p className="mt-1 max-w-xs text-[10px] leading-relaxed text-slate-600">Quando este mascote subir de nível, os ganhos aparecerão aqui automaticamente.</p>
           </div>
         ) : (
-          <div className="mt-3 max-h-64 overflow-y-auto rounded-xl border border-border">
+          <div className="mt-3 space-y-2">
+          {chainedEntries.length > 0 && (
+            <div className="flex items-start gap-2 rounded-xl border border-amber-400/20 bg-amber-400/[.06] px-3 py-2 text-[10px] leading-relaxed text-amber-100/80">
+              <GitCompareArrows size={13} className="mt-0.5 shrink-0 text-amber-300" />
+              <p><strong className="text-amber-200">{chainedEntries.length} subida(s) encadeada(s):</strong> a tabela mostra quantos níveis foram ganhos juntos, o total recebido e a média por nível para facilitar a auditoria.</p>
+            </div>
+          )}
+          <div className="max-h-64 overflow-auto rounded-xl border border-border">
           <table className="w-full text-[10px]">
-            <thead className="sticky top-0 bg-slate-900 text-slate-500"><tr><th className="px-2 py-2 text-left">Nível</th>{GROWTH_STATS.map(([key, label]) => <th key={key} className="px-1 py-2 text-center">{label.slice(0, 3)}</th>)}<th className="px-2 py-2 text-right">Origem</th></tr></thead>
+            <thead className="sticky top-0 bg-slate-900 text-slate-500"><tr><th className="px-2 py-2 text-left">Nível</th>{GROWTH_STATS.map(([key, label]) => <th key={key} className="px-1 py-2 text-center">{label.slice(0, 3)}</th>)}<th className="px-2 py-2 text-center">Total / nível</th><th className="px-2 py-2 text-right">Origem</th></tr></thead>
             <tbody className="divide-y divide-white/5">
-              {history.entries.map((entry) => (
-                <tr key={entry.id} className="text-slate-300">
-                  <td className="whitespace-nowrap px-2 py-2 font-semibold">{entry.fromLevel} → {entry.toLevel}</td>
-                  {GROWTH_STATS.map(([key]) => <td key={key} className="px-1 py-2 text-center text-emerald-300">+{entry.gained[key]}</td>)}
-                  <td className="max-w-24 truncate px-2 py-2 text-right text-slate-500" title={entry.source}>{entry.source}</td>
-                </tr>
-              ))}
+              {history.entries.map((entry) => {
+                const levels = Math.max(1, entry.toLevel - entry.fromLevel);
+                const gained = Object.values(entry.gained).reduce((sum, value) => sum + value, 0);
+                return (
+                  <tr key={entry.id} className={levels > 1 ? "bg-amber-400/[.035] text-slate-300" : "text-slate-300"}>
+                    <td className="whitespace-nowrap px-2 py-2 font-semibold">{entry.fromLevel} → {entry.toLevel}{levels > 1 && <span className="ml-1 text-[8px] text-amber-300">×{levels}</span>}</td>
+                    {GROWTH_STATS.map(([key]) => <td key={key} className="px-1 py-2 text-center text-emerald-300">+{entry.gained[key]}</td>)}
+                    <td className="whitespace-nowrap px-2 py-2 text-center font-semibold text-cyan-200">+{gained} <span className="font-normal text-slate-600">/ {(gained / levels).toLocaleString("pt-BR", { maximumFractionDigits: 2 })}</span></td>
+                    <td className="max-w-24 truncate px-2 py-2 text-right text-slate-500" title={entry.source}>{entry.source}</td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
+          </div>
           </div>
         )}
         {history.trackedFrom && <p className="mt-2 text-[9px] text-slate-600">Primeiro registro real: {new Date(history.trackedFrom).toLocaleString("pt-BR")}</p>}

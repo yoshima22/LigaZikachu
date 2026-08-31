@@ -120,7 +120,10 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
   useEffect(() => {
     void refresh();
     const tick = () => { if (document.visibilityState === "visible") void refresh(); };
-    const t = setInterval(tick, 6000);
+    // Online continua responsivo; lobby e sobretudo o modo lento não precisam
+    // baixar um probe de sincronização com a mesma frequência.
+    const pollMs = state?.run.status === "LOBBY" ? 10_000 : state?.run.pace === "SLOW" ? 30_000 : 6_000;
+    const t = setInterval(tick, pollMs);
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
     window.addEventListener("focus", onVisible);
@@ -129,7 +132,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
       document.removeEventListener("visibilitychange", onVisible);
       window.removeEventListener("focus", onVisible);
     };
-  }, [refresh]);
+  }, [refresh, state?.run.pace, state?.run.status]);
 
   if (error) return <section className={card}><p className="text-sm text-red-300">{error}</p></section>;
   if (!state) return <section className={card}><p className="text-sm text-slate-500">Carregando expedição…</p></section>;

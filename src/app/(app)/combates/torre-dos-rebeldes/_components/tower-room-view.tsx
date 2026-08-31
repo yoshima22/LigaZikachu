@@ -328,7 +328,7 @@ export function TowerRoomView({
             <p className="mt-1 text-xs text-slate-300">
               Será uma única batalha com todos os aliados presentes. A
               quantidade inimiga não precisa ser igual à do grupo. Cada ponto de
-              Pressão fortalece seus atributos em 3%, além dos modificadores
+              Pressão fortalece seus atributos em 2%, além dos modificadores
               ativos.
             </p>
           </div>

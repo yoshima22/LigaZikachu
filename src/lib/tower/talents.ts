@@ -20,7 +20,7 @@ export type TowerTalent = {
   vitality?: number;   // +% Vitalidade
   boss?: number;       // +% em todos os atributos SÓ contra chefes
   shield?: number;     // +escudo de Pressão no início da run
-  scaleRed?: number;   // reduz o fator de crescimento inimigo por Pressão (base 0.03)
+  scaleRed?: number;   // reduz o fator de crescimento inimigo por Pressão (base 0.02)
   splitRed?: number;   // reduz a penalidade de dividir a equipe (base 2, mínimo 1)
 };
 
@@ -60,7 +60,7 @@ export type TowerTalentEffects = {
   bossMult: number;
   /** Escudo de Pressão somado no início da run. */
   pressureShieldStart: number;
-  /** Fator de crescimento inimigo por Pressão (base 0.03, nunca abaixo de 0.01). */
+  /** Fator de crescimento inimigo por Pressão (base 0.02, nunca abaixo de 0.01). */
   enemyPressureScale: number;
   /** Penalidade efetiva de dividir a equipe (base 2, nunca abaixo de 1). */
   splitPenalty: number;
@@ -89,7 +89,7 @@ export function resolveTowerTalents(rankOf: (key: string) => number): TowerTalen
     vitalityMult: 1 + vitality,
     bossMult: 1 + boss,
     pressureShieldStart: Math.round(shield),
-    enemyPressureScale: Math.max(0.01, 0.03 - scaleRed),
+    enemyPressureScale: Math.max(0.01, 0.02 - scaleRed),
     splitPenalty: Math.max(1, 2 - splitRed),
   };
 }
