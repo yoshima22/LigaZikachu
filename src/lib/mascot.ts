@@ -648,13 +648,20 @@ export async function addExp(
   let evolved = false;
   let newPokemonId: number | undefined;
   const evolvedPokemonIds: number[] = [];
+  let growthStats: Record<MascotStatKey, number> = {
+    statForce: mascot.statForce,
+    statAgility: mascot.statAgility,
+    statCharisma: mascot.statCharisma,
+    statInstinct: mascot.statInstinct,
+    statVitality: mascot.statVitality,
+  };
 
   // Verifica level ups em cadeia (cap: nível 100)
   while (level < 100 && exp >= expToNextLevel(level)) {
+    const previousLevel = level;
     exp -= expToNextLevel(level);
     level++;
     levelsGained++;
-    if (level >= 100) { exp = 0; break; }
 
     // Verifica evolução (respeitando evolutionLocked)
     const evo = EVOLUTION_MAP.get(pokemonId);
@@ -665,6 +672,18 @@ export async function addExp(
       newPokemonId = pokemonId;
       evolvedPokemonIds.push(pokemonId);
     }
+
+    // Cada nível é resolvido isoladamente. Somar vários níveis e arredondar
+    // apenas no fim fazia certos multiplicadores perderem pontos; também não
+    // recalculava pesos/espécie após uma evolução ocorrida no meio do salto.
+    const levelBonus = levelStatBonuses({
+      pokemonId,
+      level: previousLevel,
+      personality: mascot.personality,
+      ...growthStats,
+    }, 1);
+    growthStats = addStatRecords(growthStats, levelBonus);
+    if (level >= 100) { exp = 0; break; }
   }
 
   // Auto-rename: se o nickname era o nome padrão do Pokémon antes da evolução,
@@ -678,13 +697,8 @@ export async function addExp(
   }
 
   // Bônus de stat por level up
-  const statUpdates = leveled
-    ? Object.fromEntries(
-        Object.entries(levelStatBonuses(mascot, levelsGained)).map(([key, value]) => [
-          key,
-          mascot[key as MascotStatKey] + value,
-        ]),
-      )
+  const statUpdates: Partial<Record<MascotStatKey, number>> = leveled
+    ? growthStats
     : {};
 
   const baseAfterLevelBonuses: Record<MascotStatKey, number> = {
