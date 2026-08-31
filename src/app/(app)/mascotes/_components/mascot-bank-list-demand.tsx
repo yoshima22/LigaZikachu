@@ -636,21 +636,21 @@ export function MascotBankList({
         Para economizar dados, o banco carrega sob demanda em paginas pequenas. Favoritos e companheiro continuam completos.
       </p>
 
-      <div className="flex flex-nowrap items-center gap-1.5 overflow-x-auto pb-1">
+      <div className="flex flex-wrap items-center gap-1 pb-1">
         <div className="relative shrink-0">
-          <Search size={11} className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" />
+          <Search size={10} className="pointer-events-none absolute left-1.5 top-1/2 -translate-y-1/2 text-slate-500" />
           <input
             value={search}
             onChange={(event) => setSearch(event.target.value)}
             onKeyDown={(event) => { if (event.key === "Enter") loadPage(1); }}
-            placeholder="Buscar..."
-            className="w-24 rounded-lg border border-border bg-slate-900 py-1.5 pl-6 pr-2 text-[11px] text-slate-100 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]"
+            placeholder="Buscar"
+            className="w-20 rounded-lg border border-border bg-slate-900 py-1 pl-5 pr-1.5 text-[10px] text-slate-100 outline-none placeholder:text-slate-600 focus:border-[#FFCB05]"
           />
         </div>
         <select
           value={typeFilter}
           onChange={(event) => setTypeFilter(event.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           <option value="">Todos os tipos</option>
           {BANK_TYPE_OPTIONS.map((type) => <option key={type} value={type}>{TYPE_LABELS[type] ?? type}</option>)}
@@ -658,16 +658,16 @@ export function MascotBankList({
         <select
           value={ocup}
           onChange={(event) => setOcup(event.target.value as OcupFilter)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           {OCUP_OPTIONS.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
         </select>
         <select
           value={rankFilter}
           onChange={(event) => setRankFilter(event.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
-          <option value="">Análise: todos</option>
+          <option value="">Análise</option>
           <option value="analyzed">Analisados</option>
           <option value="unanalyzed">Não analisados</option>
           {["SSS", "SS", "S", "A", "B", "C", "D", "E"].map((r) => (
@@ -677,7 +677,7 @@ export function MascotBankList({
         <select
           value={perfFilter}
           onChange={(event) => setPerfFilter(event.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           <option value="">Desempenho: todos</option>
           <option value="FORTE">💪 Forte</option>
@@ -688,7 +688,7 @@ export function MascotBankList({
         <select
           value={rarityFilter}
           onChange={(event) => setRarityFilter(event.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           <option value="">Raridade: todas</option>
           {(["MEGA", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PSEUDO_LEGENDARY", "PARADOX"] as const).map((r) => (
@@ -698,7 +698,7 @@ export function MascotBankList({
         <select
           value={personalityFilter}
           onChange={(event) => setPersonalityFilter(event.target.value)}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           <option value="">Personalidade: todas</option>
           {Object.entries(PERSONALITY_LABEL).map(([key, label]) => (
@@ -709,7 +709,7 @@ export function MascotBankList({
           <select
             value={originFilter}
             onChange={(event) => setOriginFilter(event.target.value)}
-            className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+            className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
           >
             <option value="">Toda origem de ovo</option>
             {originTypes.map((t) => (
@@ -721,7 +721,7 @@ export function MascotBankList({
         <select
           value={sortMode}
           onChange={(event) => setSortMode(event.target.value as "default" | "duplicates")}
-          className="shrink-0 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-[11px] text-slate-300 outline-none focus:border-[#FFCB05]"
+          className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
           <option value="default">Ordem padrão</option>
           <option value="duplicates">Agrupar repetidos</option>

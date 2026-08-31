@@ -21,8 +21,9 @@ import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonNam
 import {
   eggDuplicateWeight,
   eligibleFormVariants,
+  getEggCategoryWeightsForGeneration,
   getEggCandidatesForGeneration,
-  getEggTierWeightsForGeneration,
+  type EggRollCategory,
   type EggPokemonTier,
 } from "@/lib/mascot-egg-pools";
 import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
@@ -584,7 +585,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
     // então também não devem aparecer no preview de possíveis filhotes.
     const disabledIds = new Set(await getDisabledEggPokemonIds());
     const bonusPct = incubator.egg.hatchRarityBonusPct + eventBonusPct;
-    const { effective } = getEggTierWeightsForGeneration(
+    const categoryWeights = getEggCategoryWeightsForGeneration(
       context.eggType,
       generation,
       bonusPct,
@@ -610,13 +611,17 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
     const speciesOverrides = new Map(speciesDefinitions.map((species) => [species.pokemonId, species]));
 
     const drops: IncubatorDropPreview["drops"] = [];
-    const tiers: EggPokemonTier[] = ["COMMON", "PSEUDO_LEGENDARY", "PARADOX", "ELITE"];
-    for (const tier of tiers) {
-      const tierChance = effective[tier] / 100;
-      if (tierChance <= 0) continue;
-      const official = getEggCandidatesForGeneration(generation, tier).filter((id) => !disabledIds.has(id));
-      const custom = customSpecies.filter((species) => previewRegistryTier(species.rarity) === tier);
-      if (!official.length) continue;
+    const rollCategories: EggRollCategory[] = ["COMMON", "PSEUDO_LEGENDARY", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PARADOX"];
+    for (const rollCategory of rollCategories) {
+      const categoryChance = categoryWeights[rollCategory] / 100;
+      if (categoryChance <= 0) continue;
+      const tier: EggPokemonTier = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"].includes(rollCategory)
+        ? "ELITE"
+        : rollCategory as EggPokemonTier;
+      const official = getEggCandidatesForGeneration(generation, tier)
+        .filter((id) => !disabledIds.has(id) && previewCategory(getMascotRarity(id)).id === rollCategory);
+      const custom = customSpecies.filter((species) => previewCategory(species.rarity).id === rollCategory);
+      if (!official.length && !custom.length) continue;
 
       // É a mesma divisão usada no hatch real: primeiro divide a presença entre
       // espécies oficiais/customizadas e depois aplica a proteção de repetidos.
@@ -654,7 +659,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
             ? [override.primaryType, override.secondaryType].filter(Boolean) as string[]
             : getPokemonTypes(item.pokemonId),
           spriteUrl: override?.animatedSpriteUrl ?? override?.staticSpriteUrl ?? getSpriteUrl(item.pokemonId),
-          chancePct: tierChance * officialShare * (item.weight / officialWeightTotal) * 100,
+          chancePct: categoryChance * officialShare * (item.weight / officialWeightTotal) * 100,
           ownedCopies: item.copies,
           custom: false,
           forms,
@@ -669,7 +674,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
           categoryLabel: previewCategorySingular(category),
           types: [species.primaryType, species.secondaryType].filter(Boolean) as string[],
           spriteUrl: species.animatedSpriteUrl ?? species.staticSpriteUrl ?? getSpriteUrl(species.pokemonId),
-          chancePct: tierChance * (1 / population) * 100,
+          chancePct: categoryChance * (1 / population) * 100,
           ownedCopies: ownedCounts.get(species.pokemonId) ?? 0,
           custom: true,
         });

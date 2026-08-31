@@ -13,7 +13,7 @@ import {
   EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
   expeditionPersonalityExpMult,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
-  getSpriteUrl, getPokemonName, mascotPrimaryType, getTypeAdvantageMultiplier,
+  getSpriteUrl, getPokemonName, getMascotRarity, mascotPrimaryType, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction, rollExpeditionEggRarity,
 } from "@/lib/mascot-data";
@@ -101,17 +101,23 @@ function registryTier(rarity: string) {
   return "COMMON";
 }
 
+function registryCategory(rarity: string) {
+  if (["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"].includes(rarity)) return rarity;
+  return registryTier(rarity);
+}
+
 async function includeCustomSpeciesInRoll(result: EggRollResult, excludedPokemonIds: number[] = []) {
   const custom = await prisma.pokemonSpeciesDefinition.findMany({
     where: { custom: true, eggEligible: true, generation: result.generation, pokemonId: { notIn: excludedPokemonIds } },
     select: { pokemonId: true, rarity: true },
   });
-  const eligible = custom.filter((item) => registryTier(item.rarity) === result.tier);
+  const eligible = custom.filter((item) => registryCategory(item.rarity) === result.category);
   if (!eligible.length) return result;
   // Não conta as espécies excluídas/desligadas no total de oficiais (senão o
   // denominador infla e distorce a chance de injetar a espécie custom).
   const excludedSet = new Set(excludedPokemonIds);
-  const officialCount = getEggCandidatesForGeneration(result.generation, result.tier).filter((id) => !excludedSet.has(id)).length;
+  const officialCount = getEggCandidatesForGeneration(result.generation, result.tier)
+    .filter((id) => !excludedSet.has(id) && registryCategory(getMascotRarity(id)) === result.category).length;
   if (Math.random() * (officialCount + eligible.length) >= eligible.length) return result;
   return { ...result, pokemonId: randomFrom(eligible).pokemonId };
 }

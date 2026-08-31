@@ -28,6 +28,7 @@ import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 const COLLAPSED_FORM_IDS = new Set(Object.keys(EXTRA_FORM_BASE).map(Number));
 
 export type EggPokemonTier = "COMMON" | "PSEUDO_LEGENDARY" | "PARADOX" | "ELITE";
+export type EggRollCategory = "COMMON" | "PSEUDO_LEGENDARY" | "PARADOX" | "LEGENDARY" | "MYTHICAL" | "ULTRA_BEAST";
 
 type WeightedEggBucket = {
   label: string;
@@ -47,6 +48,7 @@ export type EggRollResult = {
   generation: number;
   generationType: string;
   tier: EggPokemonTier;
+  category: EggRollCategory;
 };
 
 export type EggRollOptions = {
@@ -204,8 +206,75 @@ function weightsWithBonus(profile: Record<EggPokemonTier, number>, bonusPct: num
   return {
     ...profile,
     COMMON: Math.max(0, profile.COMMON - bonus),
-    ELITE: Math.min(100, profile.ELITE + bonus),
+    PARADOX: profile.PARADOX + bonus / 4,
+    ELITE: profile.ELITE + (bonus * 3) / 4,
   };
+}
+
+const BONUS_CATEGORIES: EggRollCategory[] = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PARADOX"];
+
+function categoryForPokemon(pokemonId: number): EggRollCategory {
+  const rarity = getMascotRarity(pokemonId);
+  if (rarity === "LEGENDARY" || rarity === "MYTHICAL" || rarity === "ULTRA_BEAST") return rarity;
+  if (rarity === "PSEUDO_LEGENDARY") return "PSEUDO_LEGENDARY";
+  if (rarity === "PARADOX") return "PARADOX";
+  return "COMMON";
+}
+
+/**
+ * Chances finais por categoria. A chance aumentada é dividida igualmente entre
+ * Lendários, Míticos, Ultra Bestas e Paradoxais disponíveis na geração. A
+ * parcela-base de ELITE continua proporcional ao tamanho de cada pool, portanto
+ * esta mudança não reescreve as chances normais do ovo.
+ */
+export function getEggCategoryWeightsForGeneration(
+  eggType: string,
+  generation: number,
+  rarityBonusPct = 0,
+  randomGenerationBonus = false,
+): Record<EggRollCategory, number> {
+  const profile = PROFILE_WEIGHTS[profileKeyForEgg(eggType)];
+  const bonus = Math.max(0, Math.min(20, rarityBonusPct + (randomGenerationBonus ? 1 : 0)));
+  const categories: EggRollCategory[] = ["COMMON", "PSEUDO_LEGENDARY", "PARADOX", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST"];
+  const counts = Object.fromEntries(categories.map((category) => [
+    category,
+    candidatesForGeneration(generation).filter((id) => categoryForPokemon(id) === category).length,
+  ])) as Record<EggRollCategory, number>;
+  const result: Record<EggRollCategory, number> = {
+    COMMON: Math.max(0, profile.COMMON - bonus),
+    PSEUDO_LEGENDARY: profile.PSEUDO_LEGENDARY,
+    PARADOX: profile.PARADOX,
+    LEGENDARY: 0,
+    MYTHICAL: 0,
+    ULTRA_BEAST: 0,
+  };
+
+  const eliteCategories: EggRollCategory[] = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"];
+  const elitePopulation = eliteCategories.reduce((sum, category) => sum + counts[category], 0);
+  if (elitePopulation > 0) {
+    for (const category of eliteCategories) {
+      result[category] = profile.ELITE * (counts[category] / elitePopulation);
+    }
+  } else {
+    result.COMMON += profile.ELITE;
+  }
+
+  // Massas-base sem candidatos retornam para a categoria comum.
+  for (const category of ["PSEUDO_LEGENDARY", "PARADOX"] as EggRollCategory[]) {
+    if (counts[category] === 0) {
+      result.COMMON += result[category];
+      result[category] = 0;
+    }
+  }
+
+  const availableBonusCategories = BONUS_CATEGORIES.filter((category) => counts[category] > 0);
+  if (availableBonusCategories.length === 0) {
+    result.COMMON += bonus;
+  } else {
+    const share = bonus / availableBonusCategories.length;
+    for (const category of availableBonusCategories) result[category] += share;
+  }
+  return result;
 }
 
 /**
@@ -221,14 +290,13 @@ export function getEggTierWeightsForGeneration(
 ) {
   const profile = PROFILE_WEIGHTS[profileKeyForEgg(eggType)];
   const adjusted = weightsWithBonus(profile, rarityBonusPct + (randomGenerationBonus ? 1 : 0));
-  const effective = { ...adjusted };
-
-  for (const tier of ["PSEUDO_LEGENDARY", "PARADOX", "ELITE"] as EggPokemonTier[]) {
-    if (getEggCandidatesForGeneration(generation, tier).length === 0) {
-      effective.COMMON += effective[tier];
-      effective[tier] = 0;
-    }
-  }
+  const categories = getEggCategoryWeightsForGeneration(eggType, generation, rarityBonusPct, randomGenerationBonus);
+  const effective: Record<EggPokemonTier, number> = {
+    COMMON: categories.COMMON,
+    PSEUDO_LEGENDARY: categories.PSEUDO_LEGENDARY,
+    PARADOX: categories.PARADOX,
+    ELITE: categories.LEGENDARY + categories.MYTHICAL + categories.ULTRA_BEAST,
+  };
 
   return { adjusted, effective };
 }
@@ -240,6 +308,17 @@ function rollTier(weights: Record<EggPokemonTier, number>, random: () => number)
   for (const [tier, weight] of entries) {
     roll -= Math.max(0, weight);
     if (roll <= 0) return tier;
+  }
+  return "COMMON";
+}
+
+function rollCategory(weights: Record<EggRollCategory, number>, random: () => number): EggRollCategory {
+  const entries = Object.entries(weights) as Array<[EggRollCategory, number]>;
+  const total = entries.reduce((sum, [, weight]) => sum + Math.max(0, weight), 0);
+  let roll = random() * total;
+  for (const [category, weight] of entries) {
+    roll -= Math.max(0, weight);
+    if (roll <= 0) return category;
   }
   return "COMMON";
 }
@@ -285,12 +364,14 @@ export function rollEggPokemon(eggType: string, options: EggRollOptions = {}): E
   const generationFromEggType = /^EGG_GEN(?:[1-9]|6PLUS)$/.test(eggType) ? eggType : null;
   const generationType = resolveGenerationType(options.generationType ?? generationFromEggType, random);
   const generation = Number(generationType.replace("EGG_GEN", ""));
-  const profile = PROFILE_WEIGHTS[profileKeyForEgg(eggType)];
   const extraBonus = (options.rarityBonusPct ?? 0) + (options.randomGenerationBonus ? 1 : 0);
-  const requestedTier = rollTier(weightsWithBonus(profile, extraBonus), random);
+  const requestedCategory = rollCategory(getEggCategoryWeightsForGeneration(eggType, generation, extraBonus), random);
+  const requestedTier: EggPokemonTier = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"].includes(requestedCategory)
+    ? "ELITE"
+    : requestedCategory as EggPokemonTier;
   const excluded = new Set(options.excludedPokemonIds ?? []);
   const generationCandidates = candidatesForGeneration(generation).filter((id) => !excluded.has(id));
-  let candidates = generationCandidates.filter((id) => tierForPokemon(id) === requestedTier);
+  let candidates = generationCandidates.filter((id) => categoryForPokemon(id) === requestedCategory);
   let tier = requestedTier;
 
   // Paradoxais existem apenas nas gerações que os contêm. Se a categoria não
@@ -314,6 +395,7 @@ export function rollEggPokemon(eggType: string, options: EggRollOptions = {}): E
     generation,
     generationType,
     tier,
+    category: requestedCategory,
   };
 }
 
