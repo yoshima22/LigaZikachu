@@ -128,7 +128,14 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
       return () => clearTimeout(timer);
     }
     if (index >= candidates.length - 1) {
-      const timer = setTimeout(() => setRevealed(true), 720);
+      // Dá tempo para o último card sair da lateral e força o encaixe exato
+      // antes de acender a revelação. Isso evita terminar deslocado à direita.
+      const timer = setTimeout(() => {
+        const reel = reelRef.current;
+        const card = reel?.children.item(index) as HTMLElement | null;
+        if (reel && card) reel.scrollLeft = card.offsetLeft - (reel.clientWidth - card.clientWidth) / 2;
+        setRevealed(true);
+      }, 980);
       return () => clearTimeout(timer);
     }
     const progress = index / Math.max(1, candidates.length - 1);
@@ -145,9 +152,11 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
     if (!reel || !card) return;
     reel.scrollTo({
       left: card.offsetLeft - (reel.clientWidth - card.clientWidth) / 2,
-      behavior: index === 0 ? "auto" : "smooth",
+      // Enquanto gira rápido, atualizar imediatamente evita acumular animações
+      // de scroll. A desaceleração final usa movimento suave e visível.
+      behavior: index >= candidates.length - 6 ? "smooth" : "auto",
     });
-  }, [index]);
+  }, [candidates.length, index]);
 
   const finalSprite = result.isShiny ? getShinySprite(result.pokemonId, true) : getSpriteUrl(result.pokemonId);
 
@@ -166,14 +175,14 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
           <div className="pointer-events-none absolute inset-y-0 left-1/2 z-10 w-[34%] -translate-x-1/2 border-x border-yellow-300/30 bg-yellow-300/[.035] shadow-[0_0_45px_rgba(250,204,21,.12)]" />
           <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-slate-950 to-transparent sm:w-28" />
           <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-slate-950 to-transparent sm:w-28" />
-          <div ref={reelRef} className="relative flex items-center overflow-x-hidden px-[33.333%] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+          <div ref={reelRef} className="relative flex snap-x snap-mandatory items-center overflow-x-hidden px-[33.333%] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
             {candidates.map((pokemonId, candidateIndex) => {
               const distance = Math.abs(candidateIndex - index);
               const center = distance === 0;
               const isWinner = revealed && candidateIndex === candidates.length - 1;
               const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
               return (
-                <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-1/3 shrink-0 flex-col items-center rounded-2xl border px-1 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:px-2 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
+                <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-1/3 shrink-0 snap-center flex-col items-center rounded-2xl border px-1 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:px-2 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={sprite} alt="" className="h-24 w-24 object-contain transition-all sm:h-32 sm:w-32" style={{ imageRendering: "pixelated" }} />
                   <p className={`mt-2 max-w-full truncate text-xs font-bold sm:text-sm ${center ? "text-white" : "text-slate-500"}`}>{isWinner ? result.name : getPokemonName(pokemonId)}</p>
@@ -197,14 +206,29 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
 
 function LabChoiceReveal({ choices, onComplete }: { choices: LabChoice[]; onComplete: () => void }) {
   const [revealedCount, setRevealedCount] = useState(0);
+  const [slotFrame, setSlotFrame] = useState(0);
   const completed = revealedCount >= choices.length;
+  const spinPools = useMemo(() => choices.map((choice, slot) => {
+    // Cinco imagens por cápsula são reutilizadas durante o giro. Isso preserva
+    // a sensação de roleta sem transformar cada frame em um novo download.
+    return Array.from({ length: 5 }, (_, index) => ((choice.pokemonId * 29 + slot * 157 + index * 211) % 1025) + 1);
+  }), [choices]);
 
   useEffect(() => {
     if (completed) return;
-    const delay = revealedCount === 0 ? 850 : 1050;
-    const timer = setTimeout(() => setRevealedCount((count) => count + 1), delay);
+    const finalFrame = 12;
+    if (slotFrame >= finalFrame) {
+      const timer = setTimeout(() => {
+        setRevealedCount((count) => count + 1);
+        setSlotFrame(0);
+      }, 420);
+      return () => clearTimeout(timer);
+    }
+    const progress = slotFrame / finalFrame;
+    const delay = 80 + Math.round(Math.pow(progress, 3) * 260);
+    const timer = setTimeout(() => setSlotFrame((frame) => frame + 1), delay);
     return () => clearTimeout(timer);
-  }, [completed, revealedCount]);
+  }, [completed, slotFrame]);
 
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-[radial-gradient(circle_at_50%_35%,rgba(13,148,136,.28),rgba(2,6,23,.97)_68%)] p-4 backdrop-blur-md">
@@ -226,15 +250,20 @@ function LabChoiceReveal({ choices, onComplete }: { choices: LabChoice[]; onComp
           {choices.map((choice, slot) => {
             const visible = slot < revealedCount;
             const scanning = slot === revealedCount;
-            const sprite = choice.isShiny ? getShinySprite(choice.pokemonId, true) : getSpriteUrl(choice.pokemonId);
+            const rollingPokemonId = spinPools[slot]?.[slotFrame % 5] ?? choice.pokemonId;
+            const sprite = visible
+              ? choice.isShiny ? getShinySprite(choice.pokemonId, true) : getSpriteUrl(choice.pokemonId)
+              : getSpriteUrl(rollingPokemonId);
             return (
               <div key={`${slot}-${choice.pokemonId}`} className={`relative min-w-0 overflow-hidden rounded-[1.4rem] border p-2 transition-all duration-700 sm:p-4 ${visible ? "border-teal-300/55 bg-teal-300/[.08] shadow-[0_0_35px_rgba(45,212,191,.18)]" : scanning ? "scale-[1.03] border-cyan-300/60 bg-cyan-300/[.07] shadow-[0_0_45px_rgba(34,211,238,.24)]" : "border-slate-700/70 bg-slate-900/70 opacity-55"}`}>
                 <div className="absolute left-2 top-2 z-10 rounded-full border border-white/10 bg-slate-950/80 px-2 py-1 text-[8px] font-black uppercase tracking-wider text-slate-400">Cápsula {slot + 1}</div>
                 <div className="relative mt-7 flex aspect-[.82] items-center justify-center overflow-hidden rounded-2xl border border-white/[.06] bg-[linear-gradient(180deg,rgba(15,118,110,.12),rgba(2,6,23,.7))]">
                   {scanning && (
                     <>
-                      <div className="absolute inset-x-0 top-0 h-1/3 animate-bounce bg-gradient-to-b from-cyan-300/40 to-transparent blur-sm" />
-                      <Dna size={30} className="animate-pulse text-cyan-200" />
+                      <div className="absolute inset-x-0 top-0 z-10 h-1/3 animate-bounce bg-gradient-to-b from-cyan-300/40 to-transparent blur-sm" />
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img key={`${slot}-${slotFrame}-${rollingPokemonId}`} src={sprite} alt="" className="h-24 w-24 animate-pulse object-contain opacity-75 blur-[.4px] sm:h-36 sm:w-36" style={{ imageRendering: "pixelated" }} />
+                      <Dna size={20} className="absolute bottom-2 right-2 animate-pulse text-cyan-200" />
                     </>
                   )}
                   {!visible && !scanning && <span className="text-4xl font-black text-slate-700">?</span>}
