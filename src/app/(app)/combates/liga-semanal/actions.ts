@@ -96,12 +96,21 @@ function buildDivisionValidTeam<T extends MegaCandidate>(preferred: T[], fallbac
   return selected;
 }
 
+/**
+ * Mínimo de mascotes em posse para ser registrado AUTOMATICAMENTE na Liga
+ * Semanal. Abaixo disso o jogador não entra (mesmo com o casual desligado),
+ * evitando filas de W/O durante a semana toda.
+ */
+export const MIN_WEEKLY_LEAGUE_MASCOTS = 18;
+
 async function findActiveWeeklyPlayers(client: Pick<typeof prisma, "player">, now = new Date()) {
   const players = await client.player.findMany({
     where: activeWeeklyPlayerWhere(now),
-    select: { id: true, notes: true },
+    select: { id: true, notes: true, _count: { select: { mascots: true } } },
   });
-  return players.filter((player) => !isStandbyActive(player.notes, now)).map((player) => ({ id: player.id }));
+  return players
+    .filter((player) => !isStandbyActive(player.notes, now) && player._count.mascots >= MIN_WEEKLY_LEAGUE_MASCOTS)
+    .map((player) => ({ id: player.id }));
 }
 
 // ── Read action (client refresh) ──────────────────────────────────────────
@@ -126,7 +135,28 @@ export async function getLeagueDataAction() {
       casualForcedNotice = ms.length > 0 && ms.every((m) => m.status === "WO");
     }
   }
-  return JSON.parse(JSON.stringify({ ...data, casualForcedNotice }));
+  // Aviso de exclusão: jogador elegível (ativo, não-casual, sem standby) que NÃO
+  // foi registrado na liga ativa por ter menos de 18 mascotes. A janela é
+  // mostrada uma vez por campeonato (controle no cliente via weekKey).
+  let exclusionNotice: { weekKey: string; mascotCount: number; min: number } | null = null;
+  const activeLeague = await prisma.weeklyMascotLeague.findFirst({ where: { status: "ACTIVE" }, orderBy: { createdAt: "desc" }, select: { id: true, weekKey: true } });
+  if (activeLeague) {
+    const isParticipant = await prisma.weeklyMascotLeagueParticipant.findFirst({ where: { leagueId: activeLeague.id, playerId: player.id }, select: { id: true } });
+    if (!isParticipant) {
+      const pf = await prisma.player.findUnique({ where: { id: player.id }, select: { active: true, casualMode: true, notes: true, user: { select: { role: true, status: true } } } });
+      const eligible = Boolean(pf?.active) && !pf?.casualMode
+        && pf?.user?.role !== Role.ADMIN && pf?.user?.role !== Role.SUPER_ADMIN
+        && pf?.user?.status === UserStatus.ACTIVE && !isStandbyActive(pf?.notes ?? null);
+      if (eligible) {
+        const mascotCount = await prisma.mascot.count({ where: { playerId: player.id } });
+        if (mascotCount < MIN_WEEKLY_LEAGUE_MASCOTS) {
+          exclusionNotice = { weekKey: activeLeague.weekKey, mascotCount, min: MIN_WEEKLY_LEAGUE_MASCOTS };
+        }
+      }
+    }
+  }
+
+  return JSON.parse(JSON.stringify({ ...data, casualForcedNotice, exclusionNotice }));
 }
 
 // ── Create league ─────────────────────────────────────────────────────────
@@ -325,12 +355,13 @@ export async function purgeInactivePlayersAction(leagueId: string) {
     const playerIds = participants.map(p => p.playerId);
     if (playerIds.length === 0) return { success: true, removed: 0 };
 
-    // Find players that still exist and are valid
+    // Find players that still exist and are valid (ativos, não-casual, sem standby
+    // e com ao menos MIN_WEEKLY_LEAGUE_MASCOTS mascotes).
     const validPlayersRaw = await prisma.player.findMany({
       where: { id: { in: playerIds }, ...activeWeeklyPlayerWhere() },
-      select: { id: true, notes: true },
+      select: { id: true, notes: true, _count: { select: { mascots: true } } },
     });
-    const validPlayers = validPlayersRaw.filter((player) => !isStandbyActive(player.notes));
+    const validPlayers = validPlayersRaw.filter((player) => !isStandbyActive(player.notes) && player._count.mascots >= MIN_WEEKLY_LEAGUE_MASCOTS);
     const validIds = new Set(validPlayers.map(p => p.id));
     const invalidIds = playerIds.filter(id => !validIds.has(id));
 
@@ -378,6 +409,11 @@ export async function joinLeagueAction(leagueId: string) {
     where: { leagueId, playerId: player.id },
   });
   if (existing) return { error: "Você já participa desta liga" };
+
+  const mascotCount = await prisma.mascot.count({ where: { playerId: player.id } });
+  if (mascotCount < MIN_WEEKLY_LEAGUE_MASCOTS) {
+    return { error: `É preciso ter ao menos ${MIN_WEEKLY_LEAGUE_MASCOTS} mascotes para disputar a Liga Semanal (você tem ${mascotCount}).` };
+  }
 
   await prisma.weeklyMascotLeagueParticipant.create({
     data: { id: createId(), leagueId, playerId: player.id, updatedAt: new Date() },

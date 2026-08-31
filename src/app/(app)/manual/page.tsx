@@ -633,6 +633,20 @@ export default async function ManualPage() {
       </Section>
 
       {/* ── 10. Arena Z ───────────────────────────────────────────────────── */}
+      <Section id="liga-semanal" title="Liga Semanal" emoji="🏆">
+        <Sub title="Quem é registrado — mínimo de 18 mascotes">
+          <p className="text-xs leading-6 text-slate-400">
+            Só são registrados na Liga Semanal jogadores que tenham{" "}
+            <strong className="text-slate-200">ao menos 18 mascotes</strong> em posse.
+            Quem tiver menos que isso <strong className="text-slate-200">não é registrado
+            automaticamente</strong> — mesmo com o modo casual desligado. A regra evita
+            filas de W.O. durante a semana inteira por equipes que não conseguem ser
+            montadas.
+          </p>
+          <Note>Se você foi removido por ter menos de 18 mascotes, é só conseguir mais mascotes (ovos, bazar, eventos): a partir de 18, você volta a ser registrado automaticamente na próxima liga.</Note>
+        </Sub>
+      </Section>
+
       <Section id="arena" title="Arena Z (PvP e PvE)" emoji="⚔️">
         <Sub title="Salas e limites de nível">
           {ET("arena.intro", "text-xs text-slate-400")}

@@ -121,12 +121,28 @@ type PageData = {
   hideResults: boolean;
   revealedMatchIds: string[];
   casualForcedNotice?: boolean;
+  exclusionNotice?: { weekKey: string; mascotCount: number; min: number } | null;
 };
 
 export function LeagueClient({ initialData }: { initialData: PageData }) {
   const [tab, setTab] = useState<Tab>("liga");
   const [data, setData] = useState(initialData);
   const [refreshing, startRefresh] = useTransition();
+  // Janela "você não foi incluído por ter menos de N mascotes" — uma vez por
+  // campeonato (chave weekKey no localStorage do navegador).
+  const [showExclusion, setShowExclusion] = useState(false);
+  useEffect(() => {
+    const ex = data.exclusionNotice;
+    if (!ex) { setShowExclusion(false); return; }
+    try {
+      if (localStorage.getItem(`wl-exclusion-seen-${ex.weekKey}`) !== "1") setShowExclusion(true);
+    } catch { setShowExclusion(true); }
+  }, [data.exclusionNotice]);
+  const closeExclusion = () => {
+    const ex = data.exclusionNotice;
+    if (ex) { try { localStorage.setItem(`wl-exclusion-seen-${ex.weekKey}`, "1"); } catch { /* ignore */ } }
+    setShowExclusion(false);
+  };
 
   const refresh = () => {
     startRefresh(async () => {
@@ -149,6 +165,28 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
 
   return (
     <div className="space-y-4">
+      {showExclusion && data.exclusionNotice && (
+        <div className="fixed inset-0 z-[90] flex items-center justify-center bg-black/80 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-md overflow-hidden rounded-2xl border border-amber-400/40 bg-slate-950 shadow-[0_0_60px_rgba(251,191,36,.25)]">
+            <div className="border-b border-amber-400/20 bg-amber-400/10 px-5 py-4">
+              <p className="text-[10px] font-black uppercase tracking-widest text-amber-300">Liga Semanal</p>
+              <h2 className="mt-0.5 text-lg font-black text-white">Você não foi incluído nesta liga</h2>
+            </div>
+            <div className="space-y-3 px-5 py-4 text-sm leading-relaxed text-slate-300">
+              <p>
+                Para disputar a Liga Semanal é preciso ter <strong className="text-amber-200">ao menos {data.exclusionNotice.min} mascotes</strong> em posse.
+                Você tem <strong className="text-white">{data.exclusionNotice.mascotCount}</strong> no momento, então não foi registrado automaticamente neste campeonato.
+              </p>
+              <p className="text-xs text-slate-400">
+                Assim que você tiver {data.exclusionNotice.min} mascotes ou mais, volta a ser registrado automaticamente na próxima liga. Consiga mais mascotes em ovos, no bazar ou em eventos.
+              </p>
+              <button onClick={closeExclusion} className="mt-1 w-full rounded-xl bg-amber-400 py-2.5 text-sm font-black text-amber-950 hover:bg-amber-300">
+                Entendi
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
       {data.casualForcedNotice && (
         <div className="rounded-2xl border border-amber-500/40 bg-amber-950/30 p-4 text-sm text-amber-200">
           <p className="font-black">⚠️ Seu modo casual foi ativado</p>
