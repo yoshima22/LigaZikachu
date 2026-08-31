@@ -5,6 +5,7 @@ import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRi
 import { toast } from "sonner";
 import { getHungerStatus, getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { mascotOriginIcon, HUNGER_ICON_URL } from "@/lib/mascot-origin-icons";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import {
@@ -548,6 +549,10 @@ export function MascotBankList({
   const [perfFilter, setPerfFilter] = useState("");
   const [rarityFilter, setRarityFilter] = useState("");
   const [personalityFilter, setPersonalityFilter] = useState("");
+  const [originFilter, setOriginFilter] = useState("");
+  const [sortMode, setSortMode] = useState<"default" | "duplicates">("default");
+  const [originTypes, setOriginTypes] = useState<string[]>([]);
+  const [hasUnknownOrigin, setHasUnknownOrigin] = useState(false);
   const [page, setPage] = useState(1);
   const [pageInput, setPageInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -570,6 +575,8 @@ export function MascotBankList({
           perf: perfFilter,
           rarity: rarityFilter,
           personality: personalityFilter,
+          origin: originFilter,
+          sort: sortMode,
         });
         // Uma resposta antiga nao pode sobrescrever uma busca digitada depois.
         if (requestId !== requestSequence.current) return;
@@ -581,9 +588,11 @@ export function MascotBankList({
         setKnownTotal(res.data.total);
         setPage(res.data.page);
         setPageInput("");
+        if (res.data.originTypes) setOriginTypes(res.data.originTypes);
+        setHasUnknownOrigin(Boolean(res.data.hasUnknownOrigin));
       })();
     });
-  }, [ocup, search, typeFilter, rankFilter, perfFilter, rarityFilter, personalityFilter]);
+  }, [ocup, search, typeFilter, rankFilter, perfFilter, rarityFilter, personalityFilter, originFilter, sortMode]);
 
   useEffect(() => {
     if (didInitialLoad.current) return;
@@ -695,6 +704,27 @@ export function MascotBankList({
           {Object.entries(PERSONALITY_LABEL).map(([key, label]) => (
             <option key={key} value={key}>{label}</option>
           ))}
+        </select>
+        {(originTypes.length > 0 || hasUnknownOrigin) && (
+          <select
+            value={originFilter}
+            onChange={(event) => setOriginFilter(event.target.value)}
+            className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+          >
+            <option value="">Toda origem de ovo</option>
+            {originTypes.map((t) => (
+              <option key={t} value={t}>{getHatchedEggLabel(t, null) ?? t}</option>
+            ))}
+            {hasUnknownOrigin && <option value="__none__">Sem origem registrada</option>}
+          </select>
+        )}
+        <select
+          value={sortMode}
+          onChange={(event) => setSortMode(event.target.value as "default" | "duplicates")}
+          className="rounded-xl border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-300 outline-none focus:border-[#FFCB05]"
+        >
+          <option value="default">Ordem padrão</option>
+          <option value="duplicates">Agrupar repetidos</option>
         </select>
         <button
           type="button"

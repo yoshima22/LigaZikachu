@@ -1807,9 +1807,14 @@ export async function getBankMascotsPageAction(input?: {
   perf?: string;
   rarity?: string;
   personality?: string;
+  origin?: string;
+  sort?: string;
 }): Promise<{
   error?: string;
   data?: {
+    /** Tipos de ovo de origem presentes no banco (para o filtro), + se há sem origem. */
+    originTypes?: string[];
+    hasUnknownOrigin?: boolean;
     mascots: {
       id: string;
       pokemonId: number;
@@ -1864,6 +1869,8 @@ export async function getBankMascotsPageAction(input?: {
     const perf = (input?.perf ?? "").trim();
     const rarity = (input?.rarity ?? "").trim();
     const personality = (input?.personality ?? "").trim().toUpperCase();
+    const origin = (input?.origin ?? "").trim();
+    const sort = (input?.sort ?? "").trim();
     const now = new Date();
 
     const and: Prisma.MascotWhereInput[] = [
@@ -1890,6 +1897,10 @@ export async function getBankMascotsPageAction(input?: {
     if (Object.prototype.hasOwnProperty.call(PERSONALITY_LABEL, personality)) {
       and.push({ personality: personality as never });
     }
+
+    // Filtro por origem de ovo (tipo do ovo de onde o mascote nasceu).
+    if (origin === "__none__") and.push({ hatchedFromEggType: null });
+    else if (origin) and.push({ hatchedFromEggType: origin as never });
 
     if (search) {
       const pokemonIds = findPokemonIdsBySearch(search);
@@ -1960,37 +1971,64 @@ export async function getBankMascotsPageAction(input?: {
     }
 
     const where: Prisma.MascotWhereInput = { AND: and };
+    const bankSelect = {
+      id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
+      speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
+      staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
+      arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
+      hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true,
+      lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
+      ivRating: true, ivScore: true, performanceTag: true,
+      statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+      expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true } },
+      buffs: { where: { expiresAt: { gt: now } }, select: { id: true }, take: 1 },
+    } satisfies Prisma.MascotSelect;
+
+    // Origens de ovo presentes no banco do jogador (para popular o filtro),
+    // independente dos outros filtros ativos.
+    const originGroups = await prisma.mascot.groupBy({
+      by: ["hatchedFromEggType"],
+      where: { playerId: player.id, isFavorite: false, isEquipped: false },
+    });
+    const originTypes = originGroups
+      .map((g) => g.hatchedFromEggType)
+      .filter((t): t is NonNullable<typeof t> => t != null)
+      .map((t) => String(t))
+      .sort();
+    const hasUnknownOrigin = originGroups.some((g) => !g.hatchedFromEggType);
+
+    // Modo "Agrupar repetidos": junta mascotes da MESMA espécie (pokemonId),
+    // mesmo com apelidos diferentes, e traz as espécies mais repetidas primeiro.
+    // Precisa ver o conjunto inteiro para contar, então pagina em memória.
+    if (sort === "duplicates") {
+      const all = await prisma.mascot.findMany({
+        where, select: bankSelect,
+        orderBy: [{ pokemonId: "asc" }, { level: "desc" }, { id: "asc" }],
+        take: 5000,
+      });
+      const counts = new Map<number, number>();
+      for (const m of all) counts.set(m.pokemonId, (counts.get(m.pokemonId) ?? 0) + 1);
+      all.sort((a, b) =>
+        (counts.get(b.pokemonId)! - counts.get(a.pokemonId)!)
+        || (a.pokemonId - b.pokemonId)
+        || (b.level - a.level)
+        || a.id.localeCompare(b.id));
+      const total = all.length;
+      const pageItems = all.slice((page - 1) * BANK_MASCOT_PAGE_SIZE, page * BANK_MASCOT_PAGE_SIZE);
+      return { data: { mascots: pageItems, total, page, pageSize: BANK_MASCOT_PAGE_SIZE, originTypes, hasUnknownOrigin } };
+    }
+
     const [total, mascots] = await Promise.all([
       prisma.mascot.count({ where }),
       prisma.mascot.findMany({
-        where,
-        select: {
-          id: true, pokemonId: true, nickname: true, level: true, mood: true, isShiny: true,
-          speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
-          staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
-          arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
-          hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true,
-          lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
-          ivRating: true, ivScore: true, performanceTag: true,
-          statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-          expeditions: {
-            where: { status: "ACTIVE" },
-            take: 1,
-            select: { id: true, finishAt: true, status: true },
-          },
-          buffs: {
-            where: { expiresAt: { gt: now } },
-            select: { id: true },
-            take: 1,
-          },
-        },
+        where, select: bankSelect,
         orderBy: [{ level: "desc" }, { id: "asc" }],
         skip: (page - 1) * BANK_MASCOT_PAGE_SIZE,
         take: BANK_MASCOT_PAGE_SIZE,
       }),
     ]);
 
-    return { data: { mascots, total, page, pageSize: BANK_MASCOT_PAGE_SIZE } };
+    return { data: { mascots, total, page, pageSize: BANK_MASCOT_PAGE_SIZE, originTypes, hasUnknownOrigin } };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
   }
