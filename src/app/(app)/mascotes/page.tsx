@@ -15,13 +15,13 @@ import { BuffPanel } from "./_components/buff-panel";
 import { BulkInteractPanel } from "./_components/bulk-interact-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { EGG_SHOP_ITEM_TYPES, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { cleanupExpiredArenaResting, RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
-import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+import { getMegaStoneForMegaPokemon, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/mega-evolution";
 import { getActiveEggRarityBonusPct, getExpeditionEventBonusPct } from "@/lib/timed-game-bonuses";
 
 export const dynamic = "force-dynamic";

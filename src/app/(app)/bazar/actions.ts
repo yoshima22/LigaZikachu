@@ -28,7 +28,7 @@ import {
   SHELL_MAX_BET,
   SHELL_MIN_BET,
 } from "@/lib/miauvadao-shell-game";
-import { EggType, Prisma } from "@prisma/client";
+import { EggType, Prisma, ZikaCoinTxType } from "@prisma/client";
 import type { BazarItemCategory, BazarListingType, BazarListingStatus } from "@prisma/client";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
@@ -2272,10 +2272,12 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now },
       });
       const coinsToVault = Math.floor(offer.finalPrice * 0.25);
-      // Cobrar player
-      await tx.zikaCoinWallet.update({
-        where: { playerId: player.id },
-        data: { balance: { decrement: offer.finalPrice } },
+      // Cobrança e extrato fazem parte da mesma transação da entrega.
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: ZikaCoinTxType.SHOP_PURCHASE,
+        amount: -offer.finalPrice,
+        description: `Miauvadão: compra de ${offer.name}`,
       });
 
       // Atualizar sold na oferta + adicionar 25% ao cofre + mensagem NPC
@@ -2293,6 +2295,19 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
 
       // Entregar item (mesmo esquema da shop)
       await _deliverMiauvadaoItem(tx, player.id, offer);
+      await recordPlayerActivity(tx, {
+        playerId: player.id,
+        actorUserId: user.id,
+        category: "BAZAR",
+        action: "MIAUVADAO_PURCHASE",
+        summary: `Comprou ${offer.name} no Miauvadão por ${offer.finalPrice} ZC`,
+        source: "MIAUVADAO_GLOBAL_SLOT",
+        entityType: "shopItem",
+        entityId: offer.shopItemId ?? offer.itemType,
+        amount: 1,
+        unit: "ITEM",
+        metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price: offer.finalPrice },
+      });
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
       return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes) };
     }, { isolationLevel: "Serializable" });
@@ -2332,7 +2347,10 @@ async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: str
   } else if (offer.itemType === "MASCOT_SWEET") {
     await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "SWEET", quantity: 1 } });
   } else if (offer.shopItemId) {
-    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1 } });
+    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1, source: "MIAUVADAO" } });
+  } else {
+    // Nunca cobre uma oferta que o sistema não sabe entregar.
+    throw new Error(`Item do Miauvadão sem regra de entrega: ${offer.itemType}`);
   }
 }
 
@@ -2352,7 +2370,7 @@ function _mulberry32(seed: number) {
   return () => { a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
 }
 
-async function _computePersonalOffer(playerId: string, vaultBalance: number): Promise<MiauvadaoOffer | null> {
+async function _computePersonalOffer(playerId: string, vaultBalance: number, excludedItemIds: string[] = []): Promise<MiauvadaoOffer | null> {
   const shopItems = await prisma.shopItem.findMany({
     where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
     select: { id: true, name: true, type: true, price: true, imageUrl: true, description: true, rarity: true },
@@ -2360,7 +2378,9 @@ async function _computePersonalOffer(playerId: string, vaultBalance: number): Pr
   if (shopItems.length === 0) return null;
   const rotation = getMiauvadaoRotation();
   const rng = _mulberry32(_hashSeed(`${playerId}|${rotation.start.toISOString()}`));
-  const sorted = [...shopItems].sort((a, b) => a.id.localeCompare(b.id)); // ordem base estável
+  const excluded = new Set(excludedItemIds);
+  const eligible = shopItems.filter((item) => !excluded.has(item.id));
+  const sorted = [...(eligible.length > 0 ? eligible : shopItems)].sort((a, b) => a.id.localeCompare(b.id)); // ordem base estável
   const item = sorted[Math.floor(rng() * sorted.length)];
   const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
   const maxAllowed = isMegaStoneType(item.type) ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT;
@@ -2375,22 +2395,66 @@ async function _computePersonalOffer(playerId: string, vaultBalance: number): Pr
   };
 }
 
+type PersonalSlotState = {
+  personalCycle?: string;
+  personalSold?: number;
+  personalOffer?: MiauvadaoOffer;
+  personalHistory?: string[];
+};
+
 function _personalSoldCount(prd: unknown, playerId: string, rotationStartIso: string): number {
-  const entry = (prd as Record<string, { personalCycle?: string; personalSold?: number }> | null)?.[playerId];
+  const entry = (prd as Record<string, PersonalSlotState> | null)?.[playerId];
   if (!entry || entry.personalCycle !== rotationStartIso) return 0;
   return Math.max(0, Math.floor(Number(entry.personalSold ?? 0)));
+}
+
+function _storedPersonalOffer(prd: unknown, playerId: string, rotationStartIso: string) {
+  const entry = (prd as Record<string, PersonalSlotState> | null)?.[playerId];
+  return entry?.personalCycle === rotationStartIso && entry.personalOffer ? entry.personalOffer : null;
+}
+
+async function _getOrCreatePersonalOffer(playerId: string) {
+  const rotation = getMiauvadaoRotation();
+  const rotationIso = rotation.start.toISOString();
+  const config = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+  const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
+  const stored = _storedPersonalOffer(prd, playerId, rotationIso);
+  if (stored) return { offer: stored, sold: _personalSoldCount(prd, playerId, rotationIso) };
+
+  const previous = prd[playerId];
+  const history = [...new Set([
+    ...(previous?.personalOffer?.shopItemId ? [previous.personalOffer.shopItemId] : []),
+    ...(previous?.personalHistory ?? []),
+  ])].slice(0, 4);
+  const offer = await _computePersonalOffer(playerId, config.vaultBalance, history);
+  if (!offer) return null;
+  const nextEntry: PersonalSlotState = {
+    ...previous,
+    personalCycle: rotationIso,
+    personalSold: 0,
+    personalOffer: offer,
+    personalHistory: history,
+  };
+  // Atualiza somente a chave deste jogador. Evita que dois acessos simultâneos
+  // sobrescrevam as ofertas pessoais um do outro no JSON compartilhado.
+  await prisma.$executeRaw(Prisma.sql`
+    UPDATE miauvadao_config
+    SET "playerRefreshData" = jsonb_set(
+      COALESCE("playerRefreshData", '{}'::jsonb),
+      ARRAY[${playerId}],
+      ${JSON.stringify(nextEntry)}::jsonb,
+      true
+    )
+    WHERE id = 'singleton'
+  `);
+  return { offer, sold: 0 };
 }
 
 /** Oferta pessoal do jogador logado + quantas ele já comprou nesta rotação. */
 export async function getPersonalMiauvadaoOffer(): Promise<{ offer: MiauvadaoOffer; sold: number } | null> {
   const user = await getSessionUser(); if (!user) return null;
   const player = await getSessionPlayer(user.id); if (!player) return null;
-  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-  if (!config) return null;
-  const offer = await _computePersonalOffer(player.id, config.vaultBalance);
-  if (!offer) return null;
-  const rotation = getMiauvadaoRotation();
-  return { offer, sold: _personalSoldCount(config.playerRefreshData, player.id, rotation.start.toISOString()) };
+  return _getOrCreatePersonalOffer(player.id);
 }
 
 /** Compra 1 unidade da oferta pessoal (até o estoque de 2 por rotação). */
@@ -2400,25 +2464,55 @@ export async function buyPersonalMiauvadaoSlot(): Promise<{ error?: string; sold
     const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
     const rotation = getMiauvadaoRotation();
     const rotationIso = rotation.start.toISOString();
+    const prepared = await _getOrCreatePersonalOffer(player.id);
+    if (!prepared) return { error: "Você não tem oferta pessoal disponível agora." };
     let soldAfter = 0;
     await prisma.$transaction(async (tx) => {
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
-      const offer = await _computePersonalOffer(player.id, config.vaultBalance);
+      const offer = _storedPersonalOffer(config.playerRefreshData, player.id, rotationIso);
       if (!offer) throw new Error("Você não tem oferta pessoal disponível agora.");
       if (new Date() > new Date(offer.validUntil)) throw new Error("Sua oferta pessoal expirou. Recarregue a página.");
-      const prd = (config.playerRefreshData as Record<string, { personalCycle?: string; personalSold?: number }>) ?? {};
+      const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
       const already = _personalSoldCount(prd, player.id, rotationIso);
       if (already >= PERSONAL_SLOT_STOCK) throw new Error("Você já esgotou sua oferta pessoal desta rotação.");
       const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
       if (!wallet || wallet.balance < offer.finalPrice) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC, oferta custa ${offer.finalPrice} ZC).`);
       const coinsToVault = Math.floor(offer.finalPrice * 0.25);
-      await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: offer.finalPrice } } });
+      await creditCoins(tx, {
+        playerId: player.id,
+        type: ZikaCoinTxType.SHOP_PURCHASE,
+        amount: -offer.finalPrice,
+        description: `Miauvadão: oferta exclusiva de ${offer.name}`,
+      });
       await _deliverMiauvadaoItem(tx, player.id, offer);
       soldAfter = already + 1;
-      const nextPrd = { ...prd, [player.id]: { ...(prd[player.id] ?? {}), personalCycle: rotationIso, personalSold: soldAfter } };
+      const nextEntry = { ...(prd[player.id] ?? {}), personalCycle: rotationIso, personalSold: soldAfter };
+      await tx.$executeRaw(Prisma.sql`
+        UPDATE miauvadao_config
+        SET "playerRefreshData" = jsonb_set(
+          COALESCE("playerRefreshData", '{}'::jsonb),
+          ARRAY[${player.id}],
+          ${JSON.stringify(nextEntry)}::jsonb,
+          true
+        )
+        WHERE id = 'singleton'
+      `);
       await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
-        data: { playerRefreshData: nextPrd as Prisma.InputJsonValue, vaultBalance: { increment: coinsToVault } },
+        data: { vaultBalance: { increment: coinsToVault } },
+      });
+      await recordPlayerActivity(tx, {
+        playerId: player.id,
+        actorUserId: user.id,
+        category: "BAZAR",
+        action: "MIAUVADAO_PERSONAL_PURCHASE",
+        summary: `Comprou ${offer.name} no slot exclusivo por ${offer.finalPrice} ZC`,
+        source: "MIAUVADAO_PERSONAL_SLOT",
+        entityType: "shopItem",
+        entityId: offer.shopItemId ?? offer.itemType,
+        amount: 1,
+        unit: "ITEM",
+        metadata: { cycle: rotationIso, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price: offer.finalPrice },
       });
     }, { isolationLevel: "Serializable" });
     revalidateTag("miauvadao-config");

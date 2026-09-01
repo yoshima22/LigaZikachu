@@ -156,7 +156,9 @@ export default async function AdminPage() {
     select: { id: true, name: true, type: true, rarity: true, active: true }
   });
 
-  const managedForms = await listManagedForms();
+  // O catálogo de formas altera pools globais e é exclusivo do administrador
+  // de plataforma. Não execute a action (que redireciona) para Gamemasters.
+  const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
   const ackNotice = await getAckNotice();
   const patchNotes = await getPatchNotes();
 
@@ -317,7 +319,7 @@ export default async function AdminPage() {
       <MigrateImagesPanel />
 
       {/* ── Formas de Pokémon: pools de ovo + visualizador ── */}
-      <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
+      {isAdmin(currentUser.role) && <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
         <div className="flex items-center gap-2">
           <BookOpen size={16} className="text-[#FFCB05]" />
           <h3 className="font-semibold text-slate-200">Formas alternativas — liga/desliga nas pools de ovo</h3>
@@ -327,7 +329,7 @@ export default async function AdminPage() {
           As formas recém-adicionadas entram <strong className="text-slate-300">desligadas</strong>. As espécies que já estavam no jogo continuam normais.
         </p>
         <FormsPoolManager forms={managedForms} />
-      </div>
+      </div>}
 
       {/* ── Visualizador de sprites de mascotes ── */}
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
