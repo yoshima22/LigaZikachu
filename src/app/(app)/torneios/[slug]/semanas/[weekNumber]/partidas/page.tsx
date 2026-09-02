@@ -320,7 +320,7 @@ export default async function PartidasPage({ params }: Props) {
           tournamentId={tournament.id}
           weekNumber={weekNum}
           isAdmin={isAdmin}
-          deckListsLocked={isDeckRegistrationLocked(week)}
+          deckRegistrationOpen={week.status === "OPEN" && !isDeckRegistrationLocked(week)}
           contract={week.enguicaContractKey ? {
             key: week.enguicaContractKey,
             title: week.enguicaContractTitle ?? "Contrato do Professor Enguiça",

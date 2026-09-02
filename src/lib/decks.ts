@@ -39,7 +39,9 @@ export function canSubmitTournamentWeekDeck({
   week,
   now = new Date()
 }: DeckSubmitInput) {
-  return isActiveRegistration(registrationStatus) && !isDeckRegistrationLocked(week, now);
+  return week.status === WeekStatus.OPEN &&
+    isActiveRegistration(registrationStatus) &&
+    !isDeckRegistrationLocked(week, now);
 }
 
 export function canViewTournamentWeekDecklist({

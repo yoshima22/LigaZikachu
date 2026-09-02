@@ -11,11 +11,11 @@ type Props = {
   tournamentId: string;
   weekNumber: number;
   isAdmin: boolean;
-  deckListsLocked: boolean;
+  deckRegistrationOpen: boolean;
   contract: { key: string; title: string; description: string; revealedAt: string | null } | null;
 };
 
-export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckListsLocked, contract }: Props) {
+export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRegistrationOpen, contract }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -46,16 +46,16 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckLi
           ) : (
             <>
               <h2 className="text-lg font-bold text-white">Contrato ainda oculto</h2>
-              <p className="text-sm text-slate-400">O objetivo será sorteado depois que todas as listas estiverem bloqueadas e reveladas.</p>
+              <p className="text-sm text-slate-400">O objetivo é sorteado automaticamente junto com a liberação do envio de decks.</p>
             </>
           )}
         </div>
         {isAdmin && !contract && (
           <div className="space-y-2 text-right">
-            <Button onClick={reveal} disabled={pending || !deckListsLocked} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">
-              {pending ? "Sorteando..." : "Sortear e revelar contrato"}
+            <Button onClick={reveal} disabled={pending || !deckRegistrationOpen} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">
+              {pending ? "Sorteando..." : "Recuperar sorteio do contrato"}
             </Button>
-            {!deckListsLocked && <p className="max-w-52 text-[10px] text-amber-300">Disponível somente após o bloqueio das listas.</p>}
+            {!deckRegistrationOpen && <p className="max-w-52 text-[10px] text-amber-300">Disponível enquanto o envio de decks estiver aberto.</p>}
           </div>
         )}
       </div>

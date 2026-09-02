@@ -15,6 +15,7 @@ import { rewardEquippedMascot } from "@/lib/mascot";
 import { parseBrtLocal, atBrtHour } from "@/lib/brt";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
 import { parseBetConfig } from "@/lib/zikabet";
+import { drawEnguicaContract } from "@/lib/tcg-enguica-contracts";
 
 // ─── Schemas de validação ────────────────────────────────────────────────────
 
@@ -714,6 +715,9 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
       where: { tournamentWeekId: { in: tournament.weeks.map((week) => week.id) } }
     });
     const now = new Date();
+    const firstWeekContract = tournament.enguicaContractsEnabled && !tournament.weeks[0].enguicaContractKey
+      ? drawEnguicaContract()
+      : null;
 
     const result = await prisma.$transaction(async (tx) => {
       const pendingPlayerIds = tournament.registrations
@@ -800,7 +804,15 @@ export async function startTournament(tournamentId: string): Promise<{ error?: s
         tournament.weeks.map((week, index) =>
           tx.tournamentWeek.update({
             where: { id: week.id },
-            data: { status: index === 0 ? WeekStatus.OPEN : WeekStatus.PLANNED }
+            data: {
+              status: index === 0 ? WeekStatus.OPEN : WeekStatus.PLANNED,
+              ...(index === 0 && firstWeekContract ? {
+                enguicaContractKey: firstWeekContract.key,
+                enguicaContractTitle: firstWeekContract.title,
+                enguicaContractDescription: firstWeekContract.description,
+                enguicaContractRevealedAt: now,
+              } : {}),
+            }
           })
         )
       );
@@ -911,13 +923,35 @@ export async function updateTournamentWeekDeckLock(
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
-      include: { tournament: { select: { slug: true } } }
+      include: { tournament: { select: { slug: true, enguicaContractsEnabled: true } } }
     });
     if (!before) return { error: "Semana de torneio nao encontrada." };
 
+    let contractData: {
+      enguicaContractKey?: string;
+      enguicaContractTitle?: string;
+      enguicaContractDescription?: string;
+      enguicaContractRevealedAt?: Date;
+    } = {};
+    const registrationWillBeOpen = before.status === WeekStatus.OPEN && (!deckLockAt || new Date() < deckLockAt);
+    if (registrationWillBeOpen && before.tournament.enguicaContractsEnabled && !before.enguicaContractKey) {
+      const previousWeek = await prisma.tournamentWeek.findFirst({
+        where: { tournamentId: before.tournamentId, weekNumber: { lt: before.weekNumber }, enguicaContractKey: { not: null } },
+        orderBy: { weekNumber: "desc" },
+        select: { enguicaContractKey: true },
+      });
+      const contract = drawEnguicaContract(previousWeek?.enguicaContractKey);
+      contractData = {
+        enguicaContractKey: contract.key,
+        enguicaContractTitle: contract.title,
+        enguicaContractDescription: contract.description,
+        enguicaContractRevealedAt: new Date(),
+      };
+    }
+
     await prisma.tournamentWeek.update({
       where: { id: data.weekId },
-      data: { deckLockAt }
+      data: { deckLockAt, ...contractData }
     });
 
     await logAudit(
@@ -926,7 +960,7 @@ export async function updateTournamentWeekDeckLock(
       data.weekId,
       "tournament_week.deck_lock_updated",
       { deckLockAt: before.deckLockAt?.toISOString() ?? null },
-      { deckLockAt: deckLockAt?.toISOString() ?? null }
+      { deckLockAt: deckLockAt?.toISOString() ?? null, contractKey: contractData.enguicaContractKey ?? before.enguicaContractKey }
     );
 
     revalidatePath(`/torneios/${before.tournament.slug}/admin`);
@@ -954,12 +988,32 @@ export async function updateTournamentWeekSettings(
 
     const before = await prisma.tournamentWeek.findUnique({
       where: { id: data.weekId },
-      include: { tournament: { select: { slug: true } } }
+      include: { tournament: { select: { slug: true, enguicaContractsEnabled: true } } }
     });
     if (!before) return { error: "Semana de torneio nao encontrada." };
 
     const label = data.label?.trim() || null;
     const notes = data.notes?.trim() || null;
+    let contractData: {
+      enguicaContractKey?: string;
+      enguicaContractTitle?: string;
+      enguicaContractDescription?: string;
+      enguicaContractRevealedAt?: Date;
+    } = {};
+    if (data.status === WeekStatus.OPEN && before.tournament.enguicaContractsEnabled && !before.enguicaContractKey) {
+      const previousWeek = await prisma.tournamentWeek.findFirst({
+        where: { tournamentId: before.tournamentId, weekNumber: { lt: before.weekNumber }, enguicaContractKey: { not: null } },
+        orderBy: { weekNumber: "desc" },
+        select: { enguicaContractKey: true },
+      });
+      const contract = drawEnguicaContract(previousWeek?.enguicaContractKey);
+      contractData = {
+        enguicaContractKey: contract.key,
+        enguicaContractTitle: contract.title,
+        enguicaContractDescription: contract.description,
+        enguicaContractRevealedAt: new Date(),
+      };
+    }
     const updated = await prisma.tournamentWeek.update({
       where: { id: data.weekId },
       data: {
@@ -967,7 +1021,8 @@ export async function updateTournamentWeekSettings(
         mode: data.mode,
         status: data.status,
         deckLockAt,
-        notes
+        notes,
+        ...contractData,
       }
     });
 

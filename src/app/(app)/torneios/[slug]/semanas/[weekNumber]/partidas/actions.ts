@@ -456,9 +456,28 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
     })),
   });
 
+  const previousWeek = week.tournament.enguicaContractsEnabled && !week.enguicaContractKey
+    ? await prisma.tournamentWeek.findFirst({
+        where: { tournamentId, weekNumber: { lt: weekNumber }, enguicaContractKey: { not: null } },
+        orderBy: { weekNumber: "desc" },
+        select: { enguicaContractKey: true },
+      })
+    : null;
+  const contract = week.tournament.enguicaContractsEnabled && !week.enguicaContractKey
+    ? drawEnguicaContract(previousWeek?.enguicaContractKey)
+    : null;
+
   await prisma.tournamentWeek.update({
     where: { id: week.id },
-    data: { status: "OPEN" },
+    data: {
+      status: "OPEN",
+      ...(contract ? {
+        enguicaContractKey: contract.key,
+        enguicaContractTitle: contract.title,
+        enguicaContractDescription: contract.description,
+        enguicaContractRevealedAt: new Date(),
+      } : {}),
+    },
   });
 
   await prisma.auditLog.create({
@@ -1354,33 +1373,15 @@ export async function revealEnguicaContract(tournamentId: string, weekNumber: nu
   const admin = await requireAdmin();
   const week = await prisma.tournamentWeek.findUnique({
     where: { tournamentId_weekNumber: { tournamentId, weekNumber } },
-    include: {
-      tournament: {
-        include: {
-          registrations: {
-            where: { status: "APPROVED" },
-            select: { playerId: true, player: { select: { displayName: true } } },
-          },
-        },
-      },
-      deckSubmissions: { select: { playerId: true } },
-    },
+    include: { tournament: true },
   });
   if (!week) throw new Error("Semana não encontrada.");
   if (!week.tournament.enguicaContractsEnabled) {
     throw new Error("Os Contratos do Professor Enguiça não estão habilitados neste campeonato.");
   }
   if (week.enguicaContractKey) return { success: true, contractKey: week.enguicaContractKey };
-  if (!isDeckRegistrationLocked(week)) {
-    throw new Error("O contrato só pode ser revelado depois do bloqueio das listas.");
-  }
-
-  const submittedPlayers = new Set(week.deckSubmissions.map((submission) => submission.playerId));
-  const missingPlayers = week.tournament.registrations
-    .filter((registration) => !submittedPlayers.has(registration.playerId))
-    .map((registration) => registration.player.displayName);
-  if (missingPlayers.length > 0) {
-    throw new Error(`Ainda faltam listas de: ${missingPlayers.join(", ")}.`);
+  if (week.status !== "OPEN" || isDeckRegistrationLocked(week)) {
+    throw new Error("O contrato é sorteado quando o envio de decks fica disponível aos jogadores.");
   }
 
   const previousWeek = await prisma.tournamentWeek.findFirst({
