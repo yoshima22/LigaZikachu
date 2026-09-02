@@ -3,8 +3,9 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getCachedPlayerRanking } from "@/lib/ranking-cache";
-import { getPatchNotes } from "@/lib/app-settings";
+import { getPatchNotes, getServerCostGoal } from "@/lib/app-settings";
 import { PatchNotesCard } from "./_components/patch-notes-card";
+import { ServerCostGoal } from "../_components/server-cost-goal";
 import { getManualSessionUser } from "@/lib/manual-session";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
@@ -57,6 +58,7 @@ export default async function DashboardPage() {
     console.error("[Dashboard] active season lookup failed", { userId: user.id, error });
     return null;
   });
+  const serverCostGoal = await getServerCostGoal();
 
   // ===== ADMIN =====
   if (admin) {
@@ -105,6 +107,7 @@ export default async function DashboardPage() {
             </div>
           </div>
         </div>
+        {serverCostGoal.active && <ServerCostGoal title={serverCostGoal.title} percentage={serverCostGoal.percentage} />}
         {activeSeason && (
           <Card>
             <div className="flex flex-wrap items-start justify-between gap-4">
@@ -360,6 +363,8 @@ export default async function DashboardPage() {
           </div>
         )}
       </div>
+
+      {serverCostGoal.active && <ServerCostGoal title={serverCostGoal.title} percentage={serverCostGoal.percentage} />}
 
       {/* Stats rápidos */}
       <div className="grid grid-cols-2 gap-2.5 sm:gap-4 lg:grid-cols-4">
