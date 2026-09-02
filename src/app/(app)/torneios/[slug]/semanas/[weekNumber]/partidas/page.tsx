@@ -14,6 +14,7 @@ import { isDeckRegistrationLocked } from "@/lib/decks";
 import { EnguicaContractPanel } from "./_components/enguica-contract-panel";
 import { getSpecConfig } from "@/lib/spec/config";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { AdminDeckManager } from "./_components/admin-deck-manager";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -64,6 +65,16 @@ export default async function PartidasPage({ params }: Props) {
   }
 
   const week = tournament.weeks[0];
+  const adminTournamentDecks = isAdmin
+    ? await prisma.deckSubmission.findMany({
+        where: { tournamentId: tournament.id },
+        select: {
+          id: true, playerId: true, deckName: true, archetype: true,
+          tournamentWeek: { select: { weekNumber: true } },
+        },
+        orderBy: [{ submittedAt: "desc" }],
+      })
+    : [];
   const matches = [...week.matches].sort((left, right) => {
     const timeDiff = (left.scheduledAt ?? week.startDate).getTime() - (right.scheduledAt ?? week.startDate).getTime();
     if (timeDiff !== 0) return timeDiff;
@@ -233,12 +244,12 @@ export default async function PartidasPage({ params }: Props) {
       })
     : [];
 
-  const weekOpen = week.status === "OPEN";
-  const canSendDecks = player && canSubmitTournamentWeekDeck({
+  const canSendDecks = Boolean(player && canSubmitTournamentWeekDeck({
     viewerRole: user?.role ?? "PLAYER",
     registrationStatus: registration?.status ?? null,
     week
-  });
+  }));
+  const weekOpen = canSendDecks;
 
   return (
     <div className="space-y-6">
@@ -319,6 +330,23 @@ export default async function PartidasPage({ params }: Props) {
         />
       )}
 
+      {isAdmin && (
+        <AdminDeckManager
+          matches={matchCards.map((match, index) => ({
+            id: match.id,
+            label: match.roundLabel ?? `Partida ${index + 1}`,
+            players: [
+              { id: match.playerAId, name: match.playerA.displayName, deckSubmissionId: match.playerADeckSubmissionId },
+              ...(match.playerBId ? [{ id: match.playerBId, name: match.playerB.displayName, deckSubmissionId: match.playerBDeckSubmissionId }] : []),
+            ],
+          }))}
+          decks={adminTournamentDecks.map((deck) => ({
+            id: deck.id, playerId: deck.playerId, deckName: deck.deckName,
+            archetype: deck.archetype, weekNumber: deck.tournamentWeek?.weekNumber ?? 0,
+          }))}
+        />
+      )}
+
       {/* Minhas Partidas */}
       {player && myMatches.length > 0 && (
         <section className="space-y-4">
@@ -332,6 +360,7 @@ export default async function PartidasPage({ params }: Props) {
                   match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${globalIdx}` }}
                   currentPlayerId={player.id}
                   isAdmin={isAdmin}
+                  deckSelectionLocked={!canSendDecks}
                   showDeckIntent={showDeckIntent}
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
@@ -424,6 +453,7 @@ export default async function PartidasPage({ params }: Props) {
               match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${num}` }}
               currentPlayerId={player?.id}
               isAdmin={isAdmin}
+              deckSelectionLocked={!canSendDecks}
               showDeckIntent={showDeckIntent}
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}

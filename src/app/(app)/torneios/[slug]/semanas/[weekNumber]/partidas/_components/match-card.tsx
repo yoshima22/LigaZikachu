@@ -63,6 +63,7 @@ interface MatchCardProps {
   };
   currentPlayerId?: string;
   isAdmin: boolean;
+  deckSelectionLocked?: boolean;
   // Mostra os apontamentos (insígnia/mascote) do deck. Só quando os decks já são
   // públicos para todos, ou para staff (admin/gamemaster), que veem antes.
   showDeckIntent?: boolean;
@@ -104,7 +105,7 @@ function formatBrtSchedule(value: string) {
   });
 }
 
-export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = false, tournamentFormat, canReportResult, specEnabled, enguicaContract }: MatchCardProps) {
+export function MatchCard({ match, currentPlayerId, isAdmin, deckSelectionLocked = false, showDeckIntent = false, tournamentFormat, canReportResult, specEnabled, enguicaContract }: MatchCardProps) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
   const [disputeReason, setDisputeReason] = useState("");
@@ -488,7 +489,7 @@ export function MatchCard({ match, currentPlayerId, isAdmin, showDeckIntent = fa
             <label className="mt-3 flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-2 text-xs text-slate-200"><input type="checkbox" checked={opponentGymBadgeValid} onChange={(event)=>setOpponentGymBadgeValid(event.target.checked)} className="h-4 w-4 accent-amber-400"/><span>Confirmo que o deck adversário conta para esta insígnia</span></label>
           </div>
         )}
-        {isParticipant && match.currentPlayerDecks.length > 0 && (
+        {isParticipant && !deckSelectionLocked && match.currentPlayerDecks.length > 0 && (
           <div className="space-y-2 rounded-lg border border-slate-800 bg-slate-950/60 p-2">
             <label className="block text-[10px] font-semibold uppercase tracking-widest text-slate-500">
               Deck para esta partida

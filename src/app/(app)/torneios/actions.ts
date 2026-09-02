@@ -1510,7 +1510,7 @@ export async function deleteOwnDeckSubmission(
     const submission = await prisma.deckSubmission.findUnique({
       where: { id: submissionId },
       include: {
-        tournamentWeek: { select: { status: true, tournamentId: true, weekNumber: true } },
+        tournamentWeek: { select: { status: true, tournamentId: true, weekNumber: true, deckLockAt: true, lockAt: true, endDate: true } },
         tournament: { select: { slug: true } }
       }
     });
@@ -1518,11 +1518,8 @@ export async function deleteOwnDeckSubmission(
     if (!submission) return { error: "Submissão não encontrada." };
     if (submission.playerId !== player.id) return { error: "Você não pode remover a submissão de outro jogador." };
 
-    const weekStatus = submission.tournamentWeek?.status;
-    const isAdmin = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
-
-    if (!isAdmin && weekStatus !== "OPEN") {
-      return { error: "Só é possível remover decks enquanto a semana estiver aberta." };
+    if (!submission.tournamentWeek || isDeckRegistrationLocked(submission.tournamentWeek)) {
+      return { error: "O bloqueio de decks já aconteceu. Nenhum jogador pode remover ou alterar sua lista." };
     }
 
     // Remove referência na partida (se vinculada)

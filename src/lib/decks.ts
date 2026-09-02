@@ -34,13 +34,11 @@ export function isDeckRegistrationLocked(week: DeckDeadlineInput, now: Date = ne
 }
 
 export function canSubmitTournamentWeekDeck({
-  viewerRole,
+  viewerRole: _viewerRole,
   registrationStatus,
   week,
   now = new Date()
 }: DeckSubmitInput) {
-  if (isAdminRole(viewerRole)) return true;
-
   return isActiveRegistration(registrationStatus) && !isDeckRegistrationLocked(week, now);
 }
 

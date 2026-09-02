@@ -6,7 +6,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { after } from "next/server";
 import { z } from "zod";
-import { MatchStatus, ResultSource, Role, TournamentFormat, ZikaCoinTxType, type Prisma } from "@prisma/client";
+import { MatchStatus, Prisma, ResultSource, Role, TournamentFormat, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { autoSaveWeekNarrative, autoSaveTournamentNarrative } from "@/lib/narrative";
 import { addExp, applyMatchResultToMascot, battleMascots } from "@/lib/mascot";
@@ -688,6 +688,9 @@ export async function chooseMatchDeck(input: z.infer<typeof deckChoiceSchema>) {
     include: { tournamentWeek: { include: { tournament: true } } },
   });
   if (!match?.tournamentWeek) throw new Error("Partida nao encontrada");
+  if (isDeckRegistrationLocked(match.tournamentWeek)) {
+    throw new Error("O bloqueio de decks já aconteceu. Não é mais possível trocar o deck desta partida.");
+  }
   const tournamentWeekId = match.tournamentWeek.id;
 
   const side =
@@ -751,6 +754,153 @@ export async function chooseMatchDeck(input: z.infer<typeof deckChoiceSchema>) {
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}/partidas`);
   revalidatePath(`/torneios/${match.tournamentWeek.tournament.slug}/semanas/${match.tournamentWeek.weekNumber}`);
   return { success: true };
+}
+
+const adminDeckTargetSchema = z.object({
+  matchId: z.string().min(1),
+  playerId: z.string().min(1),
+});
+
+const adminCopyMatchDeckSchema = adminDeckTargetSchema.extend({
+  sourceSubmissionId: z.string().min(1),
+});
+
+const adminCreateMatchDeckSchema = adminDeckTargetSchema.extend({
+  deckName: z.string().trim().min(2, "Informe o nome do deck.").max(120),
+  archetype: z.string().trim().max(120).optional(),
+  deckList: z.string().trim().min(10, "Cole a lista completa do deck.").max(12000),
+});
+
+async function getAdminDeckTarget(matchId: string, playerId: string) {
+  const match = await prisma.match.findUnique({
+    where: { id: matchId },
+    include: { tournamentWeek: { include: { tournament: true } } },
+  });
+  if (!match?.tournamentWeek) throw new Error("Partida de torneio não encontrada.");
+  if (match.playerAId !== playerId && match.playerBId !== playerId) {
+    throw new Error("O jogador não participa desta partida.");
+  }
+  return match;
+}
+
+function adminDeckMatchLink(playerAId: string, playerId: string, submissionId: string) {
+  return playerAId === playerId
+    ? { playerADeckSubmissionId: submissionId }
+    : { playerBDeckSubmissionId: submissionId };
+}
+
+/** Exceção administrativa auditada: copia um deck já registrado pelo jogador. */
+export async function adminCopyDeckToMatch(raw: z.infer<typeof adminCopyMatchDeckSchema>) {
+  try {
+    const admin = await requireAdmin();
+    const input = adminCopyMatchDeckSchema.parse(raw);
+    const match = await getAdminDeckTarget(input.matchId, input.playerId);
+    const week = match.tournamentWeek!;
+    const source = await prisma.deckSubmission.findUnique({ where: { id: input.sourceSubmissionId } });
+    if (!source || source.playerId !== input.playerId || source.tournamentId !== week.tournamentId) {
+      return { error: "Selecione um deck deste jogador no mesmo torneio." };
+    }
+    const seasonId = week.tournament.seasonId ?? source.seasonId;
+    const deadlineAt = week.deckLockAt ?? week.lockAt ?? week.endDate;
+
+    const submission = await prisma.$transaction(async (tx) => {
+      const aggregate = await tx.deckSubmission.aggregate({
+        where: { tournamentWeekId: week.id, playerId: input.playerId },
+        _max: { deckNumber: true },
+      });
+      const cloned = await tx.deckSubmission.create({
+        data: {
+          seasonId,
+          tournamentId: week.tournamentId,
+          tournamentWeekId: week.id,
+          playerId: input.playerId,
+          deckNumber: (aggregate._max.deckNumber ?? 0) + 1,
+          deckName: source.deckName,
+          archetype: source.archetype,
+          deckList: source.deckList,
+          deadlineAt,
+          status: "SUBMITTED",
+          isLate: new Date() > deadlineAt,
+          mascotMissionMascotId: source.mascotMissionMascotId,
+          mascotMissionPokemonId: source.mascotMissionPokemonId,
+          mascotMissionMascotName: source.mascotMissionMascotName,
+          mascotMissionValid: source.mascotMissionValid,
+          mascotMissionValidation: source.mascotMissionValidation ?? Prisma.JsonNull,
+          gymBadgeId: source.gymBadgeId,
+          gymBadgeValid: source.gymBadgeValid,
+          gymBadgeValidation: source.gymBadgeValidation ?? Prisma.JsonNull,
+        },
+      });
+      await tx.match.update({
+        where: { id: match.id },
+        data: adminDeckMatchLink(match.playerAId, input.playerId, cloned.id),
+      });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: admin.id,
+          entityType: "match",
+          entityId: match.id,
+          action: "match_deck.admin_copied",
+          after: { playerId: input.playerId, sourceSubmissionId: source.id, deckSubmissionId: cloned.id, deckName: cloned.deckName },
+        },
+      });
+      return cloned;
+    });
+
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
+    return { success: true, deckName: submission.deckName };
+  } catch (error) {
+    if (error instanceof z.ZodError) return { error: error.issues.map((issue) => issue.message).join(", ") };
+    return { error: error instanceof Error ? error.message : "Erro ao copiar deck." };
+  }
+}
+
+/** Exceção administrativa auditada: registra manualmente uma lista para a partida. */
+export async function adminCreateDeckForMatch(raw: z.infer<typeof adminCreateMatchDeckSchema>) {
+  try {
+    const admin = await requireAdmin();
+    const input = adminCreateMatchDeckSchema.parse(raw);
+    const match = await getAdminDeckTarget(input.matchId, input.playerId);
+    const week = match.tournamentWeek!;
+    let seasonId = week.tournament.seasonId;
+    if (!seasonId) {
+      seasonId = (await prisma.season.findFirst({ orderBy: [{ status: "asc" }, { startDate: "desc" }], select: { id: true } }))?.id ?? null;
+    }
+    if (!seasonId) return { error: "Nenhuma temporada disponível para registrar o deck." };
+    const deadlineAt = week.deckLockAt ?? week.lockAt ?? week.endDate;
+
+    const submission = await prisma.$transaction(async (tx) => {
+      const aggregate = await tx.deckSubmission.aggregate({
+        where: { tournamentWeekId: week.id, playerId: input.playerId },
+        _max: { deckNumber: true },
+      });
+      const created = await tx.deckSubmission.create({
+        data: {
+          seasonId: seasonId!, tournamentId: week.tournamentId, tournamentWeekId: week.id,
+          playerId: input.playerId, deckNumber: (aggregate._max.deckNumber ?? 0) + 1,
+          deckName: input.deckName, archetype: input.archetype || null, deckList: input.deckList,
+          deadlineAt, status: "SUBMITTED", isLate: new Date() > deadlineAt,
+        },
+      });
+      await tx.match.update({ where: { id: match.id }, data: adminDeckMatchLink(match.playerAId, input.playerId, created.id) });
+      await tx.auditLog.create({
+        data: {
+          actorUserId: admin.id, entityType: "match", entityId: match.id,
+          action: "match_deck.admin_created",
+          after: { playerId: input.playerId, deckSubmissionId: created.id, deckName: created.deckName },
+        },
+      });
+      return created;
+    });
+
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
+    return { success: true, deckName: submission.deckName };
+  } catch (error) {
+    if (error instanceof z.ZodError) return { error: error.issues.map((issue) => issue.message).join(", ") };
+    return { error: error instanceof Error ? error.message : "Erro ao registrar deck." };
+  }
 }
 
 export async function correctMatchResult(input: z.infer<typeof correctResultSchema>) {
