@@ -10,7 +10,7 @@ import {
   getManualSessionUser,
   MANUAL_SESSION_COOKIE,
 } from "@/lib/manual-session";
-import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
+import { getGlobalNotice, getAckNotice, getServerCostGoal } from "@/lib/app-settings";
 import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
 import { Button } from "@/components/ui/button";
 import { Download, Megaphone, Zap } from "lucide-react";
@@ -47,6 +47,7 @@ import { DesktopChatDockLoader } from "./_components/desktop-chat-dock-loader";
 import { AndroidUpdateBadge } from "@/components/android-update";
 import { SpecMiniPlayer } from "@/components/spec/spec-mini-player";
 import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-control-dock";
+import { ServerCostGoal } from "./_components/server-cost-goal";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -172,8 +173,9 @@ export default async function AppLayout({
       unreadNews: 0,
     };
   });
-  const [globalNotice, tickerEvents, livePvpConfig, notificationSnapshot, zikaTvLive] = await Promise.all([
+  const [globalNotice, serverCostGoal, tickerEvents, livePvpConfig, notificationSnapshot, zikaTvLive] = await Promise.all([
     getGlobalNotice(),
+    getServerCostGoal(),
     navData.player
       ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
       : Promise.resolve([]),
@@ -312,6 +314,12 @@ export default async function AppLayout({
               </div>
             </Link>
 
+            {serverCostGoal.active && (
+              <div className="hidden xl:block">
+                <ServerCostGoal title={serverCostGoal.title} percentage={serverCostGoal.percentage} />
+              </div>
+            )}
+
             <AppNav
               admin={admin}
               platformAdmin={platformAdmin}
@@ -391,6 +399,12 @@ export default async function AppLayout({
               </Link>
             </div>
           </div>
+
+          {serverCostGoal.active && (
+            <div className="border-t border-emerald-400/10 bg-slate-950/25 xl:hidden">
+              <ServerCostGoal title={serverCostGoal.title} percentage={serverCostGoal.percentage} compact />
+            </div>
+          )}
 
           <div className="mx-auto max-w-[1536px]">
             <AppNav

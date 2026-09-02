@@ -2,14 +2,15 @@
 
 import { useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { BellRing, Bold, Coins, Italic, List, Megaphone, Send, Sparkles, Underline } from "lucide-react";
+import { BellRing, Bold, Coins, Gauge, Italic, List, Megaphone, Send, Sparkles, Underline } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice, updatePatchNotes } from "../actions";
+import { publishProfessorAnnouncement, sendAdminPushNotification, sendZikaCoinsToAllPlayers, updateGlobalNotice, updateAckNotice, updatePatchNotes, updateServerCostGoal } from "../actions";
 
-export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatchNotes }: {
+export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatchNotes, initialServerCostGoal }: {
   initialNotice: string;
   initialAck?: { title: string; content: string; buttonText: string; active: boolean; version: number };
   initialPatchNotes?: { title: string; content: string }[];
+  initialServerCostGoal?: { title: string; percentage: number; active: boolean };
 }) {
   const [notice, setNotice] = useState(initialNotice);
   const [ackTitle, setAckTitle] = useState(initialAck?.title ?? "");
@@ -56,9 +57,60 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
   const [pendingCoins, startCoins] = useTransition();
   const [pendingProfessor, startProfessor] = useTransition();
   const [pendingPush, startPush] = useTransition();
+  const [goalTitle, setGoalTitle] = useState(initialServerCostGoal?.title ?? "Meta de Custos do Server");
+  const [goalPercentage, setGoalPercentage] = useState(initialServerCostGoal?.percentage ?? 0);
+  const [goalActive, setGoalActive] = useState(initialServerCostGoal?.active ?? false);
+  const [pendingGoal, startGoal] = useTransition();
 
   return (
     <div className="grid gap-4 lg:grid-cols-2 xl:grid-cols-4">
+      <div className="rounded-2xl border border-emerald-500/25 bg-gradient-to-br from-slate-950/70 to-emerald-950/20 p-5 lg:col-span-2 xl:col-span-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <div className="flex items-center gap-2">
+              <Gauge size={16} className="text-emerald-300" />
+              <h3 className="font-semibold text-slate-200">Meta de custos do servidor</h3>
+            </div>
+            <p className="mt-2 text-xs text-slate-500">Controla a barra exibida no topo do site. A porcentagem é atualizada manualmente.</p>
+          </div>
+          <label className="flex cursor-pointer items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
+            <input type="checkbox" checked={goalActive} onChange={(event) => setGoalActive(event.target.checked)} className="accent-emerald-400" />
+            Exibir no site
+          </label>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            Texto da meta
+            <input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} maxLength={80} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-white outline-none focus:border-emerald-400/60" placeholder="Meta de Custos do Server - Setembro" />
+          </label>
+          <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
+            Progresso
+            <div className="relative mt-1.5">
+              <input type="number" min={0} max={100} value={goalPercentage} onChange={(event) => setGoalPercentage(Number(event.target.value))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 pr-8 text-sm font-bold text-white outline-none focus:border-emerald-400/60" />
+              <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
+            </div>
+          </label>
+          <Button type="button" disabled={pendingGoal} onClick={() => startGoal(async () => {
+            const result = await updateServerCostGoal({ title: goalTitle, percentage: goalPercentage, active: goalActive });
+            if (result.error) toast.error(result.error);
+            else if (result.goal) {
+              setGoalTitle(result.goal.title);
+              setGoalPercentage(result.goal.percentage);
+              setGoalActive(result.goal.active);
+              toast.success(result.goal.active ? "Meta publicada no topo do site." : "Meta salva e ocultada.");
+            }
+          })} className="h-[42px] gap-2 bg-emerald-300 text-slate-950 hover:bg-emerald-200">
+            <Send size={13} /> {pendingGoal ? "Salvando..." : "Salvar meta"}
+          </Button>
+        </div>
+        <div className="mt-4 rounded-xl border border-white/5 bg-slate-950/70 p-3">
+          <div className="mb-1.5 flex items-center justify-between gap-3 text-[10px] font-bold uppercase tracking-wider">
+            <span className="truncate text-slate-300">{goalTitle || "Meta de Custos do Server"}</span>
+            <span className="shrink-0 text-emerald-300">{Math.min(100, Math.max(0, goalPercentage || 0))}%</span>
+          </div>
+          <div className="h-2 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-cyan-400 to-[#FFCB05] transition-[width]" style={{ width: `${Math.min(100, Math.max(0, goalPercentage || 0))}%` }} /></div>
+        </div>
+      </div>
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5 lg:col-span-2">
         <div className="flex items-center gap-2">
           <Sparkles size={16} className="text-cyan-300" />

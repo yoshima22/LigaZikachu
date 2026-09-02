@@ -32,7 +32,7 @@ import {
 import { MatchStatus, TournamentStatus, UserStatus } from "@prisma/client";
 import { isAdmin, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getGlobalNotice, getAckNotice, getPatchNotes } from "@/lib/app-settings";
+import { getGlobalNotice, getAckNotice, getPatchNotes, getServerCostGoal } from "@/lib/app-settings";
 import { ensureSyncChallengeItems } from "@/lib/sync-challenge";
 import { adminListActiveVips, adminGetSchedule, adminListScheduleLabels } from "@/app/(app)/passe-apoiador/actions";
 import { Card, CardDescription, CardTitle } from "@/components/ui/card";
@@ -161,6 +161,7 @@ export default async function AdminPage() {
   const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
   const ackNotice = await getAckNotice();
   const patchNotes = await getPatchNotes();
+  const serverCostGoal = await getServerCostGoal();
 
   return (
     <div className="space-y-8">
@@ -282,7 +283,7 @@ export default async function AdminPage() {
 
       <UserAccountPanel />
       <TimedGameBonusPanel initialEvents={timedGameBonusEvents} />
-      <AdminCommunicationPanel initialNotice={globalNotice.message} initialAck={{ title: ackNotice.title, content: ackNotice.content, buttonText: ackNotice.buttonText, active: ackNotice.active, version: ackNotice.version }} initialPatchNotes={patchNotes.notes} />
+      <AdminCommunicationPanel initialNotice={globalNotice.message} initialAck={{ title: ackNotice.title, content: ackNotice.content, buttonText: ackNotice.buttonText, active: ackNotice.active, version: ackNotice.version }} initialPatchNotes={patchNotes.notes} initialServerCostGoal={serverCostGoal} />
       {isAdmin(currentUser.role) && <GamemasterPanel initialGamemasters={gamemasters} />}
       <RunawayRevertPanel />
       <div className="rounded-2xl border border-border bg-slate-900/40 p-4 space-y-4">

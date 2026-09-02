@@ -34,6 +34,54 @@ export function revalidateGlobalNotice() {
   revalidateTag(GLOBAL_NOTICE_TAG);
 }
 
+// ── Meta pública de custos do servidor ──────────────────────────────────────
+export const SERVER_COST_GOAL_KEY = "server_cost_goal";
+export const SERVER_COST_GOAL_TAG = "server-cost-goal";
+
+export type ServerCostGoalValue = {
+  title: string;
+  percentage: number;
+  active: boolean;
+  updatedAt?: string;
+};
+
+const EMPTY_SERVER_COST_GOAL: ServerCostGoalValue = {
+  title: "Meta de Custos do Server",
+  percentage: 0,
+  active: false,
+};
+
+export const getServerCostGoal = unstable_cache(
+  async (): Promise<ServerCostGoalValue> => {
+    try {
+      const setting = await prisma.appSetting.findUnique({
+        where: { key: SERVER_COST_GOAL_KEY },
+        select: { value: true },
+      });
+      const value = (setting?.value ?? {}) as Partial<ServerCostGoalValue>;
+      const percentage = Number(value.percentage);
+      return {
+        title: typeof value.title === "string" && value.title.trim()
+          ? value.title.trim().slice(0, 80)
+          : EMPTY_SERVER_COST_GOAL.title,
+        percentage: Number.isFinite(percentage)
+          ? Math.min(100, Math.max(0, Math.round(percentage)))
+          : 0,
+        active: Boolean(value.active),
+        updatedAt: typeof value.updatedAt === "string" ? value.updatedAt : undefined,
+      };
+    } catch {
+      return EMPTY_SERVER_COST_GOAL;
+    }
+  },
+  [SERVER_COST_GOAL_KEY],
+  { revalidate: 600, tags: [SERVER_COST_GOAL_TAG] },
+);
+
+export function revalidateServerCostGoal() {
+  revalidateTag(SERVER_COST_GOAL_TAG);
+}
+
 // ── Aviso com confirmação (modal único que o jogador precisa ler e fechar) ──────
 export const ACK_NOTICE_KEY = "ack_notice";
 export const ACK_NOTICE_TAG = "ack-notice";

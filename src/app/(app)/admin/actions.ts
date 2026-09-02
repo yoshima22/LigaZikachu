@@ -4,7 +4,12 @@ import { requireAdmin, requirePlatformAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { sendDeckReminderEmail } from "@/lib/email";
 import { creditCoins } from "@/lib/zikacoins";
-import { GLOBAL_NOTICE_KEY, revalidateGlobalNotice } from "@/lib/app-settings";
+import {
+  GLOBAL_NOTICE_KEY,
+  SERVER_COST_GOAL_KEY,
+  revalidateGlobalNotice,
+  revalidateServerCostGoal,
+} from "@/lib/app-settings";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { EggType, FoodType, Prisma } from "@prisma/client";
@@ -178,6 +183,32 @@ export async function updateGlobalNotice(message: string): Promise<{ error?: str
     return { message: clean };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao atualizar aviso." };
+  }
+}
+
+export async function updateServerCostGoal(input: {
+  title: string;
+  percentage: number;
+  active: boolean;
+}): Promise<{ error?: string; goal?: { title: string; percentage: number; active: boolean } }> {
+  try {
+    await requireAdmin();
+    const title = input.title.trim().replace(/\s+/g, " ").slice(0, 80);
+    const percentage = Math.min(100, Math.max(0, Math.round(Number(input.percentage))));
+    if (!title) return { error: "Informe o texto da meta." };
+    if (!Number.isFinite(percentage)) return { error: "Informe uma porcentagem válida." };
+
+    const goal = { title, percentage, active: Boolean(input.active) };
+    await prisma.appSetting.upsert({
+      where: { key: SERVER_COST_GOAL_KEY },
+      update: { value: { ...goal, updatedAt: new Date().toISOString() } as Prisma.InputJsonValue },
+      create: { key: SERVER_COST_GOAL_KEY, value: { ...goal, updatedAt: new Date().toISOString() } as Prisma.InputJsonValue },
+    });
+    revalidateServerCostGoal();
+    revalidatePath("/", "layout");
+    return { goal };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao atualizar a meta." };
   }
 }
 
