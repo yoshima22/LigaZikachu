@@ -133,6 +133,9 @@ export default async function PartidasPage({ params }: Props) {
     gymBadgeName: submission.gymBadge?.name ?? null,
     gymBadgeValid: submission.gymBadgeValid,
   }]));
+  const linkedDeckSubmissionIds = new Set(
+    matches.flatMap((match) => [match.playerADeckSubmissionId, match.playerBDeckSubmissionId].filter(Boolean) as string[])
+  );
   const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
@@ -147,7 +150,9 @@ export default async function PartidasPage({ params }: Props) {
 
     // Deduplicar por jogador + conteúdo do deck
     const dedupeKey = `${submission.playerId}::${submission.deckList.trim()}`;
-    if (seenDeckKeys.has(dedupeKey)) continue;
+    // Cópias administrativas podem ter o mesmo conteúdo de uma lista antiga.
+    // O ID ligado ao combate precisa permanecer disponível para o card encontrá-lo.
+    if (seenDeckKeys.has(dedupeKey) && !linkedDeckSubmissionIds.has(submission.id)) continue;
     seenDeckKeys.add(dedupeKey);
 
     const decks = visibleDecksByPlayer.get(submission.playerId) ?? [];

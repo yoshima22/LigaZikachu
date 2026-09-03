@@ -39,6 +39,8 @@ export interface PlayerRankingEntry {
   defendedChallenges: number;
   badgesOwned: number;
   badgePoints: number;
+  /** Pontos extras concedidos pelas regras de bônus do campeonato. */
+  bonusPoints: number;
   /** Nº de eventos (torneios) da temporada em que o jogador está inscrito. */
   eventsCount: number;
   /** "Nível de Gameplay": índice que ordena o ranking geral (ver computeGameplayScore). */
@@ -609,6 +611,7 @@ async function computeRankingFromMatches({
 
       const bonusStats = getStats(statsMap, playerId);
       bonusStats.points += points;
+      bonusStats.bonusPoints += points;
       if (typeof bonus.playerName === "string") {
         displayNameMap.set(playerId, bonus.playerName);
       }
@@ -687,6 +690,7 @@ function emptyStats(playerId: string): RankingStats {
     defendedChallenges: 0,
     badgesOwned: 0,
     badgePoints: 0,
+    bonusPoints: 0,
     eventsCount: 0,
     gameplayScore: 0
   };

@@ -23,6 +23,7 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
     { label: "Eventos",      key: "eventsCount",          color: "text-slate-300",                mobileHide: true  },
     { label: "Insígnias",    key: "badgesOwned",          color: "text-[#FFCB05]",                mobileHide: true  },
     { label: "Pts Insígnia", key: "badgePoints",          color: "text-[#FFCB05]",                mobileHide: true  },
+    { label: "Pts Bônus",    key: "bonusPoints",          color: "text-fuchsia-300 font-semibold", mobileHide: true  },
     { label: "Prêmios",      key: "defendedPrizes",       color: "text-slate-300",                mobileHide: true  },
     { label: "Desafios",     key: "gymChallenges",        color: "text-slate-300",                mobileHide: true  },
     { label: "✓ Desafios",   key: "successfulChallenges", color: "text-emerald-400",              mobileHide: true  },
