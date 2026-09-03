@@ -42,6 +42,7 @@ import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
 import { listManagedForms } from "./actions";
 import { FormsPoolManager } from "./_components/forms-pool-manager";
 import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
+import { LigaCashPanel } from "./_components/liga-cash-panel";
 
 const adminCards = [
   {
@@ -162,9 +163,17 @@ export default async function AdminPage() {
   const ackNotice = await getAckNotice();
   const patchNotes = await getPatchNotes();
   const serverCostGoal = await getServerCostGoal();
+  const paidPassOrders = await prisma.ligaCashOrder.findMany({
+    where: { status: "PAID", productType: "SUPPORTER_PASS", fulfilledAt: null },
+    orderBy: { paidAt: "asc" },
+    take: 100,
+  });
+  const paidPassPlayers = paidPassOrders.length ? await prisma.player.findMany({ where: { id: { in: paidPassOrders.map(order => order.playerId) } }, select: { id: true, displayName: true } }) : [];
+  const paidPassNames = new Map(paidPassPlayers.map(player => [player.id, player.displayName]));
 
   return (
     <div className="space-y-8">
+      <LigaCashPanel orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null }))} />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

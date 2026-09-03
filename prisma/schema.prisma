@@ -3157,6 +3157,54 @@ model SupporterPassClaim {
   @@map("supporter_pass_claims")
 }
 
+enum LigaCashOrderStatus {
+  PENDING
+  PAID
+  EXPIRED
+  CANCELLED
+  REFUNDED
+}
+
+enum LigaCashProductType {
+  LIGA_COINS
+  SUPPORTER_PASS
+}
+
+model LigaCoinWallet {
+  id        String   @id @default(cuid())
+  playerId  String   @unique
+  balance   Int      @default(0)
+  purchased Int      @default(0)
+  spent     Int      @default(0)
+  updatedAt DateTime @updatedAt
+  createdAt DateTime @default(now())
+  @@map("liga_coin_wallets")
+}
+
+model LigaCashOrder {
+  id                String               @id @default(cuid())
+  playerId          String
+  productType       LigaCashProductType
+  productCode       String
+  productLabel      String
+  ligaCoins         Int                  @default(0)
+  bonusLigaCoins    Int                  @default(0)
+  amountCents       Int
+  status            LigaCashOrderStatus  @default(PENDING)
+  provider          String               @default("MERCADO_PAGO")
+  providerPaymentId String?              @unique
+  qrCode            String?
+  qrCodeBase64      String?
+  expiresAt         DateTime?
+  paidAt            DateTime?
+  fulfilledAt       DateTime?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+  @@index([playerId, createdAt])
+  @@index([status, productType])
+  @@map("liga_cash_orders")
+}
+
 // Sessão de Shell Game — guarda posição da bolinha no servidor (anti-cheat)
 model ShellGameSession {
   id        String   @id @default(cuid())
