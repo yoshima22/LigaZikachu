@@ -34,14 +34,17 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
   });
 }
 
-export async function refundLigaCashOrder(orderId:string, providerPaymentId:string) {
+// kind distingue estorno normal (REFUND) de chargeback (CHARGEBACK) no ledger.
+// Em ambos o débito recai sobre o ORIGINADOR da compra (allowDebt = pode ficar
+// negativo, virando dívida), nunca sobre terceiros que receberam LC no Bazar.
+export async function refundLigaCashOrder(orderId:string, providerPaymentId:string, kind:"REFUND"|"CHARGEBACK"="REFUND") {
   return prisma.$transaction(async tx => {
     const order=await tx.ligaCashOrder.findUnique({where:{id:orderId}});
     if(!order||order.providerPaymentId!==providerPaymentId)throw new Error("Pedido incompatível.");
     if(order.status==="REFUNDED")return order;
     if(order.status==="PAID"&&order.productType==="LIGA_COINS"&&order.fulfilledAt){
       const amount=order.ligaCoins+order.bonusLigaCoins;
-      await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:"REFUND",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
+      await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
     }
     return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
   });

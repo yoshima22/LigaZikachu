@@ -9,7 +9,7 @@ export async function POST(req:NextRequest){
   const payment=await response.json(); const orderId=String(payment.external_reference??"");
   const order=await prisma.ligaCashOrder.findUnique({where:{id:orderId}}); if(!order||String(payment.id)!==order.providerPaymentId||Math.round(Number(payment.transaction_amount)*100)!==order.amountCents)return NextResponse.json({ok:true});
   if(payment.status==="approved")await fulfillLigaCashOrder(order.id,String(payment.id));
-  else if(["refunded","charged_back"].includes(payment.status))await refundLigaCashOrder(order.id,String(payment.id));
+  else if(["refunded","charged_back"].includes(payment.status))await refundLigaCashOrder(order.id,String(payment.id),payment.status==="charged_back"?"CHARGEBACK":"REFUND");
   else if(["cancelled","rejected"].includes(payment.status)&&order.status==="PENDING")await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}});
   return NextResponse.json({ok:true});
 }
