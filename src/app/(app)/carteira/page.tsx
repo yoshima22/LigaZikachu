@@ -2,7 +2,7 @@ import Link from "next/link";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { isAdmin } from "@/lib/auth/permissions";
+import { isStaff } from "@/lib/auth/permissions";
 import { Coins, TrendingDown, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AdjustCoinsForm } from "./_components/adjust-coins-form";
@@ -34,7 +34,7 @@ export default async function CarteiraPage({
   const session = await getAppSession();
   if (!session?.user) return null;
 
-  const admin = isAdmin(session.user.role);
+  const admin = isStaff(session.user.role);
   const params = await searchParams;
 
   const currentPlayer = await prisma.player.findUnique({
@@ -70,6 +70,7 @@ export default async function CarteiraPage({
   const reportPlayer = selectedPlayer ?? currentPlayer;
   const wallet = await getOrCreateWallet(reportPlayer.id);
   const ligaWallet = await prisma.ligaCoinWallet.findUnique({where:{playerId:reportPlayer.id}});
+  const ligaCashLedger=await prisma.ligaCashLedger.findMany({where:{playerId:reportPlayer.id},orderBy:{createdAt:"desc"},take:100});
 
   const transactions = await prisma.zikaCoinTransaction.findMany({
     where: { walletId: wallet.id },
@@ -132,7 +133,9 @@ export default async function CarteiraPage({
           </div>
         </Card>
       )}
-      {admin && <Card><p className="mb-1 font-semibold text-cyan-200">Ajuste manual de LigaCoins</p><p className="mb-3 text-xs text-slate-500">Saldo atual de {reportPlayer.displayName}: {ligaWallet?.balance??0} LC. Valores negativos removem saldo.</p><AdjustLigaCoinsForm players={adminPlayers}/></Card>}
+      {admin && <Card><p className="mb-1 font-semibold text-cyan-200">Ajuste manual de LigaCash</p><p className="mb-3 text-xs text-slate-500">Saldo atual de {reportPlayer.displayName}: {ligaWallet?.balance??0} LC. O motivo é obrigatório; somente administradores podem remover saldo.</p><AdjustLigaCoinsForm players={adminPlayers}/></Card>}
+
+      <Card><h2 className="font-semibold text-cyan-200">LigaCash</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Saldo</p><p className="text-2xl font-black text-cyan-200">{(ligaWallet?.balance??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Comprada por Pix</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.purchased??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Gasta</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.spent??0).toLocaleString("pt-BR")} LC</p></div></div><div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">{ligaCashLedger.map(entry=><div key={entry.id} className="flex items-center justify-between gap-3 bg-slate-950/40 px-4 py-3 text-xs"><div><p className="font-semibold text-slate-200">{entry.reason.replaceAll("_"," ")}</p><p className="text-[10px] text-slate-500">{entry.createdAt.toLocaleString("pt-BR")}</p></div><div className="text-right"><p className={entry.amount>=0?"font-bold text-emerald-300":"font-bold text-red-300"}>{entry.amount>0?"+":""}{entry.amount.toLocaleString("pt-BR")} LC</p><p className="text-[10px] text-slate-500">saldo {entry.balanceAfter.toLocaleString("pt-BR")}</p></div></div>)}{!ligaCashLedger.length&&<p className="p-4 text-xs text-slate-500">Nenhuma movimentação de LigaCash registrada ainda.</p>}</div></Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-1 rounded-2xl border border-[#FFCB05]/30 bg-gradient-to-br from-[#1A1A2E] to-[#201d38] p-6 sm:col-span-1">

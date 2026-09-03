@@ -534,6 +534,7 @@ const purchaseItemSchema = z.object({
   itemId: z.string().min(1),
   quantity: z.coerce.number().int().min(1).max(99).default(1),
   expectedUnitPrice: z.coerce.number().int().min(1).optional(),
+  currency: z.enum(["ZC","LC"]).default("ZC"),
 });
 
 const CONSUMABLE_TYPES = CONSUMABLE_SHOP_ITEM_TYPES as readonly string[];
@@ -542,7 +543,7 @@ export async function purchaseItem(
   itemIdOrInput: string | z.infer<typeof purchaseItemSchema>
 ): Promise<{ error?: string; purchased?: number; autoSold?: { itemName: string; coins: number } }> {
   try {
-    const { itemId, quantity, expectedUnitPrice } = purchaseItemSchema.parse(
+    const { itemId, quantity, expectedUnitPrice, currency } = purchaseItemSchema.parse(
       typeof itemIdOrInput === "string"
         ? { itemId: itemIdOrInput, quantity: 1 }
         : itemIdOrInput
@@ -567,8 +568,13 @@ export async function purchaseItem(
     const effectiveUnitPrice = priceIncreasePct > 0
       ? Math.max(1, Math.ceil(promotionPrice.price * (1 + priceIncreasePct / 100)))
       : promotionPrice.price;
-    if (expectedUnitPrice !== undefined && expectedUnitPrice !== effectiveUnitPrice) {
-      return { error: `O preço de ${item.name} mudou para ${effectiveUnitPrice.toLocaleString("pt-BR")} ZC. Revise o valor antes de confirmar novamente.` };
+    const economy=await prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}});
+    const {suggestedLigaCashPrice}=await import("@/lib/liga-cash-wallet");
+    const effectiveLigaCashPrice=item.ligaCashPrice??suggestedLigaCashPrice(effectiveUnitPrice,economy.shopLcValueMultiplier,economy.zcPerLcReference);
+    const selectedUnitPrice=currency==="LC"?effectiveLigaCashPrice:effectiveUnitPrice;
+    if(currency==="LC"&&!economy.allowLcShop)return{error:"Pagamentos em LigaCash estão temporariamente desativados na ZikaShop."};
+    if (expectedUnitPrice !== undefined && expectedUnitPrice !== selectedUnitPrice) {
+      return { error: `O preço de ${item.name} mudou para ${selectedUnitPrice.toLocaleString("pt-BR")} ${currency}. Revise o valor antes de confirmar novamente.` };
     }
 
     // Pedras de mega custom são liberadas pelo toggle (ShopItem.active); só as
@@ -606,18 +612,18 @@ export async function purchaseItem(
       }
     }
 
-    const wallet = await getOrCreateWallet(player.id);
-    const totalPrice = effectiveUnitPrice * quantity;
+    const wallet = currency==="ZC"?await getOrCreateWallet(player.id):await prisma.ligaCoinWallet.upsert({where:{playerId:player.id},create:{playerId:player.id},update:{}});
+    const totalPrice = selectedUnitPrice * quantity;
     if (wallet.balance < totalPrice)
-      return { error: `Saldo insuficiente. Você tem ${wallet.balance} ZC, a compra custa ${totalPrice} ZC.` };
+      return { error: `Saldo insuficiente. Você tem ${wallet.balance} ${currency}, a compra custa ${totalPrice} ${currency}.` };
 
     await prisma.$transaction(async (tx) => {
-      await creditCoins(tx, {
+      if(currency==="ZC")await creditCoins(tx, {
         playerId: player.id,
         type: ZikaCoinTxType.SHOP_PURCHASE,
         amount: -totalPrice,
         description: quantity > 1 ? `Compra: ${item.name} x${quantity}` : `Compra: ${item.name}`
-      });
+      });else{const {changeLigaCash}=await import("@/lib/liga-cash-wallet");await changeLigaCash(tx,{playerId:player.id,amount:-totalPrice,reason:"SHOP_PURCHASE",referenceType:"ShopItem",referenceId:item.id,spentDelta:totalPrice,metadata:{itemName:item.name,quantity,unitPrice:selectedUnitPrice}})}
 
       if (isEggShopItemType(item.type)) {
         // Compra de ovo → cria MascotEgg no inventário
@@ -696,6 +702,7 @@ export async function purchaseItem(
           promotionName: promotionPrice.promotionName,
           priceIncreasePct,
           totalPrice,
+          currency,
         },
       });
     });
@@ -708,7 +715,7 @@ export async function purchaseItem(
 
     // Emitir eventos de conquistas (fire-and-forget, não bloqueia)
     void onShopPurchase(player.id).catch(() => {});
-    void onCoinsSpent(player.id, totalPrice).catch(() => {});
+    if(currency==="ZC")void onCoinsSpent(player.id, totalPrice).catch(() => {});
 
     return { purchased: quantity };
   } catch (err) {

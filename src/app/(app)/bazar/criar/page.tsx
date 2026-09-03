@@ -59,6 +59,8 @@ function CreateListingForm() {
   const [category, setCategory] = useState<BazarItemCategory | "">("");
   const [listingType, setListingType] = useState<BazarListingType | "DIRECT_NEGOTIATION">("SALE");
   const [priceCoins, setPriceCoins] = useState("");
+  const [priceLigaCash, setPriceLigaCash] = useState("");
+  const [listingFeeCurrency, setListingFeeCurrency] = useState<"ZC" | "LC">("ZC");
   const [loanEnabled, setLoanEnabled] = useState(false);
   const [loanAmountCoins, setLoanAmountCoins] = useState("");
   const [loanInterestPct, setLoanInterestPct] = useState("0");
@@ -103,6 +105,7 @@ function CreateListingForm() {
             wantedDesc: wantedDesc || undefined,
             description: description || undefined,
             directNegotiation: true,
+            listingFeeCurrency,
           });
           if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         } else if (isAuction) {
@@ -126,6 +129,8 @@ function CreateListingForm() {
             category: category as BazarItemCategory,
             listingType: listingType as BazarListingType,
             priceCoins: listingType !== "TRADE" && priceCoins ? parseInt(priceCoins) : undefined,
+            priceLigaCash: listingType !== "TRADE" && priceLigaCash ? parseInt(priceLigaCash) : undefined,
+            listingFeeCurrency,
             loanEnabled,
             loanAmountCoins: loanEnabled ? parseInt(loanAmountCoins || priceCoins) : undefined,
             loanInterestPct: loanEnabled ? parseInt(loanInterestPct || "0") : undefined,
@@ -159,7 +164,7 @@ function CreateListingForm() {
     if (category === "MASCOT" && !selectedMascotId) return false;
     if (category === "ITEM" && (!selectedItem || itemQuantity < 1)) return false;
     if (isAuction) return !!minBid && parseInt(minBid) >= 1;
-    if (listingType !== "TRADE" && (!priceCoins || parseInt(priceCoins) < 1)) return false;
+    if (listingType !== "TRADE" && (!priceCoins || parseInt(priceCoins) < 1) && (!priceLigaCash || parseInt(priceLigaCash) < 1)) return false;
     if (loanEnabled && parseInt(loanAmountCoins || priceCoins) < 1) return false;
     return true;
   };
@@ -517,14 +522,22 @@ function CreateListingForm() {
 
         {/* Preço (apenas anúncios normais) */}
         {category && !isDirectNegotiation && !isAuction && listingType !== "TRADE" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-              <Coins size={14}/> Preço (ZikaCoins)
+              <Coins size={14}/> Formas de pagamento aceitas
             </label>
-            <input type="number" min={1} inputMode="numeric" pattern="[0-9]*"
-              value={priceCoins} onChange={e => setPriceCoins(e.target.value.replace(/\D/g, ""))}
-              placeholder="Ex: 2500"
-              className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+            <div className="grid gap-2 sm:grid-cols-2">
+              <label className="text-[11px] text-slate-400">Preço em ZC (opcional)
+                <input type="number" min={1} inputMode="numeric" value={priceCoins} onChange={e => setPriceCoins(e.target.value.replace(/\D/g, ""))} placeholder="Ex: 2500" className="mt-1 w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none" />
+              </label>
+              <label className="text-[11px] text-slate-400">Preço em LC (opcional)
+                <input type="number" min={1} inputMode="numeric" value={priceLigaCash} onChange={e => setPriceLigaCash(e.target.value.replace(/\D/g, ""))} placeholder="Ex: 250" className="mt-1 w-full rounded-xl border border-cyan-500/30 bg-slate-900 px-3 py-2 text-sm text-cyan-200 outline-none" />
+              </label>
+            </div>
+            <div className="flex items-center justify-between gap-3 text-[10px] text-slate-500">
+              <span>O comprador escolhe uma das moedas; não há conversão automática.</span>
+              {priceCoins && <button type="button" onClick={() => setPriceLigaCash(String(Math.max(1, Math.round(parseInt(priceCoins) / 10))))} className="shrink-0 text-cyan-300 hover:text-cyan-200">Sugerir LC (10 ZC ≈ 1 LC)</button>}
+            </div>
           </div>
         )}
 
@@ -622,10 +635,10 @@ function CreateListingForm() {
         {inventory && (
           <div className="flex items-start gap-2 rounded-xl border border-border/40 bg-slate-900/50 px-3 py-2.5 text-[11px] text-slate-400">
             <Info size={12} className="shrink-0 mt-0.5 text-slate-500"/>
-            <span>
-              Taxa do Bazar: <strong className="text-[#FFCB05]">{premium ? inventory.premiumFee : inventory.listingFee} ZC</strong>
-              {" "}(vai para o cofre do Miauvadão). Seu saldo: <strong className="text-slate-200">{inventory.balance.toLocaleString("pt-BR")} ZC</strong>
-            </span>
+            <div className="space-y-2">
+              <span>Taxa do Bazar: <strong className="text-[#FFCB05]">{premium ? `${inventory.premiumFee} ZC` : listingFeeCurrency === "LC" ? "1 LC" : "10 ZC"}</strong>. Vitrines premium continuam cobradas em ZC.</span>
+              {!premium && <div className="flex gap-2"><button type="button" onClick={() => setListingFeeCurrency("ZC")} className={`rounded-md border px-2 py-1 ${listingFeeCurrency === "ZC" ? "border-yellow-400 text-yellow-300" : "border-border"}`}>Pagar 10 ZC</button><button type="button" onClick={() => setListingFeeCurrency("LC")} className={`rounded-md border px-2 py-1 ${listingFeeCurrency === "LC" ? "border-cyan-400 text-cyan-300" : "border-border"}`}>Pagar 1 LC</button></div>}
+            </div>
           </div>
         )}
 

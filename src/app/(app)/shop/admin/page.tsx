@@ -6,13 +6,14 @@ import { Card } from "@/components/ui/card";
 import { ShopAdminPanel } from "./_components/shop-admin-panel";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { ShopPromotionManager } from "./_components/shop-promotion-manager";
+import {EconomySettingsPanel} from "./_components/economy-settings-panel";
 
 export const dynamic = "force-dynamic";
 
 export default async function ShopAdminPage() {
   await requireAdmin();
 
-  const [items, promotions] = await Promise.all([
+  const [items, promotions,economy] = await Promise.all([
     prisma.shopItem.findMany({
       where: { id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID } },
       orderBy: [{ type: "asc" }, { rarity: "asc" }, { name: "asc" }],
@@ -25,6 +26,7 @@ export default async function ShopAdminPage() {
         items: { include: { item: { select: { id: true, name: true } } }, orderBy: { item: { name: "asc" } } },
       },
     }),
+    prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}}),
   ]);
 
   return (
@@ -41,6 +43,10 @@ export default async function ShopAdminPage() {
       </div>
 
       {/* Guia de tamanhos */}
+      <Card>
+        <EconomySettingsPanel initial={{zcPerLcReference:economy.zcPerLcReference,shopLcValueMultiplier:economy.shopLcValueMultiplier,bazarListingFeeZc:economy.bazarListingFeeZc,bazarListingFeeLc:economy.bazarListingFeeLc,allowLcShop:economy.allowLcShop,allowLcBazar:economy.allowLcBazar,allowMixedProposals:economy.allowMixedProposals,allowLcAuctions:economy.allowLcAuctions}} items={items.map(i=>({id:i.id,name:i.name,price:i.price,ligaCashPrice:i.ligaCashPrice}))}/>
+      </Card>
+
       <Card>
         <p className="mb-3 font-semibold text-slate-200">📐 Tamanhos corretos de imagem</p>
         <div className="grid gap-2 text-xs text-slate-400 sm:grid-cols-2 lg:grid-cols-4">

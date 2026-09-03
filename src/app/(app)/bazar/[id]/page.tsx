@@ -75,6 +75,7 @@ interface ListingDetail {
   status: string;
   payload: Record<string, unknown>;
   priceCoins: number | null;
+  priceLigaCash: number | null;
   description: string | null;
   wantedDesc: string | null;
   loanEnabled: boolean;
@@ -207,6 +208,7 @@ export default function BazarListingPage(): React.JSX.Element {
         status: String(raw.status),
         payload: (raw.payload ?? {}) as Record<string, unknown>,
         priceCoins: raw.priceCoins,
+        priceLigaCash: raw.priceLigaCash,
         description: raw.description ?? null,
         wantedDesc: raw.wantedDesc ?? null,
         loanEnabled: raw.loanEnabled,
@@ -347,11 +349,12 @@ export default function BazarListingPage(): React.JSX.Element {
     toast.success("Negociação cancelada. A mesa foi reaberta."); setDirectItems([]); setDirectCoins(""); setDirectReset((n) => n + 1); reloadListing();
   });
 
-  const handleBuy = () => {
-    if (!listing?.priceCoins) return;
-    if (!confirm(`Comprar por ${listing.priceCoins} ZC?`)) return;
+  const handleBuy = (currency: "ZC" | "LC") => {
+    const price = currency === "LC" ? listing?.priceLigaCash : listing?.priceCoins;
+    if (!price) return;
+    if (!confirm(`Comprar por ${price} ${currency}? A moeda escolhida não será substituída automaticamente.`)) return;
     startTransition(async () => {
-      const r = await buyListing(id);
+      const r = await buyListing(id, currency);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Compra realizada!");
       router.push("/mascotes");
@@ -800,6 +803,12 @@ export default function BazarListingPage(): React.JSX.Element {
               </span>
             </div>
           )}
+          {!isAuction && listing.priceLigaCash !== null && listing.priceLigaCash !== undefined && (
+            <div className="flex items-center gap-2 rounded-xl border border-cyan-400/30 bg-cyan-400/10 px-4 py-3">
+              <Coins size={18} className="text-cyan-300"/>
+              <span className="text-xl font-bold text-cyan-200">{listing.priceLigaCash.toLocaleString("pt-BR")} LC</span>
+            </div>
+          )}
 
           {/* Bloco de leilão */}
           {isAuction && (
@@ -877,11 +886,16 @@ export default function BazarListingPage(): React.JSX.Element {
                 <button
                   type="button"
                   disabled={pending}
-                  onClick={handleBuy}
+                  onClick={() => handleBuy("ZC")}
                   className="w-full flex items-center justify-center gap-2 rounded-xl bg-[#FFCB05] py-3 text-sm font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50"
                 >
                   <ShoppingCart size={15}/>
                   Comprar por {listing.priceCoins.toLocaleString("pt-BR")} ZC
+                </button>
+              )}
+              {isSale && listing.priceLigaCash && (
+                <button type="button" disabled={pending} onClick={() => handleBuy("LC")} className="w-full flex items-center justify-center gap-2 rounded-xl bg-cyan-400 py-3 text-sm font-bold text-slate-950 hover:bg-cyan-300 disabled:opacity-50">
+                  <ShoppingCart size={15}/> Comprar por {listing.priceLigaCash.toLocaleString("pt-BR")} LC
                 </button>
               )}
 

@@ -32,6 +32,7 @@ interface Item {
   imageUrl: string | null;
   rarity: string;
   price: number;
+  ligaCashPrice: number;
   originalPrice?: number;
   discountPct?: number;
   promotionName?: string | null;
@@ -48,6 +49,8 @@ interface Props {
   ownedIds: Set<string>;
   inventoryCounts: Record<string, number>;
   balance: number;
+  ligaCashBalance: number;
+  ligaCashEnabled: boolean;
   playerId: string | null;
 }
 
@@ -68,7 +71,7 @@ const mascotItemEmoji: Record<string, string> = {
   RAINBOW_FEATHER: "🌈",
 };
 
-export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, playerId }: Props) {
+export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, ligaCashBalance, ligaCashEnabled, playerId }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingId, setBuyingId]   = useState<string | null>(null);
@@ -114,16 +117,17 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
     setQuantities((current) => ({ ...current, [itemId]: next }));
   };
 
-  const handleBuy = (itemId: string, price: number, name: string, quantity: number) => {
+  const handleBuy = (itemId: string, price: number, name: string, quantity: number,currency:"ZC"|"LC") => {
     const totalPrice = price * quantity;
     if (!playerId) { toast.error("Faça login com uma conta de jogador."); return; }
-    if (balance < totalPrice) { toast.error(`Saldo insuficiente. Você tem ${balance} ZC.`); return; }
-    if (!confirm(`Comprar ${quantity}x "${name}" por ${totalPrice} ZikaCoins?`)) return;
+    const available=currency==="LC"?ligaCashBalance:balance;
+    if (available < totalPrice) { toast.error(`Saldo insuficiente. Você tem ${available} ${currency}.`); return; }
+    if (!confirm(`Comprar ${quantity}x "${name}" por ${totalPrice} ${currency}? Esta escolha não usará a outra carteira.`)) return;
 
     setBuyingId(itemId);
     startTransition(async () => {
       try {
-        const result = await purchaseItem({ itemId, quantity, expectedUnitPrice: price });
+        const result = await purchaseItem({ itemId, quantity, expectedUnitPrice: price,currency });
         if (result.error) { toast.error(result.error); return; }
         if (result.autoSold) {
           toast.info(
@@ -191,6 +195,8 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
           const originalTotalPrice = (item.originalPrice ?? item.price) * quantity;
           const hasPromotion = (item.discountPct ?? 0) > 0 && originalTotalPrice > totalPrice;
           const canAfford = balance >= totalPrice;
+          const totalLigaCashPrice=item.ligaCashPrice*quantity;
+          const canAffordLigaCash=ligaCashEnabled&&ligaCashBalance>=totalLigaCashPrice;
           const isBuying = buyingId === item.id && pending;
           const ownedCount = inventoryCounts[item.id] ?? 0;
           const displayImageUrl = item.imageUrl;
@@ -303,12 +309,13 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
                       <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
                     </span>
+                    {ligaCashEnabled&&<span className="mt-1 flex items-center gap-1 text-sm font-bold text-cyan-300"><Coins size={14}/>{totalLigaCashPrice.toLocaleString("pt-BR")} LC</span>}
                   </div>
                   {owned ? (
                     <span className="flex items-center gap-1 rounded-lg bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
                       <CheckCircle size={12} /> Possuído
                     </span>
-                  ) : !canAfford ? (
+                  ) : !canAfford && !canAffordLigaCash ? (
                     <div className="flex items-center gap-1.5">
                       {isConsumable && (
                         <input
@@ -326,7 +333,7 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                       </span>
                     </div>
                   ) : (
-                    <div className="flex items-center gap-1.5">
+                    <div className="flex flex-wrap justify-end gap-1.5">
                     {isConsumable && (
                       <input
                         type="number"
@@ -340,13 +347,14 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, pla
                     )}
                     <button
                       type="button"
-                      disabled={isBuying}
-                      onClick={() => handleBuy(item.id, item.price, item.name, quantity)}
+                      disabled={isBuying||!canAfford}
+                      onClick={() => handleBuy(item.id, item.price, item.name, quantity,"ZC")}
                       className="flex items-center gap-1 rounded-lg bg-[#FFCB05] px-3 py-1 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60"
                     >
                       <ShoppingCart size={12} />
-                      {isBuying ? "Comprando…" : "Comprar"}
+                      {isBuying ? "Comprando…" : "Pagar ZC"}
                     </button>
+                    {ligaCashEnabled&&<button type="button" disabled={isBuying||!canAffordLigaCash} onClick={()=>handleBuy(item.id,item.ligaCashPrice,item.name,quantity,"LC")} className="flex items-center gap-1 rounded-lg bg-cyan-300 px-3 py-1 text-xs font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-40"><ShoppingCart size={12}/>Pagar LC</button>}
                     </div>
                   )}
                 </div>

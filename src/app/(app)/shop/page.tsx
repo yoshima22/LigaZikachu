@@ -14,6 +14,7 @@ import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
+import {suggestedLigaCashPrice} from "@/lib/liga-cash-wallet";
 
 export const dynamic = "force-dynamic";
 
@@ -42,8 +43,10 @@ export default async function ShopPage() {
     select: { id: true }
   });
 
-  const [wallet, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages, promotions] = await Promise.all([
+  const [wallet, ligaCashWallet, economy, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages, promotions] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
+    player?prisma.ligaCoinWallet.findUnique({where:{playerId:player.id}}):null,
+    prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}}),
     getActiveShopItems(),
     player
       ? prisma.playerInventory.findMany({
@@ -83,13 +86,14 @@ export default async function ShopPage() {
     ...item,
     ...resolveShopPromotionPrice(item.price, item.id, promotions, now),
   }));
-  const items = priceIncreasePct > 0
+  const pricedItems = priceIncreasePct > 0
     ? promotedItems.map((item) => ({
         ...item,
         price: Math.max(1, Math.ceil(item.price * (1 + priceIncreasePct / 100))),
         description: `${item.description ?? ""}${item.description ? " " : ""}[Ordem da Trapaça: preço adulterado +${priceIncreasePct}%]`,
       }))
     : promotedItems;
+  const items=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice??suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
   const activeGlobalPromotions = promotions.filter((promotion) =>
     promotion.scope === "GLOBAL"
     && promotion.active
@@ -136,7 +140,7 @@ export default async function ShopPage() {
         <div>
           <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
           <h1 className="font-pixel text-base text-[#FFCB05]">ZikaShop</h1>
-          <p className="mt-1 text-sm text-slate-400">Gaste suas ZikaCoins em títulos, banners, molduras, ovos e itens de mascote.</p>
+          <p className="mt-1 text-sm text-slate-400">Escolha pagar com ZikaCoins ou LigaCash. Uma carteira nunca substitui a outra automaticamente.</p>
         </div>
         <div className="flex items-center gap-3">
           {wallet && (
@@ -145,6 +149,7 @@ export default async function ShopPage() {
               {wallet.balance.toLocaleString("pt-BR")} ZC
             </Link>
           )}
+          <Link href="/mercado/ligacoins" className="flex items-center gap-2 rounded-xl border border-cyan-300/30 bg-cyan-300/10 px-4 py-2 text-sm font-bold text-cyan-200"><Coins size={16}/>{(ligaCashWallet?.balance??0).toLocaleString("pt-BR")} LC</Link>
           {staff && (
             <Link href="/shop/admin" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-slate-200">
               <Settings size={14} /> Gerenciar
@@ -189,13 +194,13 @@ export default async function ShopPage() {
               <div className="space-y-8">
                 {titles.length > 0 && <ShopGrid title="Títulos de Perfil"
                   items={titles.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null, theme: i.theme ?? "NEUTRAL", flavorText: i.flavorText ?? null, entranceEffect: i.entranceEffect ?? "NONE" }))}
-                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />}
                 {banners.length > 0 && <ShopGrid title="Banners de Perfil"
                   items={banners.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />}
                 {frames.length > 0 && <ShopGrid title="Molduras de Avatar"
                   items={frames.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />}
+                  ownedIds={ownedIds} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />}
               </div>
             ),
           },
@@ -205,7 +210,7 @@ export default async function ShopPage() {
             content: mascotItems.length > 0 ? (
               <ShopGrid title="Ovos, Comida e Buffs de Mascote"
                 items={mascotItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
           {
@@ -214,7 +219,7 @@ export default async function ShopPage() {
             content: leagueItems.length > 0 ? (
               <ShopGrid title="Itens táticos da Liga Semanal"
                 items={leagueItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
           ...((megaItems.length > 0) ? [{
@@ -223,7 +228,7 @@ export default async function ShopPage() {
             content: (
               <ShopGrid title="Pedras de Mega Evolução"
                 items={megaItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ),
           }] : []),
           {
@@ -232,7 +237,7 @@ export default async function ShopPage() {
             content: tickets.length > 0 ? (
               <ShopGrid title="Tickets ZikaLoot"
                 items={tickets.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} playerId={player?.id ?? null} />
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
         ]} />

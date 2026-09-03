@@ -1863,6 +1863,7 @@ model ShopItem {
   imageUrl                  String?              @db.Text
   rarity                    ShopItemRarity       @default(COMMON)
   price                     Int
+  ligaCashPrice             Int?
   active                    Boolean              @default(true)
   inventoryEnabled          Boolean              @default(true)
   sortOrder                 Int                  @default(0) // ordem de exibição na loja
@@ -2898,6 +2899,8 @@ model BazarListing {
   payload Json
 
   priceCoins      Int? // null = troca somente
+  priceLigaCash   Int?
+  listingFeeCurrency String @default("ZC")
   wantedDesc      String? // texto livre descrevendo o que quer em troca
   description     String?
   loanEnabled     Boolean @default(false)
@@ -2913,6 +2916,7 @@ model BazarListing {
   // Campos de leilão (null para anúncios normais)
   minBidCoins        Int?
   currentBidCoins    Int?
+  auctionCurrency    String @default("ZC")
   currentBidPlayerId String?
   auctionEndsAt      DateTime?
 
@@ -2953,6 +2957,8 @@ model BazarProposal {
 
   coinsOffer    Int     @default(0)
   coinsEscrowed Boolean @default(false)
+  ligaCashOffer    Int     @default(0)
+  ligaCashEscrowed Boolean @default(false)
   // JSON: [{type:"ITEM", itemType, quantity, displayName}]
   itemsOffer    Json?
   message       String?
@@ -3179,6 +3185,45 @@ model LigaCoinWallet {
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
   @@map("liga_coin_wallets")
+}
+
+model LigaCashLedger {
+  id            String   @id @default(cuid())
+  playerId      String
+  amount        Int
+  balanceAfter  Int
+  reason        String
+  referenceType String?
+  referenceId   String?
+  actorUserId   String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([reason, createdAt])
+  @@index([referenceType, referenceId])
+  @@map("liga_cash_ledger")
+}
+
+model EconomySettings {
+  id                       String   @id @default("singleton")
+  zcPerLcReference         Int      @default(10)
+  shopLcValueMultiplier    Float    @default(1.1)
+  bazarListingFeeZc        Int      @default(10)
+  bazarListingFeeLc        Int      @default(1)
+  allowLcShop              Boolean  @default(true)
+  allowLcBazar             Boolean  @default(true)
+  allowMixedProposals      Boolean  @default(true)
+  allowLcAuctions          Boolean  @default(true)
+  allowLcLoans             Boolean  @default(false)
+  allowLcPassRewards       Boolean  @default(true)
+  allowLcWalletRewards     Boolean  @default(true)
+  allowLcEventRewards      Boolean  @default(true)
+  allowAdminLcGrants       Boolean  @default(true)
+  updatedAt                DateTime @updatedAt
+  updatedBy                String?
+
+  @@map("economy_settings")
 }
 
 model LigaCashOrder {

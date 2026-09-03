@@ -2,9 +2,10 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { requireAdmin } from "@/lib/auth/permissions";
+import { requireAdmin,isAdmin } from "@/lib/auth/permissions";
 import { ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
+import {changeLigaCash} from "@/lib/liga-cash-wallet";
 
 export async function adjustCoins(
   playerId: string,
@@ -36,7 +37,7 @@ export async function adjustCoins(
   }
 }
 
-export async function adjustLigaCoins(playerId:string,amount:number,description:string):Promise<{error?:string}>{try{const actor=await requireAdmin();if(!playerId||!Number.isInteger(amount)||amount===0)return{error:"Parâmetros inválidos."};await prisma.$transaction(async tx=>{const wallet=await tx.ligaCoinWallet.upsert({where:{playerId},create:{playerId},update:{}});if(wallet.balance+amount<0)throw new Error("O saldo de LigaCoins não pode ficar negativo.");await tx.ligaCoinWallet.update({where:{playerId},data:{balance:{increment:amount},...(amount>0?{purchased:{increment:amount}}:{spent:{increment:-amount}})}});await tx.auditLog.create({data:{actorUserId:actor.id,entityType:"LigaCoinWallet",entityId:wallet.id,action:"ligacoins.admin_adjusted",before:{balance:wallet.balance},after:{balance:wallet.balance+amount,amount,description:description||"Ajuste manual"}}})});const player=await prisma.player.findUnique({where:{id:playerId},select:{userId:true}});revalidatePath("/carteira");if(player?.userId)revalidateTag(`nav-${player.userId}`);return{}}catch(err){return{error:err instanceof Error?err.message:"Erro desconhecido"}}}
+export async function adjustLigaCoins(playerId:string,amount:number,description:string):Promise<{error?:string}>{try{const actor=await requireAdmin();if(!playerId||!Number.isInteger(amount)||amount===0)return{error:"Parâmetros inválidos."};if(amount<0&&!isAdmin(actor.role))return{error:"Somente administradores podem remover LigaCash."};if(!description.trim())return{error:"Informe o motivo obrigatório do ajuste."};await prisma.$transaction(async tx=>{const before=await tx.ligaCoinWallet.findUnique({where:{playerId}});const balanceAfter=await changeLigaCash(tx,{playerId,amount,reason:amount>0?"ADMIN_GRANT":"ADMIN_REMOVE",referenceType:"AdminAdjustment",actorUserId:actor.id,metadata:{description:description.trim()},spentDelta:amount<0?-amount:0});await tx.auditLog.create({data:{actorUserId:actor.id,entityType:"LigaCashWallet",entityId:playerId,action:"ligacash.admin_adjusted",before:{balance:before?.balance??0},after:{balance:balanceAfter,amount,description:description.trim()}}})});const player=await prisma.player.findUnique({where:{id:playerId},select:{userId:true}});revalidatePath("/carteira");if(player?.userId)revalidateTag(`nav-${player.userId}`);return{}}catch(err){return{error:err instanceof Error?err.message:"Erro desconhecido"}}}
 
 /**
  * Envia ZC para todos os jogadores de uma vez (bônus em massa).

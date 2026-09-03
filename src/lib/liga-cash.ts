@@ -1,5 +1,6 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
+import {changeLigaCash} from "@/lib/liga-cash-wallet";
 
 export const CASH_PRODUCTS = [
   { code:"LC_850", type:"LIGA_COINS", label:"Bolsa Inicial", base:850, bonus:0, cents:999 },
@@ -16,7 +17,7 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     if (order.fulfilledAt) return order;
     if (order.productType === "LIGA_COINS") {
       const amount = order.ligaCoins + order.bonusLigaCoins;
-      await tx.ligaCoinWallet.upsert({ where:{ playerId:order.playerId }, create:{ playerId:order.playerId,balance:amount,purchased:amount }, update:{ balance:{increment:amount},purchased:{increment:amount} } });
+      await changeLigaCash(tx,{playerId:order.playerId,amount,reason:"PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
     }
     let fulfilledAt=order.productType === "LIGA_COINS" ? new Date() : null;
     if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
@@ -40,7 +41,7 @@ export async function refundLigaCashOrder(orderId:string, providerPaymentId:stri
     if(order.status==="REFUNDED")return order;
     if(order.status==="PAID"&&order.productType==="LIGA_COINS"&&order.fulfilledAt){
       const amount=order.ligaCoins+order.bonusLigaCoins;
-      await tx.ligaCoinWallet.update({where:{playerId:order.playerId},data:{balance:{decrement:amount},purchased:{decrement:amount}}});
+      await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:"REFUND",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
     }
     return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
   });

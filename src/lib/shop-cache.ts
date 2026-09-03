@@ -39,7 +39,7 @@ export const getActiveShopItems = unstable_cache(
       orderBy: [{ sortOrder: "asc" }, { type: "asc" }, { price: "asc" }],
       select: {
         id: true, type: true, name: true, description: true, imageUrl: true,
-        rarity: true, price: true, sortOrder: true, theme: true,
+        rarity: true, price: true, ligaCashPrice:true, sortOrder: true, theme: true,
         metadata: true, flavorText: true, entranceEffect: true,
       },
     });

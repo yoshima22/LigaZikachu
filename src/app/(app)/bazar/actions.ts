@@ -35,6 +35,7 @@ import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { createPlayerNotification } from "@/lib/nav-notifications";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
@@ -702,6 +703,8 @@ export interface CreateListingInput {
   category: BazarItemCategory;
   listingType: BazarListingType;
   priceCoins?: number;
+  priceLigaCash?: number;
+  listingFeeCurrency?: "ZC" | "LC";
   wantedDesc?: string;
   description?: string;
   loanEnabled?: boolean;
@@ -734,8 +737,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
     await prepareBazarMascotAvailability(player.id);
 
     // Validação básica
-    if (!input.directNegotiation && input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1)) {
-      return { error: "Defina um preço válido em ZikaCoins." };
+    if (!input.directNegotiation && input.listingType !== "TRADE" && (!input.priceCoins || input.priceCoins < 1) && (!input.priceLigaCash || input.priceLigaCash < 1)) {
+      return { error: "Defina ao menos um preço válido em ZC ou LC." };
     }
     const loanEnabled = Boolean(input.loanEnabled);
     const loanAmountCoins = Math.floor(Number(input.loanAmountCoins) || 0);
@@ -756,13 +759,18 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
 
     // Buscar config do Miauvadão (taxa)
     const config = await getMiauvadaoConfig();
+    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
     const premium = Boolean(input.premium);
-    const fee = premium ? PREMIUM_LISTING_FEE : config.listingFee;
+    const feeCurrency: "ZC" | "LC" = premium ? "ZC" : (input.listingFeeCurrency ?? "ZC");
+    if (feeCurrency === "LC" && !economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
+    const fee = premium ? PREMIUM_LISTING_FEE : feeCurrency === "LC" ? economy.bazarListingFeeLc : economy.bazarListingFeeZc;
 
     // Verificar saldo para pagar taxa
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    const wallet = feeCurrency === "LC"
+      ? await prisma.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
+      : await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
     if (!wallet || wallet.balance < fee) {
-      return { error: `Saldo insuficiente para pagar a taxa de anúncio (${fee} ZC).` };
+      return { error: `Saldo insuficiente para pagar a taxa de anúncio (${fee} ${feeCurrency}).` };
     }
 
     let payload: Record<string, unknown> = input.directNegotiation
@@ -787,16 +795,15 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
         if (globalPremiumCount >= MAX_ACTIVE_PREMIUM_LISTINGS) throw new Error("As 6 vitrines premium do Miauvadão estão ocupadas no momento. Tente novamente mais tarde.");
       }
       // Cobrar taxa
-      await tx.zikaCoinWallet.update({
-        where: { playerId: player.id },
-        data: { balance: { decrement: fee } },
-      });
+      if (feeCurrency === "ZC") {
+        await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: fee } } });
+      } else {
+        await changeLigaCash(tx, { playerId: player.id, amount: -fee, reason: "BAZAR_LISTING_FEE", referenceType: "BazarListing", spentDelta: fee });
+      }
       // Taxa vai para o cofre do Miauvadão
-      await tx.miauvadaoConfig.upsert({
-        where: { id: "singleton" },
-        create: { id: "singleton", vaultBalance: fee },
-        update: { vaultBalance: { increment: fee } },
-      });
+      if (feeCurrency === "ZC") {
+        await tx.miauvadaoConfig.upsert({ where: { id: "singleton" }, create: { id: "singleton", vaultBalance: fee }, update: { vaultBalance: { increment: fee } } });
+      }
 
       if (input.directNegotiation) {
         // A sala nasce vazia. Cada lado monta a própria oferta depois que o
@@ -927,6 +934,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           listingType: input.listingType,
           payload: payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
           priceCoins: input.listingType !== "TRADE" ? input.priceCoins : null,
+          priceLigaCash: input.listingType !== "TRADE" ? input.priceLigaCash : null,
+          listingFeeCurrency: feeCurrency,
           wantedDesc: input.wantedDesc,
           description: input.description,
           loanEnabled,
@@ -1104,7 +1113,7 @@ export async function editListing(
 
 // ── Comprar direto (SALE) ─────────────────────────────────────────────────────
 
-export async function buyListing(listingId: string): Promise<{ error?: string }> {
+export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
@@ -1120,12 +1129,17 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     if (listing.status !== "ACTIVE") return { error: "Este anúncio não está mais disponível." };
     if (listing.playerId === player.id) return { error: "Você não pode comprar seu próprio anúncio." };
     await assertBazarPairAllowed(prisma, player.id, listing.playerId);
-    if (!listing.priceCoins) return { error: "Este anúncio não tem preço definido." };
+    const price = currency === "LC" ? listing.priceLigaCash : listing.priceCoins;
+    if (!price) return { error: `Este anúncio não aceita pagamento em ${currency}.` };
     if (listing.listingType === "TRADE") return { error: "Este anúncio é somente troca. Envie uma proposta." };
+    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+    if (currency === "LC" && !economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
 
-    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-    if (!wallet || wallet.balance < listing.priceCoins) {
-      return { error: `Saldo insuficiente. Você tem ${wallet?.balance ?? 0} ZC, o item custa ${listing.priceCoins} ZC.` };
+    const wallet = currency === "LC"
+      ? await prisma.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
+      : await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+    if (!wallet || wallet.balance < price) {
+      return { error: `Saldo insuficiente. Você tem ${wallet?.balance ?? 0} ${currency}, o item custa ${price} ${currency}.` };
     }
 
     const buyerName = player.displayName;
@@ -1136,16 +1150,18 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       await tx.bazarListing.update({ where: { id: listingId }, data: { status: "SOLD" } });
 
       // Transferir coins: comprador → vendedor
-      await tx.zikaCoinWallet.update({
-        where: { playerId: player.id },
-        data: { balance: { decrement: listing.priceCoins! } },
-      });
-      await tx.zikaCoinWallet.upsert({
-        where: { playerId: listing.playerId },
-        update: { balance: { increment: listing.priceCoins! } },
-        create: { playerId: listing.playerId, balance: listing.priceCoins!, totalEarned: listing.priceCoins! },
-      });
-      await creditMiauvadaoVaultFromPlayerTransaction(tx, listing.priceCoins!);
+      if (currency === "ZC") {
+        await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: price } } });
+        await tx.zikaCoinWallet.upsert({
+          where: { playerId: listing.playerId },
+          update: { balance: { increment: price } },
+          create: { playerId: listing.playerId, balance: price, totalEarned: price },
+        });
+        await creditMiauvadaoVaultFromPlayerTransaction(tx, price);
+      } else {
+        await changeLigaCash(tx, { playerId: player.id, amount: -price, reason: "BAZAR_PURCHASE", referenceType: "BazarListing", referenceId: listingId, spentDelta: price });
+        await changeLigaCash(tx, { playerId: listing.playerId, amount: price, reason: "BAZAR_SALE", referenceType: "BazarListing", referenceId: listingId });
+      }
 
       // Transferir item para o comprador
       await _transferItem(tx, listing, player.id);
@@ -1176,8 +1192,8 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
       // Log de transação
       const payload = listing.payload as Record<string, unknown>;
       const desc = listing.category === "MASCOT"
-        ? `${fullMascotPayloadName(payload)} Nv.${payload.level} vendido por ${listing.priceCoins} ZC`
-        : `${payload.displayName} vendido por ${listing.priceCoins} ZC`;
+        ? `${fullMascotPayloadName(payload)} Nv.${payload.level} vendido por ${price} ${currency}`
+        : `${payload.displayName} vendido por ${price} ${currency}`;
 
       await tx.bazarTransaction.create({
         data: {
@@ -1187,7 +1203,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
           sellerName,
           buyerName,
           description: desc,
-          coinsAmount: listing.priceCoins!,
+          coinsAmount: currency === "ZC" ? price : 0,
           category: listing.category,
         },
       });
@@ -1196,12 +1212,12 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
         recordPlayerActivity(tx, {
           playerId: player.id, actorUserId: user.id, category: "BAZAR", action: "BAZAR_PURCHASE",
           summary: `Comprou de ${sellerName}: ${desc}`, source: "DIRECT_SALE", entityType: "bazarListing", entityId: listingId,
-          amount: -listing.priceCoins!, unit: "ZC", metadata: activityMetadata,
+          amount: -price, unit: currency, metadata: activityMetadata,
         }),
         recordPlayerActivity(tx, {
           playerId: listing.playerId, category: "BAZAR", action: "BAZAR_SALE",
           summary: `Vendeu para ${buyerName}: ${desc}`, source: "DIRECT_SALE", entityType: "bazarListing", entityId: listingId,
-          amount: listing.priceCoins!, unit: "ZC", metadata: activityMetadata,
+          amount: price, unit: currency, metadata: activityMetadata,
         }),
       ]);
       await createPlayerNotification(tx, {
@@ -1209,7 +1225,7 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
         category: "BAZAR",
         type: "DIRECT_SALE",
         title: `Vendido: ${listingDisplayName(listing)}`,
-        body: `${buyerName} comprou o anúncio por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`,
+        body: `${buyerName} comprou o anúncio por ${price.toLocaleString("pt-BR")} ${currency}.`,
         href: `/bazar/${listingId}`,
         entityId: listingId,
         eventKey: `bazar:sold:${listingId}`,
@@ -1220,8 +1236,8 @@ export async function buyListing(listingId: string): Promise<{ error?: string }>
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${listing.player.userId}`);
     after(() => Promise.allSettled([
-      sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
-      sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${listing.priceCoins!.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
     ]).then(() => undefined));
     return {};
   } catch (err) {
