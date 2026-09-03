@@ -176,7 +176,7 @@ export default async function AdminPage() {
   const nextPassConfig = await prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true } });
   const nextReservations = nextPassConfig
     ? paidPassOrders.filter(o => o.passOfferSlot === "NEXT" && (o.passScheduleKey === nextPassConfig.id || o.passScheduleKey === null))
-        .map(o => ({ id: o.id, playerName: paidPassNames.get(o.playerId) ?? "Jogador removido", paidAt: o.paidAt?.toISOString() ?? null }))
+        .map(o => ({ id: o.id, playerName: paidPassNames.get(o.playerId) ?? "Jogador removido", paidAt: o.paidAt?.toISOString() ?? null, manual: o.provider === "ADMIN_MANUAL" }))
     : [];
 
   return (
