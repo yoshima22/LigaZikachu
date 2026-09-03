@@ -1,8 +1,9 @@
 // Calendário de recompensas do Passe Apoiador (sem "use server" — apenas dados)
 
 export type DayRewardItem = {
-  type: "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
   coins?: number;
+  ligaCash?: number;
   eggType?: string;
   quantity?: number;
   packName?: string;
@@ -13,8 +14,9 @@ export type DayRewardItem = {
 export type DayReward = {
   day: number;
   label: string;
-  type: "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
   coins?: number;
+  ligaCash?: number;
   eggType?: string;
   foodType?: string;
   foodQty?: number;
@@ -39,6 +41,7 @@ export function expandDayReward(reward: DayReward): DayRewardItem[] {
 
   const items: DayRewardItem[] = [];
   if (reward.coins && reward.coins > 0) items.push({ type: "COINS", coins: reward.coins });
+  if (reward.ligaCash && reward.ligaCash > 0) items.push({ type: "LIGA_CASH", ligaCash: reward.ligaCash });
   if (reward.eggType || reward.type === "EGG") {
     items.push({ type: "EGG", eggType: reward.eggType ?? "COMMON", quantity: reward.foodQty ?? 1 });
   }

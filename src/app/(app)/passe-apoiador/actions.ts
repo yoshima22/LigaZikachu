@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { creditCoins } from "@/lib/zikacoins";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import { ZikaCoinTxType } from "@prisma/client";
 import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
 import { expandDayReward, type DayReward } from "./schedule";
@@ -416,6 +417,24 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
           amount: coins,
           description: `Passe Apoiador — Dia ${dayNumber}`,
         });
+      }
+
+      // 2b. LigaCash do Passe (soma slots LIGA_CASH). Respeita allowLcPassRewards.
+      const passLigaCash = rewardItems
+        .filter((item) => item.type === "LIGA_CASH")
+        .reduce((total, item) => total + Math.max(0, Math.floor(item.ligaCash ?? item.coins ?? 0)), 0);
+      if (passLigaCash > 0) {
+        const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+        if (economy.allowLcPassRewards) {
+          await changeLigaCash(tx, {
+            playerId: player.id,
+            amount: passLigaCash,
+            reason: "PASS_REWARD",
+            referenceType: "SupporterPass",
+            referenceId: passId,
+            metadata: { day: dayNumber },
+          });
+        }
       }
 
       // 3. Ovos — cada slot mantem tipo e quantidade independentes.

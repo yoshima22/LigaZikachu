@@ -20,10 +20,11 @@ import {
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
 
-type SlotKind = "COINS" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
 
 type Slot =
   | { id: string; kind: "COINS"; amount: number }
+  | { id: string; kind: "LIGA_CASH"; amount: number }
   | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE" | "LAB"; qty: number }
   | { id: string; kind: "FOOD"; qty: number }
   | { id: string; kind: "SWEET"; qty: number }
@@ -33,6 +34,7 @@ type Slot =
 
 const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string }> = {
   COINS:       { label: "ZikaCoins",        emoji: "🪙", color: "border-yellow-500/30 bg-yellow-950/10" },
+  LIGA_CASH:   { label: "LigaCash (LC)",    emoji: "💎", color: "border-cyan-500/30 bg-cyan-950/10" },
   EGG:         { label: "Ovo de Mascote",   emoji: "🥚", color: "border-teal-500/30 bg-teal-950/10" },
   FOOD:        { label: "Comida de Mascote",emoji: "🍖", color: "border-orange-500/30 bg-orange-950/10" },
   SWEET:       { label: "Doce de Mascote",  emoji: "🍬", color: "border-pink-500/30 bg-pink-950/10" },
@@ -51,6 +53,7 @@ function rewardToSlots(reward: DayReward): Slot[] {
     return expandDayReward(reward).map((item): Slot => {
       switch (item.type) {
         case "COINS": return { id: uid(), kind: "COINS", amount: item.coins ?? 0 };
+        case "LIGA_CASH": return { id: uid(), kind: "LIGA_CASH", amount: item.ligaCash ?? item.coins ?? 0 };
         case "EGG": return { id: uid(), kind: "EGG", eggType: (item.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: item.quantity ?? 1 };
         case "FOOD": return { id: uid(), kind: "FOOD", qty: item.quantity ?? 1 };
         case "SWEET": return { id: uid(), kind: "SWEET", qty: item.quantity ?? 1 };
@@ -64,6 +67,9 @@ function rewardToSlots(reward: DayReward): Slot[] {
 
   if (reward.coins && reward.coins > 0)
     slots.push({ id: uid(), kind: "COINS", amount: reward.coins });
+
+  if (reward.ligaCash && reward.ligaCash > 0)
+    slots.push({ id: uid(), kind: "LIGA_CASH", amount: reward.ligaCash });
 
   if (reward.eggType || reward.type === "EGG")
     slots.push({ id: uid(), kind: "EGG", eggType: (reward.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: reward.foodQty ?? 1 });
@@ -104,9 +110,12 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     food  ? "FOOD" :
     sweet ? "SWEET" : "COINS";
 
+  const liga   = slots.find(s => s.kind === "LIGA_CASH") as Extract<Slot, { kind: "LIGA_CASH" }> | undefined;
+
   const rewards: DayRewardItem[] = slots.map((slot): DayRewardItem => {
     switch (slot.kind) {
       case "COINS": return { type: "COINS", coins: slot.amount };
+      case "LIGA_CASH": return { type: "LIGA_CASH", ligaCash: slot.amount };
       case "EGG": return { type: "EGG", eggType: slot.eggType, quantity: slot.qty };
       case "FOOD": return { type: "FOOD", quantity: slot.qty };
       case "SWEET": return { type: "SWEET", quantity: slot.qty };
@@ -122,6 +131,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     label,
     isMilestone: isMilestone || undefined,
     type,
+    ligaCash: liga?.amount,
     rewards,
   };
 }
@@ -975,6 +985,7 @@ function DayEditor({ reward, onChange, onClose }: {
     setShowAdd(false);
     const defaults: Record<SlotKind, Slot> = {
       COINS:        { id: uid(), kind: "COINS", amount: 500 },
+      LIGA_CASH:    { id: uid(), kind: "LIGA_CASH", amount: 20 },
       EGG:          { id: uid(), kind: "EGG", eggType: "COMMON", qty: 1 },
       FOOD:         { id: uid(), kind: "FOOD", qty: 1 },
       SWEET:        { id: uid(), kind: "SWEET", qty: 1 },
@@ -1116,6 +1127,16 @@ function SlotEditor({ slot, onUpdate, onRemove }: {
               value={slot.amount}
               onChange={e => onUpdate({ amount: Number(e.target.value) || 0 })}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-yellow-400/50" />
+          </div>
+        )}
+
+        {slot.kind === "LIGA_CASH" && (
+          <div className="col-span-2 sm:col-span-3 space-y-1">
+            <label className="text-[10px] text-slate-500 uppercase tracking-widest">LigaCash (LC)</label>
+            <input type="number" min={0} max={99999} step={5}
+              value={slot.amount}
+              onChange={e => onUpdate({ amount: Number(e.target.value) || 0 })}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-1.5 text-sm text-cyan-200 focus:outline-none focus:border-cyan-400/50" />
           </div>
         )}
 
