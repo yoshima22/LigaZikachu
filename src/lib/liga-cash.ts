@@ -2,10 +2,11 @@ import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 
 export const CASH_PRODUCTS = [
-  { code:"LC_850", type:"LIGA_COINS", label:"Bolsa Inicial", base:850, bonus:0, cents:990 },
-  { code:"LC_1700", type:"LIGA_COINS", label:"Reserva de Treinador", base:1500, bonus:200, cents:1990 },
-  { code:"LC_3450", type:"LIGA_COINS", label:"Cofre de Ginásio", base:3000, bonus:450, cents:3490 },
-  { code:"LC_7700", type:"LIGA_COINS", label:"Tesouro da Liga", base:6500, bonus:1200, cents:6990 },
+  { code:"LC_850", type:"LIGA_COINS", label:"Bolsa Inicial", base:850, bonus:0, cents:999 },
+  { code:"LC_1900", type:"LIGA_COINS", label:"Reserva de Treinador", base:1700, bonus:200, cents:1999 },
+  { code:"LC_3900", type:"LIGA_COINS", label:"Cofre de Ginásio", base:3450, bonus:450, cents:3499 },
+  { code:"LC_8900", type:"LIGA_COINS", label:"Tesouro da Liga", base:7700, bonus:1200, cents:6999 },
+  { code:"DEBUG_LC_100", type:"LIGA_COINS", label:"Teste administrativo", base:100, bonus:0, cents:100, adminOnly:true },
   { code:"NEXT_PASS", type:"SUPPORTER_PASS", label:"Próximo Passe de Apoiador", base:0, bonus:0, cents:2000 },
 ] as const;
 

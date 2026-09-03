@@ -7,6 +7,7 @@ import { Coins, TrendingDown, TrendingUp } from "lucide-react";
 import { Card } from "@/components/ui/card";
 import { AdjustCoinsForm } from "./_components/adjust-coins-form";
 import { BulkCoinsForm } from "./_components/bulk-coins-form";
+import { AdjustLigaCoinsForm } from "./_components/adjust-liga-coins-form";
 
 const txTypeLabels: Record<string, string> = {
   PARTICIPATION_REWARD: "Participacao em dia",
@@ -68,6 +69,7 @@ export default async function CarteiraPage({
 
   const reportPlayer = selectedPlayer ?? currentPlayer;
   const wallet = await getOrCreateWallet(reportPlayer.id);
+  const ligaWallet = await prisma.ligaCoinWallet.findUnique({where:{playerId:reportPlayer.id}});
 
   const transactions = await prisma.zikaCoinTransaction.findMany({
     where: { walletId: wallet.id },
@@ -130,6 +132,7 @@ export default async function CarteiraPage({
           </div>
         </Card>
       )}
+      {admin && <Card><p className="mb-1 font-semibold text-cyan-200">Ajuste manual de LigaCoins</p><p className="mb-3 text-xs text-slate-500">Saldo atual de {reportPlayer.displayName}: {ligaWallet?.balance??0} LC. Valores negativos removem saldo.</p><AdjustLigaCoinsForm players={adminPlayers}/></Card>}
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-1 rounded-2xl border border-[#FFCB05]/30 bg-gradient-to-br from-[#1A1A2E] to-[#201d38] p-6 sm:col-span-1">

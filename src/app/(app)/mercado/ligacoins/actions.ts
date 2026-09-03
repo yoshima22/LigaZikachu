@@ -1,5 +1,6 @@
 "use server";
 import { getSessionUser } from "@/lib/auth/permissions";
+import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { CASH_PRODUCTS } from "@/lib/liga-cash";
 
@@ -7,8 +8,13 @@ export async function createLigaCashPayment(code:string){
   const user=await getSessionUser(); if(!user) return {error:"Faça login novamente."};
   const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}}); if(!player) return {error:"Jogador não encontrado."};
   const product=CASH_PRODUCTS.find(p=>p.code===code); if(!product) return {error:"Pacote inválido."};
+  if("adminOnly" in product&&product.adminOnly&&!isAdmin(user.role)) return {error:"Pacote disponível somente para testes administrativos."};
   const token=process.env.MERCADO_PAGO_ACCESS_TOKEN; const base=process.env.NEXT_PUBLIC_APP_URL;
   if(!token||!base) return {error:"Os pagamentos ainda não foram habilitados pelo administrador."};
+  const now=new Date();
+  await prisma.ligaCashOrder.updateMany({where:{playerId:player.id,status:"PENDING",expiresAt:{lte:now}},data:{status:"EXPIRED"}});
+  const pendingCount=await prisma.ligaCashOrder.count({where:{playerId:player.id,status:"PENDING",expiresAt:{gt:now}}});
+  if(pendingCount>=3)return {error:"Você já possui 3 pedidos em aberto. Pague, cancele ou aguarde a expiração."};
   const expiresAt=new Date(Date.now()+30*60_000);
   const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus,amountCents:product.cents,expiresAt}});
   const response=await fetch("https://api.mercadopago.com/v1/payments",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":order.id},body:JSON.stringify({transaction_amount:product.cents/100,description:`Liga Zikachu - ${product.label}`,payment_method_id:"pix",date_of_expiration:expiresAt.toISOString(),payer:{email:user.email},external_reference:order.id,notification_url:`${base}/api/payments/mercado-pago`})});
@@ -19,3 +25,5 @@ export async function createLigaCashPayment(code:string){
   await prisma.ligaCashOrder.update({where:{id:order.id},data:{providerPaymentId:String(payment.id),qrCode:pix?.qr_code??null,qrCodeBase64:pix?.qr_code_base64??null,expiresAt:providerExpiration}});
   return {ok:true,orderId:order.id,qrCode:pix?.qr_code,qrCodeBase64:pix?.qr_code_base64,expiresAt:providerExpiration.toISOString()};
 }
+
+export async function cancelLigaCashOrder(orderId:string){const user=await getSessionUser();if(!user)return{error:"Faça login novamente."};const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}});if(!player)return{error:"Jogador não encontrado."};const order=await prisma.ligaCashOrder.findFirst({where:{id:orderId,playerId:player.id,status:"PENDING"}});if(!order)return{error:"Este pedido não está mais em aberto."};if(order.expiresAt&&order.expiresAt<=new Date()){await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"EXPIRED"}});return{ok:true}}const token=process.env.MERCADO_PAGO_ACCESS_TOKEN;if(order.providerPaymentId&&token){const response=await fetch(`https://api.mercadopago.com/v1/payments/${order.providerPaymentId}`,{method:"PUT",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({status:"cancelled"})});if(!response.ok)return{error:"O Mercado Pago não permitiu cancelar esta cobrança agora."}}await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}});return{ok:true}}
