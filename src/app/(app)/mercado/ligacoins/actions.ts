@@ -59,6 +59,16 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
     passScheduleKey=config?.id??null;product={code,type:"SUPPORTER_PASS",label:config?.displayTitle?.trim()||(code==="PASS_CURRENT"?"Passe atual":"Passe do mês seguinte"),base:0,bonus:0,cents:2000};
   }
   if(!product) return {error:"Pacote inválido."};
+  // Impede comprar de novo um passe que o jogador já possui (ou já garantiu).
+  if(passOfferSlot==="CURRENT"&&passScheduleKey){
+    const label=passScheduleKey==="singleton"?"Passe Apoiador":passScheduleKey;
+    const has=await prisma.supporterPass.findFirst({where:{playerId:player.id,passLabel:label,active:true,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
+    if(has)return{error:"Você já possui este passe."};
+  }
+  if(passOfferSlot==="NEXT"&&passScheduleKey){
+    const has=await prisma.ligaCashOrder.findFirst({where:{playerId:player.id,productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",passScheduleKey,status:{in:["PAID","PENDING"]}},select:{id:true}});
+    if(has)return{error:"Você já garantiu este passe."};
+  }
   const document=cpf.replace(/\D/g,"");if(document.length!==11)return{error:"Informe um CPF válido para gerar o PIX."};
   const email=payerEmail.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email))return{error:"Informe o e-mail do pagador."};
   if("adminOnly" in product&&product.adminOnly&&!isAdmin(user.role)) return {error:"Pacote disponível somente para testes administrativos."};
