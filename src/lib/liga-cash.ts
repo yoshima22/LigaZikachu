@@ -23,6 +23,19 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
   });
 }
 
+export async function refundLigaCashOrder(orderId:string, providerPaymentId:string) {
+  return prisma.$transaction(async tx => {
+    const order=await tx.ligaCashOrder.findUnique({where:{id:orderId}});
+    if(!order||order.providerPaymentId!==providerPaymentId)throw new Error("Pedido incompatível.");
+    if(order.status==="REFUNDED")return order;
+    if(order.status==="PAID"&&order.productType==="LIGA_COINS"&&order.fulfilledAt){
+      const amount=order.ligaCoins+order.bonusLigaCoins;
+      await tx.ligaCoinWallet.update({where:{playerId:order.playerId},data:{balance:{decrement:amount},purchased:{decrement:amount}}});
+    }
+    return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
+  });
+}
+
 export function validMpSignature(signature:string|null, requestId:string|null, dataId:string) {
   const secret=process.env.MERCADO_PAGO_WEBHOOK_SECRET;
   if(!secret||!signature||!requestId) return false;

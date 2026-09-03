@@ -28,4 +28,12 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
   return {ok:true,orderId:order.id,qrCode:pix?.qr_code,qrCodeBase64:pix?.qr_code_base64,expiresAt:providerExpiration.toISOString()};
 }
 
+export async function getLigaCashOrderStatus(orderId:string){
+  const user=await getSessionUser();if(!user)return{status:"UNAUTHORIZED" as const};
+  const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}});if(!player)return{status:"NOT_FOUND" as const};
+  const order=await prisma.ligaCashOrder.findFirst({where:{id:orderId,playerId:player.id},select:{status:true,productType:true,productLabel:true,ligaCoins:true,bonusLigaCoins:true}});
+  if(!order)return{status:"NOT_FOUND" as const};
+  return{status:order.status,productType:order.productType,productLabel:order.productLabel,creditedLigaCoins:order.status==="PAID"&&order.productType==="LIGA_COINS"?order.ligaCoins+order.bonusLigaCoins:0};
+}
+
 export async function cancelLigaCashOrder(orderId:string){const user=await getSessionUser();if(!user)return{error:"Faça login novamente."};const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}});if(!player)return{error:"Jogador não encontrado."};const order=await prisma.ligaCashOrder.findFirst({where:{id:orderId,playerId:player.id,status:"PENDING"}});if(!order)return{error:"Este pedido não está mais em aberto."};if(order.expiresAt&&order.expiresAt<=new Date()){await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"EXPIRED"}});return{ok:true}}const token=process.env.MERCADO_PAGO_ACCESS_TOKEN;if(order.providerPaymentId&&token){const response=await fetch(`https://api.mercadopago.com/v1/payments/${order.providerPaymentId}`,{method:"PUT",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json"},body:JSON.stringify({status:"cancelled"})});if(!response.ok)return{error:"O Mercado Pago não permitiu cancelar esta cobrança agora."}}await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}});return{ok:true}}
