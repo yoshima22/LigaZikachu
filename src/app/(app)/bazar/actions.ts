@@ -84,6 +84,8 @@ type DirectNegotiationState = {
   participantConfirmed: boolean;
   ownerCoins: number;
   ownerCoinsEscrowed: boolean;
+  ownerLigaCash: number;
+  ownerLigaCashEscrowed: boolean;
   ownerItems: ProposalOfferItem[];
   ownerLoan: boolean;
   ownerInterestPct: number;
@@ -94,15 +96,15 @@ type DirectNegotiationState = {
 const EMPTY_DIRECT_STATE: DirectNegotiationState = {
   kind: "DIRECT_NEGOTIATION", accepted: false, ownerReady: false, participantReady: false,
   ownerConfirmed: false, participantConfirmed: false,
-  ownerCoins: 0, ownerCoinsEscrowed: false, ownerItems: [], ownerLoan: false,
+  ownerCoins: 0, ownerCoinsEscrowed: false, ownerLigaCash: 0, ownerLigaCashEscrowed: false, ownerItems: [], ownerLoan: false,
   ownerInterestPct: 0, participantLoan: false, participantInterestPct: 0,
 };
 
 // Assinatura canônica de uma oferta, para detectar mudança real (e só então
 // invalidar a trava/confirmação do outro lado).
-function directOfferSignature(items: ProposalOfferItem[] | null | undefined, coins: number, loan: boolean, interest: number) {
+function directOfferSignature(items: ProposalOfferItem[] | null | undefined, coins: number, loan: boolean, interest: number, ligaCash = 0) {
   const norm = (items ?? []).map((i) => `${i.mascotId ?? i.type}:${i.mascotId ? 1 : i.quantity}`).sort();
-  return JSON.stringify({ norm, coins, loan, interest });
+  return JSON.stringify({ norm, coins, ligaCash, loan, interest });
 }
 
 function parseDirectState(value: string | null | undefined): DirectNegotiationState | null {
@@ -1309,7 +1311,7 @@ export async function acceptDirectNegotiationParticipant(proposalId: string): Pr
 // confirmação do outro lado (precisa reavaliar). Sempre zera a própria
 // confirmação de fase 2 (é preciso reconfirmar após travar).
 export async function updateDirectNegotiationOffer(input: {
-  proposalId: string; coins: number; items: ProposalOfferItem[]; loan?: boolean; interestPct?: number; lock?: boolean;
+  proposalId: string; coins: number; items: ProposalOfferItem[]; loan?: boolean; interestPct?: number; lock?: boolean; ligaCash?: number;
 }): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -1323,9 +1325,15 @@ export async function updateDirectNegotiationOffer(input: {
     if (!isOwner && proposal.proposerId !== player.id) return { error: "Sem permissão." };
     const lock = input.lock !== false; // padrão: travar ao salvar (botão único)
     const coins = Math.max(0, Math.floor(Number(input.coins) || 0));
+    const ligaCash = Math.max(0, Math.floor(Number(input.ligaCash) || 0));
     const loan = Boolean(input.loan);
     const interestPct = Math.max(0, Math.min(100, Math.floor(Number(input.interestPct) || 0)));
     if (loan && coins < 1) return { error: "Informe o valor do empréstimo." };
+    if (loan && ligaCash > 0) return { error: "Empréstimos são apenas em ZC; remova a LigaCash da oferta." };
+    if (ligaCash > 0) {
+      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (!economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
+    }
     const cleanItems = (input.items ?? []).map((item) => ({ ...item, quantity: item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1)) }));
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${proposal.listingId}))`;
@@ -1335,12 +1343,17 @@ export async function updateDirectNegotiationOffer(input: {
       const oldItems = isOwner ? state.ownerItems : (fresh.itemsOffer as ProposalOfferItem[] | null) ?? [];
       const oldCoins = isOwner ? state.ownerCoins : fresh.coinsOffer;
       const oldCoinsEscrowed = isOwner ? state.ownerCoinsEscrowed : fresh.coinsEscrowed;
+      const oldLigaCash = isOwner ? state.ownerLigaCash : fresh.ligaCashOffer;
+      const oldLigaCashEscrowed = isOwner ? state.ownerLigaCashEscrowed : fresh.ligaCashEscrowed;
       const oldLoan = isOwner ? state.ownerLoan : state.participantLoan;
       const oldInterest = isOwner ? state.ownerInterestPct : state.participantInterestPct;
-      const changed = directOfferSignature(oldItems, oldCoins, oldLoan, oldInterest) !== directOfferSignature(cleanItems, coins, loan, interestPct);
+      const changed = directOfferSignature(oldItems, oldCoins, oldLoan, oldInterest, oldLigaCash) !== directOfferSignature(cleanItems, coins, loan, interestPct, ligaCash);
       await _releaseProposalOffers(tx, oldItems, player.id);
       if (oldCoinsEscrowed && oldCoins > 0) {
         await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: oldCoins } }, create: { playerId: player.id, balance: oldCoins, totalEarned: 0 } });
+      }
+      if (oldLigaCashEscrowed && oldLigaCash > 0) {
+        await changeLigaCash(tx, { playerId: player.id, amount: oldLigaCash, reason: "BAZAR_ESCROW_RELEASE", referenceType: "BazarProposal", referenceId: proposal.id });
       }
       const reservedItems = await _reserveProposalOffers(tx, player.id, cleanItems);
       // ZC postos na mesa saem da carteira AGORA (escrow), seja pagamento ou
@@ -1350,6 +1363,12 @@ export async function updateDirectNegotiationOffer(input: {
         const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
         if (!wallet || wallet.balance < coins) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
         await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: coins } } });
+      }
+      // LigaCash posta na mesa também sai da carteira ao travar (escrow).
+      if (ligaCash > 0) {
+        const lcWallet = await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id } });
+        if (!lcWallet || lcWallet.balance < ligaCash) throw new Error(`Saldo de LigaCash insuficiente (${lcWallet?.balance ?? 0} LC disponíveis).`);
+        await changeLigaCash(tx, { playerId: player.id, amount: -ligaCash, reason: "BAZAR_ESCROW", referenceType: "BazarProposal", referenceId: proposal.id });
       }
       // Travar/editar o MEU lado nunca mexe na trava do outro (a trava é da
       // própria oferta). Mas, se a MINHA oferta mudou, a CONFIRMAÇÃO de fase 2 do
@@ -1363,9 +1382,9 @@ export async function updateDirectNegotiationOffer(input: {
         if (changed) base.ownerConfirmed = false;
       }
       if (isOwner) {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...base, ownerCoins: coins, ownerCoinsEscrowed: coins > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { message: JSON.stringify({ ...base, ownerCoins: coins, ownerCoinsEscrowed: coins > 0, ownerLigaCash: ligaCash, ownerLigaCashEscrowed: ligaCash > 0, ownerItems: reservedItems, ownerLoan: loan, ownerInterestPct: interestPct }) } });
       } else {
-        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: coins > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...base, participantLoan: loan, participantInterestPct: interestPct }) } });
+        await tx.bazarProposal.update({ where: { id: fresh.id }, data: { coinsOffer: coins, coinsEscrowed: coins > 0, ligaCashOffer: ligaCash, ligaCashEscrowed: ligaCash > 0, itemsOffer: reservedItems as unknown as Prisma.InputJsonValue, message: JSON.stringify({ ...base, participantLoan: loan, participantInterestPct: interestPct }) } });
       }
       await createPlayerNotification(tx, {
         playerId: isOwner ? fresh.proposerId : proposal.listing.playerId,
@@ -1487,6 +1506,10 @@ async function _deliverDirectNegotiation(tx: TxClient, args: {
   // empréstimo NÃO alimenta o cofre (o valor volta depois; nada de faucet).
   if (freshState.ownerCoins > 0) await _creditEscrowedCoins(tx, args.proposerId, freshState.ownerCoins, !freshState.ownerLoan);
   if (freshProposal.coinsOffer > 0) await _creditEscrowedCoins(tx, args.ownerId, freshProposal.coinsOffer, !freshState.participantLoan);
+  // LigaCash (já em escrow) é entregue ao outro lado. LC não participa de
+  // empréstimos, então é sempre transferência definitiva.
+  if (freshState.ownerLigaCash > 0) await changeLigaCash(tx, { playerId: args.proposerId, amount: freshState.ownerLigaCash, reason: "BAZAR_SALE", referenceType: "BazarProposal", referenceId: args.proposalId });
+  if (freshProposal.ligaCashOffer > 0) await changeLigaCash(tx, { playerId: args.ownerId, amount: freshProposal.ligaCashOffer, reason: "BAZAR_SALE", referenceType: "BazarProposal", referenceId: args.proposalId });
   const loanSide = freshState.ownerLoan ? "owner" : freshState.participantLoan ? "participant" : null;
   if (loanSide) {
     // Quem marcou "empréstimo" é o CREDOR (entregou os ZC agora); o outro lado é
@@ -1505,8 +1528,8 @@ async function _deliverDirectNegotiation(tx: TxClient, args: {
     description: "Negociação direta concluída", coinsAmount: freshState.ownerCoins + freshProposal.coinsOffer, category: "ITEM",
     detailsJson: {
       direct: true,
-      sellerItems: freshState.ownerItems, sellerCoins: freshState.ownerCoins, sellerLoan: freshState.ownerLoan,
-      buyerItems: participantItems, buyerCoins: freshProposal.coinsOffer, buyerLoan: freshState.participantLoan,
+      sellerItems: freshState.ownerItems, sellerCoins: freshState.ownerCoins, sellerLigaCash: freshState.ownerLigaCash, sellerLoan: freshState.ownerLoan,
+      buyerItems: participantItems, buyerCoins: freshProposal.coinsOffer, buyerLigaCash: freshProposal.ligaCashOffer, buyerLoan: freshState.participantLoan,
     } as unknown as Prisma.InputJsonValue,
   } });
   await Promise.all([
@@ -1540,14 +1563,17 @@ export async function cancelDirectNegotiation(proposalId: string): Promise<{ err
       const state = parseDirectState(fresh.message);
       // Devolve a oferta do participante (itens + ZC em escrow).
       await _releaseProposalEscrow(tx, fresh);
-      // Devolve a oferta do anunciante (itens reservados + ZC em escrow).
+      // Devolve a oferta do anunciante (itens reservados + ZC/LC em escrow).
       if (state) {
         await _releaseProposalOffers(tx, state.ownerItems, proposal.listing.playerId);
         if (state.ownerCoinsEscrowed && state.ownerCoins > 0) {
           await tx.zikaCoinWallet.upsert({ where: { playerId: proposal.listing.playerId }, update: { balance: { increment: state.ownerCoins } }, create: { playerId: proposal.listing.playerId, balance: state.ownerCoins, totalEarned: 0 } });
         }
+        if (state.ownerLigaCashEscrowed && state.ownerLigaCash > 0) {
+          await changeLigaCash(tx, { playerId: proposal.listing.playerId, amount: state.ownerLigaCash, reason: "BAZAR_ESCROW_RELEASE", referenceType: "BazarProposal", referenceId: fresh.id });
+        }
       }
-      await tx.bazarProposal.update({ where: { id: fresh.id }, data: { status: "CANCELLED", coinsOffer: 0, coinsEscrowed: false, itemsOffer: Prisma.DbNull, message: JSON.stringify(EMPTY_DIRECT_STATE) } });
+      await tx.bazarProposal.update({ where: { id: fresh.id }, data: { status: "CANCELLED", coinsOffer: 0, coinsEscrowed: false, ligaCashOffer: 0, ligaCashEscrowed: false, itemsOffer: Prisma.DbNull, message: JSON.stringify(EMPTY_DIRECT_STATE) } });
       // Reabre a mesa para novos participantes sem novo anúncio.
       await tx.bazarListing.updateMany({ where: { id: proposal.listingId, status: "RESERVED" }, data: { status: "ACTIVE" } });
       await createPlayerNotification(tx, {

@@ -52,7 +52,7 @@ interface ProposalItem {
 interface DirectState {
   kind: "DIRECT_NEGOTIATION"; accepted: boolean; ownerReady: boolean; participantReady: boolean;
   ownerConfirmed?: boolean; participantConfirmed?: boolean;
-  ownerCoins: number; ownerItems: ProposalOfferedItem[]; ownerLoan: boolean; ownerInterestPct: number;
+  ownerCoins: number; ownerLigaCash?: number; ownerItems: ProposalOfferedItem[]; ownerLoan: boolean; ownerInterestPct: number;
   participantLoan: boolean; participantInterestPct: number;
 }
 
@@ -184,6 +184,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [auctionTimeLeft, setAuctionTimeLeft] = useState("");
   const [sellerWishlistOpen, setSellerWishlistOpen] = useState(false);
   const [directCoins, setDirectCoins] = useState("");
+  const [directLigaCash, setDirectLigaCash] = useState("");
   const [directItems, setDirectItems] = useState<ProposalOfferedItem[]>([]);
   const [directLoan, setDirectLoan] = useState(false);
   const [directInterest, setDirectInterest] = useState("0");
@@ -336,7 +337,7 @@ export default function BazarListingPage(): React.JSX.Element {
     toast.success("Participante aceito. A mesa está aberta."); reloadListing();
   });
   const handleDirectLock = (proposalId: string) => startTransition(async () => {
-    const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0, lock: true });
+    const r = await updateDirectNegotiationOffer({ proposalId, coins: parseInt(directCoins) || 0, ligaCash: parseInt(directLigaCash) || 0, items: directItems, loan: directLoan, interestPct: parseInt(directInterest) || 0, lock: true });
     if (r.error) { toast.error(r.error); return; }
     toast.success("Oferta reservada e travada. Quando os dois travarem, confirmem o fechamento."); setDirectItems([]); setDirectReset((n) => n + 1); reloadListing();
   });
@@ -351,7 +352,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const handleDirectCancel = (proposalId: string) => startTransition(async () => {
     if (!confirm("Cancelar esta negociação? Os itens e ZC reservados dos dois lados voltam para os donos e a mesa reabre para outros jogadores (sem novo anúncio).")) return;
     const r = await cancelDirectNegotiation(proposalId); if (r.error) { toast.error(r.error); return; }
-    toast.success("Negociação cancelada. A mesa foi reaberta."); setDirectItems([]); setDirectCoins(""); setDirectReset((n) => n + 1); reloadListing();
+    toast.success("Negociação cancelada. A mesa foi reaberta."); setDirectItems([]); setDirectCoins(""); setDirectLigaCash(""); setDirectReset((n) => n + 1); reloadListing();
   });
 
   const handleBuy = (currency: "ZC" | "LC") => {
@@ -553,9 +554,9 @@ export default function BazarListingPage(): React.JSX.Element {
               <>
                 <div className="grid gap-4 md:grid-cols-2">
                   {[
-                    { title: listing.player.displayName, ready: roomState.ownerReady, confirmed: Boolean(roomState.ownerConfirmed), coins: roomState.ownerCoins, loan: roomState.ownerLoan, interest: roomState.ownerInterestPct, items: ownerItems },
-                    { title: activeRoom.proposer.displayName, ready: roomState.participantReady, confirmed: Boolean(roomState.participantConfirmed), coins: activeRoom.coinsOffer, loan: roomState.participantLoan, interest: roomState.participantInterestPct, items: participantItems },
-                  ].map((side) => <div key={side.title} className={`rounded-2xl border p-4 ${side.confirmed ? "border-[#FFCB05]/50 bg-[#FFCB05]/5" : side.ready ? "border-green-400/40 bg-green-400/5" : "border-border bg-slate-950/50"}`}><div className="flex items-center justify-between gap-2"><h3 className="font-bold text-white">Oferta de {side.title}</h3><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${side.confirmed ? "bg-[#FFCB05]/20 text-[#FFCB05]" : side.ready ? "bg-green-500/15 text-green-300" : "bg-slate-800 text-slate-500"}`}>{side.confirmed ? "✓ Confirmado" : side.ready ? "🔒 Travado" : "Editando"}</span></div>{side.coins > 0 && <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FFCB05]"><Coins size={13}/>{side.coins.toLocaleString("pt-BR")} ZC {side.loan && <span className="ml-1 text-[10px] font-semibold text-cyan-300">emprestando ao outro lado · {side.interest}% juros</span>}</p>}<div className="mt-3">{side.items.length ? <ProposalItemsInline items={side.items}/> : <p className="text-xs text-slate-600">Nenhum item ou mascote reservado.</p>}</div></div>)}
+                    { title: listing.player.displayName, ready: roomState.ownerReady, confirmed: Boolean(roomState.ownerConfirmed), coins: roomState.ownerCoins, ligaCash: roomState.ownerLigaCash ?? 0, loan: roomState.ownerLoan, interest: roomState.ownerInterestPct, items: ownerItems },
+                    { title: activeRoom.proposer.displayName, ready: roomState.participantReady, confirmed: Boolean(roomState.participantConfirmed), coins: activeRoom.coinsOffer, ligaCash: activeRoom.ligaCashOffer ?? 0, loan: roomState.participantLoan, interest: roomState.participantInterestPct, items: participantItems },
+                  ].map((side) => <div key={side.title} className={`rounded-2xl border p-4 ${side.confirmed ? "border-[#FFCB05]/50 bg-[#FFCB05]/5" : side.ready ? "border-green-400/40 bg-green-400/5" : "border-border bg-slate-950/50"}`}><div className="flex items-center justify-between gap-2"><h3 className="font-bold text-white">Oferta de {side.title}</h3><span className={`rounded-full px-2 py-1 text-[9px] font-black uppercase ${side.confirmed ? "bg-[#FFCB05]/20 text-[#FFCB05]" : side.ready ? "bg-green-500/15 text-green-300" : "bg-slate-800 text-slate-500"}`}>{side.confirmed ? "✓ Confirmado" : side.ready ? "🔒 Travado" : "Editando"}</span></div>{side.coins > 0 && <p className="mt-3 flex items-center gap-1 text-sm font-bold text-[#FFCB05]"><Coins size={13}/>{side.coins.toLocaleString("pt-BR")} ZC {side.loan && <span className="ml-1 text-[10px] font-semibold text-cyan-300">emprestando ao outro lado · {side.interest}% juros</span>}</p>}{side.ligaCash > 0 && <p className="mt-1 flex items-center gap-1 text-sm font-bold text-cyan-300"><Coins size={13}/>{side.ligaCash.toLocaleString("pt-BR")} LC</p>}<div className="mt-3">{side.items.length ? <ProposalItemsInline items={side.items}/> : <p className="text-xs text-slate-600">Nenhum item ou mascote reservado.</p>}</div></div>)}
                 </div>
 
                 {canEditRoom && (
@@ -577,8 +578,9 @@ export default function BazarListingPage(): React.JSX.Element {
                     ) : (
                       <>
                         <div className="flex items-center gap-2"><Coins size={14} className="text-[#FFCB05]"/><input value={directCoins} onChange={(event) => setDirectCoins(event.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="ZikaCoins (0 = nenhum)" className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none"/></div>
-                        <p className="text-[10px] text-slate-500">Os ZC que você colocar saem da sua carteira ao travar e vão para o outro lado quando o negócio fechar.</p>
-                        <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span><strong className="text-cyan-300">Emprestar</strong> estes ZC: você entrega o valor agora e o outro lado fica te devendo (acordo de boa-fé, sem cobrança automática). Deixe desmarcado se for pagamento definitivo.</span></label>
+                        <div className="flex items-center gap-2"><Coins size={14} className="text-cyan-300"/><input value={directLigaCash} onChange={(event) => setDirectLigaCash(event.target.value.replace(/\D/g, ""))} inputMode="numeric" placeholder="LigaCash (0 = nenhum)" disabled={directLoan} className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-cyan-200 outline-none disabled:opacity-40"/></div>
+                        <p className="text-[10px] text-slate-500">Os ZC/LC que você colocar saem da sua carteira ao travar e vão para o outro lado quando o negócio fechar.</p>
+                        <label className="flex items-start gap-2 text-xs text-slate-300"><input type="checkbox" checked={directLoan} onChange={(event) => setDirectLoan(event.target.checked)} className="mt-0.5 accent-cyan-400"/><span><strong className="text-cyan-300">Emprestar</strong> os ZC acima: você entrega o valor agora e o outro lado fica te devendo (acordo de boa-fé, sem cobrança automática). Empréstimos são só em ZC. Deixe desmarcado se for pagamento definitivo.</span></label>
                         {directLoan && <input value={directInterest} onChange={(event) => setDirectInterest(event.target.value.replace(/\D/g, "").slice(0, 3))} inputMode="numeric" placeholder="Juros totais (%)" className="w-full rounded-lg border border-cyan-500/25 bg-slate-950 px-3 py-2 text-sm text-white outline-none"/>}
                         <OfferItemsPicker onItemsChange={setDirectItems} resetSignal={directReset}/>
                         <button disabled={pending} onClick={() => handleDirectLock(activeRoom.id)} className="w-full rounded-xl bg-green-500 py-2.5 text-xs font-black text-slate-950 disabled:opacity-50">🔒 1) Reservar e travar minha proposta</button>
