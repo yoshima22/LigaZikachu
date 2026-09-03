@@ -10,6 +10,17 @@ import { PremiumCountdown } from "./premium-countdown";
 const CATEGORY_LABEL: Record<string, string> = {
   MASCOT: "Mascote", ITEM: "Item", COSMETIC: "Cosmético",
 };
+// Estilo do rank de avaliação do Laboratório (IVs).
+const IV_RATING_STYLE: Record<string, string> = {
+  SSS: "text-fuchsia-300 border-fuchsia-400/50 bg-fuchsia-500/15",
+  SS:  "text-purple-300 border-purple-400/50 bg-purple-500/15",
+  S:   "text-amber-300 border-amber-400/50 bg-amber-500/15",
+  A:   "text-emerald-300 border-emerald-400/50 bg-emerald-500/15",
+  B:   "text-sky-300 border-sky-400/50 bg-sky-500/15",
+  C:   "text-slate-300 border-slate-400/40 bg-slate-500/15",
+  D:   "text-orange-300 border-orange-400/40 bg-orange-500/10",
+  E:   "text-red-300 border-red-400/40 bg-red-500/10",
+};
 const LISTING_TYPE_LABEL: Record<string, { label: string; color: string }> = {
   SALE:         { label: "Venda",       color: "text-green-400 border-green-500/30 bg-green-500/10" },
   TRADE:        { label: "Troca",       color: "text-blue-400  border-blue-500/30  bg-blue-500/10" },
@@ -70,6 +81,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const mascotRarity = listing.category === "MASCOT" ? getMascotRarity(Number(payload.pokemonId)) : null;
   const mascotRarityLabel = mascotRarity ? (RARITY_LABEL[mascotRarity] || "Comum") : null;
   const isShiny = listing.category === "MASCOT" && payload.isShiny === true;
+  const ivRating = listing.category === "MASCOT" && typeof payload.ivRating === "string" ? payload.ivRating : null;
   const eggOriginLabel = listing.category === "MASCOT"
     ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
     : null;
@@ -127,6 +139,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             {mascotRarity && mascotRarityLabel && (
               <div className={`absolute top-1.5 right-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
                 {mascotRarityLabel}
+              </div>
+            )}
+            {ivRating && (
+              <div className={`absolute right-1.5 top-8 rounded-full border px-2 py-0.5 text-[9px] font-black ${IV_RATING_STYLE[ivRating] ?? "border-slate-500/40 bg-slate-800/80 text-slate-300"}`} title="Avaliação do Laboratório (IVs)">
+                🔬 {ivRating}
               </div>
             )}
             {isShiny && (

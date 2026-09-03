@@ -394,6 +394,30 @@ function mascotRarityListingFilter(rarity?: MascotRarity) {
   };
 }
 
+// Injeta a avaliação atual do Laboratório (ivRating/ivScore/performanceTag) no
+// payload dos anúncios de MASCOTE que ainda não a tenham gravada. Cobre anúncios
+// antigos criados antes de a avaliação passar a ser guardada no payload. O
+// mascote referenciado continua existindo (bazarListed) enquanto o anúncio ativo.
+async function enrichMascotLabRatings(listings: { category: string; payload: unknown }[]) {
+  const need = listings.filter((l) => {
+    if (l.category !== "MASCOT") return false;
+    const p = l.payload as Record<string, unknown> | null;
+    return p && typeof p.mascotId === "string" && p.ivRating == null;
+  });
+  const ids = [...new Set(need.map((l) => String((l.payload as Record<string, unknown>).mascotId)))];
+  if (ids.length === 0) return;
+  const rated = await prisma.mascot.findMany({
+    where: { id: { in: ids }, analyzedAt: { not: null } },
+    select: { id: true, ivRating: true, ivScore: true, performanceTag: true },
+  });
+  const byId = new Map(rated.map((m) => [m.id, m]));
+  for (const l of need) {
+    const p = l.payload as Record<string, unknown>;
+    const r = byId.get(String(p.mascotId));
+    if (r?.ivRating) l.payload = { ...p, ivRating: r.ivRating, ivScore: r.ivScore, performanceTag: r.performanceTag };
+  }
+}
+
 export async function getListings(filters?: {
   category?: BazarItemCategory;
   type?: BazarListingType;
@@ -464,6 +488,7 @@ export async function getListings(filters?: {
   const listings = filters?.premiumMode === "only"
     ? await addPremiumListingHighlights(rawListings)
     : rawListings.map((listing) => ({ ...listing, premiumHighlights: [] as string[] }));
+  await enrichMascotLabRatings(listings);
 
   return {
     listings,
@@ -511,6 +536,7 @@ export async function getListing(id: string) {
     },
   });
   if (!listing) return null;
+  await enrichMascotLabRatings([listing]);
 
   // Propostas antigas guardavam apenas id/nome do mascote. Hidratamos o
   // snapshot na leitura para que atributos e personalidade apareçam também em
@@ -838,6 +864,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           battleWins: mascot.battleWins,
           hatchedFromEggType: mascot.hatchedFromEggType,
           hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
+          // Avaliação do Laboratório (quando o mascote já foi analisado).
+          ...(mascot.analyzedAt ? { ivRating: mascot.ivRating, ivScore: mascot.ivScore, performanceTag: mascot.performanceTag } : {}),
         };
 
       } else if (input.category === "ITEM") {
@@ -3719,6 +3747,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           battleWins: mascot.battleWins,
           hatchedFromEggType: mascot.hatchedFromEggType,
           hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
+          ...(mascot.analyzedAt ? { ivRating: mascot.ivRating, ivScore: mascot.ivScore, performanceTag: mascot.performanceTag } : {}),
         };
       } else if (input.category === "ITEM") {
         const qty = input.quantity ?? 1;

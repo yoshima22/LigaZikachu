@@ -113,6 +113,13 @@ const PROPOSAL_STATUS_COLOR: Record<string, string> = {
 const PROPOSAL_STATUS_LABEL: Record<string, string> = {
   PENDING:"Pendente",ACCEPTED:"Aceita",REJECTED:"Recusada",CANCELLED:"Cancelada",
 };
+// Cores do rank de avaliação do Laboratório (IVs).
+const DETAIL_IV_STYLE: Record<string, string> = {
+  SSS:"text-fuchsia-300 border-fuchsia-400/50 bg-fuchsia-500/15", SS:"text-purple-300 border-purple-400/50 bg-purple-500/15",
+  S:"text-amber-300 border-amber-400/50 bg-amber-500/15", A:"text-emerald-300 border-emerald-400/50 bg-emerald-500/15",
+  B:"text-sky-300 border-sky-400/50 bg-sky-500/15", C:"text-slate-300 border-slate-400/40 bg-slate-500/15",
+  D:"text-orange-300 border-orange-400/40 bg-orange-500/10", E:"text-red-300 border-red-400/40 bg-red-500/10",
+};
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
@@ -483,6 +490,8 @@ export default function BazarListingPage(): React.JSX.Element {
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const isShiny = payload.isShiny === true;
+  const ivRating = isMascot && typeof payload.ivRating === "string" ? payload.ivRating : null;
+  const ivScore = typeof payload.ivScore === "number" ? payload.ivScore as number : null;
   const pokemonName = (payload.pokemonName as string | undefined) || (pokemonId ? getPokemonName(pokemonId) : "");
   const eggOriginLabel = isMascot
     ? getHatchedEggLabel(payload.hatchedFromEggType as string | null, payload.hatchedFromEggOrigin as string | null)
@@ -649,6 +658,11 @@ export default function BazarListingPage(): React.JSX.Element {
               {mascotRarity && mascotRarityLabel && (
                 <span className={`rounded-full border px-3 py-1 text-[10px] font-bold uppercase tracking-wide ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
                   {mascotRarityLabel}
+                </span>
+              )}
+              {ivRating && (
+                <span className={`rounded-full border px-3 py-1 text-[10px] font-black uppercase tracking-wide ${DETAIL_IV_STYLE[ivRating] ?? "border-slate-500/40 bg-slate-800/80 text-slate-300"}`} title="Avaliação do Laboratório (IVs)">
+                  🔬 Lab {ivRating}{ivScore != null ? ` · ${ivScore}` : ""}
                 </span>
               )}
             </div>
