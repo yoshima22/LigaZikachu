@@ -170,7 +170,7 @@ const mercadoLinks = [
     icon: FlaskConical,
     adminOnly: false,
   },
-  { href: "/mercado/ligacoins", label: "LigaCoins", icon: Coins, adminOnly: false },
+  { href: "/mercado/ligacoins", label: "LigaCash", icon: Coins, adminOnly: false },
 ];
 
 // profileLinks é dinâmico - usa playerId para o link do perfil público

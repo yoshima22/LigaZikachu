@@ -1,8 +1,51 @@
 "use server";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { isAdmin } from "@/lib/auth/permissions";
+import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { CASH_PRODUCTS } from "@/lib/liga-cash";
+import { CASH_PRODUCTS, professorEnguicaThankYou } from "@/lib/liga-cash";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
+
+/**
+ * DEBUG (admin): simula uma compra bem-sucedida. Credita realisticamente o valor
+ * do pacote de LC na conta do próprio admin e devolve a notificação do Professor
+ * Enguiça para pré-visualização LOCAL (não é transmitida a ninguém). Passes só
+ * testam a mensagem (não são concedidos no debug).
+ */
+export async function debugSimulateLigaCashPurchase(code: string): Promise<{ error?: string; creditedLc?: number; title?: string; body?: string; note?: string }> {
+  const user = await getSessionUser();
+  if (!user || !isAdmin(user.role)) return { error: "Apenas administradores." };
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true, displayName: true } });
+  if (!player) return { error: "Jogador não encontrado." };
+
+  const isPass = code === "PASS_CURRENT" || code === "PASS_NEXT";
+  const product = CASH_PRODUCTS.find((p) => p.code === code);
+  if (!product && !isPass) return { error: "Pacote inválido." };
+
+  let creditedLc = 0;
+  let note: string | undefined;
+  if (product && product.type === "LIGA_COINS") {
+    creditedLc = product.base + product.bonus;
+    await prisma.$transaction(async (tx) => {
+      await changeLigaCash(tx, {
+        playerId: player.id,
+        amount: creditedLc,
+        reason: "ADMIN_GRANT",
+        referenceType: "DebugSimulatedPurchase",
+        actorUserId: user.id,
+        purchasedDelta: creditedLc,
+        metadata: { debug: true, productCode: product.code, simulated: true },
+      });
+    });
+    revalidatePath("/mercado/ligacoins");
+    revalidatePath("/carteira");
+  } else {
+    note = "Debug de Passe: apenas a notificação é testada (o passe não é concedido).";
+  }
+
+  const msg = professorEnguicaThankYou(player.displayName, isPass ? "SUPPORTER_PASS" : "LIGA_COINS");
+  return { creditedLc, title: msg.title, body: msg.body, note };
+}
 
 export async function createLigaCashPayment(code:string,cpf:string,payerEmail:string){
   const user=await getSessionUser(); if(!user) return {error:"Faça login novamente."};

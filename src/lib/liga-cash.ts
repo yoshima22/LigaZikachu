@@ -1,6 +1,30 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {changeLigaCash} from "@/lib/liga-cash-wallet";
+import { sendNotificationToUsers } from "@/lib/notifications";
+
+// ── Professor Enguiça: agradecimento público por apoiar a Liga ─────────────────
+// Variações na voz do Professor Enguiça (elétrico, caloroso, um tanto elétrico
+// demais). {name} = quem apoiou. Uma notificação especial que TODOS podem ver.
+const ENGUICA_THANKS: ((name: string) => string)[] = [
+  (n) => `⚡ O Professor Enguiça largou os experimentos e subiu no palco: "${n} acabou de fortalecer a Liga! Que descarga de generosidade — obrigado, de coração!" 💛`,
+  (n) => `🔌 Alerta de gratidão! O Professor Enguiça anuncia a todos: graças a ${n}, a Liga fica mais forte e mais viva. Você é elétrico(a)! ⚡`,
+  (n) => `💎 O Professor Enguiça ergue a pata: "${n} apoiou a Liga Zikachu! Cada apoio recarrega o sonho de todos nós. Muito obrigado!"`,
+  (n) => `⚡ "Sentiram esse choque?" — o Professor Enguiça sorri — "foi ${n} apoiando a Liga! Obrigado por manter nossa energia ligada!" 🙏`,
+  (n) => `🌩️ O Professor Enguiça interrompe a transmissão: um brinde a ${n}, que acaba de apoiar a Liga! Herói(na) da comunidade, obrigado! 💛`,
+  (n) => `🔋 Recarga total! O Professor Enguiça agradece publicamente a ${n} por apoiar a Liga. É gente assim que mantém a magia acesa. ✨`,
+  (n) => `⚡ Do laboratório para o mundo: o Professor Enguiça declara que ${n} apoiou a Liga e merece uma salva de palmas de toda a comunidade! 👏`,
+  (n) => `💛 "Anotem no diário da Liga!" pede o Professor Enguiça: hoje ${n} nos apoiou e deixou tudo mais brilhante. Gratidão eterna!`,
+  (n) => `⚡ O Professor Enguiça solta faíscas de alegria: ${n} apoiou a Liga Zikachu! Que seu gesto volte multiplicado em boas energias. 🍀`,
+  (n) => `🎉 Comunicado especial do Professor Enguiça: ${n} é oficialmente um Pilar da Comunidade! Obrigado por apoiar a nossa Liga. 💎`,
+];
+
+export function professorEnguicaThankYou(name: string, kind: "LIGA_COINS" | "SUPPORTER_PASS") {
+  const who = (name && name.trim()) || "Um treinador anônimo";
+  const base = ENGUICA_THANKS[Math.floor(Math.random() * ENGUICA_THANKS.length)](who);
+  const tail = kind === "SUPPORTER_PASS" ? " (Passe de Apoiador ativado!)" : "";
+  return { title: "⚡ Professor Enguiça agradece!", body: `${base}${tail}` };
+}
 
 export const CASH_PRODUCTS = [
   { code:"LC_850", type:"LIGA_COINS", label:"Bolsa Inicial", base:850, bonus:0, cents:999 },
@@ -11,10 +35,14 @@ export const CASH_PRODUCTS = [
 ] as const;
 
 export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:string) {
-  return prisma.$transaction(async tx => {
+  let broadcastKind: "LIGA_COINS" | "SUPPORTER_PASS" | null = null;
+  let broadcastPlayerId: string | null = null;
+  const result = await prisma.$transaction(async tx => {
     const order = await tx.ligaCashOrder.findUnique({ where:{ id:orderId } });
     if (!order || order.providerPaymentId !== providerPaymentId) throw new Error("Pedido incompatível.");
     if (order.fulfilledAt) return order;
+    broadcastKind = order.productType === "SUPPORTER_PASS" ? "SUPPORTER_PASS" : "LIGA_COINS";
+    broadcastPlayerId = order.playerId;
     if (order.productType === "LIGA_COINS") {
       const amount = order.ligaCoins + order.bonusLigaCoins;
       await changeLigaCash(tx,{playerId:order.playerId,amount,reason:"PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
@@ -32,6 +60,17 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     }
     return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
+
+  // Fora da transação: agradecimento público do Professor Enguiça (só na
+  // primeira vez que o pedido é cumprido; falhas não quebram a compra).
+  if (broadcastKind && broadcastPlayerId) {
+    try {
+      const player = await prisma.player.findUnique({ where: { id: broadcastPlayerId }, select: { displayName: true } });
+      const msg = professorEnguicaThankYou(player?.displayName ?? "Um treinador", broadcastKind);
+      await sendNotificationToUsers(null, { title: msg.title, body: msg.body, url: "/mercado/ligacoins", data: { source: "liga-support" } });
+    } catch (e) { console.error("[LigaCash] falha ao anunciar apoio", e); }
+  }
+  return result;
 }
 
 // kind distingue estorno normal (REFUND) de chargeback (CHARGEBACK) no ledger.
