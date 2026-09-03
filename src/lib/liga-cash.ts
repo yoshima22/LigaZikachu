@@ -6,7 +6,7 @@ export const CASH_PRODUCTS = [
   { code:"LC_1700", type:"LIGA_COINS", label:"Reserva de Treinador", base:1500, bonus:200, cents:1990 },
   { code:"LC_3450", type:"LIGA_COINS", label:"Cofre de Ginásio", base:3000, bonus:450, cents:3490 },
   { code:"LC_7700", type:"LIGA_COINS", label:"Tesouro da Liga", base:6500, bonus:1200, cents:6990 },
-  { code:"NEXT_PASS", type:"SUPPORTER_PASS", label:"Próximo Passe de Apoiador", base:0, bonus:0, cents:2490 },
+  { code:"NEXT_PASS", type:"SUPPORTER_PASS", label:"Próximo Passe de Apoiador", base:0, bonus:0, cents:2000 },
 ] as const;
 
 export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:string) {
