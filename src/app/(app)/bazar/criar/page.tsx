@@ -68,6 +68,7 @@ function CreateListingForm() {
   const [description, setDescription] = useState("");
   const [duration, setDuration] = useState<7 | 14 | 30>(7);
   const [auctionDuration, setAuctionDuration] = useState<"12h" | "1d">("1d");
+  const [auctionCurrency, setAuctionCurrency] = useState<"ZC" | "LC">("ZC");
   const [minBid, setMinBid] = useState("");
   const [selectedMascotId, setSelectedMascotId] = useState("");
   const [selectedItem, setSelectedItem] = useState<{ type: string; shopItemId?: string; displayName: string; imageUrl?: string; maxQty: number; eggBonusPct?: number } | null>(null);
@@ -113,6 +114,7 @@ function CreateListingForm() {
             category: category as BazarItemCategory,
             minBidCoins: parseInt(minBid) || 0,
             auctionDuration,
+            currency: auctionCurrency,
             description: description || undefined,
             mascotId: category === "MASCOT" ? selectedMascotId : undefined,
             itemType: category === "ITEM" ? selectedItem?.type : undefined,
@@ -496,12 +498,28 @@ function CreateListingForm() {
         {category && !isDirectNegotiation && isAuction && (
           <>
             <div className="space-y-2">
+              <label className="text-sm font-semibold text-slate-200">Moeda do leilão</label>
+              <div className="flex gap-2">
+                {(["ZC", "LC"] as const).map(c => (
+                  <button key={c} type="button" onClick={() => setAuctionCurrency(c)}
+                    className={`flex-1 rounded-xl border py-2 text-xs font-semibold transition-colors ${
+                      auctionCurrency === c
+                        ? (c === "LC" ? "border-cyan-400/50 bg-cyan-400/10 text-cyan-300" : "border-amber-500/50 bg-amber-500/10 text-amber-400")
+                        : "border-border text-slate-500"
+                    }`}>
+                    {c === "ZC" ? "ZikaCoins (ZC)" : "LigaCash (LC)"}
+                  </button>
+                ))}
+              </div>
+              <p className="text-[10px] text-slate-500">Todos os lances usam a mesma moeda; ela não muda depois do primeiro lance.</p>
+            </div>
+            <div className="space-y-2">
               <label className="text-sm font-semibold text-slate-200 flex items-center gap-2">
-                <Gavel size={14}/> Lance mínimo (ZikaCoins)
+                <Gavel size={14}/> Lance mínimo ({auctionCurrency === "LC" ? "LigaCash" : "ZikaCoins"})
               </label>
               <input type="number" min={1} inputMode="numeric" pattern="[0-9]*"
                 value={minBid} onChange={e => setMinBid(e.target.value.replace(/\D/g, ""))}
-                placeholder="Ex: 500"
+                placeholder={auctionCurrency === "LC" ? "Ex: 50" : "Ex: 500"}
                 className="w-full rounded-xl border border-amber-500/30 bg-slate-900 px-3 py-2 text-sm text-slate-200 outline-none focus:border-amber-400/60" />
             </div>
             <div className="space-y-2">

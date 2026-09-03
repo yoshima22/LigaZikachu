@@ -999,7 +999,7 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
-        select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
+        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
       });
       rejectedProposerUserIds = pendingProposals.map((proposal) => proposal.proposer.userId);
       for (const proposal of pendingProposals) {
@@ -1169,7 +1169,7 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
       // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
       const pendingProposals = await tx.bazarProposal.findMany({
         where: { listingId, status: "PENDING" },
-        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
+        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true },
       });
       for (const proposal of pendingProposals) {
         await _releaseProposalEscrow(tx, proposal);
@@ -1594,6 +1594,7 @@ export async function createProposal(
   message?: string,
   itemsOffer?: ProposalOfferItem[],
   loanRequested = false,
+  ligaCashOffer = 0,
 ): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -1614,15 +1615,26 @@ export async function createProposal(
 
     if (loanRequested && !listing.loanEnabled) return { error: "Este anúncio não aceita empréstimo." };
     if (loanRequested && (!listing.loanAmountCoins || listing.loanAmountCoins < 1)) return { error: "O empréstimo deste anúncio está inválido." };
-    if (loanRequested && (itemsOffer?.length || Number(coinsOffer) > 0)) {
-      return { error: "A proposta de empréstimo não pode combinar entrada em ZC ou itens." };
+    if (loanRequested && (itemsOffer?.length || Number(coinsOffer) > 0 || Number(ligaCashOffer) > 0)) {
+      return { error: "A proposta de empréstimo não pode combinar entrada em ZC, LC ou itens." };
     }
     const reservedCoins = loanRequested ? 0 : Math.max(0, Math.floor(Number(coinsOffer) || 0));
+    const reservedLigaCash = loanRequested ? 0 : Math.max(0, Math.floor(Number(ligaCashOffer) || 0));
 
     if (reservedCoins > 0) {
       const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
       if (!wallet || wallet.balance < reservedCoins) {
         return { error: `Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).` };
+      }
+    }
+    if (reservedLigaCash > 0) {
+      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (!economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
+      const mixesAssets = reservedCoins > 0 || (itemsOffer?.length ?? 0) > 0;
+      if (mixesAssets && !economy.allowMixedProposals) return { error: "Propostas combinando LigaCash com outros ativos estão desativadas." };
+      const lcWallet = await prisma.ligaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!lcWallet || lcWallet.balance < reservedLigaCash) {
+        return { error: `Saldo de LigaCash insuficiente (${lcWallet?.balance ?? 0} LC disponíveis).` };
       }
     }
 
@@ -1665,6 +1677,8 @@ export async function createProposal(
           proposerId: player.id,
           coinsOffer: reservedCoins,
           coinsEscrowed: reservedCoins > 0,
+          ligaCashOffer: reservedLigaCash,
+          ligaCashEscrowed: reservedLigaCash > 0,
           message,
           loanRequested,
           itemsOffer: reservedItems.length > 0
@@ -1672,10 +1686,21 @@ export async function createProposal(
             : undefined,
         },
       });
+      // Reserva a LigaCash (sai da carteira agora; volta em cancelamento/recusa).
+      if (reservedLigaCash > 0) {
+        await changeLigaCash(tx, {
+          playerId: player.id,
+          amount: -reservedLigaCash,
+          reason: "BAZAR_ESCROW",
+          referenceType: "BazarProposal",
+          referenceId: proposal.id,
+        });
+      }
       const offered = loanRequested
         ? `solicitou o empréstimo de ${listing.loanAmountCoins?.toLocaleString("pt-BR")} ZC`
         : [
             reservedCoins > 0 ? `${reservedCoins.toLocaleString("pt-BR")} ZC` : "",
+            reservedLigaCash > 0 ? `${reservedLigaCash.toLocaleString("pt-BR")} LC` : "",
             ...cleanItems.map((item) => `${item.quantity}x ${item.displayName ?? canonicalBazarItemName(item.type)}`),
           ].filter(Boolean).join(" + ") || "enviou uma proposta";
       await createPlayerNotification(tx, {
@@ -1743,7 +1768,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
       // Rejeitar outras proposals e liberar mascotes que estavam reservados nelas.
       const rejectedProposals = await tx.bazarProposal.findMany({
         where: { listingId: listing.id, status: "PENDING", id: { not: proposalId } },
-        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true },
+        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true },
       });
       for (const rejected of rejectedProposals) {
         await _releaseProposalEscrow(tx, rejected);
@@ -1777,6 +1802,15 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
           create: { playerId: player.id, balance: proposal.coinsOffer, totalEarned: proposal.coinsOffer },
         });
         await creditMiauvadaoVaultFromPlayerTransaction(tx, proposal.coinsOffer);
+      }
+
+      // Transferir LigaCash (proponente → dono). Se estava em escrow, o proponente
+      // já foi debitado na criação; senão (proposta antiga) debita agora.
+      if (!proposal.loanRequested && proposal.ligaCashOffer > 0) {
+        if (!proposal.ligaCashEscrowed) {
+          await changeLigaCash(tx, { playerId: proposal.proposerId, amount: -proposal.ligaCashOffer, reason: "BAZAR_PURCHASE", referenceType: "BazarProposal", referenceId: proposal.id });
+        }
+        await changeLigaCash(tx, { playerId: player.id, amount: proposal.ligaCashOffer, reason: "BAZAR_SALE", referenceType: "BazarProposal", referenceId: proposal.id });
       }
 
       // Transfer items from proposer to seller (if any)
@@ -1870,9 +1904,13 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
 
       // Log
       const payload = listing.payload as Record<string, unknown>;
+      const paidParts = [
+        proposal.coinsOffer > 0 ? `${proposal.coinsOffer} ZC` : "",
+        proposal.ligaCashOffer > 0 ? `${proposal.ligaCashOffer} LC` : "",
+      ].filter(Boolean).join(" + ");
       const loanDescription = proposal.loanRequested
         ? ` por empréstimo de ${listing.loanAmountCoins} ZC a ${listing.loanInterestPct ?? 0}%`
-        : proposal.coinsOffer > 0 ? ` por ${proposal.coinsOffer} ZC` : "";
+        : paidParts ? ` por ${paidParts}` : "";
       const desc = listing.category === "MASCOT"
         ? `${fullMascotPayloadName(payload)} Nv.${payload.level} trocado${loanDescription}`
         : `${payload.displayName} trocado${loanDescription}`;
@@ -1963,9 +2001,12 @@ export async function rejectProposal(proposalId: string): Promise<{ error?: stri
     await prisma.$transaction(async (tx) => {
       await _releaseProposalOffers(tx, proposal.itemsOffer as ProposalOfferItem[] | null, proposal.proposerId);
       await _refundProposalCoins(tx, {
+        id: proposal.id,
         proposerId: proposal.proposerId,
         coinsOffer: proposal.coinsOffer,
         coinsEscrowed: proposal.coinsEscrowed,
+        ligaCashOffer: proposal.ligaCashOffer,
+        ligaCashEscrowed: proposal.ligaCashEscrowed,
       });
       await tx.bazarProposal.update({ where: { id: proposalId }, data: { status: newStatus } });
       if (sellerIsRejecting) {
@@ -3068,27 +3109,40 @@ async function _deliverProposalOffers(tx: TxClient, items: ProposalOfferItem[], 
 
 async function _refundProposalCoins(
   tx: TxClient,
-  proposal: { proposerId: string; coinsOffer: number; coinsEscrowed: boolean },
+  proposal: { proposerId: string; coinsOffer: number; coinsEscrowed: boolean; ligaCashOffer?: number; ligaCashEscrowed?: boolean; id?: string },
 ) {
-  if (!proposal.coinsEscrowed || proposal.coinsOffer <= 0) return;
-
-  await tx.zikaCoinWallet.upsert({
-    where: { playerId: proposal.proposerId },
-    update: { balance: { increment: proposal.coinsOffer } },
-    create: {
+  if (proposal.coinsEscrowed && proposal.coinsOffer > 0) {
+    await tx.zikaCoinWallet.upsert({
+      where: { playerId: proposal.proposerId },
+      update: { balance: { increment: proposal.coinsOffer } },
+      create: {
+        playerId: proposal.proposerId,
+        balance: proposal.coinsOffer,
+        totalEarned: 0,
+      },
+    });
+  }
+  // Devolve LigaCash reservada (escrow) na proposta.
+  if (proposal.ligaCashEscrowed && (proposal.ligaCashOffer ?? 0) > 0) {
+    await changeLigaCash(tx, {
       playerId: proposal.proposerId,
-      balance: proposal.coinsOffer,
-      totalEarned: 0,
-    },
-  });
+      amount: proposal.ligaCashOffer as number,
+      reason: "BAZAR_ESCROW_RELEASE",
+      referenceType: "BazarProposal",
+      referenceId: proposal.id,
+    });
+  }
 }
 
 async function _releaseProposalEscrow(
   tx: TxClient,
   proposal: {
+    id?: string;
     proposerId: string;
     coinsOffer: number;
     coinsEscrowed: boolean;
+    ligaCashOffer?: number;
+    ligaCashEscrowed?: boolean;
     itemsOffer: unknown;
   },
 ) {
@@ -3545,6 +3599,7 @@ export interface CreateAuctionInput {
   quantity?: number;
   displayName?: string;
   premium?: boolean; // leilão em destaque na vitrine premium do Miauvadão
+  currency?: "ZC" | "LC"; // moeda única do leilão (todos os lances nela)
 }
 
 export async function createAuctionListing(input: CreateAuctionInput): Promise<{ error?: string; id?: string }> {
@@ -3557,6 +3612,11 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
     await prepareBazarMascotAvailability(player.id);
 
     if (!input.minBidCoins || input.minBidCoins < 1) return { error: "Lance mínimo inválido." };
+    const auctionCurrency: "ZC" | "LC" = input.currency === "LC" ? "LC" : "ZC";
+    if (auctionCurrency === "LC") {
+      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (!economy.allowLcAuctions) return { error: "Leilões em LigaCash estão desativados." };
+    }
 
     const MAX_ACTIVE_LISTINGS = 8;
     const activeCount = await prisma.bazarListing.count({
@@ -3652,7 +3712,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           listingType: "AUCTION", payload: payload as unknown as import("@prisma/client").Prisma.InputJsonValue,
           priceCoins: null, description: input.description,
           feeCharged: fee, expiresAt: auctionEndsAt,
-          minBidCoins: input.minBidCoins, auctionEndsAt,
+          minBidCoins: input.minBidCoins, auctionEndsAt, auctionCurrency,
           premiumUntil,
         },
       });
@@ -3719,10 +3779,13 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         await assertBazarPairAllowed(tx, player.id, listing.currentBidPlayerId);
       }
 
+      const currency: "ZC" | "LC" = listing.auctionCurrency === "LC" ? "LC" : "ZC";
       const endsAt = listing.auctionEndsAt ?? listing.expiresAt;
       if (new Date() >= endsAt) throw new Error("Este leilão já encerrou.");
-      const minBid = listing.currentBidCoins ? listing.currentBidCoins + 100 : (listing.minBidCoins ?? 1);
-      if (amount < minBid) throw new Error(`Lance mínimo é ${minBid} ZC.`);
+      // Incremento mínimo por moeda: ZC sobe de 100 em 100; LC (≈10× o valor) de 10 em 10.
+      const bidStep = currency === "LC" ? 10 : 100;
+      const minBid = listing.currentBidCoins ? listing.currentBidCoins + bidStep : (listing.minBidCoins ?? 1);
+      if (amount < minBid) throw new Error(`Lance mínimo é ${minBid} ${currency}.`);
       if (listing.currentBidPlayerId === player.id) throw new Error("Você já é o maior lance.");
 
       const prevBidderId = listing.currentBidPlayerId;
@@ -3730,24 +3793,34 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
       const msLeft = endsAt.getTime() - Date.now();
       const newEndsAt = msLeft < 5 * 60_000 ? new Date(endsAt.getTime() + 30 * 60_000) : endsAt;
 
-      // Débito condicional: impede duas requisições concorrentes de gastarem o
-      // mesmo saldo depois de ambas terem lido a carteira.
-      const debit = await tx.zikaCoinWallet.updateMany({
-        where: { playerId: player.id, balance: { gte: amount } },
-        data: { balance: { decrement: amount } },
-      });
-      if (debit.count !== 1) {
-        const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
-        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
+      // Débito do lance (escrow). Estamos sob advisory lock por listing, então a
+      // checagem de saldo não-atômica da LC é segura aqui.
+      if (currency === "ZC") {
+        const debit = await tx.zikaCoinWallet.updateMany({
+          where: { playerId: player.id, balance: { gte: amount } },
+          data: { balance: { decrement: amount } },
+        });
+        if (debit.count !== 1) {
+          const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
+          throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis).`);
+        }
+      } else {
+        const lcWallet = await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
+        if (!lcWallet || lcWallet.balance < amount) throw new Error(`Saldo de LigaCash insuficiente (${lcWallet?.balance ?? 0} LC disponíveis).`);
+        await changeLigaCash(tx, { playerId: player.id, amount: -amount, reason: "BAZAR_ESCROW", referenceType: "BazarListing", referenceId: listingId });
       }
 
-      // Devolve coins ao licitante anterior
+      // Devolve o lance ao licitante anterior
       if (prevBidderId && prevBidAmount > 0) {
-        await tx.zikaCoinWallet.upsert({
-          where: { playerId: prevBidderId },
-          update: { balance: { increment: prevBidAmount } },
-          create: { playerId: prevBidderId, balance: prevBidAmount, totalEarned: prevBidAmount },
-        });
+        if (currency === "ZC") {
+          await tx.zikaCoinWallet.upsert({
+            where: { playerId: prevBidderId },
+            update: { balance: { increment: prevBidAmount } },
+            create: { playerId: prevBidderId, balance: prevBidAmount, totalEarned: prevBidAmount },
+          });
+        } else {
+          await changeLigaCash(tx, { playerId: prevBidderId, amount: prevBidAmount, reason: "BAZAR_ESCROW_RELEASE", referenceType: "BazarListing", referenceId: listingId });
+        }
       }
 
       // Registra o lance
@@ -3758,28 +3831,29 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         where: { id: listingId },
         data: { currentBidCoins: amount, currentBidPlayerId: player.id, auctionEndsAt: newEndsAt, expiresAt: newEndsAt },
       });
-      return { listing, prevBidderId, prevBidAmount };
+      return { listing, prevBidderId, prevBidAmount, currency };
     });
 
     // Notifica o licitante anterior por mensagem privada
     if (bid.prevBidderId && bid.prevBidderId !== player.id) {
+      const cur = bid.currency;
       const desc = bid.listing.category === "MASCOT"
         ? fullMascotPayloadName(bid.listing.payload as Record<string, unknown>)
         : `${(bid.listing.payload as Record<string, unknown>).displayName}`;
-      await _sendBazarSystemDM(bid.prevBidderId, `Seu lance de ${bid.prevBidAmount} ZC no leilão de "${desc}" foi superado por um lance de ${amount} ZC. Os seus ZC foram devolvidos à carteira.`);
+      await _sendBazarSystemDM(bid.prevBidderId, `Seu lance de ${bid.prevBidAmount} ${cur} no leilão de "${desc}" foi superado por um lance de ${amount} ${cur}. Os seus ${cur} foram devolvidos à carteira.`);
       await createPlayerNotification(prisma, {
         playerId: bid.prevBidderId,
         category: "BAZAR",
         type: "AUCTION_OUTBID",
         title: `Lance superado: ${desc}`,
-        body: `Seu lance de ${bid.prevBidAmount.toLocaleString("pt-BR")} ZC foi superado por ${amount.toLocaleString("pt-BR")} ZC. O valor foi devolvido.`,
+        body: `Seu lance de ${bid.prevBidAmount.toLocaleString("pt-BR")} ${cur} foi superado por ${amount.toLocaleString("pt-BR")} ${cur}. O valor foi devolvido.`,
         href: `/bazar/${listingId}`,
         entityId: listingId,
         eventKey: `bazar:auction:outbid:${listingId}:${bid.prevBidderId}:${amount}`,
       });
       after(() => sendNotificationToPlayers([bid.prevBidderId!], {
         title: `Lance superado: ${desc}`,
-        body: `Seu lance foi coberto por ${amount.toLocaleString("pt-BR")} ZC. O valor anterior foi devolvido.`,
+        body: `Seu lance foi coberto por ${amount.toLocaleString("pt-BR")} ${cur}. O valor anterior foi devolvido.`,
         url: `/bazar/${listingId}`,
       }));
     }
@@ -3806,6 +3880,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
 
     const winnerId = listing.currentBidPlayerId;
     const winnerBid = listing.currentBidCoins ?? 0;
+    const currency: "ZC" | "LC" = listing.auctionCurrency === "LC" ? "LC" : "ZC";
 
     if (!winnerId || winnerBid === 0) {
       // Sem lances: expira e devolve item
@@ -3831,8 +3906,8 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     const sellerName = listing.player.displayName;
     const buyerName = winner.displayName;
     const payloadDesc = listing.category === "MASCOT"
-      ? `${fullMascotPayloadName(listing.payload as Record<string, unknown>)} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ZC`
-      : `${(listing.payload as Record<string, unknown>).displayName} leiloado por ${winnerBid} ZC`;
+      ? `${fullMascotPayloadName(listing.payload as Record<string, unknown>)} Nv.${(listing.payload as Record<string, unknown>).level} leiloado por ${winnerBid} ${currency}`
+      : `${(listing.payload as Record<string, unknown>).displayName} leiloado por ${winnerBid} ${currency}`;
 
     const claimed = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listingId}))`;
@@ -3842,13 +3917,17 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
       });
       if (update.count !== 1) return false;
 
-      // Transfere coins (já foram debitados do vencedor ao dar lance)
-      await tx.zikaCoinWallet.upsert({
-        where: { playerId: listing.playerId },
-        update: { balance: { increment: winnerBid } },
-        create: { playerId: listing.playerId, balance: winnerBid, totalEarned: winnerBid },
-      });
-      await creditMiauvadaoVaultFromPlayerTransaction(tx, winnerBid);
+      // Transfere o valor (já debitado do vencedor ao dar lance) ao vendedor.
+      if (currency === "ZC") {
+        await tx.zikaCoinWallet.upsert({
+          where: { playerId: listing.playerId },
+          update: { balance: { increment: winnerBid } },
+          create: { playerId: listing.playerId, balance: winnerBid, totalEarned: winnerBid },
+        });
+        await creditMiauvadaoVaultFromPlayerTransaction(tx, winnerBid);
+      } else {
+        await changeLigaCash(tx, { playerId: listing.playerId, amount: winnerBid, reason: "BAZAR_SALE", referenceType: "BazarListing", referenceId: listingId });
+      }
 
       // Transfere item ao vencedor
       await _transferItem(tx, listing, winnerId);
@@ -3857,7 +3936,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
         data: {
           listingId, sellerId: listing.playerId, buyerId: winnerId,
           sellerName, buyerName, description: payloadDesc,
-          coinsAmount: winnerBid, category: listing.category,
+          coinsAmount: currency === "ZC" ? winnerBid : 0, category: listing.category,
         },
       });
       const activityMetadata = { listingId, category: listing.category, payload: listing.payload } as import("@prisma/client").Prisma.InputJsonValue;
@@ -3865,12 +3944,12 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
         recordPlayerActivity(tx, {
           playerId: winnerId, category: "BAZAR", action: "BAZAR_AUCTION_WON",
           summary: `Venceu leilão de ${sellerName}: ${payloadDesc}`, source: "AUCTION", entityType: "bazarListing", entityId: listingId,
-          amount: -winnerBid, unit: "ZC", metadata: activityMetadata,
+          amount: -winnerBid, unit: currency, metadata: activityMetadata,
         }),
         recordPlayerActivity(tx, {
           playerId: listing.playerId, category: "BAZAR", action: "BAZAR_AUCTION_SOLD",
           summary: `Leilão vencido por ${buyerName}: ${payloadDesc}`, source: "AUCTION", entityType: "bazarListing", entityId: listingId,
-          amount: winnerBid, unit: "ZC", metadata: activityMetadata,
+          amount: winnerBid, unit: currency, metadata: activityMetadata,
         }),
       ]);
       await Promise.all([
@@ -3879,7 +3958,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
           category: "BAZAR",
           type: "AUCTION_WON",
           title: `Leilão vencido: ${listingDisplayName(listing)}`,
-          body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ZC; o item já foi entregue.`,
+          body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ${currency}; o item já foi entregue.`,
           href: `/bazar/${listingId}`,
           entityId: listingId,
           eventKey: `bazar:auction:won:${listingId}`,
@@ -3889,7 +3968,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
           category: "BAZAR",
           type: "AUCTION_SOLD",
           title: `Leilão encerrado: ${listingDisplayName(listing)}`,
-          body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ZC.`,
+          body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ${currency}.`,
           href: `/bazar/${listingId}`,
           entityId: listingId,
           eventKey: `bazar:auction:sold:${listingId}`,
@@ -3906,10 +3985,10 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     // Notifica o vencedor
     const wonPayload = listing.payload as Record<string, unknown>;
     const wonName = listing.category === "MASCOT" ? fullMascotPayloadName(wonPayload) : String(wonPayload.displayName ?? "Item");
-    await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ZC. O item foi transferido para você.`);
+    await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ${currency}. O item foi transferido para você.`);
     after(() => Promise.allSettled([
-      sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ZC e o item já foi entregue.`, url: `/bazar/${listingId}` }),
-      sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ZC.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ${currency} e o item já foi entregue.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
     ]).then(() => undefined));
 
     return { finalized: true };
@@ -3991,7 +4070,7 @@ export async function finalizeExpiredListings(limit = 25) {
         // Rejeita propostas pendentes e estorna seus escrows
         const pendingProposals = await tx.bazarProposal.findMany({
           where: { listingId: listing.id, status: { in: ["PENDING", "ACCEPTED"] } },
-          select: { proposerId: true, coinsOffer: true, coinsEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
+          select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
         });
         for (const proposal of pendingProposals) {
           await _releaseProposalEscrow(tx, proposal);

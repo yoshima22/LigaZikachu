@@ -40,6 +40,7 @@ interface ProposalOfferedItem {
 interface ProposalItem {
   id: string;
   coinsOffer: number;
+  ligaCashOffer?: number;
   message: string | null;
   status: string;
   createdAt: Date;
@@ -101,6 +102,7 @@ interface ListingDetail {
   currentBidCoins?: number | null;
   currentBidPlayerId?: string | null;
   auctionEndsAt?: Date | null;
+  auctionCurrency?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -167,6 +169,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [loading, setLoading] = useState(true);
   const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null);
   const [proposalCoins, setProposalCoins] = useState("");
+  const [proposalLigaCash, setProposalLigaCash] = useState("");
   const [proposalMsg, setProposalMsg] = useState("");
   const [favorited, setFavorited] = useState(false);
   const [offeredItems, setOfferedItems] = useState<ProposalOfferedItem[]>([]);
@@ -220,6 +223,7 @@ export default function BazarListingPage(): React.JSX.Element {
         proposals: (raw.proposals ?? []).map(p => ({
           id: p.id,
           coinsOffer: p.coinsOffer,
+          ligaCashOffer: p.ligaCashOffer,
           message: p.message ?? null,
           status: String(p.status),
           createdAt: p.createdAt,
@@ -234,6 +238,7 @@ export default function BazarListingPage(): React.JSX.Element {
         })),
         _count: { favorites: raw._count.favorites },
         minBidCoins: raw.minBidCoins,
+        auctionCurrency: raw.auctionCurrency,
         currentBidCoins: raw.currentBidCoins,
         currentBidPlayerId: raw.currentBidPlayerId,
         auctionEndsAt: raw.auctionEndsAt,
@@ -363,11 +368,13 @@ export default function BazarListingPage(): React.JSX.Element {
 
   const handlePropose = () => {
     const coins = parseInt(proposalCoins) || 0;
+    const liga = parseInt(proposalLigaCash) || 0;
     startTransition(async () => {
-      const r = await createProposal(id, coins, proposalMsg || undefined, offeredItems.length > 0 ? offeredItems : undefined);
+      const r = await createProposal(id, coins, proposalMsg || undefined, offeredItems.length > 0 ? offeredItems : undefined, false, liga);
       if (r.error) { toast.error(r.error); return; }
       toast.success("Proposta enviada!");
       setProposalCoins("");
+      setProposalLigaCash("");
       setProposalMsg("");
       setOfferedItems([]);
       reloadListing();
@@ -469,8 +476,9 @@ export default function BazarListingPage(): React.JSX.Element {
   const isSale = !isAuction && (listing.listingType === "SALE" || listing.listingType === "SALE_OR_TRADE");
   const isTrade = !isAuction && (listing.listingType === "TRADE" || listing.listingType === "SALE_OR_TRADE");
   const isTopBidder = isAuction && listing.currentBidPlayerId === currentPlayerId;
+  const auctionCur: "ZC" | "LC" = listing.auctionCurrency === "LC" ? "LC" : "ZC";
   const minNextBid = isAuction
-    ? (listing.currentBidCoins ? listing.currentBidCoins + 100 : (listing.minBidCoins ?? 1))
+    ? (listing.currentBidCoins ? listing.currentBidCoins + (auctionCur === "LC" ? 10 : 100) : (listing.minBidCoins ?? 1))
     : 0;
   const pokemonId = payload.pokemonId as number | undefined;
   const isShiny = payload.isShiny === true;
@@ -826,12 +834,12 @@ export default function BazarListingPage(): React.JSX.Element {
               <div className="grid grid-cols-2 gap-3">
                 <div className="rounded-lg bg-slate-900/60 px-3 py-2">
                   <p className="text-[9px] text-slate-500 uppercase">Lance mínimo</p>
-                  <p className="text-sm font-bold text-slate-200">{(listing.minBidCoins ?? 0).toLocaleString("pt-BR")} ZC</p>
+                  <p className="text-sm font-bold text-slate-200">{(listing.minBidCoins ?? 0).toLocaleString("pt-BR")} {auctionCur}</p>
                 </div>
                 <div className="rounded-lg bg-slate-900/60 px-3 py-2">
                   <p className="text-[9px] text-slate-500 uppercase">Lance atual</p>
                   <p className="text-sm font-bold text-amber-400">
-                    {listing.currentBidCoins ? `${listing.currentBidCoins.toLocaleString("pt-BR")} ZC` : "Sem lances"}
+                    {listing.currentBidCoins ? `${listing.currentBidCoins.toLocaleString("pt-BR")} ${auctionCur}` : "Sem lances"}
                   </p>
                 </div>
               </div>
@@ -843,13 +851,13 @@ export default function BazarListingPage(): React.JSX.Element {
               {/* Form de lance — visitante, leilão ativo, não é o top bidder */}
               {listing.status === "ACTIVE" && !isOwner && !isTopBidder && (
                 <div className="space-y-2 pt-1 border-t border-amber-500/20">
-                  <p className="text-[10px] text-slate-500">Mínimo para novo lance: <strong className="text-amber-300">{minNextBid.toLocaleString("pt-BR")} ZC</strong></p>
+                  <p className="text-[10px] text-slate-500">Mínimo para novo lance: <strong className="text-amber-300">{minNextBid.toLocaleString("pt-BR")} {auctionCur}</strong></p>
                   <div className="flex gap-2">
                     <input
                       type="number" min={minNextBid} inputMode="numeric" pattern="[0-9]*"
                       value={bidAmount}
                       onChange={e => setBidAmount(e.target.value.replace(/\D/g, ""))}
-                      placeholder={`${minNextBid} ZC ou mais`}
+                      placeholder={`${minNextBid} ${auctionCur} ou mais`}
                       className="flex-1 rounded-lg border border-amber-500/30 bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-amber-400/60"
                     />
                     <button
@@ -926,8 +934,18 @@ export default function BazarListingPage(): React.JSX.Element {
                       type="number" min={0} inputMode="numeric" pattern="[0-9]*"
                       value={proposalCoins}
                       onChange={e => setProposalCoins(e.target.value.replace(/\D/g, ""))}
-                      placeholder="ZikaCoins oferecidos (0 = sem moedas)"
+                      placeholder="ZikaCoins (0 = sem ZC)"
                       className="flex-1 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-blue-500/60"
+                    />
+                  </div>
+                  <div className="flex gap-2 items-center">
+                    <Coins size={13} className="text-cyan-300 shrink-0"/>
+                    <input
+                      type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                      value={proposalLigaCash}
+                      onChange={e => setProposalLigaCash(e.target.value.replace(/\D/g, ""))}
+                      placeholder="LigaCash (0 = sem LC)"
+                      className="flex-1 rounded-lg border border-cyan-500/30 bg-slate-900 px-2 py-1.5 text-xs text-cyan-200 outline-none focus:border-cyan-400/60"
                     />
                   </div>
                   <textarea
@@ -970,7 +988,9 @@ export default function BazarListingPage(): React.JSX.Element {
                 <div key={p.id} className="rounded-xl border border-blue-500/20 bg-blue-500/5 p-3 space-y-2">
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-xs font-semibold text-slate-300">
-                      {p.loanRequested ? "Empréstimo solicitado" : p.coinsOffer > 0 ? `${p.coinsOffer.toLocaleString("pt-BR")} ZC` : "Sem ZikaCoins"}
+                      {p.loanRequested
+                        ? "Empréstimo solicitado"
+                        : [p.coinsOffer > 0 ? `${p.coinsOffer.toLocaleString("pt-BR")} ZC` : "", (p.ligaCashOffer ?? 0) > 0 ? `${(p.ligaCashOffer ?? 0).toLocaleString("pt-BR")} LC` : ""].filter(Boolean).join(" + ") || "Sem moedas"}
                     </span>
                     <span className={`text-[10px] font-semibold ${PROPOSAL_STATUS_COLOR[p.status] ?? "text-slate-400"}`}>
                       {PROPOSAL_STATUS_LABEL[p.status] ?? p.status}
@@ -1019,6 +1039,11 @@ export default function BazarListingPage(): React.JSX.Element {
                   {p.coinsOffer > 0 && (
                     <p className="text-sm text-[#FFCB05] flex items-center gap-1">
                       <Coins size={12}/>{p.coinsOffer.toLocaleString("pt-BR")} ZC
+                    </p>
+                  )}
+                  {(p.ligaCashOffer ?? 0) > 0 && (
+                    <p className="text-sm text-cyan-300 flex items-center gap-1">
+                      <Coins size={12}/>{(p.ligaCashOffer ?? 0).toLocaleString("pt-BR")} LC
                     </p>
                   )}
                   {p.loanRequested && (
