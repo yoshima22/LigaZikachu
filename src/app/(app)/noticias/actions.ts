@@ -8,8 +8,9 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { creditCoins } from "@/lib/zikacoins";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
 
-const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF", "SHOP_ITEM"]);
+const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "LIGA_CASH", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF", "SHOP_ITEM"]);
 
 const newsSchema = z.object({
   title: z.string().trim().min(3, "Titulo muito curto.").max(120),
@@ -31,6 +32,16 @@ async function buildRewardPayload(data: z.infer<typeof newsSchema>) {
       rewardEnabled: true,
       rewardTitle: data.rewardTitle || `${amount} ZikaCoins`,
       rewardPayload: { rewardKind: "ZIKA_COINS", amount },
+    };
+  }
+  if (data.rewardKind === "LIGA_CASH") {
+    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+    if (!economy.allowLcEventRewards) throw new Error("Recompensas em LigaCash estão desativadas nas configurações de economia.");
+    const amount = Math.max(1, data.rewardAmount);
+    return {
+      rewardEnabled: true,
+      rewardTitle: data.rewardTitle || `${amount} LigaCash`,
+      rewardPayload: { rewardKind: "LIGA_CASH", amount },
     };
   }
   if (data.rewardKind === "MASCOT_EGG") {
@@ -215,6 +226,16 @@ export async function claimNewsReward(postId: string) {
           type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
           amount,
           description: `Noticia: ${post.title}`,
+        });
+      } else if (rewardKind === "LIGA_CASH") {
+        const amount = typeof payload.amount === "number" ? Math.max(1, Math.floor(payload.amount)) : 1;
+        await changeLigaCash(tx, {
+          playerId: player.id,
+          amount,
+          reason: "EVENT_REWARD",
+          referenceType: "NewsPost",
+          referenceId: post.id,
+          metadata: { title: post.title },
         });
       } else if (rewardKind === "MASCOT_EGG" && typeof payload.eggType === "string") {
         await tx.mascotEgg.create({

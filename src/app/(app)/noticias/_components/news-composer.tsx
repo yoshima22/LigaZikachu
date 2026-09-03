@@ -10,6 +10,7 @@ import { createNewsPost } from "../actions";
 const rewardKinds = [
   { value: "NONE", label: "Sem recompensa" },
   { value: "ZIKA_COINS", label: "ZikaCoins" },
+  { value: "LIGA_CASH", label: "LigaCash (LC)" },
   { value: "MASCOT_EGG", label: "Ovo de mascote" },
   { value: "MASCOT_FOOD", label: "Comida/Doce" },
   { value: "MASCOT_BUFF", label: "Item da loja" },

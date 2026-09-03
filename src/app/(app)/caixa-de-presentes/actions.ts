@@ -6,6 +6,7 @@ import { EggType, FoodType, GiftStatus, ZikaCoinTxType, type Prisma } from "@pri
 import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
 import { grantSyncTicketShopItem } from "@/lib/sync-challenge";
@@ -309,6 +310,23 @@ async function applyGiftReward(
         type: ZikaCoinTxType.ACHIEVEMENT_REWARD,
         amount,
         description: `Presente: ${gift.title}`
+      });
+    }
+  }
+
+  if (rewardKind === "LIGA_CASH") {
+    const amount = typeof payload.amount === "number" && payload.amount > 0 ? Math.floor(payload.amount) : 0;
+    if (amount > 0) {
+      // A razão do ledger pode vir do payload (PASS_REWARD, EVENT_REWARD,
+      // WALLET_REWARD, COMPENSATION, ADMIN_GRANT); default seguro = WALLET_REWARD.
+      const reason = typeof payload.ligaCashReason === "string" ? payload.ligaCashReason : "WALLET_REWARD";
+      await changeLigaCash(tx, {
+        playerId,
+        amount,
+        reason,
+        referenceType: "PlayerGift",
+        referenceId: gift.id,
+        metadata: { title: gift.title },
       });
     }
   }
