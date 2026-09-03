@@ -159,7 +159,6 @@ const colecaoLinks = [
 ];
 
 const mercadoLinks = [
-  { href: "/mercado/ligacoins", label: "LigaCoins", icon: Coins, adminOnly: false },
   { href: "/bazar", label: "Bazar", icon: Store, adminOnly: false },
   { href: "/mercado/entregas", label: "Entregas pelo Mundo", icon: MapPinned, adminOnly: true, beta: true },
   { href: "/shop", label: "ZikaShop", icon: ShoppingBag, adminOnly: false },
@@ -171,6 +170,7 @@ const mercadoLinks = [
     icon: FlaskConical,
     adminOnly: false,
   },
+  { href: "/mercado/ligacoins", label: "LigaCoins", icon: Coins, adminOnly: false },
 ];
 
 // profileLinks é dinâmico - usa playerId para o link do perfil público

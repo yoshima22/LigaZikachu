@@ -64,6 +64,7 @@ const getNavData = (userId: string) =>
           player: null,
           giftCount: 0,
           wallet: null,
+          ligaWallet: null,
           unreadNews: 0,
         };
 
@@ -75,6 +76,9 @@ const getNavData = (userId: string) =>
           where: { playerId: player.id },
           select: { balance: true },
         })
+        .catch(() => null);
+      const ligaWallet = await prisma.ligaCoinWallet
+        .findUnique({ where: { playerId: player.id }, select: { balance: true } })
         .catch(() => null);
       const latestNews = await prisma.newsPost
         .findMany({
@@ -95,7 +99,7 @@ const getNavData = (userId: string) =>
           : 0;
       const unreadNews = Math.max(0, latestNewsIds.length - readNews);
 
-      return { player, giftCount, wallet, unreadNews };
+      return { player, giftCount, wallet, ligaWallet, unreadNews };
     },
     [`nav-data-v2-${userId}`],
     { revalidate: 60, tags: [`nav-${userId}`] },
@@ -169,6 +173,7 @@ export default async function AppLayout({
       player: null,
       giftCount: 0,
       wallet: null,
+      ligaWallet: null,
       unreadNews: 0,
     };
   });
@@ -241,7 +246,7 @@ export default async function AppLayout({
       orderBy: { createdAt: "asc" },
     })
     .catch(() => null);
-  const { player, giftCount, wallet, unreadNews } = navData;
+  const { player, giftCount, wallet, ligaWallet, unreadNews } = navData;
 
   return (
     <>
@@ -340,8 +345,9 @@ export default async function AppLayout({
                     {user.name ?? user.email}
                   </p>
                   {wallet != null && (
-                    <span className="flex items-center justify-end gap-0.5 mt-0.5 text-[10px] font-semibold text-[#FFCB05]">
-                      🪙 {wallet.balance.toLocaleString("pt-BR")} ZC
+                    <span className="mt-0.5 flex items-center justify-end gap-2 text-[10px] font-semibold whitespace-nowrap">
+                      <span className="text-[#FFCB05]">🪙 {wallet.balance.toLocaleString("pt-BR")} ZC</span>
+                      <span className="text-cyan-300">◉ {ligaWallet?.balance.toLocaleString("pt-BR") ?? "0"} LC</span>
                     </span>
                   )}
                   {player?.ptcglNick && (
@@ -372,8 +378,9 @@ export default async function AppLayout({
               {/* Logout — form POST evita prefetch do Next.js (que causava logout automático) */}
               {/* ZikaCoins — visible on mobile only (desktop shows in user card) */}
               {wallet != null && (
-                <span className="flex items-center gap-0.5 text-[11px] font-semibold text-[#FFCB05] sm:hidden">
-                  🪙 {wallet.balance.toLocaleString("pt-BR")}
+                <span className="flex flex-col items-end text-[9px] font-semibold leading-tight whitespace-nowrap sm:hidden">
+                  <span className="text-[#FFCB05]">🪙 {wallet.balance.toLocaleString("pt-BR")}</span>
+                  <span className="text-cyan-300">◉ {ligaWallet?.balance.toLocaleString("pt-BR") ?? "0"} LC</span>
                 </span>
               )}
               <LogoutButton />
