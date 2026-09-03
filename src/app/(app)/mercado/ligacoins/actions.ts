@@ -4,11 +4,12 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { CASH_PRODUCTS } from "@/lib/liga-cash";
 
-export async function createLigaCashPayment(code:string,cpf:string){
+export async function createLigaCashPayment(code:string,cpf:string,payerEmail:string){
   const user=await getSessionUser(); if(!user) return {error:"Faça login novamente."};
   const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}}); if(!player) return {error:"Jogador não encontrado."};
   const product=CASH_PRODUCTS.find(p=>p.code===code); if(!product) return {error:"Pacote inválido."};
   const document=cpf.replace(/\D/g,"");if(document.length!==11)return{error:"Informe um CPF válido para gerar o PIX."};
+  const email=payerEmail.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email))return{error:"Informe o e-mail do pagador."};
   if("adminOnly" in product&&product.adminOnly&&!isAdmin(user.role)) return {error:"Pacote disponível somente para testes administrativos."};
   const token=process.env.MERCADO_PAGO_ACCESS_TOKEN; const base=process.env.NEXT_PUBLIC_APP_URL;
   if(!token||!base) return {error:"Os pagamentos ainda não foram habilitados pelo administrador."};
@@ -18,9 +19,9 @@ export async function createLigaCashPayment(code:string,cpf:string){
   if(pendingCount>=3)return {error:"Você já possui 3 pedidos em aberto. Pague, cancele ou aguarde a expiração."};
   const expiresAt=new Date(Date.now()+30*60_000);
   const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus,amountCents:product.cents,expiresAt}});
-  const response=await fetch("https://api.mercadopago.com/v1/payments",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":order.id},body:JSON.stringify({transaction_amount:product.cents/100,description:`Liga Zikachu - ${product.label}`,payment_method_id:"pix",date_of_expiration:expiresAt.toISOString(),payer:{email:user.email,identification:{type:"CPF",number:document}},external_reference:order.id,notification_url:`${base}/api/payments/mercado-pago`})});
+  const response=await fetch("https://api.mercadopago.com/v1/payments",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":order.id},body:JSON.stringify({transaction_amount:product.cents/100,description:`Liga Zikachu - ${product.label}`,payment_method_id:"pix",date_of_expiration:expiresAt.toISOString(),payer:{email,identification:{type:"CPF",number:document}},external_reference:order.id,notification_url:`${base}/api/payments/mercado-pago`})});
   const payment=await response.json();
-  if(!response.ok){await prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}});const providerMessage=typeof payment?.message==="string"?payment.message:typeof payment?.error==="string"?payment.error:null;console.error("[LigaCoins] Mercado Pago recusou a criação",{orderId:order.id,httpStatus:response.status,providerMessage,cause:Array.isArray(payment?.cause)?payment.cause.map((item:unknown)=>typeof item==="object"&&item!==null&&"code" in item?String((item as {code:unknown}).code):"unknown"):[]});return {error:providerMessage?`Mercado Pago: ${providerMessage}`:`O Mercado Pago recusou a cobrança (HTTP ${response.status}).`};}
+  if(!response.ok){const causes=Array.isArray(payment?.cause)?payment.cause.map((item:unknown)=>{if(typeof item!=="object"||item===null)return"unknown";const cause=item as{code?:unknown;description?:unknown};return`${String(cause.code??"unknown")}${cause.description?`: ${String(cause.description)}`:""}`}):[];const providerMessage=typeof payment?.message==="string"?payment.message:typeof payment?.error==="string"?payment.error:null;await prisma.$transaction([prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}}),prisma.auditLog.create({data:{actorUserId:user.id,entityType:"LigaCashOrder",entityId:order.id,action:"ligacoins.payment_rejected",metadata:{httpStatus:response.status,providerMessage,causes}}})]);console.error("[LigaCoins] Mercado Pago recusou a criação",{orderId:order.id,httpStatus:response.status,providerMessage,causes});const detail=[providerMessage,...causes].filter(Boolean).join(" · ");return {error:detail?`Mercado Pago (${response.status}): ${detail}`:`O Mercado Pago recusou a cobrança (HTTP ${response.status}).`};}
   const pix=payment.point_of_interaction?.transaction_data;
   const providerExpiration=payment.date_of_expiration?new Date(payment.date_of_expiration):expiresAt;
   await prisma.ligaCashOrder.update({where:{id:order.id},data:{providerPaymentId:String(payment.id),qrCode:pix?.qr_code??null,qrCodeBase64:pix?.qr_code_base64??null,expiresAt:providerExpiration}});
