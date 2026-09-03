@@ -62,7 +62,7 @@ export async function getActiveSchedule(scheduleKey?: string): Promise<DayReward
 
 export async function adminGetSchedule(
   scheduleKey?: string
-): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string; allowRetroactiveClaims: boolean; displayTitle: string; description: string; flavorText: string }> {
+): Promise<{ schedule: DayReward[]; isCustom: boolean; label: string; allowRetroactiveClaims: boolean; displayTitle: string; description: string; flavorText: string; isCurrentStorePass: boolean; isNextStorePass: boolean }> {
   await requireAdmin();
   const label = scheduleKey ?? "Passe Apoiador";
   const display = await getPassDisplayConfig(label);
@@ -77,10 +77,19 @@ export async function adminGetSchedule(
         displayTitle: cfg.displayTitle?.trim() || display.title,
         description: cfg.description?.trim() || display.description,
         flavorText: cfg.flavorText?.trim() || display.flavorText,
+        isCurrentStorePass: cfg.isCurrentStorePass,
+        isNextStorePass: cfg.isNextStorePass,
       };
   } catch { /* fallback */ }
   const fallback = PASS_SCHEDULE_DEFAULTS[label] ?? PASS_SCHEDULE;
-  return { schedule: fallback, isCustom: false, label, allowRetroactiveClaims: false, displayTitle: display.title, description: display.description, flavorText: display.flavorText };
+  return { schedule: fallback, isCustom: false, label, allowRetroactiveClaims: false, displayTitle: display.title, description: display.description, flavorText: display.flavorText, isCurrentStorePass: false, isNextStorePass: false };
+}
+
+export async function adminSetPassStoreSlot(scheduleKey:string,slot:"CURRENT"|"NEXT",enabled:boolean){
+  await requireAdmin();const id=scheduleKey==="Passe Apoiador"?"singleton":scheduleKey;
+  const config=await prisma.passScheduleConfig.findUnique({where:{id},select:{id:true}});if(!config)return{error:"Salve este calendário antes de anunciá-lo na loja."};
+  await prisma.$transaction(async tx=>{if(enabled)await tx.passScheduleConfig.updateMany({where:slot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},data:slot==="CURRENT"?{isCurrentStorePass:false}:{isNextStorePass:false}});await tx.passScheduleConfig.update({where:{id},data:slot==="CURRENT"?{isCurrentStorePass:enabled}:{isNextStorePass:enabled}})});
+  revalidatePath("/admin");revalidatePath("/mercado/ligacoins");return{ok:true};
 }
 
 export async function adminListScheduleLabels(): Promise<string[]> {

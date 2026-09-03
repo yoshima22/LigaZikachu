@@ -149,6 +149,8 @@ export default async function AdminPage() {
       displayTitle: r.displayTitle,
       description: r.description,
       flavorText: r.flavorText,
+      isCurrentStorePass: r.isCurrentStorePass,
+      isNextStorePass: r.isNextStorePass,
     })))
   );
 
@@ -173,7 +175,7 @@ export default async function AdminPage() {
 
   return (
     <div className="space-y-8">
-      <LigaCashPanel orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null }))} />
+      <LigaCashPanel orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null, offerSlot:order.passOfferSlot, passLabel:order.productLabel }))} />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>

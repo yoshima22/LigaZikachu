@@ -7,7 +7,6 @@ export const CASH_PRODUCTS = [
   { code:"LC_3900", type:"LIGA_COINS", label:"Cofre de Ginásio", base:3450, bonus:450, cents:3499 },
   { code:"LC_8900", type:"LIGA_COINS", label:"Tesouro da Liga", base:7700, bonus:1200, cents:6999 },
   { code:"DEBUG_LC_100", type:"LIGA_COINS", label:"Teste administrativo", base:100, bonus:0, cents:100, adminOnly:true },
-  { code:"NEXT_PASS", type:"SUPPORTER_PASS", label:"Próximo Passe de Apoiador", base:0, bonus:0, cents:2000 },
 ] as const;
 
 export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:string) {
@@ -19,7 +18,18 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
       const amount = order.ligaCoins + order.bonusLigaCoins;
       await tx.ligaCoinWallet.upsert({ where:{ playerId:order.playerId }, create:{ playerId:order.playerId,balance:amount,purchased:amount }, update:{ balance:{increment:amount},purchased:{increment:amount} } });
     }
-    return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt: order.productType === "LIGA_COINS" ? new Date() : null} });
+    let fulfilledAt=order.productType === "LIGA_COINS" ? new Date() : null;
+    if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
+      const config=await tx.passScheduleConfig.findUnique({where:{id:order.passScheduleKey}});
+      if(config&&Array.isArray(config.schedule)){
+        const days=Math.max(1,config.schedule.length);const now=new Date();const label=config.id==="singleton"?"Passe Apoiador":config.id;
+        const title=await tx.shopItem.findFirst({where:{name:"Pilar da Comunidade",type:"TITLE"},select:{id:true}});
+        if(title)await tx.playerInventory.upsert({where:{playerId_itemId:{playerId:order.playerId,itemId:title.id}},create:{playerId:order.playerId,itemId:title.id,quantity:1,source:"VIP_PASS"},update:{}});
+        await tx.supporterPass.create({data:{playerId:order.playerId,passLabel:label,startsAt:now,expiresAt:new Date(now.getTime()+days*86400000),allowRetroactiveClaims:config.allowRetroactiveClaims,titleItemId:title?.id}});
+        fulfilledAt=now;
+      }
+    }
+    return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
 }
 

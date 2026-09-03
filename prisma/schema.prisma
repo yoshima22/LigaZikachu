@@ -3198,10 +3198,13 @@ model LigaCashOrder {
   expiresAt         DateTime?
   paidAt            DateTime?
   fulfilledAt       DateTime?
+  passScheduleKey   String?
+  passOfferSlot     String?
   createdAt         DateTime             @default(now())
   updatedAt         DateTime             @updatedAt
   @@index([playerId, createdAt])
   @@index([status, productType])
+  @@index([passOfferSlot, status])
   @@map("liga_cash_orders")
 }
 
@@ -3232,6 +3235,8 @@ model PassScheduleConfig {
   flavorText             String?
   updatedAt              DateTime @updatedAt
   updatedBy              String? // userId do admin que salvou por último
+  isCurrentStorePass     Boolean  @default(false)
+  isNextStorePass        Boolean  @default(false)
 
   @@map("pass_schedule_config")
 }

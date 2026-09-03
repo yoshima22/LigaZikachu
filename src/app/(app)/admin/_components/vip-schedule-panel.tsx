@@ -15,6 +15,7 @@ import {
   adminGrantVip, adminGrantVipToAll, adminSetRetroactiveClaims, adminRevokeVip,
   adminSetPassScheduleRetroactive, adminCreatePassSchedule, adminSavePassDisplayConfig,
   adminDeletePassSchedule,
+  adminSetPassStoreSlot,
 } from "@/app/(app)/passe-apoiador/actions";
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
@@ -152,6 +153,8 @@ interface ScheduleEntry {
   displayTitle: string;
   description: string;
   flavorText: string;
+  isCurrentStorePass: boolean;
+  isNextStorePass: boolean;
 }
 
 interface ActiveVip {
@@ -209,6 +212,7 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
   );
   const [createTypePending, startCreateType] = useTransition();
   const [deleteTypePending, startDeleteType] = useTransition();
+  const [storeSlotPending,startStoreSlot]=useTransition();
   const dirtyRef = useRef(dirtyMap);
   dirtyRef.current = dirtyMap;
 
@@ -617,6 +621,12 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
                 {deleteTypePending ? "Excluindo..." : "Excluir passe"}
               </Button>
             )}
+          </div>
+
+          <div className="flex flex-wrap gap-4 rounded-xl border border-cyan-500/20 bg-cyan-950/10 p-3 text-xs text-slate-300">
+            <label className="flex items-center gap-2"><input type="checkbox" checked={allSchedules.find(s=>s.label===activeLabel)?.isCurrentStorePass??false} disabled={storeSlotPending} onChange={e=>startStoreSlot(async()=>{const r=await adminSetPassStoreSlot(activeLabel,"CURRENT",e.target.checked);if(r.error)toast.error(r.error);else{toast.success("Passe atual da loja atualizado.");location.reload()}})} className="accent-cyan-400"/> Passe atual na loja</label>
+            <label className="flex items-center gap-2"><input type="checkbox" checked={allSchedules.find(s=>s.label===activeLabel)?.isNextStorePass??false} disabled={storeSlotPending} onChange={e=>startStoreSlot(async()=>{const r=await adminSetPassStoreSlot(activeLabel,"NEXT",e.target.checked);if(r.error)toast.error(r.error);else{toast.success("Próximo passe da loja atualizado.");location.reload()}})} className="accent-violet-400"/> Passe do mês seguinte</label>
+            <p className="w-full text-[11px] text-slate-500">Cada posição aceita somente um calendário. Marcar este passe substitui o anterior naquela posição.</p>
           </div>
 
           {showCreateTypeForm && (
