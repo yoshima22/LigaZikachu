@@ -54,6 +54,10 @@ export default async function BazarPage({
       select: { id: true, type: true, hatchRarityBonusPct: true, obtainedAt: true, origin: true },
     }),
   ]) : [null, []];
+  const [ligaWallet, economy] = playerId ? await Promise.all([
+    prisma.ligaCoinWallet.findUnique({ where: { playerId } }),
+    prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} }),
+  ]) : [null, null];
   const fusionEggs: MiauvadaoFusionEgg[] = fusionEggRows.map((egg) => ({
     id: egg.id,
     type: egg.type as MiauvadaoFusionEggType,
@@ -215,6 +219,10 @@ export default async function BazarPage({
         offers={dailyOffers as never}
         vaultBalance={freshMiauvadao.vaultBalance}
         balance={wallet?.balance ?? 0}
+        ligaCashBalance={ligaWallet?.balance ?? 0}
+        lcMult={economy?.shopLcValueMultiplier ?? 1.1}
+        lcRef={economy?.zcPerLcReference ?? 10}
+        ligaCashEnabled={economy?.allowLcShop ?? false}
         playerId={playerId}
         lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
         slotRefreshAvailable={slotRefreshAvailable}

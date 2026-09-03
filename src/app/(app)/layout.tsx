@@ -345,7 +345,7 @@ export default async function AppLayout({
                     {user.name ?? user.email}
                   </p>
                   {wallet != null && (
-                    <span className="mt-0.5 flex items-center justify-end gap-2 text-[10px] font-semibold whitespace-nowrap">
+                    <span className="mt-0.5 flex flex-col items-end gap-0.5 text-[10px] font-semibold leading-tight whitespace-nowrap">
                       <span className="text-[#FFCB05]">🪙 {wallet.balance.toLocaleString("pt-BR")} ZC</span>
                       <span className="text-cyan-300">◉ {ligaWallet?.balance.toLocaleString("pt-BR") ?? "0"} LC</span>
                     </span>

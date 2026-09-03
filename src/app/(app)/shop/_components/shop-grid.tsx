@@ -303,59 +303,61 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, lig
                     )}
                   </div>
                 )}
-                <div className="flex items-center justify-between pt-1">
-                  <div>
-                    {hasPromotion && <p className="text-[10px] text-slate-500 line-through">{originalTotalPrice.toLocaleString("pt-BR")} ZC</p>}
-                    <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
-                      <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
-                    </span>
-                    {ligaCashEnabled&&<span className="mt-1 flex items-center gap-1 text-sm font-bold text-cyan-300"><Coins size={14}/>{totalLigaCashPrice.toLocaleString("pt-BR")} LC</span>}
-                  </div>
+                <div className="space-y-2 pt-1">
+                  {hasPromotion && <p className="text-[10px] text-slate-500 line-through">{originalTotalPrice.toLocaleString("pt-BR")} ZC</p>}
                   {owned ? (
-                    <span className="flex items-center gap-1 rounded-lg bg-[#7AC74C]/10 px-2 py-1 text-xs font-semibold text-[#7AC74C]">
+                    <span className="flex w-full items-center justify-center gap-1 rounded-lg bg-[#7AC74C]/10 px-2 py-1.5 text-xs font-semibold text-[#7AC74C]">
                       <CheckCircle size={12} /> Possuído
                     </span>
-                  ) : !canAfford && !canAffordLigaCash ? (
-                    <div className="flex items-center gap-1.5">
-                      {isConsumable && (
-                        <input
-                          type="number"
-                          min={1}
-                          max={99}
-                          value={quantity}
-                          onChange={(event) => setQuantity(item.id, Number(event.target.value))}
-                          className="h-7 w-14 rounded-lg border border-border bg-slate-950 px-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
-                          aria-label={`Quantidade de ${item.name}`}
-                        />
-                      )}
-                      <span className="flex items-center gap-1 rounded-lg bg-slate-800 px-2 py-1 text-xs text-slate-500">
-                        <Lock size={12} /> Sem saldo
-                      </span>
-                    </div>
                   ) : (
-                    <div className="flex flex-wrap justify-end gap-1.5">
-                    {isConsumable && (
-                      <input
-                        type="number"
-                        min={1}
-                        max={99}
-                        value={quantity}
-                        onChange={(event) => setQuantity(item.id, Number(event.target.value))}
-                        className="h-7 w-14 rounded-lg border border-border bg-slate-950 px-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
-                        aria-label={`Quantidade de ${item.name}`}
-                      />
-                    )}
-                    <button
-                      type="button"
-                      disabled={isBuying||!canAfford}
-                      onClick={() => handleBuy(item.id, item.price, item.name, quantity,"ZC")}
-                      className="flex items-center gap-1 rounded-lg bg-[#FFCB05] px-3 py-1 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-60"
-                    >
-                      <ShoppingCart size={12} />
-                      {isBuying ? "Comprando…" : "Pagar ZC"}
-                    </button>
-                    {ligaCashEnabled&&<button type="button" disabled={isBuying||!canAffordLigaCash} onClick={()=>handleBuy(item.id,item.ligaCashPrice,item.name,quantity,"LC")} className="flex items-center gap-1 rounded-lg bg-cyan-300 px-3 py-1 text-xs font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-40"><ShoppingCart size={12}/>Pagar LC</button>}
-                    </div>
+                    <>
+                      {isConsumable && (
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] text-slate-500">Qtd.</span>
+                          <input
+                            type="number"
+                            min={1}
+                            max={99}
+                            value={quantity}
+                            onChange={(event) => setQuantity(item.id, Number(event.target.value))}
+                            className="h-7 w-16 rounded-lg border border-border bg-slate-950 px-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
+                            aria-label={`Quantidade de ${item.name}`}
+                          />
+                        </div>
+                      )}
+                      {/* Linha ZC: valor à esquerda, botão correspondente à direita */}
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
+                          <Coins size={14} /> {totalPrice.toLocaleString("pt-BR")} ZC
+                        </span>
+                        <button
+                          type="button"
+                          disabled={isBuying || !canAfford}
+                          onClick={() => handleBuy(item.id, item.price, item.name, quantity, "ZC")}
+                          className="flex shrink-0 items-center gap-1 rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40"
+                        >
+                          {canAfford ? <ShoppingCart size={12} /> : <Lock size={12} />}
+                          {isBuying ? "Comprando…" : "Pagar ZC"}
+                        </button>
+                      </div>
+                      {/* Linha LC: valor à esquerda, botão correspondente à direita */}
+                      {ligaCashEnabled && (
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1 text-sm font-bold text-cyan-300">
+                            <Coins size={14} /> {totalLigaCashPrice.toLocaleString("pt-BR")} LC
+                          </span>
+                          <button
+                            type="button"
+                            disabled={isBuying || !canAffordLigaCash}
+                            onClick={() => handleBuy(item.id, item.ligaCashPrice, item.name, quantity, "LC")}
+                            className="flex shrink-0 items-center gap-1 rounded-lg bg-cyan-300 px-3 py-1.5 text-xs font-semibold text-slate-950 hover:bg-cyan-200 disabled:opacity-40"
+                          >
+                            {canAffordLigaCash ? <ShoppingCart size={12} /> : <Lock size={12} />}
+                            Pagar LC
+                          </button>
+                        </div>
+                      )}
+                    </>
                   )}
                 </div>
               </div>

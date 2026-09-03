@@ -35,7 +35,7 @@ import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { createPlayerNotification } from "@/lib/nav-notifications";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
-import { changeLigaCash } from "@/lib/liga-cash-wallet";
+import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
@@ -2308,7 +2308,7 @@ export async function fuseMiauvadaoEggsAction(eggIds: string[]): Promise<{
   }
 }
 
-export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus }> {
+export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus }> {
   try {
     if (offerIndex === 1) {
       const [sabotages, stepState] = await Promise.all([
@@ -2332,9 +2332,16 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
       if (!offer) throw new Error("Oferta não encontrada.");
       if (offer.sold >= offer.stock) throw new Error("Estoque esgotado.");
       if (now > new Date(offer.validUntil)) throw new Error("Oferta expirada.");
-      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-      if (!wallet || wallet.balance < offer.finalPrice) {
-        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC disponíveis, oferta custa ${offer.finalPrice} ZC).`);
+      // Preço em LC na mesma proporção da ZikaShop (definida na economia central).
+      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
+      const priceLc = suggestedLigaCashPrice(offer.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
+      const price = currency === "LC" ? priceLc : offer.finalPrice;
+      const wallet = currency === "LC"
+        ? await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
+        : await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < price) {
+        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency} disponíveis, oferta custa ${price} ${currency}).`);
       }
       const quota = await tx.miauvadaoPurchaseQuota.upsert({
         where: { playerId: player.id },
@@ -2354,24 +2361,39 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         where: { playerId: player.id },
         data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now },
       });
-      const coinsToVault = Math.floor(offer.finalPrice * 0.25);
+      // Só compras em ZC alimentam o cofre (o cofre é em ZC).
+      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
       // Cobrança e extrato fazem parte da mesma transação da entrega.
-      await creditCoins(tx, {
-        playerId: player.id,
-        type: ZikaCoinTxType.SHOP_PURCHASE,
-        amount: -offer.finalPrice,
-        description: `Miauvadão: compra de ${offer.name}`,
-      });
+      if (currency === "ZC") {
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: ZikaCoinTxType.SHOP_PURCHASE,
+          amount: -price,
+          description: `Miauvadão: compra de ${offer.name}`,
+        });
+      } else {
+        await changeLigaCash(tx, {
+          playerId: player.id,
+          amount: -price,
+          reason: "SHOP_PURCHASE",
+          referenceType: "MiauvadaoOffer",
+          referenceId: offer.shopItemId ?? offer.itemType,
+          spentDelta: price,
+          metadata: { offerIndex, name: offer.name },
+        });
+      }
 
-      // Atualizar sold na oferta + adicionar 25% ao cofre + mensagem NPC
+      // Atualizar sold na oferta + adicionar 25% ao cofre (só ZC) + mensagem NPC
       const updatedOffers = [...offers];
       updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
       await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
         data: {
           dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-          vaultBalance: { increment: coinsToVault },
-          lastNpcMessage: `${player.displayName} comprou ${offer.name} e deixou +${coinsToVault} ZC nos fundos! 💰`,
+          ...(coinsToVault > 0 ? { vaultBalance: { increment: coinsToVault } } : {}),
+          lastNpcMessage: currency === "ZC"
+            ? `${player.displayName} comprou ${offer.name} e deixou +${coinsToVault} ZC nos fundos! 💰`
+            : `${player.displayName} comprou ${offer.name} pagando com LigaCash! 💎`,
           lastNpcMessageAt: new Date(),
         },
       });
@@ -2383,13 +2405,13 @@ export async function buyMiauvadaoOffer(offerIndex: number): Promise<{ error?: s
         actorUserId: user.id,
         category: "BAZAR",
         action: "MIAUVADAO_PURCHASE",
-        summary: `Comprou ${offer.name} no Miauvadão por ${offer.finalPrice} ZC`,
+        summary: `Comprou ${offer.name} no Miauvadão por ${price} ${currency}`,
         source: "MIAUVADAO_GLOBAL_SLOT",
         entityType: "shopItem",
         entityId: offer.shopItemId ?? offer.itemType,
         amount: 1,
         unit: "ITEM",
-        metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price: offer.finalPrice },
+        metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency },
       });
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
       return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes) };

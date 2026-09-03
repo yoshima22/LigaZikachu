@@ -80,10 +80,11 @@ const GOLD_D = "#5a4700";
 
 function MiauvadaoCard({
   offer, idx, onBuy, onRefresh, pending, buying, balance, sabotaged, canPurchase, slotRefreshAvailable,
+  ligaCashBalance, priceLc, ligaCashEnabled,
 }: {
   offer: MiauvadaoOffer;
   idx: number;
-  onBuy: (i: number) => void;
+  onBuy: (i: number, currency: "ZC" | "LC") => void;
   onRefresh: (i: number) => void;
   pending: boolean;
   buying: boolean;
@@ -91,10 +92,15 @@ function MiauvadaoCard({
   sabotaged?: boolean;
   canPurchase: boolean;
   slotRefreshAvailable: boolean;
+  ligaCashBalance: number;
+  priceLc: number;
+  ligaCashEnabled: boolean;
 }) {
   const soldOut = offer.sold >= offer.stock;
   const expired = new Date() > new Date(offer.validUntil);
-  const canBuy  = canPurchase && !sabotaged && !soldOut && !expired && balance >= offer.finalPrice;
+  const available = canPurchase && !sabotaged && !soldOut && !expired;
+  const canBuy  = available && balance >= offer.finalPrice;
+  const canBuyLc = available && ligaCashEnabled && ligaCashBalance >= priceLc;
   const dimmed  = sabotaged || soldOut || expired;
 
   return (
@@ -192,7 +198,7 @@ function MiauvadaoCard({
           <button
             type="button"
             disabled={pending || !canBuy}
-            onClick={() => onBuy(idx)}
+            onClick={() => onBuy(idx, "ZC")}
             className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2
               font-bold transition-all disabled:cursor-not-allowed"
             style={{
@@ -206,8 +212,19 @@ function MiauvadaoCard({
              soldOut   ? "Esgotado" :
              expired   ? <><Clock size={10}/> Expirado</> :
              buying && pending ? "Comprando…" :
-             <><ShoppingCart size={11}/> Comprar</>}
+             <><ShoppingCart size={11}/> Pagar {offer.finalPrice.toLocaleString("pt-BR")} ZC</>}
           </button>
+          {ligaCashEnabled && !sabotaged && !soldOut && !expired && (
+            <button
+              type="button"
+              disabled={pending || !canBuyLc}
+              onClick={() => onBuy(idx, "LC")}
+              className="w-full flex items-center justify-center gap-1.5 rounded-lg py-2 text-xs font-bold text-slate-950 transition-all disabled:cursor-not-allowed disabled:opacity-40"
+              style={{ background: "#67e8f9", boxShadow: "0 0 0 1px #0e7490, 0 2px 8px rgba(103,232,249,0.25)" }}
+            >
+              <ShoppingCart size={11}/> Pagar {priceLc.toLocaleString("pt-BR")} LC
+            </button>
+          )}
           {slotRefreshAvailable && (
             <button type="button" disabled={pending} onClick={() => onRefresh(idx)}
               className="w-full rounded-lg border border-[#c9a800]/50 py-1.5 text-[10px] font-bold text-[#c9a800] disabled:opacity-50">
@@ -226,6 +243,10 @@ interface Props {
   offers: MiauvadaoOffer[];
   vaultBalance: number;
   balance: number;
+  ligaCashBalance?: number;
+  lcMult?: number;
+  lcRef?: number;
+  ligaCashEnabled?: boolean;
   playerId: string | null;
   lastNpcMessage?: string | null;
   slotRefreshAvailable?: boolean;
@@ -235,7 +256,15 @@ interface Props {
   personalOffer?: { offer: MiauvadaoOffer; sold: number } | null;
 }
 
-export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null, personalOffer = null }: Props) {
+// Mesma proporção da ZikaShop (economia central). Espelha suggestedLigaCashPrice.
+function suggestedLcClient(zcPrice: number, mult: number, zcPerLc: number) {
+  const raw = zcPrice / (zcPerLc * mult);
+  if (raw < 100) return Math.max(1, Math.round(raw));
+  if (raw < 500) return Math.max(5, Math.round(raw / 5) * 5);
+  return Math.max(10, Math.round(raw / 10) * 10);
+}
+
+export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance = 0, lcMult = 1.1, lcRef = 10, ligaCashEnabled = false, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null, personalOffer = null }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -275,15 +304,18 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
     return () => clearInterval(iv);
   }, [rotationEndsAt, router]);
 
-  const handleBuy = (idx: number) => {
+  const handleBuy = (idx: number, currency: "ZC" | "LC" = "ZC") => {
     const offer = offers[idx];
     if (!offer) return;
     if (sabotagedOfferIndex === idx) { toast.error("Esse slot foi sabotado pela Ordem da Trapaca."); return; }
     if (!playerId) { toast.error("Faça login para comprar."); return; }
-    if (!confirm(`Comprar "${offer.name}" por ${offer.finalPrice.toLocaleString("pt-BR")} ZC?`)) return;
+    const priceLabel = currency === "LC"
+      ? `${suggestedLcClient(offer.finalPrice, lcMult, lcRef).toLocaleString("pt-BR")} LC`
+      : `${offer.finalPrice.toLocaleString("pt-BR")} ZC`;
+    if (!confirm(`Comprar "${offer.name}" por ${priceLabel}? A moeda escolhida não será substituída automaticamente.`)) return;
     setBuyingIdx(idx);
     startTransition(async () => {
-      const r = await buyMiauvadaoOffer(idx);
+      const r = await buyMiauvadaoOffer(idx, currency);
       if (r.error) toast.error(r.error);
       else {
         if (r.purchaseStatus) setPurchaseStatus(r.purchaseStatus);
@@ -465,6 +497,9 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, playerId, lastNp
                   pending={pending}
                   buying={buyingIdx === idx}
                   balance={balance}
+                  ligaCashBalance={ligaCashBalance}
+                  priceLc={suggestedLcClient(offer.finalPrice, lcMult, lcRef)}
+                  ligaCashEnabled={ligaCashEnabled}
                   sabotaged={sabotagedOfferIndex === idx}
                   canPurchase={purchaseCount > 0}
                   slotRefreshAvailable={slotRefreshAvailable}
