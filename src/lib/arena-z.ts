@@ -2235,67 +2235,86 @@ export async function lockBotForTeam(playerId: string, teamId: string, difficult
 // ── Ranking público ───────────────────────────────────────────────────────────
 
 async function _getArenaRanking(limit: number) {
-  // Busca IDs de admins para excluir do ranking
-  const adminUsers = await prisma.user.findMany({
-    where: { role: { in: ["ADMIN", "SUPER_ADMIN"] } },
-    select: { player: { select: { id: true } } },
-  });
-  const adminPlayerIds = new Set(
-    adminUsers.map(u => u.player?.id).filter(Boolean) as string[]
-  );
-
-  const battles = await prisma.arenaBattle.findMany({
-    where: {
-      status: "RESOLVED",
-      type: { in: ["BOT", "PVP"] },
-      // Exclui batalhas onde atacante ou defensor é admin
-      attackerPlayerId: { notIn: [...adminPlayerIds] },
-      NOT: { defenderPlayerId: { in: [...adminPlayerIds] } },
-    },
-    select: {
-      id: true, type: true, status: true, result: true,
-      attackerPlayerId: true, defenderPlayerId: true,
-      winnerPlayerId: true, loserPlayerId: true,
-      botName: true, lootResult: true,
-      attackerPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
-      defenderPlayer: { select: { id: true, displayName: true, ptcglNick: true } },
-    },
-    orderBy: { createdAt: "desc" },
-    take: 500,
-  });
-
-  type Row = { playerId: string; name: string; wins: number; losses: number; draws: number; stolenCoins: number; stolenExp: number };
-  const map = new Map<string, Row>();
-  const ensure = (id: string, name: string) => {
-    if (!map.has(id)) map.set(id, { playerId: id, name, wins: 0, losses: 0, draws: 0, stolenCoins: 0, stolenExp: 0 });
-    return map.get(id)!;
+  type AggregatedRow = {
+    playerId: string;
+    name: string;
+    wins: bigint;
+    losses: bigint;
+    draws: bigint;
+    stolenCoins: bigint;
+    stolenExp: bigint;
   };
-  for (const b of battles) {
-    const aName = b.attackerPlayer?.displayName ?? b.attackerPlayer?.ptcglNick ?? "?";
-    const dName = b.defenderPlayer?.displayName ?? b.defenderPlayer?.ptcglNick ?? b.botName ?? "Bot";
-    if (b.attackerPlayerId) ensure(b.attackerPlayerId, aName);
-    if (b.defenderPlayerId) ensure(b.defenderPlayerId, dName);
-    if (b.result === "DRAW") {
-      if (b.attackerPlayerId) ensure(b.attackerPlayerId, aName).draws++;
-      if (b.defenderPlayerId) ensure(b.defenderPlayerId, dName).draws++;
-      continue;
-    }
-    if (b.winnerPlayerId) {
-      const wName = b.winnerPlayerId === b.attackerPlayerId ? aName : dName;
-      const row = ensure(b.winnerPlayerId, wName);
-      row.wins++;
-      const loot = b.lootResult as Record<string, unknown> | null;
-      if (loot?.coins && typeof loot.coins === "number") row.stolenCoins += loot.coins;
-      if (loot?.exp   && typeof loot.exp   === "number") row.stolenExp   += loot.exp;
-    }
-    if (b.loserPlayerId) {
-      const lName = b.loserPlayerId === b.attackerPlayerId ? aName : dName;
-      ensure(b.loserPlayerId, lName).losses++;
-    }
-  }
-  return [...map.values()]
-    .sort((a, b) => b.wins - a.wins || b.stolenCoins - a.stolenCoins || a.losses - b.losses)
-    .slice(0, limit);
+
+  // A agregação acontece no PostgreSQL sobre TODO o histórico elegível. Isso
+  // evita tanto a antiga janela móvel de 500 batalhas quanto enviar todos os
+  // replays/JSONs ao servidor apenas para contar o ranking.
+  const rows = await prisma.$queryRaw<AggregatedRow[]>(Prisma.sql`
+    WITH eligible AS (
+      SELECT b.*
+      FROM "arena_battles" b
+      WHERE b."status"::text = 'RESOLVED'
+        -- O ranking público é PvP. O filtro Prisma anterior citava BOT, mas a
+        -- condição do defensor nulo já os excluía; tornamos a regra explícita
+        -- para não transformar farm PvE antigo em milhares de vitórias.
+        AND b."type"::text = 'PVP'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM "players" ap
+          JOIN "users" au ON au."id" = ap."userId"
+          WHERE au."role"::text IN ('ADMIN', 'SUPER_ADMIN')
+            AND ap."id" IN (b."attackerPlayerId", b."defenderPlayerId")
+        )
+    ), participant_stats AS (
+      SELECT
+        b."attackerPlayerId" AS "playerId",
+        CASE WHEN b."winnerPlayerId" = b."attackerPlayerId" THEN 1 ELSE 0 END AS wins,
+        CASE WHEN b."loserPlayerId" = b."attackerPlayerId" THEN 1 ELSE 0 END AS losses,
+        CASE WHEN b."result"::text = 'DRAW' THEN 1 ELSE 0 END AS draws,
+        CASE WHEN b."winnerPlayerId" = b."attackerPlayerId"
+          THEN COALESCE((b."lootResult"->>'coins')::numeric, 0) ELSE 0 END AS coins,
+        CASE WHEN b."winnerPlayerId" = b."attackerPlayerId"
+          THEN COALESCE((b."lootResult"->>'exp')::numeric, 0) ELSE 0 END AS exp
+      FROM eligible b
+      WHERE b."attackerPlayerId" IS NOT NULL
+
+      UNION ALL
+
+      SELECT
+        b."defenderPlayerId" AS "playerId",
+        CASE WHEN b."winnerPlayerId" = b."defenderPlayerId" THEN 1 ELSE 0 END AS wins,
+        CASE WHEN b."loserPlayerId" = b."defenderPlayerId" THEN 1 ELSE 0 END AS losses,
+        CASE WHEN b."result"::text = 'DRAW' THEN 1 ELSE 0 END AS draws,
+        CASE WHEN b."winnerPlayerId" = b."defenderPlayerId"
+          THEN COALESCE((b."lootResult"->>'coins')::numeric, 0) ELSE 0 END AS coins,
+        CASE WHEN b."winnerPlayerId" = b."defenderPlayerId"
+          THEN COALESCE((b."lootResult"->>'exp')::numeric, 0) ELSE 0 END AS exp
+      FROM eligible b
+      WHERE b."defenderPlayerId" IS NOT NULL
+    )
+    SELECT
+      p."id" AS "playerId",
+      COALESCE(NULLIF(p."displayName", ''), p."ptcglNick", '?') AS name,
+      SUM(s.wins)::bigint AS wins,
+      SUM(s.losses)::bigint AS losses,
+      SUM(s.draws)::bigint AS draws,
+      ROUND(SUM(s.coins))::bigint AS "stolenCoins",
+      ROUND(SUM(s.exp))::bigint AS "stolenExp"
+    FROM participant_stats s
+    JOIN "players" p ON p."id" = s."playerId"
+    GROUP BY p."id", p."displayName", p."ptcglNick"
+    ORDER BY wins DESC, "stolenCoins" DESC, losses ASC
+    LIMIT ${Math.max(1, Math.min(100, limit))}
+  `);
+
+  return rows.map((row) => ({
+    playerId: row.playerId,
+    name: row.name,
+    wins: Number(row.wins),
+    losses: Number(row.losses),
+    draws: Number(row.draws),
+    stolenCoins: Number(row.stolenCoins),
+    stolenExp: Number(row.stolenExp),
+  }));
 }
 
 export const getArenaRanking = unstable_cache(
