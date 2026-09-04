@@ -49,6 +49,11 @@ import { SpecMiniPlayer } from "@/components/spec/spec-mini-player";
 import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-control-dock";
 import { AccountAccessObserver } from "@/components/account-access-observer";
 
+const ACCESS_OBSERVATION_USER_IDS = new Set([
+  "cmpkvjuf2000ajx04uoi89ypa", // Shira
+  "cmq7gfcnl0000l504c3pzmpaw", // Juninho
+]);
+
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
 // no nav, o que é aceitável para evitar 4 queries a cada navegação de página.
@@ -263,7 +268,9 @@ export default async function AppLayout({
         }}
       />
       <MaintenanceVisibilityGuard />
-      <AccountAccessObserver userId={user.id} />
+      {ACCESS_OBSERVATION_USER_IDS.has(user.id) && (
+        <AccountAccessObserver userId={user.id} />
+      )}
       <SessionPersistenceGuard />
       <MobileTitleTooltips />
       {birthdayEligible && (
