@@ -1718,7 +1718,11 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
       // Serializa o uso por mascote entre cliques, abas e instâncias da Vercel.
       // Sem isto, duas transações podem ler o mesmo saldo antes de qualquer uma concluir.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`rainbow-feather:${mascotId}`}))`;
-      const duplicateWindow = new Date(Date.now() - 2 * 60 * 1000);
+      // Janela curta apenas para absorver duplo-envio acidental (duplo-clique /
+      // retry de rede) do MESMO uso. Usos sequenciais intencionais de outra Pena
+      // no mesmo mascote são permitidos — a UI já exige duas confirmações e
+      // desabilita o botão durante o processamento.
+      const duplicateWindow = new Date(Date.now() - 5 * 1000);
       const recentUse = await tx.mascotEvent.findFirst({
         where: {
           mascotId,
@@ -1728,7 +1732,7 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
         orderBy: { createdAt: "desc" },
         select: { id: true },
       });
-      if (recentUse) throw new Error("Esta Pena Arco-Íris já foi processada. Aguarde dois minutos antes de tentar um novo uso neste mascote.");
+      if (recentUse) throw new Error("Este uso da Pena Arco-Íris acabou de ser processado. Tente novamente em alguns segundos.");
       const currentInventory = await tx.playerInventory.findUnique({ where: { id: inv.id } });
       if (!currentInventory || currentInventory.quantity < 1) throw new Error("Você não tem Pena Arco-Íris no inventário.");
       if (isAdminLabFeather) {
