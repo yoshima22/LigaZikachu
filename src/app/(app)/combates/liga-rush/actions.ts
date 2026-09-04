@@ -162,17 +162,33 @@ export async function ensureAutomaticRushLeague() {
 }
 
 function addDaysDate(date: string, days: number) { const value = new Date(`${date}T12:00:00-03:00`); value.setUTCDate(value.getUTCDate() + days); return brtDate(value); }
+function rushArchiveAt(league: { weekStart: Date }) {
+  // O resultado da semana continua sendo a tela principal durante todo o fim de
+  // semana. A troca para a nova edição ocorre junto da abertura da chave, às
+  // 08:00 BRT da segunda-feira seguinte.
+  const nextMonday = addDaysDate(brtDate(league.weekStart), 7);
+  return new Date(`${nextMonday}T08:00:00-03:00`);
+}
 function getPokemonTypeLabel(type?: string | null) { const labels: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" }; return type ? labels[type] ?? type : "Livre"; }
 
 export async function getRushDataAction() {
   const { session, player } = await requireContext();
   await ensureAutomaticRushLeague();
-  const league = await prisma.rushLeague.findFirst({
-    where: { status: { in: ["REGISTRATION", "ACTIVE"] } },
-    orderBy: { weekStart: "asc" },
+  const now = new Date();
+  const [activeLeague, nextRegistration, latestFinished] = await Promise.all([
+    prisma.rushLeague.findFirst({ where: { status: "ACTIVE" }, orderBy: { weekStart: "asc" }, select: { id: true } }),
+    prisma.rushLeague.findFirst({ where: { status: "REGISTRATION" }, orderBy: { weekStart: "asc" }, select: { id: true } }),
+    prisma.rushLeague.findFirst({ where: { status: "FINISHED" }, orderBy: { weekEnd: "desc" }, select: { id: true, weekStart: true } }),
+  ]);
+  const retainedFinished = latestFinished && now < rushArchiveAt(latestFinished) ? latestFinished : null;
+  // Prioridade: edição realmente em andamento; depois o placar encerrado ainda
+  // dentro da janela de consulta; por último, a inscrição da próxima semana.
+  const displayLeagueId = activeLeague?.id ?? retainedFinished?.id ?? nextRegistration?.id;
+  const league = displayLeagueId ? await prisma.rushLeague.findUnique({
+    where: { id: displayLeagueId },
     include: { participants: { orderBy: [{ points: "desc" }, { wins: "desc" }, { survivorsScore: "desc" }, { damageDealt: "desc" }, { damageTaken: "asc" }] }, dailyTeams: { where: { playerId: player.id } }, matches: { orderBy: [{ battleDate: "desc" }, { battleSlot: "asc" }] } },
-  });
-  const upcomingRegistration = league?.status === "ACTIVE" ? await prisma.rushLeague.findFirst({
+  }) : null;
+  const upcomingRegistration = league && league.status !== "REGISTRATION" ? await prisma.rushLeague.findFirst({
     where: { status: "REGISTRATION", weekStart: { gt: league.weekStart } },
     orderBy: { weekStart: "asc" },
     include: { participants: { select: { playerId: true } } },
@@ -235,6 +251,7 @@ export async function getRushDataAction() {
     hideResults: Boolean(prefs?.hideLeagueResults),
     blockedFromRush,
     rushTimes,
+    resultVisibleUntil: league.status === "FINISHED" ? rushArchiveAt(league) : null,
   }));
 }
 
