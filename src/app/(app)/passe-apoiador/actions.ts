@@ -89,7 +89,7 @@ export async function adminGetSchedule(
 export async function adminSetPassStoreSlot(scheduleKey:string,slot:"CURRENT"|"NEXT",enabled:boolean){
   await requireAdmin();const id=scheduleKey==="Passe Apoiador"?"singleton":scheduleKey;
   const config=await prisma.passScheduleConfig.findUnique({where:{id},select:{id:true}});if(!config)return{error:"Salve este calendário antes de anunciá-lo na loja."};
-  await prisma.$transaction(async tx=>{if(enabled)await tx.passScheduleConfig.updateMany({where:slot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},data:slot==="CURRENT"?{isCurrentStorePass:false}:{isNextStorePass:false}});await tx.passScheduleConfig.update({where:{id},data:slot==="CURRENT"?{isCurrentStorePass:enabled}:{isNextStorePass:enabled}})});
+  await prisma.$transaction(async tx=>{if(enabled)await tx.passScheduleConfig.updateMany({where:slot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},data:slot==="CURRENT"?{isCurrentStorePass:false}:{isNextStorePass:false}});await tx.passScheduleConfig.update({where:{id},data:slot==="CURRENT"?{isCurrentStorePass:enabled}:{isNextStorePass:enabled,storeActivatedAt:null,storeActivationAt:null}})});
   revalidatePath("/admin");revalidatePath("/mercado/ligacoins");return{ok:true};
 }
 

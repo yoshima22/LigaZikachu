@@ -10,6 +10,7 @@ import { creditCoins } from "@/lib/zikacoins";
 import { onLootWon } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
+import { nextMidnightBR } from "@/lib/date-br";
 
 const createSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -268,8 +269,9 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: winningPick.player.displayName };
     } else {
-      // Ninguém escolheu — bloquear número, agendar novo sorteio em 24h
-      const nextDraw = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      // Ninguém escolheu — bloquear número e preservar o horário oficial:
+      // próxima meia-noite civil de Brasília, nunca "hora atual + 24h".
+      const nextDraw = nextMidnightBR();
       await prisma.zikaLoot.update({
         where: { id: lootId },
         data: {

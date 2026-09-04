@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/pass-store-activation",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/tower-resolve",
       "schedule": "*/5 * * * *"
     },

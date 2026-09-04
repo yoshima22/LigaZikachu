@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runDraw } from "@/app/(app)/zikaloot/actions";
 import { getActiveRaidSabotages } from "@/lib/raid-event";
+import { nextMidnightBR } from "@/lib/date-br";
 
 // Chamado pelo Vercel Cron ou manualmente
 // Verifica loterias com drawAt <= agora e ainda SCHEDULED
@@ -24,7 +25,7 @@ export async function GET(request: Request) {
     .some((sabotage) => sabotage.sabotageType === "ZIKALOOT_FAKE_NUMBER");
 
   if (zikaLootLocked && due.length > 0) {
-    const nextDraw = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+    const nextDraw = nextMidnightBR(now);
     await prisma.zikaLoot.updateMany({
       where: {
         id: { in: due.map((loot) => loot.id) },

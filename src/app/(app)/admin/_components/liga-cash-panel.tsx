@@ -3,7 +3,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { X, Search } from "lucide-react";
-import { activatePaidPass, adminActivateNextPassList, adminAddPassReservation, adminRemovePassReservation, searchPlayersForPass } from "../liga-cash-actions";
+import { activatePaidPass, adminActivateNextPassList, adminAddPassReservation, adminRemovePassReservation, adminScheduleNextPassActivation, searchPlayersForPass } from "../liga-cash-actions";
 
 type Order = { id: string; playerName: string; paidAt: string | null; offerSlot: string | null; passLabel: string };
 type Reservation = { id: string; playerName: string; paidAt: string | null; manual: boolean };
@@ -11,13 +11,14 @@ type SearchHit = { id: string; displayName: string; onList: boolean };
 
 export function LigaCashPanel({ orders, nextPass, nextReservations }: {
   orders: Order[];
-  nextPass?: { label: string; retroactive: boolean } | null;
+  nextPass?: { label: string; retroactive: boolean; activationLocal?: string | null } | null;
   nextReservations?: Reservation[];
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
   const [retro, setRetro] = useState<Record<string, boolean>>({});
-  const [allRetro, setAllRetro] = useState(false);
+  const [allRetro, setAllRetro] = useState(nextPass?.retroactive ?? false);
+  const [activationLocal, setActivationLocal] = useState(nextPass?.activationLocal ?? "");
 
   // Autocomplete de jogadores
   const [query, setQuery] = useState("");
@@ -72,6 +73,13 @@ export function LigaCashPanel({ orders, nextPass, nextReservations }: {
       router.refresh();
     });
   };
+
+  const saveAutomaticActivation = () => start(async () => {
+    const result = await adminScheduleNextPassActivation(activationLocal || null, allRetro);
+    if (result.error) { toast.error(result.error); return; }
+    toast.success(activationLocal ? "Envio automático agendado em horário de Brasília." : "Agendamento automático removido.");
+    router.refresh();
+  });
 
   return (
     <section className="space-y-6">
@@ -133,13 +141,20 @@ export function LigaCashPanel({ orders, nextPass, nextReservations }: {
         <p className="mt-1 text-xs text-slate-400">Distribua a lista inteira de uma vez ou trate cada compra individualmente.</p>
 
         {nextPass && (
-          <div className="mt-3 flex flex-wrap items-center gap-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+          <div className="mt-3 space-y-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
+            <div className="flex flex-wrap items-end gap-3">
+              <label className="text-xs text-slate-300">Envio e promoção automáticos (BRT)
+                <input type="datetime-local" value={activationLocal} onChange={(e) => setActivationLocal(e.target.value)} className="mt-1 block rounded-lg border border-amber-400/25 bg-slate-950 px-3 py-2 text-sm text-white" />
+              </label>
+              <button disabled={pending} onClick={saveAutomaticActivation} className="rounded-lg border border-amber-300/40 px-4 py-2 text-xs font-bold text-amber-200 disabled:opacity-50">{activationLocal ? "Salvar agendamento" : "Remover agendamento"}</button>
+            </div>
             <label className="flex items-center gap-2 text-xs text-slate-300">
               <input type="checkbox" checked={allRetro} onChange={(e) => setAllRetro(e.target.checked)} className="accent-amber-400" /> Todos retroativos (podem resgatar dias já passados)
             </label>
             <button disabled={pending || reservations.length === 0} onClick={distributeAll} className="rounded-lg bg-amber-300 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-50">
               ⚡ Distribuir a todos da lista ({reservations.length}) e promover a atual
             </button>
+            <p className="text-[10px] leading-relaxed text-slate-500">No horário escolhido, o próximo passe vira o passe atual da página LigaCash e todos os jogadores da lista recebem o passe. A rotina verifica a cada 5 minutos e não repete um envio já concluído.</p>
           </div>
         )}
 

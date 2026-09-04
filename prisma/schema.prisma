@@ -3282,6 +3282,9 @@ model PassScheduleConfig {
   updatedBy              String? // userId do admin que salvou por último
   isCurrentStorePass     Boolean  @default(false)
   isNextStorePass        Boolean  @default(false)
+  storeActivationAt      DateTime?
+  storeActivationRetroactive Boolean @default(false)
+  storeActivatedAt       DateTime?
 
   @@map("pass_schedule_config")
 }

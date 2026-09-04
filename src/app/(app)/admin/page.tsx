@@ -173,7 +173,7 @@ export default async function AdminPage() {
   const paidPassPlayers = paidPassOrders.length ? await prisma.player.findMany({ where: { id: { in: paidPassOrders.map(order => order.playerId) } }, select: { id: true, displayName: true } }) : [];
   const paidPassNames = new Map(paidPassPlayers.map(player => [player.id, player.displayName]));
   // Calendário do próximo passe + lista de reservados (para a inclusão em massa).
-  const nextPassConfig = await prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true } });
+  const nextPassConfig = await prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true, storeActivationAt: true, storeActivationRetroactive: true } });
   const nextReservations = nextPassConfig
     ? paidPassOrders.filter(o => o.passOfferSlot === "NEXT" && (o.passScheduleKey === nextPassConfig.id || o.passScheduleKey === null))
         .map(o => ({ id: o.id, playerName: paidPassNames.get(o.playerId) ?? "Jogador removido", paidAt: o.paidAt?.toISOString() ?? null, manual: o.provider === "ADMIN_MANUAL" }))
@@ -183,7 +183,7 @@ export default async function AdminPage() {
     <div className="space-y-8">
       <LigaCashPanel
         orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null, offerSlot:order.passOfferSlot, passLabel:order.productLabel }))}
-        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.allowRetroactiveClaims } : null}
+        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.storeActivationRetroactive, activationLocal: nextPassConfig.storeActivationAt ? nextPassConfig.storeActivationAt.toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(" ", "T") : null } : null}
         nextReservations={nextReservations}
       />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">

@@ -75,3 +75,11 @@ export function scheduleDateBR(year: number, month: number, day: number, hour = 
   const offset = utcDate.getTime() - testDate.getTime();
   return new Date(testDate.getTime() - offset);
 }
+
+/** Próxima meia-noite civil em Brasília, independentemente da hora de execução. */
+export function nextMidnightBR(from = new Date()): Date {
+  const localDate = from.toLocaleDateString("en-CA", { timeZone: TZ_BR });
+  const [year, month, day] = localDate.split("-").map(Number);
+  const tomorrow = new Date(Date.UTC(year, month - 1, day + 1));
+  return scheduleDateBR(tomorrow.getUTCFullYear(), tomorrow.getUTCMonth() + 1, tomorrow.getUTCDate(), 0, 0);
+}
