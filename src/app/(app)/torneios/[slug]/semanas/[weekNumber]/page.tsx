@@ -463,7 +463,7 @@ export default async function WeekDetailPage({
               </select>
             </label>
             <label className="space-y-1 text-xs text-slate-400">
-              <span>Pontos</span>
+              <span>Pontos (+ adiciona / − remove)</span>
               <input
                 name="points"
                 type="number"
@@ -492,7 +492,7 @@ export default async function WeekDetailPage({
             </div>
           </form>
           <p className="mt-2 text-xs text-slate-500">
-            Use 0 para remover o bonus manual atual de um jogador neste dia.
+            Os pontos são somados ao bônus manual atual do jogador neste dia (use valores negativos para remover). Para zerar, aplique o oposto do total atual.
           </p>
         </div>
       )}

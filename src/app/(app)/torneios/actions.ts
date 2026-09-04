@@ -1272,6 +1272,13 @@ export async function applyTournamentWeekBonus(
       ? (currentRule.manualBonuses as Array<Record<string, unknown>>)
       : [];
 
+    // SOMA ao bônus manual existente do jogador (positivos adicionam, negativos
+    // removem) em vez de substituir o valor na tabela. Se o total zerar, a
+    // entrada é removida.
+    const existing = currentBonuses.find((bonus) => bonus.playerId === data.playerId);
+    const existingPoints = Number(existing?.points ?? 0);
+    const newTotal = existingPoints + data.points;
+
     const manualBonuses: Prisma.InputJsonArray = [
       ...currentBonuses
         .filter((bonus) => bonus.playerId !== data.playerId)
@@ -1279,7 +1286,7 @@ export async function applyTournamentWeekBonus(
       {
         playerId: data.playerId,
         playerName: player.displayName,
-        points: data.points,
+        points: newTotal,
         reason: data.reason?.trim() || "Bonus manual do modo de jogo",
         awardedById: actor.id,
         awardedAt: new Date().toISOString()
@@ -1302,7 +1309,9 @@ export async function applyTournamentWeekBonus(
           after: {
             playerId: data.playerId,
             playerName: player.displayName,
-            points: data.points,
+            delta: data.points,
+            previousPoints: existingPoints,
+            points: newTotal,
             reason: data.reason ?? null
           }
         }
