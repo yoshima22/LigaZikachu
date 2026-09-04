@@ -178,6 +178,7 @@ model User {
   generatedSnapshots        RankingSnapshot[]        @relation("RankingSnapshotGeneratedBy")
   awardedPlayerAchievements PlayerAchievement[]      @relation("PlayerAchievementAwardedBy")
   auditLogs                 AuditLog[]               @relation("AuditActor")
+  accessObservations        AccountAccessObservation[]
   playerActivityLogs        PlayerActivityLog[]      @relation("PlayerActivityActor")
   createdTournaments        Tournament[]             @relation("TournamentCreatedBy")
   decidedRegistrations      TournamentRegistration[] @relation("RegistrationDecidedBy")
@@ -1195,6 +1196,26 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
   @@index([actorUserId, createdAt])
   @@map("audit_logs")
+}
+
+// Identificadores pseudonimizados para auditoria de compartilhamento de conta.
+// IP e identificador local do navegador nunca sao persistidos em texto puro.
+model AccountAccessObservation {
+  id            String   @id @default(cuid())
+  userId        String
+  networkHash   String
+  deviceHash    String
+  userAgentHash String
+  firstSeenAt   DateTime @default(now())
+  lastSeenAt    DateTime @default(now())
+  hits          Int      @default(1)
+  user          User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, networkHash, deviceHash])
+  @@index([networkHash, lastSeenAt])
+  @@index([deviceHash, lastSeenAt])
+  @@index([userId, lastSeenAt])
+  @@map("account_access_observations")
 }
 
 // Extrato compacto e indexado para auditorias administrativas. As tabelas

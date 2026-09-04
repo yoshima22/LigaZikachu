@@ -47,6 +47,7 @@ import { DesktopChatDockLoader } from "./_components/desktop-chat-dock-loader";
 import { AndroidUpdateBadge } from "@/components/android-update";
 import { SpecMiniPlayer } from "@/components/spec/spec-mini-player";
 import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-control-dock";
+import { AccountAccessObserver } from "@/components/account-access-observer";
 
 // Cache por usuário — TTL 30s. Revalidado por tag "nav-{userId}" nas actions
 // que alteram gift count, saldo ou DMs. Pior caso: 30s de dado levemente desatualizado
@@ -262,6 +263,7 @@ export default async function AppLayout({
         }}
       />
       <MaintenanceVisibilityGuard />
+      <AccountAccessObserver userId={user.id} />
       <SessionPersistenceGuard />
       <MobileTitleTooltips />
       {birthdayEligible && (
