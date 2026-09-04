@@ -34,39 +34,6 @@ export function revalidateGlobalNotice() {
   revalidateTag(GLOBAL_NOTICE_TAG);
 }
 
-// ── Anúncio de apoio à Liga (Professor Enguiça, mostrado no topo da página) ─────
-// Substitui o push no celular: quando alguém compra LigaCash/Passe, gravamos aqui
-// a mensagem do Professor Enguiça e o topo da página a exibe por alguns minutos.
-export const LIGA_SUPPORT_ANNOUNCEMENT_KEY = "liga_support_announcement";
-export const LIGA_SUPPORT_ANNOUNCEMENT_TAG = "liga-support-announcement";
-const LIGA_SUPPORT_TTL_MS = 12 * 60_000; // visível por ~12 minutos após a compra
-
-export const getLigaSupportAnnouncement = unstable_cache(
-  async (): Promise<{ message: string; freshUntil: number }> => {
-    try {
-      const setting = await prisma.appSetting.findUnique({ where: { key: LIGA_SUPPORT_ANNOUNCEMENT_KEY }, select: { value: true } });
-      const v = (setting?.value ?? {}) as { message?: string; at?: string };
-      const message = typeof v.message === "string" ? v.message.trim() : "";
-      const at = v.at ? new Date(v.at).getTime() : 0;
-      return { message, freshUntil: at + LIGA_SUPPORT_TTL_MS };
-    } catch {
-      return { message: "", freshUntil: 0 };
-    }
-  },
-  [LIGA_SUPPORT_ANNOUNCEMENT_KEY],
-  { revalidate: 30, tags: [LIGA_SUPPORT_ANNOUNCEMENT_TAG] },
-);
-
-export async function setLigaSupportAnnouncement(message: string) {
-  const value = { message: message.slice(0, 400), at: new Date().toISOString() };
-  await prisma.appSetting.upsert({
-    where: { key: LIGA_SUPPORT_ANNOUNCEMENT_KEY },
-    create: { key: LIGA_SUPPORT_ANNOUNCEMENT_KEY, value },
-    update: { value },
-  });
-  revalidateTag(LIGA_SUPPORT_ANNOUNCEMENT_TAG);
-}
-
 // ── Meta pública de custos do servidor ──────────────────────────────────────
 export const SERVER_COST_GOAL_KEY = "server_cost_goal";
 export const SERVER_COST_GOAL_TAG = "server-cost-goal";

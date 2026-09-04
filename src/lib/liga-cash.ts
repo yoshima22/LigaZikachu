@@ -1,7 +1,7 @@
 import { createHmac, timingSafeEqual } from "crypto";
 import { prisma } from "@/lib/prisma";
 import {changeLigaCash} from "@/lib/liga-cash-wallet";
-import { setLigaSupportAnnouncement } from "@/lib/app-settings";
+import { publishLeagueTicker } from "@/lib/league-ticker";
 
 // ── Professor Enguiça: agradecimento público por apoiar a Liga ─────────────────
 // Variações na voz do Professor Enguiça (elétrico, caloroso, um tanto elétrico
@@ -61,13 +61,13 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
 
-  // Fora da transação: agradecimento público do Professor Enguiça. Sem push no
-  // celular — apenas um anúncio no topo da página (visível por alguns minutos).
+  // Fora da transação: agradecimento do Professor Enguiça como notificação padrão
+  // da Liga (ticker no topo), rápida e para todos. Sem push no celular.
   if (broadcastKind && broadcastPlayerId) {
     try {
       const player = await prisma.player.findUnique({ where: { id: broadcastPlayerId }, select: { displayName: true } });
       const msg = professorEnguicaThankYou(player?.displayName ?? "Um treinador", broadcastKind);
-      await setLigaSupportAnnouncement(msg.body);
+      await publishLeagueTicker({ type: "LIGA_SUPPORT", message: msg.body, href: "/mercado/ligacoins", ttlHours: 2 });
     } catch (e) { console.error("[LigaCash] falha ao anunciar apoio", e); }
   }
   return result;

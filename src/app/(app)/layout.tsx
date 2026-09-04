@@ -10,7 +10,7 @@ import {
   getManualSessionUser,
   MANUAL_SESSION_COOKIE,
 } from "@/lib/manual-session";
-import { getGlobalNotice, getAckNotice, getLigaSupportAnnouncement } from "@/lib/app-settings";
+import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
 import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
 import { Button } from "@/components/ui/button";
 import { Download, Megaphone, Zap } from "lucide-react";
@@ -197,8 +197,6 @@ export default async function AppLayout({
       : Promise.resolve({ messageCount: 0, bazarCount: 0, messageAlerts: [], bazarAlerts: [] }),
     getZikaTvLiveStatus().catch(() => false),
   ]);
-  const supportAnnouncement = await getLigaSupportAnnouncement().catch(() => ({ message: "", freshUntil: 0 }));
-  const showSupportAnnouncement = Boolean(supportAnnouncement.message) && Date.now() < supportAnnouncement.freshUntil;
   const livePvpVisible = canAccessLivePvp(
     livePvpConfig,
     navData.player?.id,
@@ -415,14 +413,6 @@ export default async function AppLayout({
               zikaTvLive={zikaTvLive}
             />
           </div>
-          {showSupportAnnouncement && (
-            <div className="border-t border-cyan-300/20 bg-gradient-to-r from-cyan-400/10 via-slate-900/40 to-violet-500/10">
-              <div className="mx-auto flex max-w-7xl items-center gap-2 px-4 py-2 text-xs font-semibold text-cyan-100 sm:px-6">
-                <span className="shrink-0 text-base">⚡</span>
-                <span className="truncate" title={supportAnnouncement.message}>{supportAnnouncement.message}</span>
-              </div>
-            </div>
-          )}
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">
               <summary className="mx-auto flex max-w-7xl cursor-pointer list-none items-center gap-2 px-4 py-2 text-xs font-semibold text-[#FFCB05] sm:px-6">
