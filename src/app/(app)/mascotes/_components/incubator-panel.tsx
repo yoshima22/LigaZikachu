@@ -173,7 +173,7 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
   return (
     <div className="fixed inset-0 z-[90] grid place-items-center overflow-hidden bg-[radial-gradient(circle_at_center,rgba(88,28,135,.42),rgba(2,6,23,.96)_68%)] p-4 backdrop-blur-md">
       <div className="pointer-events-none absolute inset-0 opacity-50 [background-image:radial-gradient(circle,#fde047_1px,transparent_1.5px)] [background-size:34px_34px]" />
-      <div className={`relative w-full max-w-2xl overflow-hidden rounded-[2rem] border p-5 shadow-[0_0_90px_rgba(168,85,247,.28)] transition-all duration-700 sm:p-8 ${revealed ? "border-yellow-300/70 bg-slate-950" : "border-violet-400/40 bg-slate-950/95"}`}>
+      <div className={`relative w-full max-w-3xl overflow-hidden rounded-[2rem] border p-5 shadow-[0_0_90px_rgba(168,85,247,.28)] transition-all duration-700 sm:p-8 ${revealed ? "border-yellow-300/70 bg-slate-950" : "border-violet-400/40 bg-slate-950/95"}`}>
         <div className={`pointer-events-none absolute inset-x-0 top-0 h-1 transition-all duration-700 ${revealed ? "bg-gradient-to-r from-yellow-300 via-white to-yellow-300" : "bg-gradient-to-r from-cyan-400 via-violet-400 to-fuchsia-400"}`} />
         <div className="relative text-center">
           <p className="text-[10px] font-black uppercase tracking-[.3em] text-violet-300">Incubadora da Liga</p>
@@ -192,10 +192,10 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
               const isWinner = revealed && candidateIndex === winnerIndex;
               const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
               return (
-                <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-1/3 shrink-0 snap-center flex-col items-center rounded-2xl border px-1 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:px-2 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
+                <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-36 shrink-0 snap-center flex-col items-center rounded-2xl border px-2 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:w-44 sm:px-3 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
                   <img src={sprite} alt="" className="h-24 w-24 object-contain transition-all sm:h-32 sm:w-32" style={{ imageRendering: "pixelated" }} />
-                  <p className={`mt-2 max-w-full truncate text-xs font-bold sm:text-sm ${center ? "text-white" : "text-slate-500"}`}>{isWinner ? result.name : getPokemonName(pokemonId)}</p>
+                  <p className={`mt-2 min-h-8 w-full break-words text-center text-xs font-bold leading-tight sm:text-sm ${center ? "text-white" : "text-slate-500"}`}>{isWinner ? result.name : getPokemonName(pokemonId)}</p>
                 </div>
               );
             })}
