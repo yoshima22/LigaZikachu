@@ -995,12 +995,32 @@ export async function updateTournamentWeekSettings(
     const label = data.label?.trim() || null;
     const notes = data.notes?.trim() || null;
     let contractData: {
-      enguicaContractKey?: string;
-      enguicaContractTitle?: string;
-      enguicaContractDescription?: string;
-      enguicaContractRevealedAt?: Date;
+      enguicaContractKey?: string | null;
+      enguicaContractTitle?: string | null;
+      enguicaContractDescription?: string | null;
+      enguicaContractRevealedAt?: Date | null;
     } = {};
-    if (data.status === WeekStatus.OPEN && before.tournament.enguicaContractsEnabled && !before.enguicaContractKey) {
+    const contractsOn = before.tournament.enguicaContractsEnabled;
+    // Decks ficam visíveis ("listas liberadas") quando o registro passa a
+    // travado. Comparamos antes x depois para detectar o momento da liberação.
+    const wasVisible = isDeckRegistrationLocked(before);
+    const willBeVisible = isDeckRegistrationLocked({ status: data.status, deckLockAt, lockAt: before.lockAt, endDate: before.endDate });
+
+    if (data.status === WeekStatus.PLANNED) {
+      // Semana planejada esconde o contrato do Professor Enguiça (evita vazamento
+      // enquanto o admin ainda está configurando o dia).
+      contractData = { enguicaContractKey: null, enguicaContractTitle: null, enguicaContractDescription: null, enguicaContractRevealedAt: null };
+    } else if (contractsOn && !wasVisible && willBeVisible && (data.status === WeekStatus.OPEN || data.status === WeekStatus.LOCKED)) {
+      // Ao liberar os decks para visibilidade, sorteia NOVAMENTE o desafio do dia
+      // (mesmo que já existisse um), evitando vazamento do contrato anterior.
+      const contract = drawEnguicaContract(before.enguicaContractKey ?? undefined);
+      contractData = {
+        enguicaContractKey: contract.key,
+        enguicaContractTitle: contract.title,
+        enguicaContractDescription: contract.description,
+        enguicaContractRevealedAt: new Date(),
+      };
+    } else if (data.status === WeekStatus.OPEN && contractsOn && !before.enguicaContractKey) {
       const previousWeek = await prisma.tournamentWeek.findFirst({
         where: { tournamentId: before.tournamentId, weekNumber: { lt: before.weekNumber }, enguicaContractKey: { not: null } },
         orderBy: { weekNumber: "desc" },
