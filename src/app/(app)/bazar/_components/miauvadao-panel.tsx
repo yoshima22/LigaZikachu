@@ -327,15 +327,16 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
   };
 
   const [buyingPersonal, setBuyingPersonal] = useState(false);
-  const handleBuyPersonal = () => {
+  const handleBuyPersonal = (currency: "ZC" | "LC") => {
     const p = personalOffer;
     if (!p) return;
     if (!playerId) { toast.error("Faça login para comprar."); return; }
     if (p.sold >= p.offer.stock) { toast.error("Você já esgotou sua oferta pessoal desta rotação."); return; }
-    if (!confirm(`Comprar sua oferta pessoal "${p.offer.name}" por ${p.offer.finalPrice.toLocaleString("pt-BR")} ZC?`)) return;
+    const price = currency === "LC" ? suggestedLcClient(p.offer.finalPrice, lcMult, lcRef) : p.offer.finalPrice;
+    if (!confirm(`Comprar sua oferta pessoal "${p.offer.name}" por ${price.toLocaleString("pt-BR")} ${currency}? A moeda escolhida não será substituída automaticamente.`)) return;
     setBuyingPersonal(true);
     startTransition(async () => {
-      const r = await buyPersonalMiauvadaoSlot();
+      const r = await buyPersonalMiauvadaoSlot(currency);
       if (r.error) toast.error(r.error);
       else { toast.success(`"${p.offer.name}" adicionado ao inventário! 🎉`); router.refresh(); }
       setBuyingPersonal(false);
@@ -512,7 +513,9 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
             const { offer, sold } = personalOffer;
             const remaining = Math.max(0, offer.stock - sold);
             const soldOut = remaining <= 0;
-            const cantAfford = balance < offer.finalPrice;
+            const personalPriceLc = suggestedLcClient(offer.finalPrice, lcMult, lcRef);
+            const cantAffordZc = balance < offer.finalPrice;
+            const cantAffordLc = ligaCashBalance < personalPriceLc;
             return (
               <div className="relative overflow-hidden rounded-2xl border border-cyan-400/40 bg-gradient-to-br from-cyan-500/10 via-slate-950/40 to-purple-500/10 p-3 sm:p-4" style={{ zIndex: 15 }}>
                 <div className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1">
@@ -534,16 +537,17 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
                         {offer.discountPct > 0 && <span className="rounded bg-emerald-500/15 px-1.5 py-0.5 text-[9px] font-bold text-emerald-300">-{offer.discountPct}%</span>}
                       </div>
                       <p className="mt-0.5 text-[9px] text-cyan-200/70">Estoque exclusivo: {remaining}/{offer.stock} · só você compra</p>
+                      <p className="mt-0.5 text-[9px] text-slate-500">Seus saldos: {balance.toLocaleString("pt-BR")} ZC · {ligaCashBalance.toLocaleString("pt-BR")} LC</p>
                     </div>
                   </div>
-                  <button
-                    onClick={handleBuyPersonal}
-                    disabled={pending || buyingPersonal || soldOut || cantAfford || !playerId}
-                    className="w-full shrink-0 rounded-xl bg-cyan-400 px-4 py-2.5 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 sm:w-auto"
-                    title={soldOut ? "Esgotada nesta rotação" : cantAfford ? "Saldo insuficiente" : "Comprar oferta pessoal"}
-                  >
-                    {buyingPersonal ? "..." : soldOut ? "Esgotada" : cantAfford ? "Sem saldo" : "Comprar"}
-                  </button>
+                  <div className="grid w-full shrink-0 gap-2 sm:w-auto">
+                    <button onClick={() => handleBuyPersonal("ZC")} disabled={pending || buyingPersonal || soldOut || cantAffordZc || !playerId} className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+                      {buyingPersonal ? "Processando…" : soldOut ? "Esgotada" : `Pagar ${offer.finalPrice.toLocaleString("pt-BR")} ZC`}
+                    </button>
+                    {ligaCashEnabled && <button onClick={() => handleBuyPersonal("LC")} disabled={pending || buyingPersonal || soldOut || cantAffordLc || !playerId} className="rounded-xl bg-cyan-400 px-4 py-2 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-40">
+                      {buyingPersonal ? "Processando…" : soldOut ? "Esgotada" : `Pagar ${personalPriceLc.toLocaleString("pt-BR")} LC`}
+                    </button>}
+                  </div>
                 </div>
               </div>
             );

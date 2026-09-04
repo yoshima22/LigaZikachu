@@ -2597,7 +2597,7 @@ export async function getPersonalMiauvadaoOffer(): Promise<{ offer: MiauvadaoOff
 }
 
 /** Compra 1 unidade da oferta pessoal (até o estoque de 2 por rotação). */
-export async function buyPersonalMiauvadaoSlot(): Promise<{ error?: string; sold?: number }> {
+export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string; sold?: number }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id); if (!player) return { error: "Perfil não encontrado." };
@@ -2614,15 +2614,33 @@ export async function buyPersonalMiauvadaoSlot(): Promise<{ error?: string; sold
       const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
       const already = _personalSoldCount(prd, player.id, rotationIso);
       if (already >= PERSONAL_SLOT_STOCK) throw new Error("Você já esgotou sua oferta pessoal desta rotação.");
-      const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
-      if (!wallet || wallet.balance < offer.finalPrice) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ZC, oferta custa ${offer.finalPrice} ZC).`);
-      const coinsToVault = Math.floor(offer.finalPrice * 0.25);
-      await creditCoins(tx, {
-        playerId: player.id,
-        type: ZikaCoinTxType.SHOP_PURCHASE,
-        amount: -offer.finalPrice,
-        description: `Miauvadão: oferta exclusiva de ${offer.name}`,
-      });
+      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
+      const priceLc = suggestedLigaCashPrice(offer.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
+      const price = currency === "LC" ? priceLc : offer.finalPrice;
+      const wallet = currency === "LC"
+        ? await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
+        : await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < price) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency}, oferta custa ${price} ${currency}).`);
+      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      if (currency === "ZC") {
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: ZikaCoinTxType.SHOP_PURCHASE,
+          amount: -price,
+          description: `Miauvadão: oferta exclusiva de ${offer.name}`,
+        });
+      } else {
+        await changeLigaCash(tx, {
+          playerId: player.id,
+          amount: -price,
+          reason: "SHOP_PURCHASE",
+          referenceType: "MiauvadaoPersonalOffer",
+          referenceId: offer.shopItemId ?? offer.itemType,
+          spentDelta: price,
+          metadata: { cycle: rotationIso, name: offer.name },
+        });
+      }
       await _deliverMiauvadaoItem(tx, player.id, offer);
       soldAfter = already + 1;
       const nextEntry = { ...(prd[player.id] ?? {}), personalCycle: rotationIso, personalSold: soldAfter };
@@ -2636,22 +2654,21 @@ export async function buyPersonalMiauvadaoSlot(): Promise<{ error?: string; sold
         )
         WHERE id = 'singleton'
       `);
-      await tx.miauvadaoConfig.update({
-        where: { id: "singleton" },
-        data: { vaultBalance: { increment: coinsToVault } },
-      });
+      if (coinsToVault > 0) {
+        await tx.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: coinsToVault } } });
+      }
       await recordPlayerActivity(tx, {
         playerId: player.id,
         actorUserId: user.id,
         category: "BAZAR",
         action: "MIAUVADAO_PERSONAL_PURCHASE",
-        summary: `Comprou ${offer.name} no slot exclusivo por ${offer.finalPrice} ZC`,
+        summary: `Comprou ${offer.name} no slot exclusivo por ${price} ${currency}`,
         source: "MIAUVADAO_PERSONAL_SLOT",
         entityType: "shopItem",
         entityId: offer.shopItemId ?? offer.itemType,
         amount: 1,
         unit: "ITEM",
-        metadata: { cycle: rotationIso, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price: offer.finalPrice },
+        metadata: { cycle: rotationIso, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency },
       });
     }, { isolationLevel: "Serializable" });
     revalidateTag("miauvadao-config");
