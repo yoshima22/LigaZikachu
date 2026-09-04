@@ -183,7 +183,7 @@ export default async function AdminPage() {
     <div className="space-y-8">
       <LigaCashPanel
         orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null, offerSlot:order.passOfferSlot, passLabel:order.productLabel }))}
-        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.storeActivationRetroactive, activationLocal: nextPassConfig.storeActivationAt ? nextPassConfig.storeActivationAt.toLocaleString("sv-SE", { timeZone: "America/Sao_Paulo", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hour12: false }).replace(" ", "T") : null } : null}
+        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.storeActivationRetroactive, activationLocal: nextPassConfig.storeActivationAt ? nextPassConfig.storeActivationAt.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : null } : null}
         nextReservations={nextReservations}
       />
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">

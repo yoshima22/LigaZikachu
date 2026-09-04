@@ -327,7 +327,7 @@ export default async function DashboardPage() {
       })
     : [];
   const myEntry = ranking.find(r => r.playerId === player.id);
-  const patchNotes = await getPatchNotes().catch(() => ({ notes: [] as { title: string; content: string }[] }));
+  const patchNotes = await getPatchNotes().catch(() => ({ notes: [] as { title: string; content: string }[], updatedAt: undefined as string | undefined }));
 
   const codesCount = seasonId
     ? await prisma.codeDistribution.count({ where: { playerId: player.id, seasonId, status: { not: "REVOKED" } } }).catch((error) => {
@@ -376,7 +376,7 @@ export default async function DashboardPage() {
         <StatCard label="Códigos recebidos" value={codesCount} icon={<Package size={22} />} description="nesta temporada" />
       </div>
 
-      {patchNotes.notes.length > 0 && <PatchNotesCard notes={patchNotes.notes} />}
+      {patchNotes.notes.length > 0 && <PatchNotesCard notes={patchNotes.notes} version={patchNotes.updatedAt ?? "legacy"} />}
 
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Próximas Partidas — apenas os jogos da semana atual, separados por dia */}

@@ -11,10 +11,10 @@ export async function adminScheduleNextPassActivation(localDateTime: string | nu
   if (!next) return { error: "Marque um calendário como próximo passe antes de agendar." };
   let activationAt: Date | null = null;
   if (localDateTime) {
-    const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(localDateTime);
-    if (!match) return { error: "Informe uma data e hora válidas." };
-    activationAt = scheduleDateBR(Number(match[1]), Number(match[2]), Number(match[3]), Number(match[4]), Number(match[5]));
-    if (activationAt.getTime() <= Date.now()) return { error: "Escolha um horário futuro em Brasília." };
+    const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(localDateTime);
+    if (!match) return { error: "Informe uma data válida." };
+    activationAt = scheduleDateBR(Number(match[1]), Number(match[2]), Number(match[3]), 0, 0);
+    if (activationAt.getTime() <= Date.now()) return { error: "Escolha uma data futura em Brasília." };
   }
   await prisma.passScheduleConfig.update({
     where: { id: next.id },

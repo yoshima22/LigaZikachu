@@ -143,8 +143,8 @@ export function LigaCashPanel({ orders, nextPass, nextReservations }: {
         {nextPass && (
           <div className="mt-3 space-y-3 rounded-xl border border-amber-400/25 bg-amber-400/5 p-3">
             <div className="flex flex-wrap items-end gap-3">
-              <label className="text-xs text-slate-300">Envio e promoção automáticos (BRT)
-                <input type="datetime-local" value={activationLocal} onChange={(e) => setActivationLocal(e.target.value)} className="mt-1 block rounded-lg border border-amber-400/25 bg-slate-950 px-3 py-2 text-sm text-white" />
+              <label className="text-xs text-slate-300">Data do envio automático (BRT)
+                <input type="date" value={activationLocal} onChange={(e) => setActivationLocal(e.target.value)} className="mt-1 block rounded-lg border border-amber-400/25 bg-slate-950 px-3 py-2 text-sm text-white" />
               </label>
               <button disabled={pending} onClick={saveAutomaticActivation} className="rounded-lg border border-amber-300/40 px-4 py-2 text-xs font-bold text-amber-200 disabled:opacity-50">{activationLocal ? "Salvar agendamento" : "Remover agendamento"}</button>
             </div>
@@ -154,7 +154,7 @@ export function LigaCashPanel({ orders, nextPass, nextReservations }: {
             <button disabled={pending || reservations.length === 0} onClick={distributeAll} className="rounded-lg bg-amber-300 px-4 py-2 text-xs font-black text-slate-950 disabled:opacity-50">
               ⚡ Distribuir a todos da lista ({reservations.length}) e promover a atual
             </button>
-            <p className="text-[10px] leading-relaxed text-slate-500">No horário escolhido, o próximo passe vira o passe atual da página LigaCash e todos os jogadores da lista recebem o passe. A rotina verifica a cada 5 minutos e não repete um envio já concluído.</p>
+            <p className="text-[10px] leading-relaxed text-slate-500">À meia-noite BRT da data escolhida, o próximo passe vira o passe atual da página LigaCash e todos os jogadores da lista recebem o passe. A rotina roda somente uma vez por dia e não repete um envio já concluído.</p>
           </div>
         )}
 

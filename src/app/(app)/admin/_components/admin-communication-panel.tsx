@@ -117,7 +117,7 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
           <h3 className="font-semibold text-slate-200">Patch notes (dashboard)</h3>
         </div>
         <p className="mt-2 text-xs text-slate-500">
-          Até 3 notas curtas exibidas no dashboard dos jogadores (paginadas). A Página 1 é a mais recente. Deixe o conteúdo vazio para ocultar aquela página.
+          Até 3 publicações no dashboard. Cada publicação aceita texto longo e cria suas próprias páginas automaticamente, sem aumentar o tamanho do quadro. A primeira é a mais recente.
         </p>
         <div className="mt-3 space-y-3">
           {patch.map((note, i) => (
@@ -127,7 +127,7 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
                 value={note.title}
                 onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, title: e.target.value } : n))}
                 placeholder="Título (opcional)"
-                maxLength={80}
+                maxLength={120}
                 className="mb-2 w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
               />
               <div className="mb-1.5 flex items-center gap-1">
@@ -141,11 +141,12 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
                 ref={(el) => { patchRefs.current[i] = el; }}
                 value={note.content}
                 onChange={(e) => setPatch((p) => p.map((n, j) => j === i ? { ...n, content: e.target.value } : n))}
-                placeholder="Texto curto do patch note... (use **negrito**, *itálico*, __sublinhado__, - listas)"
-                maxLength={600}
-                rows={3}
+                placeholder="Texto do patch note... (use **negrito**, *itálico*, __sublinhado__, - listas)"
+                maxLength={12000}
+                rows={8}
                 className="w-full min-w-0 rounded-lg border border-slate-700 bg-slate-950 px-3 py-1.5 text-sm text-white outline-none focus:border-cyan-400/50"
               />
+              <p className="mt-1 text-right text-[9px] text-slate-600">{note.content.length.toLocaleString("pt-BR")}/12.000 caracteres · páginas geradas automaticamente</p>
             </div>
           ))}
         </div>

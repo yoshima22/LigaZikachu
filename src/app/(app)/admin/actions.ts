@@ -1254,7 +1254,7 @@ export async function updatePatchNotes(input: { notes: { title: string; content:
     const { PATCH_NOTES_KEY, revalidatePatchNotes } = await import("@/lib/app-settings");
     const notes = (input.notes ?? [])
       .slice(0, 3)
-      .map((n) => ({ title: (n.title ?? "").trim().slice(0, 80), content: (n.content ?? "").trim().slice(0, 600) }))
+      .map((n) => ({ title: (n.title ?? "").trim().slice(0, 120), content: (n.content ?? "").trim().slice(0, 12000) }))
       .filter((n) => n.content.length > 0);
     const value = { notes, updatedAt: new Date().toISOString() };
     await prisma.appSetting.upsert({
