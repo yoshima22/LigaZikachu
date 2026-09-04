@@ -565,12 +565,14 @@ export function runLeagueCombat(
       // GUARDIAN intercept
       const guardians = (entry.side === "A" ? b : a).filter(m => m.combatRole === "GUARDIAN" && m.id !== target.id && (hp.get(m.id) ?? 0) > 0);
       let guardianEffect: string | null = null;
+      let guardianKnockedOut = false;
       if (guardians.length > 0) {
         const g = guardians[0];
         const absorbPct = Math.min(0.40, 0.15 + (g.vitality + g.charisma) / 600);
         const absorbed = Math.round(damage * absorbPct);
         damage -= absorbed;
         hp.set(g.id, Math.max(0, (hp.get(g.id) ?? 0) - absorbed));
+        guardianKnockedOut = (hp.get(g.id) ?? 0) === 0;
         guardianEffect = `Guardião ${g.name} absorveu ${absorbed} de dano.`;
       }
 
@@ -598,6 +600,13 @@ export function runLeagueCombat(
 
       const newHp = Math.max(0, (hp.get(target.id) ?? 0) - damage);
       hp.set(target.id, newHp);
+      // Dramático recupera a tentativa de último ato ao conquistar um K.O.
+      // Remover do Set não muda os 25%; apenas permite uma nova rolagem fatal.
+      let dramaticRechargeEffect: string | null = null;
+      if ((newHp === 0 || guardianKnockedOut) && actor.personality === "DRAMATIC") {
+        dramaticSaveUsed.delete(actor.id);
+        dramaticRechargeEffect = `Dramático ${actor.name} conquistou um K.O. e recuperou sua chance de último ato.`;
+      }
       if (damage > 0) hitTaken.add(target.id); // marca o 1º golpe (Tímido)
       if (entry.side === "A") totalDmgA += damage; else totalDmgB += damage;
 
@@ -638,7 +647,7 @@ export function runLeagueCombat(
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador: +${Math.round(encourage * 100)}%.` : null,
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
-        debuffEffect, guardianEffect, survivorEffect, dramaticEffect, travessoEffect,
+        debuffEffect, guardianEffect, survivorEffect, dramaticEffect, dramaticRechargeEffect, travessoEffect,
         provoked ? `Provocador desviou o ataque!` : null,
         chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
         loyalNote,

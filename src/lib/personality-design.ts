@@ -86,7 +86,7 @@ export const PERSONALITY_DESIGN: PersonalitySpec[] = [
     key: "DRAMATIC", label: "Dramático", affinity: PERSONALITY_AFFINITY.DRAMATIC,
     interactions: "Mudanças de felicidade (positivas ou negativas) são 20% maiores; eventos sociais positivos podem gerar presente.",
     expeditions: "Feliz ou Confiante concede +10% de EXP; Irritado ou Cansado não concede bônus.",
-    combat: "Abaixo de 35% de HP, causa +10% de dano e recebe +8% de cura. Uma vez por batalha, 25% de chance de sobreviver a um golpe fatal com 1 HP.",
+    combat: "Abaixo de 35% de HP, causa +10% de dano e recebe +8% de cura. Tem 25% de chance de sobreviver a um golpe fatal com 1 HP; ao causar um K.O., recupera a tentativa.",
     limitation: "Mantém a afinidade atual de -15% no crescimento de Vitalidade (sem alteração retroativa).",
   },
   {

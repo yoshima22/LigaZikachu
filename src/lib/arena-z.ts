@@ -646,7 +646,14 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         }
       }
 
-      hp.set(target.id, Math.max(0, (hp.get(target.id) ?? 0) - damage));
+      const newHp = Math.max(0, (hp.get(target.id) ?? 0) - damage);
+      hp.set(target.id, newHp);
+      let dramaticRechargeEffect: string | null = null;
+      const guardianKnockedOut = Boolean(guardianIntercept && (hp.get(guardianIntercept.guardianId) ?? 0) === 0);
+      if ((newHp === 0 || guardianKnockedOut) && actor.personality === "DRAMATIC") {
+        dramaticSaveUsed.delete(actor.id);
+        dramaticRechargeEffect = `Dramático ${actor.name} conquistou um K.O. e recuperou sua chance de último ato.`;
+      }
       if (damage > 0) hitTaken.add(target.id);
       guard = null;
 
@@ -673,6 +680,7 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
         debuffEffect,
         travessoEffect,
         dramaticEffect,
+        dramaticRechargeEffect,
         saboteurEffect,
         guardianIntercept?.effect,
         survivorLS?.effect,

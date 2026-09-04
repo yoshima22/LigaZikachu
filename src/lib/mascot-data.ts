@@ -2389,7 +2389,7 @@ export const PERSONALITY_DESCRIPTION: Record<string, string> = {
   MISCHIEVOUS: "Travesso. Seu 1º ataque contra cada inimigo tem 15% de chance de reduzir 8% do melhor atributo do alvo por 1 round — toda a equipe se beneficia ao atacá-lo.",
   LAZY:        "Preguiçoso. Acima de 50% de HP sofre -8% de dano e jornadas de 3h/6h dão +8% de EXP, mas precisa de mais vantagem de Agilidade para agir de novo.",
   COMPETITIVE: "Competitivo. Contra oponentes mais fortes causa +7% de dano (e -4% recebido contra o Rival direto). Brincar e treinar rendem EXP extra.",
-  DRAMATIC:    "Dramático. Abaixo de 35% de HP causa +10% de dano e recebe +8% de cura, com 25% de chance (1×/luta) de sobreviver a um golpe fatal com 1 HP.",
+  DRAMATIC:    "Dramático. Abaixo de 35% de HP causa +10% de dano e recebe +8% de cura, com 25% de chance de sobreviver a um golpe fatal com 1 HP. Ao causar um K.O., recupera essa tentativa.",
   PLAYFUL:     "Brincalhão. Ao entrar, 50% de chance de dar +5% de Agilidade ao time por 2 rounds; brincar rende mais felicidade e EXP.",
   ELECTRIC:    "Elétrico. +12% de Agilidade no 1º round (+5% depois) — forte em lutas curtas. Reduz o tempo das expedições curtas.",
   TIMID:       "Tímido. Antes do 1º golpe recebe -10% de dano; depois ganha +5% de Instinto pelo resto da luta. Feliz, falha menos em expedições de material.",

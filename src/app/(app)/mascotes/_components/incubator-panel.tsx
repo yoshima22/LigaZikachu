@@ -4,7 +4,7 @@ import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
 import { Clock, Dna, Egg, Eye, FastForward, FlaskConical, Search, Sparkles, X } from "lucide-react";
-import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonTypes, getShinySprite, getSpriteUrl, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import {
   putEggInIncubator,
   hatchEggAction,
@@ -200,6 +200,28 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
           </button>
         </div>
       </div>
+    </div>
+  );
+}
+
+function HatchTypeBadges({ pokemonId }: { pokemonId: number }) {
+  const [openType, setOpenType] = useState<string | null>(null);
+  const types = getPokemonTypes(pokemonId);
+  useEffect(() => setOpenType(null), [pokemonId]);
+  return (
+    <div className="w-full max-w-xs space-y-2">
+      <p className="text-center text-[10px] font-semibold uppercase tracking-widest text-slate-500">Tipos · toque para conferir</p>
+      <div className="flex flex-wrap justify-center gap-2">
+        {types.map((type) => <button key={type} type="button" aria-expanded={openType === type} onClick={() => setOpenType((value) => value === type ? null : type)} className={`rounded-full border px-3 py-1 text-xs font-bold transition ${openType === type ? "border-cyan-300 bg-cyan-400/15 text-cyan-100" : "border-slate-700 bg-slate-900 text-slate-200 hover:border-cyan-400/50"}`}>{TYPE_LABEL[type] ?? type}</button>)}
+      </div>
+      {openType && (() => {
+        const advantages = TYPE_ADVANTAGE[openType] ?? [];
+        const disadvantages = Object.entries(TYPE_ADVANTAGE).filter(([, targets]) => targets.includes(openType)).map(([attacker]) => attacker);
+        return <div className="grid gap-2 rounded-xl border border-cyan-400/20 bg-slate-950/70 p-3 sm:grid-cols-2">
+          <div><p className="text-[9px] font-black uppercase tracking-wide text-emerald-300">Vantagem contra</p><div className="mt-1 flex flex-wrap gap-1">{advantages.length ? advantages.map((type) => <span key={type} className="rounded bg-emerald-500/10 px-1.5 py-0.5 text-[10px] text-emerald-100">{TYPE_LABEL[type] ?? type}</span>) : <span className="text-[10px] text-slate-600">Nenhuma</span>}</div></div>
+          <div><p className="text-[9px] font-black uppercase tracking-wide text-red-300">Desvantagem contra</p><div className="mt-1 flex flex-wrap gap-1">{disadvantages.length ? disadvantages.map((type) => <span key={type} className="rounded bg-red-500/10 px-1.5 py-0.5 text-[10px] text-red-100">{TYPE_LABEL[type] ?? type}</span>) : <span className="text-[10px] text-slate-600">Nenhuma</span>}</div></div>
+        </div>;
+      })()}
     </div>
   );
 }
@@ -704,6 +726,8 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 <p className="text-xs text-purple-400 font-semibold">✨ Stats acima do normal pelo tipo de ovo!</p>
               )}
             </div>
+
+            <HatchTypeBadges pokemonId={hatchResult.pokemonId} />
 
             {/* Stats ao nascer */}
             {hatchResult.stats && (
