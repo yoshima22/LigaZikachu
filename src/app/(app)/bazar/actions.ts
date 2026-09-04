@@ -473,7 +473,7 @@ export async function getListings(filters?: {
 
   const select = {
     id: true, category: true, listingType: true, status: true,
-    payload: true, priceCoins: true, description: true, wantedDesc: true,
+    payload: true, priceCoins: true, priceLigaCash: true, description: true, wantedDesc: true,
     loanEnabled: true, loanAmountCoins: true, loanInterestPct: true,
     expiresAt: true, premiumUntil: true, createdAt: true, views: true,
     minBidCoins: true, currentBidCoins: true, auctionEndsAt: true,
@@ -1063,6 +1063,7 @@ export async function editListing(
   listingId: string,
   fields: {
     priceCoins?: number | null;
+    priceLigaCash?: number | null;
     description?: string;
     wantedDesc?: string;
     listingType?: "SALE" | "SALE_OR_TRADE" | "AUCTION";
@@ -1083,6 +1084,9 @@ export async function editListing(
 
     if (fields.priceCoins !== undefined && fields.priceCoins !== null && fields.priceCoins < 0) {
       return { error: "Preço não pode ser negativo." };
+    }
+    if (fields.priceLigaCash !== undefined && fields.priceLigaCash !== null && fields.priceLigaCash < 0) {
+      return { error: "Preço em LigaCash não pode ser negativo." };
     }
 
     const wasAuction = listing.listingType === "AUCTION";
@@ -1105,6 +1109,7 @@ export async function editListing(
       if (minBid < 1) return { error: "Defina um lance mínimo válido (>= 1 ZC) para o leilão." };
       if (listing.currentBidPlayerId) return { error: "Este leilão já recebeu lances; não é possível alterar o lance mínimo." };
       data.priceCoins = null;
+      data.priceLigaCash = null;
       data.minBidCoins = minBid;
       data.currentBidCoins = null;
       data.currentBidPlayerId = null;
@@ -1118,10 +1123,11 @@ export async function editListing(
       }
     } else {
       // Venda ou Venda/Troca.
-      if (newType === "SALE" && (fields.priceCoins === undefined || fields.priceCoins === null)) {
-        return { error: "Um anúncio de venda precisa de um preço." };
+      if (newType === "SALE" && !fields.priceCoins && !fields.priceLigaCash) {
+        return { error: "Um anúncio de venda precisa de um preço em ZC ou LC." };
       }
       data.priceCoins = fields.priceCoins ?? null;
+      data.priceLigaCash = fields.priceLigaCash ?? null;
       // Ao sair de um leilão, limpa os campos de leilão.
       if (wasAuction) {
         data.minBidCoins = null;

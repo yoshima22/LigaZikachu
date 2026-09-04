@@ -182,6 +182,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const [offeredItems, setOfferedItems] = useState<ProposalOfferedItem[]>([]);
   const [editMode, setEditMode] = useState(false);
   const [editPrice, setEditPrice] = useState("");
+  const [editPriceLc, setEditPriceLc] = useState("");
   const [editDesc, setEditDesc] = useState("");
   const [editWanted, setEditWanted] = useState("");
   const [editType, setEditType] = useState<"SALE" | "SALE_OR_TRADE" | "AUCTION">("SALE_OR_TRADE");
@@ -423,6 +424,7 @@ export default function BazarListingPage(): React.JSX.Element {
   const handleOpenEdit = () => {
     if (!listing) return;
     setEditPrice(listing.priceCoins != null ? String(listing.priceCoins) : "");
+    setEditPriceLc(listing.priceLigaCash != null ? String(listing.priceLigaCash) : "");
     setEditDesc(listing.description ?? "");
     setEditWanted(listing.wantedDesc ?? "");
     setEditType(
@@ -439,8 +441,11 @@ export default function BazarListingPage(): React.JSX.Element {
     startTransition(async () => {
       const priceRaw = editPrice.trim();
       const priceCoins = priceRaw === "" ? null : parseInt(priceRaw);
+      const priceLcRaw = editPriceLc.trim();
+      const priceLigaCash = priceLcRaw === "" ? null : parseInt(priceLcRaw);
       const r = await editListing(id, {
         priceCoins,
+        priceLigaCash,
         description: editDesc,
         wantedDesc: editWanted,
         listingType: editType,
@@ -1172,17 +1177,28 @@ export default function BazarListingPage(): React.JSX.Element {
                       <p className="col-span-2 text-[10px] text-slate-500">Ao converter para leilão, o prazo recomeça a partir de agora.</p>
                     </div>
                   ) : (
-                    <div className="space-y-1">
-                      <label className="text-[10px] text-slate-400 uppercase tracking-wide">
-                        {editType === "SALE" ? "Preço (ZC)" : "Preço (ZC) — deixe vazio para somente troca"}
-                      </label>
-                      <input
-                        type="number" min={0} inputMode="numeric" pattern="[0-9]*"
-                        value={editPrice}
-                        onChange={e => setEditPrice(e.target.value.replace(/\D/g, ""))}
-                        placeholder={editType === "SALE" ? "Defina um preço" : "Sem preço (somente troca)"}
-                        className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
-                      />
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide">Preço em ZC</label>
+                        <input
+                          type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                          value={editPrice}
+                          onChange={e => setEditPrice(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Ex: 2500"
+                          className="w-full rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60"
+                        />
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[10px] text-slate-400 uppercase tracking-wide">Preço em LC</label>
+                        <input
+                          type="number" min={0} inputMode="numeric" pattern="[0-9]*"
+                          value={editPriceLc}
+                          onChange={e => setEditPriceLc(e.target.value.replace(/\D/g, ""))}
+                          placeholder="Ex: 250"
+                          className="w-full rounded-lg border border-cyan-500/30 bg-slate-900 px-3 py-1.5 text-xs text-cyan-200 outline-none focus:border-cyan-400/60"
+                        />
+                      </div>
+                      <p className="sm:col-span-2 text-[10px] text-slate-500">{editType === "SALE" ? "Preencha ao menos uma moeda; o comprador escolhe como pagar." : "Deixe ambos vazios para somente troca. O comprador escolhe a moeda quando houver preço."}</p>
                     </div>
                   )}
 

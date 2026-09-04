@@ -53,6 +53,7 @@ interface Listing {
   status: string;
   payload: Record<string, unknown>;
   priceCoins: number | null;
+  priceLigaCash?: number | null;
   description: string | null;
   loanEnabled?: boolean;
   loanAmountCoins?: number | null;
@@ -264,9 +265,18 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         ) : (
           <>
             <div className="flex items-center justify-between pt-1">
-              {listing.priceCoins ? (
-                <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
-                  <Coins size={13}/> {listing.priceCoins.toLocaleString("pt-BR")} ZC
+              {listing.priceCoins || listing.priceLigaCash ? (
+                <span className="flex flex-col gap-0.5 leading-tight">
+                  {listing.priceCoins ? (
+                    <span className="flex items-center gap-1 text-sm font-bold text-[#FFCB05]">
+                      <Coins size={13}/> {listing.priceCoins.toLocaleString("pt-BR")} ZC
+                    </span>
+                  ) : null}
+                  {listing.priceLigaCash ? (
+                    <span className="flex items-center gap-1 text-sm font-bold text-cyan-300">
+                      <Coins size={13}/> {listing.priceLigaCash.toLocaleString("pt-BR")} LC
+                    </span>
+                  ) : null}
                 </span>
               ) : (
                 <span className="text-xs text-blue-400">Somente troca</span>
