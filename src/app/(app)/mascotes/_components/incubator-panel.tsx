@@ -120,14 +120,13 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
     const winnerIndex = 22 + Math.floor(Math.random() * 5);
     const tailSize = 5 + Math.floor(Math.random() * 4);
     const total = winnerIndex + 1 + tailSize;
+    const visualPool = result.roulettePokemonIds.filter((pokemonId) => pokemonId !== result.pokemonId);
     const ids = Array.from({ length: total }, () => {
-      let pokemonId = 1 + Math.floor(Math.random() * 1025);
-      if (pokemonId === result.pokemonId) pokemonId = (pokemonId % 1025) + 1;
-      return pokemonId;
+      return visualPool[Math.floor(Math.random() * visualPool.length)] ?? result.pokemonId;
     });
     ids[winnerIndex] = result.pokemonId;
     return { candidates: ids, winnerIndex };
-  }, [result.pokemonId]);
+  }, [result.pokemonId, result.roulettePokemonIds]);
   const { candidates, winnerIndex } = reel;
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);

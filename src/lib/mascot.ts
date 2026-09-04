@@ -21,7 +21,7 @@ import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
 import { Prisma, ZikaCoinTxType } from "@prisma/client";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { getEggCandidatesForGeneration, getInitialPokemonId, rollEggPokemon, type EggRollResult } from "@/lib/mascot-egg-pools";
+import { generationForEggPokemon, getEggCandidatesForGeneration, getInitialPokemonId, rollEggPokemon, type EggRollResult } from "@/lib/mascot-egg-pools";
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
@@ -179,6 +179,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   personality: string;
   stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
   statRange: [number, number];
+  roulettePokemonIds: number[];
 }> {
   const incubator = await prisma.mascotIncubator.findUnique({
     where: { playerId },
@@ -192,12 +193,13 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   const { getActiveEggRarityBonusPct } = await import("@/lib/timed-game-bonuses");
   const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
+  const disabledEggPokemonIds = await getDisabledEggPokemonIds();
   const rollResult = forcedPokemonId ? null : await includeCustomSpeciesInRoll(rollEggPokemon(rollContext.eggType, {
     generationType: rollContext.generationType,
     rarityBonusPct: incubator.egg.hatchRarityBonusPct + eventRarityBonusPct,
     randomGenerationBonus: rollContext.randomGeneration,
     ownedBaseCounts,
-    excludedPokemonIds: await getDisabledEggPokemonIds(),
+    excludedPokemonIds: disabledEggPokemonIds,
   }));
   const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();
@@ -291,6 +293,16 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     isShiny: boolean; isStatBuffed: boolean; eggTypeKey: string;
   };
   const [rangeMin, rangeMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
+  const rouletteGeneration = rollResult?.generation ?? generationForEggPokemon(pokemonId);
+  const disabledForRoulette = new Set(disabledEggPokemonIds);
+  const roulettePool = rouletteGeneration
+    ? getEggCandidatesForGeneration(rouletteGeneration).filter((id) => !disabledForRoulette.has(id))
+    : [pokemonId];
+  // Envia apenas uma amostra leve da pool real. A animação não precisa receber
+  // centenas de IDs nem fazer uma nova consulta depois que o ovo já chocou.
+  const roulettePokemonIds = Array.from({ length: 40 }, () =>
+    roulettePool[Math.floor(Math.random() * roulettePool.length)] ?? pokemonId,
+  );
 
   return {
     mascotId: m.id,
@@ -310,6 +322,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     },
     /** Range normal do ovo — para comparação visual */
     statRange: [rangeMin, rangeMax] as [number, number],
+    roulettePokemonIds,
   };
 }
 
