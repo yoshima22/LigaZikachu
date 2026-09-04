@@ -113,11 +113,22 @@ const GEN_OPTIONS = [
 const HATCH_ANIMATION_PREFERENCE_KEY = "liga:incubator:hatch-animation";
 
 function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete: () => void }) {
-  const candidates = useMemo(() => {
+  const reel = useMemo(() => {
     // A roleta é somente visual. O resultado já foi persistido no servidor antes dela começar.
-    const ids = Array.from({ length: 24 }, (_, index) => ((result.pokemonId * 37 + index * 83 + 151) % 1025) + 1);
-    return [...ids, result.pokemonId];
+    // O vencedor entra numa posição variável e ainda há 5–8 mascotes depois
+    // dele. Assim o fim da lista nunca denuncia antecipadamente o resultado.
+    const winnerIndex = 22 + Math.floor(Math.random() * 5);
+    const tailSize = 5 + Math.floor(Math.random() * 4);
+    const total = winnerIndex + 1 + tailSize;
+    const ids = Array.from({ length: total }, () => {
+      let pokemonId = 1 + Math.floor(Math.random() * 1025);
+      if (pokemonId === result.pokemonId) pokemonId = (pokemonId % 1025) + 1;
+      return pokemonId;
+    });
+    ids[winnerIndex] = result.pokemonId;
+    return { candidates: ids, winnerIndex };
   }, [result.pokemonId]);
+  const { candidates, winnerIndex } = reel;
   const [index, setIndex] = useState(0);
   const [revealed, setRevealed] = useState(false);
   const reelRef = useRef<HTMLDivElement>(null);
@@ -127,9 +138,8 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
       const timer = setTimeout(onComplete, 1800);
       return () => clearTimeout(timer);
     }
-    if (index >= candidates.length - 1) {
-      // Dá tempo para o último card sair da lateral e força o encaixe exato
-      // antes de acender a revelação. Isso evita terminar deslocado à direita.
+    if (index >= winnerIndex) {
+      // Há cards não revelados à direita, mas o resultado real encaixa no centro.
       const timer = setTimeout(() => {
         const reel = reelRef.current;
         const card = reel?.children.item(index) as HTMLElement | null;
@@ -138,13 +148,13 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
       }, 980);
       return () => clearTimeout(timer);
     }
-    const progress = index / Math.max(1, candidates.length - 1);
+    const progress = index / Math.max(1, winnerIndex);
     // Começa veloz e desacelera de maneira contínua. O vencedor passa primeiro
     // pela lateral direita antes de parar no centro, sem troca artificial.
     const delay = 75 + Math.round(Math.pow(progress, 3) * 560);
     const timer = setTimeout(() => setIndex((current) => current + 1), delay);
     return () => clearTimeout(timer);
-  }, [candidates.length, index, onComplete, revealed]);
+  }, [index, onComplete, revealed, winnerIndex]);
 
   useEffect(() => {
     const reel = reelRef.current;
@@ -154,9 +164,9 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
       left: card.offsetLeft - (reel.clientWidth - card.clientWidth) / 2,
       // Enquanto gira rápido, atualizar imediatamente evita acumular animações
       // de scroll. A desaceleração final usa movimento suave e visível.
-      behavior: index >= candidates.length - 6 ? "smooth" : "auto",
+      behavior: index >= winnerIndex - 5 ? "smooth" : "auto",
     });
-  }, [candidates.length, index]);
+  }, [index, winnerIndex]);
 
   const finalSprite = result.isShiny ? getShinySprite(result.pokemonId, true) : getSpriteUrl(result.pokemonId);
 
@@ -179,7 +189,7 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
             {candidates.map((pokemonId, candidateIndex) => {
               const distance = Math.abs(candidateIndex - index);
               const center = distance === 0;
-              const isWinner = revealed && candidateIndex === candidates.length - 1;
+              const isWinner = revealed && candidateIndex === winnerIndex;
               const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
               return (
                 <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-1/3 shrink-0 snap-center flex-col items-center rounded-2xl border px-1 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:px-2 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
