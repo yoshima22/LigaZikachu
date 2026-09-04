@@ -2,7 +2,7 @@ import { createHash, randomInt } from "crypto";
 import { ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName } from "@/lib/mascot-data";
-import { getCombatActionsPerRound, getHealerHealAmount, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { getAttackerDamageBonus, getCombatActionsPerRound, getDuelistDamageBonus, getEncouragerBonus, getFlankDamageBonus, getHealerHealAmount, getScoutBonus, getSpecialistDamageBonus, normalizeCombatRole, scaleCombatRoleEffect, type CombatRole } from "@/lib/combat-roles";
 import { creditCoins } from "@/lib/zikacoins";
 
 export const ORDER_EVENT_SLUG = "ordem-da-trapaca";
@@ -1439,8 +1439,6 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     SABOTEUR: 1,
   };
   const clamp = (value: number, min: number, max: number) => Math.max(min, Math.min(max, value));
-  const roleStatBonus = (value: number, min: number, max: number, divisor = 220) => min + clamp(value / divisor, 0, 1) * (max - min);
-
   const mascotStates = orderedMascots.map((mascot) => {
     const power = mascotRaidPower(mascot);
     const combatRole = normalizeCombatRole(selectedRoles[mascot.id]);
@@ -1448,22 +1446,19 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     return { ...mascot, combatRole, name: mascot.nickname ?? getPokemonName(mascot.pokemonId), power, hp, maxHp: hp, damage: 0, defeated: false, survivorProcUsed: false };
   });
   const aliveMascots = () => mascotStates.filter((m) => !m.defeated);
-  const teamDamageAura = clamp(
-    mascotStates
-      .filter((m) => m.combatRole === "ENCOURAGER")
-      .reduce((sum, mascot) => sum + roleStatBonus(mascot.statCharisma, 0.04, 0.18), 0)
-    + mascotStates
-      .filter((m) => m.combatRole === "SCOUT")
-      .reduce((sum, mascot) => sum + roleStatBonus((mascot.statAgility + mascot.statInstinct) / 2, 0.01, 0.08), 0),
+  // Efeitos iguais não empilham: prevalece o melhor representante vivo da
+  // postura, como na Liga/Arena. Encorajador e Batedor são efeitos diferentes.
+  const teamDamageAura = () => clamp(
+    Math.max(0, ...aliveMascots().filter((m) => m.combatRole === "ENCOURAGER").map((m) => getEncouragerBonus(m.statCharisma)))
+    + Math.max(0, ...aliveMascots().filter((m) => m.combatRole === "SCOUT").map((m) => getScoutBonus(m.statAgility, m.statInstinct))),
     0,
-    0.32,
+    0.26,
   );
-  const bossSabotagePenalty = clamp(
-    mascotStates
-      .filter((m) => m.combatRole === "SABOTEUR")
-      .reduce((sum, mascot) => sum + roleStatBonus((mascot.statInstinct + mascot.statAgility) / 2, 0.03, 0.12), 0),
+  const bossSabotagePenalty = Math.max(
     0,
-    0.24,
+    ...mascotStates
+      .filter((m) => m.combatRole === "SABOTEUR")
+      .map((m) => scaleCombatRoleEffect((m.statInstinct + m.statAgility) / 2, 0.03, 0.12)),
   );
   const hpPercentAtStart = event.bossHpMax > 0 ? Math.max(0, Math.min(1, startingBossHp / event.bossHpMax)) : 1;
   const baseBossAdvantage = 0.1 + (1 - hpPercentAtStart) * 0.1;
@@ -1486,27 +1481,28 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       const crit = randomInt(100) < critChance ? (mascot.combatRole === "DUELIST" ? 1.7 : 1.55) : 1;
       const lowHpMultiplier = mascot.hp / mascot.maxHp <= 0.3 && mascot.combatRole === "SURVIVOR" ? 1.15 : 1;
       const roleAttributeMultiplier = {
-        ATTACKER: 1 + roleStatBonus(mascot.statForce, 0.08, 0.26),
-        FLANK: 1 + roleStatBonus(mascot.statAgility, 0.04, 0.18),
-        OPPORTUNIST: 1 + roleStatBonus(mascot.statInstinct, 0.05, 0.28, 250),
+        ATTACKER: 1 + getAttackerDamageBonus(mascot.statForce),
+        FLANK: 1 + getFlankDamageBonus(mascot.statAgility),
+        OPPORTUNIST: 1 + scaleCombatRoleEffect(mascot.statInstinct, 0.05, 0.28),
         ENCOURAGER: 1,
         GUARDIAN: 0.9,
-        DUELIST: 1 + roleStatBonus((mascot.statForce + mascot.statInstinct) / 2, 0.06, 0.18),
-        SABOTEUR: 1 + roleStatBonus((mascot.statInstinct + mascot.statAgility) / 2, 0.02, 0.12),
+        DUELIST: 1 + getDuelistDamageBonus(mascot.statForce, mascot.statInstinct),
+        SABOTEUR: 1 + scaleCombatRoleEffect((mascot.statInstinct + mascot.statAgility) / 2, 0.02, 0.12),
         HEALER: 0.8,
-        SCOUT: 0.95 + roleStatBonus((mascot.statAgility + mascot.statInstinct) / 2, 0, 0.08),
+        SCOUT: 0.95 + getScoutBonus(mascot.statAgility, mascot.statInstinct),
         PROVOKER: 0.92,
-        SPECIALIST: 1 + roleStatBonus(Math.max(mascot.statForce, mascot.statAgility, mascot.statInstinct, mascot.statVitality, mascot.statCharisma), 0.06, 0.2),
+        SPECIALIST: 1 + getSpecialistDamageBonus(Math.max(mascot.statForce, mascot.statAgility, mascot.statInstinct, mascot.statVitality, mascot.statCharisma)),
         SURVIVOR: lowHpMultiplier,
         DEFENDER: 0.9,
       } satisfies Record<CombatRole, number>;
-      const damage = Math.max(1, Math.round(mascot.power * variance * crit * roleDamageMultiplier[mascot.combatRole] * roleAttributeMultiplier[mascot.combatRole] * (1 + teamDamageAura)));
+      const activeTeamDamageAura = teamDamageAura();
+      const damage = Math.max(1, Math.round(mascot.power * variance * crit * roleDamageMultiplier[mascot.combatRole] * roleAttributeMultiplier[mascot.combatRole] * (1 + activeTeamDamageAura)));
       mascot.damage += damage;
       totalDamage += damage;
       if (simulatedBossHp > 0) {
         simulatedBossHp = Math.max(0, simulatedBossHp - damage);
       }
-      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp, teamAura: Math.round(teamDamageAura * 100), sabotage: Math.round(bossSabotagePenalty * 100), extraActionByAgility: actionIndex > 0, actionInRound: actionIndex + 1, actionsInRound: actionProfile.actions });
+      log.push({ turn, actor: mascot.name, actorId: mascot.id, actorPokemonId: mascot.pokemonId, actorRole: mascot.combatRole, action: "ATTACK", damage, crit: crit > 1, bossHp: simulatedBossHp, teamAura: Math.round(activeTeamDamageAura * 100), sabotage: Math.round(bossSabotagePenalty * 100), extraActionByAgility: actionIndex > 0, actionInRound: actionIndex + 1, actionsInRound: actionProfile.actions });
       }
     }
 

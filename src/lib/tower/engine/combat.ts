@@ -5,7 +5,8 @@
 // vantagem de tipo). Nada aqui importa o motor da Arena — é código independente.
 
 import type { CombatRole } from "@/lib/combat-roles";
-import { getHealerHealAmount } from "@/lib/combat-roles";
+import { getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianReduction, getHealerHealAmount, getOpportunistProfile, getSaboteurSuppression, getScoutBonus, getSurvivorReduction } from "@/lib/combat-roles";
+import { debuffResistanceFactor } from "@/lib/personality-combat";
 import { getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import {
   manhattan,
@@ -42,26 +43,32 @@ function roleRange(role: CombatRole): number {
   return 2;
 }
 
+function sabotageAgainst(saboteurs: TowerUnit[], target: TowerUnit): number {
+  return Math.max(0, ...saboteurs
+    .filter((unit) => unit.role === "SABOTEUR" && unit.hp > 0)
+    .map((unit) => getSaboteurSuppression(effectiveStat(unit, "instinct"), effectiveStat(unit, "agility")) * debuffResistanceFactor(unit, target)));
+}
+
 /** Multiplicador de dano por papel atacante×alvo (espelha league-combat). */
 function damageMultiplier(actor: TowerUnit, target: TowerUnit): number {
   let m = 1;
   const force = effectiveStat(actor, "force");
   const agility = effectiveStat(actor, "agility");
   const instinct = effectiveStat(actor, "instinct");
-  if (actor.role === "ATTACKER") m *= 1.08 + Math.min(0.18, force / 420);
+  if (actor.role === "ATTACKER") m *= 1 + getAttackerDamageBonus(force);
   if (actor.role === "ATTACKER" && target.role === "DEFENDER") m *= 1.15;
-  if (actor.role === "FLANK") m *= 1.04 + Math.min(0.14, agility / 500);
+  if (actor.role === "FLANK") m *= 1 + getFlankDamageBonus(agility);
   if (actor.role === "FLANK" && ["ENCOURAGER", "OPPORTUNIST", "HEALER"].includes(target.role)) m *= 1.12;
   if (actor.role === "OPPORTUNIST" && instinct > effectiveStat(target, "instinct")) m *= 1.1;
-  if (actor.role === "DUELIST") m *= 1.06 + Math.min(0.12, (force + instinct) / 800);
+  if (actor.role === "DUELIST") m *= 1 + getDuelistDamageBonus(force, instinct);
   if (actor.role === "PROVOKER") m *= 0.92;
   if (actor.role === "SCOUT") m *= 0.95;
   if (actor.role === "GUARDIAN") m *= 0.9;
   if (actor.role === "HEALER") m *= 0.8;
   const tVit = effectiveStat(target, "vitality");
-  if (target.role === "DEFENDER") m *= 1 - Math.min(0.35, 0.08 + tVit / 240);
-  if (target.role === "GUARDIAN") m *= 1 - Math.min(0.2, 0.05 + tVit / 300);
-  if (target.role === "SURVIVOR") m *= 1 - Math.min(0.15, tVit / 400);
+  if (target.role === "DEFENDER") m *= 1 - getDefenderReduction(tVit);
+  if (target.role === "GUARDIAN") m *= 1 - getGuardianReduction(tVit);
+  if (target.role === "SURVIVOR") m *= 1 - getSurvivorReduction(tVit);
   return m;
 }
 
@@ -176,11 +183,12 @@ export function resolveTowerRound(input: TowerRoundInput): TowerRoundResult {
         .filter((a) => a.id !== actor.id && a.hp > 0 && a.hp < a.maxHp && manhattan(actor, a) <= 3)
         .sort((a, b) => a.hp / a.maxHp - b.hp / b.maxHp)[0];
       if (wounded) {
-        const amount = getHealerHealAmount({
+        const enemySabotage = sabotageAgainst(enemies, actor);
+        const amount = Math.max(1, Math.round(getHealerHealAmount({
           charisma: effectiveStat(actor, "charisma"),
           vitality: effectiveStat(actor, "vitality"),
           level: actor.level,
-        });
+        }) * (1 - enemySabotage)));
         wounded.hp = Math.min(wounded.maxHp, wounded.hp + amount);
         events.push({ unitId: actor.id, targetId: wounded.id, kind: "HEAL", text: `${actor.name} curou ${wounded.name}.`, amount });
         continue;
@@ -209,7 +217,7 @@ export function resolveTowerRound(input: TowerRoundInput): TowerRoundResult {
     );
     if (defender) {
       if (actor.role === "FLANK") {
-        const bypass = Math.min(0.82, 0.35 + effectiveStat(actor, "agility") / 530);
+        const bypass = getFlankBypassChance(effectiveStat(actor, "agility"));
         if (towerRoll(seed, round, actor.id, defender.id, "flank") >= bypass) {
           target = defender;
         } else {
@@ -229,7 +237,11 @@ export function resolveTowerRound(input: TowerRoundInput): TowerRoundResult {
     const base = effectiveStat(actor, "force") * 0.7 + actor.level * 1.2 + 8;
     const typeMult = getTypeAdvantageMultiplier(actor.types, target.types);
     const variance = 0.9 + towerRoll(seed, round, actor.id, target.id, "dmg") * 0.2;
-    let dmg = Math.max(1, Math.round(base * damageMultiplier(actor, target) * typeMult * variance));
+    const bestEncourager = allies.filter((u) => u.role === "ENCOURAGER").sort((a, b) => effectiveStat(b, "charisma") - effectiveStat(a, "charisma"))[0];
+    const enemySabotage = bestEncourager ? sabotageAgainst(enemies, bestEncourager) : 0;
+    const encourage = (bestEncourager ? getEncouragerBonus(effectiveStat(bestEncourager, "charisma")) : 0) * (1 - enemySabotage);
+    const scout = Math.max(0, ...allies.filter((u) => u.role === "SCOUT").map((u) => getScoutBonus(effectiveStat(u, "agility"), effectiveStat(u, "instinct"))));
+    let dmg = Math.max(1, Math.round(base * damageMultiplier(actor, target) * typeMult * variance * (1 + encourage + scout)));
     dmg = Math.round(dmg * (1 - target.shield));
     target.shield = 0;
 
@@ -243,6 +255,23 @@ export function resolveTowerRound(input: TowerRoundInput): TowerRoundResult {
     }
     target.hp = after;
     events.push({ unitId: actor.id, targetId: target.id, kind: "ATTACK", text: `${actor.name} atacou ${target.name} (${dmg}).`, amount: dmg });
+    if (actor.role === "OPPORTUNIST" && after > 0) {
+      const profile = getOpportunistProfile(effectiveStat(actor, "instinct"));
+      if (towerRoll(seed, round, actor.id, target.id, "opportunist") < profile.procChance) {
+        const stats = ["force", "agility", "instinct", "vitality"] as const;
+        const stat = stats[Math.floor(towerRoll(seed, round, actor.id, target.id, "opportunist-stat") * stats.length)];
+        const amount = profile.debuffPct * debuffResistanceFactor(actor, target);
+        const id = `role:opportunist:${actor.id}:${target.id}:${stat}`;
+        const previous = target.effects.find((effect) => effect.id === id);
+        if (previous) {
+          previous.value = Math.max(previous.value, amount);
+          previous.duration = 2;
+        } else {
+          target.effects.push({ id, label: "Oportunista", kind: "DEBUFF", stat, value: amount, duration: 2 });
+        }
+        events.push({ unitId: actor.id, targetId: target.id, kind: "DEBUFF", text: `${actor.name} reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% após resistência.`, amount: Math.round(amount * 100) });
+      }
+    }
     if (before > 0 && after <= 0) {
       events.push({ unitId: actor.id, targetId: target.id, kind: "KO", text: `${target.name} foi derrotado.` });
     }

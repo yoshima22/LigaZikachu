@@ -66,6 +66,7 @@ export type TowerBattleEvent = {
     | "DEFEND"
     | "ATTACK"
     | "HEAL"
+    | "DEBUFF"
     | "REDIRECT"
     | "BYPASS"
     | "KO"

@@ -1,7 +1,8 @@
 import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
-import { PERSONALITY_AFFINITY, DEBUFF_RESISTANCE } from "./personality-design";
-import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, isSupportRole, type CombatRole } from "./combat-roles";
+import { PERSONALITY_AFFINITY } from "./personality-design";
+import { debuffResistanceFactor } from "./personality-combat";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 
@@ -63,19 +64,6 @@ function alive(team: LeagueMascot[], hp: Map<string, number>) {
 }
 
 function statTotal(m: LeagueMascot) { return m.force + m.agility + m.instinct + m.vitality + m.charisma; }
-
-// Resistência de buff/debuff (design pág. 8): a força usa o Instinto da fonte; a
-// resistência do alvo usa 60% de Instinto + 40% de Vitalidade. O confronto ajusta
-// a intensidade do efeito entre 60% e 135% (reduz, não vira falha total).
-function debuffResistanceFactor(source: LeagueMascot, target: LeagueMascot) {
-  const power = Math.max(1, source.instinct);
-  const resist = target.instinct * DEBUFF_RESISTANCE.targetInstinctWeight + target.vitality * DEBUFF_RESISTANCE.targetVitalityWeight;
-  const ratio = power / (power + Math.max(1, resist)); // 0..1 (0,5 ≈ neutro)
-  const factor = DEBUFF_RESISTANCE.minEffect + (DEBUFF_RESISTANCE.maxEffect - DEBUFF_RESISTANCE.minEffect) * ratio;
-  const clamped = Math.max(DEBUFF_RESISTANCE.minEffect, Math.min(DEBUFF_RESISTANCE.maxEffect, factor));
-  // Guloso reduz a intensidade de controle recebido (provocar/debuffs longos).
-  return clamped * (target.personality === "GLUTTON" ? 0.6 : 1);
-}
 
 // Multiplicador ofensivo por personalidade do atacante (depende de HP atual e
 // de estado com memória). O combate roda uma vez; o resultado fica no log.
@@ -468,7 +456,7 @@ export function runLeagueCombat(
           if (wounded.length > 0) {
             wounded.sort((x, y) => (hp.get(x.id) ?? 0) - (hp.get(y.id) ?? 0));
             const target = wounded[0];
-            const healSupp = saboteurSuppression(opponents, hp);
+            const healSupp = saboteurSuppression(opponents, hp, actor);
             const heal = Math.max(1, Math.round(getHealerHealAmount(actor) * (1 - healSupp)));
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
@@ -502,7 +490,7 @@ export function runLeagueCombat(
       let provoked = false;
       if (provokers.length > 0) {
         const p = provokers[0];
-        const chance = Math.min(0.55, 0.2 + p.charisma / 300 + p.instinct / 400) * (1 - saboteurSuppression(allies, hp));
+        const chance = getProvokerChance(p.charisma, p.instinct) * (1 - saboteurSuppression(allies, hp, p));
         if (Math.random() < chance) { target = p; provoked = true; }
       }
 
@@ -568,7 +556,7 @@ export function runLeagueCombat(
       let guardianKnockedOut = false;
       if (guardians.length > 0) {
         const g = guardians[0];
-        const absorbPct = Math.min(0.40, 0.15 + (g.vitality + g.charisma) / 600);
+        const absorbPct = getGuardianIntercept(g.vitality, g.charisma);
         const absorbed = Math.round(damage * absorbPct);
         damage -= absorbed;
         hp.set(g.id, Math.max(0, (hp.get(g.id) ?? 0) - absorbed));
@@ -703,7 +691,7 @@ function selectTarget(actor: LeagueMascot, opponents: LeagueMascot[], hp: Map<st
   const defenders = opponents.filter(m => m.combatRole === "DEFENDER");
 
   if (actor.combatRole === "FLANK" || actor.combatRole === "SCOUT") {
-    const slip = Math.min(0.82, 0.35 + actor.agility / 150);
+    const slip = getFlankBypassChance(actor.agility);
     if (Math.random() < slip) return lowestHp ?? pick(opponents);
   }
   if (defenders.length > 0) {
@@ -723,45 +711,45 @@ function selectTarget(actor: LeagueMascot, opponents: LeagueMascot[], hp: Map<st
 
 function roleDamageMult(actor: LeagueMascot, target: LeagueMascot) {
   let mult = 1;
-  if (actor.combatRole === "ATTACKER") mult *= 1.08 + Math.min(0.18, actor.force / 420);
+  if (actor.combatRole === "ATTACKER") mult *= 1 + getAttackerDamageBonus(actor.force);
   if (actor.combatRole === "ATTACKER" && target.combatRole === "DEFENDER") mult *= 1.15;
-  if (actor.combatRole === "FLANK") mult *= 1.04 + Math.min(0.14, actor.agility / 500);
+  if (actor.combatRole === "FLANK") mult *= 1 + getFlankDamageBonus(actor.agility);
   if (actor.combatRole === "FLANK" && ["ENCOURAGER", "OPPORTUNIST", "HEALER"].includes(target.combatRole)) mult *= 1.12;
   if (actor.combatRole === "OPPORTUNIST" && actor.instinct > target.instinct) mult *= 1.1;
-  if (actor.combatRole === "DUELIST") mult *= 1.06 + Math.min(0.12, (actor.force + actor.instinct) / 800);
+  if (actor.combatRole === "DUELIST") mult *= 1 + getDuelistDamageBonus(actor.force, actor.instinct);
   if (actor.combatRole === "SPECIALIST") {
     const max = Math.max(actor.force, actor.agility, actor.instinct, actor.vitality, actor.charisma);
-    mult *= 1.06 + Math.min(0.14, max / 500);
+    mult *= 1 + getSpecialistDamageBonus(max);
   }
   if (actor.combatRole === "PROVOKER") mult *= 0.92;
   if (actor.combatRole === "SCOUT") mult *= 0.95;
   if (actor.combatRole === "GUARDIAN") mult *= 0.90;
   if (actor.combatRole === "HEALER") mult *= 0.80;
-  if (target.combatRole === "DEFENDER") mult *= 1 - Math.min(0.35, 0.08 + target.vitality / 240);
-  if (target.combatRole === "GUARDIAN") mult *= 1 - Math.min(0.20, 0.05 + target.vitality / 300);
-  if (target.combatRole === "SURVIVOR") mult *= 1 - Math.min(0.15, target.vitality / 400);
+  if (target.combatRole === "DEFENDER") mult *= 1 - getDefenderReduction(target.vitality);
+  if (target.combatRole === "GUARDIAN") mult *= 1 - getGuardianReduction(target.vitality);
+  if (target.combatRole === "SURVIVOR") mult *= 1 - getSurvivorReduction(target.vitality);
   return mult;
 }
 
 // Supressão do Sabotador: reduz a eficácia dos SUPORTES inimigos (Provocador,
 // Encorajador e Cuidador). Escala com Instinto + Agilidade do melhor sabotador.
-function saboteurSuppression(opponents: LeagueMascot[], hp: Map<string, number>) {
+function saboteurSuppression(opponents: LeagueMascot[], hp: Map<string, number>, target?: LeagueMascot) {
   const saboteurs = opponents.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
   if (saboteurs.length === 0) return 0;
   const best = saboteurs.sort((a, b) => (b.instinct + b.agility) - (a.instinct + a.agility))[0];
-  return Math.min(0.40, 0.15 + (best.instinct + best.agility) / 800);
+  return getSaboteurSuppression(best.instinct, best.agility) * (target ? debuffResistanceFactor(best, target) : 1);
 }
 
 function aliveEncourageBonus(team: LeagueMascot[], hp: Map<string, number>, opponents: LeagueMascot[]) {
   const enc = team.filter(m => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0);
   if (enc.length === 0) return 0;
-  const charisma = enc.reduce((s, m) => s + m.charisma, 0);
-  return Math.min(0.18, 0.04 + charisma / 650) * (1 - saboteurSuppression(opponents, hp));
+  const best = enc.sort((a, b) => b.charisma - a.charisma)[0];
+  return getEncouragerBonus(best.charisma) * (1 - saboteurSuppression(opponents, hp, best));
 }
 
 function aliveScoutBonus(team: LeagueMascot[], hp: Map<string, number>) {
   const scouts = team.filter(m => m.combatRole === "SCOUT" && (hp.get(m.id) ?? 0) > 0);
   if (scouts.length === 0) return 0;
   const best = scouts[0];
-  return Math.min(0.08, best.agility / 400 + best.instinct / 500);
+  return getScoutBonus(best.agility, best.instinct);
 }

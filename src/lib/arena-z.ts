@@ -3,7 +3,7 @@ import { DEFAULT_ARENA_DAILY_ZC_LIMIT, getActiveArenaDailyZcLimit } from "@/lib/
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
-import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, isSupportRole, type CombatRole } from "@/lib/combat-roles";
+import { getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, normalizeCombatRole, recommendCombatRole, defaultCombatRoleFor, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurProcChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "@/lib/combat-roles";
 import { personalityOffenseMult, personalityDefenseMult, debuffResistanceFactor, personalityAgilityMult, rollPlayfulTeamBuff, rollTravessoDebuff } from "@/lib/personality-combat";
 import { getPokemonElement, getPokemonName, getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
@@ -345,8 +345,8 @@ function getEffectiveStat(m: ArenaMascot, debuffs: Map<string, Partial<Record<"f
 function aliveEncourageBonus(team: ArenaMascot[], hp: Map<string, number>) {
   const encouragers = team.filter(m => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0);
   if (encouragers.length === 0) return 0;
-  const charisma = encouragers.reduce((sum, m) => sum + m.charisma, 0);
-  return Math.min(0.18, 0.04 + charisma / 650);
+  const best = encouragers.sort((a, b) => b.charisma - a.charisma)[0];
+  return getEncouragerBonus(best.charisma);
 }
 
 function chooseRoleTarget(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<string, number>) {
@@ -354,7 +354,7 @@ function chooseRoleTarget(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<
   const lowestHp = [...opponents].sort((a, b) => (hp.get(a.id) ?? 0) - (hp.get(b.id) ?? 0))[0];
 
   if (actor.combatRole === "FLANK") {
-    const slipChance = Math.min(0.82, 0.35 + actor.agility / 150);
+    const slipChance = getFlankBypassChance(actor.agility);
     if (Math.random() < slipChance) return lowestHp ?? pick(opponents);
   }
 
@@ -381,28 +381,28 @@ function chooseRoleTarget(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<
 function roleDamageMultiplier(actor: ArenaMascot, target: ArenaMascot) {
   let mult = 1;
   // Original 5 roles
-  if (actor.combatRole === "ATTACKER") mult *= 1.08 + Math.min(0.18, actor.force / 420);
+  if (actor.combatRole === "ATTACKER") mult *= 1 + getAttackerDamageBonus(actor.force);
   if (actor.combatRole === "ATTACKER" && target.combatRole === "DEFENDER") mult *= 1.15;
-  if (actor.combatRole === "FLANK") mult *= 1.04 + Math.min(0.14, actor.agility / 500);
+  if (actor.combatRole === "FLANK") mult *= 1 + getFlankDamageBonus(actor.agility);
   if (actor.combatRole === "FLANK" && ["ENCOURAGER", "OPPORTUNIST", "HEALER"].includes(target.combatRole)) mult *= 1.12;
   if (actor.combatRole === "OPPORTUNIST" && actor.instinct > target.instinct) mult *= 1.1;
   // New 8 roles
-  if (actor.combatRole === "DUELIST") mult *= 1.06 + Math.min(0.12, (actor.force + actor.instinct) / 800);
+  if (actor.combatRole === "DUELIST") mult *= 1 + getDuelistDamageBonus(actor.force, actor.instinct);
   if (actor.combatRole === "SPECIALIST") {
     const maxStat = Math.max(actor.force, actor.agility, actor.instinct, actor.vitality, actor.charisma);
-    mult *= 1.06 + Math.min(0.14, maxStat / 500);
+    mult *= 1 + getSpecialistDamageBonus(maxStat);
   }
   if (actor.combatRole === "PROVOKER") mult *= 0.92;
   if (actor.combatRole === "SCOUT") mult *= 0.95;
   if (actor.combatRole === "GUARDIAN") mult *= 0.90;
   if (actor.combatRole === "HEALER") mult *= 0.80;
   // Defensive roles
-  if (target.combatRole === "DEFENDER") mult *= 1 - Math.min(0.35, 0.08 + target.vitality / 240);
+  if (target.combatRole === "DEFENDER") mult *= 1 - getDefenderReduction(target.vitality);
   if (target.combatRole === "FLANK") mult *= 1 - Math.min(0.25, target.agility / 360);
-  if (target.combatRole === "GUARDIAN") mult *= 1 - Math.min(0.20, 0.05 + target.vitality / 300);
+  if (target.combatRole === "GUARDIAN") mult *= 1 - getGuardianReduction(target.vitality);
   if (target.combatRole === "SURVIVOR") {
     // Gets tougher as HP drops (checked by caller, but base reduction here)
-    mult *= 1 - Math.min(0.15, target.vitality / 400);
+    mult *= 1 - getSurvivorReduction(target.vitality);
   }
   return mult;
 }
@@ -421,7 +421,7 @@ function tryApplyOpportunistDebuff(actor: ArenaMascot, target: ArenaMascot, debu
 
 function trySaboteurDisrupt(actor: ArenaMascot, opponents: ArenaMascot[], hp: Map<string, number>): string | null {
   if (actor.combatRole !== "SABOTEUR") return null;
-  const chance = Math.min(0.55, 0.18 + (actor.instinct + actor.agility) / 400);
+  const chance = getSaboteurProcChance(actor.instinct, actor.agility);
   if (Math.random() > chance) return null;
   const encouragers = opponents.filter(m => isSupportRole(m.combatRole) && (hp.get(m.id) ?? 0) > 0);
   if (encouragers.length === 0) return `Sabotador ${actor.name} interferiu no ritmo inimigo.`;
@@ -449,7 +449,7 @@ function tryGuardianIntercept(target: ArenaMascot, allies: ArenaMascot[], hp: Ma
   const guardians = allies.filter(m => m.combatRole === "GUARDIAN" && m.id !== target.id && (hp.get(m.id) ?? 0) > 0);
   if (guardians.length === 0) return null;
   const guardian = guardians[0];
-  const absorbPct = Math.min(0.40, 0.15 + (guardian.vitality + guardian.charisma) / 600);
+  const absorbPct = getGuardianIntercept(guardian.vitality, guardian.charisma);
   const absorbed = Math.round(damage * absorbPct);
   const remaining = damage - absorbed;
   const gHp = hp.get(guardian.id) ?? 0;
@@ -470,7 +470,7 @@ function tryProvokerRedirect(actor: ArenaMascot, target: ArenaMascot, opponents:
   const provokers = opponents.filter(m => m.combatRole === "PROVOKER" && m.id !== target.id && (hp.get(m.id) ?? 0) > 0);
   if (provokers.length === 0) return null;
   const provoker = provokers[0];
-  const chance = Math.min(0.55, 0.2 + provoker.charisma / 300 + provoker.instinct / 400);
+  const chance = getProvokerChance(provoker.charisma, provoker.instinct);
   if (Math.random() > chance) return null;
   return provoker;
 }
@@ -479,13 +479,14 @@ function aliveScoutBonus(team: ArenaMascot[], hp: Map<string, number>) {
   const scouts = team.filter(m => m.combatRole === "SCOUT" && (hp.get(m.id) ?? 0) > 0);
   if (scouts.length === 0) return 0;
   const best = scouts[0];
-  return Math.min(0.08, best.agility / 400 + best.instinct / 500);
+  return getScoutBonus(best.agility, best.instinct);
 }
 
-function aliveSaboteurSuppression(opponents: ArenaMascot[], hp: Map<string, number>) {
+function aliveSaboteurSuppression(opponents: ArenaMascot[], hp: Map<string, number>, target?: ArenaMascot) {
   const saboteurs = opponents.filter(m => m.combatRole === "SABOTEUR" && (hp.get(m.id) ?? 0) > 0);
   if (saboteurs.length === 0) return 0;
-  return 0.30;
+  const best = saboteurs.sort((a, b) => (b.instinct + b.agility) - (a.instinct + a.agility))[0];
+  return getSaboteurSuppression(best.instinct, best.agility) * (target ? debuffResistanceFactor(best, target) : 1);
 }
 
 function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
@@ -583,7 +584,8 @@ function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
       const force = getEffectiveStat(actor, debuffs, "force");
       const instinct = getEffectiveStat(actor, debuffs, "instinct");
       const vitality = getEffectiveStat(target, debuffs, "vitality");
-      const saboteurSuppression = aliveSaboteurSuppression(opponents, hp);
+      const bestEncourager = allies.filter((m) => m.combatRole === "ENCOURAGER" && (hp.get(m.id) ?? 0) > 0).sort((a, b) => b.charisma - a.charisma)[0];
+      const saboteurSuppression = aliveSaboteurSuppression(opponents, hp, bestEncourager);
       const encourage = aliveEncourageBonus(allies, hp) * (1 - saboteurSuppression);
       const scoutBonus = aliveScoutBonus(allies, hp);
       const duelistBonus = actor.combatRole === "DUELIST" && duelistLock.get(actor.id) === target.id ? 1.12 : 1;

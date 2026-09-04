@@ -6,6 +6,7 @@ import { BarChart3, X } from "lucide-react";
 import {
   getCombatRoleLabel,
   getHealerHealAmount,
+  getFlankBypassChance,
   normalizeCombatRole,
   recommendCombatRole,
   type CombatRole,
@@ -185,7 +186,7 @@ export function TeamCombatAnalysisButton({
                 <h4 className="text-sm font-black text-white">Efeitos das posturas</h4>
                 <div className="mt-3 space-y-2 text-xs text-slate-300">
                   <p><strong className="text-yellow-200">Atacantes:</strong> {analysis.attackers.length || "nenhum"}; +15% contra Defensores. Bônus pessoal varia com Força.</p>
-                  <p><strong className="text-fuchsia-200">Flancos:</strong> {analysis.flanks.length || "nenhum"}; +12% contra suportes e chance de ignorar Defensor de {analysis.flanks.length ? analysis.flanks.map((m) => pct(cap(0.35 + m.statAgility / 150, 0.82))).join(", ") : "0%"}.</p>
+                  <p><strong className="text-fuchsia-200">Flancos:</strong> {analysis.flanks.length || "nenhum"}; +12% contra suportes e chance de ignorar Defensor de {analysis.flanks.length ? analysis.flanks.map((m) => pct(getFlankBypassChance(m.statAgility))).join(", ") : "0%"}.</p>
                   <p><strong className="text-blue-200">Duelistas:</strong> mantêm o alvo e recebem +12% durante o mesmo duelo. O bônus contra suportes pertence ao Flanco.</p>
                   <p><strong className="text-orange-200">Provocadores:</strong> {analysis.provokers.length ? analysis.provokers.map((m) => `${nameOf(m)} ${pct(cap(0.20 + m.statCharisma / 300 + m.statInstinct / 400, 0.55))}`).join(" · ") : "nenhum"}.</p>
                   <p><strong className="text-green-200">Cuidadores:</strong> cura individual no aliado vivo mais ferido; {mode === "RAID" ? "atacam e podem curar depois." : "trocam o ataque pela cura quando necessário."}</p>

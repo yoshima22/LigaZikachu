@@ -17,13 +17,35 @@ export const COMBAT_ROLE_VALUES = [
 export type CombatRole = typeof COMBAT_ROLE_VALUES[number];
 
 export const OPPORTUNIST_INSTINCT_CAP = 250;
+export const COMBAT_ROLE_STAT_CAP = 250;
+
+/** Curva única das posturas: o mínimo existe com atributo 0 e o teto só é
+ * alcançado no cap publicado. Valores acima do cap não ampliam o efeito. */
+export function scaleCombatRoleEffect(stat: number, minimum: number, maximum: number, cap = COMBAT_ROLE_STAT_CAP) {
+  const ratio = Math.min(1, Math.max(0, stat) / cap);
+  return minimum + (maximum - minimum) * ratio;
+}
+
+export function getDefenderReduction(vitality: number) { return scaleCombatRoleEffect(vitality, 0.08, 0.35); }
+export function getAttackerDamageBonus(force: number) { return scaleCombatRoleEffect(force, 0.08, 0.26); }
+export function getFlankDamageBonus(agility: number) { return scaleCombatRoleEffect(agility, 0.04, 0.18); }
+export function getFlankBypassChance(agility: number) { return scaleCombatRoleEffect(agility, 0.35, 0.82); }
+export function getEncouragerBonus(charisma: number) { return scaleCombatRoleEffect(charisma, 0.04, 0.18); }
+export function getGuardianIntercept(vitality: number, charisma: number) { return scaleCombatRoleEffect((vitality + charisma) / 2, 0.15, 0.40); }
+export function getGuardianReduction(vitality: number) { return scaleCombatRoleEffect(vitality, 0.05, 0.20); }
+export function getDuelistDamageBonus(force: number, instinct: number) { return scaleCombatRoleEffect((force + instinct) / 2, 0.06, 0.18); }
+export function getSaboteurSuppression(instinct: number, agility: number) { return scaleCombatRoleEffect((instinct + agility) / 2, 0.15, 0.40); }
+export function getSaboteurProcChance(instinct: number, agility: number) { return scaleCombatRoleEffect((instinct + agility) / 2, 0.18, 0.55); }
+export function getScoutBonus(agility: number, instinct: number) { return scaleCombatRoleEffect((agility + instinct) / 2, 0, 0.08); }
+export function getProvokerChance(charisma: number, instinct: number) { return scaleCombatRoleEffect((charisma + instinct) / 2, 0.20, 0.55); }
+export function getSpecialistDamageBonus(bestStat: number) { return scaleCombatRoleEffect(bestStat, 0.06, 0.20); }
+export function getSurvivorReduction(vitality: number) { return scaleCombatRoleEffect(vitality, 0, 0.15); }
 
 /** Escala linearmente entre os valores publicados no manual até 250 de Instinto. */
 export function getOpportunistProfile(instinct: number) {
-  const ratio = Math.min(1, Math.max(0, instinct) / OPPORTUNIST_INSTINCT_CAP);
   return {
-    procChance: 0.22 + ratio * 0.40,
-    debuffPct: 0.08 + ratio * 0.17,
+    procChance: scaleCombatRoleEffect(instinct, 0.22, 0.62, OPPORTUNIST_INSTINCT_CAP),
+    debuffPct: scaleCombatRoleEffect(instinct, 0.08, 0.25, OPPORTUNIST_INSTINCT_CAP),
   };
 }
 
@@ -51,17 +73,17 @@ export const COMBAT_ROLE_LABELS: Record<CombatRole, string> = {
 };
 
 export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
-  DEFENDER: "Atributo direto: Vitalidade. Atrai 62% a 78% dos ataques e reduz entre 8% e 35% do dano recebido, conforme a Vitalidade.",
-  ATTACKER: "Atributo direto: Força. Recebe de +8% a +26% de dano conforme a Força e mais +15% contra Defensores.",
-  FLANK: "Atributo direto: Agilidade. Ganha de +4% a +18% de dano, tem 35% a 82% de chance de furar a defesa e causa +12% contra suportes.",
-  OPPORTUNIST: "Atributo direto: Instinto. De 0 a 250 de Instinto, escala progressivamente de 22% a 62% de chance de reduzir um atributo inimigo em 8% a 25%; causa +10% se superar o Instinto do alvo.",
-  ENCOURAGER: "Atributo direto: Carisma. Enquanto estiver ativo, concede de +4% a +18% de dano para toda a equipe. Sabotadores inimigos reduzem esse bônus.",
-  GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Intercepta de 15% a 40% do dano de um aliado e recebe de 5% a 20% menos dano; causa 10% menos dano.",
+  DEFENDER: "Atributo direto: Vitalidade. Até 250, escala de 8% a 35% de redução de dano. Atrai 78% dos ataques, ou 62% quando o agressor é Atacante.",
+  ATTACKER: "Atributo direto: Força. Até 250, escala de +8% a +26% de dano e recebe mais +15% contra Defensores.",
+  FLANK: "Atributo direto: Agilidade. Até 250, escala de +4% a +18% de dano e de 35% a 82% de chance de furar a defesa; causa +12% contra suportes.",
+  OPPORTUNIST: "Atributo direto: Instinto. Até 250, escala de 22% a 62% de chance e de 8% a 25% de redução. Instinto/Vitalidade do alvo reduzem a intensidade; causa +10% se superar o Instinto inimigo.",
+  ENCOURAGER: "Atributo direto: Carisma. Até 250, concede de +4% a +18% de dano à equipe enquanto estiver ativo. Vale apenas o melhor Encorajador; Sabotadores reduzem o bônus.",
+  GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Pela média dos dois até 250, intercepta de 15% a 40% do dano; Vitalidade dá de 5% a 20% de redução pessoal. Causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",
-  SABOTEUR: "Atributos diretos: Instinto e Agilidade. Prioriza suportes e reduz em 15% a 40% os bônus dos Encorajadores inimigos enquanto estiver ativo.",
+  SABOTEUR: "Atributos diretos: Instinto e Agilidade. Pela média dos dois até 250, reduz de 15% a 40% a eficácia do suporte inimigo e escala sua chance de interferência de 18% a 55%.",
   HEALER: "Atributos diretos: Carisma, Vitalidade e nível. Cura individualmente o aliado vivo ferido de menor HP em (35% do Carisma + 25% da Vitalidade + nível) × 2,5. O número de curas também escala com os atributos.",
-  SCOUT: "Atributos diretos: Agilidade e Instinto. Concede até +8% de dano à equipe, tem 35% a 82% de chance de focar o alvo mais frágil e causa 5% menos dano.",
-  PROVOKER: "Atributos diretos: Carisma e Instinto. Tem 20% a 55% de chance de redirecionar ataques para si e reduz o dano desviado em 8%; causa 8% menos dano.",
+  SCOUT: "Atributos diretos: Agilidade e Instinto. Pela média dos dois até 250, concede até +8% de dano à equipe; a Agilidade dá de 35% a 82% de chance de focar o alvo frágil. Causa 5% menos dano.",
+  PROVOKER: "Atributos diretos: Carisma e Instinto. Pela média dos dois até 250, escala de 20% a 55% de chance de redirecionar ataques, reduzindo o golpe em 8%. Causa 8% menos dano.",
   SPECIALIST: "Atributo direto: o maior entre Força, Agilidade, Instinto, Vitalidade e Carisma. Recebe de +6% a +20% de dano.",
   SURVIVOR: "Atributos diretos: Vitalidade e Instinto. Reduz até 15% do dano; abaixo de 30% de HP ganha +15% de dano e mais 25% de redução, além de sobreviver uma vez com 1 HP.",
 };

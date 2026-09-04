@@ -10,6 +10,21 @@ import {
   getCombatRoleLabel,
   normalizeCombatRole,
   getHealerHealAmount,
+  getAttackerDamageBonus,
+  getDefenderReduction,
+  getDuelistDamageBonus,
+  getEncouragerBonus,
+  getFlankBypassChance,
+  getFlankDamageBonus,
+  getGuardianIntercept,
+  getGuardianReduction,
+  getOpportunistProfile,
+  getProvokerChance,
+  getSaboteurProcChance,
+  getSaboteurSuppression,
+  getScoutBonus,
+  getSpecialistDamageBonus,
+  getSurvivorReduction,
   type CombatRole,
 } from "@/lib/combat-roles";
 
@@ -33,36 +48,36 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
   const { statForce: f, statAgility: a, statVitality: v, statInstinct: i, statCharisma: c } = s;
   switch (role) {
     case "DEFENDER":
-      return [`Redução pessoal estimada: ${pct(cap(0.08 + v / 240, 0.35))}.`, "Atrai normalmente 78% dos ataques; contra Atacantes, 62%.", "Na Arena, tem 20% de chance de gastar a ação preparando uma defesa de 45%."];
+      return [`Redução pessoal estimada: ${pct(getDefenderReduction(v))}.`, "Atrai normalmente 78% dos ataques; contra Atacantes, 62%.", "Na Arena, tem 20% de chance de gastar a ação preparando uma defesa de 45%."];
     case "ATTACKER":
-      return [`Bônus pessoal de dano: ${pct(0.08 + cap(f / 420, 0.18))}.`, "Contra Defensor, multiplica o resultado novamente por +15%.", "Prefere inimigos de maior Força; Defensores ainda podem puxar seu ataque em 62% das vezes."];
+      return [`Bônus pessoal de dano: ${pct(getAttackerDamageBonus(f))}.`, "Contra Defensor, multiplica o resultado novamente por +15%.", "Prefere inimigos de maior Força; Defensores ainda podem puxar seu ataque em 62% das vezes."];
     case "FLANK":
-      return [`Bônus pessoal de dano: ${pct(0.04 + cap(a / 500, 0.14))}.`, `Chance de ignorar a atração do Defensor e focar o alvo mais frágil: ${pct(cap(0.35 + a / 150, 0.82))}.`, `Redução defensiva na Arena: até ${pct(cap(a / 360, 0.25))}; +12% de dano contra suportes.`];
+      return [`Bônus pessoal de dano: ${pct(getFlankDamageBonus(a))}.`, `Chance de ignorar a atração do Defensor e focar o alvo mais frágil: ${pct(getFlankBypassChance(a))}.`, `Redução defensiva na Arena: até ${pct(cap(a / 360, 0.25))}; +12% de dano contra suportes.`];
     case "OPPORTUNIST":
-      return [`Chance de aplicar redução: ${pct(cap(0.22 + i / 220, 0.62))}.`, `Redução aplicada em Força, Agilidade, Instinto ou Vitalidade: ${pct(cap(0.08 + i / 500, 0.25))}.`, "Recebe +10% de dano se seu Instinto superar o do alvo e prefere inimigos de Instinto baixo."];
+      { const profile = getOpportunistProfile(i); return [`Chance de aplicar redução: ${pct(profile.procChance)}.`, `Redução-base: ${pct(profile.debuffPct)} antes da resistência do alvo.`, "Instinto (60%) e Vitalidade (40%) do alvo reduzem a intensidade. Recebe +10% de dano se superar o Instinto inimigo."]; }
     case "ENCOURAGER":
-      return [`Bônus de dano para toda a equipe enquanto estiver vivo: ${pct(cap(0.04 + c / 650, 0.18))}.`, "O bônus é passivo: ele ainda ataca em seu turno.", "Um Sabotador inimigo pode reduzir parte desse bônus."];
+      return [`Bônus de dano para toda a equipe enquanto estiver vivo: ${pct(getEncouragerBonus(c))}.`, "Vale o melhor Encorajador vivo e o bônus é passivo: ele ainda ataca.", "Um Sabotador inimigo pode reduzir parte desse bônus."];
     case "GUARDIAN":
-      return [`Intercepta ${pct(cap(0.15 + (v + c) / 600, 0.40))} do dano dirigido a um aliado; o dano interceptado vai para o Guardião.`, `Redução pessoal: ${pct(cap(0.05 + v / 300, 0.20))}; dano causado: -10%.`, "Na Arena, tem 15% de chance de gastar a ação preparando defesa de 38%."];
+      return [`Intercepta ${pct(getGuardianIntercept(v, c))} do dano dirigido a um aliado; o dano interceptado vai para o Guardião.`, `Redução pessoal: ${pct(getGuardianReduction(v))}; dano causado: -10%.`, "Na Arena, tem 15% de chance de gastar a ação preparando defesa de 38%."];
     case "DUELIST":
-      return [`Bônus de dano base: ${pct(0.06 + cap((f + i) / 800, 0.12))}.`, "Depois de escolher um alvo, recebe mais +12% enquanto o duelo permanecer no mesmo inimigo.", "Mantém o foco até o alvo cair."];
+      return [`Bônus de dano base: ${pct(getDuelistDamageBonus(f, i))}.`, "Depois de escolher um alvo, recebe mais +12% enquanto o duelo permanecer no mesmo inimigo.", "Mantém o foco até o alvo cair."];
     case "SABOTEUR":
-      return [`Chance de interferência na Arena: ${pct(cap(0.18 + (i + a) / 400, 0.55))}.`, `Reduz entre 15% e 40% do bônus de Encorajadores na Liga, conforme Instinto + Agilidade.`, "Prefere Encorajadores e Cuidadores; o efeito é passivo e ele também ataca."];
+      return [`Chance de interferência: ${pct(getSaboteurProcChance(i, a))}.`, `Redução da eficácia de suporte: ${pct(getSaboteurSuppression(i, a))}.`, "Usa a média de Instinto e Agilidade; prefere Encorajadores, Provocadores e Cuidadores."];
     case "HEALER": {
       const heal = getHealerHealAmount({ charisma: c, vitality: v, level: s.level ?? 1 });
       const count = 2 + Math.floor((c + v) / 40);
       return [`Cura individual prevista: ${heal} HP por ação. Fórmula: (35% do Carisma + 25% da Vitalidade + nível) × 2,5.`, `Limite previsto: ${count} curas por combate tradicional.`, "Escolhe um aliado vivo ferido, priorizando o de menor HP; não cura o time inteiro. Na Arena/Liga, troca o ataque pela cura. Em Raid, ataca e pode curar depois."];
     }
     case "SCOUT":
-      return [`Bônus passivo de dano da equipe: ${pct(cap(a / 400 + i / 500, 0.08))}.`, `Chance de furar a atração do Defensor: ${pct(cap(0.35 + a / 150, 0.82))}.`, "Foca o inimigo de menor HP e causa -5% de dano próprio."];
+      return [`Bônus passivo de dano da equipe: ${pct(getScoutBonus(a, i))}.`, `Chance de furar a atração do Defensor: ${pct(getFlankBypassChance(a))}.`, "Foca o inimigo de menor HP e causa -5% de dano próprio."];
     case "PROVOKER":
-      return [`Chance de redirecionar um ataque para si: ${pct(cap(0.20 + c / 300 + i / 400, 0.55))}.`, "Quando redireciona, o golpe causa 8% menos dano.", "O efeito é reativo/passivo; em seu turno também ataca, causando -8%."];
+      return [`Chance de redirecionar um ataque para si: ${pct(getProvokerChance(c, i))}.`, "Quando redireciona, o golpe causa 8% menos dano.", "Usa a média de Carisma e Instinto; em seu turno também ataca, causando -8%."];
     case "SPECIALIST": {
       const best = Math.max(f, a, v, i, c);
-      return [`Usa o maior atributo (${best}) para obter ${pct(0.06 + cap(best / 500, 0.14))} de dano.`, "É uma postura ofensiva estável: sempre usa sua ação para atacar."];
+      return [`Usa o maior atributo (${best}) para obter ${pct(getSpecialistDamageBonus(best))} de dano.`, "É uma postura ofensiva estável: sempre usa sua ação para atacar."];
     }
     case "SURVIVOR":
-      return [`Redução base: ${pct(cap(v / 400, 0.15))}.`, "Abaixo de 30% de HP: +15% de dano e mais 25% de redução.", "Uma vez por combate, um golpe fatal o deixa com 1 HP."];
+      return [`Redução base: ${pct(getSurvivorReduction(v))}.`, "Abaixo de 30% de HP: +15% de dano e mais 25% de redução.", "Uma vez por combate, um golpe fatal o deixa com 1 HP."];
   }
 }
 

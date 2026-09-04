@@ -93,7 +93,7 @@ export const PERSONALITY_DESIGN: PersonalitySpec[] = [
     key: "PLAYFUL", label: "Brincalhão", affinity: PERSONALITY_AFFINITY.PLAYFUL,
     interactions: "Brincar concede +3 de felicidade, +10 de EXP e 15% de chance de reduzir o próximo cooldown de Brincar.",
     expeditions: "Se uma expedição Padrão encontrar ovo, ele recebe +1 ponto percentual na raridade do mascote; eventos positivos com amigos ficam mais comuns.",
-    combat: "Ao entrar, 12% de chance de dar +5% de Agilidade ao time por 2 rounds. É coletivo e não causa dano.",
+    combat: "Ao entrar, 50% de chance de dar +5% de Agilidade ao time por 2 rounds. É coletivo e não causa dano.",
   },
   {
     key: "ELECTRIC", label: "Elétrico", affinity: PERSONALITY_AFFINITY.ELECTRIC,
