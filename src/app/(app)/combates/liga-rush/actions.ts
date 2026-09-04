@@ -225,6 +225,7 @@ export async function getRushDataAction() {
     ? (Array.isArray(ruleData(previousFinished.ruleJson).noShowPlayerIds) && (ruleData(previousFinished.ruleJson).noShowPlayerIds as string[]).includes(player.id))
     : false;
   const weekHighlights = buildRushHighlights(league.matches, names);
+  const bannedMascots = buildRushBannedMascots(league.matches, names);
   const rushTimes = await getRushTimes();
   const currentDate = brtDate();
   const firstBattleDate = brtDate(league.weekStart);
@@ -246,6 +247,7 @@ export async function getRushDataAction() {
     presets: RUSH_RULE_PRESETS,
     cancellation,
     weekHighlights,
+    bannedMascots,
     upcomingRegistration,
     upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
     hideResults: Boolean(prefs?.hideLeagueResults),
@@ -279,6 +281,27 @@ function buildRushHighlights(matches: Array<{ replayJson: unknown; resultJson: u
   const blank = (turn:any, actor=true):Stat => ({ id:actor?turn.actorId:turn.targetId,name:actor?turn.actorName:turn.targetName,pokemonId:(actor?turn.actorPokemonId:turn.targetPokemonId)??0,ownerId:(actor?turn.actorOwnerId:turn.targetOwnerId)??"",ownerName:names[(actor?turn.actorOwnerId:turn.targetOwnerId)??""]??"Jogador",role:(actor?turn.actorRole:turn.targetRole)??"",damageDealt:0,damageTaken:0,kosDealt:0,heals:0,attackActions:0,matches:0,wins:0});
   for (const match of matches) { if (!Array.isArray(match.replayJson)) continue; const seen=new Set<string>(); const hp=new Map<string,number>(); const result=ruleData(match.resultJson); for(const fighter of [...(Array.isArray(result.lineupA)?result.lineupA:[]),...(Array.isArray(result.lineupB)?result.lineupB:[])] as any[])if(fighter?.id)hp.set(fighter.id,Number(fighter.maxHp)||Number(fighter.hp)||0); for(const turn of match.replayJson as any[]){ if(!turn?.actorId||!turn?.targetId)continue; const actor=stats.get(turn.actorId)??blank(turn,true); const target=stats.get(turn.targetId)??blank(turn,false); seen.add(turn.actorId);seen.add(turn.targetId); if(turn.action==="ATTACK"){actor.attackActions++;const damage=Math.max(0,Number(turn.damage)||0);actor.damageDealt+=damage;target.damageTaken+=damage;const before=hp.get(turn.targetId)??0;const after=Math.max(0,before-damage);hp.set(turn.targetId,after);if(before>0&&after<=0)actor.kosDealt++;} if((turn.action==="HEAL"||turn.action==="DEFEND")&&String(turn.effect??"").toLowerCase().includes("cur"))actor.heals++; stats.set(actor.id,actor);stats.set(target.id,target);} for(const id of seen){const stat=stats.get(id);if(stat){stat.matches++;if(stat.ownerId===match.winnerId)stat.wins++;}} }
   return [...stats.values()];
+}
+
+function buildRushBannedMascots(matches: Array<{ battleDate:string; battleSlot:number; status:string; playerAId:string; playerBId:string|null; resultJson:unknown }>, names:Record<string,string>) {
+  type Entry={id:string;pokemonId:number;name:string;dates:Set<string>;usedBy:Set<string>;firstBattleDate:string;firstBattleSlot:number};
+  const entries=new Map<string,Entry>();
+  for(const match of matches){
+    if(match.status!=="RESOLVED")continue;
+    const result=ruleData(match.resultJson);
+    for(const [lineupKey,fallbackOwner] of [["lineupA",match.playerAId],["lineupB",match.playerBId]] as const){
+      const lineup=Array.isArray(result[lineupKey])?result[lineupKey] as Array<Record<string,unknown>>:[];
+      for(const mascot of lineup){
+        const id=typeof mascot.id==="string"?mascot.id:"";if(!id)continue;
+        const ownerId=typeof mascot.ownerId==="string"?mascot.ownerId:fallbackOwner;
+        const current=entries.get(id)??{id,pokemonId:Number(mascot.pokemonId)||0,name:String(mascot.name??getPokemonName(Number(mascot.pokemonId)||0)),dates:new Set<string>(),usedBy:new Set<string>(),firstBattleDate:match.battleDate,firstBattleSlot:match.battleSlot};
+        current.dates.add(match.battleDate);
+        if(ownerId)current.usedBy.add(names[ownerId]??"Jogador");
+        entries.set(id,current);
+      }
+    }
+  }
+  return [...entries.values()].map(entry=>({...entry,dates:[...entry.dates].sort(),usedBy:[...entry.usedBy]})).sort((a,b)=>a.firstBattleDate.localeCompare(b.firstBattleDate)||a.firstBattleSlot-b.firstBattleSlot||a.name.localeCompare(b.name));
 }
 
 export async function joinRushLeagueAction(leagueId: string) {
@@ -347,7 +370,9 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
       const escopo = repetition === "DAILY_UNIQUE" ? { battleDate: input.battleDate }
         : repetition === "DAY_LOCKED" ? { battleDate: { not: input.battleDate } }
         : {};
-      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, playerId: player.id, ...escopo }, select: { id: true, mascotIdsJson: true } });
+      // A trava acompanha o ID do mascote em toda a edição, não o dono atual.
+      // Transferir o mascote depois de escalá-lo não libera uma segunda luta.
+      const otherTeams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId: league.id, ...escopo }, select: { id: true, mascotIdsJson: true } });
       const current = await prisma.rushLeagueDailyTeam.findUnique({ where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } } });
       const otherIds = otherTeams.filter((t) => t.id !== current?.id).flatMap((t) => Array.isArray(t.mascotIdsJson) ? t.mascotIdsJson as string[] : []);
       const usedMascotIds = new Set(otherIds);
@@ -588,6 +613,10 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
     const league = await prisma.rushLeague.findUnique({ where: { id: leagueId } });
     if (!league) return { error: "Liga não encontrada." };
     const matches = await prisma.rushLeagueMatch.findMany({ where: { leagueId, battleDate, battleSlot: { lte: Math.min(3, Math.max(1, maxSlot)) }, status: "SCHEDULED", playerBId: { not: null } }, orderBy: { battleSlot: "asc" } });
+    const repetition=repeatMode(ruleData(league.ruleJson),league.uniqueSpecies);
+    const priorMatches=repetition==="UNRESTRICTED"?[]:await prisma.rushLeagueMatch.findMany({where:{leagueId,status:"RESOLVED",...(repetition==="DAILY_UNIQUE"?{battleDate}:repetition==="DAY_LOCKED"?{battleDate:{not:battleDate}}:{})},select:{resultJson:true}});
+    const globallyUsed=new Set<string>();
+    for(const prior of priorMatches){const result=ruleData(prior.resultJson);for(const lineup of [result.lineupA,result.lineupB])if(Array.isArray(lineup))for(const mascot of lineup as Array<Record<string,unknown>>)if(typeof mascot.id==="string")globallyUsed.add(mascot.id);}
     let resolved = 0, walkovers = 0, skipped = 0;
     for (const match of matches) {
       const teams = await prisma.rushLeagueDailyTeam.findMany({ where: { leagueId, battleDate, battleSlot: match.battleSlot, playerId: { in: [match.playerAId, match.playerBId!] } } });
@@ -603,7 +632,9 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
       const sanitize = (ids: string[], owner: string) => {
         const owned = ids.map((id) => map.get(id)).filter((m): m is NonNullable<typeof m> => !!m && m.playerId === owner);
         const { valid, invalid } = evaluateBattleTeam(owned, rule);
-        return { validIds: valid.map((m) => m.id), removed: invalid.map((x) => ({ id: x.mascot.id, name: x.mascot.nickname ?? getPokemonName(x.mascot.pokemonId), reasons: x.reasons })) };
+        const repeated=valid.filter(m=>globallyUsed.has(m.id));
+        const repeatedIds=new Set(repeated.map(m=>m.id));
+        return { validIds: valid.filter(m=>!repeatedIds.has(m.id)).map((m) => m.id), removed: [...invalid.map((x) => ({ id: x.mascot.id, name: x.mascot.nickname ?? getPokemonName(x.mascot.pokemonId), reasons: x.reasons })),...repeated.map(m=>({id:m.id,name:m.nickname??getPokemonName(m.pokemonId),reasons:["Mascote presente no Mural dos Banidos desta edição."]}))] };
       };
       const sanA = sanitize(rawIdsA, match.playerAId);
       const sanB = sanitize(rawIdsB, match.playerBId!);
@@ -641,6 +672,7 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
       const a = idsA.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesA[id]));
       const b = idsB.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesB[id]));
       const result = runLeagueCombat(a, b);
+      if(repetition!=="UNRESTRICTED")for(const id of [...idsA,...idsB])globallyUsed.add(id);
       const winnerId = result.winner === "A" ? match.playerAId : result.winner === "B" ? match.playerBId : null;
       const loserId = winnerId ? (winnerId === match.playerAId ? match.playerBId : match.playerAId) : null;
       const applied = await prisma.$transaction(async (tx) => {
