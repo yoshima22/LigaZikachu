@@ -1,6 +1,6 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, unstable_cache } from "next/cache";
 import { GiftType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
@@ -225,7 +225,6 @@ export async function getRushDataAction() {
     ? (Array.isArray(ruleData(previousFinished.ruleJson).noShowPlayerIds) && (ruleData(previousFinished.ruleJson).noShowPlayerIds as string[]).includes(player.id))
     : false;
   const weekHighlights = buildRushHighlights(league.matches, names);
-  const bannedMascots = buildRushBannedMascots(league.matches, names);
   const rushTimes = await getRushTimes();
   const currentDate = brtDate();
   const firstBattleDate = brtDate(league.weekStart);
@@ -247,7 +246,6 @@ export async function getRushDataAction() {
     presets: RUSH_RULE_PRESETS,
     cancellation,
     weekHighlights,
-    bannedMascots,
     upcomingRegistration,
     upcomingJoined: Boolean(upcomingRegistration?.participants.some((participant) => participant.playerId === player.id)),
     hideResults: Boolean(prefs?.hideLeagueResults),
@@ -284,7 +282,7 @@ function buildRushHighlights(matches: Array<{ replayJson: unknown; resultJson: u
 }
 
 function buildRushBannedMascots(matches: Array<{ battleDate:string; battleSlot:number; status:string; playerAId:string; playerBId:string|null; resultJson:unknown }>, names:Record<string,string>) {
-  type Entry={id:string;pokemonId:number;name:string;dates:Set<string>;usedBy:Set<string>;firstBattleDate:string;firstBattleSlot:number};
+  type Entry={id:string;pokemonId:number;name:string;dates:Set<string>;usedBy:Set<string>;usedByIds:Set<string>;firstBattleDate:string;firstBattleSlot:number};
   const entries=new Map<string,Entry>();
   for(const match of matches){
     if(match.status!=="RESOLVED")continue;
@@ -294,14 +292,35 @@ function buildRushBannedMascots(matches: Array<{ battleDate:string; battleSlot:n
       for(const mascot of lineup){
         const id=typeof mascot.id==="string"?mascot.id:"";if(!id)continue;
         const ownerId=typeof mascot.ownerId==="string"?mascot.ownerId:fallbackOwner;
-        const current=entries.get(id)??{id,pokemonId:Number(mascot.pokemonId)||0,name:String(mascot.name??getPokemonName(Number(mascot.pokemonId)||0)),dates:new Set<string>(),usedBy:new Set<string>(),firstBattleDate:match.battleDate,firstBattleSlot:match.battleSlot};
+        const current=entries.get(id)??{id,pokemonId:Number(mascot.pokemonId)||0,name:String(mascot.name??getPokemonName(Number(mascot.pokemonId)||0)),dates:new Set<string>(),usedBy:new Set<string>(),usedByIds:new Set<string>(),firstBattleDate:match.battleDate,firstBattleSlot:match.battleSlot};
         current.dates.add(match.battleDate);
-        if(ownerId)current.usedBy.add(names[ownerId]??"Jogador");
+        if(ownerId){current.usedBy.add(names[ownerId]??"Jogador");current.usedByIds.add(ownerId);}
         entries.set(id,current);
       }
     }
   }
-  return [...entries.values()].map(entry=>({...entry,dates:[...entry.dates].sort(),usedBy:[...entry.usedBy]})).sort((a,b)=>a.firstBattleDate.localeCompare(b.firstBattleDate)||a.firstBattleSlot-b.firstBattleSlot||a.name.localeCompare(b.name));
+  return [...entries.values()].map(entry=>({...entry,dates:[...entry.dates].sort(),usedBy:[...entry.usedBy],usedByIds:[...entry.usedByIds]})).sort((a,b)=>a.firstBattleDate.localeCompare(b.firstBattleDate)||a.firstBattleSlot-b.firstBattleSlot||a.name.localeCompare(b.name));
+}
+
+const getCachedRushBanWall=async(leagueId:string)=>unstable_cache(async()=>{
+  const league=await prisma.rushLeague.findUnique({where:{id:leagueId},select:{ruleJson:true,uniqueSpecies:true,participants:{select:{playerId:true}},matches:{where:{status:"RESOLVED"},orderBy:[{battleDate:"asc"},{battleSlot:"asc"}],select:{battleDate:true,battleSlot:true,status:true,playerAId:true,playerBId:true,resultJson:true}}}});
+  if(!league)return null;
+  const players=await prisma.player.findMany({where:{id:{in:league.participants.map(entry=>entry.playerId)}},select:{id:true,displayName:true}});
+  const names=Object.fromEntries(players.map(entry=>[entry.id,entry.displayName]));
+  return{entries:buildRushBannedMascots(league.matches,names),users:players.map(entry=>({id:entry.id,name:entry.displayName})).sort((a,b)=>a.name.localeCompare(b.name)),repetition:repeatMode(ruleData(league.ruleJson),league.uniqueSpecies)};
+},[`rush-ban-wall-${leagueId}`],{revalidate:60})();
+
+export async function getRushBannedMascotsAction(input:{leagueId:string;page?:number;usedByPlayerId?:string}){
+  await requireContext();
+  const data=await getCachedRushBanWall(input.leagueId);
+  if(!data)return{error:"Liga Rush não encontrada."};
+  const pageSize=24;
+  const usedByPlayerId=input.usedByPlayerId;
+  const filtered=usedByPlayerId?data.entries.filter(entry=>entry.usedByIds.includes(usedByPlayerId)):data.entries;
+  const total=filtered.length;
+  const pages=Math.max(1,Math.ceil(total/pageSize));
+  const page=Math.min(pages,Math.max(1,Math.trunc(input.page??1)));
+  return{success:true,entries:filtered.slice((page-1)*pageSize,page*pageSize).map(({usedByIds,...entry})=>entry),users:data.users,repetition:data.repetition,page,pages,total};
 }
 
 export async function joinRushLeagueAction(leagueId: string) {
