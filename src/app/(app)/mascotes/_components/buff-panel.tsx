@@ -382,6 +382,17 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         } else {
           toast.success("Item usado com sucesso! ✨");
         }
+        // Cada uso concluído encerra a seleção atual, mesmo quando ainda restam
+        // unidades do item. Isso evita que um segundo clique aplique novamente o
+        // mesmo item/mascote por engano e devolve a busca ao estado inicial.
+        searchSeq.current += 1;
+        setSelectedBuff("");
+        setSelectedMascot("");
+        setSelectedMascotObj(null);
+        setSearch("");
+        setResults([]);
+        setShowResults(false);
+        setMascotPage(0);
         // A Pena mantém o painel montado para exibir o comparativo. O card é
         // recarregado ao fechar o modal; outros itens continuam atualizando já.
         if (t !== "RAINBOW_FEATHER" || !r.comparison) router.refresh();
