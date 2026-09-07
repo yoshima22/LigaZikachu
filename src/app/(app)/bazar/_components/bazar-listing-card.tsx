@@ -73,6 +73,7 @@ interface Listing {
 export function BazarListingCard({ listing }: { listing: Listing }) {
   const isAuction = listing.listingType === "AUCTION";
   const payload = listing.payload as Record<string, unknown>;
+  const bundleItems = Array.isArray(payload.bundleItems) ? payload.bundleItems as Array<{ displayName: string; quantity: number; mascotId?: string }> : [];
   const isDirectNegotiation = payload.directNegotiation === true;
   const type = isDirectNegotiation
     ? { label: "Negociação direta", color: "text-cyan-300 border-cyan-500/30 bg-cyan-500/10" }
@@ -108,7 +109,13 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
 
       {/* Preview */}
       <div className="flex items-center justify-center bg-slate-900/80 h-32 relative">
-        {isDirectNegotiation ? (
+        {bundleItems.length > 0 ? (
+          <div className="flex flex-col items-center gap-2 text-amber-200">
+            <Gavel size={48}/>
+            <span className="text-[11px] font-black uppercase tracking-wide">Pacote misto</span>
+            <span className="text-[9px] text-slate-400">{bundleItems.length} tipos · {bundleItems.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0)} ativos</span>
+          </div>
+        ) : isDirectNegotiation ? (
           <div className="flex flex-col items-center gap-2 text-cyan-200">
             <Handshake size={54} strokeWidth={1.4}/>
             <span className="text-[10px] font-bold uppercase tracking-[0.18em]">Mesa aberta</span>
@@ -215,12 +222,14 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         )}
         <div>
           <p className="font-semibold text-white text-sm truncate">
-            {listing.category === "MASCOT"
+            {bundleItems.length > 0
+              ? `Grande pacote · ${bundleItems.length} tipos`
+              : listing.category === "MASCOT"
               ? fullMascotName(payload)
               : String(payload.displayName ?? payload.itemType ?? "Item")}
           </p>
           <p className="text-[10px] text-slate-500">
-            {CATEGORY_LABEL[listing.category]}
+            {bundleItems.length > 0 ? "Itens + mascotes" : CATEGORY_LABEL[listing.category]}
             {listing.category === "MASCOT" && ` · #${payload.pokemonId as number}`}
           </p>
         </div>

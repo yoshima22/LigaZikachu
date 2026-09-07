@@ -10,6 +10,7 @@ import { getSpriteUrl, getPokemonName, shortMascotCode } from "@/lib/mascot-data
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 import { Gavel } from "lucide-react";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
+import type { ProposalOfferItem } from "../actions";
 
 interface InventoryItem {
   inventoryId: string;
@@ -79,6 +80,7 @@ function CreateListingForm() {
   const [mascotPage, setMascotPage] = useState(0);
   const [itemSearch, setItemSearch] = useState("");
   const [premium, setPremium] = useState(false);
+  const [auctionBundle, setAuctionBundle] = useState<ProposalOfferItem[]>([]);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
   const loadInventory = async (force = false) => {
@@ -110,8 +112,15 @@ function CreateListingForm() {
           });
           if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         } else if (isAuction) {
+          const selectedMascot = inventory?.mascots.find((m) => m.id === selectedMascotId);
+          const fallbackSingle: ProposalOfferItem[] = selectedMascot ? [{
+            type: "MASCOT", quantity: 1, displayName: selectedMascot.nickname ?? getPokemonName(selectedMascot.pokemonId),
+            mascotId: selectedMascot.id, pokemonId: selectedMascot.pokemonId, level: selectedMascot.level,
+            personality: selectedMascot.personality, statForce: selectedMascot.statForce, statAgility: selectedMascot.statAgility,
+            statCharisma: selectedMascot.statCharisma, statInstinct: selectedMascot.statInstinct, statVitality: selectedMascot.statVitality,
+          }] : selectedItem ? [{ type: selectedItem.type, quantity: itemQuantity, displayName: selectedItem.displayName, shopItemId: selectedItem.shopItemId, eggBonusPct: selectedItem.eggBonusPct }] : [];
           const r = await createAuctionListing({
-            category: category as BazarItemCategory,
+            category: "ITEM",
             minBidCoins: parseInt(minBid) || 0,
             auctionDuration,
             currency: auctionCurrency,
@@ -124,6 +133,7 @@ function CreateListingForm() {
             quantity: category === "ITEM" ? itemQuantity : undefined,
             displayName: category === "ITEM" ? selectedItem?.displayName : undefined,
             premium,
+            bundleItems: auctionBundle.length > 0 ? auctionBundle : fallbackSingle,
           });
           if (r.error) { setSubmitError(r.error); toast.error(r.error); return; }
         } else {
@@ -163,9 +173,9 @@ function CreateListingForm() {
   const canProceed = () => {
     if (isDirectNegotiation) return true;
     if (!category) return false;
+    if (isAuction) return auctionBundle.length > 0 && !!minBid && parseInt(minBid) >= 1;
     if (category === "MASCOT" && !selectedMascotId) return false;
     if (category === "ITEM" && (!selectedItem || itemQuantity < 1)) return false;
-    if (isAuction) return !!minBid && parseInt(minBid) >= 1;
     if (listingType !== "TRADE" && (!priceCoins || parseInt(priceCoins) < 1) && (!priceLigaCash || parseInt(priceLigaCash) < 1)) return false;
     if (loanEnabled && parseInt(loanAmountCoins || priceCoins) < 1) return false;
     return true;
@@ -217,7 +227,7 @@ function CreateListingForm() {
               { value: "ITEM",   emoji: "📦", label: "Item",    desc: "Ovos, buffs, tickets, comida..." },
             ] as const).map(opt => (
               <button key={opt.value} type="button"
-                onClick={() => { setCategory(opt.value); setSelectedItem(null); loadInventory(true); }}
+                onClick={() => { setCategory(opt.value); setSelectedItem(null); loadInventory(); }}
                 className={`flex items-center gap-3 rounded-xl border p-3 text-left transition-colors ${
                   category === opt.value ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-white" : "border-border text-slate-400 hover:border-slate-600"
                 }`}>
@@ -315,9 +325,14 @@ function CreateListingForm() {
                      ) : (
                        <div className="grid gap-2 sm:grid-cols-2">
                          {paged.map(m => (
-                           <button key={m.id} type="button" onClick={() => setSelectedMascotId(m.id)}
+                           <button key={m.id} type="button" onClick={() => {
+                             if (!isAuction) { setSelectedMascotId(m.id); return; }
+                             setAuctionBundle((current) => current.some((item) => item.mascotId === m.id)
+                               ? current.filter((item) => item.mascotId !== m.id)
+                               : [...current, { type: "MASCOT", quantity: 1, displayName: m.nickname ?? getPokemonName(m.pokemonId), mascotId: m.id, pokemonId: m.pokemonId, level: m.level, personality: m.personality, statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma, statInstinct: m.statInstinct, statVitality: m.statVitality }]);
+                           }}
                              className={`flex flex-col rounded-xl border p-2.5 text-left transition-colors ${
-                               selectedMascotId === m.id ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
+                               (isAuction ? auctionBundle.some((item) => item.mascotId === m.id) : selectedMascotId === m.id) ? "border-[#FFCB05]/50 bg-[#FFCB05]/10" : "border-border hover:border-slate-600"
                              }`}>
                              <div className="flex items-center gap-3">
                                {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -478,7 +493,7 @@ function CreateListingForm() {
             })()}
 
             {selectedItem && (
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
                 <label className="text-xs text-slate-400 shrink-0">
                   Quantidade{selectedItem.maxQty > 1 ? ` (máx. ${selectedItem.maxQty})` : ""}:
                 </label>
@@ -489,8 +504,40 @@ function CreateListingForm() {
                     setItemQuantity(Math.min(v, selectedItem.maxQty ?? 99));
                   }}
                   className="w-20 rounded-lg border border-border bg-slate-900 px-2 py-1 text-xs text-slate-200 text-center outline-none" />
+                {isAuction && (
+                  <button type="button" onClick={() => {
+                    const key = selectedItem.shopItemId ?? `${selectedItem.type}#${selectedItem.eggBonusPct ?? 0}`;
+                    setAuctionBundle((current) => {
+                      const without = current.filter((item) => (item.shopItemId ?? `${item.type}#${item.eggBonusPct ?? 0}`) !== key);
+                      return [...without, { type: selectedItem.type, quantity: itemQuantity, displayName: selectedItem.displayName, shopItemId: selectedItem.shopItemId, eggBonusPct: selectedItem.eggBonusPct }];
+                    });
+                    setSelectedItem(null);
+                    setItemQuantity(1);
+                  }} className="rounded-lg border border-amber-400/40 bg-amber-400/10 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-amber-400/20">
+                    Adicionar ao pacote
+                  </button>
+                )}
               </div>
             )}
+          </div>
+        )}
+
+        {isAuction && auctionBundle.length > 0 && (
+          <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-400/5 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-xs font-black uppercase tracking-wide text-amber-300">Pacote do leilão · {auctionBundle.length} tipos</p>
+              <p className="text-[10px] text-slate-500">Alterne entre Mascote e Item para continuar adicionando</p>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              {auctionBundle.map((item) => {
+                const key = item.mascotId ?? item.shopItemId ?? `${item.type}#${item.eggBonusPct ?? 0}`;
+                return <button key={key} type="button" onClick={() => setAuctionBundle((current) => current.filter((entry) => (entry.mascotId ?? entry.shopItemId ?? `${entry.type}#${entry.eggBonusPct ?? 0}`) !== key))}
+                  className="rounded-full border border-amber-300/30 bg-slate-950 px-3 py-1 text-[11px] text-slate-200 hover:border-red-400/50 hover:text-red-300"
+                  title="Remover do pacote">
+                  {item.mascotId ? "🐾" : "📦"} {item.quantity > 1 ? `${item.quantity}× ` : ""}{item.displayName} ×
+                </button>;
+              })}
+            </div>
           </div>
         )}
 

@@ -53,7 +53,7 @@ function revalidateBazar() {
   revalidateTag("bazar-transactions");
 }
 
-type ProposalOfferItem = {
+export type ProposalOfferItem = {
   type: string;
   quantity: number;
   displayName: string;
@@ -171,6 +171,11 @@ function fullMascotPayloadName(payload: Record<string, unknown>) {
 
 function listingDisplayName(listing: { category: string; payload: unknown }) {
   const payload = listing.payload as Record<string, unknown>;
+  const bundle = Array.isArray(payload.bundleItems) ? payload.bundleItems as ProposalOfferItem[] : [];
+  if (bundle.length > 0) {
+    const units = bundle.reduce((total, item) => total + Math.max(1, Number(item.quantity) || 1), 0);
+    return `Pacote de leilão · ${bundle.length} tipo${bundle.length === 1 ? "" : "s"} · ${units} unidade${units === 1 ? "" : "s"}`;
+  }
   return listing.category === "MASCOT"
     ? fullMascotPayloadName(payload)
     : String(payload.displayName ?? payload.name ?? "Item do Bazar");
@@ -1069,6 +1074,7 @@ export async function editListing(
     listingType?: "SALE" | "SALE_OR_TRADE" | "AUCTION";
     minBidCoins?: number | null;
     auctionDuration?: "12h" | "1d";
+    renewPremium?: boolean;
   },
 ): Promise<{ error?: string }> {
   try {
@@ -1137,7 +1143,37 @@ export async function editListing(
       }
     }
 
-    await prisma.bazarListing.update({ where: { id: listingId }, data });
+    await prisma.$transaction(async (tx) => {
+      if (fields.renewPremium) {
+        await tx.$queryRaw`SELECT 1 AS acquired FROM pg_advisory_xact_lock(hashtext('bazar-premium-listings'))`;
+        const now = new Date();
+        const premiumWhere = {
+          status: { in: ["ACTIVE", "RESERVED"] as BazarListingStatus[] },
+          premiumUntil: { gt: now },
+          id: { not: listingId },
+        };
+        const [globalPremiumCount, ownPremiumCount, wallet] = await Promise.all([
+          tx.bazarListing.count({ where: premiumWhere }),
+          tx.bazarListing.count({ where: { ...premiumWhere, playerId: player.id } }),
+          tx.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
+        ]);
+        if (ownPremiumCount > 0) throw new Error("Você já possui outro anúncio premium ativo.");
+        if (globalPremiumCount >= MAX_ACTIVE_PREMIUM_LISTINGS) throw new Error("As vitrines premium do Miauvadão estão ocupadas no momento.");
+        if (!wallet || wallet.balance < PREMIUM_LISTING_FEE) throw new Error(`Saldo insuficiente para renovar o destaque (${PREMIUM_LISTING_FEE} ZC).`);
+        await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: PREMIUM_LISTING_FEE } } });
+        await tx.miauvadaoConfig.upsert({
+          where: { id: "singleton" },
+          create: { id: "singleton", vaultBalance: PREMIUM_LISTING_FEE },
+          update: { vaultBalance: { increment: PREMIUM_LISTING_FEE } },
+        });
+        data.premiumUntil = new Date(now.getTime() + PREMIUM_LISTING_HOURS * 3_600_000);
+      }
+      await tx.bazarListing.update({ where: { id: listingId }, data });
+    });
+
+    if (fields.renewPremium) {
+      await publishDuePremiumBazarTicker().catch((error) => console.error("[Bazar Premium] Falha ao renovar destaque", error));
+    }
 
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
@@ -3085,7 +3121,11 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
 
     if (!item.mascotId) {
       const inv = await tx.playerInventory.findFirst({
-        where: { playerId, item: { type: item.type as never }, quantity: { gte: quantity } },
+        where: {
+          playerId,
+          ...(item.shopItemId ? { itemId: item.shopItemId } : { item: { type: item.type as never } }),
+          quantity: { gte: quantity },
+        },
         select: { itemId: true },
       });
       if (!inv) {
@@ -3251,6 +3291,13 @@ async function _releaseProposalEscrow(
 
 async function _transferItem(tx: TxClient, listing: { id: string; category: string; payload: unknown }, toBuyerId: string) {
   const payload = listing.payload as Record<string, unknown>;
+  const bundle = Array.isArray(payload.bundleItems) ? payload.bundleItems as ProposalOfferItem[] : null;
+  if (bundle?.length) {
+    const listingOwner = await tx.bazarListing.findUnique({ where: { id: listing.id }, select: { playerId: true } });
+    if (!listingOwner) throw new Error("Não foi possível identificar o dono do pacote.");
+    await _deliverProposalOffers(tx, bundle, listingOwner.playerId, toBuyerId);
+    return;
+  }
 
   if (listing.category === "MASCOT") {
     const mascotId = payload.mascotId as string;
@@ -3304,6 +3351,11 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
 
 async function _returnEscrow(tx: TxClient, listing: { id: string; category: string; payload: unknown }, ownerId: string) {
   const payload = listing.payload as Record<string, unknown>;
+  const bundle = Array.isArray(payload.bundleItems) ? payload.bundleItems as ProposalOfferItem[] : null;
+  if (bundle?.length) {
+    await _releaseProposalOffers(tx, bundle, ownerId);
+    return;
+  }
 
   // Mesa de negociação direta não tem ativo escrowado no próprio anúncio (as
   // ofertas dos dois lados são liberadas à parte, pela proposta/estado direto).
@@ -3699,6 +3751,8 @@ export interface CreateAuctionInput {
   displayName?: string;
   premium?: boolean; // leilão em destaque na vitrine premium do Miauvadão
   currency?: "ZC" | "LC"; // moeda única do leilão (todos os lances nela)
+  /** Pacote misto. Quando informado, substitui o ativo único legado. */
+  bundleItems?: ProposalOfferItem[];
 }
 
 export async function createAuctionListing(input: CreateAuctionInput): Promise<{ error?: string; id?: string }> {
@@ -3753,7 +3807,19 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
       await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: fee } } });
       await tx.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: fee } } });
 
-      if (input.category === "MASCOT" && input.mascotId) {
+      if (Array.isArray(input.bundleItems) && input.bundleItems.length > 0) {
+        if (input.bundleItems.length > 40) throw new Error("Um pacote pode conter no máximo 40 tipos de ativos.");
+        for (const item of input.bundleItems) {
+          if (!item.mascotId && HIDDEN_BAZAR_ITEM_TYPES.has(item.type)) throw new Error(`${item.displayName} não pode ser leiloado.`);
+          if (item.shopItemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser leiloado.");
+        }
+        const reserved = await _reserveProposalOffers(tx, player.id, input.bundleItems);
+        payload = {
+          bundleItems: reserved,
+          displayName: `Pacote misto com ${reserved.length} tipo${reserved.length === 1 ? "" : "s"}`,
+          quantity: reserved.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0),
+        };
+      } else if (input.category === "MASCOT" && input.mascotId) {
         const mascot = await tx.mascot.findUnique({ where: { id: input.mascotId } });
         if (!mascot) throw new Error("Mascote não encontrado.");
         await assertMascotTradeableInBazar(tx, mascot, player.id);
