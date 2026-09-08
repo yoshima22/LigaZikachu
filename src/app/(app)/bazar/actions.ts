@@ -3113,7 +3113,9 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
       const escrowBonus = bonusPct !== null ? bonusPct : eggs[0]?.hatchRarityBonusPct ?? 0;
       await tx.mascotEgg.updateMany({
         where: { id: { in: eggIds }, playerId },
-        data: { origin: `bazar-proposal:${playerId}` },
+        // Mantém o ovo no escrow do Bazar e usa o mesmo prefixo que todas as
+        // telas/ações reconhecem como indisponível para o jogador.
+        data: { origin: `bazar:proposal:${playerId}` },
       });
       reserved.push({
         ...normalized,
@@ -3243,7 +3245,19 @@ async function _deliverProposalOffers(tx: TxClient, items: ProposalOfferItem[], 
     if (isEggOfferType(item.type)) {
       const eggIds = [...new Set(item.escrowed_egg_ids ?? [])];
       if (eggIds.length !== quantity) throw new Error(`A reserva de ${item.displayName} está inconsistente.`);
-      const moved = await tx.mascotEgg.updateMany({ where: { id: { in: eggIds }, playerId: fromPlayerId, origin: { startsWith: "bazar-proposal:" } }, data: { playerId: toPlayerId, origin: "Negociação direta do Bazar" } });
+      const moved = await tx.mascotEgg.updateMany({
+        where: {
+          id: { in: eggIds },
+          playerId: fromPlayerId,
+          // Aceita o marcador antigo durante a transição para não travar mesas
+          // abertas antes desta correção.
+          OR: [
+            { origin: { startsWith: "bazar:proposal:" } },
+            { origin: { startsWith: "bazar-proposal:" } },
+          ],
+        },
+        data: { playerId: toPlayerId, origin: "Negociação direta do Bazar" },
+      });
       if (moved.count !== quantity) throw new Error(`Não foi possível entregar ${item.displayName}.`);
       continue;
     }
