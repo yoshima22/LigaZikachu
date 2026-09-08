@@ -224,7 +224,7 @@ export default async function PartidasPage({ params }: Props) {
   const currentPlayerEnguicaCompletion = player
     ? allEnguicaCompletions.find((completion) => completion.playerId === player.id) ?? null
     : null;
-  const enguicaContract = tournament.enguicaContractsEnabled && week.enguicaContractKey
+  const enguicaContract = tournament.enguicaContractsEnabled && week.enguicaContractKey && (!week.enguicaContractHidden || isAdmin)
     ? {
         key: week.enguicaContractKey,
         title: week.enguicaContractTitle ?? "Contrato do Professor Enguiça",
@@ -326,6 +326,7 @@ export default async function PartidasPage({ params }: Props) {
           weekNumber={weekNum}
           isAdmin={isAdmin}
           deckRegistrationOpen={week.status === "OPEN" && !isDeckRegistrationLocked(week)}
+          hidden={week.enguicaContractHidden}
           contract={week.enguicaContractKey ? {
             key: week.enguicaContractKey,
             title: week.enguicaContractTitle ?? "Contrato do Professor Enguiça",

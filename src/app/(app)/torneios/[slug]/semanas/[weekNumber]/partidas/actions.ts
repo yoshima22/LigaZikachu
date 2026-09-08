@@ -476,6 +476,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
         enguicaContractTitle: contract.title,
         enguicaContractDescription: contract.description,
         enguicaContractRevealedAt: new Date(),
+        enguicaContractHidden: false,
       } : {}),
     },
   });
@@ -1398,6 +1399,7 @@ export async function revealEnguicaContract(tournamentId: string, weekNumber: nu
       enguicaContractTitle: contract.title,
       enguicaContractDescription: contract.description,
       enguicaContractRevealedAt: revealedAt,
+      enguicaContractHidden: false,
     },
   });
   if (updated.count === 1) {
@@ -1415,6 +1417,58 @@ export async function revealEnguicaContract(tournamentId: string, weekNumber: nu
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
   revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
   return { success: true, contractKey: contract.key };
+}
+
+export async function redrawEnguicaContract(tournamentId: string, weekNumber: number) {
+  const admin = await requireAdmin();
+  const week = await prisma.tournamentWeek.findUnique({
+    where: { tournamentId_weekNumber: { tournamentId, weekNumber } },
+    include: { tournament: true, _count: { select: { enguicaCompletions: true } } },
+  });
+  if (!week) throw new Error("Semana não encontrada.");
+  if (!week.tournament.enguicaContractsEnabled) throw new Error("Os contratos não estão habilitados neste campeonato.");
+  if (week._count.enguicaCompletions > 0) throw new Error("Não é possível resortear depois que algum jogador marcou a conclusão do contrato.");
+
+  const contract = drawEnguicaContract(week.enguicaContractKey);
+  const changedAt = new Date();
+  await prisma.$transaction([
+    prisma.tournamentWeek.update({ where: { id: week.id }, data: {
+      enguicaContractKey: contract.key,
+      enguicaContractTitle: contract.title,
+      enguicaContractDescription: contract.description,
+      enguicaContractRevealedAt: changedAt,
+      enguicaContractHidden: false,
+    } }),
+    prisma.auditLog.create({ data: {
+      actorUserId: admin.id, entityType: "tournament_week", entityId: week.id,
+      action: "enguica_contract.redrawn",
+      before: { contractKey: week.enguicaContractKey, hidden: week.enguicaContractHidden },
+      after: { contractKey: contract.key, title: contract.title, hidden: false },
+    } }),
+  ]);
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+  return { success: true, contractKey: contract.key };
+}
+
+export async function setEnguicaContractHidden(tournamentId: string, weekNumber: number, hidden: boolean) {
+  const admin = await requireAdmin();
+  const week = await prisma.tournamentWeek.findUnique({
+    where: { tournamentId_weekNumber: { tournamentId, weekNumber } },
+    include: { tournament: { select: { slug: true } } },
+  });
+  if (!week?.enguicaContractKey) throw new Error("Nenhum contrato foi sorteado nesta semana.");
+  await prisma.$transaction([
+    prisma.tournamentWeek.update({ where: { id: week.id }, data: { enguicaContractHidden: hidden } }),
+    prisma.auditLog.create({ data: {
+      actorUserId: admin.id, entityType: "tournament_week", entityId: week.id,
+      action: hidden ? "enguica_contract.hidden" : "enguica_contract.shown",
+      before: { hidden: week.enguicaContractHidden }, after: { hidden },
+    } }),
+  ]);
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}`);
+  revalidatePath(`/torneios/${week.tournament.slug}/semanas/${weekNumber}/partidas`);
+  return { success: true };
 }
 
 // Admin: marca/desmarca a conclusão do contrato de UM jogador específico da
@@ -1465,6 +1519,7 @@ export async function declareEnguicaContractCompletion(matchId: string) {
     include: { tournamentWeek: { include: { tournament: true } } },
   });
   if (!match?.tournamentWeek) throw new Error("Partida não encontrada.");
+  if (match.tournamentWeek.enguicaContractHidden) throw new Error("O Contrato do Professor Enguiça está oculto no momento.");
   if (match.status !== MatchStatus.PENDING_CONFIRMATION && match.status !== MatchStatus.CONFIRMED) {
     throw new Error("O contrato só pode ser registrado em uma partida válida.");
   }

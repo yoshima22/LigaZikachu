@@ -550,6 +550,7 @@ model TournamentWeek {
   enguicaContractTitle       String?
   enguicaContractDescription String?                       @db.Text
   enguicaContractRevealedAt  DateTime?
+  enguicaContractHidden      Boolean                       @default(false)
   notes                      String?
   narrativeText              String?                       @db.Text // gerado via IA ao encerrar a semana
   narrativeGeneratedAt       DateTime?

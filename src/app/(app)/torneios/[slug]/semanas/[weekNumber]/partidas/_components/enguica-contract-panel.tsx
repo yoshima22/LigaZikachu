@@ -5,17 +5,18 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { ENGUICA_BOX_REWARD_LABEL, ENGUICA_CONTRACTS } from "@/lib/tcg-enguica-contracts";
-import { revealEnguicaContract } from "../actions";
+import { redrawEnguicaContract, revealEnguicaContract, setEnguicaContractHidden } from "../actions";
 
 type Props = {
   tournamentId: string;
   weekNumber: number;
   isAdmin: boolean;
   deckRegistrationOpen: boolean;
+  hidden: boolean;
   contract: { key: string; title: string; description: string; revealedAt: string | null } | null;
 };
 
-export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRegistrationOpen, contract }: Props) {
+export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRegistrationOpen, hidden, contract }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
 
@@ -31,13 +32,39 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRe
     });
   }
 
+  function redraw() {
+    if (!confirm("Resortear o contrato desta semana? O contrato atual será substituído.")) return;
+    startTransition(async () => {
+      try {
+        await redrawEnguicaContract(tournamentId, weekNumber);
+        toast.success("Novo contrato sorteado e exibido.");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível resortear o contrato.");
+      }
+    });
+  }
+
+  function toggleHidden() {
+    startTransition(async () => {
+      try {
+        await setEnguicaContractHidden(tournamentId, weekNumber, !hidden);
+        toast.success(hidden ? "Contrato exibido aos jogadores." : "Contrato ocultado dos jogadores.");
+        router.refresh();
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Não foi possível alterar a visibilidade.");
+      }
+    });
+  }
+
   return (
     <section className="overflow-hidden rounded-2xl border border-cyan-400/25 bg-gradient-to-br from-cyan-500/10 via-slate-950 to-violet-500/10">
       <div className="flex flex-wrap items-start justify-between gap-4 p-5">
         <div className="max-w-3xl space-y-2">
           <p className="text-[10px] font-bold uppercase tracking-[0.22em] text-cyan-300">Desafio geral compartilhado</p>
-          {contract ? (
+          {contract && (!hidden || isAdmin) ? (
             <>
+              {hidden && <span className="inline-flex rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 text-[10px] font-black uppercase text-amber-300">Oculto para jogadores</span>}
               <h2 className="text-xl font-black text-white">📋 {contract.title}</h2>
               <p className="text-sm leading-6 text-slate-300">{contract.description}</p>
               <p className="text-xs text-cyan-200">Caixa Enguiça: {ENGUICA_BOX_REWARD_LABEL}</p>
@@ -50,6 +77,16 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRe
             </>
           )}
         </div>
+        {isAdmin && contract && (
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={redraw} disabled={pending} variant="outline" className="border-violet-400/40 text-violet-200 hover:bg-violet-400/10">
+              {pending ? "Processando..." : "🎲 Resortear contrato"}
+            </Button>
+            <Button onClick={toggleHidden} disabled={pending} variant="outline" className="border-amber-400/40 text-amber-200 hover:bg-amber-400/10">
+              {hidden ? "👁 Exibir contrato" : "🙈 Ocultar contrato"}
+            </Button>
+          </div>
+        )}
         {isAdmin && !contract && (
           <div className="space-y-2 text-right">
             <Button onClick={reveal} disabled={pending || !deckRegistrationOpen} className="bg-cyan-400 text-slate-950 hover:bg-cyan-300">
@@ -59,7 +96,7 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRe
           </div>
         )}
       </div>
-      <details className="border-t border-cyan-400/15 px-5 py-3">
+      {(!hidden || isAdmin) && <details className="border-t border-cyan-400/15 px-5 py-3">
         <summary className="cursor-pointer text-xs font-semibold text-slate-400 hover:text-cyan-200">Ver pool de {ENGUICA_CONTRACTS.length} contratos possíveis</summary>
         <div className="mt-3 grid gap-2 md:grid-cols-2">
           {ENGUICA_CONTRACTS.map((item) => (
@@ -69,7 +106,7 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRe
             </div>
           ))}
         </div>
-      </details>
+      </details>}
     </section>
   );
 }
