@@ -9,7 +9,29 @@ export const MAX_ACTIVE_PREMIUM_LISTINGS = 6;
 
 type Payload = Record<string, unknown>;
 
+type BundleEntry = { displayName?: string; quantity?: number; mascotId?: string };
+
+function bundleEntries(payload: Payload): BundleEntry[] {
+  return Array.isArray(payload.bundleItems) ? payload.bundleItems as BundleEntry[] : [];
+}
+
+function bundleName(payload: Payload) {
+  const entries = bundleEntries(payload);
+  if (!entries.length) return null;
+  if (entries.length === 1) {
+    const item = entries[0];
+    const quantity = Math.max(1, Number(item.quantity) || 1);
+    return quantity > 1 ? `Lote com ${quantity}x ${item.displayName ?? "item"}` : String(item.displayName ?? "Item");
+  }
+  const mascots = entries.filter((item) => item.mascotId).length;
+  if (mascots === entries.length) return `Pacote com ${entries.length} mascotes`;
+  if (mascots === 0) return `Pacote com ${entries.length} itens diferentes`;
+  return `Pacote misto com ${mascots} mascote${mascots === 1 ? "" : "s"} e ${entries.length - mascots} item${entries.length - mascots === 1 ? "" : "s"}`;
+}
+
 function listingName(payload: Payload) {
+  const bundled = bundleName(payload);
+  if (bundled) return bundled;
   const original = String(payload.pokemonName ?? payload.displayName ?? payload.itemType ?? "oferta").trim();
   const nickname = typeof payload.nickname === "string" ? payload.nickname.trim() : "";
   return nickname && nickname.localeCompare(original, "pt-BR", { sensitivity: "base" }) !== 0
@@ -49,6 +71,19 @@ export async function addPremiumListingHighlights<T extends {
   return listings.map((listing) => {
     const payload = (listing.payload ?? {}) as Payload;
     const facts: string[] = [];
+    const bundle = bundleEntries(payload);
+    if (bundle.length > 0) {
+      const units = bundle.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0);
+      const names = bundle.slice(0, 3).map((item) => {
+        const quantity = Math.max(1, Number(item.quantity) || 1);
+        return `${quantity > 1 ? `${quantity}x ` : ""}${item.displayName ?? "item"}`;
+      });
+      facts.push(bundle.length === 1
+        ? `${names[0]} em um único leilão.`
+        : `Leilão reúne ${names.join(", ")}${bundle.length > 3 ? ` e mais ${bundle.length - 3}` : ""}.`);
+      if (bundle.length > 1) facts.push(`${bundle.length} tipos diferentes e ${units} ativos entregues juntos ao vencedor.`);
+      return { ...listing, premiumHighlights: facts.slice(0, 2) };
+    }
     const same = active.filter((candidate) => candidate.id !== listing.id && sameProduct(payload, candidate.payload as Payload, listing.category));
 
     if (listing.category === "MASCOT") {
@@ -100,6 +135,7 @@ async function buildPremiumMessage(listing: {
 }) {
   const payload = (listing.payload ?? {}) as Payload;
   const name = listingName(payload);
+  const bundle = bundleEntries(payload);
   const activePeers = await prisma.bazarListing.findMany({
     where: { status: "ACTIVE", expiresAt: { gt: new Date() }, id: { not: listing.id }, category: listing.category as never },
     select: { payload: true, priceCoins: true },
@@ -107,6 +143,15 @@ async function buildPremiumMessage(listing: {
   const same = activePeers.filter((peer) => sameProduct(payload, peer.payload as Payload, listing.category));
   const messages: string[] = [];
   const owner = listing.player.displayName;
+
+  if (bundle.length > 0) {
+    const showcase = bundle.slice(0, 3).map((item) => {
+      const quantity = Math.max(1, Number(item.quantity) || 1);
+      return `${quantity > 1 ? `${quantity}x ` : ""}${item.displayName ?? "item"}`;
+    }).join(", ");
+    messages.push(`${owner} colocou ${name} na vitrine: ${showcase}${bundle.length > 3 ? ` e mais ${bundle.length - 3} tipos` : ""}. O maior lance leva tudo!`);
+    messages.push(`Leilão em destaque: ${name}, de ${owner}. São ${bundle.reduce((sum, item) => sum + Math.max(1, Number(item.quantity) || 1), 0)} ativos entregues juntos ao vencedor.`);
+  }
 
   if (listing.priceCoins && same.every((peer) => !peer.priceCoins || listing.priceCoins! <= peer.priceCoins)) {
     messages.push(`${owner} colocou ${name} em destaque: é o menor preço entre as ofertas ativas desse produto. Vale conferir antes que suma!`);

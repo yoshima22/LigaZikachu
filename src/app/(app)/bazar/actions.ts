@@ -173,8 +173,14 @@ function listingDisplayName(listing: { category: string; payload: unknown }) {
   const payload = listing.payload as Record<string, unknown>;
   const bundle = Array.isArray(payload.bundleItems) ? payload.bundleItems as ProposalOfferItem[] : [];
   if (bundle.length > 0) {
+    if (bundle.length === 1) {
+      const item = bundle[0];
+      return item.quantity > 1 ? `${item.quantity}x ${item.displayName}` : item.displayName;
+    }
     const units = bundle.reduce((total, item) => total + Math.max(1, Number(item.quantity) || 1), 0);
-    return `Pacote de leilão · ${bundle.length} tipo${bundle.length === 1 ? "" : "s"} · ${units} unidade${units === 1 ? "" : "s"}`;
+    const mascots = bundle.filter((item) => item.mascotId).length;
+    const kind = mascots === bundle.length ? "Pacote de mascotes" : mascots === 0 ? "Pacote de itens" : "Pacote misto";
+    return `${kind} · ${bundle.length} tipos · ${units} unidades`;
   }
   return listing.category === "MASCOT"
     ? fullMascotPayloadName(payload)

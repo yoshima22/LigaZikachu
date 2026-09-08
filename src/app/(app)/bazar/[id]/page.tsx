@@ -486,6 +486,13 @@ export default function BazarListingPage(): React.JSX.Element {
 
   const payload = listing.payload;
   const bundleItems = Array.isArray(payload.bundleItems) ? payload.bundleItems as ProposalOfferedItem[] : [];
+  const bundleTitle = bundleItems.length === 1
+    ? (bundleItems[0].quantity > 1 ? `${bundleItems[0].quantity}x ${bundleItems[0].displayName}` : bundleItems[0].displayName)
+    : bundleItems.length > 1
+      ? (bundleItems.every((item) => item.mascotId) ? `Pacote com ${bundleItems.length} mascotes`
+        : bundleItems.every((item) => !item.mascotId) ? `Pacote com ${bundleItems.length} itens diferentes`
+        : `Pacote misto com ${bundleItems.filter((item) => item.mascotId).length} mascote(s) e ${bundleItems.filter((item) => !item.mascotId).length} item(ns)`)
+      : "";
   const isOwner = listing.playerId === currentPlayerId;
   const isPremium = Boolean(listing.premiumUntil && new Date(listing.premiumUntil).getTime() > Date.now());
   const isAuction = listing.listingType === "AUCTION";
@@ -645,7 +652,7 @@ export default function BazarListingPage(): React.JSX.Element {
         {/* Preview */}
         <div className="flex items-center justify-center bg-slate-900/80 h-48">
           {bundleItems.length > 0 ? (
-            <div className="flex flex-col items-center gap-2 text-amber-200"><Gavel size={54}/><span className="text-sm font-black">Pacote com {bundleItems.length} tipos</span><span className="text-xs text-slate-400">{bundleItems.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0)} ativos no total</span></div>
+            <div className="flex flex-col items-center gap-2 text-amber-200"><Gavel size={54}/><span className="text-sm font-black">{bundleTitle}</span><span className="text-xs text-slate-400">{bundleItems.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0)} ativos no total</span></div>
           ) : isMascot && pokemonId ? (
             <div className="flex flex-col items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -687,7 +694,7 @@ export default function BazarListingPage(): React.JSX.Element {
           <div className="flex items-start justify-between gap-3">
             <div>
               <h2 className="text-xl font-bold text-white flex items-center gap-2">
-                {bundleItems.length > 0 ? `Grande pacote · ${bundleItems.length} tipos` : isMascot ? mascotFullName : (displayName ?? itemType ?? "Item")}
+                {bundleItems.length > 0 ? bundleTitle : isMascot ? mascotFullName : (displayName ?? itemType ?? "Item")}
                 {!isMascot && quantity && quantity > 1 && (
                   <span className="rounded-full border border-slate-600 bg-slate-800 px-2 py-0.5 text-xs font-semibold text-slate-300">×{quantity}</span>
                 )}

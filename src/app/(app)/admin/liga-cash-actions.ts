@@ -4,6 +4,7 @@ import {prisma} from "@/lib/prisma";
 import {adminGrantVip,getActiveSchedule} from "@/app/(app)/passe-apoiador/actions";
 import {revalidatePath} from "next/cache";
 import { scheduleDateBR } from "@/lib/date-br";
+import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
 
 export async function adminScheduleNextPassActivation(localDateTime: string | null, retroactive: boolean) {
   await requireAdmin();
@@ -23,7 +24,7 @@ export async function adminScheduleNextPassActivation(localDateTime: string | nu
   revalidatePath("/admin");
   return { ok: true, activationAt: activationAt?.toISOString() ?? null };
 }
-export async function activatePaidPass(orderId:string,retroactive:boolean){await requireAdmin();const order=await prisma.ligaCashOrder.findUnique({where:{id:orderId}});if(!order||order.status!=="PAID"||order.productType!=="SUPPORTER_PASS"||order.fulfilledAt)return {error:"Pedido não está disponível."};let key=order.passScheduleKey;if(!key&&order.passOfferSlot){const cfg=await prisma.passScheduleConfig.findFirst({where:order.passOfferSlot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},select:{id:true}});key=cfg?.id??null}if(!key)return{error:"Marque o calendário correspondente antes de distribuir este passe."};const label=key==="singleton"?"Passe Apoiador":key;const schedule=await getActiveSchedule(label);const granted=await adminGrantVip({playerId:order.playerId,days:schedule.length,startDay:1,passLabel:label});if(!granted.ok||!granted.passId)return {error:granted.error};await prisma.$transaction([prisma.supporterPass.update({where:{id:granted.passId},data:{allowRetroactiveClaims:retroactive}}),prisma.ligaCashOrder.update({where:{id:order.id},data:{fulfilledAt:new Date(),passScheduleKey:key}})]);revalidatePath("/admin");return {ok:true};}
+export async function activatePaidPass(orderId:string,retroactive:boolean){await requireAdmin();const order=await prisma.ligaCashOrder.findUnique({where:{id:orderId}});if(!order||order.status!=="PAID"||order.productType!=="SUPPORTER_PASS"||order.fulfilledAt)return {error:"Pedido não está disponível."};let key=order.passScheduleKey;if(!key&&order.passOfferSlot){const cfg=await prisma.passScheduleConfig.findFirst({where:order.passOfferSlot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},select:{id:true}});key=cfg?.id??null}if(!key)return{error:"Marque o calendário correspondente antes de distribuir este passe."};const label=key==="singleton"?"Passe Apoiador":key;const schedule=await getActiveSchedule(label);const granted=await adminGrantVip({playerId:order.playerId,days:schedule.length,startDay:1,passLabel:label});if(!granted.ok||!granted.passId)return {error:granted.error};await prisma.$transaction([prisma.supporterPass.update({where:{id:granted.passId},data:{allowRetroactiveClaims:retroactive,expiresAt:new Date(Date.now()+(schedule.length+PAID_PASS_GRACE_DAYS)*86400000)}}),prisma.ligaCashOrder.update({where:{id:order.id},data:{fulfilledAt:new Date(),passScheduleKey:key}})]);revalidatePath("/admin");return {ok:true};}
 
 /** Busca jogadores por nome (autocomplete da lista do próximo passe). */
 export async function searchPlayersForPass(query: string): Promise<{ id: string; displayName: string; onList: boolean }[]> {
@@ -114,7 +115,7 @@ export async function adminActivateNextPassList(retroactive: boolean): Promise<{
     const res = await adminGrantVip({ playerId: order.playerId, days: schedule.length, startDay: 1, passLabel: label });
     if (!res.ok || !res.passId) { failed++; continue; }
     await prisma.$transaction([
-      prisma.supporterPass.update({ where: { id: res.passId }, data: { allowRetroactiveClaims: retro } }),
+      prisma.supporterPass.update({ where: { id: res.passId }, data: { allowRetroactiveClaims: retro, expiresAt: new Date(Date.now() + (schedule.length + PAID_PASS_GRACE_DAYS) * 86_400_000) } }),
       prisma.ligaCashOrder.update({ where: { id: order.id }, data: { fulfilledAt: new Date(), passScheduleKey: next.id } }),
     ]);
     granted++;

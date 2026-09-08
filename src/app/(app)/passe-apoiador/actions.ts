@@ -293,15 +293,15 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
       },
       orderBy: { createdAt: "desc" },
     });
-    const allActivePasses: ActivePassSummary[] = allActiveRaw.map(p => ({
+    const allActivePasses: ActivePassSummary[] = await Promise.all(allActiveRaw.map(async p => ({
       id: p.id,
       startsAt: p.startsAt,
       expiresAt: p.expiresAt,
       passLabel: p.passLabel ?? "Passe Apoiador",
-      totalDays: Math.max(1, Math.min(365, Math.ceil((p.expiresAt.getTime() - p.startsAt.getTime()) / 86400000))),
+      totalDays: (await getActiveSchedule(p.passLabel ?? undefined)).length,
       daysRemaining: Math.max(0, Math.ceil((p.expiresAt.getTime() - now.getTime()) / 86400000)),
       claimsCount: p.claims.filter((claim) => claim.rewardType !== "DEBUG_SKIP").length,
-    }));
+    })));
 
     // Seleciona o passe: pelo ID se fornecido, senão o mais recente ativo
     const pass = passId
@@ -325,7 +325,7 @@ export async function getMyPassStatus(passId?: string): Promise<PassStatus> {
     // independente do horário em que o passe foi criado.
     const daysElapsed = calendarDaysBRT(pass.startsAt, now);
     const daysRemaining = Math.max(0, Math.ceil((pass.expiresAt.getTime() - now.getTime()) / 86400000));
-    const totalDays = Math.max(1, Math.min(365, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const totalDays = (await getActiveSchedule(pass.passLabel ?? undefined)).length;
     const todayDay = Math.min(totalDays, daysElapsed + 1);
     const alreadyClaimed = pass.claims.some(c => c.dayNumber === todayDay);
     const canClaimToday = !isExpired && !alreadyClaimed && todayDay >= 1 && todayDay <= totalDays;
@@ -387,12 +387,12 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (pass.claims.length > 0) return { ok: false, error: "Dia já resgatado." };
 
     // Verificar que o dia já chegou (calendário BRT, não 24h corridas)
-    const passTotalDays = Math.max(1, Math.min(365, Math.ceil((pass.expiresAt.getTime() - pass.startsAt.getTime()) / 86400000)));
+    const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
+    const passTotalDays = activeSchedule.length;
     const currentDay = Math.min(passTotalDays, calendarDaysBRT(pass.startsAt, new Date()) + 1);
     if (!pass.allowRetroactiveClaims && dayNumber > currentDay) return { ok: false, error: "Esse dia ainda não chegou." };
     if (dayNumber < 1 || dayNumber > passTotalDays) return { ok: false, error: "Dia inválido para este passe." };
 
-    const activeSchedule = await getActiveSchedule(pass.passLabel ?? undefined);
     const reward = activeSchedule.find(r => r.day === dayNumber);
     if (!reward) return { ok: false, error: "Recompensa não configurada." };
     const rewardItems = expandDayReward(reward);

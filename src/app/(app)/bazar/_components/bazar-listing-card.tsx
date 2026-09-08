@@ -74,6 +74,13 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
   const isAuction = listing.listingType === "AUCTION";
   const payload = listing.payload as Record<string, unknown>;
   const bundleItems = Array.isArray(payload.bundleItems) ? payload.bundleItems as Array<{ displayName: string; quantity: number; mascotId?: string }> : [];
+  const bundleTitle = bundleItems.length === 1
+    ? (bundleItems[0].quantity > 1 ? `${bundleItems[0].quantity}x ${bundleItems[0].displayName}` : bundleItems[0].displayName)
+    : bundleItems.length > 1
+      ? (bundleItems.every((item) => item.mascotId) ? `Pacote com ${bundleItems.length} mascotes`
+        : bundleItems.every((item) => !item.mascotId) ? `Pacote com ${bundleItems.length} itens`
+        : `Pacote misto · ${bundleItems.length} tipos`)
+      : "";
   const isDirectNegotiation = payload.directNegotiation === true;
   const type = isDirectNegotiation
     ? { label: "Negociação direta", color: "text-cyan-300 border-cyan-500/30 bg-cyan-500/10" }
@@ -112,7 +119,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         {bundleItems.length > 0 ? (
           <div className="flex flex-col items-center gap-2 text-amber-200">
             <Gavel size={48}/>
-            <span className="text-[11px] font-black uppercase tracking-wide">Pacote misto</span>
+            <span className="max-w-[90%] truncate text-[11px] font-black uppercase tracking-wide">{bundleTitle}</span>
             <span className="text-[9px] text-slate-400">{bundleItems.length} tipos · {bundleItems.reduce((sum, item) => sum + Math.max(1, item.quantity || 1), 0)} ativos</span>
           </div>
         ) : isDirectNegotiation ? (
@@ -223,7 +230,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         <div>
           <p className="font-semibold text-white text-sm truncate">
             {bundleItems.length > 0
-              ? `Grande pacote · ${bundleItems.length} tipos`
+              ? bundleTitle
               : listing.category === "MASCOT"
               ? fullMascotName(payload)
               : String(payload.displayName ?? payload.itemType ?? "Item")}
