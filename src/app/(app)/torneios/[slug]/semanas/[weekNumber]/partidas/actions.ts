@@ -1427,11 +1427,17 @@ export async function redrawEnguicaContract(tournamentId: string, weekNumber: nu
   });
   if (!week) throw new Error("Semana não encontrada.");
   if (!week.tournament.enguicaContractsEnabled) throw new Error("Os contratos não estão habilitados neste campeonato.");
-  if (week._count.enguicaCompletions > 0) throw new Error("Não é possível resortear depois que algum jogador marcou a conclusão do contrato.");
+  // Conclusões já PREMIADAS (Caixa Enguiça enviada no encerramento) não podem ser
+  // desfeitas — não dá para re-sortear depois disso.
+  const rewarded = await prisma.tournamentEnguicaCompletion.count({ where: { tournamentWeekId: week.id, rewardedAt: { not: null } } });
+  if (rewarded > 0) throw new Error("Não é possível resortear: a Caixa Enguiça deste contrato já foi entregue a algum jogador.");
 
   const contract = drawEnguicaContract(week.enguicaContractKey);
   const changedAt = new Date();
   await prisma.$transaction([
+    // Zera as conclusões pendentes (ainda não premiadas) do contrato anterior:
+    // com um novo contrato, os jogadores recomeçam do zero.
+    prisma.tournamentEnguicaCompletion.deleteMany({ where: { tournamentWeekId: week.id, rewardedAt: null } }),
     prisma.tournamentWeek.update({ where: { id: week.id }, data: {
       enguicaContractKey: contract.key,
       enguicaContractTitle: contract.title,
@@ -1442,7 +1448,7 @@ export async function redrawEnguicaContract(tournamentId: string, weekNumber: nu
     prisma.auditLog.create({ data: {
       actorUserId: admin.id, entityType: "tournament_week", entityId: week.id,
       action: "enguica_contract.redrawn",
-      before: { contractKey: week.enguicaContractKey, hidden: week.enguicaContractHidden },
+      before: { contractKey: week.enguicaContractKey, hidden: week.enguicaContractHidden, pendingCompletions: week._count.enguicaCompletions },
       after: { contractKey: contract.key, title: contract.title, hidden: false },
     } }),
   ]);

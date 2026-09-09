@@ -33,7 +33,7 @@ export function EnguicaContractPanel({ tournamentId, weekNumber, isAdmin, deckRe
   }
 
   function redraw() {
-    if (!confirm("Resortear o contrato desta semana? O contrato atual será substituído.")) return;
+    if (!confirm("Resortear o contrato desta semana? O contrato atual será substituído e as conclusões ainda não premiadas serão zeradas (os jogadores recomeçam no novo contrato).")) return;
     startTransition(async () => {
       try {
         await redrawEnguicaContract(tournamentId, weekNumber);
