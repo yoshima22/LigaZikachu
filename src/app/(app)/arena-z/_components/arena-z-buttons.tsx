@@ -197,19 +197,29 @@ function BattleAnimationModal({
     return m;
   });
 
-  // Keep onFinish in a ref so it never enters useEffect deps
+  // Mantém callbacks/dados voláteis em refs para que NÃO entrem nas deps do
+  // efeito do timer. Sem isto, um re-render do componente-pai (que passa novas
+  // referências de turns/playerMascots/botMascots) reiniciava o setTimeout da
+  // fase atual antes de ela avançar — travando a animação no meio do combate.
   const onFinishRef = useRef(onFinish);
-  useEffect(() => { onFinishRef.current = onFinish; });
+  const turnsRef = useRef(turns);
+  const playerMascotsRef = useRef(playerMascots);
+  const botMascotsRef = useRef(botMascots);
+  onFinishRef.current = onFinish;
+  turnsRef.current = turns;
+  playerMascotsRef.current = playerMascots;
+  botMascotsRef.current = botMascots;
 
   useEffect(() => {
     if (isPaused) return;
+    const turnsNow = turnsRef.current;
 
-    if (currentIdx >= turns.length) {
+    if (currentIdx >= turnsNow.length) {
       const t = setTimeout(() => onFinishRef.current(), 700 / playbackRate);
       return () => clearTimeout(t);
     }
 
-    const turn = turns[currentIdx];
+    const turn = turnsNow[currentIdx];
     const phaseDuration = phase === "wait" || phase === "attack"
       ? 300
       : phase === "hit"
@@ -227,7 +237,7 @@ function BattleAnimationModal({
             [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
           }));
         } else if (turn.action === "HEAL") {
-          const allMascots = [...playerMascots, ...botMascots];
+          const allMascots = [...playerMascotsRef.current, ...botMascotsRef.current];
           const healed = allMascots.find(m => m.id === turn.defenderId);
           setHpMap(prev => ({
             ...prev,
@@ -246,7 +256,7 @@ function BattleAnimationModal({
     }, phaseDuration / playbackRate);
 
     return () => clearTimeout(timer);
-  }, [currentIdx, isPaused, phase, playbackRate, turns, playerMascots, botMascots]);
+  }, [currentIdx, isPaused, phase, playbackRate]);
 
   const turn = turns[currentIdx] ?? null;
   const allReplayMascots = [...playerMascots, ...botMascots];
