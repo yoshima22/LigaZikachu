@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
+import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { BondDirectoryV2, BondsTutorial, RefugeLocationScene } from "./bonds-v2-controls";
 import { ResolveBondOptionButton } from "./bond-actions";
 
@@ -158,12 +159,12 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     </section>
 
     <section className="rounded-3xl border border-white/10 bg-slate-950/65 p-5">
-      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Consequência, não decoração</p><h2 className="text-xl font-black text-white">Impactos em teste</h2><p className="mt-1 text-xs text-slate-400">Projeções visíveis para validar o balanceamento. Ainda não alteram partidas ou expedições reais.</p></div>
+      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Consequência, não decoração</p><h2 className="text-xl font-black text-white">Impactos em teste</h2><p className="mt-1 text-xs text-slate-400">Valores experimentais da prévia administrativa. Bônus de amizade já podem ser validados em expedições e treinos sem afetar jogadores comuns.</p></div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
-        <ImpactCard tone="emerald" title="Parceiros de jornada" value={strongestFriend ? (strongestFriend.relationshipScore >= 80 ? "até −8% de tempo" : strongestFriend.relationshipScore >= 40 ? "até −5% de tempo" : "até −3% de tempo") : "Sem vínculo elegível"} text={strongestFriend ? `${mascotName(strongestFriend.mascotA)} e ${mascotName(strongestFriend.mascotB)} formam a melhor dupla atual. Apenas o melhor vínculo conta.` : "Colegas e amigos em expedições simultâneas ativam esta projeção."} />
-        <ImpactCard tone="cyan" title="Parceiros de treino" value={strongestFriend ? (strongestFriend.relationshipScore >= 80 ? "+10% EXP" : strongestFriend.relationshipScore >= 40 ? "+8% EXP" : "+5% EXP") : "Sem vínculo elegível"} text="O bônus é aplicado somente quando os dois participam da atividade e possui teto global." />
+        <ImpactCard tone="emerald" title="Parceiros de jornada" value={strongestFriend ? (strongestFriend.relationshipScore >= BONDS_V2_BALANCE.superFriend.minScore ? "−7% de tempo" : strongestFriend.relationshipScore >= BONDS_V2_BALANCE.friend.minScore ? "−3% de tempo" : "Colega · sem bônus") : "Sem vínculo elegível"} text={strongestFriend ? `${mascotName(strongestFriend.mascotA)} e ${mascotName(strongestFriend.mascotB)} formam a melhor dupla atual. Basta estarem em expedições simultâneas; apenas o melhor vínculo conta.` : "Amigos em expedições simultâneas ativam o efeito."} />
+        <ImpactCard tone="cyan" title="Parceiros de treino" value={strongestFriend ? (strongestFriend.relationshipScore >= BONDS_V2_BALANCE.superFriend.minScore ? "+10% EXP" : strongestFriend.relationshipScore >= BONDS_V2_BALANCE.friend.minScore ? "+5% EXP" : "Colega · sem bônus") : "Sem vínculo elegível"} text="Vale exclusivamente no modo Treino, não acumula e respeita o teto global de 10%." />
         <ImpactCard tone="rose" title="Algo a provar" value={strongestRival && strongestRival.relationshipScore <= -50 ? "+5% contra o Inimigo" : "Rivalidade em formação"} text={strongestRival ? `${mascotName(strongestRival.mascotA)} reage especificamente a ${mascotName(strongestRival.mascotB)}; não é um bônus contra toda equipe.` : "Inimigos podem ativar um bônus ofensivo pessoal e situacional."} />
-        <ImpactCard tone="fuchsia" title="Acerto de contas" value={strongestRival && strongestRival.relationshipScore <= -80 ? "Nêmesis ativo" : "Nenhum Nêmesis"} text="Quando dois Nêmesis se enfrentam, o efeito aparece no combate e dura somente o confronto direto previsto." />
+        <ImpactCard tone="fuchsia" title="Acerto de contas" value={strongestRival && strongestRival.relationshipScore <= -80 ? "+8% · 3 turnos" : "Nenhum Nêmesis"} text="Efeito simétrico apenas entre os dois Nêmesis. Termina após 3 turnos diretos, K.O. ou substituição." />
       </div>
     </section>
 

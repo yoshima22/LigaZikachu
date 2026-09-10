@@ -10,6 +10,7 @@ export const REFUGE_LOCATIONS = {
 } as const;
 
 export type RefugeLocation = keyof typeof REFUGE_LOCATIONS;
+export { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 
 export function relationTierV2(score: number) {
   if (score <= -80) return "Nêmesis";
@@ -22,13 +23,13 @@ export function relationTierV2(score: number) {
 }
 
 export function relationEffectV2(score: number) {
-  if (score <= -80) return "Acerto de Contas: confronto especial e visível contra este Nêmesis.";
-  if (score <= -50) return "Tenho Algo a Provar: bônus ofensivo situacional apenas contra este Inimigo.";
-  if (score <= -15) return "Motivação: conquistas deste Rival podem inspirar treino e revanche.";
+  if (score <= -80) return "Acerto de Contas: ambos causam +8% de dano um contra o outro nos 3 primeiros turnos de confronto direto.";
+  if (score <= -50) return "Tenho Algo a Provar: +5% de dano apenas contra este Inimigo específico.";
+  if (score <= -15) return "Motivação: conquistas deste Rival podem inspirar treino e revanche, no máximo uma vez por mascote ao dia.";
   if (score <= 14) return "Sem efeito mecânico; novas experiências definem o rumo da relação.";
-  if (score <= 39) return "Cooperação leve e chance de felicidade em atividades conjuntas.";
-  if (score <= 79) return "Parceiros: bônus limitado em treino e expedições simultâneas.";
-  return "Super Amigos: melhor bônus elegível de jornada, treino e apoio emocional.";
+  if (score <= 39) return "Colega: participa de histórias e interações, sem bônus numérico fixo.";
+  if (score <= 79) return "Amigo: −3% no tempo de expedições simultâneas e +5% de EXP quando treinam juntos.";
+  return "Super Amigo: −7% no tempo de expedições simultâneas e +10% de EXP quando treinam juntos.";
 }
 
 function names(mascots: Array<{ pokemonId: number; nickname: string | null }>) {

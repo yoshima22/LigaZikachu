@@ -29,6 +29,7 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
 import { PERSONALITY_AFFINITY, type StatKey } from "@/lib/personality-design";
+import { getBondsV2ExpeditionBonus } from "@/lib/mascot-bonds-v2-balance";
 
 // Afinidade usa chaves "force/agility/..."; o crescimento usa "statForce/...".
 const STAT_KEY_TO_WEIGHT: Record<StatKey, "statForce" | "statAgility" | "statInstinct" | "statVitality" | "statCharisma"> = {
@@ -1554,7 +1555,9 @@ export async function startExpedition(
   const picnicTimeReductionPct = picnicSpeedBuff ? 30 : 0;
   // Elétrico: reduz um pouco mais o tempo de expedições curtas (30min e 1h).
   const electricTimeReductionPct = mascot.personality === "ELECTRIC" && (durationKey === "30min" || durationKey === "1h") ? 8 : 0;
-  const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100) * (1 - electricTimeReductionPct / 100));
+  const bondBonus = await getBondsV2ExpeditionBonus(mascot.id, mode);
+  const bondTimeReductionPct = bondBonus.timeReductionPct;
+  const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100) * (1 - electricTimeReductionPct / 100) * (1 - bondTimeReductionPct / 100));
   const finishAt = new Date(Date.now() + effectiveDurationMs);
   return prisma.$transaction(async (tx) => {
     const expedition = await tx.mascotExpedition.create({
@@ -1567,6 +1570,9 @@ export async function startExpedition(
           agilityTimeReductionPct,
           picnicTimeReductionPct,
           electricTimeReductionPct,
+          bondTimeReductionPct,
+          bondTrainingExpPct: bondBonus.trainingExpPct,
+          bondPartnerName: bondBonus.partnerName,
           totalTimeReductionPct: 100 * (1 - effectiveDurationMs / dur.ms),
           baseDurationMs: dur.ms,
           effectiveDurationMs,
@@ -1671,6 +1677,7 @@ export async function claimExpedition(
   const mode: ExpeditionMode = (stored.mode as ExpeditionMode) ?? "STANDARD";
   const picnicActive = stored.picnicActive === true;
   const eventExpBonusPct = Math.max(0, Math.min(500, Number(stored.eventExpBonusPct) || 0));
+  const bondTrainingExpPct = mode === "TRAINING" ? Math.max(0, Math.min(10, Number(stored.bondTrainingExpPct) || 0)) : 0;
   const picnicLootBonusPct = picnicActive ? (mode === "ITEMS" ? 3 : mode === "STANDARD" ? 1.5 : 0) : 0;
   const dur = EXPEDITION_DURATIONS[durationKey];
 
@@ -1776,7 +1783,7 @@ export async function claimExpedition(
 
   const expeditionExp = mode === "ITEMS"
     ? Math.round(expBase * dur.expMultiplier * levelMult * allyExpBonus * rivalBonus * expBoostMult * (eventExpBonusPct / 100) * personalityExpMult)
-    : Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult * personalityExpMult);
+    : Math.round(expBase * expMult * levelMult * allyExpBonus * rivalBonus * luckyEggMult * expBoostMult * picnicExpMult * eventExpMult * personalityExpMult * (1 + bondTrainingExpPct / 100));
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
@@ -1813,6 +1820,7 @@ export async function claimExpedition(
       if (allyCount > 0) bonuses.push(`${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiou`);
       if (rivalBonus > 1) bonuses.push("motivação de rivalidade");
       if (eventExpBonusPct > 0) bonuses.push(`evento +${eventExpBonusPct}% EXP`);
+      if (bondTrainingExpPct > 0) bonuses.push(`Laços 2.0 +${bondTrainingExpPct}% EXP com ${String(stored.bondPartnerName ?? "um amigo")}`);
       const note = bonuses.length > 0 ? ` (${bonuses.join(", ")})` : "";
       await tx.mascotEvent.create({
         data: {
