@@ -147,52 +147,52 @@ enum RegistrationStatus {
 }
 
 model User {
-  id                        String                   @id @default(cuid())
+  id                        String                     @id @default(cuid())
   name                      String?
-  email                     String                   @unique
+  email                     String                     @unique
   emailVerified             DateTime?
   image                     String?
   passwordHash              String?
-  role                      Role                     @default(PLAYER)
-  status                    UserStatus               @default(PENDING_APPROVAL)
+  role                      Role                       @default(PLAYER)
+  status                    UserStatus                 @default(PENDING_APPROVAL)
   approvedById              String?
-  createdAt                 DateTime                 @default(now())
-  updatedAt                 DateTime                 @updatedAt
-  approvedBy                User?                    @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
-  approvedUsers             User[]                   @relation("UserApprovals")
+  createdAt                 DateTime                   @default(now())
+  updatedAt                 DateTime                   @updatedAt
+  approvedBy                User?                      @relation("UserApprovals", fields: [approvedById], references: [id], onDelete: SetNull)
+  approvedUsers             User[]                     @relation("UserApprovals")
   player                    Player?
   accounts                  Account[]
   sessions                  Session[]
-  createdSeasons            Season[]                 @relation("SeasonCreatedBy")
-  createdMatches            Match[]                  @relation("MatchCreatedBy")
-  reportedMatches           Match[]                  @relation("MatchReportedBy")
-  confirmedMatches          Match[]                  @relation("MatchConfirmedBy")
-  approvedDecks             DeckSubmission[]         @relation("DeckApprovedBy")
-  openedChallenges          Challenge[]              @relation("ChallengeOpenedBy")
-  resolvedChallenges        Challenge[]              @relation("ChallengeResolvedBy")
-  createdBoosterCodes       BoosterCode[]            @relation("BoosterCodeCreatedBy")
-  invalidatedCodes          BoosterCode[]            @relation("BoosterCodeInvalidatedBy")
-  assignedDistributions     CodeDistribution[]       @relation("CodeAssignedBy")
-  revokedDistributions      CodeDistribution[]       @relation("CodeRevokedBy")
-  createdAchievements       Achievement[]            @relation("AchievementCreatedBy")
-  generatedSnapshots        RankingSnapshot[]        @relation("RankingSnapshotGeneratedBy")
-  awardedPlayerAchievements PlayerAchievement[]      @relation("PlayerAchievementAwardedBy")
-  auditLogs                 AuditLog[]               @relation("AuditActor")
+  createdSeasons            Season[]                   @relation("SeasonCreatedBy")
+  createdMatches            Match[]                    @relation("MatchCreatedBy")
+  reportedMatches           Match[]                    @relation("MatchReportedBy")
+  confirmedMatches          Match[]                    @relation("MatchConfirmedBy")
+  approvedDecks             DeckSubmission[]           @relation("DeckApprovedBy")
+  openedChallenges          Challenge[]                @relation("ChallengeOpenedBy")
+  resolvedChallenges        Challenge[]                @relation("ChallengeResolvedBy")
+  createdBoosterCodes       BoosterCode[]              @relation("BoosterCodeCreatedBy")
+  invalidatedCodes          BoosterCode[]              @relation("BoosterCodeInvalidatedBy")
+  assignedDistributions     CodeDistribution[]         @relation("CodeAssignedBy")
+  revokedDistributions      CodeDistribution[]         @relation("CodeRevokedBy")
+  createdAchievements       Achievement[]              @relation("AchievementCreatedBy")
+  generatedSnapshots        RankingSnapshot[]          @relation("RankingSnapshotGeneratedBy")
+  awardedPlayerAchievements PlayerAchievement[]        @relation("PlayerAchievementAwardedBy")
+  auditLogs                 AuditLog[]                 @relation("AuditActor")
   accessObservations        AccountAccessObservation[]
-  playerActivityLogs        PlayerActivityLog[]      @relation("PlayerActivityActor")
-  createdTournaments        Tournament[]             @relation("TournamentCreatedBy")
-  decidedRegistrations      TournamentRegistration[] @relation("RegistrationDecidedBy")
-  createdLeagueBadges       LeagueBadge[]            @relation("LeagueBadgeCreatedBy")
-  awardedPlayerBadges       PlayerBadge[]            @relation("PlayerBadgeAwardedBy")
-  coinAdjustments           ZikaCoinTransaction[]    @relation("ZkTxAdmin")
+  playerActivityLogs        PlayerActivityLog[]        @relation("PlayerActivityActor")
+  createdTournaments        Tournament[]               @relation("TournamentCreatedBy")
+  decidedRegistrations      TournamentRegistration[]   @relation("RegistrationDecidedBy")
+  createdLeagueBadges       LeagueBadge[]              @relation("LeagueBadgeCreatedBy")
+  awardedPlayerBadges       PlayerBadge[]              @relation("PlayerBadgeAwardedBy")
+  coinAdjustments           ZikaCoinTransaction[]      @relation("ZkTxAdmin")
   fcmTokens                 UserFcmToken[]
-  createdShopItems          ShopItem[]               @relation("ShopItemCreatedBy")
-  createdShopPromotions     ShopPromotion[]          @relation("ShopPromotionCreatedBy")
-  createdZikaLoots          ZikaLoot[]               @relation("ZikaLootCreatedBy")
+  createdShopItems          ShopItem[]                 @relation("ShopItemCreatedBy")
+  createdShopPromotions     ShopPromotion[]            @relation("ShopPromotionCreatedBy")
+  createdZikaLoots          ZikaLoot[]                 @relation("ZikaLootCreatedBy")
   tutorialProgress          UserTutorialProgress[]
   passwordResetTokens       PasswordResetToken[]
-  createdNewsPosts          NewsPost[]               @relation("NewsPostAuthor")
-  closedTournamentDays      TournamentDayClosure[]   @relation("TournamentDayClosedBy")
+  createdNewsPosts          NewsPost[]                 @relation("NewsPostAuthor")
+  closedTournamentDays      TournamentDayClosure[]     @relation("TournamentDayClosedBy")
   raidNotifications         UserRaidNotification[]
   raidPasswordStamps        RaidPasswordStamp[]
 
@@ -347,6 +347,7 @@ model Player {
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
   notifications               PlayerNotification[]
   mascotInteractionJobs       MascotInteractionJob[]
+  mascotBondRoutines          MascotRoutine[]
 
   @@map("players")
 }
@@ -2454,6 +2455,9 @@ model Mascot {
   socialEventsAsB           MascotSocialEvent[]       @relation("MascotSocialEventMascotB")
   socialDecisionLogsAsA     MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotA")
   socialDecisionLogsAsB     MascotSocialDecisionLog[] @relation("MascotSocialDecisionMascotB")
+  bondMemoriesAsA           MascotBondMemory[]        @relation("MascotBondMemoryA")
+  bondMemoriesAsB           MascotBondMemory[]        @relation("MascotBondMemoryB")
+  routine                   MascotRoutine?
   events                    MascotEvent[]
   progressMilestones        MascotProgressMilestone[]
   statGrowthHistory         MascotStatGrowthEntry[]
@@ -2552,6 +2556,9 @@ model MascotRelation {
   lastInteractionAt DateTime?
   createdAt         DateTime           @default(now())
   updatedAt         DateTime           @updatedAt
+  isActive          Boolean            @default(true)
+  isProtected       Boolean            @default(false)
+  dormantAt         DateTime?
   mascotA           Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
   mascotB           Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
 
@@ -2601,6 +2608,10 @@ model MascotSocialEvent {
   resolvedAt          DateTime?
   autoResolvedAt      DateTime?
   createdAt           DateTime                @default(now())
+  sourceType          String                  @default("SOCIAL")
+  sourceId            String?
+  contextJson         Json?
+  isImportant         Boolean                 @default(false)
 
   owner            Player                    @relation("MascotSocialEventOwner", fields: [ownerId], references: [id], onDelete: Cascade)
   resolvedByPlayer Player?                   @relation("MascotSocialEventResolver", fields: [resolvedByPlayerId], references: [id], onDelete: SetNull)
@@ -2642,6 +2653,46 @@ model MascotSocialDecisionLog {
   @@index([mascotAId, createdAt])
   @@index([mascotBId, createdAt])
   @@map("mascot_social_decision_logs")
+}
+
+model MascotBondMemory {
+  id          String    @id @default(cuid())
+  mascotAId   String
+  mascotBId   String?
+  memoryType  String
+  sourceType  String
+  sourceId    String?
+  title       String
+  description String    @db.Text
+  intensity   Int       @default(1)
+  isMilestone Boolean   @default(false)
+  metadata    Json?
+  expiresAt   DateTime?
+  createdAt   DateTime  @default(now())
+  mascotA     Mascot    @relation("MascotBondMemoryA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB     Mascot?   @relation("MascotBondMemoryB", fields: [mascotBId], references: [id], onDelete: Cascade)
+
+  @@index([mascotAId, createdAt])
+  @@index([mascotBId, createdAt])
+  @@index([sourceType, sourceId])
+  @@map("mascot_bond_memories")
+}
+
+model MascotRoutine {
+  id               String   @id @default(cuid())
+  playerId         String
+  mascotId         String   @unique
+  locationType     String
+  status           String   @default("ACTIVE")
+  accumulatedUnits Int      @default(0)
+  startedAt        DateTime @default(now())
+  lastProcessedAt  DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mascot           Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, locationType, status])
+  @@map("mascot_routines")
 }
 
 model MascotEvent {
@@ -2920,14 +2971,14 @@ model BazarListing {
   // Cosmetic: { inventoryItemId, itemType, displayName }
   payload Json
 
-  priceCoins      Int? // null = troca somente
-  priceLigaCash   Int?
-  listingFeeCurrency String @default("ZC")
-  wantedDesc      String? // texto livre descrevendo o que quer em troca
-  description     String?
-  loanEnabled     Boolean @default(false)
-  loanAmountCoins Int?
-  loanInterestPct Int?
+  priceCoins         Int? // null = troca somente
+  priceLigaCash      Int?
+  listingFeeCurrency String  @default("ZC")
+  wantedDesc         String? // texto livre descrevendo o que quer em troca
+  description        String?
+  loanEnabled        Boolean @default(false)
+  loanAmountCoins    Int?
+  loanInterestPct    Int?
 
   feeCharged   Int       @default(0)
   views        Int       @default(0)
@@ -2938,7 +2989,7 @@ model BazarListing {
   // Campos de leilão (null para anúncios normais)
   minBidCoins        Int?
   currentBidCoins    Int?
-  auctionCurrency    String @default("ZC")
+  auctionCurrency    String    @default("ZC")
   currentBidPlayerId String?
   auctionEndsAt      DateTime?
 
@@ -2977,14 +3028,14 @@ model BazarProposal {
   listingId  String
   proposerId String
 
-  coinsOffer    Int     @default(0)
-  coinsEscrowed Boolean @default(false)
+  coinsOffer       Int     @default(0)
+  coinsEscrowed    Boolean @default(false)
   ligaCashOffer    Int     @default(0)
   ligaCashEscrowed Boolean @default(false)
   // JSON: [{type:"ITEM", itemType, quantity, displayName}]
-  itemsOffer    Json?
-  message       String?
-  loanRequested Boolean @default(false)
+  itemsOffer       Json?
+  message          String?
+  loanRequested    Boolean @default(false)
 
   status             BazarProposalStatus @default(PENDING)
   viewedByProposerAt DateTime?
@@ -3206,6 +3257,7 @@ model LigaCoinWallet {
   spent     Int      @default(0)
   updatedAt DateTime @updatedAt
   createdAt DateTime @default(now())
+
   @@map("liga_coin_wallets")
 }
 
@@ -3228,38 +3280,38 @@ model LigaCashLedger {
 }
 
 model EconomySettings {
-  id                       String   @id @default("singleton")
-  zcPerLcReference         Int      @default(10)
-  shopLcValueMultiplier    Float    @default(1.1)
-  bazarListingFeeZc        Int      @default(10)
-  bazarListingFeeLc        Int      @default(1)
-  allowLcShop              Boolean  @default(true)
-  allowLcBazar             Boolean  @default(true)
-  allowMixedProposals      Boolean  @default(true)
-  allowLcAuctions          Boolean  @default(true)
-  allowLcLoans             Boolean  @default(false)
-  allowLcPassRewards       Boolean  @default(true)
-  allowLcWalletRewards     Boolean  @default(true)
-  allowLcEventRewards      Boolean  @default(true)
-  allowAdminLcGrants       Boolean  @default(true)
-  updatedAt                DateTime @updatedAt
-  updatedBy                String?
+  id                    String   @id @default("singleton")
+  zcPerLcReference      Int      @default(10)
+  shopLcValueMultiplier Float    @default(1.1)
+  bazarListingFeeZc     Int      @default(10)
+  bazarListingFeeLc     Int      @default(1)
+  allowLcShop           Boolean  @default(true)
+  allowLcBazar          Boolean  @default(true)
+  allowMixedProposals   Boolean  @default(true)
+  allowLcAuctions       Boolean  @default(true)
+  allowLcLoans          Boolean  @default(false)
+  allowLcPassRewards    Boolean  @default(true)
+  allowLcWalletRewards  Boolean  @default(true)
+  allowLcEventRewards   Boolean  @default(true)
+  allowAdminLcGrants    Boolean  @default(true)
+  updatedAt             DateTime @updatedAt
+  updatedBy             String?
 
   @@map("economy_settings")
 }
 
 model LigaCashOrder {
-  id                String               @id @default(cuid())
+  id                String              @id @default(cuid())
   playerId          String
   productType       LigaCashProductType
   productCode       String
   productLabel      String
-  ligaCoins         Int                  @default(0)
-  bonusLigaCoins    Int                  @default(0)
+  ligaCoins         Int                 @default(0)
+  bonusLigaCoins    Int                 @default(0)
   amountCents       Int
-  status            LigaCashOrderStatus  @default(PENDING)
-  provider          String               @default("MERCADO_PAGO")
-  providerPaymentId String?              @unique
+  status            LigaCashOrderStatus @default(PENDING)
+  provider          String              @default("MERCADO_PAGO")
+  providerPaymentId String?             @unique
   qrCode            String?
   qrCodeBase64      String?
   expiresAt         DateTime?
@@ -3267,8 +3319,9 @@ model LigaCashOrder {
   fulfilledAt       DateTime?
   passScheduleKey   String?
   passOfferSlot     String?
-  createdAt         DateTime             @default(now())
-  updatedAt         DateTime             @updatedAt
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
   @@index([playerId, createdAt])
   @@index([status, productType])
   @@index([passOfferSlot, status])
@@ -3294,19 +3347,19 @@ model ShellGameSession {
 
 // Configuração customizável do calendário do Passe Apoiador
 model PassScheduleConfig {
-  id                     String   @id @default("singleton")
-  schedule               Json // DayReward[] — 30 itens
-  allowRetroactiveClaims Boolean  @default(false)
-  displayTitle           String?
-  description            String?
-  flavorText             String?
-  updatedAt              DateTime @updatedAt
-  updatedBy              String? // userId do admin que salvou por último
-  isCurrentStorePass     Boolean  @default(false)
-  isNextStorePass        Boolean  @default(false)
-  storeActivationAt      DateTime?
-  storeActivationRetroactive Boolean @default(false)
-  storeActivatedAt       DateTime?
+  id                         String    @id @default("singleton")
+  schedule                   Json // DayReward[] — 30 itens
+  allowRetroactiveClaims     Boolean   @default(false)
+  displayTitle               String?
+  description                String?
+  flavorText                 String?
+  updatedAt                  DateTime  @updatedAt
+  updatedBy                  String? // userId do admin que salvou por último
+  isCurrentStorePass         Boolean   @default(false)
+  isNextStorePass            Boolean   @default(false)
+  storeActivationAt          DateTime?
+  storeActivationRetroactive Boolean   @default(false)
+  storeActivatedAt           DateTime?
 
   @@map("pass_schedule_config")
 }

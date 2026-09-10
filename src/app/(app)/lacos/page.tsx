@@ -16,6 +16,8 @@ import {
   type BondOption,
 } from "@/lib/mascot-bonds";
 import { BehaviorSelect, RelationsFilter, ResolveBondOptionButton } from "./_components/bond-actions";
+import { BondsV2Admin } from "./_components/bonds-v2-admin";
+import { isAdmin } from "@/lib/auth/permissions";
 
 export const dynamic = "force-dynamic";
 
@@ -62,6 +64,12 @@ export default async function LacosPage({
     select: { id: true, displayName: true, mascotBondBehavior: true },
   });
   if (!player) redirect("/dashboard");
+
+  // A reformulação permanece isolada por papel: jogadores continuam recebendo
+  // integralmente a tela e as regras atuais até a liberação explícita.
+  if (isAdmin(session.user.role)) {
+    return <BondsV2Admin playerId={player.id} />;
+  }
 
   await autoResolveExpiredBondEvents(player.id);
   await ensureRunawayWarningsForPlayer(player.id).catch(() => {});
