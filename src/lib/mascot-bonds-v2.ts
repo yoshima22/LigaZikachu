@@ -3,10 +3,10 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { clampScore, relationTypeFromScore } from "@/lib/mascot-bonds";
 
 export const REFUGE_LOCATIONS = {
-  GARDEN: { label: "Horta", icon: "🌱", capacity: 4, accent: "emerald", purpose: "Comida, cuidado e cooperação" },
-  TRAINING: { label: "Campo de Treino", icon: "🥊", capacity: 3, accent: "amber", purpose: "EXP leve, motivação e rivalidade" },
-  REST: { label: "Área de Descanso", icon: "🌙", capacity: 4, accent: "sky", purpose: "Recuperação, conforto e reconciliação" },
-  YARD: { label: "Pátio", icon: "✨", capacity: 6, accent: "violet", purpose: "Novos encontros e interação social" },
+  GARDEN: { label: "Horta", icon: "🌱", capacity: 4, accent: "emerald", purpose: "Comida, cuidado e cooperação", impact: "Favorece amizade (+4). Mascotes Gulosos podem iniciar disputas (-2)." },
+  TRAINING: { label: "Campo de Treino", icon: "🥊", capacity: 3, accent: "amber", purpose: "EXP leve, motivação e rivalidade", impact: "Favorece rivalidade (-2). Competitivos intensificam o desafio (-5)." },
+  REST: { label: "Área de Descanso", icon: "🌙", capacity: 4, accent: "sky", purpose: "Recuperação, conforto e reconciliação", impact: "Aproxima relações (+3). Serenos e Tímidos recebem efeito maior (+5)." },
+  YARD: { label: "Pátio", icon: "✨", capacity: 6, accent: "violet", purpose: "Novos encontros e interação social", impact: "Cria aproximações (+3). Brincalhões e Curiosos interagem mais (+5)." },
 } as const;
 
 export type RefugeLocation = keyof typeof REFUGE_LOCATIONS;
@@ -45,13 +45,22 @@ function socialDelta(location: RefugeLocation, personality: MascotPersonality) {
 /** Processador experimental isolado: só é chamado pelas ações administrativas da prévia. */
 export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerId: string, location: RefugeLocation) {
   const definition = REFUGE_LOCATIONS[location];
-  const routines = await tx.mascotRoutine.findMany({
+  const ownRoutines = await tx.mascotRoutine.findMany({
     where: { playerId, locationType: location, status: "ACTIVE" },
     orderBy: { startedAt: "asc" },
     take: definition.capacity,
     include: { mascot: { select: { id: true, pokemonId: true, nickname: true, personality: true } } },
   });
-  if (routines.length === 0) throw new Error(`Coloque pelo menos um mascote em ${definition.label}.`);
+  if (ownRoutines.length === 0) throw new Error(`Coloque pelo menos um mascote seu em ${definition.label}.`);
+
+  // Os locais são públicos. Priorizamos um visitante de outra conta para que
+  // a simulação represente encontros reais; sem visitante, usamos outro mascote do dono.
+  const visitor = await tx.mascotRoutine.findFirst({
+    where: { playerId: { not: playerId }, locationType: location, status: "ACTIVE" },
+    orderBy: { lastProcessedAt: "asc" },
+    include: { mascot: { select: { id: true, pokemonId: true, nickname: true, personality: true } } },
+  });
+  const routines = [ownRoutines[0], visitor ?? ownRoutines[1]].filter((routine): routine is NonNullable<typeof routine> => Boolean(routine));
 
   const first = routines[0].mascot;
   const second = routines[1]?.mascot ?? null;

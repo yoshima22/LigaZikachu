@@ -5,6 +5,8 @@ import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
 import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
+import { Prisma } from "@prisma/client";
 import {
   applyBondOption,
   autoResolveExpiredBondEvents,
@@ -64,6 +66,29 @@ export async function simulateRefugeV2Action(location: RefugeLocation) {
     return { ok: true, message: result.description };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível simular o Refúgio." };
+  }
+}
+
+export async function saveRefugeBackgroundV2Action(location: RefugeLocation, image: string) {
+  try {
+    const playerId = await getAdminPlayerId();
+    if (!REFUGE_LOCATIONS[location]) throw new Error("Local inválido.");
+    if (image && !image.startsWith("data:image/") && !/^https:\/\//i.test(image)) throw new Error("Envie uma imagem ou URL HTTPS válida.");
+    const session = await getAppSession();
+    const storedUrl = image.startsWith("data:image/") ? await uploadDataUrlAsset(image, "bonds-v2", `refugio-${location.toLowerCase()}`) : image;
+    const current = await prisma.siteContent.findUnique({ where: { id: "bonds-v2-settings" }, select: { data: true } });
+    const data = current?.data && typeof current.data === "object" && !Array.isArray(current.data) ? current.data as Record<string, unknown> : {};
+    const backgrounds = data.backgrounds && typeof data.backgrounds === "object" && !Array.isArray(data.backgrounds) ? data.backgrounds as Record<string, unknown> : {};
+    const next = { ...data, backgrounds: { ...backgrounds, [location]: storedUrl || null } } as Prisma.InputJsonValue;
+    await prisma.siteContent.upsert({
+      where: { id: "bonds-v2-settings" },
+      create: { id: "bonds-v2-settings", data: next, updatedBy: session?.user.id },
+      update: { data: next, updatedBy: session?.user.id },
+    });
+    revalidatePath("/lacos");
+    return { ok: true, url: storedUrl };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível salvar o cenário." };
   }
 }
 
