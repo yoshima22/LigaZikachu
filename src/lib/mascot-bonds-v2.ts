@@ -1,6 +1,6 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName } from "@/lib/mascot-data";
-import { clampScore, relationTypeFromScore } from "@/lib/mascot-bonds";
+import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 4, accent: "emerald", purpose: "Comida, cuidado e cooperação", impact: "Favorece amizade (+4). Mascotes Gulosos podem iniciar disputas (-2)." },
@@ -42,6 +42,35 @@ function socialDelta(location: RefugeLocation, personality: MascotPersonality) {
   return personality === "PLAYFUL" || personality === "CURIOUS" ? 5 : 3;
 }
 
+const OPENINGS = [
+  "Sem chamar atenção dos treinadores,", "Durante uma pausa na rotina,", "Quando o movimento do local diminuiu,",
+  "Depois de observarem um ao outro por algum tempo,", "No meio de uma tarefa aparentemente comum,",
+];
+
+const REACTIONS: Record<RefugeLocation, string[]> = {
+  GARDEN: ["a divisão da colheita virou assunto", "um alimento desapareceu antes da hora", "uma tarefa difícil exigiu cooperação", "os dois discordaram sobre quem havia trabalhado mais"],
+  TRAINING: ["um desafio amistoso ficou sério", "uma provocação exigiu resposta", "a diferença de desempenho ficou evidente", "um pedido de revanche mudou o clima"],
+  REST: ["uma tentativa de consolo foi bem recebida", "uma brincadeira interrompeu o silêncio", "uma mágoa antiga voltou à conversa", "um deles percebeu que o outro precisava de companhia"],
+  YARD: ["uma brincadeira improvisada reuniu curiosos", "uma disputa por atenção começou", "um encontro inesperado despertou admiração", "um comentário atravessado criou tensão"],
+};
+
+function pick<T>(items: T[]) { return items[Math.floor(Math.random() * items.length)]; }
+
+function importantOptions(location: RefugeLocation, conflict: boolean, firstName: string, secondName: string): BondOption[] {
+  if (conflict) return [
+    { id: "channel_rivalry", intention: "Transformar tensão em motivação", label: `Propor um desafio com regras claras`, outcomePreview: `${firstName} e ${secondName} mantêm a rivalidade saudável e criam uma promessa de revanche.`, type: "AGGRESSIVE", scoreDelta: -5, scoreDeltaB: -2, expA: location === "TRAINING" ? 18 : 8 },
+    { id: "listen_both", intention: "Compreender antes de decidir", label: "Ouvir a versão de cada mascote", outcomePreview: "A tensão diminui sem apagar o motivo do conflito; os dois ganham respeito em ritmos diferentes.", type: "NEUTRAL", scoreDelta: 2, scoreDeltaB: 4 },
+    { id: "repair_together", intention: "Reconstruir confiança", label: "Dar aos dois uma tarefa cooperativa", outcomePreview: "A convivência melhora e esta discussão vira uma memória de reconciliação.", type: "POSITIVE", cost: { kind: "FOOD", quantity: 1 }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 3, happinessB: 3 },
+    { id: "let_them_settle", intention: "Confiar na personalidade deles", label: "Não interferir e observar a consequência", outcomePreview: "Sem custo. Cada mascote reage de acordo com sua personalidade e a rivalidade pode se intensificar.", type: "NEUTRAL", scoreDelta: -1, scoreDeltaB: 1 },
+  ];
+  return [
+    { id: "celebrate_bond", intention: "Reconhecer a aproximação", label: "Celebrar o momento com os dois", outcomePreview: "Fortalece a amizade nas duas direções e registra uma lembrança positiva.", type: "POSITIVE", cost: { kind: "SWEET", quantity: 1 }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 4, happinessB: 3 },
+    { id: "encourage_independence", intention: "Estimular sem forçar", label: "Sugerir que repitam a atividade juntos", outcomePreview: "Cria uma oportunidade futura e aproxima mais o mascote que tomou a iniciativa.", type: "POSITIVE", scoreDelta: 4, scoreDeltaB: 2 },
+    { id: "ask_meaning", intention: "Entender o que isso significou", label: `Conversar separadamente com ${firstName}`, outcomePreview: "Revela uma interpretação pessoal e pode transformar admiração em motivação.", type: "NEUTRAL", scoreDelta: 3, scoreDeltaB: 0, expA: 6 },
+    { id: "preserve_moment", intention: "Deixar acontecer naturalmente", label: "Guardar a memória sem interferir", outcomePreview: "Sem custo. O acontecimento entra no diário, mas a relação muda pouco.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 1 },
+  ];
+}
+
 /** Processador experimental isolado: só é chamado pelas ações administrativas da prévia. */
 export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerId: string, location: RefugeLocation) {
   const definition = REFUGE_LOCATIONS[location];
@@ -49,7 +78,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     where: { playerId, locationType: location, status: "ACTIVE" },
     orderBy: { startedAt: "asc" },
     take: definition.capacity,
-    include: { mascot: { select: { id: true, pokemonId: true, nickname: true, personality: true } } },
+    include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
   });
   if (ownRoutines.length === 0) throw new Error(`Coloque pelo menos um mascote seu em ${definition.label}.`);
 
@@ -58,7 +87,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const visitor = await tx.mascotRoutine.findFirst({
     where: { playerId: { not: playerId }, locationType: location, status: "ACTIVE" },
     orderBy: { lastProcessedAt: "asc" },
-    include: { mascot: { select: { id: true, pokemonId: true, nickname: true, personality: true } } },
+    include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
   });
   const routines = [ownRoutines[0], visitor ?? ownRoutines[1]].filter((routine): routine is NonNullable<typeof routine> => Boolean(routine));
 
@@ -66,11 +95,13 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const second = routines[1]?.mascot ?? null;
   const [firstName, secondName] = names([first, ...(second ? [second] : [])]);
   const delta = second ? socialDelta(location, first.personality) : 0;
+  const conflict = Boolean(second && (delta < 0 || Math.random() < (location === "TRAINING" ? 0.55 : 0.18)));
+  const appliedDelta = conflict ? Math.min(-2, delta) : delta;
   const descriptions: Record<RefugeLocation, string> = {
-    GARDEN: second ? `${firstName} e ${secondName} cuidaram da Horta. A divisão da colheita revelou como os dois convivem.` : `${firstName} cuidou da Horta e separou parte da produção.`,
-    TRAINING: second ? `${firstName} desafiou ${secondName} para uma sessão competitiva no Campo de Treino.` : `${firstName} treinou por conta própria e saiu mais determinado.`,
-    REST: second ? `${firstName} e ${secondName} dividiram um momento tranquilo na Área de Descanso.` : `${firstName} encontrou tempo para recuperar o ânimo.`,
-    YARD: second ? `${firstName} e ${secondName} se encontraram no Pátio e passaram a prestar mais atenção um no outro.` : `${firstName} explorou o Pátio à procura de companhia.`,
+    GARDEN: second ? `${pick(OPENINGS)} ${firstName} e ${secondName} cuidaram da Horta quando ${pick(REACTIONS.GARDEN)}. ${conflict ? "O desacordo não terminou ali." : "A forma como resolveram isso aproximou os dois."}` : `${firstName} cuidou da Horta e separou parte da produção.`,
+    TRAINING: second ? `${pick(OPENINGS)} ${firstName} treinou com ${secondName} e ${pick(REACTIONS.TRAINING)}. ${conflict ? "Agora existe algo a provar." : "O esforço terminou em respeito mútuo."}` : `${firstName} treinou por conta própria e saiu mais determinado.`,
+    REST: second ? `${pick(OPENINGS)} ${firstName} dividiu o descanso com ${secondName} quando ${pick(REACTIONS.REST)}. ${conflict ? "O descanso terminou com um assunto mal resolvido." : "Nenhum dos dois saiu dali exatamente igual."}` : `${firstName} encontrou tempo para recuperar o ânimo.`,
+    YARD: second ? `${pick(OPENINGS)} ${firstName} encontrou ${secondName} no Pátio e ${pick(REACTIONS.YARD)}. ${conflict ? "Outros mascotes perceberam o clima mudar." : "A cena pode ser o começo de um novo grupo."}` : `${firstName} explorou o Pátio à procura de companhia.`,
   };
 
   if (second) {
@@ -78,7 +109,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
       select: { relationshipScore: true },
     });
-    const next = clampScore((current?.relationshipScore ?? 0) + delta);
+    const next = clampScore((current?.relationshipScore ?? 0) + appliedDelta);
     await tx.mascotRelation.upsert({
       where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
       update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true, dormantAt: null },
@@ -95,13 +126,33 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       title: `${definition.icon} ${definition.label}`,
       description: descriptions[location],
       intensity: Math.abs(delta) >= 5 ? 2 : 1,
-      metadata: { location, scoreDelta: delta },
+      metadata: { location, scoreDelta: appliedDelta, conflict, personalities: [first.personality, second?.personality].filter(Boolean) },
     },
   });
+  if (second) {
+    await tx.mascotSocialEvent.create({
+      data: {
+        ownerId: playerId,
+        mascotAId: first.id,
+        mascotBId: second.id,
+        eventType: conflict ? `REFUGE_${location}_CONFLICT` : `REFUGE_${location}_BOND`,
+        title: conflict ? `Algo ficou mal resolvido em ${definition.label}` : `Um vínculo ganhou significado em ${definition.label}`,
+        description: descriptions[location],
+        optionsJson: importantOptions(location, conflict, firstName, secondName) as unknown as Prisma.InputJsonValue,
+        visibility: "INVOLVED_PLAYERS",
+        affectedPlayerIds: [...new Set([playerId, second.playerId])] as Prisma.InputJsonValue,
+        publicEligible: false,
+        sourceType: "REFUGE",
+        contextJson: { location, conflict, generatedFrom: ["source", "fact", "personality", "relation", "interpretation", "reaction", "consequence"] },
+        isImportant: true,
+        expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
+      },
+    });
+  }
   await tx.mascotRoutine.updateMany({
     where: { id: { in: routines.map((routine) => routine.id) } },
     data: { accumulatedUnits: { increment: 1 }, lastProcessedAt: new Date() },
   });
 
-  return { description: descriptions[location], delta, participants: routines.length };
+  return { description: descriptions[location], delta: appliedDelta, participants: routines.length };
 }

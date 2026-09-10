@@ -72,13 +72,14 @@ export function BondV2Buttons({ relationId, active, protectedBond }: { relationI
 }
 
 type SceneMascot = { id: string; name: string; sprite: string; level: number; personality: string; owner: string; own: boolean; location: string | null };
+type SceneStory = { id: string; title: string; description: string; conflict: boolean; when: string };
 
 const POSITIONS = [
   "left-[8%] bottom-[12%]", "left-[27%] bottom-[25%]", "left-[48%] bottom-[10%]", "left-[68%] bottom-[28%]",
   "left-[82%] bottom-[12%]", "left-[18%] bottom-[48%]", "left-[58%] bottom-[50%]", "left-[78%] bottom-[52%]",
 ];
 
-export function RefugeLocationScene({ location, occupants, ownMascots, backgroundUrl }: { location: RefugeLocation; occupants: SceneMascot[]; ownMascots: SceneMascot[]; backgroundUrl: string }) {
+export function RefugeLocationScene({ location, occupants, ownMascots, backgroundUrl, stories }: { location: RefugeLocation; occupants: SceneMascot[]; ownMascots: SceneMascot[]; backgroundUrl: string; stories: SceneStory[] }) {
   const definition = REFUGE_LOCATIONS[location];
   const [query, setQuery] = useState("");
   const [image, setImage] = useState(backgroundUrl);
@@ -107,6 +108,7 @@ export function RefugeLocationScene({ location, occupants, ownMascots, backgroun
       <div><div className="relative"><Search size={14} className="absolute left-3 top-2.5 text-slate-500" /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Pesquisar por nome ou personalidade..." className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-cyan-300/40" /></div><div className="mt-2 flex max-h-28 flex-wrap gap-1.5 overflow-y-auto pr-1">{available.map((mascot) => <button key={mascot.id} disabled={pending || mascot.location === location} onClick={() => allocate(mascot.id)} className={`flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] transition ${mascot.location === location ? "border-cyan-300/30 bg-cyan-300/10 text-cyan-200" : "border-white/10 text-slate-300 hover:border-white/25 hover:bg-white/5"}`}><img src={mascot.sprite} alt="" className="h-5 w-5 object-contain" />{mascot.name}{mascot.location === location ? " · aqui" : " · enviar"}</button>)}</div></div>
       <details className="group rounded-xl border border-white/10 bg-white/[.025] p-3"><summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-bold text-slate-300"><ImagePlus size={14} /> Cenário do local</summary><div className="mt-3"><ImageUpload value={image} onChange={setImage} label="Background personalizado" hint="Recomendado: 1600×900, JPG ou WEBP." compress maxWidth={1800} maxHeight={1000} /><button disabled={pending || image === backgroundUrl} onClick={() => startTransition(async () => { const result = await saveRefugeBackgroundV2Action(location, image); if (result.error) toast.error(result.error); else toast.success("Cenário salvo."); })} className="mt-2 w-full rounded-lg bg-fuchsia-400 px-3 py-2 text-[10px] font-black text-slate-950 disabled:opacity-40">Salvar cenário</button></div></details>
     </div>
+    <div className="border-t border-white/10 bg-black/20 p-4"><div className="mb-2 flex items-center justify-between"><p className="text-[10px] font-black uppercase tracking-[.18em] text-slate-300">O que está acontecendo aqui</p><span className="text-[9px] text-slate-600">ambiência recente</span></div>{stories.length === 0 ? <p className="rounded-xl border border-dashed border-white/10 p-3 text-xs text-slate-600">Ainda não há histórias registradas neste local.</p> : <div className="grid gap-2 sm:grid-cols-3">{stories.map((story) => <div key={story.id} className={`rounded-xl border p-3 ${story.conflict ? "border-rose-400/25 bg-rose-400/[.06]" : "border-emerald-400/15 bg-emerald-400/[.04]"}`}><p className={`text-[9px] font-black uppercase tracking-wider ${story.conflict ? "text-rose-300" : "text-emerald-300"}`}>{story.conflict ? "⚡ Conflito percebido" : "✦ Momento social"} · {story.when}</p><p className="mt-1 text-xs font-bold text-white">{story.title}</p><p className="mt-1 line-clamp-3 text-[10px] leading-4 text-slate-400">{story.description}</p></div>)}</div>}</div>
   </article>;
 }
 

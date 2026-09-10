@@ -1,4 +1,4 @@
-import { Activity, Archive, Brain, HeartHandshake, LockKeyhole, Sparkles } from "lucide-react";
+import { Activity, Archive, Brain, HeartHandshake, LockKeyhole, Network, Sparkles, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
@@ -89,6 +89,23 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     active: relation.isActive,
     protectedBond: relation.isProtected,
   }));
+  const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, { leader: string; sprite: string; members: Array<{ name: string; sprite: string; score: number }> }>>((groups, relation) => {
+    const key = mascotName(relation.mascotA);
+    groups[key] ??= { leader: key, sprite: getSpriteUrl(relation.mascotA.pokemonId), members: [] };
+    groups[key].members.push({ name: mascotName(relation.mascotB), sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore });
+    return groups;
+  }, {})).filter((group) => group.members.length >= 2).sort((a, b) => b.members.length - a.members.length).slice(0, 4);
+  const trainerComparisons = Object.values(relations.reduce<Record<string, { trainer: string; friends: number; rivals: number; total: number; scoreTotal: number }>>((groups, relation) => {
+    const trainer = relation.mascotB.player.displayName;
+    groups[trainer] ??= { trainer, friends: 0, rivals: 0, total: 0, scoreTotal: 0 };
+    groups[trainer].total += 1;
+    groups[trainer].scoreTotal += relation.relationshipScore;
+    if (relation.relationshipScore >= 15) groups[trainer].friends += 1;
+    if (relation.relationshipScore <= -15) groups[trainer].rivals += 1;
+    return groups;
+  }, {})).sort((a, b) => b.total - a.total).slice(0, 6);
+  const strongestFriend = relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).sort((a, b) => b.relationshipScore - a.relationshipScore)[0];
+  const strongestRival = relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).sort((a, b) => a.relationshipScore - b.relationshipScore)[0];
 
   return <div className="space-y-8">
     <header className="relative overflow-hidden rounded-3xl border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,.24),transparent_40%),linear-gradient(135deg,#070d1d,#120826)] p-6 shadow-2xl shadow-fuchsia-950/20">
@@ -123,7 +140,14 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
             own: routine.mascot.playerId === playerId,
             location,
           }));
-          return <RefugeLocationScene key={location} location={location} occupants={occupants} ownMascots={ownMascots} backgroundUrl={typeof backgrounds[location] === "string" ? backgrounds[location] : ""} />;
+          const stories = memories.filter((memory) => {
+            const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
+            return metadata.location === location;
+          }).slice(0, 3).map((memory) => {
+            const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
+            return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) };
+          });
+          return <RefugeLocationScene key={location} location={location} occupants={occupants} ownMascots={ownMascots} backgroundUrl={typeof backgrounds[location] === "string" ? backgrounds[location] : ""} stories={stories} />;
         })}
       </div>
     </section>
@@ -131,6 +155,24 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     <section>
       <div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Escolhas que mudam histórias</p><h2 className="text-xl font-black text-white">Momentos importantes</h2><p className="mt-1 text-xs text-slate-500">Acontecimentos comuns entram no diário. Somente decisões de impacto pedem sua intervenção.</p></div>
       {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <div className="grid gap-3 lg:grid-cols-2">{pendingEvents.map((event) => <article key={event.id} className="rounded-2xl border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,.07),rgba(15,23,42,.7))] p-4"><div className="flex items-center gap-3"><div className="flex -space-x-2"><img src={getSpriteUrl(event.mascotA.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />{event.mascotB && <img src={getSpriteUrl(event.mascotB.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />}</div><div><p className="text-[10px] uppercase tracking-wider text-amber-300">{event.sourceType} · {event.isImportant ? "momento decisivo" : "decisão social"}</p><h3 className="font-bold text-white">{event.title}</h3></div></div><p className="my-3 text-sm leading-6 text-slate-300">{event.description}</p><div className="grid gap-2">{normalizeBondOptions(event.optionsJson).map((option) => <ResolveBondOptionButton key={option.id} eventId={event.id} option={option} />)}</div></article>)}</div>}
+    </section>
+
+    <section className="rounded-3xl border border-white/10 bg-slate-950/65 p-5">
+      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Consequência, não decoração</p><h2 className="text-xl font-black text-white">Impactos em teste</h2><p className="mt-1 text-xs text-slate-400">Projeções visíveis para validar o balanceamento. Ainda não alteram partidas ou expedições reais.</p></div>
+      <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
+        <ImpactCard tone="emerald" title="Parceiros de jornada" value={strongestFriend ? (strongestFriend.relationshipScore >= 80 ? "até −8% de tempo" : strongestFriend.relationshipScore >= 40 ? "até −5% de tempo" : "até −3% de tempo") : "Sem vínculo elegível"} text={strongestFriend ? `${mascotName(strongestFriend.mascotA)} e ${mascotName(strongestFriend.mascotB)} formam a melhor dupla atual. Apenas o melhor vínculo conta.` : "Colegas e amigos em expedições simultâneas ativam esta projeção."} />
+        <ImpactCard tone="cyan" title="Parceiros de treino" value={strongestFriend ? (strongestFriend.relationshipScore >= 80 ? "+10% EXP" : strongestFriend.relationshipScore >= 40 ? "+8% EXP" : "+5% EXP") : "Sem vínculo elegível"} text="O bônus é aplicado somente quando os dois participam da atividade e possui teto global." />
+        <ImpactCard tone="rose" title="Algo a provar" value={strongestRival && strongestRival.relationshipScore <= -50 ? "+5% contra o Inimigo" : "Rivalidade em formação"} text={strongestRival ? `${mascotName(strongestRival.mascotA)} reage especificamente a ${mascotName(strongestRival.mascotB)}; não é um bônus contra toda equipe.` : "Inimigos podem ativar um bônus ofensivo pessoal e situacional."} />
+        <ImpactCard tone="fuchsia" title="Acerto de contas" value={strongestRival && strongestRival.relationshipScore <= -80 ? "Nêmesis ativo" : "Nenhum Nêmesis"} text="Quando dois Nêmesis se enfrentam, o efeito aparece no combate e dura somente o confronto direto previsto." />
+      </div>
+    </section>
+
+    <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
+      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-300">Além das duplas</p><h2 className="text-xl font-black text-white">Mapa social e outros treinadores</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">Grupos são leituras da rede de Laços Ativos, não um bônus separado. Eles ajudam a descobrir mascotes que conectam várias amizades e treinadores com quem sua coleção possui mais histórias.</p></div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <article key={group.leader} className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.035] p-3"><div className="flex items-center gap-2"><img src={group.sprite} alt="" className="h-11 w-11 rounded-full bg-slate-900 object-contain" /><div><p className="text-xs font-black uppercase tracking-wider text-fuchsia-300">Ponto de encontro</p><p className="font-bold text-white">Círculo de {group.leader}</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{group.members.map((member) => <span key={member.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300"><img src={member.sprite} alt="" className="h-5 w-5 object-contain" />{member.name} · +{member.score}</span>)}</div></article>)}</div>}</div>
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3>{trainerComparisons.length === 0 ? <Empty text="Ainda não há outros treinadores para comparar." /> : <div className="space-y-2">{trainerComparisons.map((item) => { const average = Math.round(item.scoreTotal / Math.max(1, item.total)); return <div key={item.trainer} className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-white">{item.trainer}</p><p className="text-[10px] text-slate-500">{item.total} relações · média direcional {average > 0 ? "+" : ""}{average}</p></div><div className="flex gap-2 text-[10px]"><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-300">{item.friends} amizades</span><span className="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{item.rivals} rivalidades</span></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={average >= 0 ? "h-full bg-emerald-400" : "ml-auto h-full bg-rose-400"} style={{ width: `${Math.min(100, Math.max(8, Math.abs(average)))}%` }} /></div></div>; })}</div>}</div>
+      </div>
     </section>
 
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
@@ -142,4 +184,9 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
 
 function Empty({ text }: { text: string }) {
   return <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">{text}</div>;
+}
+
+function ImpactCard({ tone, title, value, text }: { tone: "emerald" | "cyan" | "rose" | "fuchsia"; title: string; value: string; text: string }) {
+  const tones = { emerald: "border-emerald-400/20 text-emerald-300", cyan: "border-cyan-400/20 text-cyan-300", rose: "border-rose-400/20 text-rose-300", fuchsia: "border-fuchsia-400/20 text-fuchsia-300" };
+  return <article className={`rounded-2xl border bg-white/[.025] p-4 ${tones[tone]}`}><p className="text-[10px] font-black uppercase tracking-wider">{title}</p><p className="mt-2 text-lg font-black text-white">{value}</p><p className="mt-2 text-xs leading-5 text-slate-400">{text}</p></article>;
 }

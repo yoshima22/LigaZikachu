@@ -24,6 +24,9 @@ export type BondOption = {
   cost?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number };
   costs?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number }[];
   scoreDelta: number;
+  scoreDeltaB?: number;
+  intention?: string;
+  outcomePreview?: string;
   happinessA?: number;
   happinessB?: number;
   expA?: number;
@@ -508,7 +511,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
     const mascotBId = event.mascotBId;
     if (mascotBId) {
       await ensureDirectionalRelation(tx, event.mascotAId, mascotBId, option.scoreDelta);
-      await ensureDirectionalRelation(tx, mascotBId, event.mascotAId, option.scoreDelta);
+      await ensureDirectionalRelation(tx, mascotBId, event.mascotAId, option.scoreDeltaB ?? option.scoreDelta);
     }
 
     if (option.happinessA) {
@@ -523,6 +526,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
 
     const resultJson = {
       scoreDelta: option.scoreDelta,
+      scoreDeltaB: option.scoreDeltaB ?? option.scoreDelta,
       happinessA: option.happinessA ?? 0,
       happinessB: option.happinessB ?? 0,
       expA: option.expA ?? 0,
@@ -596,6 +600,23 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
         visibility: option.publicEligible ? "PUBLIC" : event.visibility,
       },
     });
+
+    if (event.sourceType === "REFUGE") {
+      await tx.mascotBondMemory.create({
+        data: {
+          mascotAId: event.mascotAId,
+          mascotBId,
+          memoryType: `DECISION_${option.id.toUpperCase()}`,
+          sourceType: "REFUGE_DECISION",
+          sourceId: event.id,
+          title: option.intention ?? option.label,
+          description: option.outcomePreview ?? `${option.label} foi a decisão tomada para este momento.`,
+          intensity: Math.abs(option.scoreDelta) >= 5 ? 2 : 1,
+          isMilestone: Math.abs(option.scoreDelta) >= 7,
+          metadata: event.contextJson ?? undefined,
+        },
+      });
+    }
 
     await tx.mascotSocialEvent.update({
       where: { id: event.id },

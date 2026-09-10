@@ -115,7 +115,9 @@ export function ResolveBondOptionButton({ eventId, option, disabled }: { eventId
       })}
       className={`rounded-xl border px-3 py-2 text-left text-xs transition disabled:cursor-not-allowed disabled:opacity-45 ${tone}`}
     >
+      {option.intention && <span className="mb-0.5 block text-[9px] font-black uppercase tracking-wider opacity-65">{option.intention}</span>}
       <span className="block font-bold">{pending ? "Aplicando..." : option.label}</span>
+      {option.outcomePreview && <span className="mt-1 block text-[11px] leading-4 opacity-90">{option.outcomePreview}</span>}
       <span className="mt-1 block text-[10px] opacity-75">
         {option.type === "POSITIVE" ? "Positiva" : option.type === "AGGRESSIVE" ? "Rivalidade" : "Neutra"}
         {` | Custo: ${costLabel}`}
