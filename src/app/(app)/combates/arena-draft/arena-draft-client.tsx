@@ -884,6 +884,12 @@ export function ArenaDraftClient({
             <p className="mt-1 text-xs text-slate-500">
               Mínimo de 5 partidas. Cancelamentos não contam.
             </p>
+            <Link
+              href="/combates/arena-draft/ranking-mascotes"
+              className="mt-3 inline-flex rounded-lg border border-fuchsia-300/25 px-3 py-2 text-[10px] font-bold text-fuchsia-200 hover:bg-fuchsia-300/5"
+            >
+              Ver ranking por mascote
+            </Link>
             <div className="mt-4 space-y-2">
               {leaderboard.length === 0 ? (
                 <p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
@@ -917,7 +923,7 @@ export function ArenaDraftClient({
               ) : (
                 history.map((m) => (
                   <Link
-                    href={`/combates/arena-draft/${m.id}`}
+                    href={`/combates/arena-draft/replays/${m.id}`}
                     key={m.id}
                     className="flex justify-between rounded-xl border border-white/10 p-3 hover:border-cyan-300/30"
                   >
