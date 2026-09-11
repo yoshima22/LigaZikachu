@@ -134,6 +134,10 @@ export function ArenaDraftClient({
   const [presetPage, setPresetPage] = useState(1);
   const [renamingPresetId, setRenamingPresetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
+  // Buffer de digitação dos status: guarda o texto cru enquanto o jogador digita
+  // para não travar o mínimo (20) no meio de "80". Só ao sair do campo (blur) o
+  // valor é ajustado para a faixa válida.
+  const [statDrafts, setStatDrafts] = useState<Record<string, string>>({});
   const presetPages = Math.max(1, Math.ceil(presets.length / 5));
   const visiblePresets = presets.slice((presetPage - 1) * 5, presetPage * 5);
   useEffect(() => {
@@ -793,7 +797,7 @@ export function ArenaDraftClient({
                   onChange={(e) => setName(e.target.value)}
                   className="w-full max-w-md border-b border-white/10 bg-transparent text-lg font-black text-white outline-none sm:text-xl"
                 />
-                <p className="mt-1 text-xs text-slate-500">
+                <p className="mt-1 flex min-h-[2.25rem] items-center text-xs text-slate-500">
                   Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
                   {allocatedPoints.toLocaleString("pt-BR")}
                   /4.500 disponíveis
@@ -990,23 +994,48 @@ export function ArenaDraftClient({
                                 </span>
                                 <input
                                   type="number"
+                                  inputMode="numeric"
                                   min={20}
                                   max={pet.isMega ? 240 : 250}
-                                  value={pet.stats[key]}
-                                  onChange={(e) =>
+                                  value={
+                                    statDrafts[`${pet.id}:${key}`] ??
+                                    String(pet.stats[key])
+                                  }
+                                  onChange={(e) => {
+                                    const raw = e.target.value;
+                                    if (!/^\d*$/.test(raw)) return;
+                                    const draftKey = `${pet.id}:${key}`;
+                                    setStatDrafts((drafts) => ({
+                                      ...drafts,
+                                      [draftKey]: raw,
+                                    }));
+                                    if (raw === "") return;
+                                    const max = pet.isMega ? 240 : 250;
+                                    updatePet(pet.id, {
+                                      stats: {
+                                        ...pet.stats,
+                                        [key]: Math.min(max, Number(raw)),
+                                      },
+                                    });
+                                  }}
+                                  onBlur={() => {
+                                    const draftKey = `${pet.id}:${key}`;
+                                    const max = pet.isMega ? 240 : 250;
                                     updatePet(pet.id, {
                                       stats: {
                                         ...pet.stats,
                                         [key]: Math.max(
                                           20,
-                                          Math.min(
-                                            pet.isMega ? 240 : 250,
-                                            Number(e.target.value),
-                                          ),
+                                          Math.min(max, pet.stats[key] || 20),
                                         ),
                                       },
-                                    })
-                                  }
+                                    });
+                                    setStatDrafts((drafts) => {
+                                      const next = { ...drafts };
+                                      delete next[draftKey];
+                                      return next;
+                                    });
+                                  }}
                                   className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
                                 />
                               </label>
