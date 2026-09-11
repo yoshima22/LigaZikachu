@@ -111,9 +111,9 @@ export function validateArenaDraftPets(input: unknown) {
   const baseTotal =
     pets.length * DRAFT_STAT_KEYS.length * ARENA_DRAFT_RULES.baseStat;
   const distributed = finalTotal - baseTotal;
-  if (distributed !== ARENA_DRAFT_RULES.statBudget)
+  if (distributed > ARENA_DRAFT_RULES.statBudget)
     errors.push(
-      `O time distribui ${Math.max(0, distributed).toLocaleString("pt-BR")}/4.500 pontos além dos status iniciais.`,
+      `O time ultrapassou o limite: ${Math.max(0, distributed).toLocaleString("pt-BR")}/4.500 pontos além dos status iniciais.`,
     );
   return { valid: errors.length === 0, errors, pets };
 }

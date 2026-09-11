@@ -36,6 +36,7 @@ import {
   duplicateDraftPresetAction,
   joinDraftQueueAction,
   renameDraftPresetAction,
+  searchDraftOpponentsAction,
   saveDraftPresetAction,
 } from "./actions";
 
@@ -82,7 +83,6 @@ export function ArenaDraftClient({
   activeMatch,
   history,
   leaderboard,
-  players,
   isAdmin,
 }: {
   species: Species[];
@@ -99,7 +99,6 @@ export function ArenaDraftClient({
     rating: number;
     winRate: number;
   }>;
-  players: Array<{ id: string; name: string }>;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -122,6 +121,10 @@ export function ArenaDraftClient({
   const [catalogOrder, setCatalogOrder] = useState<"NAME" | "ID">("NAME");
   const [catalogPage, setCatalogPage] = useState(1);
   const [challengeQuery, setChallengeQuery] = useState("");
+  const [opponentResults, setOpponentResults] = useState<
+    Array<{ id: string; name: string; nickname: string | null }>
+  >([]);
+  const [searchingOpponents, setSearchingOpponents] = useState(false);
   const [challengePresetId, setChallengePresetId] = useState(
     presets.find((preset) => preset.isReady)?.id ?? "",
   );
@@ -136,6 +139,25 @@ export function ArenaDraftClient({
     if (window.localStorage.getItem("arena-draft-intro-v1") !== "seen")
       setTutorialOpen(true);
   }, []);
+  useEffect(() => {
+    const term = challengeQuery.trim();
+    if (term.length < 2) {
+      setOpponentResults([]);
+      setSearchingOpponents(false);
+      return;
+    }
+    setSearchingOpponents(true);
+    const timer = window.setTimeout(async () => {
+      try {
+        setOpponentResults(await searchDraftOpponentsAction(term));
+      } catch {
+        setOpponentResults([]);
+      } finally {
+        setSearchingOpponents(false);
+      }
+    }, 350);
+    return () => window.clearTimeout(timer);
+  }, [challengeQuery]);
   const closeTutorial = () => {
     window.localStorage.setItem("arena-draft-intro-v1", "seen");
     setTutorialOpen(false);
@@ -749,7 +771,7 @@ export function ArenaDraftClient({
               </div>
             </div>
           </section>
-          <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+          <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-slate-950/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div className="min-w-0 flex-1">
                 <input
@@ -760,7 +782,7 @@ export function ArenaDraftClient({
                 <p className="mt-1 text-xs text-slate-500">
                   Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
                   {allocatedPoints.toLocaleString("pt-BR")}
-                  /4.500
+                  /4.500 disponíveis
                 </p>
               </div>
               <button
@@ -771,7 +793,7 @@ export function ArenaDraftClient({
                 Salvar preset
               </button>
             </div>
-            <div className="mt-4">
+            <div className="mt-4 flex-1">
               {pets.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
                   Escolha mascotes no catálogo para começar.
@@ -786,10 +808,14 @@ export function ArenaDraftClient({
                       Toque em um mascote para editar
                     </span>
                   </div>
-                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-4 2xl:grid-cols-6">
+                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
                     {pets.map((pet) => {
                       const item = species.find(
                         (candidate) => candidate.id === pet.speciesId,
+                      );
+                      const distributed = DRAFT_STAT_KEYS.reduce(
+                        (total, key) => total + pet.stats[key] - 20,
+                        0,
                       );
                       return (
                         <button
@@ -805,17 +831,44 @@ export function ArenaDraftClient({
                               MEGA
                             </span>
                           )}
-                          <img
-                            src={item?.sprite}
-                            alt=""
-                            className="mx-auto h-12 w-12 object-contain"
-                          />
-                          <b className="block truncate text-center text-[9px] text-white">
-                            {item?.name}
-                          </b>
-                          <span className="mt-1 block truncate text-center text-[7px] text-slate-500">
-                            {postureLabels[pet.posture]}
-                          </span>
+                          <div className="flex items-center gap-2 pr-7">
+                            <img
+                              src={item?.sprite}
+                              alt=""
+                              className="h-11 w-11 shrink-0 object-contain"
+                            />
+                            <span className="min-w-0">
+                              <b className="block truncate text-[9px] text-white">
+                                {item?.name}
+                              </b>
+                              <small className="block truncate text-[7px] text-slate-500">
+                                {postureLabels[pet.posture]} · +{distributed}
+                              </small>
+                            </span>
+                          </div>
+                          <div className="mt-2 grid grid-cols-5 gap-0.5">
+                            {DRAFT_STAT_KEYS.map((key) => (
+                              <span
+                                key={key}
+                                className="rounded bg-slate-950/60 px-0.5 py-1 text-center"
+                              >
+                                <b className="block text-[5px] uppercase text-slate-600">
+                                  {
+                                    {
+                                      force: "FOR",
+                                      agility: "AGI",
+                                      charisma: "CAR",
+                                      instinct: "INS",
+                                      vitality: "VIT",
+                                    }[key]
+                                  }
+                                </b>
+                                <strong className="text-[7px] text-slate-200">
+                                  {pet.stats[key]}
+                                </strong>
+                              </span>
+                            ))}
+                          </div>
                         </button>
                       );
                     })}
@@ -823,7 +876,7 @@ export function ArenaDraftClient({
                       (_, index) => (
                         <div
                           key={`empty-${index}`}
-                          className="flex min-h-[82px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[9px] text-slate-700"
+                          className="flex min-h-[103px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[9px] text-slate-700"
                         >
                           {pets.length + index + 1}
                         </div>
@@ -1116,17 +1169,21 @@ export function ArenaDraftClient({
                   </option>
                 ))}
             </select>
-            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
-              {players
-                .filter(
-                  (candidate) =>
-                    !challengeQuery ||
-                    candidate.name
-                      .toLowerCase()
-                      .includes(challengeQuery.toLowerCase()),
-                )
-                .slice(0, 20)
-                .map((candidate) => (
+            <div className="mt-3 space-y-2">
+              {challengeQuery.trim().length < 2 ? (
+                <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-xs text-slate-500">
+                  Digite pelo menos 2 letras do nome ou nickname.
+                </p>
+              ) : searchingOpponents ? (
+                <p className="p-5 text-center text-xs text-fuchsia-200">
+                  Procurando jogador…
+                </p>
+              ) : opponentResults.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 p-5 text-center text-xs text-slate-500">
+                  Nenhum jogador encontrado.
+                </p>
+              ) : (
+                opponentResults.map((candidate) => (
                   <button
                     key={candidate.id}
                     disabled={
@@ -1146,10 +1203,18 @@ export function ArenaDraftClient({
                     }
                     className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left text-xs text-white disabled:opacity-40"
                   >
-                    <span>{candidate.name}</span>
+                    <span className="min-w-0">
+                      <b className="block truncate">{candidate.name}</b>
+                      {candidate.nickname && (
+                        <small className="block truncate text-fuchsia-200/70">
+                          @{candidate.nickname}
+                        </small>
+                      )}
+                    </span>
                     <Swords size={14} className="text-fuchsia-300" />
                   </button>
-                ))}
+                ))
+              )}
             </div>
           </section>
         </div>

@@ -29,7 +29,7 @@ export default async function ArenaDraftPage() {
       stateVersion: { increment: 1 },
     },
   });
-  const [presets, activeMatch, history, players, rankedMatches, disabledMegas] =
+  const [presets, activeMatch, history, rankedMatches, disabledMegas] =
     await Promise.all([
       prisma.arenaDraftPreset.findMany({
         where: { ownerId: player.id },
@@ -59,12 +59,6 @@ export default async function ArenaDraftPage() {
           playerA: { select: { displayName: true } },
           playerB: { select: { displayName: true } },
         },
-      }),
-      prisma.player.findMany({
-        where: { active: true, id: { not: player.id } },
-        orderBy: { displayName: "asc" },
-        take: 250,
-        select: { id: true, displayName: true },
       }),
       prisma.arenaDraftMatch.findMany({
         where: {
@@ -179,7 +173,6 @@ export default async function ArenaDraftPage() {
         id: p.id,
         name: p.name,
         isReady:
-          p.isReady &&
           validateArenaDraftPets(p.petsJson).valid &&
           !(p.petsJson as unknown as ArenaDraftPet[]).some(
             (pet) =>
@@ -218,10 +211,6 @@ export default async function ArenaDraftPage() {
               : "Empate",
       }))}
       leaderboard={board}
-      players={players.map((candidate) => ({
-        id: candidate.id,
-        name: candidate.displayName,
-      }))}
       isAdmin={
         session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
       }

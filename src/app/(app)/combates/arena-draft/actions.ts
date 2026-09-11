@@ -25,6 +25,30 @@ async function currentPlayer() {
   return player;
 }
 
+export async function searchDraftOpponentsAction(query: string) {
+  const player = await currentPlayer();
+  const term = query.trim().slice(0, 40);
+  if (term.length < 2) return [];
+  const players = await prisma.player.findMany({
+    where: {
+      active: true,
+      id: { not: player.id },
+      OR: [
+        { displayName: { contains: term, mode: "insensitive" } },
+        { ptcglNick: { contains: term, mode: "insensitive" } },
+      ],
+    },
+    orderBy: { displayName: "asc" },
+    take: 8,
+    select: { id: true, displayName: true, ptcglNick: true },
+  });
+  return players.map((candidate) => ({
+    id: candidate.id,
+    name: candidate.displayName,
+    nickname: candidate.ptcglNick,
+  }));
+}
+
 async function disabledMegaIdsInPreset(
   pets: ReturnType<typeof validateArenaDraftPets>["pets"],
 ) {
@@ -190,7 +214,7 @@ export async function joinDraftQueueAction(presetId: string) {
   try {
     const player = await currentPlayer();
     const preset = await prisma.arenaDraftPreset.findFirst({
-      where: { id: presetId, ownerId: player.id, isReady: true },
+      where: { id: presetId, ownerId: player.id },
     });
     if (!preset) throw new Error("Selecione um preset completo e válido.");
     if (!validateArenaDraftPets(preset.petsJson).valid)
@@ -286,7 +310,7 @@ export async function createDraftChallengeAction(
       throw new Error("Você não pode desafiar a si mesmo.");
     const [preset, target, occupied] = await Promise.all([
       prisma.arenaDraftPreset.findFirst({
-        where: { id: presetId, ownerId: player.id, isReady: true },
+        where: { id: presetId, ownerId: player.id },
       }),
       prisma.player.findFirst({
         where: { id: targetPlayerId, active: true },
@@ -375,7 +399,7 @@ export async function answerDraftChallengeAction(
       return { success: "Desafio recusado." };
     }
     const preset = await prisma.arenaDraftPreset.findFirst({
-      where: { id: presetId ?? "", ownerId: player.id, isReady: true },
+      where: { id: presetId ?? "", ownerId: player.id },
     });
     if (!preset) throw new Error("Selecione um preset válido para aceitar.");
     if (!validateArenaDraftPets(preset.petsJson).valid)
