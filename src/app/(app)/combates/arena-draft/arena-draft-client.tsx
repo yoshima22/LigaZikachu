@@ -34,6 +34,7 @@ import {
   answerDraftChallengeAction,
   deleteDraftPresetAction,
   duplicateDraftPresetAction,
+  getDraftQueueStatusAction,
   joinDraftQueueAction,
   renameDraftPresetAction,
   searchDraftOpponentsAction,
@@ -158,6 +159,17 @@ export function ArenaDraftClient({
     }, 350);
     return () => window.clearTimeout(timer);
   }, [challengeQuery]);
+  useEffect(() => {
+    if (activeMatch?.state !== "CREATED") return;
+    const timer = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      const status = await getDraftQueueStatusAction(activeMatch.id);
+      if (status.matched)
+        router.push(`/combates/arena-draft/${activeMatch.id}`);
+      else if (status.cancelled) router.refresh();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, [activeMatch?.id, activeMatch?.state, router]);
   const closeTutorial = () => {
     window.localStorage.setItem("arena-draft-intro-v1", "seen");
     setTutorialOpen(false);
@@ -266,7 +278,9 @@ export function ArenaDraftClient({
       if (result.error) toast.error(result.error);
       else {
         toast.success(result.success);
-        router.refresh();
+        if (result.matchId && result.success === "Adversário encontrado!")
+          router.push(`/combates/arena-draft/${result.matchId}`);
+        else router.refresh();
       }
     });
 

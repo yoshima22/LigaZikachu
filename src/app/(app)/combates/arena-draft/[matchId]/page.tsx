@@ -59,6 +59,8 @@ export default async function DraftRoomPage({
     (match.playerAId !== player.id && match.playerBId !== player.id)
   )
     notFound();
+  if (match.state === "CREATED" || match.state === "CANCELLED")
+    redirect("/combates/arena-draft");
   const side = match.playerAId === player.id ? "A" : "B";
   const own = (side === "A"
     ? match.presetASnapshot
@@ -117,7 +119,7 @@ export default async function DraftRoomPage({
           speciesId: p.speciesId,
           name: getPokemonName(p.speciesId),
           sprite: getSpriteUrl(p.speciesId),
-          types,
+          types: types.map((type) => TYPE_LABELS_PT[type] ?? type),
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
           isMega: p.isMega,

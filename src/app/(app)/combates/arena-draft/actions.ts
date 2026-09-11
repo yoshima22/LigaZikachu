@@ -248,12 +248,12 @@ export async function joinDraftQueueAction(presetId: string) {
           data: {
             playerBId: player.id,
             presetBSnapshot: snapshot,
-            state: "TEAM_REVEAL",
+            state: "BAN_PHASE",
             stateVersion: { increment: 1 },
-            deadlineAt: new Date(Date.now() + 30_000),
+            deadlineAt: new Date(Date.now() + 90_000),
             draftJson: {
-              readyA: false,
-              readyB: false,
+              readyA: true,
+              readyB: true,
               bansA: [],
               bansB: [],
               picksA: [],
@@ -283,6 +283,27 @@ export async function joinDraftQueueAction(presetId: string) {
       error:
         error instanceof Error ? error.message : "Falha ao entrar na fila.",
     };
+  }
+}
+
+export async function getDraftQueueStatusAction(matchId: string) {
+  try {
+    const player = await currentPlayer();
+    const match = await prisma.arenaDraftMatch.findFirst({
+      where: {
+        id: matchId,
+        OR: [{ playerAId: player.id }, { playerBId: player.id }],
+      },
+      select: { state: true, playerBId: true },
+    });
+    return {
+      matched: Boolean(
+        match?.playerBId && !["CREATED", "CANCELLED"].includes(match.state),
+      ),
+      cancelled: match?.state === "CANCELLED",
+    };
+  } catch {
+    return { matched: false, cancelled: false };
   }
 }
 
@@ -470,6 +491,7 @@ export async function submitArenaDraftAction(
   try {
     const player = await currentPlayer();
     await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
       const match = await tx.arenaDraftMatch.findUnique({
         where: { id: matchId },
       });
@@ -481,6 +503,8 @@ export async function submitArenaDraftAction(
       const side: "A" | "B" = match.playerAId === player.id ? "A" : "B";
       if (match.state === "TEAM_REVEAL") {
         const draft = match.draftJson as unknown as DraftState;
+        if (side === "A" ? draft.readyA : draft.readyB)
+          throw new Error("Sua equipe já está confirmada.");
         if (side === "A") draft.readyA = true;
         else draft.readyB = true;
         const bothReady = Boolean(draft.readyA && draft.readyB);
@@ -1137,13 +1161,6 @@ export async function heartbeatArenaDraftAction(matchId: string) {
         (presence) => presence.playerId === opponentId,
       );
       const reference = opponentPresence?.lastSeenAt ?? match.updatedAt;
-      const absentMs = now.getTime() - reference.getTime();
-      if (absentMs <= 90_000)
-        return {
-          active: true,
-          opponentOnline: Boolean(opponentPresence && absentMs <= 45_000),
-          graceSeconds: Math.max(0, Math.ceil((90_000 - absentMs) / 1000)),
-        };
       const battleStarted =
         [
           "BATTLE_INIT",
@@ -1151,6 +1168,14 @@ export async function heartbeatArenaDraftAction(matchId: string) {
           "STRATEGY_WINDOW",
           "STRATEGY_RESOLVING",
         ].includes(match.state) || Boolean(match.battleJson);
+      const toleranceMs = battleStarted ? 90_000 : 5 * 60_000;
+      const absentMs = now.getTime() - reference.getTime();
+      if (absentMs <= toleranceMs)
+        return {
+          active: true,
+          opponentOnline: Boolean(opponentPresence && absentMs <= 45_000),
+          graceSeconds: Math.max(0, Math.ceil((toleranceMs - absentMs) / 1000)),
+        };
       const nextSequence = match.eventSequence + 1;
       await tx.arenaDraftAction.create({
         data: {
@@ -1160,7 +1185,10 @@ export async function heartbeatArenaDraftAction(matchId: string) {
           sequence: nextSequence,
           phase: match.state,
           actionType: battleStarted ? "TECHNICAL_FORFEIT" : "DISCONNECT_CANCEL",
-          payloadJson: { absentPlayerId: opponentId, toleranceSeconds: 90 },
+          payloadJson: {
+            absentPlayerId: opponentId,
+            toleranceSeconds: toleranceMs / 1000,
+          },
         },
       });
       if (battleStarted) {

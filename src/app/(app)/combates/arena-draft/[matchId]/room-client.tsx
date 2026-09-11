@@ -172,8 +172,8 @@ export function DraftRoomClient({
     };
     void pulse();
     const fallback = window.setInterval(async () => {
-      if (document.visibilityState !== "visible") return;
       await pulse();
+      if (document.visibilityState !== "visible") return;
       await advanceArenaDraftTimeoutAction(matchId);
       router.refresh();
     }, 30000);
@@ -203,6 +203,7 @@ export function DraftRoomClient({
     banning = state === "BAN_PHASE",
     picking = state === "PICK_PHASE";
   const isMyTurn = turn === ownSide;
+  const ownTeamConfirmed = ownSide === "A" ? progress.readyA : progress.readyB;
   const petById = new Map([...own, ...rival].map((pet) => [pet.id, pet]));
   const stateLabel: Record<string, string> = {
     TEAM_REVEAL: "Apresentação",
@@ -268,11 +269,13 @@ export function DraftRoomClient({
         )}
         {reveal && (
           <button
-            disabled={pending}
+            disabled={pending || ownTeamConfirmed}
             onClick={() => act("reveal")}
-            className="mt-4 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950"
+            className="mt-4 rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:bg-emerald-300/10 disabled:text-emerald-200"
           >
-            Estou pronto para o draft
+            {ownTeamConfirmed
+              ? "Equipe confirmada · aguardando adversário"
+              : "Confirmar equipe e iniciar draft"}
           </button>
         )}
       </header>
