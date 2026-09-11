@@ -85,6 +85,32 @@ export async function deleteDraftPresetAction(id: string) {
   }
 }
 
+export async function duplicateDraftPresetAction(id: string) {
+  try {
+    const player = await currentPlayer();
+    const preset = await prisma.arenaDraftPreset.findFirst({
+      where: { id, ownerId: player.id },
+    });
+    if (!preset) throw new Error("Preset não encontrado.");
+    await prisma.arenaDraftPreset.create({
+      data: {
+        ownerId: player.id,
+        name: `${preset.name} (cópia)`.slice(0, 40),
+        petsJson: preset.petsJson as Prisma.InputJsonValue,
+        isReady:
+          preset.isReady && validateArenaDraftPets(preset.petsJson).valid,
+      },
+    });
+    revalidatePath("/combates/arena-draft");
+    return { success: "Preset duplicado." };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Não foi possível duplicar.",
+    };
+  }
+}
+
 export async function joinDraftQueueAction(presetId: string) {
   try {
     const player = await currentPlayer();

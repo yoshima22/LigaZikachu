@@ -32,6 +32,7 @@ import {
   createDraftChallengeAction,
   answerDraftChallengeAction,
   deleteDraftPresetAction,
+  duplicateDraftPresetAction,
   joinDraftQueueAction,
   saveDraftPresetAction,
 } from "./actions";
@@ -110,6 +111,10 @@ export function ArenaDraftClient({
   const [pets, setPets] = useState<ArenaDraftPet[]>(selected?.pets ?? []);
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
+  const [megaFilter, setMegaFilter] = useState<"ALL" | "MEGA" | "COMMON">(
+    "ALL",
+  );
+  const [catalogOrder, setCatalogOrder] = useState<"NAME" | "ID">("NAME");
   const [catalogPage, setCatalogPage] = useState(1);
   const [challengeQuery, setChallengeQuery] = useState("");
   const [challengePresetId, setChallengePresetId] = useState(
@@ -131,14 +136,22 @@ export function ArenaDraftClient({
   );
   const filtered = useMemo(
     () =>
-      species.filter(
-        (item) =>
-          (type === "ALL" || item.types.includes(type)) &&
-          (!query ||
-            item.name.toLowerCase().includes(query.toLowerCase()) ||
-            String(item.id) === query),
-      ),
-    [species, query, type],
+      species
+        .filter(
+          (item) =>
+            (type === "ALL" || item.types.includes(type)) &&
+            (megaFilter === "ALL" ||
+              (megaFilter === "MEGA" ? item.isMega : !item.isMega)) &&
+            (!query ||
+              item.name.toLowerCase().includes(query.toLowerCase()) ||
+              String(item.id) === query),
+        )
+        .sort((a, b) =>
+          catalogOrder === "NAME"
+            ? a.name.localeCompare(b.name, "pt-BR")
+            : a.id - b.id,
+        ),
+    [species, query, type, megaFilter, catalogOrder],
   );
   const catalogPages = Math.max(
     1,
@@ -454,33 +467,58 @@ export function ArenaDraftClient({
                   </p>
                 ) : (
                   presets.map((p) => (
-                    <button
+                    <div
                       key={p.id}
-                      onClick={() => choosePreset(p)}
-                      className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
+                      className={`flex items-center rounded-xl border ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
                     >
-                      <span>
-                        <b className="block text-sm text-white">{p.name}</b>
-                        <small className="text-slate-500">
-                          {p.pets.length}/12 ·{" "}
-                          {p.pets.filter((x) => x.isMega).length}/2 Megas
-                        </small>
-                      </span>
-                      {p.isReady ? (
-                        <CheckCircle2 className="text-emerald-300" size={18} />
-                      ) : (
-                        <span className="text-[9px] text-amber-300">
-                          RASCUNHO
+                      <button
+                        onClick={() => choosePreset(p)}
+                        className="flex min-w-0 flex-1 items-center justify-between p-3 text-left"
+                      >
+                        <span>
+                          <b className="block text-sm text-white">{p.name}</b>
+                          <small className="text-slate-500">
+                            {p.pets.length}/12 ·{" "}
+                            {p.pets.filter((x) => x.isMega).length}/2 Megas
+                          </small>
                         </span>
-                      )}
-                    </button>
+                        {p.isReady ? (
+                          <CheckCircle2
+                            className="text-emerald-300"
+                            size={18}
+                          />
+                        ) : (
+                          <span className="text-[9px] text-amber-300">
+                            RASCUNHO
+                          </span>
+                        )}
+                      </button>
+                      <button
+                        title="Duplicar preset"
+                        disabled={pending}
+                        onClick={() =>
+                          start(async () => {
+                            const result = await duplicateDraftPresetAction(
+                              p.id,
+                            );
+                            result.error
+                              ? toast.error(result.error)
+                              : toast.success(result.success);
+                            router.refresh();
+                          })
+                        }
+                        className="mr-2 rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-cyan-200"
+                      >
+                        <Copy size={14} />
+                      </button>
+                    </div>
                   ))
                 )}
               </div>
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <h2 className="font-black text-white">Catálogo livre</h2>
-              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_150px]">
+              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_145px_125px_130px]">
                 <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3">
                   <Search size={14} />
                   <input
@@ -507,6 +545,28 @@ export function ArenaDraftClient({
                       {TYPE_LABELS_PT[t] ?? t}
                     </option>
                   ))}
+                </select>
+                <select
+                  value={megaFilter}
+                  onChange={(e) => {
+                    setMegaFilter(e.target.value as typeof megaFilter);
+                    setCatalogPage(1);
+                  }}
+                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                >
+                  <option value="ALL">Todas as formas</option>
+                  <option value="COMMON">Sem Mega</option>
+                  <option value="MEGA">Somente Mega</option>
+                </select>
+                <select
+                  value={catalogOrder}
+                  onChange={(e) =>
+                    setCatalogOrder(e.target.value as typeof catalogOrder)
+                  }
+                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                >
+                  <option value="NAME">Ordem alfabética</option>
+                  <option value="ID">Ordem Pokédex</option>
                 </select>
               </div>
               <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
