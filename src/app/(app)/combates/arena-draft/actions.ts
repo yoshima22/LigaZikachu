@@ -9,6 +9,7 @@ import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import {
   runArenaCombat,
   type ArenaCombatRuntime,
@@ -27,11 +28,15 @@ async function currentPlayer() {
 async function disabledMegaIdsInPreset(
   pets: ReturnType<typeof validateArenaDraftPets>["pets"],
 ) {
+  const managedMegaIds = new Set(CUSTOM_MEGA_POKEMON_IDS);
   const ids = [
     ...new Set(
       pets
         .map((pet) => pet.speciesId)
-        .filter((speciesId) => MEGA_FORM_IDS.has(speciesId)),
+        .filter(
+          (speciesId) =>
+            MEGA_FORM_IDS.has(speciesId) && managedMegaIds.has(speciesId),
+        ),
     ),
   ];
   if (!ids.length) return [];

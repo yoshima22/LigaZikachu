@@ -9,6 +9,7 @@ import {
 } from "@/lib/mascot-data";
 import { validateArenaDraftPets, type ArenaDraftPet } from "@/lib/arena-draft";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { ArenaDraftClient } from "./arena-draft-client";
 
 export const dynamic = "force-dynamic";
@@ -84,17 +85,18 @@ export default async function ArenaDraftPage() {
       }),
       prisma.eggPokemonToggle.findMany({
         where: {
-          pokemonId: { in: [...MEGA_FORM_IDS] },
+          pokemonId: { in: CUSTOM_MEGA_POKEMON_IDS },
           disabled: true,
         },
         select: { pokemonId: true },
       }),
     ]);
   const disabledMegaIds = new Set(disabledMegas.map((row) => row.pokemonId));
+  const customMegaIds = new Set(CUSTOM_MEGA_POKEMON_IDS);
   const species = Array.from(
     new Set([...WISHLIST_POKEMON_IDS, ...MEGA_FORM_IDS]),
   )
-    .filter((id) => !MEGA_FORM_IDS.has(id) || !disabledMegaIds.has(id))
+    .filter((id) => !customMegaIds.has(id) || !disabledMegaIds.has(id))
     .map((id) => ({
       id,
       name: getPokemonName(id),
@@ -180,7 +182,9 @@ export default async function ArenaDraftPage() {
           p.isReady &&
           validateArenaDraftPets(p.petsJson).valid &&
           !(p.petsJson as unknown as ArenaDraftPet[]).some(
-            (pet) => pet.isMega && disabledMegaIds.has(pet.speciesId),
+            (pet) =>
+              customMegaIds.has(pet.speciesId) &&
+              disabledMegaIds.has(pet.speciesId),
           ),
         pets: p.petsJson as unknown as ArenaDraftPet[],
         updatedAt: p.updatedAt.toISOString(),
