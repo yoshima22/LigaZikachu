@@ -4,6 +4,9 @@ import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 export const ARENA_DRAFT_RULES = {
   teamSize: 12,
   statBudget: 4500,
+  // Teto por status: a soma dos pontos distribuídos (acima dos 20 iniciais) de
+  // um mesmo status, somando todos os mascotes, não pode passar de 900.
+  perStatBudget: 900,
   baseStat: 20,
   maxMegas: 2,
   bansPerPlayer: 3,
@@ -116,8 +119,28 @@ export function validateArenaDraftPets(input: unknown) {
     errors.push(
       `O time ultrapassou o limite: ${Math.max(0, distributed).toLocaleString("pt-BR")}/4.500 pontos além dos status iniciais.`,
     );
+  // Teto por status (soma dos pontos distribuídos daquele status no time).
+  for (const key of DRAFT_STAT_KEYS) {
+    const column = pets.reduce(
+      (sum, pet) => sum + (pet.stats[key] - ARENA_DRAFT_RULES.baseStat),
+      0,
+    );
+    if (column > ARENA_DRAFT_RULES.perStatBudget)
+      errors.push(
+        `${DRAFT_STAT_LABELS[key]} ultrapassou ${ARENA_DRAFT_RULES.perStatBudget} pontos no time (${column.toLocaleString("pt-BR")}).`,
+      );
+  }
   return { valid: errors.length === 0, errors, pets };
 }
+
+export const DRAFT_STAT_LABELS: Record<(typeof DRAFT_STAT_KEYS)[number], string> =
+  {
+    force: "Força",
+    agility: "Agilidade",
+    charisma: "Carisma",
+    instinct: "Instinto",
+    vitality: "Vitalidade",
+  };
 
 export function publicDraftPet(pet: ArenaDraftPet) {
   return {

@@ -193,6 +193,7 @@ export default async function ArenaDraftPage() {
               disabledMegaIds.has(pet.speciesId),
           ),
         pets: p.petsJson as unknown as ArenaDraftPet[],
+        needsReview: p.needsReview,
         updatedAt: p.updatedAt.toISOString(),
       }))}
       activeMatch={

@@ -55,6 +55,7 @@ type Preset = {
   name: string;
   isReady: boolean;
   pets: ArenaDraftPet[];
+  needsReview?: boolean;
   updatedAt: string;
 };
 type Match = {
@@ -222,6 +223,19 @@ export function ArenaDraftClient({
         0,
       ),
     0,
+  );
+  // Pontos distribuídos por status no time (teto de 900 por coluna).
+  const columnDistributed = Object.fromEntries(
+    DRAFT_STAT_KEYS.map((key) => [
+      key,
+      pets.reduce(
+        (sum, pet) => sum + (pet.stats[key] - ARENA_DRAFT_RULES.baseStat),
+        0,
+      ),
+    ]),
+  ) as Record<(typeof DRAFT_STAT_KEYS)[number], number>;
+  const overStatCap = DRAFT_STAT_KEYS.some(
+    (key) => columnDistributed[key] > ARENA_DRAFT_RULES.perStatBudget,
   );
   const choosePreset = (preset: Preset) => {
     setSelectedId(preset.id);
@@ -586,8 +600,13 @@ export function ArenaDraftClient({
                                 {p.pets.length}/12 ·{" "}
                                 {p.pets.filter((x) => x.isMega).length}/2 Megas
                               </small>
+                              {p.needsReview && (
+                                <span className="mt-0.5 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-300">
+                                  ⚠ Revisar pontos
+                                </span>
+                              )}
                             </span>
-                            {p.isReady && (
+                            {p.isReady && !p.needsReview && (
                               <CheckCircle2
                                 className="shrink-0 text-emerald-300"
                                 size={16}
@@ -819,6 +838,53 @@ export function ArenaDraftClient({
                     }}
                   />
                 </div>
+                {/* Uso por status: teto de 900 em cada coluna. */}
+                <div className="mt-2 grid max-w-md grid-cols-5 gap-1">
+                  {(
+                    [
+                      ["FOR", "force"],
+                      ["AGI", "agility"],
+                      ["CAR", "charisma"],
+                      ["INS", "instinct"],
+                      ["VIT", "vitality"],
+                    ] as const
+                  ).map(([label, key]) => {
+                    const used = columnDistributed[key];
+                    const over = used > ARENA_DRAFT_RULES.perStatBudget;
+                    return (
+                      <div key={key} className="text-center">
+                        <div className="mb-0.5 flex justify-between text-[8px] font-bold uppercase">
+                          <span className="text-slate-500">{label}</span>
+                          <span
+                            className={
+                              over ? "text-rose-300" : "text-slate-400"
+                            }
+                          >
+                            {used}/900
+                          </span>
+                        </div>
+                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                          <div
+                            className="h-full rounded-full"
+                            style={{
+                              width: `${Math.min(100, (used / ARENA_DRAFT_RULES.perStatBudget) * 100)}%`,
+                              background: over
+                                ? "#fb7185"
+                                : used === ARENA_DRAFT_RULES.perStatBudget
+                                  ? "#6ee7b7"
+                                  : "#22d3ee",
+                            }}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                {overStatCap && (
+                  <p className="mt-1 text-[10px] font-bold text-rose-300">
+                    Algum status passou de 900. Reduza para poder competir.
+                  </p>
+                )}
               </div>
               <button
                 disabled={pending}
@@ -828,6 +894,15 @@ export function ArenaDraftClient({
                 Salvar preset
               </button>
             </div>
+            {selected?.needsReview && (
+              <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-[11px] leading-4 text-amber-100">
+                <b>Revise este preset.</b> Uma nova regra limita cada status a 900
+                pontos no time. Ajustamos automaticamente os status que passavam
+                do limite e devolvemos os pontos excedentes como{" "}
+                <b>pontos livres</b> — redistribua-os e salve para atualizar o
+                time.
+              </div>
+            )}
             <div className="mt-4 flex-1">
               {pets.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
@@ -1079,9 +1154,22 @@ export function ArenaDraftClient({
                                         ARENA_DRAFT_RULES.statBudget -
                                           otherDistributed,
                                       );
+                                    // Teto de 900 por status (coluna) no time.
+                                    const otherColumn =
+                                      columnDistributed[key] -
+                                      (pet.stats[key] -
+                                        ARENA_DRAFT_RULES.baseStat);
+                                    const columnMax =
+                                      ARENA_DRAFT_RULES.baseStat +
+                                      Math.max(
+                                        0,
+                                        ARENA_DRAFT_RULES.perStatBudget -
+                                          otherColumn,
+                                      );
                                     const capped = Math.min(
                                       max,
                                       budgetMax,
+                                      columnMax,
                                       Number(raw),
                                     );
                                     setStatDrafts((drafts) => ({
@@ -1108,6 +1196,17 @@ export function ArenaDraftClient({
                                         ARENA_DRAFT_RULES.statBudget -
                                           otherDistributed,
                                       );
+                                    const otherColumn =
+                                      columnDistributed[key] -
+                                      (pet.stats[key] -
+                                        ARENA_DRAFT_RULES.baseStat);
+                                    const columnMax =
+                                      ARENA_DRAFT_RULES.baseStat +
+                                      Math.max(
+                                        0,
+                                        ARENA_DRAFT_RULES.perStatBudget -
+                                          otherColumn,
+                                      );
                                     updatePet(pet.id, {
                                       stats: {
                                         ...pet.stats,
@@ -1116,6 +1215,7 @@ export function ArenaDraftClient({
                                           Math.min(
                                             max,
                                             budgetMax,
+                                            columnMax,
                                             pet.stats[key] || 20,
                                           ),
                                         ),

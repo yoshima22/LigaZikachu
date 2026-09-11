@@ -112,6 +112,8 @@ export async function saveDraftPresetAction(input: {
           name,
           petsJson: validation.pets as unknown as Prisma.InputJsonValue,
           isReady,
+          // Ao salvar, o dono revisou o preset: limpa o aviso de revisão.
+          needsReview: false,
         },
       });
     } else {
