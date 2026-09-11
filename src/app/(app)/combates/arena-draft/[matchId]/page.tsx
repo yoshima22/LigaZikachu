@@ -48,6 +48,11 @@ export default async function DraftRoomPage({
   const { matchId } = await params;
   const match = await prisma.arenaDraftMatch.findUnique({
     where: { id: matchId },
+    include: {
+      playerA: { select: { displayName: true } },
+      playerB: { select: { displayName: true } },
+      actions: { orderBy: { sequence: "desc" }, take: 12 },
+    },
   });
   if (
     !match ||
@@ -68,12 +73,14 @@ export default async function DraftRoomPage({
     picksB: [],
     turn: "A",
   }) as Record<string, unknown>;
-  const disabled = new Set([
-    ...((draft.bansA as string[]) ?? []),
-    ...((draft.bansB as string[]) ?? []),
-    ...((draft.picksA as string[]) ?? []),
-    ...((draft.picksB as string[]) ?? []),
-  ]);
+  const bansA = (draft.bansA as string[]) ?? [];
+  const bansB = (draft.bansB as string[]) ?? [];
+  const picksA = (draft.picksA as string[]) ?? [];
+  const picksB = (draft.picksB as string[]) ?? [];
+  const ownBans = side === "A" ? bansB : bansA;
+  const rivalBans = side === "A" ? bansA : bansB;
+  const ownPicks = side === "A" ? picksA : picksB;
+  const rivalPicks = side === "A" ? picksB : picksA;
   const battle = match.battleJson as unknown as BattleData | null;
   const ownEligible = new Set(
     side === "A" ? (battle?.eligibleA ?? []) : (battle?.eligibleB ?? []),
@@ -82,10 +89,20 @@ export default async function DraftRoomPage({
     side === "A" ? (battle?.activeA ?? []) : (battle?.activeB ?? []);
   const ownPostures =
     side === "A" ? (battle?.posturesA ?? {}) : (battle?.posturesB ?? {});
-  const map = (pets: ArenaDraftPet[] | null, strategy = false) =>
+  const map = (
+    pets: ArenaDraftPet[] | null,
+    strategy = false,
+    banned: string[] = [],
+    picked: string[] = [],
+  ) =>
     pets
       ?.filter((p) => !strategy || ownEligible.has(p.id))
       .map((p) => {
+        const status: "AVAILABLE" | "BANNED" | "PICKED" = banned.includes(p.id)
+          ? "BANNED"
+          : picked.includes(p.id)
+            ? "PICKED"
+            : "AVAILABLE";
         const types = getPokemonTypes(p.speciesId);
         const advantages = [
           ...new Set(types.flatMap((type) => TYPE_ADVANTAGE[type] ?? [])),
@@ -102,7 +119,7 @@ export default async function DraftRoomPage({
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
           isMega: p.isMega,
-          disabled: disabled.has(p.id),
+          status,
           posture: ownPostures[p.id] ?? p.posture,
           hp: battle?.runtime?.hp[p.id] ?? null,
         };
@@ -113,8 +130,40 @@ export default async function DraftRoomPage({
       state={match.state}
       turn={String(draft.turn ?? "")}
       ownSide={side}
-      own={map(own, match.state === "STRATEGY_WINDOW")}
-      rival={map(rival)}
+      playerNames={{
+        own:
+          side === "A"
+            ? match.playerA.displayName
+            : (match.playerB?.displayName ?? "Rival"),
+        rival:
+          side === "A"
+            ? (match.playerB?.displayName ?? "Rival")
+            : match.playerA.displayName,
+      }}
+      deadlineAt={match.deadlineAt?.toISOString() ?? null}
+      progress={{
+        readyA: Boolean(draft.readyA),
+        readyB: Boolean(draft.readyB),
+        bansA: bansA.length,
+        bansB: bansB.length,
+        picksA: picksA.length,
+        picksB: picksB.length,
+      }}
+      own={map(own, match.state === "STRATEGY_WINDOW", ownBans, ownPicks)}
+      rival={map(rival, false, rivalBans, rivalPicks)}
+      activity={match.actions.reverse().map((action) => ({
+        sequence: action.sequence,
+        actor:
+          action.actorId === player.id
+            ? "Você"
+            : side === "A"
+              ? (match.playerB?.displayName ?? "Rival")
+              : match.playerA.displayName,
+        type: action.actionType,
+        targetId: String(
+          (action.payloadJson as { targetId?: string } | null)?.targetId ?? "",
+        ),
+      }))}
       battle={battle}
       strategy={
         match.state === "STRATEGY_WINDOW"

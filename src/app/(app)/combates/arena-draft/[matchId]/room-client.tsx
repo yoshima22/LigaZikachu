@@ -50,7 +50,7 @@ type Pet = {
   advantages: string[];
   weaknesses: string[];
   isMega: boolean;
-  disabled: boolean;
+  status: "AVAILABLE" | "BANNED" | "PICKED";
   posture: Role;
   hp: number | null;
 };
@@ -81,6 +81,10 @@ export function DraftRoomClient({
   state,
   turn,
   ownSide,
+  playerNames,
+  deadlineAt,
+  progress,
+  activity,
   own,
   rival,
   battle,
@@ -90,6 +94,22 @@ export function DraftRoomClient({
   state: string;
   turn: string;
   ownSide: string;
+  playerNames: { own: string; rival: string };
+  deadlineAt: string | null;
+  progress: {
+    readyA: boolean;
+    readyB: boolean;
+    bansA: number;
+    bansB: number;
+    picksA: number;
+    picksB: number;
+  };
+  activity: Array<{
+    sequence: number;
+    actor: string;
+    type: string;
+    targetId: string;
+  }>;
   own: Pet[];
   rival: Pet[];
   battle: Battle;
@@ -168,9 +188,25 @@ export function DraftRoomClient({
       r.error ? toast.error(r.error) : toast.success(r.success);
       router.refresh();
     });
+  useEffect(() => {
+    if (state !== "BATTLE_INIT") return;
+    const timer = window.setTimeout(() => fight(), 700);
+    return () => window.clearTimeout(timer);
+  }, [state]);
   const reveal = state === "TEAM_REVEAL",
     banning = state === "BAN_PHASE",
     picking = state === "PICK_PHASE";
+  const isMyTurn = turn === ownSide;
+  const petById = new Map([...own, ...rival].map((pet) => [pet.id, pet]));
+  const stateLabel: Record<string, string> = {
+    TEAM_REVEAL: "Apresentação",
+    BAN_PHASE: "Bans",
+    PICK_PHASE: "Draft",
+    BATTLE_INIT: "Preparação",
+    STRATEGY_WINDOW: "Combate",
+    FINISHED: "Resultado",
+    CANCELLED: "Cancelada",
+  };
   return (
     <div className="space-y-5">
       <header className="rounded-3xl border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top,rgba(168,85,247,.2),transparent_45%),#050916] p-6">
@@ -210,8 +246,20 @@ export function DraftRoomClient({
         <p className="mt-2 text-sm text-slate-400">
           {state === "STRATEGY_WINDOW"
             ? "Formação e posturas ficam secretas até os dois confirmarem."
-            : `Estado ${state} · ${turn ? `vez do lado ${turn}` : "aguarde o servidor"}`}
+            : banning || picking
+              ? isMyTurn
+                ? "Sua vez — escolha destacada e confirme antes do cronômetro acabar."
+                : `Vez de ${playerNames.rival} — acompanhe a escolha em tempo real.`
+              : `Etapa: ${stateLabel[state] ?? state}`}
         </p>
+        {(reveal || banning || picking) && (
+          <DraftProgress
+            state={state}
+            ownSide={ownSide}
+            progress={progress}
+            deadlineAt={deadlineAt}
+          />
+        )}
         {reveal && (
           <button
             disabled={pending}
@@ -245,6 +293,9 @@ export function DraftRoomClient({
             action="Banir"
             onAction={act}
           />
+          {(banning || picking) && activity.length > 0 && (
+            <DraftActivity activity={activity} petById={petById} />
+          )}
         </div>
       )}
       {state === "BATTLE_INIT" && (
@@ -254,13 +305,12 @@ export function DraftRoomClient({
             Seis entram em campo e os três restantes formam o banco. O combate
             pausa nos turnos 20, 35 e 45.
           </p>
-          <button
-            disabled={pending}
-            onClick={fight}
-            className="mt-4 rounded-xl bg-amber-300 px-5 py-3 text-xs font-black text-slate-950"
-          >
-            Iniciar combate automático
-          </button>
+          <div className="mx-auto mt-4 h-1.5 w-40 overflow-hidden rounded-full bg-white/10">
+            <div className="h-full animate-pulse rounded-full bg-gradient-to-r from-cyan-300 to-fuchsia-400" />
+          </div>
+          <p className="mt-2 text-[10px] font-bold uppercase tracking-widest text-amber-200">
+            Sincronizando combatentes…
+          </p>
         </div>
       )}
       {state === "FINISHED" && battle && <Replay battle={battle} />}
@@ -505,8 +555,15 @@ function Team({
         {pets.map((p) => (
           <article
             key={p.id}
-            className={`rounded-xl border p-3 text-center ${p.disabled ? "border-rose-400/20 bg-rose-950/20 opacity-40" : "border-white/10"}`}
+            className={`relative rounded-xl border p-3 text-center ${p.status === "BANNED" ? "border-rose-400/30 bg-rose-950/30 opacity-55" : p.status === "PICKED" ? "border-cyan-300/45 bg-cyan-300/10" : "border-white/10"}`}
           >
+            {p.status !== "AVAILABLE" && (
+              <span
+                className={`absolute right-2 top-2 rounded-full px-2 py-1 text-[8px] font-black ${p.status === "BANNED" ? "bg-rose-500/20 text-rose-200" : "bg-cyan-300/15 text-cyan-200"}`}
+              >
+                {p.status === "BANNED" ? "BANIDO" : "ESCOLHIDO"}
+              </span>
+            )}
             <img
               src={p.sprite}
               alt=""
@@ -532,7 +589,7 @@ function Team({
                 </p>
               </div>
             )}
-            {actionable && !p.disabled && (
+            {actionable && p.status === "AVAILABLE" && (
               <button
                 onClick={() => onAction(p.id)}
                 className="mt-2 w-full rounded-lg bg-fuchsia-500 px-2 py-2 text-[10px] font-bold text-white"
@@ -544,6 +601,127 @@ function Team({
         ))}
       </div>
     </section>
+  );
+}
+function DraftProgress({
+  state,
+  ownSide,
+  progress,
+  deadlineAt,
+}: {
+  state: string;
+  ownSide: string;
+  progress: {
+    readyA: boolean;
+    readyB: boolean;
+    bansA: number;
+    bansB: number;
+    picksA: number;
+    picksB: number;
+  };
+  deadlineAt: string | null;
+}) {
+  const ownReady = ownSide === "A" ? progress.readyA : progress.readyB;
+  const rivalReady = ownSide === "A" ? progress.readyB : progress.readyA;
+  const ownBans = ownSide === "A" ? progress.bansA : progress.bansB;
+  const rivalBans = ownSide === "A" ? progress.bansB : progress.bansA;
+  const ownPicks = ownSide === "A" ? progress.picksA : progress.picksB;
+  const rivalPicks = ownSide === "A" ? progress.picksB : progress.picksA;
+  const steps = [
+    {
+      label: "Equipes",
+      value: `${Number(ownReady) + Number(rivalReady)}/2`,
+      done: state !== "TEAM_REVEAL",
+    },
+    { label: "Seus bans", value: `${ownBans}/3`, done: ownBans === 3 },
+    { label: "Bans rivais", value: `${rivalBans}/3`, done: rivalBans === 3 },
+    { label: "Sua formação", value: `${ownPicks}/6`, done: ownPicks === 6 },
+    {
+      label: "Formação rival",
+      value: `${rivalPicks}/6`,
+      done: rivalPicks === 6,
+    },
+  ];
+  return (
+    <div className="mt-5 rounded-2xl bg-slate-950/65 p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-1 items-center gap-1">
+          {steps.map((step, index) => (
+            <div key={step.label} className="flex min-w-0 flex-1 items-center">
+              <div className="min-w-0 flex-1 text-center">
+                <div
+                  className={`mx-auto h-2 w-2 rounded-full ${step.done ? "bg-cyan-300 shadow-[0_0_12px_#67e8f9]" : "bg-slate-600"}`}
+                />
+                <b className="mt-1 block truncate text-[8px] uppercase text-slate-400">
+                  {step.label}
+                </b>
+                <span className="text-[10px] font-black text-white">
+                  {step.value}
+                </span>
+              </div>
+              {index < steps.length - 1 && (
+                <i
+                  className={`h-px w-3 sm:w-7 ${step.done ? "bg-cyan-300/60" : "bg-slate-700"}`}
+                />
+              )}
+            </div>
+          ))}
+        </div>
+        {deadlineAt && (
+          <span className="rounded-xl border border-cyan-300/20 bg-cyan-300/5 px-3 py-2 text-xs font-black text-cyan-200">
+            <Countdown deadlineAt={deadlineAt} />
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+function DraftActivity({
+  activity,
+  petById,
+}: {
+  activity: Array<{
+    sequence: number;
+    actor: string;
+    type: string;
+    targetId: string;
+  }>;
+  petById: Map<string, Pet>;
+}) {
+  return (
+    <aside className="lg:col-span-2 rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+      <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
+        Linha do draft
+      </p>
+      <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+        {activity
+          .filter((entry) => entry.type !== "READY")
+          .map((entry) => {
+            const pet = petById.get(entry.targetId);
+            return (
+              <div
+                key={entry.sequence}
+                className="flex min-w-44 items-center gap-2 rounded-xl bg-white/[.035] px-3 py-2"
+              >
+                {pet && (
+                  <img
+                    src={pet.sprite}
+                    alt=""
+                    className="h-9 w-9 object-contain"
+                  />
+                )}
+                <span className="min-w-0 text-[9px] text-slate-400">
+                  <b className="block truncate text-slate-200">{entry.actor}</b>
+                  {entry.type === "BAN" ? "baniu" : "escolheu"}{" "}
+                  <strong className="text-white">
+                    {pet?.name ?? "mascote"}
+                  </strong>
+                </span>
+              </div>
+            );
+          })}
+      </div>
+    </aside>
   );
 }
 function Replay({ battle }: { battle: NonNullable<Battle> }) {
