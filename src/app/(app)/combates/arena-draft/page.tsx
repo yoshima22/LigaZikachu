@@ -7,7 +7,11 @@ import {
   getSpriteUrl,
   WISHLIST_POKEMON_IDS,
 } from "@/lib/mascot-data";
-import { validateArenaDraftPets, type ArenaDraftPet } from "@/lib/arena-draft";
+import {
+  ARENA_DRAFT_RULES,
+  validateArenaDraftPets,
+  type ArenaDraftPet,
+} from "@/lib/arena-draft";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { ArenaDraftClient } from "./arena-draft-client";
@@ -159,13 +163,22 @@ export default async function ArenaDraftPage() {
       }, new Map())
       .values(),
   )
-    .filter((r) => r.matches >= 5)
+    .filter((r) => r.matches >= 1)
     .map((row) => ({
       ...row,
       rating: ratings.get(row.playerId) ?? 1000,
       winRate: Math.round((row.wins / row.matches) * 100),
+      // Abaixo do mínimo de partidas o jogador aparece, mas marcado como
+      // provisório (ainda não conta para o topo oficial da temporada).
+      provisional: row.matches < ARENA_DRAFT_RULES.minimumRankedMatches,
     }))
-    .sort((a, b) => b.rating - a.rating || b.wins - a.wins);
+    // Qualificados primeiro (por rating); provisórios depois.
+    .sort(
+      (a, b) =>
+        Number(a.provisional) - Number(b.provisional) ||
+        b.rating - a.rating ||
+        b.wins - a.wins,
+    );
   return (
     <ArenaDraftClient
       species={species}

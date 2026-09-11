@@ -101,6 +101,7 @@ export function ArenaDraftClient({
     matches: number;
     rating: number;
     winRate: number;
+    provisional: boolean;
   }>;
   isAdmin: boolean;
 }) {
@@ -1347,8 +1348,10 @@ export function ArenaDraftClient({
               <Trophy size={19} /> Ranking Beta
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Temporada mensal · rating Elo. Mínimo de 5 partidas; cancelamentos
-              e partidas com admin não contam.
+              Temporada mensal · rating Elo. Todos os jogos válidos entram; com
+              menos de 5 partidas o jogador fica{" "}
+              <b className="text-amber-300">provisório</b> (não disputa o topo
+              oficial). Cancelamentos e partidas com admin não contam.
             </p>
             <Link
               href="/combates/arena-draft/ranking-mascotes"
@@ -1367,8 +1370,19 @@ export function ArenaDraftClient({
                     key={r.playerId}
                     className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/10 p-3"
                   >
-                    <b className="text-cyan-300">#{i + 1}</b>
-                    <span className="font-bold text-white">{r.name}</span>
+                    <b className={r.provisional ? "text-slate-500" : "text-cyan-300"}>
+                      {r.provisional ? "—" : `#${i + 1}`}
+                    </b>
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate font-bold text-white">
+                        {r.name}
+                      </span>
+                      {r.provisional && (
+                        <span className="shrink-0 rounded-full border border-amber-300/30 bg-amber-300/10 px-2 py-0.5 text-[9px] font-black uppercase text-amber-300">
+                          Provisório {r.matches}/5
+                        </span>
+                      )}
+                    </span>
                     <span className="text-right text-xs text-slate-400">
                       <b className="block text-fuchsia-300">{r.rating} pts</b>
                       {r.wins}V · {r.losses}D · {r.draws}E · {r.winRate}%
