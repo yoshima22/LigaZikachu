@@ -28,6 +28,8 @@ import {
   type ArenaDraftPet,
 } from "@/lib/arena-draft";
 import { PERSONALITY_LABEL, TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { COMBAT_ROLE_DESCRIPTIONS, type CombatRole } from "@/lib/combat-roles";
+import { PERSONALITY_DESIGN_BY_KEY } from "@/lib/personality-design";
 import {
   cancelDraftQueueAction,
   createDraftChallengeAction,
@@ -802,6 +804,20 @@ export function ArenaDraftClient({
                   {allocatedPoints.toLocaleString("pt-BR")}
                   /4.500 disponíveis
                 </p>
+                <div className="mt-1 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
+                  <div
+                    className="h-full rounded-full transition-all duration-300"
+                    style={{
+                      width: `${Math.min(100, (allocatedPoints / ARENA_DRAFT_RULES.statBudget) * 100)}%`,
+                      background:
+                        allocatedPoints > ARENA_DRAFT_RULES.statBudget
+                          ? "#fb7185"
+                          : allocatedPoints === ARENA_DRAFT_RULES.statBudget
+                            ? "#6ee7b7"
+                            : "linear-gradient(90deg,#22d3ee,#d946ef)",
+                    }}
+                  />
+                </div>
               </div>
               <button
                 disabled={pending}
@@ -826,7 +842,7 @@ export function ArenaDraftClient({
                       Toque em um mascote para editar
                     </span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 xl:grid-cols-3 2xl:grid-cols-4">
+                  <div className="grid grid-cols-3 gap-2">
                     {pets.map((pet) => {
                       const item = species.find(
                         (candidate) => candidate.id === pet.speciesId,
@@ -839,38 +855,38 @@ export function ArenaDraftClient({
                         <button
                           key={pet.id}
                           onClick={() => setEditingPetId(pet.id)}
-                          className={`relative min-w-0 rounded-xl border p-2 text-left transition ${editingPetId === pet.id ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,.08)]" : "border-white/10 bg-white/[.025] hover:border-white/20"}`}
+                          className={`relative min-w-0 rounded-xl border p-2.5 text-left transition ${editingPetId === pet.id ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,.08)]" : "border-white/10 bg-white/[.025] hover:border-white/20"}`}
                         >
-                          <span className="absolute left-1.5 top-1.5 text-[8px] font-black text-slate-500">
+                          <span className="absolute left-1.5 top-1.5 text-[9px] font-black text-slate-500">
                             {pet.slot + 1}
                           </span>
                           {pet.isMega && (
-                            <span className="absolute right-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[6px] font-black text-fuchsia-200">
+                            <span className="absolute right-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[7px] font-black text-fuchsia-200">
                               MEGA
                             </span>
                           )}
-                          <div className="flex items-center gap-2 pr-7">
+                          <div className="flex items-center gap-2 pr-6">
                             <img
                               src={item?.sprite}
                               alt=""
-                              className="h-11 w-11 shrink-0 object-contain"
+                              className="h-14 w-14 shrink-0 object-contain [image-rendering:pixelated]"
                             />
                             <span className="min-w-0">
-                              <b className="block truncate text-[9px] text-white">
+                              <b className="block truncate text-xs text-white">
                                 {item?.name}
                               </b>
-                              <small className="block truncate text-[7px] text-slate-500">
+                              <small className="block truncate text-[10px] text-slate-500">
                                 {postureLabels[pet.posture]} · +{distributed}
                               </small>
                             </span>
                           </div>
-                          <div className="mt-2 grid grid-cols-5 gap-0.5">
+                          <div className="mt-2 grid grid-cols-5 gap-1">
                             {DRAFT_STAT_KEYS.map((key) => (
                               <span
                                 key={key}
-                                className="rounded bg-slate-950/60 px-0.5 py-1 text-center"
+                                className="rounded bg-slate-950/60 px-0.5 py-1.5 text-center"
                               >
-                                <b className="block text-[5px] uppercase text-slate-600">
+                                <b className="block text-[8px] uppercase text-slate-500">
                                   {
                                     {
                                       force: "FOR",
@@ -881,7 +897,7 @@ export function ArenaDraftClient({
                                     }[key]
                                   }
                                 </b>
-                                <strong className="text-[7px] text-slate-200">
+                                <strong className="text-sm text-white">
                                   {pet.stats[key]}
                                 </strong>
                               </span>
@@ -894,7 +910,7 @@ export function ArenaDraftClient({
                       (_, index) => (
                         <div
                           key={`empty-${index}`}
-                          className="flex min-h-[103px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[9px] text-slate-700"
+                          className="flex min-h-[128px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[10px] text-slate-700"
                         >
                           {pets.length + index + 1}
                         </div>
@@ -974,6 +990,30 @@ export function ArenaDraftClient({
                                   {pet.isMega
                                     ? "Forma Mega · +10"
                                     : "Forma comum"}
+                                </div>
+                              </div>
+                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.04] p-2.5">
+                                  <p className="text-[9px] font-black uppercase tracking-wider text-fuchsia-300">
+                                    {PERSONALITY_LABEL[pet.personality] ??
+                                      pet.personality}{" "}
+                                    · efeito em combate
+                                  </p>
+                                  <p className="mt-1 text-[11px] leading-4 text-slate-300">
+                                    {PERSONALITY_DESIGN_BY_KEY[pet.personality]
+                                      ?.combat ??
+                                      "Sem efeito de combate específico."}
+                                  </p>
+                                </div>
+                                <div className="rounded-lg border border-[#FFCB05]/25 bg-[#FFCB05]/[.05] p-2.5">
+                                  <p className="text-[9px] font-black uppercase tracking-wider text-[#FFCB05]">
+                                    {postureLabels[pet.posture]} · como atua
+                                  </p>
+                                  <p className="mt-1 text-[11px] leading-4 text-slate-300">
+                                    {COMBAT_ROLE_DESCRIPTIONS[
+                                      pet.posture as CombatRole
+                                    ] ?? ""}
+                                  </p>
                                 </div>
                               </div>
                             </div>
