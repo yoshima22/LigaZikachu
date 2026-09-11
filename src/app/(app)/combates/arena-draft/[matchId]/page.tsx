@@ -136,6 +136,7 @@ export default async function DraftRoomPage({
     <DraftRoomClient
       matchId={match.id}
       state={match.state}
+      stateVersion={match.stateVersion}
       turn={String(draft.turn ?? "")}
       ownSide={side}
       playerNames={{

@@ -307,6 +307,32 @@ export async function getDraftQueueStatusAction(matchId: string) {
   }
 }
 
+/** Sincronizacao leve da sala: o cliente consulta a cada ~1,8s e so recarrega
+ * quando a versao muda, em vez de depender do realtime do Supabase. Tambem
+ * sinaliza quando o prazo da fase venceu para disparar o avanco automatico. */
+export async function getDraftSyncStateAction(matchId: string) {
+  try {
+    const player = await currentPlayer();
+    const match = await prisma.arenaDraftMatch.findFirst({
+      where: {
+        id: matchId,
+        OR: [{ playerAId: player.id }, { playerBId: player.id }],
+      },
+      select: { stateVersion: true, state: true, deadlineAt: true },
+    });
+    if (!match) return { stateVersion: -1, state: "CANCELLED", deadlinePassed: false };
+    return {
+      stateVersion: match.stateVersion,
+      state: match.state,
+      deadlinePassed: Boolean(
+        match.deadlineAt && match.deadlineAt.getTime() <= Date.now(),
+      ),
+    };
+  } catch {
+    return { stateVersion: -1, state: "", deadlinePassed: false };
+  }
+}
+
 export async function cancelDraftQueueAction(matchId: string) {
   const player = await currentPlayer();
   await prisma.arenaDraftMatch.updateMany({
