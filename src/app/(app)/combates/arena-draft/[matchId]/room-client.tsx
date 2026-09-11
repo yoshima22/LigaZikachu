@@ -2,6 +2,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
+import { createClient } from "@supabase/supabase-js";
 import {
   resolveArenaDraftBattleAction,
   advanceArenaDraftTimeoutAction,
@@ -90,14 +91,49 @@ export function DraftRoomClient({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  const [connection, setConnection] = useState<
+    "connecting" | "live" | "fallback"
+  >("connecting");
   useEffect(() => {
     if (["FINISHED", "CANCELLED"].includes(state)) return;
-    const timer = window.setInterval(async () => {
-      if (state === "STRATEGY_WINDOW")
-        await advanceArenaDraftTimeoutAction(matchId);
+    const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
+      key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    let cleanup = () => {};
+    if (url && key) {
+      const supabase = createClient(url, key, {
+        auth: { persistSession: false, autoRefreshToken: false },
+        realtime: { params: { eventsPerSecond: 2 } },
+      });
+      const channel = supabase
+        .channel(`arena-draft-${matchId}`)
+        .on(
+          "postgres_changes",
+          {
+            event: "INSERT",
+            schema: "public",
+            table: "arena_draft_actions",
+            filter: `matchId=eq.${matchId}`,
+          },
+          () => {
+            if (document.visibilityState === "visible") router.refresh();
+          },
+        )
+        .subscribe((status) =>
+          setConnection(status === "SUBSCRIBED" ? "live" : "connecting"),
+        );
+      cleanup = () => {
+        void supabase.removeChannel(channel);
+      };
+    } else setConnection("fallback");
+    const fallback = window.setInterval(async () => {
+      if (document.visibilityState !== "visible") return;
+      await advanceArenaDraftTimeoutAction(matchId);
       router.refresh();
-    }, 6000);
-    return () => window.clearInterval(timer);
+    }, 30000);
+    return () => {
+      window.clearInterval(fallback);
+      cleanup();
+    };
   }, [matchId, router, state]);
   const act = (id: string) =>
     start(async () => {
@@ -120,6 +156,18 @@ export function DraftRoomClient({
         <p className="text-[10px] font-black uppercase tracking-[.2em] text-fuchsia-300">
           Arena Draft · sala sincronizada
         </p>
+        <span
+          className={`mt-2 inline-flex items-center gap-1 text-[9px] font-bold ${connection === "live" ? "text-emerald-300" : connection === "fallback" ? "text-amber-300" : "text-slate-500"}`}
+        >
+          <i
+            className={`h-1.5 w-1.5 rounded-full ${connection === "live" ? "bg-emerald-300" : "bg-amber-300"}`}
+          />
+          {connection === "live"
+            ? "Conexão ao vivo"
+            : connection === "fallback"
+              ? "Reconexão econômica"
+              : "Conectando…"}
+        </span>
         <h1 className="mt-2 text-3xl font-black text-white">
           {reveal
             ? "Inspeção das equipes"

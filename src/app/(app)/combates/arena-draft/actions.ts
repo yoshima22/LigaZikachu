@@ -330,12 +330,24 @@ export async function submitArenaDraftAction(
         if (side === "A") draft.readyA = true;
         else draft.readyB = true;
         const bothReady = Boolean(draft.readyA && draft.readyB);
+        await tx.arenaDraftAction.create({
+          data: {
+            matchId: match.id,
+            actorId: player.id,
+            idempotencyKey,
+            sequence: match.eventSequence + 1,
+            phase: "TEAM_REVEAL",
+            actionType: "READY",
+            payloadJson: {},
+          },
+        });
         await tx.arenaDraftMatch.update({
           where: { id: match.id },
           data: {
             draftJson: draft as unknown as Prisma.InputJsonValue,
             state: bothReady ? "BAN_PHASE" : "TEAM_REVEAL",
             stateVersion: { increment: 1 },
+            eventSequence: { increment: 1 },
             deadlineAt: new Date(Date.now() + (bothReady ? 90_000 : 30_000)),
           },
         });
@@ -657,6 +669,21 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
         events: [],
         strategyHistory: [],
       };
+      await tx.arenaDraftAction.create({
+        data: {
+          matchId,
+          actorId: player.id,
+          idempotencyKey: `battle-init:${match.id}`,
+          sequence: match.eventSequence + 1,
+          phase: "BATTLE_INIT",
+          actionType: "BATTLE_STARTED",
+          payloadJson: {},
+        },
+      });
+      await tx.arenaDraftMatch.update({
+        where: { id: match.id },
+        data: { eventSequence: { increment: 1 } },
+      });
       await persistCombatSegment(tx, match, battle);
     });
     revalidatePath(`/combates/arena-draft/${matchId}`);
@@ -740,6 +767,21 @@ export async function submitArenaDraftStrategyAction(input: {
           confirmedAt: new Date().toISOString(),
         },
       };
+      await tx.arenaDraftAction.create({
+        data: {
+          matchId: match.id,
+          actorId: player.id,
+          idempotencyKey: `strategy:${match.id}:${battle.checkpoint}:${player.id}`,
+          sequence: match.eventSequence + 1,
+          phase: "STRATEGY_WINDOW",
+          actionType: "STRATEGY_LOCKED",
+          payloadJson: { checkpoint: STRATEGY_CHECKPOINTS[battle.checkpoint] },
+        },
+      });
+      await tx.arenaDraftMatch.update({
+        where: { id: match.id },
+        data: { eventSequence: { increment: 1 } },
+      });
       if (!battle.plans.A || !battle.plans.B) {
         await tx.arenaDraftMatch.update({
           where: { id: match.id },
