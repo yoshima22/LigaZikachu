@@ -87,6 +87,8 @@ export default async function DraftRoomPage({
   );
   const ownActive =
     side === "A" ? (battle?.activeA ?? []) : (battle?.activeB ?? []);
+  const rivalActive =
+    side === "A" ? (battle?.activeB ?? []) : (battle?.activeA ?? []);
   const ownPostures =
     side === "A" ? (battle?.posturesA ?? {}) : (battle?.posturesB ?? {});
   const map = (
@@ -122,6 +124,10 @@ export default async function DraftRoomPage({
           status,
           posture: ownPostures[p.id] ?? p.posture,
           hp: battle?.runtime?.hp[p.id] ?? null,
+          maxHp: Math.max(
+            10,
+            Math.round(655 + (p.stats.vitality + (p.isMega ? 10 : 0)) * 4),
+          ),
         };
       }) ?? [];
   return (
@@ -165,10 +171,18 @@ export default async function DraftRoomPage({
         ),
       }))}
       battle={battle}
+      winnerName={
+        match.winnerId === match.playerAId
+          ? match.playerA.displayName
+          : match.winnerId === match.playerBId
+            ? (match.playerB?.displayName ?? null)
+            : null
+      }
       strategy={
         match.state === "STRATEGY_WINDOW"
           ? {
               activeIds: ownActive,
+              rivalActiveIds: rivalActive,
               ownConfirmed: Boolean(battle?.plans?.[side]),
               rivalConfirmed: Boolean(
                 battle?.plans?.[side === "A" ? "B" : "A"],

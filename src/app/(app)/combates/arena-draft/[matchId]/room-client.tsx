@@ -53,6 +53,7 @@ type Pet = {
   status: "AVAILABLE" | "BANNED" | "PICKED";
   posture: Role;
   hp: number | null;
+  maxHp: number;
 };
 type Battle = {
   result?: string;
@@ -68,9 +69,12 @@ type Battle = {
     targetHpAfter?: number;
     effect?: string;
   }>;
+  checkpoint?: number;
+  checkpoints?: number[];
 } | null;
 type Strategy = {
   activeIds: string[];
+  rivalActiveIds: string[];
   ownConfirmed: boolean;
   rivalConfirmed: boolean;
   checkpointTurn: number | null;
@@ -88,6 +92,7 @@ export function DraftRoomClient({
   own,
   rival,
   battle,
+  winnerName,
   strategy,
 }: {
   matchId: string;
@@ -113,6 +118,7 @@ export function DraftRoomClient({
   own: Pet[];
   rival: Pet[];
   battle: Battle;
+  winnerName: string | null;
   strategy: Strategy;
 }) {
   const router = useRouter();
@@ -274,6 +280,8 @@ export function DraftRoomClient({
         <StrategyWindow
           matchId={matchId}
           pets={own}
+          rival={rival}
+          playerNames={playerNames}
           strategy={strategy}
           battle={battle}
         />
@@ -313,18 +321,28 @@ export function DraftRoomClient({
           </p>
         </div>
       )}
-      {state === "FINISHED" && battle && <Replay battle={battle} />}
+      {state === "FINISHED" && battle && (
+        <Replay
+          battle={battle}
+          winnerName={winnerName}
+          playerNames={playerNames}
+        />
+      )}
     </div>
   );
 }
 function StrategyWindow({
   matchId,
   pets,
+  rival,
+  playerNames,
   strategy,
   battle,
 }: {
   matchId: string;
   pets: Pet[];
+  rival: Pet[];
+  playerNames: { own: string; rival: string };
   strategy: NonNullable<Strategy>;
   battle: Battle;
 }) {
@@ -358,6 +376,13 @@ function StrategyWindow({
     });
   return (
     <section className="rounded-3xl border border-cyan-300/20 bg-slate-950/80 p-5">
+      <CombatStage
+        own={pets.filter((pet) => strategy.activeIds.includes(pet.id))}
+        rival={rival.filter((pet) => strategy.rivalActiveIds.includes(pet.id))}
+        playerNames={playerNames}
+        battle={battle}
+        checkpoint={strategy.checkpointTurn}
+      />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-black text-cyan-200">
@@ -506,6 +531,136 @@ function StrategyWindow({
           : "Travar estratégia em segredo"}
       </button>
     </section>
+  );
+}
+function CombatStage({
+  own,
+  rival,
+  playerNames,
+  battle,
+  checkpoint,
+}: {
+  own: Pet[];
+  rival: Pet[];
+  playerNames: { own: string; rival: string };
+  battle: Battle;
+  checkpoint: number | null;
+}) {
+  const previousCheckpoint =
+    checkpoint === 35 ? 20 : checkpoint === 45 ? 35 : 0;
+  const segment =
+    battle?.events?.filter(
+      (event) =>
+        event.turn > previousCheckpoint &&
+        (checkpoint === null || event.turn <= checkpoint),
+    ) ?? [];
+  const damage = segment
+    .filter((event) => event.action === "ATTACK")
+    .reduce((sum, event) => sum + event.damage, 0);
+  const healing = segment
+    .filter((event) => event.action === "HEAL")
+    .reduce((sum, event) => sum + event.damage, 0);
+  const kos = segment.filter((event) => event.targetHpAfter === 0).length;
+  return (
+    <div className="mb-5 overflow-hidden rounded-2xl border border-white/10 bg-[radial-gradient(circle_at_center,rgba(34,211,238,.10),transparent_48%),linear-gradient(135deg,#071324,#170822)] p-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <p className="text-[9px] font-black uppercase tracking-[.2em] text-cyan-300">
+            Segmento encerrado · ações {previousCheckpoint + 1}–{checkpoint}
+          </p>
+          <h2 className="mt-1 text-lg font-black text-white">
+            A arena aguarda suas decisões
+          </h2>
+        </div>
+        <div className="flex gap-2 text-[9px] font-bold">
+          <span className="rounded-lg bg-rose-400/10 px-2 py-1 text-rose-200">
+            {damage} dano
+          </span>
+          <span className="rounded-lg bg-emerald-400/10 px-2 py-1 text-emerald-200">
+            {healing} cura
+          </span>
+          <span className="rounded-lg bg-amber-300/10 px-2 py-1 text-amber-200">
+            {kos} KO
+          </span>
+        </div>
+      </div>
+      <div className="mt-4 grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr]">
+        <Formation name={playerNames.own} pets={own} />
+        <span className="text-center text-sm font-black text-fuchsia-300">
+          VS
+        </span>
+        <Formation name={playerNames.rival} pets={rival} rival />
+      </div>
+      {segment.some((event) => event.targetHpAfter === 0 || event.effect) && (
+        <div className="mt-4 flex gap-2 overflow-x-auto pb-1">
+          {segment
+            .filter((event) => event.targetHpAfter === 0 || event.effect)
+            .slice(-6)
+            .map((event, index) => (
+              <div
+                key={`${event.turn}-${index}`}
+                className={`min-w-52 rounded-xl border px-3 py-2 text-[9px] ${event.targetHpAfter === 0 ? "border-rose-400/25 bg-rose-400/5" : "border-fuchsia-300/20 bg-fuchsia-300/5"}`}
+              >
+                <b className="text-white">
+                  T{event.turn} · {event.actorName}
+                </b>
+                <span className="block text-slate-400">
+                  {event.targetHpAfter === 0
+                    ? `${event.targetName} sofreu KO`
+                    : event.effect}
+                </span>
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+function Formation({
+  name,
+  pets,
+  rival = false,
+}: {
+  name: string;
+  pets: Pet[];
+  rival?: boolean;
+}) {
+  return (
+    <div className={rival ? "sm:text-right" : ""}>
+      <b className="text-[10px] text-slate-300">{name}</b>
+      <div
+        className={`mt-2 flex flex-wrap gap-2 ${rival ? "sm:justify-end" : ""}`}
+      >
+        {pets.map((pet) => {
+          const hp = pet.hp ?? pet.maxHp;
+          const percent = Math.max(0, Math.min(100, (hp / pet.maxHp) * 100));
+          return (
+            <div
+              key={pet.id}
+              className={`w-16 rounded-xl border border-white/10 bg-slate-950/70 p-1.5 ${hp <= 0 ? "grayscale opacity-35" : ""}`}
+            >
+              <img
+                src={pet.sprite}
+                alt=""
+                className="mx-auto h-9 w-9 object-contain"
+              />
+              <span className="block truncate text-center text-[7px] font-bold text-white">
+                {pet.name}
+              </span>
+              <div className="mt-1 h-1 overflow-hidden rounded-full bg-white/10">
+                <div
+                  className={`h-full ${percent > 50 ? "bg-emerald-300" : percent > 20 ? "bg-amber-300" : "bg-rose-400"}`}
+                  style={{ width: `${percent}%` }}
+                />
+              </div>
+              <span className="mt-0.5 block text-center text-[6px] text-slate-500">
+                {Math.max(0, hp)} HP
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </div>
   );
 }
 function Countdown({ deadlineAt }: { deadlineAt: string }) {
@@ -724,7 +879,15 @@ function DraftActivity({
     </aside>
   );
 }
-function Replay({ battle }: { battle: NonNullable<Battle> }) {
+function Replay({
+  battle,
+  winnerName,
+  playerNames,
+}: {
+  battle: NonNullable<Battle>;
+  winnerName: string | null;
+  playerNames: { own: string; rival: string };
+}) {
   return (
     <section className="rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-5">
       <div className="flex flex-wrap items-end justify-between gap-2">
@@ -733,12 +896,11 @@ function Replay({ battle }: { battle: NonNullable<Battle> }) {
             Replay por eventos
           </p>
           <h2 className="text-2xl font-black text-white">
-            {battle.result === "ATTACKER_WIN"
-              ? "Vitória do lado A"
-              : battle.result === "DEFENDER_WIN"
-                ? "Vitória do lado B"
-                : "Empate"}
+            {winnerName ? `Vitória de ${winnerName}` : "Empate"}
           </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            {playerNames.own} × {playerNames.rival}
+          </p>
         </div>
         <p className="text-xs text-slate-400">
           {battle.rounds} ações registradas
