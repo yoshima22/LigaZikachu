@@ -1977,7 +1977,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   // Gen 3 legendaries
   377:"rock",378:"ice",379:"steel",
   380:"dragon/psychic",381:"dragon/psychic",
-  382:"water",383:"fire/ground",384:"dragon/flying",
+  382:"water",383:"ground",384:"dragon/flying",
   385:"steel/psychic",386:"psychic",
   // ── Gen 4 ──────────────────────────────────────────────────────────────────
   387:"grass",388:"grass",389:"grass/ground",
