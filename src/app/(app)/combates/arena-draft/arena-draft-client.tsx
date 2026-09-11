@@ -390,11 +390,7 @@ export function ArenaDraftClient({
             <button
               key={String(key)}
               onClick={() => {
-                if (
-                  key === "PLAY" &&
-                  !activeMatch &&
-                  !presets.some((preset) => preset.isReady)
-                ) {
+                if (key === "PLAY" && !activeMatch && presets.length === 0) {
                   setMissingPresetOpen(true);
                   return;
                 }
