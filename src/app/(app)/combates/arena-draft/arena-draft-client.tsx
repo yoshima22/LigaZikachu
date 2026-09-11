@@ -1045,28 +1045,66 @@ export function ArenaDraftClient({
                                     const raw = e.target.value;
                                     if (!/^\d*$/.test(raw)) return;
                                     const draftKey = `${pet.id}:${key}`;
+                                    if (raw === "") {
+                                      setStatDrafts((drafts) => ({
+                                        ...drafts,
+                                        [draftKey]: "",
+                                      }));
+                                      return;
+                                    }
+                                    const max = pet.isMega ? 240 : 250;
+                                    // Teto do orçamento do time: o que os demais
+                                    // status já distribuíram não pode deixar este
+                                    // ultrapassar os 4.500 pontos do time.
+                                    const otherDistributed =
+                                      allocatedPoints -
+                                      (pet.stats[key] - ARENA_DRAFT_RULES.baseStat);
+                                    const budgetMax =
+                                      ARENA_DRAFT_RULES.baseStat +
+                                      Math.max(
+                                        0,
+                                        ARENA_DRAFT_RULES.statBudget -
+                                          otherDistributed,
+                                      );
+                                    const capped = Math.min(
+                                      max,
+                                      budgetMax,
+                                      Number(raw),
+                                    );
                                     setStatDrafts((drafts) => ({
                                       ...drafts,
-                                      [draftKey]: raw,
+                                      [draftKey]:
+                                        capped === Number(raw)
+                                          ? raw
+                                          : String(capped),
                                     }));
-                                    if (raw === "") return;
-                                    const max = pet.isMega ? 240 : 250;
                                     updatePet(pet.id, {
-                                      stats: {
-                                        ...pet.stats,
-                                        [key]: Math.min(max, Number(raw)),
-                                      },
+                                      stats: { ...pet.stats, [key]: capped },
                                     });
                                   }}
                                   onBlur={() => {
                                     const draftKey = `${pet.id}:${key}`;
                                     const max = pet.isMega ? 240 : 250;
+                                    const otherDistributed =
+                                      allocatedPoints -
+                                      (pet.stats[key] - ARENA_DRAFT_RULES.baseStat);
+                                    const budgetMax =
+                                      ARENA_DRAFT_RULES.baseStat +
+                                      Math.max(
+                                        0,
+                                        ARENA_DRAFT_RULES.statBudget -
+                                          otherDistributed,
+                                      );
                                     updatePet(pet.id, {
                                       stats: {
                                         ...pet.stats,
                                         [key]: Math.max(
                                           20,
-                                          Math.min(max, pet.stats[key] || 20),
+                                          Math.min(
+                                            max,
+                                            budgetMax,
+                                            pet.stats[key] || 20,
+                                          ),
                                         ),
                                       },
                                     });
