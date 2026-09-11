@@ -6,6 +6,8 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
+import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { runArenaCombat, type ArenaMascot, type ArenaTurnLog } from "@/lib/arena-z";
 
 async function currentPlayer() {
   const user = await getSessionUser();
@@ -104,4 +106,18 @@ export async function submitArenaDraftAction(matchId: string, targetId: string, 
     });
     revalidatePath(`/combates/arena-draft/${matchId}`); return { success: "Ação registrada." };
   } catch(error) { return { error:error instanceof Error?error.message:"Ação recusada." }; }
+}
+
+function draftFighter(pet: ReturnType<typeof validateArenaDraftPets>["pets"][number], ownerId: string): ArenaMascot {
+  const bonus = pet.isMega ? 10 : 0;
+  const role = pet.posture === "CAREGIVER" ? "HEALER" : pet.posture === "GUARDIAN" ? "GUARDIAN" : pet.posture;
+  return { id:pet.id, ownerId, pokemonId:pet.speciesId, types:getPokemonTypes(pet.speciesId), name:getPokemonName(pet.speciesId), level:100,
+    force:pet.stats.force+bonus, agility:pet.stats.agility+bonus, charisma:pet.stats.charisma+bonus, instinct:pet.stats.instinct+bonus, vitality:pet.stats.vitality+bonus,
+    happiness:100, hp:Math.max(10,Math.round(55+600+(pet.stats.vitality+bonus)*4)), combatRole:role as ArenaMascot["combatRole"], personality:pet.personality };
+}
+function metricsFromLogs(logs: ArenaTurnLog[], fighters: ArenaMascot[]) {
+  return fighters.map(f=>{const dealt=logs.filter(l=>l.actorId===f.id&&l.action==="ATTACK").reduce((s,l)=>s+l.damage,0);const received=logs.filter(l=>l.targetId===f.id&&l.action==="ATTACK").reduce((s,l)=>s+l.damage,0);const healing=logs.filter(l=>l.actorId===f.id&&l.action==="HEAL").reduce((s,l)=>s+l.damage,0);const kos=new Set(logs.filter(l=>l.actorId===f.id&&l.action==="ATTACK"&&l.damage>0).map(l=>l.targetId));return {petId:f.id,speciesId:f.pokemonId,name:f.name,damageDealt:dealt,damageReceived:received,healing,kos:kos.size,actions:logs.filter(l=>l.actorId===f.id).length};});
+}
+export async function resolveArenaDraftBattleAction(matchId:string){
+  try{const player=await currentPlayer();await prisma.$transaction(async tx=>{await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;const match=await tx.arenaDraftMatch.findUnique({where:{id:matchId}});if(!match||!match.playerBId||(match.playerAId!==player.id&&match.playerBId!==player.id))throw new Error("Partida indisponível.");if(match.state==="FINISHED")return;if(match.state!=="BATTLE_INIT")throw new Error("O draft ainda não terminou.");const draft=match.draftJson as unknown as DraftState;const petsA=validateArenaDraftPets(match.presetASnapshot).pets;const petsB=validateArenaDraftPets(match.presetBSnapshot).pets;const idsA=new Set(draft.picksA),idsB=new Set(draft.picksB);const teamA=petsA.filter(p=>idsA.has(p.id)).map(p=>draftFighter(p,match.playerAId));const teamB=petsB.filter(p=>idsB.has(p.id)).map(p=>draftFighter(p,match.playerBId!));if(teamA.length!==6||teamB.length!==6)throw new Error("Formação final inválida.");const combat=runArenaCombat(teamA,teamB);const winnerId=combat.result==="ATTACKER_WIN"?match.playerAId:combat.result==="DEFENDER_WIN"?match.playerBId:null;const metrics={playerA:metricsFromLogs(combat.log,teamA),playerB:metricsFromLogs(combat.log,teamB),rounds:combat.rounds};await tx.arenaDraftMatch.update({where:{id:match.id},data:{state:"FINISHED",stateVersion:{increment:1},winnerId,finishedAt:new Date(),battleJson:{version:1,checkpoints:[20,35,45],events:combat.log,result:combat.result,rounds:combat.rounds} as unknown as Prisma.InputJsonValue,metricsJson:metrics as unknown as Prisma.InputJsonValue,eventSequence:{increment:combat.log.length}}});});revalidatePath(`/combates/arena-draft/${matchId}`);revalidatePath("/combates/arena-draft");return{success:"Combate concluído e replay salvo."};}catch(error){return{error:error instanceof Error?error.message:"Falha ao iniciar combate."};}
 }

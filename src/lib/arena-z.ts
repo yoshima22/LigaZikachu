@@ -170,7 +170,7 @@ const BOT_NAMES = [
   "Niko Parafuso",  "Leva Brilhante", "Skua Temporal",   "Brun Rocha",     "Queia Chama",
 ];
 
-type ArenaMascot = {
+export type ArenaMascot = {
   id: string;
   ownerId: string | null;
   pokemonId: number;
@@ -489,7 +489,7 @@ function aliveSaboteurSuppression(opponents: ArenaMascot[], hp: Map<string, numb
   return getSaboteurSuppression(best.instinct, best.agility) * (target ? debuffResistanceFactor(best, target) : 1);
 }
 
-function runCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
+export function runArenaCombat(attackers: ArenaMascot[], defenders: ArenaMascot[]) {
   const hp = new Map<string, number>();
   for (const m of [...attackers, ...defenders]) hp.set(m.id, m.hp);
 
@@ -1817,7 +1817,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     // Debug mode automático para admin: roda combate sem persistir resultado real
     const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
     const bot = buildBotOpponent(attackers, difficulty);
-    const combat = runCombat(attackers, bot.defenders);
+    const combat = runArenaCombat(attackers, bot.defenders);
     const won = combat.result === "ATTACKER_WIN";
     const diff = DIFFICULTY_CONFIG[difficulty];
     const fakeReward: ArenaLootFull = won ? {
@@ -1864,7 +1864,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
   if (team.isTraining) {
     const attackers = team.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }));
     const bot = buildBotOpponent(attackers, difficulty);
-    const combat = runCombat(attackers, bot.defenders);
+    const combat = runArenaCombat(attackers, bot.defenders);
     const won = combat.result === "ATTACKER_WIN";
     const allMascots = new Map([...attackers, ...bot.defenders].map(m => [m.id, m]));
     return {
@@ -1961,7 +1961,7 @@ export async function runBotBattle(playerId: string, teamId: string, difficulty:
     defenders = bot.defenders;
   }
 
-  const combat = runCombat(attackers, defenders);
+  const combat = runArenaCombat(attackers, defenders);
   const won = combat.result === "ATTACKER_WIN";
   // Recompensa escalada pela dificuldade
   const baseReward = won ? botReward(band.min, band.max, useDifficulty) : { coins: 0, exp: 0, food: 0, sweet: 0, egg: undefined, buffItem: undefined };
@@ -2656,7 +2656,7 @@ export async function runPvpBattle(playerId: string, attackTeamId: string, defen
   let defenders = defenseTeam.members.map(m => toArenaMascot({ ...m.mascot, combatRole: m.combatRole }, defenseDebuffPct));
   attackers = applyBondModifiersToArenaMascots(attackers, await getBondCombatModifier(attackers.map(m => m.id)));
   defenders = applyBondModifiersToArenaMascots(defenders, await getBondCombatModifier(defenders.map(m => m.id)));
-  const combat = runCombat(attackers, defenders);
+  const combat = runArenaCombat(attackers, defenders);
   const attackerWon = combat.result === "ATTACKER_WIN";
   const defenderWon = combat.result === "DEFENDER_WIN";
   const draw = combat.result === "DRAW";
