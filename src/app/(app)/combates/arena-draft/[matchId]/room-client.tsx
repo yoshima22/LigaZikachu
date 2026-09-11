@@ -6,6 +6,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   resolveArenaDraftBattleAction,
   advanceArenaDraftTimeoutAction,
+  heartbeatArenaDraftAction,
   submitArenaDraftAction,
   submitArenaDraftStrategyAction,
 } from "../actions";
@@ -58,10 +59,13 @@ type Battle = {
   rounds?: number;
   events?: Array<{
     turn: number;
+    actorId?: string;
+    targetId?: string;
     actorName: string;
     targetName: string;
     action: string;
     damage: number;
+    targetHpAfter?: number;
     effect?: string;
   }>;
 } | null;
@@ -96,6 +100,10 @@ export function DraftRoomClient({
   const [connection, setConnection] = useState<
     "connecting" | "live" | "fallback"
   >("connecting");
+  const [opponentPresence, setOpponentPresence] = useState<{
+    online: boolean;
+    grace?: number;
+  } | null>(null);
   useEffect(() => {
     if (["FINISHED", "CANCELLED"].includes(state)) return;
     const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
@@ -127,8 +135,19 @@ export function DraftRoomClient({
         void supabase.removeChannel(channel);
       };
     } else setConnection("fallback");
+    const pulse = async () => {
+      const presence = await heartbeatArenaDraftAction(matchId);
+      if (presence.active)
+        setOpponentPresence({
+          online: presence.opponentOnline,
+          grace: presence.graceSeconds,
+        });
+      if (presence.resolved) router.refresh();
+    };
+    void pulse();
     const fallback = window.setInterval(async () => {
       if (document.visibilityState !== "visible") return;
+      await pulse();
       await advanceArenaDraftTimeoutAction(matchId);
       router.refresh();
     }, 30000);
@@ -170,6 +189,11 @@ export function DraftRoomClient({
               ? "Reconexão econômica"
               : "Conectando…"}
         </span>
+        {opponentPresence && !opponentPresence.online && (
+          <span className="ml-3 inline-flex rounded-full bg-amber-300/10 px-2 py-1 text-[9px] font-bold text-amber-200">
+            Adversário reconectando · até {opponentPresence.grace ?? 90}s
+          </span>
+        )}
         <h1 className="mt-2 text-3xl font-black text-white">
           {reveal
             ? "Inspeção das equipes"
@@ -199,7 +223,12 @@ export function DraftRoomClient({
         )}
       </header>
       {state === "STRATEGY_WINDOW" && strategy ? (
-        <StrategyWindow matchId={matchId} pets={own} strategy={strategy} />
+        <StrategyWindow
+          matchId={matchId}
+          pets={own}
+          strategy={strategy}
+          battle={battle}
+        />
       ) : (
         <div className="grid gap-5 lg:grid-cols-2">
           <Team
@@ -242,10 +271,12 @@ function StrategyWindow({
   matchId,
   pets,
   strategy,
+  battle,
 }: {
   matchId: string;
   pets: Pet[];
   strategy: NonNullable<Strategy>;
+  battle: Battle;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -351,6 +382,69 @@ function StrategyWindow({
             </article>
           );
         })}
+      </div>
+      <div className="mt-5 grid gap-3 lg:grid-cols-[.8fr_1.2fr]">
+        <div className="rounded-2xl border border-white/10 bg-white/[.02] p-4">
+          <p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">
+            Resumo até o checkpoint
+          </p>
+          <div className="mt-3 space-y-2">
+            {pets.map((p) => {
+              const dealt =
+                battle?.events
+                  ?.filter((e) => e.actorId === p.id && e.action === "ATTACK")
+                  .reduce((sum, e) => sum + e.damage, 0) ?? 0;
+              const received =
+                battle?.events
+                  ?.filter((e) => e.targetId === p.id && e.action === "ATTACK")
+                  .reduce((sum, e) => sum + e.damage, 0) ?? 0;
+              const kos =
+                battle?.events?.filter(
+                  (e) => e.actorId === p.id && e.targetHpAfter === 0,
+                ).length ?? 0;
+              return (
+                <div
+                  key={p.id}
+                  className="flex items-center justify-between text-[10px]"
+                >
+                  <span className="max-w-32 truncate text-slate-300">
+                    {p.name}
+                  </span>
+                  <span className="text-slate-500">
+                    {kos} KO · {dealt} causado · {received} recebido
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-white/[.02] p-4">
+          <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
+            Acontecimentos recentes
+          </p>
+          <div className="mt-3 space-y-2">
+            {battle?.events
+              ?.slice(-8)
+              .reverse()
+              .map((event, index) => (
+                <div
+                  key={`${event.turn}-${index}`}
+                  className="rounded-lg bg-slate-950/70 px-3 py-2 text-[10px] text-slate-300"
+                >
+                  <b className="text-white">
+                    T{event.turn} · {event.actorName}
+                  </b>{" "}
+                  → {event.targetName} · {event.damage}{" "}
+                  {event.action === "HEAL" ? "HP" : "dano"}
+                  {event.effect && (
+                    <span className="mt-1 block text-fuchsia-200">
+                      {event.effect}
+                    </span>
+                  )}
+                </div>
+              ))}
+          </div>
+        </div>
       </div>
       <button
         disabled={pending || strategy.ownConfirmed || active.length !== 6}

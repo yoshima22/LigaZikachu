@@ -393,11 +393,25 @@ model ArenaDraftMatch {
   playerB         Player?            @relation("ArenaDraftPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
   winner          Player?            @relation("ArenaDraftWinner", fields: [winnerId], references: [id], onDelete: SetNull)
   actions         ArenaDraftAction[]
+  presences       ArenaDraftPresence[]
 
   @@index([state, createdAt])
   @@index([playerAId, createdAt])
   @@index([playerBId, createdAt])
   @@map("arena_draft_matches")
+}
+
+model ArenaDraftPresence {
+  id         String          @id @default(cuid())
+  matchId    String
+  playerId   String
+  lastSeenAt DateTime        @default(now())
+  createdAt  DateTime        @default(now())
+  match      ArenaDraftMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, playerId])
+  @@index([matchId, lastSeenAt])
+  @@map("arena_draft_presences")
 }
 
 model ArenaDraftAction {

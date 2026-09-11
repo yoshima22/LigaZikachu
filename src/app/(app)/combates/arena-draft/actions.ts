@@ -1001,3 +1001,90 @@ export async function advanceArenaDraftTimeoutAction(matchId: string) {
     return { success: false };
   }
 }
+
+export async function heartbeatArenaDraftAction(matchId: string) {
+  try {
+    const player = await currentPlayer();
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
+      const match = await tx.arenaDraftMatch.findUnique({
+        where: { id: matchId },
+        include: { presences: true },
+      });
+      if (
+        !match ||
+        !match.playerBId ||
+        (match.playerAId !== player.id && match.playerBId !== player.id) ||
+        ["FINISHED", "CANCELLED"].includes(match.state)
+      )
+        return { active: false, opponentOnline: false };
+      const now = new Date();
+      await tx.arenaDraftPresence.upsert({
+        where: { matchId_playerId: { matchId, playerId: player.id } },
+        update: { lastSeenAt: now },
+        create: { matchId, playerId: player.id, lastSeenAt: now },
+      });
+      const opponentId =
+        match.playerAId === player.id ? match.playerBId : match.playerAId;
+      const opponentPresence = match.presences.find(
+        (presence) => presence.playerId === opponentId,
+      );
+      const reference = opponentPresence?.lastSeenAt ?? match.updatedAt;
+      const absentMs = now.getTime() - reference.getTime();
+      if (absentMs <= 90_000)
+        return {
+          active: true,
+          opponentOnline: Boolean(opponentPresence && absentMs <= 45_000),
+          graceSeconds: Math.max(0, Math.ceil((90_000 - absentMs) / 1000)),
+        };
+      const battleStarted =
+        [
+          "BATTLE_INIT",
+          "BATTLE_RUNNING",
+          "STRATEGY_WINDOW",
+          "STRATEGY_RESOLVING",
+        ].includes(match.state) || Boolean(match.battleJson);
+      const nextSequence = match.eventSequence + 1;
+      await tx.arenaDraftAction.create({
+        data: {
+          matchId,
+          actorId: player.id,
+          idempotencyKey: `disconnect:${match.id}:${opponentId}`,
+          sequence: nextSequence,
+          phase: match.state,
+          actionType: battleStarted ? "TECHNICAL_FORFEIT" : "DISCONNECT_CANCEL",
+          payloadJson: { absentPlayerId: opponentId, toleranceSeconds: 90 },
+        },
+      });
+      if (battleStarted) {
+        const battle = (match.battleJson ?? {}) as Record<string, unknown>;
+        battle.result = "TECHNICAL_FORFEIT";
+        battle.forfeitPlayerId = opponentId;
+        await tx.arenaDraftMatch.update({
+          where: { id: match.id },
+          data: {
+            state: "FINISHED",
+            winnerId: player.id,
+            finishedAt: now,
+            deadlineAt: null,
+            battleJson: battle as Prisma.InputJsonValue,
+            stateVersion: { increment: 1 },
+            eventSequence: { increment: 1 },
+          },
+        });
+      } else
+        await tx.arenaDraftMatch.update({
+          where: { id: match.id },
+          data: {
+            state: "CANCELLED",
+            deadlineAt: null,
+            stateVersion: { increment: 1 },
+            eventSequence: { increment: 1 },
+          },
+        });
+      return { active: false, opponentOnline: false, resolved: true };
+    });
+  } catch {
+    return { active: false, opponentOnline: false };
+  }
+}
