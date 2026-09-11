@@ -124,6 +124,8 @@ export async function joinDraftQueueAction(presetId: string) {
             stateVersion: { increment: 1 },
             deadlineAt: new Date(Date.now() + 30_000),
             draftJson: {
+              readyA: false,
+              readyB: false,
               bansA: [],
               bansB: [],
               picksA: [],
@@ -261,6 +263,8 @@ export async function answerDraftChallengeAction(
         stateVersion: { increment: 1 },
         deadlineAt: new Date(Date.now() + 30_000),
         draftJson: {
+          readyA: false,
+          readyB: false,
           bansA: [],
           bansB: [],
           picksA: [],
@@ -281,6 +285,8 @@ export async function answerDraftChallengeAction(
 }
 
 type DraftState = {
+  readyA?: boolean;
+  readyB?: boolean;
   bansA: string[];
   bansB: string[];
   picksA: string[];
@@ -320,12 +326,17 @@ export async function submitArenaDraftAction(
         throw new Error("Sala não encontrada.");
       const side: "A" | "B" = match.playerAId === player.id ? "A" : "B";
       if (match.state === "TEAM_REVEAL") {
+        const draft = match.draftJson as unknown as DraftState;
+        if (side === "A") draft.readyA = true;
+        else draft.readyB = true;
+        const bothReady = Boolean(draft.readyA && draft.readyB);
         await tx.arenaDraftMatch.update({
           where: { id: match.id },
           data: {
-            state: "BAN_PHASE",
+            draftJson: draft as unknown as Prisma.InputJsonValue,
+            state: bothReady ? "BAN_PHASE" : "TEAM_REVEAL",
             stateVersion: { increment: 1 },
-            deadlineAt: new Date(Date.now() + 90_000),
+            deadlineAt: new Date(Date.now() + (bothReady ? 90_000 : 30_000)),
           },
         });
         return;
@@ -443,7 +454,10 @@ function metricsFromLogs(logs: ArenaTurnLog[], fighters: ArenaMascot[]) {
     const kos = new Set(
       logs
         .filter(
-          (l) => l.actorId === f.id && l.action === "ATTACK" && l.damage > 0,
+          (l) =>
+            l.actorId === f.id &&
+            l.action === "ATTACK" &&
+            l.targetHpAfter === 0,
         )
         .map((l) => l.targetId),
     );
@@ -755,5 +769,135 @@ export async function submitArenaDraftStrategyAction(input: {
     return {
       error: error instanceof Error ? error.message : "Estratégia recusada.",
     };
+  }
+}
+
+/** Resolve apenas quando o prazo já venceu. As escolhas ausentes mantêm a
+ * formação e as posturas atuais, portanto uma queda de conexão não inventa
+ * trocas nem revela informação privada. */
+export async function advanceArenaDraftTimeoutAction(matchId: string) {
+  try {
+    const player = await currentPlayer();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
+      const match = await tx.arenaDraftMatch.findUnique({
+        where: { id: matchId },
+      });
+      if (
+        !match ||
+        !match.playerBId ||
+        (match.playerAId !== player.id && match.playerBId !== player.id)
+      )
+        return;
+      if (!match.deadlineAt || match.deadlineAt.getTime() > Date.now()) return;
+      if (match.state === "TEAM_REVEAL") {
+        const draft = match.draftJson as unknown as DraftState;
+        draft.readyA = true;
+        draft.readyB = true;
+        await tx.arenaDraftMatch.update({
+          where: { id: match.id },
+          data: {
+            draftJson: draft as unknown as Prisma.InputJsonValue,
+            state: "BAN_PHASE",
+            stateVersion: { increment: 1 },
+            deadlineAt: new Date(Date.now() + 90_000),
+          },
+        });
+        return;
+      }
+      if (match.state === "BAN_PHASE" || match.state === "PICK_PHASE") {
+        const draft = match.draftJson as unknown as DraftState;
+        const side = draft.turn;
+        const own = validateArenaDraftPets(
+          side === "A" ? match.presetASnapshot : match.presetBSnapshot,
+        ).pets;
+        const rival = validateArenaDraftPets(
+          side === "A" ? match.presetBSnapshot : match.presetASnapshot,
+        ).pets;
+        const used = new Set([
+          ...draft.bansA,
+          ...draft.bansB,
+          ...draft.picksA,
+          ...draft.picksB,
+        ]);
+        const pool = (draft.phase === "BAN" ? rival : own).filter(
+          (pet) => !used.has(pet.id),
+        );
+        const target = pool[0];
+        if (!target) throw new Error("Não há escolha automática válida.");
+        if (draft.phase === "BAN") {
+          (side === "A" ? draft.bansA : draft.bansB).push(target.id);
+          const total = draft.bansA.length + draft.bansB.length;
+          if (total >= 6) {
+            draft.phase = "PICK";
+            draft.turn = pickOrder[0];
+          } else draft.turn = side === "A" ? "B" : "A";
+        } else {
+          (side === "A" ? draft.picksA : draft.picksB).push(target.id);
+          const total = draft.picksA.length + draft.picksB.length;
+          if (total < pickOrder.length) draft.turn = pickOrder[total];
+        }
+        const totalPicks = draft.picksA.length + draft.picksB.length;
+        const nextState =
+          draft.phase === "PICK"
+            ? totalPicks >= 12
+              ? "BATTLE_INIT"
+              : "PICK_PHASE"
+            : "BAN_PHASE";
+        await tx.arenaDraftAction.create({
+          data: {
+            matchId,
+            actorId: side === "A" ? match.playerAId : match.playerBId,
+            idempotencyKey: `timeout:${match.id}:${match.eventSequence + 1}`,
+            sequence: match.eventSequence + 1,
+            phase: draft.phase,
+            actionType: "TIMEOUT_AUTO",
+            payloadJson: { targetId: target.id },
+          },
+        });
+        await tx.arenaDraftMatch.update({
+          where: { id: match.id },
+          data: {
+            draftJson: draft as unknown as Prisma.InputJsonValue,
+            state: nextState,
+            stateVersion: { increment: 1 },
+            eventSequence: { increment: 1 },
+            deadlineAt:
+              nextState === "BATTLE_INIT"
+                ? null
+                : new Date(Date.now() + 90_000),
+          },
+        });
+        return;
+      }
+      if (match.state !== "STRATEGY_WINDOW") return;
+      const battle = match.battleJson as unknown as DraftBattle;
+      battle.plans = battle.plans ?? {};
+      battle.plans.A ??= {
+        activeIds: battle.activeA,
+        postures: battle.posturesA,
+        confirmedAt: match.deadlineAt.toISOString(),
+      };
+      battle.plans.B ??= {
+        activeIds: battle.activeB,
+        postures: battle.posturesB,
+        confirmedAt: match.deadlineAt.toISOString(),
+      };
+      battle.activeA = battle.plans.A.activeIds;
+      battle.activeB = battle.plans.B.activeIds;
+      battle.posturesA = battle.plans.A.postures;
+      battle.posturesB = battle.plans.B.postures;
+      battle.strategyHistory.push({
+        checkpoint: STRATEGY_CHECKPOINTS[battle.checkpoint],
+        activeA: battle.activeA,
+        activeB: battle.activeB,
+      });
+      battle.checkpoint += 1;
+      await persistCombatSegment(tx, match, battle);
+    });
+    revalidatePath(`/combates/arena-draft/${matchId}`);
+    return { success: true };
+  } catch {
+    return { success: false };
   }
 }

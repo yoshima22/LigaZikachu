@@ -1,9 +1,10 @@
 "use client";
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import {
   resolveArenaDraftBattleAction,
+  advanceArenaDraftTimeoutAction,
   submitArenaDraftAction,
   submitArenaDraftStrategyAction,
 } from "../actions";
@@ -22,6 +23,21 @@ const ROLES = [
   "SPECIALIST",
   "SURVIVOR",
 ] as const;
+const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
+  DEFENDER: "Defensor",
+  ATTACKER: "Atacante",
+  FLANK: "Flanco",
+  OPPORTUNIST: "Oportunista",
+  ENCOURAGER: "Encorajador",
+  GUARDIAN: "Guardião",
+  DUELIST: "Duelista",
+  SABOTEUR: "Sabotador",
+  HEALER: "Cuidador",
+  SCOUT: "Batedor",
+  PROVOKER: "Provocador",
+  SPECIALIST: "Especialista",
+  SURVIVOR: "Sobrevivente",
+};
 type Role = (typeof ROLES)[number];
 type Pet = {
   id: string;
@@ -74,6 +90,15 @@ export function DraftRoomClient({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
+  useEffect(() => {
+    if (["FINISHED", "CANCELLED"].includes(state)) return;
+    const timer = window.setInterval(async () => {
+      if (state === "STRATEGY_WINDOW")
+        await advanceArenaDraftTimeoutAction(matchId);
+      router.refresh();
+    }, 6000);
+    return () => window.clearInterval(timer);
+  }, [matchId, router, state]);
   const act = (id: string) =>
     start(async () => {
       const r = await submitArenaDraftAction(matchId, id, crypto.randomUUID());
@@ -213,6 +238,9 @@ function StrategyWindow({
           </p>
         </div>
         <div className="flex gap-3 text-[10px] font-bold">
+          {strategy.deadlineAt && (
+            <Countdown deadlineAt={strategy.deadlineAt} />
+          )}
           <span
             className={
               strategy.ownConfirmed ? "text-emerald-300" : "text-amber-300"
@@ -265,7 +293,9 @@ function StrategyWindow({
                 className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-[10px] text-white"
               >
                 {ROLES.map((r) => (
-                  <option key={r}>{r}</option>
+                  <option key={r} value={r}>
+                    {ROLE_LABELS[r]}
+                  </option>
                 ))}
               </select>
             </article>
@@ -282,6 +312,32 @@ function StrategyWindow({
           : "Travar estratégia em segredo"}
       </button>
     </section>
+  );
+}
+function Countdown({ deadlineAt }: { deadlineAt: string }) {
+  const [seconds, setSeconds] = useState(() =>
+    Math.max(
+      0,
+      Math.ceil((new Date(deadlineAt).getTime() - Date.now()) / 1000),
+    ),
+  );
+  useEffect(() => {
+    const timer = window.setInterval(
+      () =>
+        setSeconds(
+          Math.max(
+            0,
+            Math.ceil((new Date(deadlineAt).getTime() - Date.now()) / 1000),
+          ),
+        ),
+      1000,
+    );
+    return () => window.clearInterval(timer);
+  }, [deadlineAt]);
+  return (
+    <span className="text-cyan-200">
+      {Math.floor(seconds / 60)}:{String(seconds % 60).padStart(2, "0")}
+    </span>
   );
 }
 function Team({

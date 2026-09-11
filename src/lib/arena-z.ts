@@ -342,6 +342,7 @@ export type ArenaTurnLog = {
   targetOwnerId: string | null;
   targetPokemonId?: number;
   targetLevel?: number;
+  targetHpAfter?: number;
   action: "ATTACK" | "DEFEND" | "HEAL";
   damage: number;
   attackerType: string;
@@ -1185,6 +1186,7 @@ export function runArenaCombat(
           targetOwnerId: target.ownerId,
           action: "ATTACK",
           damage,
+          targetHpAfter: newHp,
           attackerType,
           defenderType,
           multiplier,

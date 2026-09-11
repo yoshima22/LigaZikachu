@@ -62,7 +62,12 @@ export default async function ArenaDraftPage() {
         select: { id: true, displayName: true },
       }),
       prisma.arenaDraftMatch.findMany({
-        where: { state: "FINISHED", playerBId: { not: null } },
+        where: {
+          state: "FINISHED",
+          playerBId: { not: null },
+          playerA: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
+          playerB: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
+        },
         orderBy: { finishedAt: "desc" },
         take: 500,
         select: {

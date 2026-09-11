@@ -177,11 +177,11 @@ export function ArenaDraftClient({
         personality: "LOYAL",
         posture: "ATTACKER",
         stats: {
-          force: 95,
-          agility: 95,
-          charisma: 95,
-          instinct: 95,
-          vitality: 95,
+          force: 20,
+          agility: 20,
+          charisma: 20,
+          instinct: 20,
+          vitality: 20,
         },
       },
     ]);
@@ -640,7 +640,15 @@ export function ArenaDraftClient({
                         {DRAFT_STAT_KEYS.map((key) => (
                           <label key={key} className="text-center">
                             <span className="block truncate text-[8px] uppercase text-slate-500">
-                              {key}
+                              {
+                                {
+                                  force: "Força",
+                                  agility: "Agilidade",
+                                  charisma: "Carisma",
+                                  instinct: "Instinto",
+                                  vitality: "Vitalidade",
+                                }[key]
+                              }
                             </span>
                             <input
                               type="number"
@@ -945,64 +953,74 @@ function ArenaDraftTutorial({
       aria-modal="true"
       aria-label="Como funciona a Arena Draft"
     >
-      <div className="relative max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] bg-[radial-gradient(circle_at_top_right,rgba(217,70,239,.18),transparent_32%),radial-gradient(circle_at_top_left,rgba(34,211,238,.16),transparent_35%),#070b18] p-6 shadow-2xl sm:p-9">
-        <button
-          onClick={onClose}
-          className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white"
-          aria-label="Fechar"
-        >
-          ×
-        </button>
-        <p className="text-[10px] font-black uppercase tracking-[.25em] text-cyan-300">
-          Primeiros passos
-        </p>
-        <h2 className="mt-3 pr-10 text-3xl font-black text-white sm:text-4xl">
-          Aqui, estratégia vem antes da coleção.
-        </h2>
-        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-          A Arena Draft libera o mesmo catálogo para todos. Você monta sua
-          estratégia, esconde a build e precisa ler as escolhas do rival.
-        </p>
-        <div className="mt-7 grid gap-3 sm:grid-cols-2">
-          <TutorialStep
-            number="01"
-            title="Monte seus 12"
-            text="Todo mascote começa com 20 em cada status. Depois, distribua 4.500 pontos adicionais pelo time inteiro. Formas Mega são reconhecidas automaticamente e o limite é 2."
+      <div className="relative max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-cyan-300/20 bg-[#070b18] shadow-2xl shadow-black/70">
+        <div className="relative h-44 overflow-hidden sm:h-64">
+          <img
+            src="/images/arena-draft/tutorial-arena.png"
+            alt="Arena com mascotes preparados para o draft"
+            className="h-full w-full object-cover object-center"
           />
-          <TutorialStep
-            number="02"
-            title="Proteja sua build"
-            text="O rival vê espécie, tipos e quais formas são Mega. Seus números, personalidade e postura permanecem secretos durante a inspeção."
-          />
-          <TutorialStep
-            number="03"
-            title="Bans e formação"
-            text="Cada jogador bane 3 opções do adversário. Com os 9 restantes, o draft progressivo define 6 titulares e 3 reservas."
-          />
-          <TutorialStep
-            number="04"
-            title="Combate e reação"
-            text="A luta é automática. Nos turnos 20, 35 e 45, cada lado prepara mudanças em segredo; HP, debuffs e derrotas continuam valendo após a troca."
-          />
+          <div className="absolute inset-0 bg-gradient-to-t from-[#070b18] via-[#070b18]/20 to-transparent" />
         </div>
-        <div className="mt-6 rounded-2xl bg-amber-300/8 p-4 text-xs leading-5 text-amber-100 ring-1 ring-amber-300/20">
-          <b>Beta sem premiações:</b> partidas servem para testar estratégia,
-          balanceamento, draft e rankings. Nenhum mascote ou item da sua coleção
-          é consumido ou alterado.
-        </div>
-        <div className="mt-7 flex flex-wrap justify-end gap-3">
+        <div className="relative -mt-12 p-6 sm:p-9">
           <button
             onClick={onClose}
-            className="rounded-xl px-5 py-3 text-sm font-bold text-slate-300 ring-1 ring-white/15"
+            className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white"
+            aria-label="Fechar"
           >
-            Explorar a página
+            ×
           </button>
-          <button
-            onClick={onBuild}
-            className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950"
-          >
-            Montar minha equipe
-          </button>
+          <p className="text-[10px] font-black uppercase tracking-[.25em] text-cyan-300">
+            Primeiros passos
+          </p>
+          <h2 className="mt-3 pr-10 text-3xl font-black text-white sm:text-4xl">
+            Aqui, estratégia vem antes da coleção.
+          </h2>
+          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+            A Arena Draft libera o mesmo catálogo para todos. Você monta sua
+            estratégia, esconde a build e precisa ler as escolhas do rival.
+          </p>
+          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+            <TutorialStep
+              number="01"
+              title="Monte seus 12"
+              text="Todo mascote começa com 20 em cada status. Depois, distribua 4.500 pontos adicionais pelo time inteiro. Formas Mega são reconhecidas automaticamente e o limite é 2."
+            />
+            <TutorialStep
+              number="02"
+              title="Proteja sua build"
+              text="O rival vê espécie, tipos e quais formas são Mega. Seus números, personalidade e postura permanecem secretos durante a inspeção."
+            />
+            <TutorialStep
+              number="03"
+              title="Bans e formação"
+              text="Cada jogador bane 3 opções do adversário. Com os 9 restantes, o draft progressivo define 6 titulares e 3 reservas."
+            />
+            <TutorialStep
+              number="04"
+              title="Combate e reação"
+              text="A luta é automática. Nos turnos 20, 35 e 45, cada lado prepara mudanças em segredo; HP, debuffs e derrotas continuam valendo após a troca."
+            />
+          </div>
+          <div className="mt-6 rounded-2xl bg-amber-300/8 p-4 text-xs leading-5 text-amber-100 ring-1 ring-amber-300/20">
+            <b>Beta sem premiações:</b> partidas servem para testar estratégia,
+            balanceamento, draft e rankings. Nenhum mascote ou item da sua
+            coleção é consumido ou alterado.
+          </div>
+          <div className="mt-7 flex flex-wrap justify-end gap-3">
+            <button
+              onClick={onClose}
+              className="rounded-xl px-5 py-3 text-sm font-bold text-slate-300 ring-1 ring-white/15"
+            >
+              Explorar a página
+            </button>
+            <button
+              onClick={onBuild}
+              className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950"
+            >
+              Montar minha equipe
+            </button>
+          </div>
         </div>
       </div>
     </div>
