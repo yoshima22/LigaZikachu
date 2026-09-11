@@ -10,6 +10,7 @@ import {
   Copy,
   Gamepad2,
   History,
+  Pencil,
   Search,
   Shield,
   Sparkles,
@@ -34,6 +35,7 @@ import {
   deleteDraftPresetAction,
   duplicateDraftPresetAction,
   joinDraftQueueAction,
+  renameDraftPresetAction,
   saveDraftPresetAction,
 } from "./actions";
 
@@ -109,6 +111,9 @@ export function ArenaDraftClient({
   const selected = presets.find((p) => p.id === selectedId);
   const [name, setName] = useState(selected?.name ?? "Meu primeiro draft");
   const [pets, setPets] = useState<ArenaDraftPet[]>(selected?.pets ?? []);
+  const [editingPetId, setEditingPetId] = useState<string | null>(
+    selected?.pets[0]?.id ?? null,
+  );
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
   const [megaFilter, setMegaFilter] = useState<"ALL" | "MEGA" | "COMMON">(
@@ -122,6 +127,11 @@ export function ArenaDraftClient({
   );
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [missingPresetOpen, setMissingPresetOpen] = useState(false);
+  const [presetPage, setPresetPage] = useState(1);
+  const [renamingPresetId, setRenamingPresetId] = useState<string | null>(null);
+  const [renameValue, setRenameValue] = useState("");
+  const presetPages = Math.max(1, Math.ceil(presets.length / 5));
+  const visiblePresets = presets.slice((presetPage - 1) * 5, presetPage * 5);
   useEffect(() => {
     if (window.localStorage.getItem("arena-draft-intro-v1") !== "seen")
       setTutorialOpen(true);
@@ -176,6 +186,7 @@ export function ArenaDraftClient({
     setSelectedId(preset.id);
     setName(preset.name);
     setPets(preset.pets);
+    setEditingPetId(preset.pets[0]?.id ?? null);
     setTab("BUILD");
   };
   const addPet = (item: Species) => {
@@ -183,10 +194,11 @@ export function ArenaDraftClient({
       return toast.error("Os 12 slots já estão preenchidos.");
     if (item.isMega && megas >= 2)
       return toast.error("O preset já possui as 2 formas Mega permitidas.");
+    const id = crypto.randomUUID();
     setPets([
       ...pets,
       {
-        id: crypto.randomUUID(),
+        id,
         slot: pets.length,
         speciesId: item.id,
         isMega: item.isMega,
@@ -201,15 +213,17 @@ export function ArenaDraftClient({
         },
       },
     ]);
+    setEditingPetId(id);
   };
   const updatePet = (id: string, patch: Partial<ArenaDraftPet>) =>
     setPets(pets.map((pet) => (pet.id === id ? { ...pet, ...patch } : pet)));
-  const removePet = (id: string) =>
-    setPets(
-      pets
-        .filter((pet) => pet.id !== id)
-        .map((pet, slot) => ({ ...pet, slot })),
-    );
+  const removePet = (id: string) => {
+    const next = pets
+      .filter((pet) => pet.id !== id)
+      .map((pet, slot) => ({ ...pet, slot }));
+    setPets(next);
+    if (editingPetId === id) setEditingPetId(next[0]?.id ?? null);
+  };
   const save = () =>
     start(async () => {
       const result = await saveDraftPresetAction({
@@ -460,14 +474,16 @@ export function ArenaDraftClient({
               <div className="flex items-center justify-between">
                 <h2 className="font-black text-white">Meus presets</h2>
                 <button
+                  disabled={presets.length >= 10}
                   onClick={() => {
                     setSelectedId(null);
                     setName("Novo preset");
                     setPets([]);
+                    setEditingPetId(null);
                   }}
-                  className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white"
+                  className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-35"
                 >
-                  + Novo
+                  {presets.length >= 10 ? "Limite 10/10" : "+ Novo"}
                 </button>
               </div>
               <div className="mt-3 space-y-2">
@@ -476,55 +492,159 @@ export function ArenaDraftClient({
                     Nenhum preset criado.
                   </p>
                 ) : (
-                  presets.map((p) => (
+                  visiblePresets.map((p) => (
                     <div
                       key={p.id}
-                      className={`flex items-center rounded-xl border ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
+                      className={`rounded-xl border p-2 ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
                     >
-                      <button
-                        onClick={() => choosePreset(p)}
-                        className="flex min-w-0 flex-1 items-center justify-between p-3 text-left"
-                      >
-                        <span>
-                          <b className="block text-sm text-white">{p.name}</b>
-                          <small className="text-slate-500">
-                            {p.pets.length}/12 ·{" "}
-                            {p.pets.filter((x) => x.isMega).length}/2 Megas
-                          </small>
-                        </span>
-                        {p.isReady ? (
-                          <CheckCircle2
-                            className="text-emerald-300"
-                            size={18}
+                      {renamingPresetId === p.id ? (
+                        <div className="flex gap-2">
+                          <input
+                            autoFocus
+                            value={renameValue}
+                            maxLength={40}
+                            onChange={(event) =>
+                              setRenameValue(event.target.value)
+                            }
+                            onKeyDown={(event) => {
+                              if (event.key === "Escape")
+                                setRenamingPresetId(null);
+                            }}
+                            className="min-w-0 flex-1 rounded-lg border border-cyan-300/25 bg-slate-950 px-3 py-2 text-xs text-white outline-none"
                           />
-                        ) : (
-                          <span className="text-[9px] text-amber-300">
-                            RASCUNHO
-                          </span>
-                        )}
-                      </button>
-                      <button
-                        title="Duplicar preset"
-                        disabled={pending}
-                        onClick={() =>
-                          start(async () => {
-                            const result = await duplicateDraftPresetAction(
-                              p.id,
-                            );
-                            result.error
-                              ? toast.error(result.error)
-                              : toast.success(result.success);
-                            router.refresh();
-                          })
-                        }
-                        className="mr-2 rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-cyan-200"
-                      >
-                        <Copy size={14} />
-                      </button>
+                          <button
+                            disabled={pending}
+                            onClick={() =>
+                              start(async () => {
+                                const result = await renameDraftPresetAction(
+                                  p.id,
+                                  renameValue,
+                                );
+                                if (result.error) toast.error(result.error);
+                                else {
+                                  toast.success(result.success);
+                                  setRenamingPresetId(null);
+                                  router.refresh();
+                                }
+                              })
+                            }
+                            className="rounded-lg bg-cyan-300 px-3 text-[10px] font-black text-slate-950"
+                          >
+                            Salvar
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => choosePreset(p)}
+                            className="flex min-w-0 flex-1 items-center justify-between p-2 text-left"
+                          >
+                            <span className="min-w-0">
+                              <b className="block truncate text-sm text-white">
+                                {p.name}
+                              </b>
+                              <small className="text-slate-500">
+                                {p.pets.length}/12 ·{" "}
+                                {p.pets.filter((x) => x.isMega).length}/2 Megas
+                              </small>
+                            </span>
+                            {p.isReady && (
+                              <CheckCircle2
+                                className="shrink-0 text-emerald-300"
+                                size={16}
+                              />
+                            )}
+                          </button>
+                          <button
+                            title="Renomear preset"
+                            onClick={() => {
+                              setRenamingPresetId(p.id);
+                              setRenameValue(p.name);
+                            }}
+                            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+                          >
+                            <Pencil size={13} />
+                          </button>
+                          <button
+                            title="Duplicar preset"
+                            disabled={pending || presets.length >= 10}
+                            onClick={() =>
+                              start(async () => {
+                                const result = await duplicateDraftPresetAction(
+                                  p.id,
+                                );
+                                result.error
+                                  ? toast.error(result.error)
+                                  : toast.success(result.success);
+                                router.refresh();
+                              })
+                            }
+                            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-cyan-200 disabled:opacity-25"
+                          >
+                            <Copy size={13} />
+                          </button>
+                          <button
+                            title="Excluir preset"
+                            disabled={pending}
+                            onClick={() => {
+                              if (
+                                !window.confirm(
+                                  `Excluir o preset “${p.name}”? Esta ação não pode ser desfeita.`,
+                                )
+                              )
+                                return;
+                              start(async () => {
+                                const result = await deleteDraftPresetAction(
+                                  p.id,
+                                );
+                                if (result.error) toast.error(result.error);
+                                else {
+                                  toast.success(result.success);
+                                  if (selectedId === p.id) {
+                                    setSelectedId(null);
+                                    setPets([]);
+                                    setEditingPetId(null);
+                                  }
+                                  if (
+                                    visiblePresets.length === 1 &&
+                                    presetPage > 1
+                                  )
+                                    setPresetPage((page) => page - 1);
+                                  router.refresh();
+                                }
+                              });
+                            }}
+                            className="rounded-lg p-2 text-slate-400 hover:bg-rose-400/10 hover:text-rose-300"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      )}
                     </div>
                   ))
                 )}
               </div>
+              {presets.length > 0 && (
+                <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
+                  <button
+                    disabled={presetPage <= 1}
+                    onClick={() => setPresetPage((page) => page - 1)}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
+                  >
+                    Anterior
+                  </button>
+                  <span className="text-[9px] text-slate-500">
+                    Página {presetPage}/{presetPages} · {presets.length}/10
+                  </span>
+                  <button
+                    disabled={presetPage >= presetPages}
+                    onClick={() => setPresetPage((page) => page + 1)}
+                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
+                  >
+                    Próxima
+                  </button>
+                </div>
+              )}
             </div>
             <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
               <h2 className="font-black text-white">Catálogo livre</h2>
@@ -605,7 +725,7 @@ export function ArenaDraftClient({
                   </button>
                 ))}
               </div>
-              <div className="mt-3 flex items-center justify-between">
+              <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
                 <button
                   disabled={catalogPage <= 1}
                   onClick={() => setCatalogPage((p) => p - 1)}
@@ -613,9 +733,15 @@ export function ArenaDraftClient({
                 >
                   Anterior
                 </button>
-                <span className="text-[10px] text-slate-400">
-                  Página {Math.min(catalogPage, catalogPages)} de {catalogPages}{" "}
-                  · {filtered.length} espécies
+                <span className="text-center text-[9px] text-slate-400 sm:text-[10px]">
+                  <span className="block sm:inline">
+                    Página {Math.min(catalogPage, catalogPages)} de{" "}
+                    {catalogPages}
+                  </span>{" "}
+                  <span className="hidden sm:inline">· </span>
+                  <span className="block sm:inline">
+                    {filtered.length} espécies
+                  </span>
                 </span>
                 <button
                   disabled={catalogPage >= catalogPages}
@@ -629,11 +755,11 @@ export function ArenaDraftClient({
           </section>
           <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
             <div className="flex flex-wrap items-center justify-between gap-3">
-              <div>
+              <div className="min-w-0 flex-1">
                 <input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
-                  className="border-b border-white/10 bg-transparent text-xl font-black text-white outline-none"
+                  className="w-full max-w-md border-b border-white/10 bg-transparent text-lg font-black text-white outline-none sm:text-xl"
                 />
                 <p className="mt-1 text-xs text-slate-500">
                   Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
@@ -644,134 +770,195 @@ export function ArenaDraftClient({
               <button
                 disabled={pending}
                 onClick={save}
-                className="rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50"
+                className="w-full rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50 sm:w-auto"
               >
                 Salvar preset
               </button>
             </div>
-            <div className="mt-4 space-y-3">
+            <div className="mt-4">
               {pets.length === 0 ? (
                 <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
                   Escolha mascotes no catálogo para começar.
                 </div>
               ) : (
-                pets.map((pet) => {
-                  const item = species.find((s) => s.id === pet.speciesId)!;
-                  const total = DRAFT_STAT_KEYS.reduce(
-                    (s, k) => s + pet.stats[k],
-                    0,
-                  );
-                  return (
-                    <article
-                      key={pet.id}
-                      className="rounded-2xl border border-white/10 bg-white/[.025] p-3"
-                    >
-                      <div className="flex gap-3">
-                        <span className="text-xs font-black text-slate-500">
-                          {pet.slot + 1}
-                        </span>
-                        <img
-                          src={item?.sprite}
-                          alt=""
-                          className="h-14 w-14 object-contain"
-                        />
-                        <div className="min-w-0 flex-1">
-                          <div className="flex items-center justify-between">
-                            <b className="truncate text-white">{item?.name}</b>
-                            <button
-                              onClick={() => removePet(pet.id)}
-                              className="text-rose-300"
-                            >
-                              <Trash2 size={15} />
-                            </button>
-                          </div>
-                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
-                            <select
-                              value={pet.personality}
-                              onChange={(e) =>
-                                updatePet(pet.id, {
-                                  personality: e.target
-                                    .value as ArenaDraftPet["personality"],
-                                })
-                              }
-                              className="rounded-lg bg-slate-900 p-2 text-[10px]"
-                            >
-                              {DRAFT_PERSONALITIES.map((x) => (
-                                <option key={x} value={x}>
-                                  {PERSONALITY_LABEL[x]}
-                                </option>
-                              ))}
-                            </select>
-                            <select
-                              value={pet.posture}
-                              onChange={(e) =>
-                                updatePet(pet.id, {
-                                  posture: e.target
-                                    .value as ArenaDraftPet["posture"],
-                                })
-                              }
-                              className="rounded-lg bg-slate-900 p-2 text-[10px]"
-                            >
-                              {DRAFT_POSTURES.map((x) => (
-                                <option key={x} value={x}>
-                                  {postureLabels[x]}
-                                </option>
-                              ))}
-                            </select>
-                            <div
-                              className={`flex items-center justify-center rounded-lg border p-2 text-[10px] ${pet.isMega ? "border-fuchsia-400 text-fuchsia-200" : "border-white/10 text-slate-500"}`}
-                            >
-                              {pet.isMega ? "Forma Mega · +10" : "Forma comum"}
+                <>
+                  <div className="mb-2 flex items-center justify-between gap-2">
+                    <p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">
+                      Escalação selecionada
+                    </p>
+                    <span className="text-right text-[9px] text-slate-500">
+                      Toque em um mascote para editar
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6 xl:grid-cols-4 2xl:grid-cols-6">
+                    {pets.map((pet) => {
+                      const item = species.find(
+                        (candidate) => candidate.id === pet.speciesId,
+                      );
+                      return (
+                        <button
+                          key={pet.id}
+                          onClick={() => setEditingPetId(pet.id)}
+                          className={`relative min-w-0 rounded-xl border p-2 text-left transition ${editingPetId === pet.id ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,.08)]" : "border-white/10 bg-white/[.025] hover:border-white/20"}`}
+                        >
+                          <span className="absolute left-1.5 top-1.5 text-[8px] font-black text-slate-500">
+                            {pet.slot + 1}
+                          </span>
+                          {pet.isMega && (
+                            <span className="absolute right-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[6px] font-black text-fuchsia-200">
+                              MEGA
+                            </span>
+                          )}
+                          <img
+                            src={item?.sprite}
+                            alt=""
+                            className="mx-auto h-12 w-12 object-contain"
+                          />
+                          <b className="block truncate text-center text-[9px] text-white">
+                            {item?.name}
+                          </b>
+                          <span className="mt-1 block truncate text-center text-[7px] text-slate-500">
+                            {postureLabels[pet.posture]}
+                          </span>
+                        </button>
+                      );
+                    })}
+                    {Array.from({ length: Math.max(0, 12 - pets.length) }).map(
+                      (_, index) => (
+                        <div
+                          key={`empty-${index}`}
+                          className="flex min-h-[82px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[9px] text-slate-700"
+                        >
+                          {pets.length + index + 1}
+                        </div>
+                      ),
+                    )}
+                  </div>
+                  {pets
+                    .filter((pet) => pet.id === editingPetId)
+                    .map((pet) => {
+                      const item = species.find((s) => s.id === pet.speciesId)!;
+                      const total = DRAFT_STAT_KEYS.reduce(
+                        (s, k) => s + pet.stats[k],
+                        0,
+                      );
+                      return (
+                        <article
+                          key={pet.id}
+                          className="mt-4 rounded-2xl border border-cyan-300/15 bg-white/[.025] p-3 sm:p-4"
+                        >
+                          <div className="flex gap-3">
+                            <span className="text-xs font-black text-slate-500">
+                              {pet.slot + 1}
+                            </span>
+                            <img
+                              src={item?.sprite}
+                              alt=""
+                              className="h-12 w-12 object-contain sm:h-14 sm:w-14"
+                            />
+                            <div className="min-w-0 flex-1">
+                              <div className="flex items-center justify-between">
+                                <b className="truncate text-white">
+                                  {item?.name}
+                                </b>
+                                <button
+                                  onClick={() => removePet(pet.id)}
+                                  className="text-rose-300"
+                                >
+                                  <Trash2 size={15} />
+                                </button>
+                              </div>
+                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                <select
+                                  value={pet.personality}
+                                  onChange={(e) =>
+                                    updatePet(pet.id, {
+                                      personality: e.target
+                                        .value as ArenaDraftPet["personality"],
+                                    })
+                                  }
+                                  className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                                >
+                                  {DRAFT_PERSONALITIES.map((x) => (
+                                    <option key={x} value={x}>
+                                      {PERSONALITY_LABEL[x]}
+                                    </option>
+                                  ))}
+                                </select>
+                                <select
+                                  value={pet.posture}
+                                  onChange={(e) =>
+                                    updatePet(pet.id, {
+                                      posture: e.target
+                                        .value as ArenaDraftPet["posture"],
+                                    })
+                                  }
+                                  className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                                >
+                                  {DRAFT_POSTURES.map((x) => (
+                                    <option key={x} value={x}>
+                                      {postureLabels[x]}
+                                    </option>
+                                  ))}
+                                </select>
+                                <div
+                                  className={`flex items-center justify-center rounded-lg border p-2 text-[10px] ${pet.isMega ? "border-fuchsia-400 text-fuchsia-200" : "border-white/10 text-slate-500"}`}
+                                >
+                                  {pet.isMega
+                                    ? "Forma Mega · +10"
+                                    : "Forma comum"}
+                                </div>
+                              </div>
                             </div>
                           </div>
-                        </div>
-                      </div>
-                      <div className="mt-3 grid grid-cols-5 gap-1">
-                        {DRAFT_STAT_KEYS.map((key) => (
-                          <label key={key} className="text-center">
-                            <span className="block truncate text-[8px] uppercase text-slate-500">
-                              {
-                                {
-                                  force: "Força",
-                                  agility: "Agilidade",
-                                  charisma: "Carisma",
-                                  instinct: "Instinto",
-                                  vitality: "Vitalidade",
-                                }[key]
-                              }
-                            </span>
-                            <input
-                              type="number"
-                              min={20}
-                              max={pet.isMega ? 240 : 250}
-                              value={pet.stats[key]}
-                              onChange={(e) =>
-                                updatePet(pet.id, {
-                                  stats: {
-                                    ...pet.stats,
-                                    [key]: Math.max(
-                                      20,
-                                      Math.min(
-                                        pet.isMega ? 240 : 250,
-                                        Number(e.target.value),
-                                      ),
-                                    ),
-                                  },
-                                })
-                              }
-                              className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
-                            />
-                          </label>
-                        ))}
-                      </div>
-                      <p className="mt-2 text-right text-[10px] text-slate-400">
-                        20 iniciais em cada status · {total - 100} pontos
-                        distribuídos{" "}
-                        {pet.isMega && "· bônus Mega calculado pelo servidor"}
-                      </p>
-                    </article>
-                  );
-                })
+                          <div className="mt-3 grid grid-cols-2 gap-2 min-[430px]:grid-cols-5 min-[430px]:gap-1">
+                            {DRAFT_STAT_KEYS.map((key) => (
+                              <label key={key} className="text-center">
+                                <span className="block truncate text-[8px] uppercase text-slate-500">
+                                  {
+                                    {
+                                      force: "Força",
+                                      agility: "Agilidade",
+                                      charisma: "Carisma",
+                                      instinct: "Instinto",
+                                      vitality: "Vitalidade",
+                                    }[key]
+                                  }
+                                </span>
+                                <input
+                                  type="number"
+                                  min={20}
+                                  max={pet.isMega ? 240 : 250}
+                                  value={pet.stats[key]}
+                                  onChange={(e) =>
+                                    updatePet(pet.id, {
+                                      stats: {
+                                        ...pet.stats,
+                                        [key]: Math.max(
+                                          20,
+                                          Math.min(
+                                            pet.isMega ? 240 : 250,
+                                            Number(e.target.value),
+                                          ),
+                                        ),
+                                      },
+                                    })
+                                  }
+                                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
+                                />
+                              </label>
+                            ))}
+                          </div>
+                          <p className="mt-2 text-right text-[10px] text-slate-400">
+                            20 iniciais em cada status · {total - 100} pontos
+                            distribuídos{" "}
+                            {pet.isMega &&
+                              "· bônus Mega calculado pelo servidor"}
+                          </p>
+                        </article>
+                      );
+                    })}
+                </>
               )}
             </div>
           </section>

@@ -91,6 +91,13 @@ export async function saveDraftPresetAction(input: {
         },
       });
     } else {
+      const presetCount = await prisma.arenaDraftPreset.count({
+        where: { ownerId: player.id },
+      });
+      if (presetCount >= 10)
+        throw new Error(
+          "Você já atingiu o limite de 10 presets. Exclua um para criar outro.",
+        );
       await prisma.arenaDraftPreset.create({
         data: {
           ownerId: player.id,
@@ -126,6 +133,26 @@ export async function deleteDraftPresetAction(id: string) {
   }
 }
 
+export async function renameDraftPresetAction(id: string, nextName: string) {
+  try {
+    const player = await currentPlayer();
+    const name = nextName.trim().slice(0, 40);
+    if (name.length < 3) throw new Error("Use ao menos 3 caracteres no nome.");
+    const updated = await prisma.arenaDraftPreset.updateMany({
+      where: { id, ownerId: player.id },
+      data: { name },
+    });
+    if (!updated.count) throw new Error("Preset não encontrado.");
+    revalidatePath("/combates/arena-draft");
+    return { success: "Preset renomeado." };
+  } catch (error) {
+    return {
+      error:
+        error instanceof Error ? error.message : "Não foi possível renomear.",
+    };
+  }
+}
+
 export async function duplicateDraftPresetAction(id: string) {
   try {
     const player = await currentPlayer();
@@ -133,6 +160,13 @@ export async function duplicateDraftPresetAction(id: string) {
       where: { id, ownerId: player.id },
     });
     if (!preset) throw new Error("Preset não encontrado.");
+    const presetCount = await prisma.arenaDraftPreset.count({
+      where: { ownerId: player.id },
+    });
+    if (presetCount >= 10)
+      throw new Error(
+        "Você já atingiu o limite de 10 presets. Exclua um antes de duplicar.",
+      );
     await prisma.arenaDraftPreset.create({
       data: {
         ownerId: player.id,

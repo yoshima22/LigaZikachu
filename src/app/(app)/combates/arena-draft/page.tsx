@@ -34,7 +34,7 @@ export default async function ArenaDraftPage() {
       prisma.arenaDraftPreset.findMany({
         where: { ownerId: player.id },
         orderBy: { updatedAt: "desc" },
-        take: 30,
+        take: 10,
       }),
       prisma.arenaDraftMatch.findFirst({
         where: {
