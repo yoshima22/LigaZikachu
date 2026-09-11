@@ -1,0 +1,8 @@
+import { notFound, redirect } from "next/navigation";
+import { getAppSession,getSessionPlayer } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { getPokemonName,getPokemonTypes,getSpriteUrl } from "@/lib/mascot-data";
+import type { ArenaDraftPet } from "@/lib/arena-draft";
+import { DraftRoomClient } from "./room-client";
+export const dynamic="force-dynamic";
+export default async function DraftRoomPage({params}:{params:Promise<{matchId:string}>}){const session=await getAppSession();if(!session?.user)redirect("/login");const player=await getSessionPlayer(session.user.id);if(!player)redirect("/dashboard");const {matchId}=await params;const match=await prisma.arenaDraftMatch.findUnique({where:{id:matchId}});if(!match||(match.playerAId!==player.id&&match.playerBId!==player.id))notFound();const side=match.playerAId===player.id?"A":"B";const own=(side==="A"?match.presetASnapshot:match.presetBSnapshot) as unknown as ArenaDraftPet[];const rival=(side==="A"?match.presetBSnapshot:match.presetASnapshot) as unknown as ArenaDraftPet[];const draft=(match.draftJson??{bansA:[],bansB:[],picksA:[],picksB:[],turn:"A"}) as Record<string,unknown>;const disabled=new Set([...(draft.bansA as string[]??[]),...(draft.bansB as string[]??[]),...(draft.picksA as string[]??[]),...(draft.picksB as string[]??[])]);const map=(pets:ArenaDraftPet[]|null)=>pets?.map(p=>({id:p.id,speciesId:p.speciesId,name:getPokemonName(p.speciesId),sprite:getSpriteUrl(p.speciesId),types:getPokemonTypes(p.speciesId),isMega:p.isMega,disabled:disabled.has(p.id)}))??[];return <DraftRoomClient matchId={match.id} state={match.state} turn={String(draft.turn??"")} ownSide={side} own={map(own)} rival={map(rival)}/>}

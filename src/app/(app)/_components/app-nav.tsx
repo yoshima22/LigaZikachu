@@ -78,6 +78,7 @@ const combatLinks = [
     livePvpOnly: true,
     casual: true,
   },
+  { href: "/combates/arena-draft", label: "Arena Draft", icon: Swords, adminOnly: false, beta: true },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   {
     href: "/desafio-sincronizado",

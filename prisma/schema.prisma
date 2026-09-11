@@ -348,8 +348,73 @@ model Player {
   notifications               PlayerNotification[]
   mascotInteractionJobs       MascotInteractionJob[]
   mascotBondRoutines          MascotRoutine[]
+  arenaDraftPresets           ArenaDraftPreset[]
+  arenaDraftMatchesAsA        ArenaDraftMatch[]              @relation("ArenaDraftPlayerA")
+  arenaDraftMatchesAsB        ArenaDraftMatch[]              @relation("ArenaDraftPlayerB")
+  arenaDraftMatchesWon        ArenaDraftMatch[]              @relation("ArenaDraftWinner")
 
   @@map("players")
+}
+
+/// Preset isolado da coleção normal. Os 12 mascotes PvP vivem no JSON validado
+/// pelo servidor para permitir snapshots históricos imutáveis por partida.
+model ArenaDraftPreset {
+  id        String   @id @default(cuid())
+  ownerId   String
+  name      String
+  petsJson  Json
+  isReady   Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  owner     Player   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+
+  @@index([ownerId, updatedAt])
+  @@map("arena_draft_presets")
+}
+
+model ArenaDraftMatch {
+  id              String             @id @default(cuid())
+  playerAId       String
+  playerBId       String?
+  winnerId        String?
+  state           String             @default("CREATED")
+  stateVersion    Int                @default(1)
+  deadlineAt      DateTime?
+  presetASnapshot Json
+  presetBSnapshot Json?
+  draftJson       Json?
+  battleJson      Json?
+  metricsJson     Json?
+  eventSequence   Int                @default(0)
+  createdAt       DateTime           @default(now())
+  updatedAt       DateTime           @updatedAt
+  finishedAt      DateTime?
+  playerA         Player             @relation("ArenaDraftPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB         Player?            @relation("ArenaDraftPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winner          Player?            @relation("ArenaDraftWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  actions         ArenaDraftAction[]
+
+  @@index([state, createdAt])
+  @@index([playerAId, createdAt])
+  @@index([playerBId, createdAt])
+  @@map("arena_draft_matches")
+}
+
+model ArenaDraftAction {
+  id             String          @id @default(cuid())
+  matchId        String
+  actorId        String
+  idempotencyKey String          @unique
+  sequence       Int
+  phase          String
+  actionType     String
+  payloadJson    Json
+  createdAt      DateTime        @default(now())
+  match          ArenaDraftMatch @relation(fields: [matchId], references: [id], onDelete: Cascade)
+
+  @@unique([matchId, sequence])
+  @@index([matchId, createdAt])
+  @@map("arena_draft_actions")
 }
 
 /// Fila duravel das interacoes em massa. O pedido sobrevive ao fechamento da
