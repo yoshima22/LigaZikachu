@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { createClient } from "@supabase/supabase-js";
@@ -42,11 +43,64 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   SURVIVOR: "Sobrevivente",
 };
 type Role = (typeof ROLES)[number];
+// Espelha o pickOrder do servidor (actions.ts): draft em serpentina.
+const DRAFT_PICK_ORDER = [
+  "A",
+  "B",
+  "B",
+  "A",
+  "A",
+  "B",
+  "B",
+  "A",
+  "A",
+  "B",
+  "B",
+  "A",
+] as const;
+const PERSONALITY_LABELS: Record<string, string> = {
+  LOYAL: "Leal",
+  PROUD: "Orgulhoso",
+  MISCHIEVOUS: "Travesso",
+  LAZY: "Preguiçoso",
+  COMPETITIVE: "Competitivo",
+  DRAMATIC: "Dramático",
+  PLAYFUL: "Brincalhão",
+  ELECTRIC: "Elétrico",
+  TIMID: "Tímido",
+  CHAOTIC: "Caótico",
+  CURIOUS: "Curioso",
+  GLUTTON: "Guloso",
+  SERENE: "Sereno",
+};
+// Código de cores das personalidades (borda / fundo / texto), no mesmo espírito
+// das tags de arena/liga.
+const PERSONALITY_STYLES: Record<string, string> = {
+  LOYAL: "border-sky-400/40 bg-sky-400/10 text-sky-200",
+  PROUD: "border-amber-400/40 bg-amber-400/10 text-amber-200",
+  MISCHIEVOUS: "border-fuchsia-400/40 bg-fuchsia-400/10 text-fuchsia-200",
+  LAZY: "border-slate-400/40 bg-slate-400/10 text-slate-200",
+  COMPETITIVE: "border-red-400/40 bg-red-400/10 text-red-200",
+  DRAMATIC: "border-rose-400/40 bg-rose-400/10 text-rose-200",
+  PLAYFUL: "border-lime-400/40 bg-lime-400/10 text-lime-200",
+  ELECTRIC: "border-yellow-300/40 bg-yellow-300/10 text-yellow-200",
+  TIMID: "border-indigo-400/40 bg-indigo-400/10 text-indigo-200",
+  CHAOTIC: "border-purple-400/40 bg-purple-400/10 text-purple-200",
+  CURIOUS: "border-cyan-400/40 bg-cyan-400/10 text-cyan-200",
+  GLUTTON: "border-orange-400/40 bg-orange-400/10 text-orange-200",
+  SERENE: "border-emerald-400/40 bg-emerald-400/10 text-emerald-200",
+};
+const personalityLabel = (value?: string | null) =>
+  value ? (PERSONALITY_LABELS[value] ?? value) : null;
+const personalityStyle = (value?: string | null) =>
+  (value && PERSONALITY_STYLES[value]) ||
+  "border-slate-500/40 bg-slate-500/10 text-slate-300";
 type Pet = {
   id: string;
   speciesId: number;
   name: string;
   sprite: string;
+  personality?: string | null;
   types: string[];
   advantages: string[];
   weaknesses: string[];
@@ -69,6 +123,10 @@ type Battle = {
     damage: number;
     targetHpAfter?: number;
     effect?: string;
+    actorRole?: string;
+    targetRole?: string;
+    advantageApplied?: boolean;
+    multiplier?: number;
   }>;
   checkpoint?: number;
   checkpoints?: number[];
@@ -133,7 +191,7 @@ export function DraftRoomClient({
     online: boolean;
     grace?: number;
   } | null>(null);
-  const [selected, setSelected] = useState<string | null>(null);
+  const [selected, setSelected] = useState<string[]>([]);
   // Poll leve estilo Batalha de Terreno: recarrega só quando a versão muda.
   useEffect(() => {
     if (["FINISHED", "CANCELLED"].includes(state)) return;
@@ -218,13 +276,28 @@ export function DraftRoomClient({
       cleanup();
     };
   }, [matchId, router, state, stateVersion]);
-  const act = (id: string) =>
+  // Bans e picks entram no servidor um alvo por vez (ordem A B B A A B B A A B
+  // B A). Quando o jogador tem dois picks seguidos, deixamos escolher os dois e
+  // enviamos em sequência num único "Confirmar".
+  const submitSelection = (ids: string[]) =>
     start(async () => {
-      const r = await submitArenaDraftAction(matchId, id, crypto.randomUUID());
-      r.error ? toast.error(r.error) : toast.success(r.success);
-      setSelected(null);
+      for (const id of ids) {
+        const r = await submitArenaDraftAction(
+          matchId,
+          id,
+          crypto.randomUUID(),
+        );
+        if (r.error) {
+          toast.error(r.error);
+          router.refresh();
+          return;
+        }
+      }
+      toast.success(ids.length > 1 ? "Escolhas registradas." : "Ação registrada.");
+      setSelected([]);
       router.refresh();
     });
+  const act = (id: string) => submitSelection([id]);
   const fight = () =>
     start(async () => {
       const r = await resolveArenaDraftBattleAction(matchId);
@@ -245,7 +318,7 @@ export function DraftRoomClient({
   const petById = new Map([...own, ...rival].map((pet) => [pet.id, pet]));
   // Reseta a seleção sempre que a vez ou a fase mudam.
   useEffect(() => {
-    setSelected(null);
+    setSelected([]);
   }, [turn, state]);
 
   const pool =
@@ -254,6 +327,17 @@ export function DraftRoomClient({
       : picking
         ? own.filter((p) => p.status === "AVAILABLE")
         : [];
+  // Quantos alvos o jogador confirma nesta vez: ban é sempre 1; no draft pode
+  // ser 2 quando a ordem lhe dá dois picks seguidos.
+  const totalPicks = progress.picksA + progress.picksB;
+  let picksThisTurn = 0;
+  for (
+    let i = totalPicks;
+    i < DRAFT_PICK_ORDER.length && DRAFT_PICK_ORDER[i] === ownSide;
+    i += 1
+  )
+    picksThisTurn += 1;
+  const required = banning ? 1 : Math.max(1, Math.min(picksThisTurn, pool.length));
 
   const title = reveal
     ? "Inspeção das equipes"
@@ -388,8 +472,19 @@ export function DraftRoomClient({
                 phase={banning ? "BAN" : "PICK"}
                 pool={pool}
                 selected={selected}
-                onSelect={setSelected}
-                onConfirm={() => selected && act(selected)}
+                required={required}
+                onToggle={(id) =>
+                  setSelected((current) =>
+                    current.includes(id)
+                      ? current.filter((x) => x !== id)
+                      : current.length < required
+                        ? [...current, id]
+                        : required === 1
+                          ? [id]
+                          : current,
+                  )
+                }
+                onConfirm={() => selected.length === required && submitSelection(selected)}
                 pending={pending}
               />
             ) : (
@@ -447,7 +542,7 @@ function StrategyWindow({
       router.refresh();
     });
   return (
-    <section className="rounded-3xl border border-cyan-300/20 bg-slate-950/80 p-5">
+    <section className="rounded-3xl border border-cyan-300/20 bg-slate-950/80 p-5 pb-28">
       <CombatStage
         own={pets.filter((pet) => strategy.activeIds.includes(pet.id))}
         rival={rival.filter((pet) => strategy.rivalActiveIds.includes(pet.id))}
@@ -489,34 +584,34 @@ function StrategyWindow({
         {pets.map((p) => {
           const selected = active.includes(p.id),
             dead = p.hp !== null && p.hp <= 0;
+          const benchFull = !selected && active.length >= 6;
           return (
             <article
               key={p.id}
-              className={`rounded-2xl border p-3 ${selected ? "border-cyan-300/60 bg-cyan-300/10" : "border-white/10 bg-white/[.02]"} ${dead ? "opacity-40" : ""}`}
+              className={`rounded-2xl border p-3 ${selected ? "border-cyan-300/60 bg-cyan-300/10" : "border-white/10 bg-white/[.02]"} ${dead ? "opacity-50" : ""}`}
             >
-              <button
-                disabled={dead || strategy.ownConfirmed}
-                onClick={() => toggle(p.id)}
-                className="flex w-full items-center gap-3 text-left"
-              >
+              <div className="flex items-center gap-3">
                 <img
                   src={p.sprite}
                   alt=""
                   className={`h-16 w-16 shrink-0 object-contain [image-rendering:pixelated] ${dead ? "grayscale" : ""}`}
                 />
-                <span className="min-w-0 flex-1">
+                <div className="min-w-0 flex-1">
                   <b className="block truncate text-sm text-white">{p.name}</b>
-                  <small
-                    className={
-                      dead
-                        ? "text-rose-300"
-                        : selected
-                          ? "text-cyan-200"
-                          : "text-slate-400"
-                    }
-                  >
-                    {dead ? "Derrotado" : selected ? "Em campo" : "Banco"}
-                  </small>
+                  <span className="mt-0.5 flex flex-wrap gap-1">
+                    <span
+                      className={`rounded px-1.5 py-0.5 text-[8px] font-black ${dead ? "bg-rose-500/15 text-rose-300" : selected ? "bg-cyan-400/15 text-cyan-200" : "bg-slate-500/15 text-slate-300"}`}
+                    >
+                      {dead ? "DERROTADO" : selected ? "EM CAMPO" : "BANCO"}
+                    </span>
+                    {personalityLabel(p.personality) && (
+                      <span
+                        className={`rounded border px-1.5 py-0.5 text-[8px] font-bold ${personalityStyle(p.personality)}`}
+                      >
+                        {personalityLabel(p.personality)}
+                      </span>
+                    )}
+                  </span>
                   <span className="mt-1 flex items-center gap-2">
                     <span className="h-1.5 flex-1 overflow-hidden rounded-full bg-white/10">
                       <span
@@ -536,18 +631,39 @@ function StrategyWindow({
                       {Math.max(0, p.hp ?? p.maxHp)}/{p.maxHp}
                     </small>
                   </span>
-                </span>
+                </div>
+              </div>
+              <button
+                disabled={dead || strategy.ownConfirmed || benchFull}
+                onClick={() => toggle(p.id)}
+                title={
+                  benchFull
+                    ? "Já há 6 em campo. Mande um ativo ao banco primeiro."
+                    : undefined
+                }
+                className={`mt-2 w-full rounded-lg px-2 py-2 text-[10px] font-bold transition disabled:opacity-40 ${selected ? "border border-rose-400/40 bg-rose-500/10 text-rose-200" : "border border-cyan-300/40 bg-cyan-300/10 text-cyan-200"}`}
+              >
+                {dead
+                  ? "Fora de combate"
+                  : selected
+                    ? "↓ Mandar ao banco"
+                    : benchFull
+                      ? "Campo cheio (6/6)"
+                      : "↑ Colocar em campo"}
               </button>
+              <label className="mt-2 block text-[8px] font-bold uppercase tracking-wider text-slate-500">
+                Postura
+              </label>
               <select
                 disabled={dead || strategy.ownConfirmed}
                 value={postures[p.id]}
                 onChange={(e) =>
                   setPostures((v) => ({ ...v, [p.id]: e.target.value as Role }))
                 }
-                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-900 px-2 py-2 text-[10px] text-white"
+                className="mt-1 w-full rounded-lg border border-[#FFCB05]/30 bg-slate-900 px-2 py-2 text-[10px] font-bold text-[#FFCB05]"
               >
                 {ROLES.map((r) => (
-                  <option key={r} value={r}>
+                  <option key={r} value={r} className="text-white">
                     {ROLE_LABELS[r]}
                   </option>
                 ))}
@@ -619,15 +735,33 @@ function StrategyWindow({
           </div>
         </div>
       </div>
-      <button
-        disabled={pending || strategy.ownConfirmed || active.length !== 6}
-        onClick={submit}
-        className="mt-5 w-full rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"
-      >
-        {strategy.ownConfirmed
-          ? "Estratégia confirmada · aguardando rival"
-          : "Travar estratégia em segredo"}
-      </button>
+      {/* Barra fixa com tempo + travar, sempre visível (padrão Torre dos Rebeldes). */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/90 p-3 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
+          {strategy.deadlineAt && (
+            <div className="flex shrink-0 flex-col items-center rounded-xl border border-cyan-300/25 bg-cyan-300/5 px-3 py-1.5">
+              <span className="text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                Tempo
+              </span>
+              <span className="font-pixel text-lg text-[#FFCB05]">
+                <Countdown deadlineAt={strategy.deadlineAt} />
+              </span>
+            </div>
+          )}
+          <span className="shrink-0 text-xs font-bold text-cyan-200">
+            {active.length}/6 em campo
+          </span>
+          <button
+            disabled={pending || strategy.ownConfirmed || active.length !== 6}
+            onClick={submit}
+            className="flex-1 rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"
+          >
+            {strategy.ownConfirmed
+              ? "Estratégia confirmada · aguardando rival"
+              : "Travar estratégia em segredo"}
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -674,13 +808,19 @@ function AnimatedBattle({
     return () => window.clearTimeout(timer);
   }, [playing, cursor, end]);
   const hp = new Map<string, number>();
-  [...leftPets, ...rightPets].forEach((pet) => hp.set(pet.id, pet.maxHp));
+  const petById = new Map<string, Pet>();
+  [...leftPets, ...rightPets].forEach((pet) => {
+    hp.set(pet.id, pet.maxHp);
+    petById.set(pet.id, pet);
+  });
   for (let index = 0; index <= cursor && index < events.length; index += 1) {
     const event = events[index];
     if (event.targetId && event.targetHpAfter !== undefined)
       hp.set(event.targetId, event.targetHpAfter);
   }
   const current = cursor >= from && cursor < events.length ? events[cursor] : null;
+  const roleLabel = (value?: string) =>
+    value ? (ROLE_LABELS[value as Role] ?? value) : null;
   const togglePlay = () => {
     if (cursor >= end) {
       setCursor(startCursor);
@@ -742,29 +882,64 @@ function AnimatedBattle({
           {renderSide(rightPets, true)}
         </div>
       </div>
-      <div className="mt-3 min-h-[2.75rem] rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-center text-[11px]">
+      <div className="mt-3 min-h-[2.75rem] rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-[11px]">
         {current ? (
-          <span className="text-slate-200">
-            <b className="text-white">
-              T{current.turn} · {current.actorName}
-            </b>{" "}
-            {current.action === "HEAL" ? "curou" : "→"} {current.targetName} ·{" "}
-            <span
-              className={
-                current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
-              }
-            >
-              {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
-            </span>
-            {current.targetHpAfter === 0 && (
-              <span className="ml-1 font-black text-rose-400">KO!</span>
-            )}
+          <div className="flex flex-col items-center gap-1">
+            <div className="flex flex-wrap items-center justify-center gap-1.5">
+              <b className="text-white">
+                T{current.turn} · {current.actorName}
+              </b>
+              {roleLabel(current.actorRole) && (
+                <span className="rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[8px] font-bold text-[#FFCB05]">
+                  {roleLabel(current.actorRole)}
+                </span>
+              )}
+              {personalityLabel(
+                current.actorId ? petById.get(current.actorId)?.personality : null,
+              ) && (
+                <span
+                  className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${personalityStyle(current.actorId ? petById.get(current.actorId)?.personality : null)}`}
+                >
+                  {personalityLabel(
+                    current.actorId
+                      ? petById.get(current.actorId)?.personality
+                      : null,
+                  )}
+                </span>
+              )}
+              <span className="text-slate-400">
+                {current.action === "HEAL" ? "curou" : "atacou"}
+              </span>
+              <b className="text-slate-200">{current.targetName}</b>
+              {roleLabel(current.targetRole) && (
+                <span className="rounded-full border border-slate-600 bg-slate-950 px-1.5 py-0.5 text-[8px] font-bold text-slate-400">
+                  {roleLabel(current.targetRole)}
+                </span>
+              )}
+              <span
+                className={
+                  current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
+                }
+              >
+                · {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
+              </span>
+              {current.advantageApplied && current.action !== "HEAL" && (
+                <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-1.5 py-0.5 text-[8px] font-black text-yellow-200">
+                  ⚡ SUPER EFETIVO
+                </span>
+              )}
+              {current.targetHpAfter === 0 && (
+                <span className="font-black text-rose-400">KO!</span>
+              )}
+            </div>
             {current.effect && (
-              <span className="ml-1 text-fuchsia-200">· {current.effect}</span>
+              <span className="text-center text-[10px] text-fuchsia-200">
+                {current.effect}
+              </span>
             )}
-          </span>
+          </div>
         ) : (
-          <span className="text-slate-500">
+          <span className="block text-center text-slate-500">
             {cursor < from ? "Preparando o confronto…" : "Fim do segmento."}
           </span>
         )}
@@ -1022,42 +1197,54 @@ function WaitingCard({ rival, phase }: { rival: string; phase: "BAN" | "PICK" })
     </div>
   );
 }
-// Grade de selecionar-e-confirmar (um alvo por vez), no estilo do pré-jogo online.
+// Grade de selecionar-e-confirmar. Ban confirma 1; o draft pode confirmar 2 de
+// uma vez quando a serpentina dá dois picks seguidos.
 function SelectionGrid({
   phase,
   pool,
   selected,
-  onSelect,
+  required,
+  onToggle,
   onConfirm,
   pending,
 }: {
   phase: "BAN" | "PICK";
   pool: Pet[];
-  selected: string | null;
-  onSelect: (id: string | null) => void;
+  selected: string[];
+  required: number;
+  onToggle: (id: string) => void;
   onConfirm: () => void;
   pending: boolean;
 }) {
   const [details, setDetails] = useState<string | null>(null);
   const ban = phase === "BAN";
+  const done = selected.length === required;
   return (
     <section
-      className={`rounded-2xl border p-4 ${ban ? "border-rose-400/30 bg-rose-500/[.04]" : "border-amber-300/30 bg-amber-300/[.04]"}`}
+      className={`rounded-2xl border p-4 pb-24 ${ban ? "border-rose-400/30 bg-rose-500/[.04]" : "border-amber-300/30 bg-amber-300/[.04]"}`}
     >
       <p className="text-center text-sm font-bold text-white">
         {ban
           ? "Escolha um mascote da equipe adversária para banir."
-          : "Escolha um mascote da sua conta para a formação."}
+          : required > 1
+            ? `Escolha ${required} mascotes da sua conta para a formação.`
+            : "Escolha um mascote da sua conta para a formação."}
       </p>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {pool.map((pet) => {
-          const isSelected = selected === pet.id;
+          const index = selected.indexOf(pet.id);
+          const isSelected = index >= 0;
           return (
             <div key={pet.id} className="space-y-1">
               <button
-                onClick={() => onSelect(isSelected ? null : pet.id)}
-                className={`w-full rounded-xl border p-2 text-center transition ${isSelected ? (ban ? "border-rose-400 bg-rose-500/15" : "border-[#FFCB05] bg-[#FFCB05]/15") : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
+                onClick={() => onToggle(pet.id)}
+                className={`relative w-full rounded-xl border p-2 text-center transition ${isSelected ? (ban ? "border-rose-400 bg-rose-500/15" : "border-[#FFCB05] bg-[#FFCB05]/15") : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
               >
+                {isSelected && required > 1 && (
+                  <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-[#FFCB05] text-[9px] font-black text-slate-950">
+                    {index + 1}
+                  </span>
+                )}
                 <img
                   src={pet.sprite}
                   alt=""
@@ -1066,6 +1253,18 @@ function SelectionGrid({
                 <b className="block truncate text-[10px] text-white">
                   {pet.name}
                 </b>
+                <span className="mt-0.5 flex flex-wrap justify-center gap-1">
+                  <span className="rounded border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1 text-[7px] font-bold text-[#FFCB05]">
+                    {ROLE_LABELS[pet.posture]}
+                  </span>
+                  {personalityLabel(pet.personality) && (
+                    <span
+                      className={`rounded border px-1 text-[7px] font-bold ${personalityStyle(pet.personality)}`}
+                    >
+                      {personalityLabel(pet.personality)}
+                    </span>
+                  )}
+                </span>
                 <span className="block truncate text-[8px] text-slate-500">
                   {pet.types.join(" · ")}
                   {pet.isMega && " · MEGA"}
@@ -1091,17 +1290,27 @@ function SelectionGrid({
           );
         })}
       </div>
-      <button
-        disabled={pending || !selected}
-        onClick={onConfirm}
-        className={`mt-4 w-full rounded-xl px-4 py-3 text-xs font-black disabled:opacity-40 ${ban ? "bg-rose-500 text-white" : "bg-[#FFCB05] text-slate-950"}`}
-      >
-        {pending
-          ? "Enviando…"
-          : ban
-            ? "Confirmar ban"
-            : "Confirmar escolha"}
-      </button>
+      {/* Barra fixa: confirmar sempre visível, como na Torre dos Rebeldes. */}
+      <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/90 p-3 backdrop-blur">
+        <div className="mx-auto flex max-w-4xl items-center gap-3">
+          <span className="shrink-0 text-xs font-bold text-slate-300">
+            {selected.length}/{required} selecionado{required > 1 ? "s" : ""}
+          </span>
+          <button
+            disabled={pending || !done}
+            onClick={onConfirm}
+            className={`flex-1 rounded-xl px-4 py-3 text-xs font-black disabled:opacity-40 ${ban ? "bg-rose-500 text-white" : "bg-[#FFCB05] text-slate-950"}`}
+          >
+            {pending
+              ? "Enviando…"
+              : ban
+                ? "Confirmar ban"
+                : required > 1
+                  ? `Confirmar ${required} escolhas`
+                  : "Confirmar escolha"}
+          </button>
+        </div>
+      </div>
     </section>
   );
 }
@@ -1303,6 +1512,14 @@ function Replay({
             </div>
           </div>
         )}
+        <div className="mt-5">
+          <Link
+            href="/combates/arena-draft"
+            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-5 py-2.5 text-xs font-black text-white hover:bg-white/15"
+          >
+            ← Voltar para a Arena Draft
+          </Link>
+        </div>
       </div>
 
       {/* Replay animado com controles locais */}

@@ -119,6 +119,7 @@ export default async function DraftRoomPage({
           speciesId: p.speciesId,
           name: getPokemonName(p.speciesId),
           sprite: getSpriteUrl(p.speciesId),
+          personality: p.personality,
           types: types.map((type) => TYPE_LABELS_PT[type] ?? type),
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
