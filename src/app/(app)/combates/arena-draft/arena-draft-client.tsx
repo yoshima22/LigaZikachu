@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import {
@@ -80,6 +80,7 @@ export function ArenaDraftClient({
   history,
   leaderboard,
   players,
+  isAdmin,
 }: {
   species: Species[];
   presets: Preset[];
@@ -94,6 +95,7 @@ export function ArenaDraftClient({
     matches: number;
   }>;
   players: Array<{ id: string; name: string }>;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -111,6 +113,15 @@ export function ArenaDraftClient({
   const [challengePresetId, setChallengePresetId] = useState(
     presets.find((preset) => preset.isReady)?.id ?? "",
   );
+  const [tutorialOpen, setTutorialOpen] = useState(false);
+  useEffect(() => {
+    if (window.localStorage.getItem("arena-draft-intro-v1") !== "seen")
+      setTutorialOpen(true);
+  }, []);
+  const closeTutorial = () => {
+    window.localStorage.setItem("arena-draft-intro-v1", "seen");
+    setTutorialOpen(false);
+  };
   const catalogPageSize = 24;
   const types = useMemo(
     () => Array.from(new Set(species.flatMap((item) => item.types))).sort(),
@@ -136,6 +147,15 @@ export function ArenaDraftClient({
     Math.min(catalogPage, catalogPages) * catalogPageSize,
   );
   const megas = pets.filter((pet) => pet.isMega).length;
+  const allocatedPoints = pets.reduce(
+    (sum, pet) =>
+      sum +
+      DRAFT_STAT_KEYS.reduce(
+        (value, key) => value + pet.stats[key] - ARENA_DRAFT_RULES.baseStat,
+        0,
+      ),
+    0,
+  );
   const choosePreset = (preset: Preset) => {
     setSelectedId(preset.id);
     setName(preset.name);
@@ -157,11 +177,11 @@ export function ArenaDraftClient({
         personality: "LOYAL",
         posture: "ATTACKER",
         stats: {
-          force: 75,
-          agility: 75,
-          charisma: 75,
-          instinct: 75,
-          vitality: 75,
+          force: 95,
+          agility: 95,
+          charisma: 95,
+          instinct: 95,
+          vitality: 95,
         },
       },
     ]);
@@ -200,46 +220,115 @@ export function ArenaDraftClient({
 
   return (
     <div className="space-y-6">
-      <section className="overflow-hidden rounded-3xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,.2),transparent_38%),radial-gradient(circle_at_90%_20%,rgba(168,85,247,.22),transparent_35%),#050a18] p-6 sm:p-8">
-        <div className="flex flex-wrap items-start justify-between gap-4">
+      {tutorialOpen && (
+        <ArenaDraftTutorial
+          onClose={closeTutorial}
+          onBuild={() => {
+            closeTutorial();
+            setTab("BUILD");
+          }}
+        />
+      )}
+      <section className="relative isolate overflow-hidden rounded-[2rem] bg-[#050916] px-6 py-10 shadow-2xl shadow-cyan-950/30 sm:px-10 sm:py-14">
+        <div className="absolute inset-0 -z-20 bg-[linear-gradient(rgba(34,211,238,.045)_1px,transparent_1px),linear-gradient(90deg,rgba(217,70,239,.04)_1px,transparent_1px)] bg-[size:38px_38px] [mask-image:linear-gradient(to_bottom,black,transparent)]" />
+        <div className="absolute -left-24 top-0 -z-10 h-72 w-72 rounded-full bg-cyan-500/20 blur-[100px]" />
+        <div className="absolute -right-20 bottom-0 -z-10 h-80 w-80 rounded-full bg-fuchsia-600/20 blur-[110px]" />
+        <div className="grid items-center gap-10 xl:grid-cols-[1.08fr_.92fr]">
           <div>
-            <span className="rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.22em] text-fuchsia-200">
-              Arena Draft · Beta
+            <span className="text-[10px] font-black uppercase tracking-[.28em] text-cyan-300">
+              Novo modo competitivo · Beta
             </span>
-            <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">
-              Sua leitura vale mais que sua coleção.
+            <h1 className="mt-5 max-w-3xl text-4xl font-black leading-[.95] text-white sm:text-6xl">
+              Monte. Leia.
+              <br />
+              <span className="bg-gradient-to-r from-cyan-300 to-fuchsia-400 bg-clip-text text-transparent">
+                Domine o draft.
+              </span>
             </h1>
-            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-              Monte 12 mascotes com acesso livre ao catálogo, distribua 4.500
-              pontos, enfrente bans e picks progressivos e intervenha nos turnos
-              20, 35 e 45. O Beta não concede premiações.
+            <p className="mt-6 max-w-2xl text-sm leading-7 text-slate-300 sm:text-base">
+              Crie uma equipe de 12 mascotes com acesso livre ao catálogo. Bana
+              ameaças, escolha sua formação e faça ajustes estratégicos durante
+              a batalha.
             </p>
-          </div>
-          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-right">
-            <p className="text-xs text-cyan-200">Formato oficial</p>
-            <p className="text-2xl font-black text-white">12 → 9 → 6 + 3</p>
-            <p className="text-[10px] text-slate-400">3 bans por lado</p>
-          </div>
-        </div>
-        <div className="mt-6 grid gap-2 sm:grid-cols-4">
-          {[
-            [Bot, "Construa 12", "4.500 pontos para dividir no time"],
-            [Ban, "Ban e draft", "Informação pública protegida"],
-            [Swords, "Combate automático", "Motor oficial e sincronizado"],
-            [Sparkles, "Decida", "Janelas T20 · T35 · T45"],
-          ].map(([Icon, title, text]) => {
-            const C = Icon as typeof Bot;
-            return (
-              <div
-                key={String(title)}
-                className="rounded-2xl border border-white/10 bg-black/20 p-3"
+            <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-bold text-slate-400">
+              <span>◆ Sem premiações no Beta</span>
+              <span>◆ Qualquer mascote disponível</span>
+              <span>◆ Até 2 Megas por equipe</span>
+            </div>
+            <div className="mt-8 flex flex-wrap gap-3">
+              <button
+                onClick={() => setTab("BUILD")}
+                className="rounded-xl bg-gradient-to-r from-cyan-300 to-cyan-400 px-6 py-3 text-sm font-black text-slate-950 shadow-lg shadow-cyan-500/20"
               >
-                <C size={17} className="text-cyan-300" />
-                <p className="mt-2 font-bold text-white">{String(title)}</p>
-                <p className="text-[11px] text-slate-400">{String(text)}</p>
+                Montar minha equipe
+              </button>
+              <button
+                onClick={() => setTutorialOpen(true)}
+                className="rounded-xl bg-white/7 px-6 py-3 text-sm font-bold text-white ring-1 ring-white/15 hover:bg-white/10"
+              >
+                Como funciona
+              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setTutorialOpen(true)}
+                  className="rounded-xl px-4 py-3 text-xs font-bold text-fuchsia-300 ring-1 ring-fuchsia-400/30"
+                >
+                  Admin · testar instruções
+                </button>
+              )}
+            </div>
+          </div>
+          <div className="relative min-h-[390px] overflow-hidden rounded-3xl bg-[radial-gradient(circle_at_50%_42%,rgba(34,211,238,.2),transparent_42%),linear-gradient(145deg,rgba(8,15,34,.75),rgba(18,8,35,.75))] p-6">
+            <div className="absolute inset-x-8 top-8 h-40 rounded-[50%] border border-cyan-300/20 [transform:perspective(500px)_rotateX(65deg)] shadow-[0_0_60px_rgba(34,211,238,.12)]" />
+            <div className="absolute left-5 top-16 flex -space-x-4 opacity-80">
+              {species.slice(24, 27).map((item) => (
+                <img
+                  key={item.id}
+                  src={item.sprite}
+                  alt=""
+                  className="h-20 w-20 object-contain drop-shadow-[0_0_12px_rgba(34,211,238,.6)]"
+                />
+              ))}
+            </div>
+            <div className="absolute right-5 top-16 flex -space-x-4 opacity-80">
+              {species.slice(150, 153).map((item) => (
+                <img
+                  key={item.id}
+                  src={item.sprite}
+                  alt=""
+                  className="h-20 w-20 object-contain drop-shadow-[0_0_12px_rgba(217,70,239,.6)]"
+                />
+              ))}
+            </div>
+            <div className="relative mt-40">
+              <p className="mb-5 text-center text-[10px] font-black uppercase tracking-[.22em] text-white">
+                Sua rota para a batalha
+              </p>
+              <div className="relative grid grid-cols-2 gap-x-4 gap-y-7 sm:grid-cols-4">
+                <div className="absolute left-[12%] right-[12%] top-4 hidden h-px bg-gradient-to-r from-cyan-400 via-white/40 to-fuchsia-400 sm:block" />
+                {[
+                  ["12 mascotes", "Monte seu preset"],
+                  ["3 banidos pelo rival", "Escolhas do adversário"],
+                  ["9 disponíveis", "Draft progressivo"],
+                  ["6 em campo + 3 no banco", "Formação final"],
+                ].map(([title, text], index) => (
+                  <div key={title} className="relative text-center">
+                    <span
+                      className={`relative z-10 mx-auto flex h-8 w-8 items-center justify-center rounded-full text-xs font-black ${index < 2 ? "bg-cyan-300 text-slate-950" : "bg-fuchsia-400 text-white"}`}
+                    >
+                      {index + 1}
+                    </span>
+                    <b className="mt-3 block text-xs text-white">{title}</b>
+                    <span
+                      className={`mt-1 block text-[9px] ${index === 1 ? "font-bold text-rose-300" : "text-slate-500"}`}
+                    >
+                      {text}
+                    </span>
+                  </div>
+                ))}
               </div>
-            );
-          })}
+            </div>
+          </div>
         </div>
       </section>
       <nav className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-2 sm:grid-cols-4">
@@ -264,20 +353,61 @@ export function ArenaDraftClient({
       </nav>
 
       {tab === "HOME" && (
-        <div className="grid gap-4 lg:grid-cols-3">
-          <Info
-            title="Igualdade competitiva"
-            text="Os mascotes da Arena Draft são cópias PvP independentes. Nada altera sua coleção, inventário ou mascotes reais."
-          />
-          <Info
-            title="Build secreta"
-            text="Antes da luta, o rival vê somente espécie, arte, tipos e Mega. Atributos, personalidade e postura permanecem privados."
-          />
-          <Info
-            title="Estado preservado"
-            text="Trocas estratégicas não curam HP, não removem debuffs e não revivem derrotados. Planos são revelados simultaneamente."
-          />
-        </div>
+        <section className="py-5 sm:py-10">
+          <div className="relative grid gap-4 lg:grid-cols-4">
+            <div className="absolute left-[10%] right-[10%] top-8 hidden h-[2px] bg-gradient-to-r from-cyan-400/40 via-fuchsia-400/60 to-cyan-400/40 lg:block" />
+            {[
+              [
+                Bot,
+                "Crie seu preset",
+                "Distribua 4.500 pontos entre o time; todos começam com 20 em cada status. Escolha até 2 formas Mega.",
+              ],
+              [
+                Search,
+                "Leia o adversário",
+                "Você vê espécies, tipos e Megas — mas a build continua secreta.",
+              ],
+              [
+                Ban,
+                "Bana e faça o draft",
+                "Cada lado bane 3 mascotes. Dos 9 restantes, você define titulares e banco.",
+              ],
+              [
+                Sparkles,
+                "Reaja no combate",
+                "Nos turnos 20, 35 e 45, ajuste posturas e troque mascotes sem recuperar HP.",
+              ],
+            ].map(([Icon, title, text], index) => {
+              const C = Icon as typeof Bot;
+              return (
+                <article
+                  key={String(title)}
+                  className="relative bg-gradient-to-b from-white/[.055] to-transparent p-5 pt-6"
+                >
+                  <span className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-950 text-sm font-black text-cyan-300 ring-1 ring-cyan-300/30">
+                    {index + 1}
+                  </span>
+                  <C size={17} className="mt-7 text-fuchsia-300" />
+                  <h2 className="mt-3 text-lg font-black text-white">
+                    {String(title)}
+                  </h2>
+                  <p className="mt-2 text-sm leading-6 text-slate-400">
+                    {String(text)}
+                  </p>
+                </article>
+              );
+            })}
+          </div>
+          <div className="mt-10 flex flex-wrap justify-center gap-4 text-xs text-slate-400">
+            <span>Seu inventário não é alterado</span>
+            <span className="text-slate-700">◆</span>
+            <span>Combate automático sincronizado</span>
+            <span className="text-slate-700">◆</span>
+            <span>Trocas não curam e não revivem</span>
+            <span className="text-slate-700">◆</span>
+            <span>Reaja no momento certo · T20 / T35 / T45</span>
+          </div>
+        </section>
       )}
 
       {tab === "BUILD" && (
@@ -417,17 +547,7 @@ export function ArenaDraftClient({
                 />
                 <p className="mt-1 text-xs text-slate-500">
                   Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
-                  {pets
-                    .reduce(
-                      (sum, current) =>
-                        sum +
-                        DRAFT_STAT_KEYS.reduce(
-                          (value, key) => value + current.stats[key],
-                          0,
-                        ),
-                      0,
-                    )
-                    .toLocaleString("pt-BR")}
+                  {allocatedPoints.toLocaleString("pt-BR")}
                   /4.500
                 </p>
               </div>
@@ -524,7 +644,7 @@ export function ArenaDraftClient({
                             </span>
                             <input
                               type="number"
-                              min={0}
+                              min={20}
                               max={250}
                               value={pet.stats[key]}
                               onChange={(e) =>
@@ -541,7 +661,8 @@ export function ArenaDraftClient({
                         ))}
                       </div>
                       <p className="mt-2 text-right text-[10px] text-slate-400">
-                        Este mascote usa {total} pontos{" "}
+                        20 iniciais em cada status · {total - 100} pontos
+                        distribuídos{" "}
                         {pet.isMega && "· bônus Mega calculado pelo servidor"}
                       </p>
                     </article>
@@ -810,12 +931,97 @@ export function ArenaDraftClient({
   );
 }
 
-function Info({ title, text }: { title: string; text: string }) {
+function ArenaDraftTutorial({
+  onClose,
+  onBuild,
+}: {
+  onClose: () => void;
+  onBuild: () => void;
+}) {
   return (
-    <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
-      <Shield size={18} className="text-fuchsia-300" />
-      <h2 className="mt-3 font-black text-white">{title}</h2>
-      <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/85 p-3 backdrop-blur-md"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Como funciona a Arena Draft"
+    >
+      <div className="relative max-h-[94vh] w-full max-w-4xl overflow-y-auto rounded-[2rem] bg-[radial-gradient(circle_at_top_right,rgba(217,70,239,.18),transparent_32%),radial-gradient(circle_at_top_left,rgba(34,211,238,.16),transparent_35%),#070b18] p-6 shadow-2xl sm:p-9">
+        <button
+          onClick={onClose}
+          className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white"
+          aria-label="Fechar"
+        >
+          ×
+        </button>
+        <p className="text-[10px] font-black uppercase tracking-[.25em] text-cyan-300">
+          Primeiros passos
+        </p>
+        <h2 className="mt-3 pr-10 text-3xl font-black text-white sm:text-4xl">
+          Aqui, estratégia vem antes da coleção.
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+          A Arena Draft libera o mesmo catálogo para todos. Você monta sua
+          estratégia, esconde a build e precisa ler as escolhas do rival.
+        </p>
+        <div className="mt-7 grid gap-3 sm:grid-cols-2">
+          <TutorialStep
+            number="01"
+            title="Monte seus 12"
+            text="Todo mascote começa com 20 em cada status. Depois, distribua 4.500 pontos adicionais pelo time inteiro. Formas Mega são reconhecidas automaticamente e o limite é 2."
+          />
+          <TutorialStep
+            number="02"
+            title="Proteja sua build"
+            text="O rival vê espécie, tipos e quais formas são Mega. Seus números, personalidade e postura permanecem secretos durante a inspeção."
+          />
+          <TutorialStep
+            number="03"
+            title="Bans e formação"
+            text="Cada jogador bane 3 opções do adversário. Com os 9 restantes, o draft progressivo define 6 titulares e 3 reservas."
+          />
+          <TutorialStep
+            number="04"
+            title="Combate e reação"
+            text="A luta é automática. Nos turnos 20, 35 e 45, cada lado prepara mudanças em segredo; HP, debuffs e derrotas continuam valendo após a troca."
+          />
+        </div>
+        <div className="mt-6 rounded-2xl bg-amber-300/8 p-4 text-xs leading-5 text-amber-100 ring-1 ring-amber-300/20">
+          <b>Beta sem premiações:</b> partidas servem para testar estratégia,
+          balanceamento, draft e rankings. Nenhum mascote ou item da sua coleção
+          é consumido ou alterado.
+        </div>
+        <div className="mt-7 flex flex-wrap justify-end gap-3">
+          <button
+            onClick={onClose}
+            className="rounded-xl px-5 py-3 text-sm font-bold text-slate-300 ring-1 ring-white/15"
+          >
+            Explorar a página
+          </button>
+          <button
+            onClick={onBuild}
+            className="rounded-xl bg-cyan-300 px-6 py-3 text-sm font-black text-slate-950"
+          >
+            Montar minha equipe
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+function TutorialStep({
+  number,
+  title,
+  text,
+}: {
+  number: string;
+  title: string;
+  text: string;
+}) {
+  return (
+    <article className="rounded-2xl bg-white/[.045] p-5">
+      <span className="text-xs font-black text-fuchsia-300">{number}</span>
+      <h3 className="mt-2 font-black text-white">{title}</h3>
+      <p className="mt-2 text-xs leading-5 text-slate-400">{text}</p>
     </article>
   );
 }

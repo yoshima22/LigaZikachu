@@ -170,6 +170,9 @@ export default async function ArenaDraftPage() {
         id: candidate.id,
         name: candidate.displayName,
       }))}
+      isAdmin={
+        session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
+      }
     />
   );
 }

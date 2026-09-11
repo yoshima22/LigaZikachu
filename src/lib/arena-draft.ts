@@ -4,6 +4,7 @@ import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 export const ARENA_DRAFT_RULES = {
   teamSize: 12,
   statBudget: 4500,
+  baseStat: 20,
   maxMegas: 2,
   bansPerPlayer: 3,
   activeSize: 6,
@@ -60,11 +61,11 @@ export const arenaDraftPetSchema = z.object({
   personality: z.enum(DRAFT_PERSONALITIES),
   posture: z.enum(DRAFT_POSTURES),
   stats: z.object({
-    force: z.number().int().min(0).max(250),
-    agility: z.number().int().min(0).max(250),
-    charisma: z.number().int().min(0).max(250),
-    instinct: z.number().int().min(0).max(250),
-    vitality: z.number().int().min(0).max(250),
+    force: z.number().int().min(20).max(250),
+    agility: z.number().int().min(20).max(250),
+    charisma: z.number().int().min(20).max(250),
+    instinct: z.number().int().min(20).max(250),
+    vitality: z.number().int().min(20).max(250),
   }),
 });
 export const arenaDraftPetsSchema = z.array(arenaDraftPetSchema).max(12);
@@ -89,14 +90,17 @@ export function validateArenaDraftPets(input: unknown) {
     errors.push("Existem slots duplicados.");
   if (pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
     errors.push("O preset pode ter no máximo 2 Megas.");
-  const total = pets.reduce(
+  const finalTotal = pets.reduce(
     (teamTotal, pet) =>
       teamTotal + DRAFT_STAT_KEYS.reduce((sum, key) => sum + pet.stats[key], 0),
     0,
   );
-  if (total !== ARENA_DRAFT_RULES.statBudget)
+  const baseTotal =
+    pets.length * DRAFT_STAT_KEYS.length * ARENA_DRAFT_RULES.baseStat;
+  const distributed = finalTotal - baseTotal;
+  if (distributed !== ARENA_DRAFT_RULES.statBudget)
     errors.push(
-      `O time distribui ${total.toLocaleString("pt-BR")}/4.500 pontos.`,
+      `O time distribui ${Math.max(0, distributed).toLocaleString("pt-BR")}/4.500 pontos além dos status iniciais.`,
     );
   return { valid: errors.length === 0, errors, pets };
 }
