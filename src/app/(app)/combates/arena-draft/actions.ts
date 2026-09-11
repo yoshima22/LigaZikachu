@@ -7,6 +7,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { sendNotificationToUser } from "@/lib/notifications";
 import {
   runArenaCombat,
   type ArenaCombatRuntime,
@@ -212,7 +213,7 @@ export async function createDraftChallengeAction(
       }),
       prisma.player.findFirst({
         where: { id: targetPlayerId, active: true },
-        select: { id: true },
+        select: { id: true, userId: true },
       }),
       prisma.arenaDraftMatch.findFirst({
         where: {
@@ -228,6 +229,21 @@ export async function createDraftChallengeAction(
       );
     if (!target) throw new Error("Jogador indisponível.");
     if (occupied) throw new Error("Esse jogador já está em uma sala.");
+    const recentPair = await prisma.arenaDraftMatch.findFirst({
+      where: {
+        state: "FINISHED",
+        finishedAt: { gte: new Date(Date.now() - 30 * 60_000) },
+        OR: [
+          { playerAId: player.id, playerBId: targetPlayerId },
+          { playerAId: targetPlayerId, playerBId: player.id },
+        ],
+      },
+      select: { id: true },
+    });
+    if (recentPair)
+      throw new Error(
+        "Aguarde 30 minutos antes de desafiar novamente este jogador.",
+      );
     const match = await prisma.arenaDraftMatch.create({
       data: {
         playerAId: player.id,
@@ -238,6 +254,11 @@ export async function createDraftChallengeAction(
       },
     });
     revalidatePath("/combates/arena-draft");
+    await sendNotificationToUser(target.userId, {
+      title: "Novo desafio na Arena Draft",
+      body: `${player.displayName} quer enfrentar você. O convite expira em 10 minutos.`,
+      url: "/combates/arena-draft",
+    }).catch(() => null);
     return {
       success: "Desafio enviado. Ele expira em 10 minutos.",
       matchId: match.id,
@@ -519,6 +540,7 @@ type StrategyPlan = {
 };
 type DraftBattle = {
   version: 2;
+  seed?: number;
   checkpoint: number;
   checkpoints: number[];
   eligibleA: string[];
@@ -540,6 +562,14 @@ type DraftBattle = {
 };
 
 const STRATEGY_CHECKPOINTS = [20, 35, 45] as const;
+function draftSeed(matchId: string) {
+  let hash = 2166136261;
+  for (const char of matchId) {
+    hash ^= char.charCodeAt(0);
+    hash = Math.imul(hash, 16777619);
+  }
+  return hash >>> 0;
+}
 function postureMap(pets: ReturnType<typeof validateArenaDraftPets>["pets"]) {
   return Object.fromEntries(pets.map((pet) => [pet.id, pet.posture])) as Record<
     string,
@@ -596,6 +626,7 @@ async function persistCombatSegment(
   const combat = runArenaCombat(teamA, teamB, {
     runtime: battle.runtime,
     stopAtTurn,
+    seed: battle.seed,
   });
   battle.runtime = combat.runtime;
   battle.events.push(...combat.log);
@@ -683,6 +714,7 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
         .map((p) => p.id);
       const battle: DraftBattle = {
         version: 2,
+        seed: draftSeed(match.id),
         checkpoint: 0,
         checkpoints: [...STRATEGY_CHECKPOINTS],
         eligibleA,

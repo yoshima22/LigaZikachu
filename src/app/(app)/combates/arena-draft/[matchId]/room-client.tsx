@@ -46,6 +46,8 @@ type Pet = {
   name: string;
   sprite: string;
   types: string[];
+  advantages: string[];
+  weaknesses: string[];
   isMega: boolean;
   disabled: boolean;
   posture: Role;
@@ -401,6 +403,7 @@ function Team({
   action: string;
   onAction: (id: string) => void;
 }) {
+  const [typeDetails, setTypeDetails] = useState<string | null>(null);
   return (
     <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
       <h2 className="font-black text-white">{title}</h2>
@@ -419,6 +422,22 @@ function Team({
             <p className="text-[9px] text-slate-500">
               {p.types.join(" · ")} {p.isMega && "· MEGA"}
             </p>
+            <button
+              onClick={() => setTypeDetails(typeDetails === p.id ? null : p.id)}
+              className="mt-1 text-[9px] font-bold text-cyan-300"
+            >
+              {typeDetails === p.id ? "Ocultar tipos" : "Ver vantagens"}
+            </button>
+            {typeDetails === p.id && (
+              <div className="mt-2 rounded-lg bg-slate-950 p-2 text-left text-[8px]">
+                <p className="text-emerald-300">
+                  Vantagem: {p.advantages.join(", ") || "—"}
+                </p>
+                <p className="mt-1 text-rose-300">
+                  Fraqueza: {p.weaknesses.join(", ") || "—"}
+                </p>
+              </div>
+            )}
             {actionable && !p.disabled && (
               <button
                 onClick={() => onAction(p.id)}

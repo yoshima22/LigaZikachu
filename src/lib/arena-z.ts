@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { AsyncLocalStorage } from "node:async_hooks";
 import {
   DEFAULT_ARENA_DAILY_ZC_LIMIT,
   getActiveArenaDailyZcLimit,
@@ -370,6 +371,7 @@ export type ArenaCombatRuntime = {
   travessoFirstHit: string[];
   playfulTeamBuff: Record<"A" | "D", boolean>;
   guard: { team: "A" | "D"; reduction: number } | null;
+  rngCounter: number;
 };
 
 export type ArenaCombatOptions = {
@@ -377,14 +379,21 @@ export type ArenaCombatOptions = {
   /** Último número de ação incluído neste segmento. */
   stopAtTurn?: number;
   maxTurns?: number;
+  /** Seed canônica da partida. Quando omitida, mantém o comportamento aleatório tradicional. */
+  seed?: number;
 };
 
+const combatRng = new AsyncLocalStorage<() => number>();
+function arenaRandom() {
+  return combatRng.getStore()?.() ?? Math.random();
+}
+
 function rand(min: number, max: number) {
-  return Math.floor(Math.random() * (max - min + 1)) + min;
+  return Math.floor(arenaRandom() * (max - min + 1)) + min;
 }
 
 function pick<T>(items: T[]) {
-  return items[Math.floor(Math.random() * items.length)];
+  return items[Math.floor(arenaRandom() * items.length)];
 }
 
 function seededRng(seed: number) {
@@ -557,7 +566,7 @@ function chooseRoleTarget(
 
   if (actor.combatRole === "FLANK") {
     const slipChance = getFlankBypassChance(actor.agility);
-    if (Math.random() < slipChance) return lowestHp ?? pick(opponents);
+    if (arenaRandom() < slipChance) return lowestHp ?? pick(opponents);
   }
 
   if (actor.combatRole === "SCOUT") {
@@ -566,7 +575,7 @@ function chooseRoleTarget(
 
   if (defenders.length > 0) {
     const pullChance = actor.combatRole === "ATTACKER" ? 0.62 : 0.78;
-    if (Math.random() < pullChance)
+    if (arenaRandom() < pullChance)
       return [...defenders].sort((a, b) => b.vitality - a.vitality)[0];
   }
 
@@ -653,7 +662,7 @@ function tryApplyOpportunistDebuff(
   const opportunist = getOpportunistProfile(
     getEffectiveStat(actor, debuffs, "instinct"),
   );
-  if (Math.random() > opportunist.procChance) return null;
+  if (arenaRandom() > opportunist.procChance) return null;
   const current = debuffs.get(target.id) ?? {};
   const amount = opportunist.debuffPct * debuffResistanceFactor(actor, target);
   const stats: Array<"force" | "agility" | "instinct" | "vitality"> = [
@@ -662,7 +671,7 @@ function tryApplyOpportunistDebuff(
     "instinct",
     "vitality",
   ];
-  const stat = stats[Math.floor(Math.random() * stats.length)];
+  const stat = stats[Math.floor(arenaRandom() * stats.length)];
   debuffs.set(target.id, {
     ...current,
     [stat]: Math.max(current[stat] ?? 0, amount),
@@ -677,7 +686,7 @@ function trySaboteurDisrupt(
 ): string | null {
   if (actor.combatRole !== "SABOTEUR") return null;
   const chance = getSaboteurProcChance(actor.instinct, actor.agility);
-  if (Math.random() > chance) return null;
+  if (arenaRandom() > chance) return null;
   const encouragers = opponents.filter(
     (m) => isSupportRole(m.combatRole) && (hp.get(m.id) ?? 0) > 0,
   );
@@ -787,7 +796,7 @@ function tryProvokerRedirect(
   if (provokers.length === 0) return null;
   const provoker = provokers[0];
   const chance = getProvokerChance(provoker.charisma, provoker.instinct);
-  if (Math.random() > chance) return null;
+  if (arenaRandom() > chance) return null;
   return provoker;
 }
 
@@ -818,7 +827,7 @@ function aliveSaboteurSuppression(
   );
 }
 
-export function runArenaCombat(
+function runArenaCombatInternal(
   attackers: ArenaMascot[],
   defenders: ArenaMascot[],
   options: ArenaCombatOptions = {},
@@ -846,8 +855,8 @@ export function runArenaCombat(
   const travessoFirstHit = new Set<string>(previous?.travessoFirstHit ?? []);
   const playfulTeamBuff: Record<"A" | "D", boolean> =
     previous?.playfulTeamBuff ?? {
-      A: rollPlayfulTeamBuff(attackers),
-      D: rollPlayfulTeamBuff(defenders),
+      A: rollPlayfulTeamBuff(attackers, arenaRandom),
+      D: rollPlayfulTeamBuff(defenders, arenaRandom),
     };
   // Leal: escolhe um aliado para proteger (maior Carisma do time, exceto ele).
   const loyalAlly = new Map<string, ArenaMascot>();
@@ -961,7 +970,7 @@ export function runArenaCombat(
             : actor.combatRole === "GUARDIAN"
               ? 0.15
               : 0.1;
-        const defend = Math.random() < defendChance;
+        const defend = arenaRandom() < defendChance;
 
         if (defend) {
           const reduction =
@@ -1105,7 +1114,7 @@ export function runArenaCombat(
           !dramaticSaveUsed.has(target.id)
         ) {
           const cur = hp.get(target.id) ?? 0;
-          if (cur - damage <= 0 && Math.random() < 0.25) {
+          if (cur - damage <= 0 && arenaRandom() < 0.25) {
             damage = cur - 1;
             dramaticSaveUsed.add(target.id);
             dramaticEffect = `Dramático ${target.name} fez um último ato e sobreviveu com 1 HP!`;
@@ -1135,7 +1144,7 @@ export function runArenaCombat(
         const travessoKey = `${actor.id}:${target.id}`;
         if (!travessoFirstHit.has(travessoKey)) {
           travessoFirstHit.add(travessoKey);
-          const tv = rollTravessoDebuff(actor, target);
+          const tv = rollTravessoDebuff(actor, target, arenaRandom);
           if (tv) {
             const cur = debuffs.get(target.id) ?? {};
             debuffs.set(target.id, {
@@ -1227,6 +1236,7 @@ export function runArenaCombat(
     travessoFirstHit: [...travessoFirstHit],
     playfulTeamBuff,
     guard,
+    rngCounter: previous?.rngCounter ?? 0,
   };
   const finished =
     alive(attackers, hp).length === 0 ||
@@ -1240,6 +1250,28 @@ export function runArenaCombat(
     runtime,
     finished,
   };
+}
+
+export function runArenaCombat(
+  attackers: ArenaMascot[],
+  defenders: ArenaMascot[],
+  options: ArenaCombatOptions = {},
+) {
+  if (options.seed === undefined)
+    return runArenaCombatInternal(attackers, defenders, options);
+  const start = options.runtime?.rngCounter ?? 0;
+  const seeded = seededRng(options.seed);
+  for (let index = 0; index < start; index++) seeded();
+  let calls = start;
+  const result = combatRng.run(
+    () => {
+      calls += 1;
+      return seeded();
+    },
+    () => runArenaCombatInternal(attackers, defenders, options),
+  );
+  result.runtime.rngCounter = calls;
+  return result;
 }
 
 export type ArenaLootFull = ArenaLoot & {

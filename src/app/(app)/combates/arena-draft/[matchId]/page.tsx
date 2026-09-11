@@ -5,6 +5,8 @@ import {
   getPokemonName,
   getPokemonTypes,
   getSpriteUrl,
+  TYPE_ADVANTAGE,
+  TYPE_LABELS_PT,
 } from "@/lib/mascot-data";
 import type { ArenaDraftPet } from "@/lib/arena-draft";
 import type { ArenaCombatRuntime, ArenaMascot } from "@/lib/arena-z";
@@ -83,17 +85,28 @@ export default async function DraftRoomPage({
   const map = (pets: ArenaDraftPet[] | null, strategy = false) =>
     pets
       ?.filter((p) => !strategy || ownEligible.has(p.id))
-      .map((p) => ({
-        id: p.id,
-        speciesId: p.speciesId,
-        name: getPokemonName(p.speciesId),
-        sprite: getSpriteUrl(p.speciesId),
-        types: getPokemonTypes(p.speciesId),
-        isMega: p.isMega,
-        disabled: disabled.has(p.id),
-        posture: ownPostures[p.id] ?? p.posture,
-        hp: battle?.runtime?.hp[p.id] ?? null,
-      })) ?? [];
+      .map((p) => {
+        const types = getPokemonTypes(p.speciesId);
+        const advantages = [
+          ...new Set(types.flatMap((type) => TYPE_ADVANTAGE[type] ?? [])),
+        ];
+        const weaknesses = Object.entries(TYPE_ADVANTAGE)
+          .filter(([, strong]) => strong.some((type) => types.includes(type)))
+          .map(([type]) => type);
+        return {
+          id: p.id,
+          speciesId: p.speciesId,
+          name: getPokemonName(p.speciesId),
+          sprite: getSpriteUrl(p.speciesId),
+          types,
+          advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
+          weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
+          isMega: p.isMega,
+          disabled: disabled.has(p.id),
+          posture: ownPostures[p.id] ?? p.posture,
+          hp: battle?.runtime?.hp[p.id] ?? null,
+        };
+      }) ?? [];
   return (
     <DraftRoomClient
       matchId={match.id}
