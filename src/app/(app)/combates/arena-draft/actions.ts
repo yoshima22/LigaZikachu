@@ -8,6 +8,7 @@ import { prisma } from "@/lib/prisma";
 import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { sendNotificationToUser } from "@/lib/notifications";
+import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import {
   runArenaCombat,
   type ArenaCombatRuntime,
@@ -23,6 +24,34 @@ async function currentPlayer() {
   return player;
 }
 
+async function disabledMegaIdsInPreset(
+  pets: ReturnType<typeof validateArenaDraftPets>["pets"],
+) {
+  const ids = [
+    ...new Set(
+      pets
+        .map((pet) => pet.speciesId)
+        .filter((speciesId) => MEGA_FORM_IDS.has(speciesId)),
+    ),
+  ];
+  if (!ids.length) return [];
+  const rows = await prisma.eggPokemonToggle.findMany({
+    where: { pokemonId: { in: ids }, disabled: true },
+    select: { pokemonId: true },
+  });
+  return rows.map((row) => row.pokemonId);
+}
+
+async function assertPresetMegasEnabled(
+  pets: ReturnType<typeof validateArenaDraftPets>["pets"],
+) {
+  const disabled = await disabledMegaIdsInPreset(pets);
+  if (disabled.length)
+    throw new Error(
+      "Este preset contém uma forma Mega que ainda não foi liberada no jogo. Remova-a e salve novamente.",
+    );
+}
+
 export async function saveDraftPresetAction(input: {
   id?: string;
   name: string;
@@ -34,6 +63,14 @@ export async function saveDraftPresetAction(input: {
     if (name.length < 3)
       throw new Error("Dê um nome de ao menos 3 caracteres ao preset.");
     const validation = validateArenaDraftPets(input.pets);
+    const disabledMegas = await disabledMegaIdsInPreset(validation.pets);
+    const isReady = validation.valid && disabledMegas.length === 0;
+    const errors = [
+      ...validation.errors,
+      ...(disabledMegas.length
+        ? ["Remova as formas Mega que ainda não foram liberadas no jogo."]
+        : []),
+    ];
     if (input.id) {
       const existing = await prisma.arenaDraftPreset.findUnique({
         where: { id: input.id },
@@ -45,7 +82,7 @@ export async function saveDraftPresetAction(input: {
         data: {
           name,
           petsJson: validation.pets as unknown as Prisma.InputJsonValue,
-          isReady: validation.valid,
+          isReady,
         },
       });
     } else {
@@ -54,16 +91,14 @@ export async function saveDraftPresetAction(input: {
           ownerId: player.id,
           name,
           petsJson: validation.pets as unknown as Prisma.InputJsonValue,
-          isReady: validation.valid,
+          isReady,
         },
       });
     }
     revalidatePath("/combates/arena-draft");
     return {
-      success: validation.valid
-        ? "Preset pronto para competir."
-        : "Rascunho salvo.",
-      errors: validation.errors,
+      success: isReady ? "Preset pronto para competir." : "Rascunho salvo.",
+      errors,
     };
   } catch (error) {
     return {
@@ -123,6 +158,9 @@ export async function joinDraftQueueAction(presetId: string) {
       throw new Error(
         "Este preset usa as regras antigas. Abra, ajuste os 4.500 pontos do time e salve novamente.",
       );
+    await assertPresetMegasEnabled(
+      validateArenaDraftPets(preset.petsJson).pets,
+    );
     const already = await prisma.arenaDraftMatch.findFirst({
       where: {
         OR: [{ playerAId: player.id }, { playerBId: player.id }],
@@ -227,6 +265,9 @@ export async function createDraftChallengeAction(
       throw new Error(
         "Este preset precisa ser salvo novamente com 4.500 pontos no time.",
       );
+    await assertPresetMegasEnabled(
+      validateArenaDraftPets(preset.petsJson).pets,
+    );
     if (!target) throw new Error("Jogador indisponível.");
     if (occupied) throw new Error("Esse jogador já está em uma sala.");
     const recentPair = await prisma.arenaDraftMatch.findFirst({
@@ -302,6 +343,9 @@ export async function answerDraftChallengeAction(
       throw new Error(
         "Este preset precisa ser ajustado para as regras atuais.",
       );
+    await assertPresetMegasEnabled(
+      validateArenaDraftPets(preset.petsJson).pets,
+    );
     await prisma.arenaDraftMatch.update({
       where: { id: match.id },
       data: {

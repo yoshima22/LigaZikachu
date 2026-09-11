@@ -121,6 +121,7 @@ export function ArenaDraftClient({
     presets.find((preset) => preset.isReady)?.id ?? "",
   );
   const [tutorialOpen, setTutorialOpen] = useState(false);
+  const [missingPresetOpen, setMissingPresetOpen] = useState(false);
   useEffect(() => {
     if (window.localStorage.getItem("arena-draft-intro-v1") !== "seen")
       setTutorialOpen(true);
@@ -240,6 +241,15 @@ export function ArenaDraftClient({
           onClose={closeTutorial}
           onBuild={() => {
             closeTutorial();
+            setTab("BUILD");
+          }}
+        />
+      )}
+      {missingPresetOpen && (
+        <MissingPresetDialog
+          onClose={() => setMissingPresetOpen(false)}
+          onBuild={() => {
+            setMissingPresetOpen(false);
             setTab("BUILD");
           }}
         />
@@ -368,10 +378,10 @@ export function ArenaDraftClient({
               onClick={() => {
                 if (
                   key === "PLAY" &&
+                  !activeMatch &&
                   !presets.some((preset) => preset.isReady)
                 ) {
-                  toast.info("Monte e salve um preset válido antes de jogar.");
-                  setTab("BUILD");
+                  setMissingPresetOpen(true);
                   return;
                 }
                 setTab(key as typeof tab);
@@ -1029,6 +1039,60 @@ export function ArenaDraftClient({
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+function MissingPresetDialog({
+  onClose,
+  onBuild,
+}: {
+  onClose: () => void;
+  onBuild: () => void;
+}) {
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="missing-preset-title"
+      className="fixed inset-0 z-[80] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+      onMouseDown={(event) => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <section className="w-full max-w-md overflow-hidden rounded-3xl border border-cyan-300/25 bg-[radial-gradient(circle_at_top,rgba(34,211,238,.14),transparent_42%),#070b18] p-6 shadow-2xl shadow-cyan-950/50 sm:p-8">
+        <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-cyan-300/10 text-cyan-300 ring-1 ring-cyan-300/20">
+          <Users size={23} />
+        </span>
+        <p className="mt-5 text-[9px] font-black uppercase tracking-[.22em] text-cyan-300">
+          Equipe necessária
+        </p>
+        <h2
+          id="missing-preset-title"
+          className="mt-2 text-2xl font-black text-white"
+        >
+          Monte seu time em “Montar preset”
+        </h2>
+        <p className="mt-3 text-sm leading-6 text-slate-400">
+          Antes de jogar, escolha 12 mascotes, distribua os 4.500 pontos do time
+          e salve uma formação válida. Depois disso, a fila e os desafios serão
+          liberados.
+        </p>
+        <div className="mt-6 grid gap-2 sm:grid-cols-[1fr_auto]">
+          <button
+            onClick={onBuild}
+            className="rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 px-5 py-3 text-xs font-black text-slate-950"
+          >
+            Ir para Montar preset
+          </button>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-white/10 px-5 py-3 text-xs font-bold text-slate-300"
+          >
+            Agora não
+          </button>
+        </div>
+      </section>
     </div>
   );
 }

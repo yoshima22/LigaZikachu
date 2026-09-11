@@ -28,7 +28,7 @@ export default async function ArenaDraftPage() {
       stateVersion: { increment: 1 },
     },
   });
-  const [presets, activeMatch, history, players, rankedMatches] =
+  const [presets, activeMatch, history, players, rankedMatches, disabledMegas] =
     await Promise.all([
       prisma.arenaDraftPreset.findMany({
         where: { ownerId: player.id },
@@ -82,16 +82,26 @@ export default async function ArenaDraftPage() {
           playerB: { select: { displayName: true } },
         },
       }),
+      prisma.eggPokemonToggle.findMany({
+        where: {
+          pokemonId: { in: [...MEGA_FORM_IDS] },
+          disabled: true,
+        },
+        select: { pokemonId: true },
+      }),
     ]);
+  const disabledMegaIds = new Set(disabledMegas.map((row) => row.pokemonId));
   const species = Array.from(
     new Set([...WISHLIST_POKEMON_IDS, ...MEGA_FORM_IDS]),
-  ).map((id) => ({
-    id,
-    name: getPokemonName(id),
-    sprite: getSpriteUrl(id),
-    types: getPokemonTypes(id),
-    isMega: MEGA_FORM_IDS.has(id),
-  }));
+  )
+    .filter((id) => !MEGA_FORM_IDS.has(id) || !disabledMegaIds.has(id))
+    .map((id) => ({
+      id,
+      name: getPokemonName(id),
+      sprite: getSpriteUrl(id),
+      types: getPokemonTypes(id),
+      isMega: MEGA_FORM_IDS.has(id),
+    }));
   const opponent = activeMatch
     ? ((activeMatch.playerAId === player.id
         ? activeMatch.playerB?.displayName
@@ -166,7 +176,12 @@ export default async function ArenaDraftPage() {
       presets={presets.map((p) => ({
         id: p.id,
         name: p.name,
-        isReady: p.isReady && validateArenaDraftPets(p.petsJson).valid,
+        isReady:
+          p.isReady &&
+          validateArenaDraftPets(p.petsJson).valid &&
+          !(p.petsJson as unknown as ArenaDraftPet[]).some(
+            (pet) => pet.isMega && disabledMegaIds.has(pet.speciesId),
+          ),
         pets: p.petsJson as unknown as ArenaDraftPet[],
         updatedAt: p.updatedAt.toISOString(),
       }))}
