@@ -643,7 +643,7 @@ function draftFighter(
     ownerId,
     pokemonId: pet.speciesId,
     types: getPokemonTypes(pet.speciesId),
-    name: getPokemonName(pet.speciesId),
+    name: pet.nickname?.trim() || getPokemonName(pet.speciesId),
     level: 100,
     force: pet.stats.force + bonus,
     agility: pet.stats.agility + bonus,

@@ -121,7 +121,11 @@ export default async function DraftRoomPage({
         return {
           id: p.id,
           speciesId: p.speciesId,
-          name: getPokemonName(p.speciesId),
+          // Apelido só aparece para quem pode ver a build (dono; rival após o
+          // draft). Durante inspeção/draft o rival sempre vê a espécie.
+          name: revealBuild
+            ? p.nickname?.trim() || getPokemonName(p.speciesId)
+            : getPokemonName(p.speciesId),
           sprite: getSpriteUrl(p.speciesId),
           personality: revealBuild ? p.personality : null,
           types: types.map((type) => TYPE_LABELS_PT[type] ?? type),

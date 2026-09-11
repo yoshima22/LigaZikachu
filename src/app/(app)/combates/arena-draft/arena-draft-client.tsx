@@ -866,26 +866,27 @@ export function ArenaDraftClient({
                               MEGA
                             </span>
                           )}
-                          <div className="flex items-center gap-2 pr-6">
+                          <div className="flex flex-col items-center pt-2 text-center">
                             <img
                               src={item?.sprite}
                               alt=""
-                              className="h-14 w-14 shrink-0 object-contain [image-rendering:pixelated]"
+                              className="h-14 w-14 object-contain [image-rendering:pixelated]"
                             />
-                            <span className="min-w-0">
-                              <b className="block truncate text-xs text-white">
-                                {item?.name}
-                              </b>
-                              <small className="block truncate text-[10px] text-slate-500">
-                                {postureLabels[pet.posture]} · +{distributed}
-                              </small>
-                            </span>
+                            <b className="mt-1 block w-full break-words text-xs leading-tight text-white">
+                              {pet.nickname?.trim() || item?.name}
+                            </b>
+                            <small className="block text-[10px] text-cyan-200">
+                              {postureLabels[pet.posture]}
+                            </small>
+                            <small className="block text-[9px] text-slate-500">
+                              +{distributed} distribuídos
+                            </small>
                           </div>
                           <div className="mt-2 grid grid-cols-5 gap-1">
                             {DRAFT_STAT_KEYS.map((key) => (
                               <span
                                 key={key}
-                                className="rounded bg-slate-950/60 px-0.5 py-1.5 text-center"
+                                className="rounded bg-slate-950/60 py-1 text-center"
                               >
                                 <b className="block text-[8px] uppercase text-slate-500">
                                   {
@@ -898,7 +899,7 @@ export function ArenaDraftClient({
                                     }[key]
                                   }
                                 </b>
-                                <strong className="text-sm text-white">
+                                <strong className="block text-[11px] tabular-nums text-white">
                                   {pet.stats[key]}
                                 </strong>
                               </span>
@@ -952,6 +953,17 @@ export function ArenaDraftClient({
                                   <Trash2 size={15} />
                                 </button>
                               </div>
+                              <input
+                                value={pet.nickname ?? ""}
+                                maxLength={18}
+                                onChange={(e) =>
+                                  updatePet(pet.id, {
+                                    nickname: e.target.value,
+                                  })
+                                }
+                                placeholder={`Apelido (opcional) · ${item?.name ?? ""}`}
+                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/40"
+                              />
                               <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
                                 <select
                                   value={pet.personality}

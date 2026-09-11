@@ -59,6 +59,7 @@ export const arenaDraftPetSchema = z
     slot: z.number().int().min(0).max(11),
     speciesId: z.number().int().positive(),
     isMega: z.boolean(),
+    nickname: z.string().trim().max(18).optional(),
     personality: z.enum(DRAFT_PERSONALITIES),
     posture: z.enum(DRAFT_POSTURES),
     stats: z.object({

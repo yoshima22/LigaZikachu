@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -95,6 +95,32 @@ const personalityLabel = (value?: string | null) =>
 const personalityStyle = (value?: string | null) =>
   (value && PERSONALITY_STYLES[value]) ||
   "border-slate-500/40 bg-slate-500/10 text-slate-300";
+// Som curto de notificação (WebAudio, sem asset) quando chega a vez do jogador.
+function playTurnChime() {
+  try {
+    const Ctx =
+      window.AudioContext ??
+      (window as unknown as { webkitAudioContext?: typeof AudioContext })
+        .webkitAudioContext;
+    if (!Ctx) return;
+    const ctx = new Ctx();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.type = "sine";
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    osc.frequency.setValueAtTime(1174, ctx.currentTime + 0.12);
+    gain.gain.setValueAtTime(0.0001, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.18, ctx.currentTime + 0.02);
+    gain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.34);
+    osc.start();
+    osc.stop(ctx.currentTime + 0.36);
+    window.setTimeout(() => ctx.close().catch(() => {}), 600);
+  } catch {
+    /* áudio indisponível */
+  }
+}
 type Pet = {
   id: string;
   speciesId: number;
@@ -329,6 +355,17 @@ export function DraftRoomClient({
   useEffect(() => {
     setSelected([]);
   }, [turn, state]);
+  // Toca um som quando chega a vez do jogador (draft) ou abre a janela de troca.
+  const chimedRef = useRef(false);
+  useEffect(() => {
+    const myDraftTurn =
+      (state === "BAN_PHASE" || state === "PICK_PHASE") && turn === ownSide;
+    const myStrategyTurn =
+      state === "STRATEGY_WINDOW" && Boolean(strategy) && !strategy?.ownConfirmed;
+    const shouldChime = myDraftTurn || myStrategyTurn;
+    if (shouldChime && !chimedRef.current) playTurnChime();
+    chimedRef.current = shouldChime;
+  }, [state, turn, ownSide, strategy]);
 
   const pool =
     banning
@@ -495,6 +532,7 @@ export function DraftRoomClient({
                 }
                 onConfirm={() => selected.length === required && submitSelection(selected)}
                 pending={pending}
+                deadlineAt={deadlineAt}
               />
             ) : (
               <WaitingCard rival={playerNames.rival} phase={banning ? "BAN" : "PICK"} />
@@ -643,22 +681,28 @@ function StrategyWindow({
                 </div>
               </div>
               <button
-                disabled={dead || strategy.ownConfirmed || benchFull}
+                disabled={
+                  strategy.ownConfirmed || (dead && !selected) || benchFull
+                }
                 onClick={() => toggle(p.id)}
                 title={
                   benchFull
-                    ? "Já há 6 em campo. Mande um ativo ao banco primeiro."
-                    : undefined
+                    ? "Já há 6 em campo. Tire um do campo para colocar uma reserva."
+                    : dead && selected
+                      ? "Derrotado: mande ao banco para liberar a vaga a uma reserva viva."
+                      : undefined
                 }
                 className={`mt-2 w-full rounded-lg px-2 py-2 text-[10px] font-bold transition disabled:opacity-40 ${selected ? "border border-rose-400/40 bg-rose-500/10 text-rose-200" : "border border-cyan-300/40 bg-cyan-300/10 text-cyan-200"}`}
               >
-                {dead
-                  ? "Fora de combate"
-                  : selected
-                    ? "↓ Mandar ao banco"
-                    : benchFull
-                      ? "Campo cheio (6/6)"
-                      : "↑ Colocar em campo"}
+                {dead && selected
+                  ? "↓ Liberar vaga (derrotado)"
+                  : dead
+                    ? "Fora de combate"
+                    : selected
+                      ? "↓ Mandar ao banco"
+                      : benchFull
+                        ? "Campo cheio (6/6)"
+                        : "↑ Colocar em campo"}
               </button>
               <label className="mt-2 block text-[8px] font-bold uppercase tracking-wider text-slate-500">
                 Postura
@@ -800,6 +844,8 @@ function AnimatedBattle({
   const startCursor = Math.max(-1, from - 1);
   const [cursor, setCursor] = useState(startCursor);
   const [playing, setPlaying] = useState(true);
+  // Ritmo lento por padrão para dar tempo de ler cada ação e efeito.
+  const [speedMs, setSpeedMs] = useState(1300);
   useEffect(() => {
     setCursor(Math.max(-1, from - 1));
     setPlaying(true);
@@ -812,10 +858,10 @@ function AnimatedBattle({
     }
     const timer = window.setTimeout(
       () => setCursor((value) => Math.min(end, value + 1)),
-      600,
+      speedMs,
     );
     return () => window.clearTimeout(timer);
-  }, [playing, cursor, end]);
+  }, [playing, cursor, end, speedMs]);
   const hp = new Map<string, number>();
   const petById = new Map<string, Pet>();
   [...leftPets, ...rightPets].forEach((pet) => {
@@ -836,6 +882,20 @@ function AnimatedBattle({
       setPlaying(true);
     } else setPlaying((value) => !value);
   };
+  // Fila de ação: próximos mascotes a agir.
+  const upcoming = events
+    .slice(cursor + 1, Math.min(end + 1, cursor + 6))
+    .filter((event) => event.actorId);
+  // Efeitos recentes aplicados (lista separada e legível).
+  const recentEffects = events
+    .slice(from, cursor + 1)
+    .map((event, index) => ({ event, index }))
+    .filter(
+      ({ event }) =>
+        event.effect || event.targetHpAfter === 0 || event.advantageApplied,
+    )
+    .slice(-6)
+    .reverse();
   const renderSide = (pets: Pet[], right = false) => (
     <div
       className={`mt-2 flex flex-wrap gap-2 ${right ? "justify-center sm:justify-end" : "justify-center sm:justify-start"}`}
@@ -845,22 +905,47 @@ function AnimatedBattle({
         const percent = Math.max(0, Math.min(100, (value / pet.maxHp) * 100));
         const isActor = current?.actorId === pet.id;
         const isTarget = current?.targetId === pet.id;
+        const beingHit = isTarget && current?.action !== "HEAL";
+        const beingHealed = isTarget && current?.action === "HEAL";
+        const dead = value <= 0;
         return (
           <div
             key={pet.id}
-            className={`w-[4.75rem] rounded-xl border p-1.5 transition ${value <= 0 ? "border-white/10 opacity-40 grayscale" : isTarget ? "border-rose-400/70 bg-rose-500/10" : isActor ? "border-cyan-300/70 bg-cyan-300/10" : "border-white/10 bg-slate-950/60"}`}
+            className={`relative w-[4.75rem] rounded-xl border p-1.5 transition ${dead ? "border-white/10 opacity-40 grayscale" : isTarget ? "border-rose-400/70 bg-rose-500/10" : isActor ? "border-cyan-300/70 bg-cyan-300/10 ring-1 ring-cyan-300/40" : "border-white/10 bg-slate-950/60"}`}
           >
-            <img
-              src={pet.sprite}
-              alt=""
-              className={`mx-auto h-14 w-14 object-contain [image-rendering:pixelated] ${isActor ? "animate-pulse" : ""}`}
-            />
+            {isTarget && (
+              <span
+                key={cursor}
+                className={`adb-float pointer-events-none absolute left-1/2 top-1 z-10 -translate-x-1/2 text-xs font-black ${beingHealed ? "text-emerald-300" : "text-rose-300"}`}
+              >
+                {beingHealed ? "+" : "-"}
+                {current?.damage}
+              </span>
+            )}
+            <div
+              key={`sprite-${isTarget || isActor ? cursor : "idle"}`}
+              className={
+                beingHit
+                  ? "adb-shake"
+                  : beingHealed
+                    ? "adb-heal"
+                    : isActor
+                      ? "adb-lunge"
+                      : ""
+              }
+            >
+              <img
+                src={pet.sprite}
+                alt=""
+                className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
+              />
+            </div>
             <span className="block truncate text-center text-[8px] font-bold text-white">
               {pet.name}
             </span>
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div
-                className="h-full transition-all duration-300"
+                className="h-full transition-all duration-500"
                 style={{
                   width: `${percent}%`,
                   background:
@@ -868,8 +953,8 @@ function AnimatedBattle({
                 }}
               />
             </div>
-            <span className="mt-0.5 block text-center text-[7px] text-slate-400">
-              {value} HP
+            <span className="mt-0.5 block text-center text-[7px] tabular-nums text-slate-400">
+              {value}/{pet.maxHp}
             </span>
           </div>
         );
@@ -878,6 +963,16 @@ function AnimatedBattle({
   );
   return (
     <div>
+      <style>{`
+        @keyframes adbShake {0%,100%{transform:translateX(0)}20%{transform:translateX(-4px)}40%{transform:translateX(4px)}60%{transform:translateX(-3px)}80%{transform:translateX(3px)}}
+        @keyframes adbHeal {0%{filter:brightness(1)}50%{filter:brightness(1.8) drop-shadow(0 0 6px #6ee7b7)}100%{filter:brightness(1)}}
+        @keyframes adbLunge {0%,100%{transform:translateY(0)}40%{transform:translateY(-5px) scale(1.06)}}
+        @keyframes adbFloat {0%{opacity:0;transform:translate(-50%,4px)}20%{opacity:1}100%{opacity:0;transform:translate(-50%,-16px)}}
+        .adb-shake{animation:adbShake .5s ease}
+        .adb-heal{animation:adbHeal .6s ease}
+        .adb-lunge{animation:adbLunge .4s ease}
+        .adb-float{animation:adbFloat 1s ease forwards}
+      `}</style>
       <div className="grid items-start gap-3 sm:grid-cols-[1fr_auto_1fr]">
         <div>
           <b className="text-[10px] text-slate-300">{leftName}</b>
@@ -891,60 +986,55 @@ function AnimatedBattle({
           {renderSide(rightPets, true)}
         </div>
       </div>
+
+      {/* Narração da ação atual */}
       <div className="mt-3 min-h-[2.75rem] rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-[11px]">
         {current ? (
-          <div className="flex flex-col items-center gap-1">
-            <div className="flex flex-wrap items-center justify-center gap-1.5">
-              <b className="text-white">
-                T{current.turn} · {current.actorName}
-              </b>
-              {roleLabel(current.actorRole) && (
-                <span className="rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[8px] font-bold text-[#FFCB05]">
-                  {roleLabel(current.actorRole)}
-                </span>
-              )}
-              {personalityLabel(
-                current.actorId ? petById.get(current.actorId)?.personality : null,
-              ) && (
-                <span
-                  className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${personalityStyle(current.actorId ? petById.get(current.actorId)?.personality : null)}`}
-                >
-                  {personalityLabel(
-                    current.actorId
-                      ? petById.get(current.actorId)?.personality
-                      : null,
-                  )}
-                </span>
-              )}
-              <span className="text-slate-400">
-                {current.action === "HEAL" ? "curou" : "atacou"}
+          <div className="flex flex-wrap items-center justify-center gap-1.5">
+            <b className="text-white">
+              T{current.turn} · {current.actorName}
+            </b>
+            {roleLabel(current.actorRole) && (
+              <span className="rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[8px] font-bold text-[#FFCB05]">
+                {roleLabel(current.actorRole)}
               </span>
-              <b className="text-slate-200">{current.targetName}</b>
-              {roleLabel(current.targetRole) && (
-                <span className="rounded-full border border-slate-600 bg-slate-950 px-1.5 py-0.5 text-[8px] font-bold text-slate-400">
-                  {roleLabel(current.targetRole)}
-                </span>
-              )}
+            )}
+            {personalityLabel(
+              current.actorId ? petById.get(current.actorId)?.personality : null,
+            ) && (
               <span
-                className={
-                  current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
-                }
+                className={`rounded-full border px-1.5 py-0.5 text-[8px] font-bold ${personalityStyle(current.actorId ? petById.get(current.actorId)?.personality : null)}`}
               >
-                · {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
+                {personalityLabel(
+                  current.actorId
+                    ? petById.get(current.actorId)?.personality
+                    : null,
+                )}
               </span>
-              {current.advantageApplied && current.action !== "HEAL" && (
-                <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-1.5 py-0.5 text-[8px] font-black text-yellow-200">
-                  ⚡ SUPER EFETIVO
-                </span>
-              )}
-              {current.targetHpAfter === 0 && (
-                <span className="font-black text-rose-400">KO!</span>
-              )}
-            </div>
-            {current.effect && (
-              <span className="text-center text-[10px] text-fuchsia-200">
-                {current.effect}
+            )}
+            <span className="text-slate-400">
+              {current.action === "HEAL" ? "curou" : "atacou"}
+            </span>
+            <b className="text-slate-200">{current.targetName}</b>
+            {roleLabel(current.targetRole) && (
+              <span className="rounded-full border border-slate-600 bg-slate-950 px-1.5 py-0.5 text-[8px] font-bold text-slate-400">
+                {roleLabel(current.targetRole)}
               </span>
+            )}
+            <span
+              className={
+                current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
+              }
+            >
+              · {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
+            </span>
+            {current.advantageApplied && current.action !== "HEAL" && (
+              <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-1.5 py-0.5 text-[8px] font-black text-yellow-200">
+                ⚡ SUPER EFETIVO
+              </span>
+            )}
+            {current.targetHpAfter === 0 && (
+              <span className="font-black text-rose-400">KO!</span>
             )}
           </div>
         ) : (
@@ -953,8 +1043,68 @@ function AnimatedBattle({
           </span>
         )}
       </div>
+
+      {/* Fila de ação */}
+      {upcoming.length > 0 && (
+        <div className="mt-2 flex items-center gap-2 overflow-x-auto rounded-xl border border-white/5 bg-slate-950/50 px-2 py-1.5">
+          <span className="shrink-0 text-[8px] font-black uppercase tracking-widest text-slate-500">
+            A seguir
+          </span>
+          {upcoming.map((event, index) => {
+            const actor = event.actorId ? petById.get(event.actorId) : null;
+            return (
+              <div
+                key={`${event.turn}-${index}`}
+                className="flex shrink-0 items-center gap-1 rounded-lg bg-white/[.04] px-1.5 py-0.5"
+              >
+                {actor && (
+                  <img
+                    src={actor.sprite}
+                    alt=""
+                    className="h-5 w-5 object-contain [image-rendering:pixelated]"
+                  />
+                )}
+                <span className="text-[8px] text-slate-300">
+                  {event.actorName}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* Lista de efeitos aplicados */}
+      {recentEffects.length > 0 && (
+        <div className="mt-2 rounded-xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-2">
+          <p className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">
+            Efeitos aplicados
+          </p>
+          <div className="mt-1 space-y-1">
+            {recentEffects.map(({ event, index }) => (
+              <p
+                key={`${event.turn}-${index}`}
+                className="text-[10px] leading-tight text-slate-300"
+              >
+                <b className="text-slate-500">T{event.turn}</b>{" "}
+                {event.targetHpAfter === 0 && (
+                  <span className="font-black text-rose-300">
+                    {event.targetName} sofreu KO ·{" "}
+                  </span>
+                )}
+                {event.advantageApplied && event.action !== "HEAL" && (
+                  <span className="text-yellow-200">⚡ super efetivo · </span>
+                )}
+                {event.effect && (
+                  <span className="text-fuchsia-100">{event.effect}</span>
+                )}
+              </p>
+            ))}
+          </div>
+        </div>
+      )}
+
       {controls && (
-        <div className="mt-3 flex items-center gap-2">
+        <div className="mt-3 flex flex-wrap items-center gap-2">
           <button
             onClick={() => {
               setPlaying(false);
@@ -979,6 +1129,23 @@ function AnimatedBattle({
           >
             ▶
           </button>
+          <div className="flex overflow-hidden rounded-lg border border-slate-700 text-[10px]">
+            {(
+              [
+                ["Lento", 1800],
+                ["Normal", 1300],
+                ["Rápido", 750],
+              ] as const
+            ).map(([label, ms]) => (
+              <button
+                key={label}
+                onClick={() => setSpeedMs(ms)}
+                className={`px-2 py-1.5 font-bold ${speedMs === ms ? "bg-cyan-300 text-slate-950" : "text-slate-300"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
           <input
             type="range"
             min={startCursor}
@@ -1175,7 +1342,7 @@ function DraftBoard({
                     />
                     <div className="min-w-0 flex-1">
                       <span
-                        className={`block truncate text-[11px] font-bold ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
+                        className={`block break-words text-[11px] font-bold leading-tight ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
                       >
                         {pet.name}
                         {pet.isMega && (
@@ -1218,12 +1385,12 @@ function DraftBoard({
                       ).map(([label, value]) => (
                         <span
                           key={label}
-                          className="rounded bg-slate-950/60 px-0.5 py-0.5 text-center"
+                          className="rounded bg-slate-950/60 py-0.5 text-center"
                         >
-                          <b className="block text-[7px] uppercase text-slate-500">
+                          <b className="block text-[7px] uppercase leading-none text-slate-500">
                             {label}
                           </b>
-                          <strong className="text-[10px] text-slate-100">
+                          <strong className="block text-[10px] leading-tight tabular-nums text-slate-100">
                             {value}
                           </strong>
                         </span>
@@ -1235,30 +1402,38 @@ function DraftBoard({
             </div>
           ) : (
             // Time rival: só espécie, tipos e Mega (build continua secreta).
-            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+            <div className="grid grid-cols-3 gap-1.5">
               {panel.pets.map((pet) => (
                 <div
                   key={pet.id}
-                  className={`relative rounded-lg border p-1 text-center ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
+                  className={`relative rounded-lg border p-2 text-center ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
                 >
                   <img
                     src={pet.sprite}
                     alt=""
-                    className={`mx-auto h-9 w-9 object-contain ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
+                    className={`mx-auto h-12 w-12 object-contain [image-rendering:pixelated] ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
                   />
                   <span
-                    className={`block truncate text-[7px] font-bold ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
+                    className={`mt-1 block break-words text-[10px] font-bold leading-tight ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
                   >
                     {pet.name}
                   </span>
+                  <span className="block truncate text-[8px] text-slate-500">
+                    {pet.types.join(" · ")}
+                  </span>
                   {pet.isMega && (
-                    <span className="absolute left-0.5 top-0.5 text-[7px] font-black text-amber-300">
+                    <span className="absolute left-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[7px] font-black text-fuchsia-200">
                       M
                     </span>
                   )}
                   {pet.status === "PICKED" && (
-                    <span className="absolute right-0.5 top-0.5 text-[8px]">
+                    <span className="absolute right-1 top-1 text-[9px] text-cyan-300">
                       ✓
+                    </span>
+                  )}
+                  {pet.status === "BANNED" && (
+                    <span className="absolute right-1 top-1 text-[8px] font-black text-rose-300">
+                      ✕
                     </span>
                   )}
                 </div>
@@ -1293,6 +1468,7 @@ function SelectionGrid({
   onToggle,
   onConfirm,
   pending,
+  deadlineAt,
 }: {
   phase: "BAN" | "PICK";
   pool: Pet[];
@@ -1301,6 +1477,7 @@ function SelectionGrid({
   onToggle: (id: string) => void;
   onConfirm: () => void;
   pending: boolean;
+  deadlineAt: string | null;
 }) {
   const [details, setDetails] = useState<string | null>(null);
   const ban = phase === "BAN";
@@ -1336,7 +1513,7 @@ function SelectionGrid({
                   alt=""
                   className="mx-auto h-14 w-14 object-contain [image-rendering:pixelated]"
                 />
-                <b className="block truncate text-[10px] text-white">
+                <b className="block break-words text-[10px] font-bold leading-tight text-white">
                   {pet.name}
                 </b>
                 {/* Só o próprio time (fase de picks) revela postura/personalidade/status. */}
@@ -1355,10 +1532,24 @@ function SelectionGrid({
                       )}
                     </span>
                     {pet.stats && (
-                      <span className="mt-0.5 block text-[7px] text-slate-400">
-                        F{pet.stats.force} A{pet.stats.agility} C
-                        {pet.stats.charisma} I{pet.stats.instinct} V
-                        {pet.stats.vitality}
+                      <span className="mt-1 grid grid-cols-5 gap-0.5">
+                        {(
+                          [
+                            ["F", pet.stats.force],
+                            ["A", pet.stats.agility],
+                            ["C", pet.stats.charisma],
+                            ["I", pet.stats.instinct],
+                            ["V", pet.stats.vitality],
+                          ] as const
+                        ).map(([label, value]) => (
+                          <span
+                            key={label}
+                            className="rounded bg-slate-950/70 py-0.5 text-center text-[8px] tabular-nums text-slate-300"
+                          >
+                            <span className="text-slate-500">{label}</span>
+                            {value}
+                          </span>
+                        ))}
                       </span>
                     )}
                   </>
@@ -1388,9 +1579,19 @@ function SelectionGrid({
           );
         })}
       </div>
-      {/* Barra fixa: confirmar sempre visível, como na Torre dos Rebeldes. */}
+      {/* Barra fixa: tempo + confirmar sempre visíveis, como na Torre dos Rebeldes. */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/90 p-3 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-3">
+          {deadlineAt && (
+            <div className="flex shrink-0 flex-col items-center rounded-xl border border-cyan-300/25 bg-cyan-300/5 px-3 py-1.5">
+              <span className="text-[8px] font-black uppercase tracking-widest text-cyan-300">
+                Tempo
+              </span>
+              <span className="font-pixel text-lg text-[#FFCB05]">
+                <Countdown deadlineAt={deadlineAt} />
+              </span>
+            </div>
+          )}
           <span className="shrink-0 text-xs font-bold text-slate-300">
             {selected.length}/{required} selecionado{required > 1 ? "s" : ""}
           </span>
