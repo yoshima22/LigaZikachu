@@ -9,6 +9,7 @@ import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import {
   runArenaCombat,
+  type ArenaCombatRuntime,
   type ArenaMascot,
   type ArenaTurnLog,
 } from "@/lib/arena-z";
@@ -458,6 +459,148 @@ function metricsFromLogs(logs: ArenaTurnLog[], fighters: ArenaMascot[]) {
     };
   });
 }
+
+type StrategyPlan = {
+  activeIds: string[];
+  postures: Record<string, ArenaMascot["combatRole"]>;
+  confirmedAt: string;
+};
+type DraftBattle = {
+  version: 2;
+  checkpoint: number;
+  checkpoints: number[];
+  eligibleA: string[];
+  eligibleB: string[];
+  activeA: string[];
+  activeB: string[];
+  posturesA: Record<string, ArenaMascot["combatRole"]>;
+  posturesB: Record<string, ArenaMascot["combatRole"]>;
+  plans?: { A?: StrategyPlan; B?: StrategyPlan };
+  runtime?: ArenaCombatRuntime;
+  events: ArenaTurnLog[];
+  strategyHistory: Array<{
+    checkpoint: number;
+    activeA: string[];
+    activeB: string[];
+  }>;
+  result?: string;
+  rounds?: number;
+};
+
+const STRATEGY_CHECKPOINTS = [20, 35, 45] as const;
+function postureMap(pets: ReturnType<typeof validateArenaDraftPets>["pets"]) {
+  return Object.fromEntries(pets.map((pet) => [pet.id, pet.posture])) as Record<
+    string,
+    ArenaMascot["combatRole"]
+  >;
+}
+function buildDraftTeam(
+  pets: ReturnType<typeof validateArenaDraftPets>["pets"],
+  ownerId: string,
+  activeIds: string[],
+  postures: Record<string, ArenaMascot["combatRole"]>,
+) {
+  const active = new Set(activeIds);
+  return pets
+    .filter((pet) => active.has(pet.id))
+    .map((pet) =>
+      draftFighter(
+        { ...pet, posture: postures[pet.id] ?? pet.posture },
+        ownerId,
+      ),
+    );
+}
+
+async function persistCombatSegment(
+  tx: Prisma.TransactionClient,
+  match: {
+    id: string;
+    playerAId: string;
+    playerBId: string | null;
+    presetASnapshot: Prisma.JsonValue;
+    presetBSnapshot: Prisma.JsonValue | null;
+    battleJson: Prisma.JsonValue | null;
+  },
+  battle: DraftBattle,
+) {
+  if (!match.playerBId) throw new Error("Adversário ausente.");
+  const petsA = validateArenaDraftPets(match.presetASnapshot).pets;
+  const petsB = validateArenaDraftPets(match.presetBSnapshot).pets;
+  const teamA = buildDraftTeam(
+    petsA,
+    match.playerAId,
+    battle.activeA,
+    battle.posturesA,
+  );
+  const teamB = buildDraftTeam(
+    petsB,
+    match.playerBId,
+    battle.activeB,
+    battle.posturesB,
+  );
+  if (teamA.length !== 6 || teamB.length !== 6)
+    throw new Error("Formação final inválida.");
+  const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint] ?? 80;
+  const combat = runArenaCombat(teamA, teamB, {
+    runtime: battle.runtime,
+    stopAtTurn,
+  });
+  battle.runtime = combat.runtime;
+  battle.events.push(...combat.log);
+  battle.rounds = combat.rounds;
+  battle.plans = {};
+  if (!combat.finished && battle.checkpoint < STRATEGY_CHECKPOINTS.length) {
+    await tx.arenaDraftMatch.update({
+      where: { id: match.id },
+      data: {
+        state: "STRATEGY_WINDOW",
+        stateVersion: { increment: 1 },
+        deadlineAt: new Date(Date.now() + 180_000),
+        battleJson: battle as unknown as Prisma.InputJsonValue,
+        eventSequence: { increment: combat.log.length },
+      },
+    });
+    return false;
+  }
+  battle.result = combat.result;
+  const winnerId =
+    combat.result === "ATTACKER_WIN"
+      ? match.playerAId
+      : combat.result === "DEFENDER_WIN"
+        ? match.playerBId
+        : null;
+  const allA = petsA.map((p) =>
+    draftFighter(
+      { ...p, posture: battle.posturesA[p.id] ?? p.posture },
+      match.playerAId,
+    ),
+  );
+  const allB = petsB.map((p) =>
+    draftFighter(
+      { ...p, posture: battle.posturesB[p.id] ?? p.posture },
+      match.playerBId!,
+    ),
+  );
+  await tx.arenaDraftMatch.update({
+    where: { id: match.id },
+    data: {
+      state: "FINISHED",
+      stateVersion: { increment: 1 },
+      winnerId,
+      finishedAt: new Date(),
+      deadlineAt: null,
+      battleJson: battle as unknown as Prisma.InputJsonValue,
+      metricsJson: {
+        playerA: metricsFromLogs(battle.events, allA),
+        playerB: metricsFromLogs(battle.events, allB),
+        rounds: combat.rounds,
+      } as unknown as Prisma.InputJsonValue,
+      eventSequence: { increment: combat.log.length },
+    },
+  });
+  return true;
+}
+
 export async function resolveArenaDraftBattleAction(matchId: string) {
   try {
     const player = await currentPlayer();
@@ -478,46 +621,29 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
       const draft = match.draftJson as unknown as DraftState;
       const petsA = validateArenaDraftPets(match.presetASnapshot).pets;
       const petsB = validateArenaDraftPets(match.presetBSnapshot).pets;
-      const idsA = new Set(draft.picksA),
-        idsB = new Set(draft.picksB);
-      const teamA = petsA
-        .filter((p) => idsA.has(p.id))
-        .map((p) => draftFighter(p, match.playerAId));
-      const teamB = petsB
-        .filter((p) => idsB.has(p.id))
-        .map((p) => draftFighter(p, match.playerBId!));
-      if (teamA.length !== 6 || teamB.length !== 6)
-        throw new Error("Formação final inválida.");
-      const combat = runArenaCombat(teamA, teamB);
-      const winnerId =
-        combat.result === "ATTACKER_WIN"
-          ? match.playerAId
-          : combat.result === "DEFENDER_WIN"
-            ? match.playerBId
-            : null;
-      const metrics = {
-        playerA: metricsFromLogs(combat.log, teamA),
-        playerB: metricsFromLogs(combat.log, teamB),
-        rounds: combat.rounds,
+      const bannedByB = new Set(draft.bansB),
+        bannedByA = new Set(draft.bansA);
+      const eligibleA = petsA
+        .filter((p) => !bannedByB.has(p.id))
+        .map((p) => p.id);
+      const eligibleB = petsB
+        .filter((p) => !bannedByA.has(p.id))
+        .map((p) => p.id);
+      const battle: DraftBattle = {
+        version: 2,
+        checkpoint: 0,
+        checkpoints: [...STRATEGY_CHECKPOINTS],
+        eligibleA,
+        eligibleB,
+        activeA: draft.picksA,
+        activeB: draft.picksB,
+        posturesA: postureMap(petsA),
+        posturesB: postureMap(petsB),
+        plans: {},
+        events: [],
+        strategyHistory: [],
       };
-      await tx.arenaDraftMatch.update({
-        where: { id: match.id },
-        data: {
-          state: "FINISHED",
-          stateVersion: { increment: 1 },
-          winnerId,
-          finishedAt: new Date(),
-          battleJson: {
-            version: 1,
-            checkpoints: [20, 35, 45],
-            events: combat.log,
-            result: combat.result,
-            rounds: combat.rounds,
-          } as unknown as Prisma.InputJsonValue,
-          metricsJson: metrics as unknown as Prisma.InputJsonValue,
-          eventSequence: { increment: combat.log.length },
-        },
-      });
+      await persistCombatSegment(tx, match, battle);
     });
     revalidatePath(`/combates/arena-draft/${matchId}`);
     revalidatePath("/combates/arena-draft");
@@ -526,6 +652,108 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
     return {
       error:
         error instanceof Error ? error.message : "Falha ao iniciar combate.",
+    };
+  }
+}
+
+export async function submitArenaDraftStrategyAction(input: {
+  matchId: string;
+  activeIds: string[];
+  postures: Record<string, ArenaMascot["combatRole"]>;
+}) {
+  try {
+    const player = await currentPlayer();
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.matchId}))`;
+      const match = await tx.arenaDraftMatch.findUnique({
+        where: { id: input.matchId },
+      });
+      if (!match || !match.playerBId || match.state !== "STRATEGY_WINDOW")
+        throw new Error("A janela estratégica não está aberta.");
+      const side =
+        match.playerAId === player.id
+          ? "A"
+          : match.playerBId === player.id
+            ? "B"
+            : null;
+      if (!side) throw new Error("Você não participa desta partida.");
+      const battle = match.battleJson as unknown as DraftBattle;
+      if (battle.plans?.[side])
+        throw new Error("Sua estratégia já foi confirmada.");
+      const eligible = side === "A" ? battle.eligibleA : battle.eligibleB;
+      const unique = [...new Set(input.activeIds)];
+      if (unique.length !== 6 || unique.some((id) => !eligible.includes(id)))
+        throw new Error("Escolha exatamente 6 mascotes válidos.");
+      const dead = new Set(
+        Object.entries(battle.runtime?.hp ?? {})
+          .filter(([, hp]) => hp <= 0)
+          .map(([id]) => id),
+      );
+      const currentlyActive = new Set(
+        side === "A" ? battle.activeA : battle.activeB,
+      );
+      if (unique.some((id) => dead.has(id) && !currentlyActive.has(id)))
+        throw new Error(
+          "Mascotes derrotados não podem voltar do banco ao campo.",
+        );
+      const validRoles = new Set([
+        "DEFENDER",
+        "ATTACKER",
+        "FLANK",
+        "OPPORTUNIST",
+        "ENCOURAGER",
+        "GUARDIAN",
+        "DUELIST",
+        "SABOTEUR",
+        "HEALER",
+        "SCOUT",
+        "PROVOKER",
+        "SPECIALIST",
+        "SURVIVOR",
+      ]);
+      const postures = Object.fromEntries(
+        eligible.map((id) => {
+          const role = input.postures[id];
+          if (!validRoles.has(role)) throw new Error("Postura inválida.");
+          return [id, role];
+        }),
+      ) as Record<string, ArenaMascot["combatRole"]>;
+      battle.plans = {
+        ...(battle.plans ?? {}),
+        [side]: {
+          activeIds: unique,
+          postures,
+          confirmedAt: new Date().toISOString(),
+        },
+      };
+      if (!battle.plans.A || !battle.plans.B) {
+        await tx.arenaDraftMatch.update({
+          where: { id: match.id },
+          data: {
+            battleJson: battle as unknown as Prisma.InputJsonValue,
+            stateVersion: { increment: 1 },
+          },
+        });
+        return;
+      }
+      battle.activeA = battle.plans.A.activeIds;
+      battle.activeB = battle.plans.B.activeIds;
+      battle.posturesA = battle.plans.A.postures;
+      battle.posturesB = battle.plans.B.postures;
+      battle.strategyHistory.push({
+        checkpoint: STRATEGY_CHECKPOINTS[battle.checkpoint],
+        activeA: battle.activeA,
+        activeB: battle.activeB,
+      });
+      battle.checkpoint += 1;
+      await persistCombatSegment(tx, match, battle);
+    });
+    revalidatePath(`/combates/arena-draft/${input.matchId}`);
+    revalidatePath("/combates/arena-draft");
+    return { success: "Estratégia confirmada em segredo." };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Estratégia recusada.",
     };
   }
 }
