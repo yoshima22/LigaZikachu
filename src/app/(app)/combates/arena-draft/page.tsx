@@ -17,6 +17,9 @@ export default async function ArenaDraftPage() {
   if (!session?.user) redirect("/login");
   const player = await getSessionPlayer(session.user.id);
   if (!player) redirect("/dashboard");
+  const seasonStart = new Date();
+  seasonStart.setDate(1);
+  seasonStart.setHours(0, 0, 0, 0);
   await prisma.arenaDraftMatch.updateMany({
     where: { state: "CHALLENGE_PENDING", deadlineAt: { lt: new Date() } },
     data: {
@@ -47,8 +50,9 @@ export default async function ArenaDraftPage() {
         where: {
           OR: [{ playerAId: player.id }, { playerBId: player.id }],
           state: "FINISHED",
+          finishedAt: { gte: seasonStart },
         },
-        orderBy: { finishedAt: "desc" },
+        orderBy: { finishedAt: "asc" },
         take: 20,
         include: {
           playerA: { select: { displayName: true } },
@@ -93,6 +97,25 @@ export default async function ArenaDraftPage() {
         ? activeMatch.playerB?.displayName
         : activeMatch.playerA.displayName) ?? null)
     : null;
+  const ratings = new Map<string, number>();
+  for (const match of rankedMatches) {
+    const ratingA = ratings.get(match.playerAId) ?? 1000;
+    const ratingB = ratings.get(match.playerBId!) ?? 1000;
+    const expectedA = 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
+    const scoreA = !match.winnerId
+      ? 0.5
+      : match.winnerId === match.playerAId
+        ? 1
+        : 0;
+    ratings.set(
+      match.playerAId,
+      Math.round(ratingA + 32 * (scoreA - expectedA)),
+    );
+    ratings.set(
+      match.playerBId!,
+      Math.round(ratingB + 32 * (1 - scoreA - (1 - expectedA))),
+    );
+  }
   const board = Array.from(
     rankedMatches
       .reduce<
@@ -131,7 +154,12 @@ export default async function ArenaDraftPage() {
       .values(),
   )
     .filter((r) => r.matches >= 5)
-    .sort((a, b) => b.wins - a.wins || a.losses - b.losses);
+    .map((row) => ({
+      ...row,
+      rating: ratings.get(row.playerId) ?? 1000,
+      winRate: Math.round((row.wins / row.matches) * 100),
+    }))
+    .sort((a, b) => b.rating - a.rating || b.wins - a.wins);
   return (
     <ArenaDraftClient
       species={species}

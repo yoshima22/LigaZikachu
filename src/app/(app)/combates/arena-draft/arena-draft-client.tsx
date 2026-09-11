@@ -93,6 +93,8 @@ export function ArenaDraftClient({
     losses: number;
     draws: number;
     matches: number;
+    rating: number;
+    winRate: number;
   }>;
   players: Array<{ id: string; name: string }>;
   isAdmin: boolean;
@@ -269,12 +271,20 @@ export function ArenaDraftClient({
                 Como funciona
               </button>
               {isAdmin && (
-                <button
-                  onClick={() => setTutorialOpen(true)}
-                  className="rounded-xl px-4 py-3 text-xs font-bold text-fuchsia-300 ring-1 ring-fuchsia-400/30"
-                >
-                  Admin · testar instruções
-                </button>
+                <>
+                  <button
+                    onClick={() => setTutorialOpen(true)}
+                    className="rounded-xl px-4 py-3 text-xs font-bold text-fuchsia-300 ring-1 ring-fuchsia-400/30"
+                  >
+                    Admin · testar instruções
+                  </button>
+                  <Link
+                    href="/combates/arena-draft/admin"
+                    className="rounded-xl px-4 py-3 text-xs font-bold text-amber-200 ring-1 ring-amber-300/30"
+                  >
+                    Admin · controlar modo
+                  </Link>
+                </>
               )}
             </div>
           </div>
@@ -342,7 +352,17 @@ export function ArenaDraftClient({
           return (
             <button
               key={String(key)}
-              onClick={() => setTab(key as typeof tab)}
+              onClick={() => {
+                if (
+                  key === "PLAY" &&
+                  !presets.some((preset) => preset.isReady)
+                ) {
+                  toast.info("Monte e salve um preset válido antes de jogar.");
+                  setTab("BUILD");
+                  return;
+                }
+                setTab(key as typeof tab);
+              }}
               className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-bold ${tab === key ? "bg-cyan-300 text-slate-950" : "text-slate-400 hover:bg-white/5"}`}
             >
               <C size={15} />
@@ -653,13 +673,19 @@ export function ArenaDraftClient({
                             <input
                               type="number"
                               min={20}
-                              max={250}
+                              max={pet.isMega ? 240 : 250}
                               value={pet.stats[key]}
                               onChange={(e) =>
                                 updatePet(pet.id, {
                                   stats: {
                                     ...pet.stats,
-                                    [key]: Number(e.target.value),
+                                    [key]: Math.max(
+                                      20,
+                                      Math.min(
+                                        pet.isMega ? 240 : 250,
+                                        Number(e.target.value),
+                                      ),
+                                    ),
                                   },
                                 })
                               }
@@ -828,7 +854,7 @@ export function ArenaDraftClient({
               onChange={(event) => setChallengePresetId(event.target.value)}
               className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-xs"
             >
-              <option value="">Preset usado no desafio</option>
+              <option value="">Escolha sua equipe para o desafio</option>
               {presets
                 .filter((preset) => preset.isReady)
                 .map((preset) => (
@@ -882,7 +908,8 @@ export function ArenaDraftClient({
               <Trophy size={19} /> Ranking Beta
             </h2>
             <p className="mt-1 text-xs text-slate-500">
-              Mínimo de 5 partidas. Cancelamentos não contam.
+              Temporada mensal · rating Elo. Mínimo de 5 partidas; cancelamentos
+              e partidas com admin não contam.
             </p>
             <Link
               href="/combates/arena-draft/ranking-mascotes"
@@ -903,8 +930,9 @@ export function ArenaDraftClient({
                   >
                     <b className="text-cyan-300">#{i + 1}</b>
                     <span className="font-bold text-white">{r.name}</span>
-                    <span className="text-xs text-slate-400">
-                      {r.wins}V · {r.losses}D · {r.draws}E
+                    <span className="text-right text-xs text-slate-400">
+                      <b className="block text-fuchsia-300">{r.rating} pts</b>
+                      {r.wins}V · {r.losses}D · {r.draws}E · {r.winRate}%
                     </span>
                   </div>
                 ))
@@ -959,16 +987,16 @@ function ArenaDraftTutorial({
       aria-modal="true"
       aria-label="Como funciona a Arena Draft"
     >
-      <div className="relative max-h-[94vh] w-full max-w-5xl overflow-y-auto rounded-[2rem] border border-cyan-300/20 bg-[#070b18] shadow-2xl shadow-black/70">
-        <div className="relative h-44 overflow-hidden sm:h-64">
+      <div className="relative grid max-h-[96vh] w-full max-w-7xl overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[#070b18] shadow-2xl shadow-black/70 lg:grid-cols-[1.08fr_.92fr]">
+        <div className="relative hidden min-h-[680px] bg-slate-950 lg:block">
           <img
             src="/images/arena-draft/tutorial-arena.png"
             alt="Arena com mascotes preparados para o draft"
-            className="h-full w-full object-cover object-center"
+            className="absolute inset-0 h-full w-full object-contain object-center"
           />
-          <div className="absolute inset-0 bg-gradient-to-t from-[#070b18] via-[#070b18]/20 to-transparent" />
+          <div className="absolute inset-y-0 right-0 w-24 bg-gradient-to-l from-[#070b18] to-transparent" />
         </div>
-        <div className="relative -mt-12 p-6 sm:p-9">
+        <div className="relative overflow-y-auto p-5 sm:p-7 lg:overflow-hidden">
           <button
             onClick={onClose}
             className="absolute right-5 top-5 flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-xl text-white"
@@ -979,14 +1007,14 @@ function ArenaDraftTutorial({
           <p className="text-[10px] font-black uppercase tracking-[.25em] text-cyan-300">
             Primeiros passos
           </p>
-          <h2 className="mt-3 pr-10 text-3xl font-black text-white sm:text-4xl">
+          <h2 className="mt-2 pr-10 text-2xl font-black text-white sm:text-3xl">
             Aqui, estratégia vem antes da coleção.
           </h2>
-          <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
+          <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-300">
             A Arena Draft libera o mesmo catálogo para todos. Você monta sua
             estratégia, esconde a build e precisa ler as escolhas do rival.
           </p>
-          <div className="mt-7 grid gap-3 sm:grid-cols-2">
+          <div className="mt-4 grid gap-2 sm:grid-cols-2">
             <TutorialStep
               number="01"
               title="Monte seus 12"
@@ -1008,12 +1036,12 @@ function ArenaDraftTutorial({
               text="A luta é automática. Nos turnos 20, 35 e 45, cada lado prepara mudanças em segredo; HP, debuffs e derrotas continuam valendo após a troca."
             />
           </div>
-          <div className="mt-6 rounded-2xl bg-amber-300/8 p-4 text-xs leading-5 text-amber-100 ring-1 ring-amber-300/20">
+          <div className="mt-3 rounded-xl bg-amber-300/8 p-3 text-[11px] leading-4 text-amber-100 ring-1 ring-amber-300/20">
             <b>Beta sem premiações:</b> partidas servem para testar estratégia,
             balanceamento, draft e rankings. Nenhum mascote ou item da sua
             coleção é consumido ou alterado.
           </div>
-          <div className="mt-7 flex flex-wrap justify-end gap-3">
+          <div className="mt-4 flex flex-wrap justify-end gap-2">
             <button
               onClick={onClose}
               className="rounded-xl px-5 py-3 text-sm font-bold text-slate-300 ring-1 ring-white/15"
@@ -1042,10 +1070,10 @@ function TutorialStep({
   text: string;
 }) {
   return (
-    <article className="rounded-2xl bg-white/[.045] p-5">
+    <article className="rounded-xl bg-white/[.045] p-3">
       <span className="text-xs font-black text-fuchsia-300">{number}</span>
       <h3 className="mt-2 font-black text-white">{title}</h3>
-      <p className="mt-2 text-xs leading-5 text-slate-400">{text}</p>
+      <p className="mt-1 text-[11px] leading-4 text-slate-400">{text}</p>
     </article>
   );
 }

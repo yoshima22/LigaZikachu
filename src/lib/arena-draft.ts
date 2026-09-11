@@ -53,21 +53,34 @@ export const DRAFT_STAT_KEYS = [
   "vitality",
 ] as const;
 
-export const arenaDraftPetSchema = z.object({
-  id: z.string().min(1),
-  slot: z.number().int().min(0).max(11),
-  speciesId: z.number().int().positive(),
-  isMega: z.boolean(),
-  personality: z.enum(DRAFT_PERSONALITIES),
-  posture: z.enum(DRAFT_POSTURES),
-  stats: z.object({
-    force: z.number().int().min(20).max(250),
-    agility: z.number().int().min(20).max(250),
-    charisma: z.number().int().min(20).max(250),
-    instinct: z.number().int().min(20).max(250),
-    vitality: z.number().int().min(20).max(250),
-  }),
-});
+export const arenaDraftPetSchema = z
+  .object({
+    id: z.string().min(1),
+    slot: z.number().int().min(0).max(11),
+    speciesId: z.number().int().positive(),
+    isMega: z.boolean(),
+    personality: z.enum(DRAFT_PERSONALITIES),
+    posture: z.enum(DRAFT_POSTURES),
+    stats: z.object({
+      force: z.number().int().min(20).max(250),
+      agility: z.number().int().min(20).max(250),
+      charisma: z.number().int().min(20).max(250),
+      instinct: z.number().int().min(20).max(250),
+      vitality: z.number().int().min(20).max(250),
+    }),
+  })
+  .superRefine((pet, context) => {
+    if (!MEGA_FORM_IDS.has(pet.speciesId)) return;
+    for (const key of DRAFT_STAT_KEYS) {
+      if (pet.stats[key] > 240)
+        context.addIssue({
+          code: z.ZodIssueCode.custom,
+          path: ["stats", key],
+          message:
+            "Formas Mega aceitam no máximo 240 antes do bônus de transformação.",
+        });
+    }
+  });
 export const arenaDraftPetsSchema = z.array(arenaDraftPetSchema).max(12);
 export type ArenaDraftPet = z.infer<typeof arenaDraftPetSchema>;
 
