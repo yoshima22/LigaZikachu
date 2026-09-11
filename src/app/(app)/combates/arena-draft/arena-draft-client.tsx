@@ -3,53 +3,819 @@
 import { useMemo, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { Ban, Bot, CheckCircle2, Copy, Gamepad2, History, Search, Shield, Sparkles, Swords, Trash2, Trophy, Users } from "lucide-react";
+import {
+  Ban,
+  Bot,
+  CheckCircle2,
+  Copy,
+  Gamepad2,
+  History,
+  Search,
+  Shield,
+  Sparkles,
+  Swords,
+  Trash2,
+  Trophy,
+  Users,
+} from "lucide-react";
 import { toast } from "sonner";
-import { ARENA_DRAFT_RULES, DRAFT_PERSONALITIES, DRAFT_POSTURES, DRAFT_STAT_KEYS, type ArenaDraftPet } from "@/lib/arena-draft";
+import {
+  ARENA_DRAFT_RULES,
+  DRAFT_PERSONALITIES,
+  DRAFT_POSTURES,
+  DRAFT_STAT_KEYS,
+  type ArenaDraftPet,
+} from "@/lib/arena-draft";
 import { PERSONALITY_LABEL, TYPE_LABELS_PT } from "@/lib/mascot-data";
-import { cancelDraftQueueAction, deleteDraftPresetAction, joinDraftQueueAction, saveDraftPresetAction } from "./actions";
+import {
+  cancelDraftQueueAction,
+  createDraftChallengeAction,
+  answerDraftChallengeAction,
+  deleteDraftPresetAction,
+  joinDraftQueueAction,
+  saveDraftPresetAction,
+} from "./actions";
 
-type Species = { id: number; name: string; sprite: string; types: string[] };
-type Preset = { id: string; name: string; isReady: boolean; pets: ArenaDraftPet[]; updatedAt: string };
-type Match = { id: string; state: string; opponent: string | null; createdAt: string };
-const postureLabels: Record<string, string> = { ATTACKER: "Atacante", GUARDIAN: "Guardião", CAREGIVER: "Cuidador", ENCOURAGER: "Encorajador", OPPORTUNIST: "Oportunista", SPECIALIST: "Especialista", SURVIVOR: "Sobrevivente" };
+type Species = {
+  id: number;
+  name: string;
+  sprite: string;
+  types: string[];
+  isMega: boolean;
+};
+type Preset = {
+  id: string;
+  name: string;
+  isReady: boolean;
+  pets: ArenaDraftPet[];
+  updatedAt: string;
+};
+type Match = {
+  id: string;
+  state: string;
+  opponent: string | null;
+  createdAt: string;
+  incoming?: boolean;
+};
+const postureLabels: Record<string, string> = {
+  DEFENDER: "Defensor",
+  ATTACKER: "Atacante",
+  FLANK: "Flanco",
+  GUARDIAN: "Guardião",
+  HEALER: "Cuidador",
+  ENCOURAGER: "Encorajador",
+  OPPORTUNIST: "Oportunista",
+  DUELIST: "Duelista",
+  SABOTEUR: "Sabotador",
+  SCOUT: "Batedor",
+  PROVOKER: "Provocador",
+  SPECIALIST: "Especialista",
+  SURVIVOR: "Sobrevivente",
+};
 
-export function ArenaDraftClient({ species, presets, activeMatch, history, leaderboard }: { species: Species[]; presets: Preset[]; activeMatch: Match | null; history: Array<Match & { result: string }>; leaderboard:Array<{playerId:string;name:string;wins:number;losses:number;draws:number;matches:number}> }) {
-  const router = useRouter(); const [pending, start] = useTransition();
+export function ArenaDraftClient({
+  species,
+  presets,
+  activeMatch,
+  history,
+  leaderboard,
+  players,
+}: {
+  species: Species[];
+  presets: Preset[];
+  activeMatch: Match | null;
+  history: Array<Match & { result: string }>;
+  leaderboard: Array<{
+    playerId: string;
+    name: string;
+    wins: number;
+    losses: number;
+    draws: number;
+    matches: number;
+  }>;
+  players: Array<{ id: string; name: string }>;
+}) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
   const [tab, setTab] = useState<"HOME" | "BUILD" | "PLAY" | "RANK">("HOME");
-  const [selectedId, setSelectedId] = useState<string | null>(presets[0]?.id ?? null);
+  const [selectedId, setSelectedId] = useState<string | null>(
+    presets[0]?.id ?? null,
+  );
   const selected = presets.find((p) => p.id === selectedId);
   const [name, setName] = useState(selected?.name ?? "Meu primeiro draft");
   const [pets, setPets] = useState<ArenaDraftPet[]>(selected?.pets ?? []);
-  const [query, setQuery] = useState(""); const [type, setType] = useState("ALL");
-  const types = useMemo(() => Array.from(new Set(species.flatMap((item) => item.types))).sort(), [species]);
-  const filtered = useMemo(() => species.filter((item) => (type === "ALL" || item.types.includes(type)) && (!query || item.name.toLowerCase().includes(query.toLowerCase()) || String(item.id) === query)).slice(0, 36), [species, query, type]);
+  const [query, setQuery] = useState("");
+  const [type, setType] = useState("ALL");
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [challengeQuery, setChallengeQuery] = useState("");
+  const [challengePresetId, setChallengePresetId] = useState(
+    presets.find((preset) => preset.isReady)?.id ?? "",
+  );
+  const catalogPageSize = 24;
+  const types = useMemo(
+    () => Array.from(new Set(species.flatMap((item) => item.types))).sort(),
+    [species],
+  );
+  const filtered = useMemo(
+    () =>
+      species.filter(
+        (item) =>
+          (type === "ALL" || item.types.includes(type)) &&
+          (!query ||
+            item.name.toLowerCase().includes(query.toLowerCase()) ||
+            String(item.id) === query),
+      ),
+    [species, query, type],
+  );
+  const catalogPages = Math.max(
+    1,
+    Math.ceil(filtered.length / catalogPageSize),
+  );
+  const visibleSpecies = filtered.slice(
+    (Math.min(catalogPage, catalogPages) - 1) * catalogPageSize,
+    Math.min(catalogPage, catalogPages) * catalogPageSize,
+  );
   const megas = pets.filter((pet) => pet.isMega).length;
-  const choosePreset = (preset: Preset) => { setSelectedId(preset.id); setName(preset.name); setPets(preset.pets); setTab("BUILD"); };
-  const addPet = (item: Species) => { if (pets.length >= 12) return toast.error("Os 12 slots já estão preenchidos."); setPets([...pets, { id: crypto.randomUUID(), slot: pets.length, speciesId: item.id, isMega: false, personality: "LOYAL", posture: "ATTACKER", stats: { force: 900, agility: 900, charisma: 900, instinct: 900, vitality: 900 } }]); };
-  const updatePet = (id: string, patch: Partial<ArenaDraftPet>) => setPets(pets.map((pet) => pet.id === id ? { ...pet, ...patch } : pet));
-  const removePet = (id: string) => setPets(pets.filter((pet) => pet.id !== id).map((pet, slot) => ({ ...pet, slot })));
-  const save = () => start(async () => { const result = await saveDraftPresetAction({ id: selectedId ?? undefined, name, pets }); if (result.error) toast.error(result.error); else { toast.success(result.success); result.errors?.forEach((e) => toast.warning(e)); router.refresh(); } });
-  const queue = (id: string) => start(async () => { const result = await joinDraftQueueAction(id); if (result.error) toast.error(result.error); else { toast.success(result.success); router.refresh(); } });
+  const choosePreset = (preset: Preset) => {
+    setSelectedId(preset.id);
+    setName(preset.name);
+    setPets(preset.pets);
+    setTab("BUILD");
+  };
+  const addPet = (item: Species) => {
+    if (pets.length >= 12)
+      return toast.error("Os 12 slots já estão preenchidos.");
+    if (item.isMega && megas >= 2)
+      return toast.error("O preset já possui as 2 formas Mega permitidas.");
+    setPets([
+      ...pets,
+      {
+        id: crypto.randomUUID(),
+        slot: pets.length,
+        speciesId: item.id,
+        isMega: item.isMega,
+        personality: "LOYAL",
+        posture: "ATTACKER",
+        stats: {
+          force: 75,
+          agility: 75,
+          charisma: 75,
+          instinct: 75,
+          vitality: 75,
+        },
+      },
+    ]);
+  };
+  const updatePet = (id: string, patch: Partial<ArenaDraftPet>) =>
+    setPets(pets.map((pet) => (pet.id === id ? { ...pet, ...patch } : pet)));
+  const removePet = (id: string) =>
+    setPets(
+      pets
+        .filter((pet) => pet.id !== id)
+        .map((pet, slot) => ({ ...pet, slot })),
+    );
+  const save = () =>
+    start(async () => {
+      const result = await saveDraftPresetAction({
+        id: selectedId ?? undefined,
+        name,
+        pets,
+      });
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.success);
+        result.errors?.forEach((e) => toast.warning(e));
+        router.refresh();
+      }
+    });
+  const queue = (id: string) =>
+    start(async () => {
+      const result = await joinDraftQueueAction(id);
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.success);
+        router.refresh();
+      }
+    });
 
-  return <div className="space-y-6">
-    <section className="overflow-hidden rounded-3xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,.2),transparent_38%),radial-gradient(circle_at_90%_20%,rgba(168,85,247,.22),transparent_35%),#050a18] p-6 sm:p-8">
-      <div className="flex flex-wrap items-start justify-between gap-4"><div><span className="rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.22em] text-fuchsia-200">Arena Draft · Beta</span><h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">Sua leitura vale mais que sua coleção.</h1><p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">Monte 12 mascotes com acesso livre ao catálogo, distribua 4.500 pontos, enfrente bans e picks progressivos e intervenha nos turnos 20, 35 e 45. O Beta não concede premiações.</p></div><div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-right"><p className="text-xs text-cyan-200">Formato oficial</p><p className="text-2xl font-black text-white">12 → 9 → 6 + 3</p><p className="text-[10px] text-slate-400">3 bans por lado</p></div></div>
-      <div className="mt-6 grid gap-2 sm:grid-cols-4">{[[Bot,"Construa 12","4.500 pontos por mascote"],[Ban,"Ban e draft","Informação pública protegida"],[Swords,"Combate automático","Motor oficial e sincronizado"],[Sparkles,"Decida","Janelas T20 · T35 · T45"]].map(([Icon,title,text]) => { const C=Icon as typeof Bot; return <div key={String(title)} className="rounded-2xl border border-white/10 bg-black/20 p-3"><C size={17} className="text-cyan-300"/><p className="mt-2 font-bold text-white">{String(title)}</p><p className="text-[11px] text-slate-400">{String(text)}</p></div>;})}</div>
-    </section>
-    <nav className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-2 sm:grid-cols-4">{[["HOME","Visão geral",Gamepad2],["BUILD","Montar preset",Bot],["PLAY","Jogar",Users],["RANK","Histórico e ranking",Trophy]].map(([key,label,Icon]) => { const C=Icon as typeof Bot; return <button key={String(key)} onClick={()=>setTab(key as typeof tab)} className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-bold ${tab===key?"bg-cyan-300 text-slate-950":"text-slate-400 hover:bg-white/5"}`}><C size={15}/>{String(label)}</button>;})}</nav>
+  return (
+    <div className="space-y-6">
+      <section className="overflow-hidden rounded-3xl border border-cyan-400/25 bg-[radial-gradient(circle_at_15%_0%,rgba(34,211,238,.2),transparent_38%),radial-gradient(circle_at_90%_20%,rgba(168,85,247,.22),transparent_35%),#050a18] p-6 sm:p-8">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <span className="rounded-full border border-fuchsia-300/30 bg-fuchsia-400/10 px-3 py-1 text-[10px] font-black uppercase tracking-[.22em] text-fuchsia-200">
+              Arena Draft · Beta
+            </span>
+            <h1 className="mt-4 text-3xl font-black text-white sm:text-5xl">
+              Sua leitura vale mais que sua coleção.
+            </h1>
+            <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+              Monte 12 mascotes com acesso livre ao catálogo, distribua 4.500
+              pontos, enfrente bans e picks progressivos e intervenha nos turnos
+              20, 35 e 45. O Beta não concede premiações.
+            </p>
+          </div>
+          <div className="rounded-2xl border border-cyan-300/20 bg-cyan-300/5 p-4 text-right">
+            <p className="text-xs text-cyan-200">Formato oficial</p>
+            <p className="text-2xl font-black text-white">12 → 9 → 6 + 3</p>
+            <p className="text-[10px] text-slate-400">3 bans por lado</p>
+          </div>
+        </div>
+        <div className="mt-6 grid gap-2 sm:grid-cols-4">
+          {[
+            [Bot, "Construa 12", "4.500 pontos para dividir no time"],
+            [Ban, "Ban e draft", "Informação pública protegida"],
+            [Swords, "Combate automático", "Motor oficial e sincronizado"],
+            [Sparkles, "Decida", "Janelas T20 · T35 · T45"],
+          ].map(([Icon, title, text]) => {
+            const C = Icon as typeof Bot;
+            return (
+              <div
+                key={String(title)}
+                className="rounded-2xl border border-white/10 bg-black/20 p-3"
+              >
+                <C size={17} className="text-cyan-300" />
+                <p className="mt-2 font-bold text-white">{String(title)}</p>
+                <p className="text-[11px] text-slate-400">{String(text)}</p>
+              </div>
+            );
+          })}
+        </div>
+      </section>
+      <nav className="grid grid-cols-2 gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-2 sm:grid-cols-4">
+        {[
+          ["HOME", "Visão geral", Gamepad2],
+          ["BUILD", "Montar preset", Bot],
+          ["PLAY", "Jogar", Users],
+          ["RANK", "Histórico e ranking", Trophy],
+        ].map(([key, label, Icon]) => {
+          const C = Icon as typeof Bot;
+          return (
+            <button
+              key={String(key)}
+              onClick={() => setTab(key as typeof tab)}
+              className={`flex items-center justify-center gap-2 rounded-xl px-3 py-3 text-xs font-bold ${tab === key ? "bg-cyan-300 text-slate-950" : "text-slate-400 hover:bg-white/5"}`}
+            >
+              <C size={15} />
+              {String(label)}
+            </button>
+          );
+        })}
+      </nav>
 
-    {tab === "HOME" && <div className="grid gap-4 lg:grid-cols-3"><Info title="Igualdade competitiva" text="Os mascotes da Arena Draft são cópias PvP independentes. Nada altera sua coleção, inventário ou mascotes reais."/><Info title="Build secreta" text="Antes da luta, o rival vê somente espécie, arte, tipos e Mega. Atributos, personalidade e postura permanecem privados."/><Info title="Estado preservado" text="Trocas estratégicas não curam HP, não removem debuffs e não revivem derrotados. Planos são revelados simultaneamente."/></div>}
+      {tab === "HOME" && (
+        <div className="grid gap-4 lg:grid-cols-3">
+          <Info
+            title="Igualdade competitiva"
+            text="Os mascotes da Arena Draft são cópias PvP independentes. Nada altera sua coleção, inventário ou mascotes reais."
+          />
+          <Info
+            title="Build secreta"
+            text="Antes da luta, o rival vê somente espécie, arte, tipos e Mega. Atributos, personalidade e postura permanecem privados."
+          />
+          <Info
+            title="Estado preservado"
+            text="Trocas estratégicas não curam HP, não removem debuffs e não revivem derrotados. Planos são revelados simultaneamente."
+          />
+        </div>
+      )}
 
-    {tab === "BUILD" && <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
-      <section className="space-y-4"><div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"><div className="flex items-center justify-between"><h2 className="font-black text-white">Meus presets</h2><button onClick={()=>{setSelectedId(null);setName("Novo preset");setPets([])}} className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white">+ Novo</button></div><div className="mt-3 space-y-2">{presets.length===0?<p className="text-xs text-slate-500">Nenhum preset criado.</p>:presets.map(p=><button key={p.id} onClick={()=>choosePreset(p)} className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${selectedId===p.id?"border-cyan-300/50 bg-cyan-300/5":"border-white/10"}`}><span><b className="block text-sm text-white">{p.name}</b><small className="text-slate-500">{p.pets.length}/12 · {p.pets.filter(x=>x.isMega).length}/2 Megas</small></span>{p.isReady?<CheckCircle2 className="text-emerald-300" size={18}/>:<span className="text-[9px] text-amber-300">RASCUNHO</span>}</button>)}</div></div>
-      <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"><h2 className="font-black text-white">Catálogo livre</h2><div className="mt-3 grid gap-2 sm:grid-cols-[1fr_150px]"><label className="flex items-center gap-2 rounded-xl border border-white/10 px-3"><Search size={14}/><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Nome ou Pokédex" className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"/></label><select value={type} onChange={e=>setType(e.target.value)} className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"><option value="ALL">Todos os tipos</option>{types.map(t=><option key={t} value={t}>{TYPE_LABELS_PT[t]??t}</option>)}</select></div><div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">{filtered.map(item=><button key={item.id} onClick={()=>addPet(item)} className="rounded-xl border border-white/10 bg-white/[.025] p-2 hover:border-cyan-300/40"><img src={item.sprite} alt="" className="mx-auto h-12 w-12 object-contain"/><span className="block truncate text-[10px] font-bold text-white">{item.name}</span><span className="text-[9px] text-slate-500">#{item.id}</span></button>)}</div></div></section>
-      <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><input value={name} onChange={e=>setName(e.target.value)} className="border-b border-white/10 bg-transparent text-xl font-black text-white outline-none"/><p className="mt-1 text-xs text-slate-500">Slots {pets.length}/12 · Megas {megas}/2</p></div><button disabled={pending} onClick={save} className="rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50">Salvar preset</button></div><div className="mt-4 space-y-3">{pets.length===0?<div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">Escolha mascotes no catálogo para começar.</div>:pets.map(pet=>{const item=species.find(s=>s.id===pet.speciesId)!;const total=DRAFT_STAT_KEYS.reduce((s,k)=>s+pet.stats[k],0);return <article key={pet.id} className="rounded-2xl border border-white/10 bg-white/[.025] p-3"><div className="flex gap-3"><span className="text-xs font-black text-slate-500">{pet.slot+1}</span><img src={item?.sprite} alt="" className="h-14 w-14 object-contain"/><div className="min-w-0 flex-1"><div className="flex items-center justify-between"><b className="truncate text-white">{item?.name}</b><button onClick={()=>removePet(pet.id)} className="text-rose-300"><Trash2 size={15}/></button></div><div className="mt-2 grid gap-2 sm:grid-cols-3"><select value={pet.personality} onChange={e=>updatePet(pet.id,{personality:e.target.value as ArenaDraftPet["personality"]})} className="rounded-lg bg-slate-900 p-2 text-[10px]">{DRAFT_PERSONALITIES.map(x=><option key={x} value={x}>{PERSONALITY_LABEL[x]}</option>)}</select><select value={pet.posture} onChange={e=>updatePet(pet.id,{posture:e.target.value as ArenaDraftPet["posture"]})} className="rounded-lg bg-slate-900 p-2 text-[10px]">{DRAFT_POSTURES.map(x=><option key={x} value={x}>{postureLabels[x]}</option>)}</select><label className={`flex items-center justify-center gap-2 rounded-lg border p-2 text-[10px] ${pet.isMega?"border-fuchsia-400 text-fuchsia-200":"border-white/10 text-slate-400"}`}><input type="checkbox" checked={pet.isMega} disabled={!pet.isMega&&megas>=2} onChange={e=>updatePet(pet.id,{isMega:e.target.checked})}/>Mega +10</label></div></div></div><div className="mt-3 grid grid-cols-5 gap-1">{DRAFT_STAT_KEYS.map(key=><label key={key} className="text-center"><span className="block truncate text-[8px] uppercase text-slate-500">{key}</span><input type="number" min={100} max={2500} value={pet.stats[key]} onChange={e=>updatePet(pet.id,{stats:{...pet.stats,[key]:Number(e.target.value)}})} className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"/></label>)}</div><p className={`mt-2 text-right text-[10px] font-bold ${total===4500?"text-emerald-300":"text-rose-300"}`}>{total.toLocaleString("pt-BR")}/4.500 distribuídos {pet.isMega&&"· +10 em cada atributo calculado pelo servidor"}</p></article>})}</div></section>
-    </div>}
+      {tab === "BUILD" && (
+        <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
+          <section className="space-y-4">
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <div className="flex items-center justify-between">
+                <h2 className="font-black text-white">Meus presets</h2>
+                <button
+                  onClick={() => {
+                    setSelectedId(null);
+                    setName("Novo preset");
+                    setPets([]);
+                  }}
+                  className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white"
+                >
+                  + Novo
+                </button>
+              </div>
+              <div className="mt-3 space-y-2">
+                {presets.length === 0 ? (
+                  <p className="text-xs text-slate-500">
+                    Nenhum preset criado.
+                  </p>
+                ) : (
+                  presets.map((p) => (
+                    <button
+                      key={p.id}
+                      onClick={() => choosePreset(p)}
+                      className={`flex w-full items-center justify-between rounded-xl border p-3 text-left ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
+                    >
+                      <span>
+                        <b className="block text-sm text-white">{p.name}</b>
+                        <small className="text-slate-500">
+                          {p.pets.length}/12 ·{" "}
+                          {p.pets.filter((x) => x.isMega).length}/2 Megas
+                        </small>
+                      </span>
+                      {p.isReady ? (
+                        <CheckCircle2 className="text-emerald-300" size={18} />
+                      ) : (
+                        <span className="text-[9px] text-amber-300">
+                          RASCUNHO
+                        </span>
+                      )}
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+              <h2 className="font-black text-white">Catálogo livre</h2>
+              <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_150px]">
+                <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3">
+                  <Search size={14} />
+                  <input
+                    value={query}
+                    onChange={(e) => {
+                      setQuery(e.target.value);
+                      setCatalogPage(1);
+                    }}
+                    placeholder="Nome ou Pokédex"
+                    className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
+                  />
+                </label>
+                <select
+                  value={type}
+                  onChange={(e) => {
+                    setType(e.target.value);
+                    setCatalogPage(1);
+                  }}
+                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                >
+                  <option value="ALL">Todos os tipos</option>
+                  {types.map((t) => (
+                    <option key={t} value={t}>
+                      {TYPE_LABELS_PT[t] ?? t}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                {visibleSpecies.map((item) => (
+                  <button
+                    key={item.id}
+                    onClick={() => addPet(item)}
+                    className={`relative rounded-xl border bg-white/[.025] p-2 hover:border-cyan-300/40 ${item.isMega ? "border-fuchsia-400/40" : "border-white/10"}`}
+                  >
+                    <img
+                      src={item.sprite}
+                      alt=""
+                      className="mx-auto h-12 w-12 object-contain"
+                    />
+                    <span className="block truncate text-[10px] font-bold text-white">
+                      {item.name}
+                    </span>
+                    <span className="text-[9px] text-slate-500">
+                      #{item.id}
+                    </span>
+                    {item.isMega && (
+                      <span className="absolute right-1 top-1 rounded bg-fuchsia-500 px-1 text-[7px] font-black text-white">
+                        MEGA
+                      </span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <div className="mt-3 flex items-center justify-between">
+                <button
+                  disabled={catalogPage <= 1}
+                  onClick={() => setCatalogPage((p) => p - 1)}
+                  className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
+                >
+                  Anterior
+                </button>
+                <span className="text-[10px] text-slate-400">
+                  Página {Math.min(catalogPage, catalogPages)} de {catalogPages}{" "}
+                  · {filtered.length} espécies
+                </span>
+                <button
+                  disabled={catalogPage >= catalogPages}
+                  onClick={() => setCatalogPage((p) => p + 1)}
+                  className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
+                >
+                  Próxima
+                </button>
+              </div>
+            </div>
+          </section>
+          <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div>
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  className="border-b border-white/10 bg-transparent text-xl font-black text-white outline-none"
+                />
+                <p className="mt-1 text-xs text-slate-500">
+                  Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
+                  {pets
+                    .reduce(
+                      (sum, current) =>
+                        sum +
+                        DRAFT_STAT_KEYS.reduce(
+                          (value, key) => value + current.stats[key],
+                          0,
+                        ),
+                      0,
+                    )
+                    .toLocaleString("pt-BR")}
+                  /4.500
+                </p>
+              </div>
+              <button
+                disabled={pending}
+                onClick={save}
+                className="rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50"
+              >
+                Salvar preset
+              </button>
+            </div>
+            <div className="mt-4 space-y-3">
+              {pets.length === 0 ? (
+                <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
+                  Escolha mascotes no catálogo para começar.
+                </div>
+              ) : (
+                pets.map((pet) => {
+                  const item = species.find((s) => s.id === pet.speciesId)!;
+                  const total = DRAFT_STAT_KEYS.reduce(
+                    (s, k) => s + pet.stats[k],
+                    0,
+                  );
+                  return (
+                    <article
+                      key={pet.id}
+                      className="rounded-2xl border border-white/10 bg-white/[.025] p-3"
+                    >
+                      <div className="flex gap-3">
+                        <span className="text-xs font-black text-slate-500">
+                          {pet.slot + 1}
+                        </span>
+                        <img
+                          src={item?.sprite}
+                          alt=""
+                          className="h-14 w-14 object-contain"
+                        />
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center justify-between">
+                            <b className="truncate text-white">{item?.name}</b>
+                            <button
+                              onClick={() => removePet(pet.id)}
+                              className="text-rose-300"
+                            >
+                              <Trash2 size={15} />
+                            </button>
+                          </div>
+                          <div className="mt-2 grid gap-2 sm:grid-cols-3">
+                            <select
+                              value={pet.personality}
+                              onChange={(e) =>
+                                updatePet(pet.id, {
+                                  personality: e.target
+                                    .value as ArenaDraftPet["personality"],
+                                })
+                              }
+                              className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                            >
+                              {DRAFT_PERSONALITIES.map((x) => (
+                                <option key={x} value={x}>
+                                  {PERSONALITY_LABEL[x]}
+                                </option>
+                              ))}
+                            </select>
+                            <select
+                              value={pet.posture}
+                              onChange={(e) =>
+                                updatePet(pet.id, {
+                                  posture: e.target
+                                    .value as ArenaDraftPet["posture"],
+                                })
+                              }
+                              className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                            >
+                              {DRAFT_POSTURES.map((x) => (
+                                <option key={x} value={x}>
+                                  {postureLabels[x]}
+                                </option>
+                              ))}
+                            </select>
+                            <div
+                              className={`flex items-center justify-center rounded-lg border p-2 text-[10px] ${pet.isMega ? "border-fuchsia-400 text-fuchsia-200" : "border-white/10 text-slate-500"}`}
+                            >
+                              {pet.isMega ? "Forma Mega · +10" : "Forma comum"}
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-5 gap-1">
+                        {DRAFT_STAT_KEYS.map((key) => (
+                          <label key={key} className="text-center">
+                            <span className="block truncate text-[8px] uppercase text-slate-500">
+                              {key}
+                            </span>
+                            <input
+                              type="number"
+                              min={0}
+                              max={250}
+                              value={pet.stats[key]}
+                              onChange={(e) =>
+                                updatePet(pet.id, {
+                                  stats: {
+                                    ...pet.stats,
+                                    [key]: Number(e.target.value),
+                                  },
+                                })
+                              }
+                              className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
+                            />
+                          </label>
+                        ))}
+                      </div>
+                      <p className="mt-2 text-right text-[10px] text-slate-400">
+                        Este mascote usa {total} pontos{" "}
+                        {pet.isMega && "· bônus Mega calculado pelo servidor"}
+                      </p>
+                    </article>
+                  );
+                })
+              )}
+            </div>
+          </section>
+        </div>
+      )}
 
-    {tab === "PLAY" && <div className="grid gap-4 lg:grid-cols-2"><section className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[.035] p-5"><h2 className="text-xl font-black text-white">Fila pública</h2><p className="mt-2 text-sm text-slate-400">Escolha um preset pronto. A sala congela uma cópia dele ao encontrar um adversário.</p>{activeMatch?<div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4"><p className="font-bold text-amber-200">{activeMatch.state==="CREATED"?"Buscando adversário…":`Partida contra ${activeMatch.opponent??"adversário"}`}</p><p className="text-xs text-slate-500">Estado: {activeMatch.state}</p><div className="mt-3 flex gap-2">{activeMatch.state==="CREATED"&&<button onClick={()=>start(async()=>{await cancelDraftQueueAction(activeMatch.id);router.refresh()})} className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs text-rose-200">Cancelar busca</button>}<Link href={`/combates/arena-draft/${activeMatch.id}`} className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950">Abrir sala</Link></div></div>:<div className="mt-4 space-y-2">{presets.filter(p=>p.isReady).map(p=><button key={p.id} disabled={pending} onClick={()=>queue(p.id)} className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left hover:border-cyan-300/40"><span><b className="block text-white">{p.name}</b><small className="text-slate-500">12 mascotes · {p.pets.filter(x=>x.isMega).length} Megas</small></span><Swords size={18} className="text-cyan-300"/></button>)}{!presets.some(p=>p.isReady)&&<p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">Finalize um preset para procurar partida.</p>}</div>}</section><section className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/[.035] p-5"><h2 className="text-xl font-black text-white">Desafio direto</h2><p className="mt-2 text-sm text-slate-400">O fluxo de convite, aceite explícito e proteção antifarm está reservado para a próxima etapa do Beta.</p><button disabled className="mt-5 w-full rounded-xl border border-white/10 p-3 text-xs text-slate-600">Pesquisar jogador — em integração</button></section></div>}
-    {tab === "RANK" && <div className="grid gap-5 lg:grid-cols-2"><section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"><h2 className="flex items-center gap-2 text-xl font-black text-white"><Trophy size={19}/> Ranking Beta</h2><p className="mt-1 text-xs text-slate-500">Mínimo de 5 partidas. Cancelamentos não contam.</p><div className="mt-4 space-y-2">{leaderboard.length===0?<p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Aguardando amostra mínima.</p>:leaderboard.map((r,i)=><div key={r.playerId} className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/10 p-3"><b className="text-cyan-300">#{i+1}</b><span className="font-bold text-white">{r.name}</span><span className="text-xs text-slate-400">{r.wins}V · {r.losses}D · {r.draws}E</span></div>)}</div></section><section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"><h2 className="flex items-center gap-2 text-xl font-black text-white"><History size={19}/> Meu histórico</h2><div className="mt-4 space-y-2">{history.length===0?<p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">Nenhuma partida concluída.</p>:history.map(m=><Link href={`/combates/arena-draft/${m.id}`} key={m.id} className="flex justify-between rounded-xl border border-white/10 p-3 hover:border-cyan-300/30"><span><b className="text-white">{m.opponent}</b><small className="block text-slate-500">{new Date(m.createdAt).toLocaleString("pt-BR")}</small></span><b className="text-cyan-300">{m.result}</b></Link>)}</div></section></div>}
-  </div>;
+      {tab === "PLAY" && (
+        <div className="grid gap-4 lg:grid-cols-2">
+          <section className="rounded-2xl border border-cyan-300/20 bg-cyan-300/[.035] p-5">
+            <h2 className="text-xl font-black text-white">Fila pública</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Escolha um preset pronto. A sala congela uma cópia dele ao
+              encontrar um adversário.
+            </p>
+            {activeMatch ? (
+              <div className="mt-4 rounded-xl border border-amber-300/20 bg-amber-300/5 p-4">
+                <p className="font-bold text-amber-200">
+                  {activeMatch.state === "CREATED"
+                    ? "Buscando adversário…"
+                    : `Partida contra ${activeMatch.opponent ?? "adversário"}`}
+                </p>
+                <p className="text-xs text-slate-500">
+                  Estado: {activeMatch.state}
+                </p>
+                <div className="mt-3 flex gap-2">
+                  {activeMatch.state === "CREATED" && (
+                    <button
+                      onClick={() =>
+                        start(async () => {
+                          await cancelDraftQueueAction(activeMatch.id);
+                          router.refresh();
+                        })
+                      }
+                      className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
+                    >
+                      Cancelar busca
+                    </button>
+                  )}
+                  {activeMatch.state === "CHALLENGE_PENDING" &&
+                  activeMatch.incoming ? (
+                    <>
+                      <select
+                        value={challengePresetId}
+                        onChange={(event) =>
+                          setChallengePresetId(event.target.value)
+                        }
+                        className="rounded-lg border border-white/10 bg-slate-950 px-2 text-xs"
+                      >
+                        <option value="">Escolha o preset</option>
+                        {presets
+                          .filter((preset) => preset.isReady)
+                          .map((preset) => (
+                            <option key={preset.id} value={preset.id}>
+                              {preset.name}
+                            </option>
+                          ))}
+                      </select>
+                      <button
+                        onClick={() =>
+                          start(async () => {
+                            const result = await answerDraftChallengeAction(
+                              activeMatch.id,
+                              challengePresetId,
+                              true,
+                            );
+                            result.error
+                              ? toast.error(result.error)
+                              : toast.success(result.success);
+                            router.refresh();
+                          })
+                        }
+                        className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950"
+                      >
+                        Aceitar
+                      </button>
+                      <button
+                        onClick={() =>
+                          start(async () => {
+                            const result = await answerDraftChallengeAction(
+                              activeMatch.id,
+                              null,
+                              false,
+                            );
+                            result.error
+                              ? toast.error(result.error)
+                              : toast.success(result.success);
+                            router.refresh();
+                          })
+                        }
+                        className="rounded-lg border border-rose-400/30 px-3 py-2 text-xs text-rose-200"
+                      >
+                        Recusar
+                      </button>
+                    </>
+                  ) : (
+                    activeMatch.state !== "CHALLENGE_PENDING" && (
+                      <Link
+                        href={`/combates/arena-draft/${activeMatch.id}`}
+                        className="rounded-lg bg-cyan-300 px-3 py-2 text-xs font-bold text-slate-950"
+                      >
+                        Abrir sala
+                      </Link>
+                    )
+                  )}
+                </div>
+              </div>
+            ) : (
+              <div className="mt-4 space-y-2">
+                {presets
+                  .filter((p) => p.isReady)
+                  .map((p) => (
+                    <button
+                      key={p.id}
+                      disabled={pending}
+                      onClick={() => queue(p.id)}
+                      className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left hover:border-cyan-300/40"
+                    >
+                      <span>
+                        <b className="block text-white">{p.name}</b>
+                        <small className="text-slate-500">
+                          12 mascotes · {p.pets.filter((x) => x.isMega).length}{" "}
+                          Megas
+                        </small>
+                      </span>
+                      <Swords size={18} className="text-cyan-300" />
+                    </button>
+                  ))}
+                {!presets.some((p) => p.isReady) && (
+                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">
+                    Finalize um preset para procurar partida.
+                  </p>
+                )}
+              </div>
+            )}
+          </section>
+          <section className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/[.035] p-5">
+            <h2 className="text-xl font-black text-white">Desafio direto</h2>
+            <p className="mt-2 text-sm text-slate-400">
+              Procure um jogador e envie um convite. O adversário escolhe o
+              próprio preset ao aceitar; o convite expira em 10 minutos.
+            </p>
+            <input
+              value={challengeQuery}
+              onChange={(event) => setChallengeQuery(event.target.value)}
+              placeholder="Pesquisar jogador"
+              className="mt-4 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-sm outline-none"
+            />
+            <select
+              value={challengePresetId}
+              onChange={(event) => setChallengePresetId(event.target.value)}
+              className="mt-2 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-3 text-xs"
+            >
+              <option value="">Preset usado no desafio</option>
+              {presets
+                .filter((preset) => preset.isReady)
+                .map((preset) => (
+                  <option key={preset.id} value={preset.id}>
+                    {preset.name}
+                  </option>
+                ))}
+            </select>
+            <div className="mt-3 max-h-64 space-y-2 overflow-y-auto">
+              {players
+                .filter(
+                  (candidate) =>
+                    !challengeQuery ||
+                    candidate.name
+                      .toLowerCase()
+                      .includes(challengeQuery.toLowerCase()),
+                )
+                .slice(0, 20)
+                .map((candidate) => (
+                  <button
+                    key={candidate.id}
+                    disabled={
+                      pending || Boolean(activeMatch) || !challengePresetId
+                    }
+                    onClick={() =>
+                      start(async () => {
+                        const result = await createDraftChallengeAction(
+                          challengePresetId,
+                          candidate.id,
+                        );
+                        result.error
+                          ? toast.error(result.error)
+                          : toast.success(result.success);
+                        router.refresh();
+                      })
+                    }
+                    className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left text-xs text-white disabled:opacity-40"
+                  >
+                    <span>{candidate.name}</span>
+                    <Swords size={14} className="text-fuchsia-300" />
+                  </button>
+                ))}
+            </div>
+          </section>
+        </div>
+      )}
+      {tab === "RANK" && (
+        <div className="grid gap-5 lg:grid-cols-2">
+          <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+            <h2 className="flex items-center gap-2 text-xl font-black text-white">
+              <Trophy size={19} /> Ranking Beta
+            </h2>
+            <p className="mt-1 text-xs text-slate-500">
+              Mínimo de 5 partidas. Cancelamentos não contam.
+            </p>
+            <div className="mt-4 space-y-2">
+              {leaderboard.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
+                  Aguardando amostra mínima.
+                </p>
+              ) : (
+                leaderboard.map((r, i) => (
+                  <div
+                    key={r.playerId}
+                    className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/10 p-3"
+                  >
+                    <b className="text-cyan-300">#{i + 1}</b>
+                    <span className="font-bold text-white">{r.name}</span>
+                    <span className="text-xs text-slate-400">
+                      {r.wins}V · {r.losses}D · {r.draws}E
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </section>
+          <section className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+            <h2 className="flex items-center gap-2 text-xl font-black text-white">
+              <History size={19} /> Meu histórico
+            </h2>
+            <div className="mt-4 space-y-2">
+              {history.length === 0 ? (
+                <p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
+                  Nenhuma partida concluída.
+                </p>
+              ) : (
+                history.map((m) => (
+                  <Link
+                    href={`/combates/arena-draft/${m.id}`}
+                    key={m.id}
+                    className="flex justify-between rounded-xl border border-white/10 p-3 hover:border-cyan-300/30"
+                  >
+                    <span>
+                      <b className="text-white">{m.opponent}</b>
+                      <small className="block text-slate-500">
+                        {new Date(m.createdAt).toLocaleString("pt-BR")}
+                      </small>
+                    </span>
+                    <b className="text-cyan-300">{m.result}</b>
+                  </Link>
+                ))
+              )}
+            </div>
+          </section>
+        </div>
+      )}
+    </div>
+  );
 }
 
-function Info({title,text}:{title:string;text:string}){return <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-5"><Shield size={18} className="text-fuchsia-300"/><h2 className="mt-3 font-black text-white">{title}</h2><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></article>}
+function Info({ title, text }: { title: string; text: string }) {
+  return (
+    <article className="rounded-2xl border border-white/10 bg-slate-950/70 p-5">
+      <Shield size={18} className="text-fuchsia-300" />
+      <h2 className="mt-3 font-black text-white">{title}</h2>
+      <p className="mt-2 text-sm leading-6 text-slate-400">{text}</p>
+    </article>
+  );
+}
