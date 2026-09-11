@@ -107,6 +107,13 @@ type Pet = {
   isMega: boolean;
   status: "AVAILABLE" | "BANNED" | "PICKED";
   posture: Role;
+  stats?: {
+    force: number;
+    agility: number;
+    charisma: number;
+    instinct: number;
+    vitality: number;
+  } | null;
   hp: number | null;
   maxHp: number;
 };
@@ -231,20 +238,8 @@ export function DraftRoomClient({
       if (busy || document.hidden) return;
       busy = true;
       try {
-        // Presença/desconexão não precisa da mesma cadência do estado.
-        if (ticks % 4 === 0) {
-          const presence = await heartbeatArenaDraftAction(matchId);
-          if (presence.active)
-            setOpponentPresence({
-              online: presence.opponentOnline,
-              grace: presence.graceSeconds,
-            });
-          if (presence.resolved) {
-            router.refresh();
-            return;
-          }
-        }
-        ticks += 1;
+        // Prioridade: detectar a mudança de estado o mais rápido possível.
+        // Essa consulta é leve (só stateVersion/state/deadline).
         const sync = await getDraftSyncStateAction(matchId);
         if (
           sync.deadlinePassed &&
@@ -260,12 +255,26 @@ export function DraftRoomClient({
           lastVersion = sync.stateVersion;
           router.refresh();
         }
+        // Presença/desconexão em cadência menor e sem bloquear a sincronização.
+        if (ticks % 5 === 0) {
+          void heartbeatArenaDraftAction(matchId)
+            .then((presence) => {
+              if (presence.active)
+                setOpponentPresence({
+                  online: presence.opponentOnline,
+                  grace: presence.graceSeconds,
+                });
+              if (presence.resolved) router.refresh();
+            })
+            .catch(() => {});
+        }
+        ticks += 1;
       } finally {
         busy = false;
       }
     };
     void tick();
-    const poll = window.setInterval(tick, 1800);
+    const poll = window.setInterval(tick, 1000);
     const onVisible = () => {
       if (!document.hidden) void tick();
     };
@@ -1150,35 +1159,112 @@ function DraftBoard({
               <span className="text-rose-300">{panel.bans}/3 banidos</span>
             </span>
           </div>
-          <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
-            {panel.pets.map((pet) => (
-              <div
-                key={pet.id}
-                className={`relative rounded-lg border p-1 text-center ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
-              >
-                <img
-                  src={pet.sprite}
-                  alt=""
-                  className={`mx-auto h-9 w-9 object-contain ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
-                />
-                <span
-                  className={`block truncate text-[7px] font-bold ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
+          {panel.mine ? (
+            // Time do próprio jogador: revela postura, personalidade e status.
+            <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+              {panel.pets.map((pet) => (
+                <div
+                  key={pet.id}
+                  className={`relative rounded-lg border p-2 ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
                 >
-                  {pet.name}
-                </span>
-                {pet.isMega && (
-                  <span className="absolute left-0.5 top-0.5 text-[7px] font-black text-amber-300">
-                    M
+                  <div className="flex items-center gap-2">
+                    <img
+                      src={pet.sprite}
+                      alt=""
+                      className={`h-10 w-10 shrink-0 object-contain [image-rendering:pixelated] ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
+                    />
+                    <div className="min-w-0 flex-1">
+                      <span
+                        className={`block truncate text-[11px] font-bold ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
+                      >
+                        {pet.name}
+                        {pet.isMega && (
+                          <span className="ml-1 text-[8px] font-black text-amber-300">
+                            MEGA
+                          </span>
+                        )}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap gap-1">
+                        <span className="rounded border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1 text-[8px] font-bold text-[#FFCB05]">
+                          {ROLE_LABELS[pet.posture]}
+                        </span>
+                        {personalityLabel(pet.personality) && (
+                          <span
+                            className={`rounded border px-1 text-[8px] font-bold ${personalityStyle(pet.personality)}`}
+                          >
+                            {personalityLabel(pet.personality)}
+                          </span>
+                        )}
+                      </span>
+                    </div>
+                    {pet.status !== "AVAILABLE" && (
+                      <span
+                        className={`shrink-0 text-[8px] font-black ${pet.status === "BANNED" ? "text-rose-300" : "text-cyan-300"}`}
+                      >
+                        {pet.status === "BANNED" ? "BANIDO" : "✓"}
+                      </span>
+                    )}
+                  </div>
+                  {pet.stats && (
+                    <div className="mt-1.5 grid grid-cols-5 gap-0.5">
+                      {(
+                        [
+                          ["FOR", pet.stats.force],
+                          ["AGI", pet.stats.agility],
+                          ["CAR", pet.stats.charisma],
+                          ["INS", pet.stats.instinct],
+                          ["VIT", pet.stats.vitality],
+                        ] as const
+                      ).map(([label, value]) => (
+                        <span
+                          key={label}
+                          className="rounded bg-slate-950/60 px-0.5 py-0.5 text-center"
+                        >
+                          <b className="block text-[7px] uppercase text-slate-500">
+                            {label}
+                          </b>
+                          <strong className="text-[10px] text-slate-100">
+                            {value}
+                          </strong>
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            // Time rival: só espécie, tipos e Mega (build continua secreta).
+            <div className="grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+              {panel.pets.map((pet) => (
+                <div
+                  key={pet.id}
+                  className={`relative rounded-lg border p-1 text-center ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
+                >
+                  <img
+                    src={pet.sprite}
+                    alt=""
+                    className={`mx-auto h-9 w-9 object-contain ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
+                  />
+                  <span
+                    className={`block truncate text-[7px] font-bold ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
+                  >
+                    {pet.name}
                   </span>
-                )}
-                {pet.status === "PICKED" && (
-                  <span className="absolute right-0.5 top-0.5 text-[8px]">
-                    ✓
-                  </span>
-                )}
-              </div>
-            ))}
-          </div>
+                  {pet.isMega && (
+                    <span className="absolute left-0.5 top-0.5 text-[7px] font-black text-amber-300">
+                      M
+                    </span>
+                  )}
+                  {pet.status === "PICKED" && (
+                    <span className="absolute right-0.5 top-0.5 text-[8px]">
+                      ✓
+                    </span>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
         </section>
       ))}
     </div>
@@ -1253,18 +1339,30 @@ function SelectionGrid({
                 <b className="block truncate text-[10px] text-white">
                   {pet.name}
                 </b>
-                <span className="mt-0.5 flex flex-wrap justify-center gap-1">
-                  <span className="rounded border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1 text-[7px] font-bold text-[#FFCB05]">
-                    {ROLE_LABELS[pet.posture]}
-                  </span>
-                  {personalityLabel(pet.personality) && (
-                    <span
-                      className={`rounded border px-1 text-[7px] font-bold ${personalityStyle(pet.personality)}`}
-                    >
-                      {personalityLabel(pet.personality)}
+                {/* Só o próprio time (fase de picks) revela postura/personalidade/status. */}
+                {!ban && (
+                  <>
+                    <span className="mt-0.5 flex flex-wrap justify-center gap-1">
+                      <span className="rounded border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1 text-[7px] font-bold text-[#FFCB05]">
+                        {ROLE_LABELS[pet.posture]}
+                      </span>
+                      {personalityLabel(pet.personality) && (
+                        <span
+                          className={`rounded border px-1 text-[7px] font-bold ${personalityStyle(pet.personality)}`}
+                        >
+                          {personalityLabel(pet.personality)}
+                        </span>
+                      )}
                     </span>
-                  )}
-                </span>
+                    {pet.stats && (
+                      <span className="mt-0.5 block text-[7px] text-slate-400">
+                        F{pet.stats.force} A{pet.stats.agility} C
+                        {pet.stats.charisma} I{pet.stats.instinct} V
+                        {pet.stats.vitality}
+                      </span>
+                    )}
+                  </>
+                )}
                 <span className="block truncate text-[8px] text-slate-500">
                   {pet.types.join(" · ")}
                   {pet.isMega && " · MEGA"}

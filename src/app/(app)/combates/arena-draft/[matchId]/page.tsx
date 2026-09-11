@@ -93,11 +93,15 @@ export default async function DraftRoomPage({
     side === "A" ? (battle?.activeB ?? []) : (battle?.activeA ?? []);
   const ownPostures =
     side === "A" ? (battle?.posturesA ?? {}) : (battle?.posturesB ?? {});
+  // A build (status, personalidade, postura) do time só pode ser revelada ao
+  // dono. Para o rival, esses campos ficam ocultos durante inspeção/draft e só
+  // aparecem quando o combate já revelou tudo (janela estratégica/replay).
   const map = (
     pets: ArenaDraftPet[] | null,
     strategy = false,
     banned: string[] = [],
     picked: string[] = [],
+    revealBuild = false,
   ) =>
     pets
       ?.filter((p) => !strategy || ownEligible.has(p.id))
@@ -119,13 +123,14 @@ export default async function DraftRoomPage({
           speciesId: p.speciesId,
           name: getPokemonName(p.speciesId),
           sprite: getSpriteUrl(p.speciesId),
-          personality: p.personality,
+          personality: revealBuild ? p.personality : null,
           types: types.map((type) => TYPE_LABELS_PT[type] ?? type),
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
           isMega: p.isMega,
           status,
-          posture: ownPostures[p.id] ?? p.posture,
+          posture: revealBuild ? (ownPostures[p.id] ?? p.posture) : "ATTACKER",
+          stats: revealBuild ? p.stats : null,
           hp: battle?.runtime?.hp[p.id] ?? null,
           maxHp: Math.max(
             10,
@@ -159,8 +164,14 @@ export default async function DraftRoomPage({
         picksA: picksA.length,
         picksB: picksB.length,
       }}
-      own={map(own, match.state === "STRATEGY_WINDOW", ownBans, ownPicks)}
-      rival={map(rival, false, rivalBans, rivalPicks)}
+      own={map(own, match.state === "STRATEGY_WINDOW", ownBans, ownPicks, true)}
+      rival={map(
+        rival,
+        false,
+        rivalBans,
+        rivalPicks,
+        ["STRATEGY_WINDOW", "FINISHED"].includes(match.state),
+      )}
       activity={match.actions.reverse().map((action) => ({
         sequence: action.sequence,
         actor:
