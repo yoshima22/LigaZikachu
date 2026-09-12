@@ -13,7 +13,13 @@ import {
   getSpriteUrl,
 } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
-import { WORLD_PARTY_MAX, readWorldParty } from "@/world-data/party";
+import {
+  WORLD_PARTY_MAX,
+  readWorldParty,
+  readWorldMascotState,
+  worldMaxHp,
+  type WorldMascotStateMap,
+} from "@/world-data/party";
 import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
@@ -169,6 +175,62 @@ export async function saveWorldPartyAction(
   }
 }
 
+const POTION_HEAL = 60;
+
+// Usa um item da mochila num mascote da aventura: Potion cura HP, Antidote
+// remove veneno. Consome o item e persiste o estado.
+export async function useWorldItemAction(
+  kind: "POTION" | "ANTIDOTE",
+  mascotId: string,
+) {
+  try {
+    const player = await adminPlayer();
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const state = await tx.worldPlayerState.findUnique({ where: { playerId: player.id } });
+      if (!state) throw new Error("Inicie sua aventura primeiro.");
+      const party = readWorldParty(state.partyJson);
+      if (!party.some((entry) => entry.mascotId === mascotId))
+        throw new Error("Este mascote não está na sua equipe.");
+      const mascot = await tx.mascot.findFirst({
+        where: { id: mascotId, playerId: player.id },
+        select: { id: true, level: true, statVitality: true },
+      });
+      if (!mascot) throw new Error("Mascote indisponível.");
+      const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
+      const mascotState = readWorldMascotState(state.mascotStateJson);
+      const max = worldMaxHp(mascot.level, mascot.statVitality);
+      const current = mascotState[mascotId] ?? { hp: max, poisoned: false };
+      const itemKey = kind === "POTION" ? "potions" : "antidotes";
+      const have = Number(inventory[itemKey] ?? 0);
+      if (have < 1) throw new Error(kind === "POTION" ? "Você não tem Potions." : "Você não tem Antidotes.");
+      if (kind === "POTION") {
+        if (current.hp >= max) throw new Error("Este mascote já está com o HP cheio.");
+        current.hp = Math.min(max, current.hp + POTION_HEAL);
+      } else {
+        if (!current.poisoned) throw new Error("Este mascote não está envenenado.");
+        current.poisoned = false;
+      }
+      const nextState = { ...mascotState, [mascotId]: current } as WorldMascotStateMap;
+      await tx.worldPlayerState.update({
+        where: { playerId: player.id },
+        data: {
+          inventoryJson: { ...inventory, [itemKey]: have - 1 } as Prisma.InputJsonValue,
+          mascotStateJson: nextState as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return { hp: current.hp, max };
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Não foi possível usar o item.",
+    };
+  }
+}
+
 export async function exploreWorldLocationAction() {
   try {
     const player = await adminPlayer();
@@ -278,7 +340,14 @@ export async function restAtWorldCenterAction() {
     const recovered = await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
       const state = await requireAvailableWorldService(player.id, "CENTER", tx);
-      await tx.worldPlayerState.update({ where: { playerId: player.id }, data: { fatigue: 0 } });
+      // Remove fadiga e restaura HP/condições de toda a equipe.
+      await tx.worldPlayerState.update({
+        where: { playerId: player.id },
+        data: {
+          fatigue: 0,
+          mascotStateJson: {} as Prisma.InputJsonValue,
+        },
+      });
       return state.fatigue;
     });
     revalidatePath("/mundo");
@@ -324,6 +393,7 @@ export async function challengeWorldTrainerAction(trainerId: string) {
       // Formação própria do World Mode (persistente). Se ainda não houver uma
       // salva, cai nos equipados/favoritos como fallback temporário.
       const party = readWorldParty(state.partyJson);
+      const mascotState = readWorldMascotState(state.mascotStateJson);
       let mascots: Awaited<ReturnType<typeof tx.mascot.findMany>>;
       const postureById = new Map(party.map((e) => [e.mascotId, e.posture]));
       if (party.length > 0) {
@@ -341,8 +411,21 @@ export async function challengeWorldTrainerAction(trainerId: string) {
         if (mascots.length === 0) mascots = await tx.mascot.findMany({ where: { playerId: player.id }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }], take: 6 });
         if (mascots.length === 0) throw new Error("Monte a equipe do World Mode ou tenha ao menos um mascote.");
       }
-      const teamA = mascots.map((mascot, index) =>
+      // Mascotes desmaiados (HP 0 no estado da aventura) não podem lutar.
+      const maxHpById = new Map(
+        mascots.map((m) => [m.id, worldMaxHp(m.level, m.statVitality)] as const),
+      );
+      const battleReady = mascots.filter(
+        (m) => (mascotState[m.id]?.hp ?? maxHpById.get(m.id)!) > 0,
+      );
+      if (battleReady.length === 0)
+        throw new Error("Toda a sua equipe está desmaiada. Recupere-a no Pokémon Center.");
+      const teamA = battleReady.map((mascot, index) =>
         toLeagueMascot(mascot, index + 1, postureById.get(mascot.id) ?? mascot.preferredCombatRole),
+      );
+      // HP inicial = HP persistente da aventura (ou cheio).
+      const startingHp = new Map(
+        battleReady.map((m) => [m.id, mascotState[m.id]?.hp ?? maxHpById.get(m.id)!] as const),
       );
       const teamB = trainer.team.map((entry, index) => toLeagueMascot({
         id: `world-npc:${trainer.id}:${index}`,
@@ -357,29 +440,58 @@ export async function challengeWorldTrainerAction(trainerId: string) {
         statVitality: entry.stats.vitality,
         personality: null,
       }, index + 1, entry.role));
-      const battle = runLeagueCombat(teamA, teamB);
+      const battle = runLeagueCombat(teamA, teamB, null, [], [], { startingHp });
       const won = battle.winner === "A";
       const firstWin = won && !state.defeatedTrainerIds.includes(trainer.id);
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
       const reward = firstWin ? trainer.firstWinReward : {};
-      if (firstWin) {
-        await tx.worldPlayerState.update({
-          where: { playerId: player.id },
-          data: {
-            defeatedTrainerIds: [...state.defeatedTrainerIds, trainer.id],
-            badges: trainer.badgeId && !state.badges.includes(trainer.badgeId)
-              ? [...state.badges, trainer.badgeId]
-              : state.badges,
-            inventoryJson: {
-              ...inventory,
-              pokeBalls: Number(inventory.pokeBalls ?? 0) + (reward.pokeBalls ?? 0),
-              potions: Number(inventory.potions ?? 0) + (reward.potions ?? 0),
-              antidotes: Number(inventory.antidotes ?? 0) + (reward.antidotes ?? 0),
-            } as Prisma.InputJsonValue,
-          },
-        });
-        if (reward.zikaCoins) await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.MATCH_WIN_REWARD, amount: reward.zikaCoins, description: `World Mode: vitória contra ${trainer.name}` });
+      // HP persistente: reconstrói o HP final de cada mascote do jogador a partir
+      // do log da batalha e grava no estado da aventura (dano fica entre lutas).
+      const ownIds = new Set(battleReady.map((m) => m.id));
+      const endHp = new Map(startingHp);
+      for (const entry of battle.log) {
+        if (
+          entry.targetId &&
+          ownIds.has(entry.targetId) &&
+          typeof entry.targetHpAfter === "number"
+        ) {
+          const max = maxHpById.get(entry.targetId)!;
+          endHp.set(entry.targetId, Math.max(0, Math.min(max, entry.targetHpAfter)));
+        }
       }
+      const nextMascotState: WorldMascotStateMap = { ...mascotState };
+      for (const m of battleReady)
+        nextMascotState[m.id] = {
+          hp: endHp.get(m.id) ?? maxHpById.get(m.id)!,
+          poisoned: mascotState[m.id]?.poisoned ?? false,
+        };
+      const stateUpdate: Prisma.WorldPlayerStateUpdateInput = {
+        mascotStateJson: nextMascotState as unknown as Prisma.InputJsonValue,
+      };
+      if (firstWin) {
+        stateUpdate.defeatedTrainerIds = [...state.defeatedTrainerIds, trainer.id];
+        stateUpdate.badges =
+          trainer.badgeId && !state.badges.includes(trainer.badgeId)
+            ? [...state.badges, trainer.badgeId]
+            : state.badges;
+        stateUpdate.inventoryJson = {
+          ...inventory,
+          pokeBalls: Number(inventory.pokeBalls ?? 0) + (reward.pokeBalls ?? 0),
+          potions: Number(inventory.potions ?? 0) + (reward.potions ?? 0),
+          antidotes: Number(inventory.antidotes ?? 0) + (reward.antidotes ?? 0),
+        } as Prisma.InputJsonValue;
+      }
+      await tx.worldPlayerState.update({
+        where: { playerId: player.id },
+        data: stateUpdate,
+      });
+      if (firstWin && reward.zikaCoins)
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: ZikaCoinTxType.MATCH_WIN_REWARD,
+          amount: reward.zikaCoins,
+          description: `World Mode: vitória contra ${trainer.name}`,
+        });
       const session = await tx.worldBattleSession.create({
         data: {
           playerId: player.id,

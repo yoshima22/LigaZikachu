@@ -40,6 +40,7 @@ import {
   saveWorldPartyAction,
   startWorldAdventureAction,
   startWorldTravelAction,
+  useWorldItemAction,
 } from "./actions";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
 
@@ -61,6 +62,16 @@ type WorldMascot = {
   };
 };
 type PartyEntry = { mascotId: string; posture: string };
+type PartyMascot = {
+  id: string;
+  name: string;
+  sprite: string;
+  level: number;
+  posture: string;
+  hp: number;
+  maxHp: number;
+  poisoned: boolean;
+};
 
 type Location = Omit<WorldLocationConfig, "encounters"> & {
   encounters: Array<WorldEncounterConfig & { name: string }>;
@@ -148,7 +159,7 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[] }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles, partyMascots }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
@@ -165,6 +176,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
   const selected = byId.get(selectedId) ?? locations[0];
   const current = initialState ? byId.get(initialState.currentLocationId) : null;
   const localTrainers = trainers.filter((trainer) => trainer.locationId === current?.id);
+  const needsHeal = partyMascots.some((m) => m.hp < m.maxHp || m.poisoned);
   const reachable = new Set(current?.connections.map((connection) => connection.to) ?? []);
   const act = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
@@ -294,8 +306,8 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         <section className="grid gap-5 lg:grid-cols-2">
           {current.services.includes("CENTER") && (
             <div className="rounded-[2rem] border border-rose-300/15 bg-[radial-gradient(circle_at_top_left,rgba(251,113,133,.14),transparent_48%),#080d18] p-6">
-              <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-300/10 text-rose-300"><HeartPulse className="h-6 w-6" /></span><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-rose-300">Pokémon Center</span><h2 className="text-2xl font-black text-white">Recupere-se antes da rota</h2><p className="mt-2 text-xs leading-5 text-slate-400">O descanso remove toda a fadiga acumulada. Cura e condições dos mascotes serão conectadas junto ao sistema de combates do mundo.</p></div></div>
-              <button disabled={pending || initialState.fatigue === 0} onClick={() => act(restAtWorldCenterAction, "Descanso concluído. Sua fadiga foi removida.")} className="mt-5 w-full rounded-xl bg-gradient-to-r from-rose-300 to-pink-300 px-5 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">{initialState.fatigue > 0 ? `Descansar · remover ${initialState.fatigue} de fadiga` : "Você já está descansado"}</button>
+              <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-300/10 text-rose-300"><HeartPulse className="h-6 w-6" /></span><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-rose-300">Pokémon Center</span><h2 className="text-2xl font-black text-white">Recupere-se antes da rota</h2><p className="mt-2 text-xs leading-5 text-slate-400">O descanso remove toda a fadiga acumulada e restaura o HP e as condições de toda a sua equipe da aventura.</p></div></div>
+              <button disabled={pending || (initialState.fatigue === 0 && !needsHeal)} onClick={() => act(restAtWorldCenterAction, "Descanso concluído. Equipe recuperada.")} className="mt-5 w-full rounded-xl bg-gradient-to-r from-rose-300 to-pink-300 px-5 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">{initialState.fatigue > 0 || needsHeal ? `Descansar · remover fadiga e curar equipe` : "Equipe e fadiga já estão em ordem"}</button>
             </div>
           )}
           {current.services.includes("MART") && (
@@ -339,7 +351,13 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         </section>
       )}
 
-      <WorldPartyPanel initialParty={initialState.party} onSaved={() => router.refresh()} />
+      <WorldPartyPanel
+        initialParty={initialState.party}
+        partyMascots={partyMascots}
+        potions={initialState.inventory.potions ?? 0}
+        antidotes={initialState.inventory.antidotes ?? 0}
+        onSaved={() => router.refresh()}
+      />
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-4">
         <div className="flex flex-wrap gap-3 text-[10px] text-slate-300"><span><Backpack className="mr-1 inline h-3.5 w-3.5 text-amber-300" />{initialState.inventory.pokeBalls ?? 0} Poké Balls</span><span><FlaskConical className="mr-1 inline h-3.5 w-3.5 text-emerald-300" />{initialState.inventory.potions ?? 0} Potions</span><span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-cyan-300" />Chegada resolvida sob demanda, sem cron contínuo</span></div>
@@ -353,12 +371,28 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
 // postura editável. Não altera a coleção principal (isEquipped intacto).
 function WorldPartyPanel({
   initialParty,
+  partyMascots,
+  potions,
+  antidotes,
   onSaved,
 }: {
   initialParty: PartyEntry[];
+  partyMascots: PartyMascot[];
+  potions: number;
+  antidotes: number;
   onSaved: () => void;
 }) {
   const [pending, start] = useTransition();
+  const router = useRouter();
+  const useItem = (kind: "POTION" | "ANTIDOTE", mascotId: string) =>
+    start(async () => {
+      const result = await useWorldItemAction(kind, mascotId);
+      if (!result.ok) toast.error(result.error ?? "Falha ao usar item.");
+      else {
+        toast.success(kind === "POTION" ? "Potion usada." : "Antídoto aplicado.");
+        router.refresh();
+      }
+    });
   const [open, setOpen] = useState(false);
   const [mascots, setMascots] = useState<WorldMascot[]>([]);
   const [loading, setLoading] = useState(false);
@@ -435,40 +469,68 @@ function WorldPartyPanel({
         </button>
       </div>
 
-      {/* Equipe atual (resumo) */}
-      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
-        {party.length === 0 ? (
-          <p className="col-span-full rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500">
+      {/* Equipe atual com HP persistente e itens de recuperação */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {partyMascots.length === 0 ? (
+          <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500 sm:col-span-2 lg:col-span-3">
             Nenhuma equipe montada. Enquanto não houver, as batalhas usam seus
             mascotes equipados como fallback.
           </p>
         ) : (
-          party.map((entry) => {
-            const m = byId.get(entry.mascotId);
+          partyMascots.map((m) => {
+            const pct = Math.max(0, Math.min(100, (m.hp / m.maxHp) * 100));
+            const fainted = m.hp <= 0;
             return (
               <div
-                key={entry.mascotId}
-                className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.06] p-2 text-center"
+                key={m.id}
+                className={`rounded-xl border p-2.5 ${fainted ? "border-rose-400/40 bg-rose-950/30" : "border-emerald-300/20 bg-emerald-300/[.05]"}`}
               >
-                {m ? (
-                  <>
-                    <img
-                      src={m.sprite}
-                      alt=""
-                      className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]"
+                <div className="flex items-center gap-2">
+                  <img
+                    src={m.sprite}
+                    alt=""
+                    className={`h-10 w-10 shrink-0 object-contain [image-rendering:pixelated] ${fainted ? "opacity-40 grayscale" : ""}`}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <b className="block truncate text-[11px] text-white">{m.name}</b>
+                    <span className="flex flex-wrap gap-1 text-[8px]">
+                      <span className="text-emerald-200">{getCombatRoleLabel(m.posture)}</span>
+                      <span className="text-slate-500">Nv.{m.level}</span>
+                      {m.poisoned && <span className="text-fuchsia-300">Envenenado</span>}
+                      {fainted && <span className="font-black text-rose-300">Desmaiado</span>}
+                    </span>
+                  </div>
+                </div>
+                <div className="mt-1.5 flex items-center gap-2">
+                  <span className="h-2 flex-1 overflow-hidden rounded-full bg-white/10">
+                    <span
+                      className="block h-full transition-all"
+                      style={{
+                        width: `${pct}%`,
+                        background: pct > 50 ? "#6ee7b7" : pct > 20 ? "#fcd34d" : "#fb7185",
+                      }}
                     />
-                    <b className="block truncate text-[9px] text-white">
-                      {m.nickname?.trim() || m.name}
-                    </b>
-                  </>
-                ) : (
-                  <b className="block truncate text-[9px] text-slate-400">
-                    Mascote #{entry.mascotId.slice(0, 4)}
-                  </b>
-                )}
-                <span className="text-[8px] text-emerald-200">
-                  {getCombatRoleLabel(entry.posture)}
-                </span>
+                  </span>
+                  <small className="w-14 shrink-0 text-right text-[9px] tabular-nums text-slate-400">
+                    {Math.max(0, m.hp)}/{m.maxHp}
+                  </small>
+                </div>
+                <div className="mt-2 flex gap-1.5">
+                  <button
+                    disabled={pending || potions < 1 || m.hp >= m.maxHp}
+                    onClick={() => useItem("POTION", m.id)}
+                    className="flex-1 rounded-lg border border-emerald-300/25 bg-emerald-300/10 px-2 py-1.5 text-[9px] font-black text-emerald-200 disabled:opacity-35"
+                  >
+                    Potion (+{60}) · {potions}
+                  </button>
+                  <button
+                    disabled={pending || antidotes < 1 || !m.poisoned}
+                    onClick={() => useItem("ANTIDOTE", m.id)}
+                    className="flex-1 rounded-lg border border-fuchsia-300/25 bg-fuchsia-300/10 px-2 py-1.5 text-[9px] font-black text-fuchsia-200 disabled:opacity-35"
+                  >
+                    Antídoto · {antidotes}
+                  </button>
+                </div>
               </div>
             );
           })

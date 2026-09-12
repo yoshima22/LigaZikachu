@@ -47,6 +47,9 @@ export type LeagueCombatOptions = {
   instinctChaos?: boolean;
   midBattleReroll?: boolean;
   lastMascotVitalityBonus?: number;
+  // HP inicial por mascote (World Mode: dano persistente entre batalhas). O
+  // valor máximo continua sendo `mascot.hp`; ausente = começa com vida cheia.
+  startingHp?: Map<string, number>;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -349,7 +352,13 @@ export function runLeagueCombat(
   }
 
   const hp = new Map<string, number>();
-  for (const m of [...a, ...b]) hp.set(m.id, m.hp);
+  for (const m of [...a, ...b])
+    hp.set(
+      m.id,
+      options.startingHp
+        ? Math.max(0, Math.min(m.hp, options.startingHp.get(m.id) ?? m.hp))
+        : m.hp,
+    );
 
   const debuffs = new Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>();
   const healCount = new Map<string, number>();

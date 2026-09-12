@@ -6,7 +6,11 @@ import {
   getAdminWorldEncounters,
   getAdminWorldState,
 } from "./actions";
-import { readWorldParty } from "@/world-data/party";
+import {
+  readWorldParty,
+  readWorldMascotState,
+  worldMaxHp,
+} from "@/world-data/party";
 import { WorldModeClient } from "./world-mode-client";
 import { KANTO_MVP_MART } from "@/world-data/kanto/mart";
 import { prisma } from "@/lib/prisma";
@@ -24,6 +28,40 @@ export default async function WorldModePage() {
   const wallet = state
     ? await prisma.zikaCoinWallet.findUnique({ where: { playerId: state.playerId }, select: { balance: true } })
     : null;
+  // Resolve os mascotes da formação com HP/condições persistentes para exibição.
+  const party = state ? readWorldParty(state.partyJson) : [];
+  const mascotState = state ? readWorldMascotState(state.mascotStateJson) : {};
+  const partyRows =
+    state && party.length
+      ? await prisma.mascot.findMany({
+          where: { id: { in: party.map((e) => e.mascotId) }, playerId: state.playerId },
+          select: {
+            id: true,
+            pokemonId: true,
+            nickname: true,
+            level: true,
+            statVitality: true,
+          },
+        })
+      : [];
+  const partyRowById = new Map(partyRows.map((m) => [m.id, m]));
+  const partyMascots = party
+    .map((entry) => {
+      const m = partyRowById.get(entry.mascotId);
+      if (!m) return null;
+      const maxHp = worldMaxHp(m.level, m.statVitality);
+      return {
+        id: m.id,
+        name: m.nickname?.trim() || getPokemonName(m.pokemonId),
+        sprite: getSpriteUrl(m.pokemonId),
+        level: m.level,
+        posture: entry.posture,
+        hp: mascotState[m.id]?.hp ?? maxHp,
+        maxHp,
+        poisoned: mascotState[m.id]?.poisoned ?? false,
+      };
+    })
+    .filter((m): m is NonNullable<typeof m> => Boolean(m));
   const locations = KANTO_MVP_LOCATIONS.map((location) => ({
     ...location,
     encounters: location.encounters.map((encounter) => ({
@@ -53,6 +91,7 @@ export default async function WorldModePage() {
       }}
       martItems={KANTO_MVP_MART}
       zikaCoins={wallet?.balance ?? 0}
+      partyMascots={partyMascots}
       trainers={KANTO_MVP_TRAINERS.map((trainer) => ({
         ...trainer,
         team: trainer.team.map((mascot) => ({ ...mascot, name: getPokemonName(mascot.pokemonId), spriteUrl: getSpriteUrl(mascot.pokemonId) })),
