@@ -128,7 +128,7 @@ export default async function MascotRankingPage({
           {(
             [
               ["CUSTOM", "⚙️ Customizado"],
-              ["REAL", "🐾 Meus mascotes"],
+              ["REAL", "🐾 Padrão"],
             ] as const
           ).map(([m, label]) => (
             <Link

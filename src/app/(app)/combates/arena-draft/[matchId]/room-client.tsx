@@ -425,7 +425,7 @@ export function DraftRoomClient({
           <span
             className={`rounded-full border px-2 py-0.5 text-[9px] font-black uppercase ${mode === "REAL" ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"}`}
           >
-            {mode === "REAL" ? "🐾 Meus mascotes" : "⚙️ Customizado"}
+            {mode === "REAL" ? "🐾 Padrão" : "⚙️ Customizado"}
           </span>
           <span
             className={`inline-flex items-center gap-1 text-[9px] font-bold ${connection === "live" ? "text-emerald-300" : connection === "fallback" ? "text-amber-300" : "text-slate-500"}`}

@@ -33,8 +33,14 @@ export default async function ArenaDraftPage() {
       stateVersion: { increment: 1 },
     },
   });
-  const [presets, activeMatch, history, rankedMatches, disabledMegas] =
-    await Promise.all([
+  const [
+    presets,
+    activeMatch,
+    history,
+    rankedMatches,
+    disabledMegas,
+    waitingByMode,
+  ] = await Promise.all([
       prisma.arenaDraftPreset.findMany({
         where: { ownerId: player.id },
         orderBy: { updatedAt: "desc" },
@@ -89,7 +95,17 @@ export default async function ArenaDraftPage() {
         },
         select: { pokemonId: true },
       }),
+      prisma.arenaDraftMatch.groupBy({
+        by: ["mode"],
+        where: { state: "CREATED", playerBId: null },
+        _count: { _all: true },
+      }),
     ]);
+  const queueCounts = { CUSTOM: 0, REAL: 0 };
+  for (const row of waitingByMode) {
+    const m = row.mode === "REAL" ? "REAL" : "CUSTOM";
+    queueCounts[m] += row._count._all;
+  }
   const disabledMegaIds = new Set(disabledMegas.map((row) => row.pokemonId));
   const customMegaIds = new Set(CUSTOM_MEGA_POKEMON_IDS);
   const species = Array.from(
@@ -238,6 +254,7 @@ export default async function ArenaDraftPage() {
               : "Empate",
       }))}
       leaderboards={boards}
+      queueCounts={queueCounts}
       isAdmin={
         session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
       }

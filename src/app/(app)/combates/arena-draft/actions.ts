@@ -12,7 +12,7 @@ import {
   type DraftMode,
 } from "@/lib/arena-draft";
 import { getPokemonName, getPokemonTypes, getSpriteUrl } from "@/lib/mascot-data";
-import { defaultCombatRoleFor } from "@/lib/combat-roles";
+import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
@@ -88,6 +88,7 @@ export async function saveRealRosterAction(input: {
   id?: string;
   name: string;
   mascotIds: string[];
+  postures?: Record<string, string>;
 }) {
   try {
     const player = await currentPlayer();
@@ -131,14 +132,18 @@ export async function saveRealRosterAction(input: {
         ),
         nickname: mascot.nickname?.slice(0, 18) || undefined,
         personality: mascot.personality,
-        posture: defaultCombatRoleFor({
-          preferredCombatRole: mascot.preferredCombatRole,
-          statForce: mascot.statForce,
-          statAgility: mascot.statAgility,
-          statVitality: mascot.statVitality,
-          statInstinct: mascot.statInstinct,
-          statCharisma: mascot.statCharisma,
-        }),
+        // Postura escolhida pelo jogador (se houver), senão a padrão do mascote.
+        posture: normalizeCombatRole(
+          input.postures?.[mascot.id] ??
+            defaultCombatRoleFor({
+              preferredCombatRole: mascot.preferredCombatRole,
+              statForce: mascot.statForce,
+              statAgility: mascot.statAgility,
+              statVitality: mascot.statVitality,
+              statInstinct: mascot.statInstinct,
+              statCharisma: mascot.statCharisma,
+            }),
+        ),
         stats: {
           force: mascot.statForce,
           agility: mascot.statAgility,
@@ -397,15 +402,27 @@ export async function joinDraftQueueAction(presetId: string) {
       await assertPresetMegasEnabled(
         validateArenaDraftPets(preset.petsJson, mode).pets,
       );
-    const already = await prisma.arenaDraftMatch.findFirst({
-      where: {
-        OR: [{ playerAId: player.id }, { playerBId: player.id }],
-        state: { notIn: ["FINISHED", "CANCELLED"] },
-      },
-    });
-    if (already)
-      return { success: "Você já possui uma sala ativa.", matchId: already.id };
+    const snapshot = preset.petsJson as Prisma.InputJsonValue;
     const match = await prisma.$transaction(async (tx) => {
+      // Bloqueia apenas se o jogador já está numa partida EM ANDAMENTO (além de
+      // CREATED). Salas CREATED órfãs não podem travar a fila.
+      const inProgress = await tx.arenaDraftMatch.findFirst({
+        where: {
+          OR: [{ playerAId: player.id }, { playerBId: player.id }],
+          state: { notIn: ["FINISHED", "CANCELLED", "CREATED"] },
+        },
+      });
+      if (inProgress) return inProgress;
+      // Cancela salas CREATED órfãs do próprio jogador (de qualquer modo) para
+      // não acumular filas fantasmas.
+      await tx.arenaDraftMatch.updateMany({
+        where: { playerAId: player.id, state: "CREATED", playerBId: null },
+        data: {
+          state: "CANCELLED",
+          deadlineAt: null,
+          stateVersion: { increment: 1 },
+        },
+      });
       // Fila separada por modo: só pareia com quem espera no mesmo modo.
       const waiting = await tx.arenaDraftMatch.findFirst({
         where: {
@@ -416,7 +433,6 @@ export async function joinDraftQueueAction(presetId: string) {
         },
         orderBy: { createdAt: "asc" },
       });
-      const snapshot = preset.petsJson as Prisma.InputJsonValue;
       if (waiting)
         return tx.arenaDraftMatch.update({
           where: { id: waiting.id },
@@ -480,6 +496,92 @@ export async function getDraftQueueStatusAction(matchId: string) {
     };
   } catch {
     return { matched: false, cancelled: false };
+  }
+}
+
+/** Chamado enquanto o jogador está na fila (sala CREATED). Resolve a corrida em
+ * que dois jogadores criam salas ao mesmo tempo: quem consultar primeiro pareia
+ * as duas salas do mesmo modo. Retorna o matchId para onde navegar. */
+export async function tryPairDraftAction(matchId: string) {
+  try {
+    const player = await currentPlayer();
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
+      const mine = await tx.arenaDraftMatch.findUnique({
+        where: { id: matchId },
+      });
+      if (
+        !mine ||
+        (mine.playerAId !== player.id && mine.playerBId !== player.id)
+      )
+        return { matched: false, cancelled: true };
+      if (mine.state === "CANCELLED") return { matched: false, cancelled: true };
+      // Minha sala já avançou (alguém entrou) → navego para ela.
+      if (mine.state !== "CREATED" || mine.playerBId)
+        return { matched: true, matchId: mine.id };
+      // Procuro outra sala esperando no mesmo modo e me junto a ela.
+      const opponent = await tx.arenaDraftMatch.findFirst({
+        where: {
+          state: "CREATED",
+          playerBId: null,
+          playerAId: { not: player.id },
+          mode: mine.mode,
+          id: { not: mine.id },
+        },
+        orderBy: { createdAt: "asc" },
+      });
+      if (!opponent) return { matched: false };
+      await tx.arenaDraftMatch.update({
+        where: { id: opponent.id },
+        data: {
+          playerBId: player.id,
+          presetBSnapshot: mine.presetASnapshot as Prisma.InputJsonValue,
+          state: "BAN_PHASE",
+          stateVersion: { increment: 1 },
+          deadlineAt: new Date(Date.now() + 90_000),
+          draftJson: {
+            readyA: true,
+            readyB: true,
+            bansA: [],
+            bansB: [],
+            picksA: [],
+            picksB: [],
+            turn: "A",
+            phase: "BAN",
+          },
+        },
+      });
+      await tx.arenaDraftMatch.update({
+        where: { id: mine.id },
+        data: {
+          state: "CANCELLED",
+          deadlineAt: null,
+          stateVersion: { increment: 1 },
+        },
+      });
+      return { matched: true, matchId: opponent.id };
+    });
+  } catch {
+    return { matched: false };
+  }
+}
+
+// Quantos jogadores estão aguardando adversário em cada modo (fila pública).
+export async function getDraftQueueCountsAction() {
+  try {
+    const rows = await prisma.arenaDraftMatch.groupBy({
+      by: ["mode"],
+      where: { state: "CREATED", playerBId: null },
+      _count: { _all: true },
+    });
+    const counts = { CUSTOM: 0, REAL: 0 };
+    for (const row of rows) {
+      const mode = row.mode === "REAL" ? "REAL" : "CUSTOM";
+      counts[mode] += row._count._all;
+    }
+    return counts;
+  } catch {
+    return { CUSTOM: 0, REAL: 0 };
   }
 }
 

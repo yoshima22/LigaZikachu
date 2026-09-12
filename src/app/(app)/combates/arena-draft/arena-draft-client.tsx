@@ -36,14 +36,24 @@ import {
   answerDraftChallengeAction,
   deleteDraftPresetAction,
   duplicateDraftPresetAction,
-  getDraftQueueStatusAction,
   getMyDraftMascotsAction,
   joinDraftQueueAction,
   renameDraftPresetAction,
   saveRealRosterAction,
   searchDraftOpponentsAction,
   saveDraftPresetAction,
+  tryPairDraftAction,
 } from "./actions";
+
+// Rótulos dos modos (o valor interno segue "CUSTOM"/"REAL").
+const MODE_LABEL: Record<"CUSTOM" | "REAL", string> = {
+  CUSTOM: "Customizado",
+  REAL: "Padrão",
+};
+const MODE_ICON: Record<"CUSTOM" | "REAL", string> = {
+  CUSTOM: "⚙️",
+  REAL: "🐾",
+};
 
 type Species = {
   id: number;
@@ -108,6 +118,7 @@ export function ArenaDraftClient({
   activeMatch,
   history,
   leaderboards,
+  queueCounts,
   isAdmin,
 }: {
   species: Species[];
@@ -128,6 +139,7 @@ export function ArenaDraftClient({
       provisional: boolean;
     }>
   >;
+  queueCounts: Record<"CUSTOM" | "REAL", number>;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -202,13 +214,23 @@ export function ArenaDraftClient({
   }, [challengeQuery]);
   useEffect(() => {
     if (activeMatch?.state !== "CREATED") return;
-    const timer = window.setInterval(async () => {
-      if (document.visibilityState !== "visible") return;
-      const status = await getDraftQueueStatusAction(activeMatch.id);
-      if (status.matched)
-        router.push(`/combates/arena-draft/${activeMatch.id}`);
-      else if (status.cancelled) router.refresh();
-    }, 5000);
+    const id = activeMatch.id;
+    let busy = false;
+    const tick = async () => {
+      if (busy || document.visibilityState !== "visible") return;
+      busy = true;
+      try {
+        // Pareia salas do mesmo modo (resolve a corrida de criação simultânea).
+        const r = await tryPairDraftAction(id);
+        if (r.matched)
+          router.push(`/combates/arena-draft/${r.matchId ?? id}`);
+        else if (r.cancelled) router.refresh();
+      } finally {
+        busy = false;
+      }
+    };
+    void tick();
+    const timer = window.setInterval(tick, 3000);
     return () => window.clearInterval(timer);
   }, [activeMatch?.id, activeMatch?.state, router]);
   const closeTutorial = () => {
@@ -557,25 +579,20 @@ export function ArenaDraftClient({
         <div className="space-y-4">
           {/* Seletor de modo bem sinalizado */}
           <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-2">
-            {(
-              [
-                ["CUSTOM", "⚙️ Mascotes customizados"],
-                ["REAL", "🐾 Meus mascotes"],
-              ] as const
-            ).map(([m, label]) => (
+            {(["CUSTOM", "REAL"] as const).map((m) => (
               <button
                 key={m}
                 onClick={() => setBuildMode(m)}
                 className={`flex-1 rounded-xl px-3 py-2.5 text-xs font-black transition ${buildMode === m ? (m === "REAL" ? "bg-emerald-400 text-slate-950" : "bg-cyan-300 text-slate-950") : "text-slate-400 hover:bg-white/5"}`}
               >
-                {label}
+                {MODE_ICON[m]} {MODE_LABEL[m]}
               </button>
             ))}
           </div>
           <p className="text-[11px] text-slate-400">
             {buildMode === "REAL"
-              ? "Monte um time com os seus mascotes reais (status de verdade). As salas deste modo só pareiam com outros times reais."
-              : "Monte 12 mascotes com 4.500 pontos. As salas deste modo só pareiam com outros presets customizados."}
+              ? "Modo Padrão: monte um time com os seus mascotes reais (status de verdade). Só pareia com outros times do modo Padrão."
+              : "Modo Customizado: monte 12 mascotes com 4.500 pontos. Só pareia com outros presets Customizados."}
           </p>
           {buildMode === "REAL" ? (
             <RealRosterBuilder
@@ -1414,40 +1431,64 @@ export function ArenaDraftClient({
                 </div>
               </div>
             ) : (
-              <div className="mt-4 space-y-2">
-                {presets
-                  .filter((p) => p.isReady)
-                  .map((p) => (
-                    <button
-                      key={p.id}
-                      disabled={pending}
-                      onClick={() => queue(p.id)}
-                      className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left hover:border-cyan-300/40"
+              <div className="mt-4 space-y-4">
+                {(["CUSTOM", "REAL"] as const).map((m) => {
+                  const ready = presets.filter(
+                    (p) => p.isReady && p.source === m,
+                  );
+                  return (
+                    <div
+                      key={m}
+                      className={`rounded-2xl border p-3 ${m === "REAL" ? "border-emerald-400/25 bg-emerald-400/[.04]" : "border-cyan-400/25 bg-cyan-400/[.04]"}`}
                     >
-                      <span>
-                        <b className="flex items-center gap-2 text-white">
-                          {p.name}
-                          <span
-                            className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase ${p.source === "REAL" ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"}`}
-                          >
-                            {p.source === "REAL"
-                              ? "🐾 Meus mascotes"
-                              : "⚙️ Customizado"}
-                          </span>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <b className="text-sm text-white">
+                          {MODE_ICON[m]} {MODE_LABEL[m]}
                         </b>
-                        <small className="text-slate-500">
-                          12 mascotes · {p.pets.filter((x) => x.isMega).length}{" "}
-                          Megas
-                        </small>
-                      </span>
-                      <Swords size={18} className="text-cyan-300" />
-                    </button>
-                  ))}
-                {!presets.some((p) => p.isReady) && (
-                  <p className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">
-                    Finalize um preset para procurar partida.
-                  </p>
-                )}
+                        <span
+                          className={`rounded-full px-2.5 py-1 text-[10px] font-black ${m === "REAL" ? "bg-emerald-400/15 text-emerald-200" : "bg-cyan-400/15 text-cyan-200"}`}
+                        >
+                          {queueCounts[m]} na fila
+                        </span>
+                      </div>
+                      {ready.length === 0 ? (
+                        <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500">
+                          Nenhum time {MODE_LABEL[m]} pronto. Monte um em “Montar
+                          preset”.
+                        </p>
+                      ) : (
+                        <div className="space-y-2">
+                          {ready.map((p) => (
+                            <button
+                              key={p.id}
+                              disabled={pending}
+                              onClick={() => queue(p.id)}
+                              className="flex w-full items-center justify-between rounded-xl border border-white/10 bg-slate-950/50 p-3 text-left hover:border-white/25"
+                            >
+                              <span className="min-w-0">
+                                <b className="block truncate text-sm text-white">
+                                  {p.name}
+                                </b>
+                                <small className="text-slate-500">
+                                  12 mascotes ·{" "}
+                                  {p.pets.filter((x) => x.isMega).length} Megas
+                                </small>
+                              </span>
+                              <Swords
+                                size={18}
+                                className={
+                                  m === "REAL"
+                                    ? "shrink-0 text-emerald-300"
+                                    : "shrink-0 text-cyan-300"
+                                }
+                              />
+                            </button>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
               </div>
             )}
           </section>
@@ -1542,18 +1583,13 @@ export function ArenaDraftClient({
             </p>
             {/* Ranking separado por modo */}
             <div className="mt-3 flex gap-2">
-              {(
-                [
-                  ["CUSTOM", "⚙️ Customizado"],
-                  ["REAL", "🐾 Meus mascotes"],
-                ] as const
-              ).map(([m, label]) => (
+              {(["CUSTOM", "REAL"] as const).map((m) => (
                 <button
                   key={m}
                   onClick={() => setRankMode(m)}
                   className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${rankMode === m ? (m === "REAL" ? "bg-emerald-400 text-slate-950" : "bg-cyan-300 text-slate-950") : "border border-white/10 text-slate-400"}`}
                 >
-                  {label}
+                  {MODE_ICON[m]} {MODE_LABEL[m]}
                 </button>
               ))}
             </div>
@@ -1644,6 +1680,7 @@ function RealRosterBuilder({
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("Meu time real");
   const [selected, setSelected] = useState<string[]>([]);
+  const [postures, setPostures] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const perPage = 18;
@@ -1668,7 +1705,7 @@ function RealRosterBuilder({
   );
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
   const visible = filtered.slice((Math.min(page, pages) - 1) * perPage, Math.min(page, pages) * perPage);
-  const toggle = (id: string) =>
+  const toggle = (id: string) => {
     setSelected((cur) =>
       cur.includes(id)
         ? cur.filter((x) => x !== id)
@@ -1676,15 +1713,28 @@ function RealRosterBuilder({
           ? [...cur, id]
           : cur,
     );
+    // Ao entrar, herda a postura padrão do mascote (editável depois).
+    setPostures((cur) =>
+      cur[id] ? cur : { ...cur, [id]: byId.get(id)?.posture ?? "ATTACKER" },
+    );
+  };
   const loadPreset = (preset: Preset) => {
     setEditingId(preset.id);
     setName(preset.name);
     setSelected(preset.pets.map((p) => p.id).filter((id) => byId.has(id)));
+    setPostures(
+      Object.fromEntries(
+        preset.pets
+          .filter((p) => byId.has(p.id))
+          .map((p) => [p.id, p.posture]),
+      ),
+    );
   };
   const reset = () => {
     setEditingId(null);
     setName("Meu time real");
     setSelected([]);
+    setPostures({});
   };
   const save = () =>
     start(async () => {
@@ -1692,6 +1742,7 @@ function RealRosterBuilder({
         id: editingId ?? undefined,
         name,
         mascotIds: selected,
+        postures,
       });
       if (result.error) toast.error(result.error);
       else {
@@ -1704,7 +1755,7 @@ function RealRosterBuilder({
       <section className="space-y-4">
         <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[.04] p-4">
           <div className="flex items-center justify-between">
-            <h2 className="font-black text-white">Meus times reais</h2>
+            <h2 className="font-black text-white">Meus times (Padrão)</h2>
             <button
               onClick={reset}
               className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950"
@@ -1740,32 +1791,50 @@ function RealRosterBuilder({
         </div>
         <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-            Selecionados ({selected.length}/12)
+            Selecionados ({selected.length}/12) · escolha a postura
           </p>
-          <div className="mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+          <div className="mt-2 space-y-1.5">
             {selected.map((id) => {
               const m = byId.get(id);
               if (!m) return null;
               return (
-                <button
+                <div
                   key={id}
-                  onClick={() => toggle(id)}
-                  title="Remover"
-                  className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 p-1 text-center"
+                  className="flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/[.06] p-1.5"
                 >
                   <img
                     src={m.sprite}
                     alt=""
-                    className="mx-auto h-8 w-8 object-contain [image-rendering:pixelated]"
+                    className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
                   />
-                  <span className="block truncate text-[7px] text-white">
+                  <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-white">
                     {m.nickname?.trim() || m.name}
                   </span>
-                </button>
+                  <select
+                    value={postures[id] ?? m.posture}
+                    onChange={(e) =>
+                      setPostures((cur) => ({ ...cur, [id]: e.target.value }))
+                    }
+                    className="max-w-[92px] rounded border border-[#FFCB05]/30 bg-slate-900 px-1 py-1 text-[9px] font-bold text-[#FFCB05]"
+                  >
+                    {DRAFT_POSTURES.map((r) => (
+                      <option key={r} value={r} className="text-white">
+                        {postureLabels[r]}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    onClick={() => toggle(id)}
+                    title="Remover"
+                    className="shrink-0 rounded p-1 text-rose-300 hover:bg-rose-400/10"
+                  >
+                    <Trash2 size={13} />
+                  </button>
+                </div>
               );
             })}
             {selected.length === 0 && (
-              <p className="col-span-full py-3 text-center text-[10px] text-slate-600">
+              <p className="py-3 text-center text-[10px] text-slate-600">
                 Escolha 12 mascotes ao lado.
               </p>
             )}
