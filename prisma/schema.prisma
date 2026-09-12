@@ -363,6 +363,7 @@ model ArenaDraftPreset {
   ownerId     String
   name        String
   petsJson    Json
+  source      String   @default("CUSTOM")
   isReady     Boolean  @default(false)
   needsReview Boolean  @default(false)
   createdAt   DateTime @default(now())
@@ -378,6 +379,7 @@ model ArenaDraftMatch {
   playerAId       String
   playerBId       String?
   winnerId        String?
+  mode            String             @default("CUSTOM")
   state           String             @default("CREATED")
   stateVersion    Int                @default(1)
   deadlineAt      DateTime?

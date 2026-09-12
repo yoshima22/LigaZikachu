@@ -145,6 +145,7 @@ export default async function DraftRoomPage({
   return (
     <DraftRoomClient
       matchId={match.id}
+      mode={match.mode === "REAL" ? "REAL" : "CUSTOM"}
       state={match.state}
       stateVersion={match.stateVersion}
       turn={String(draft.turn ?? "")}

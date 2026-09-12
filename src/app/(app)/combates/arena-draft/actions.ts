@@ -5,8 +5,14 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
-import { publicDraftPet, validateArenaDraftPets } from "@/lib/arena-draft";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import {
+  publicDraftPet,
+  validateArenaDraftPets,
+  ARENA_DRAFT_RULES,
+  type DraftMode,
+} from "@/lib/arena-draft";
+import { getPokemonName, getPokemonTypes, getSpriteUrl } from "@/lib/mascot-data";
+import { defaultCombatRoleFor } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
@@ -23,6 +29,164 @@ async function currentPlayer() {
   const player = await getSessionPlayer(user.id);
   if (!player) throw new Error("Jogador não encontrado.");
   return player;
+}
+
+// ── Modo "Meus mascotes" (REAL) ──────────────────────────────────────────────
+// Lista os mascotes reais do jogador para montar um time do próprio acervo.
+export async function getMyDraftMascotsAction() {
+  const player = await currentPlayer();
+  const mascots = await prisma.mascot.findMany({
+    where: { playerId: player.id },
+    orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+    take: 300,
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      level: true,
+      personality: true,
+      preferredCombatRole: true,
+      statForce: true,
+      statAgility: true,
+      statCharisma: true,
+      statInstinct: true,
+      statVitality: true,
+      megaEvolvedAt: true,
+      megaEvolvedFromPokemonId: true,
+    },
+  });
+  return mascots.map((mascot) => ({
+    id: mascot.id,
+    speciesId: mascot.pokemonId,
+    name: getPokemonName(mascot.pokemonId),
+    nickname: mascot.nickname,
+    sprite: getSpriteUrl(mascot.pokemonId),
+    level: mascot.level,
+    personality: mascot.personality,
+    posture: defaultCombatRoleFor({
+      preferredCombatRole: mascot.preferredCombatRole,
+      statForce: mascot.statForce,
+      statAgility: mascot.statAgility,
+      statVitality: mascot.statVitality,
+      statInstinct: mascot.statInstinct,
+      statCharisma: mascot.statCharisma,
+    }),
+    isMega: Boolean(mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId),
+    stats: {
+      force: mascot.statForce,
+      agility: mascot.statAgility,
+      charisma: mascot.statCharisma,
+      instinct: mascot.statInstinct,
+      vitality: mascot.statVitality,
+    },
+  }));
+}
+
+// Salva um "preset" de mascotes reais (source REAL). O snapshot congela os
+// status reais no momento do salvamento.
+export async function saveRealRosterAction(input: {
+  id?: string;
+  name: string;
+  mascotIds: string[];
+}) {
+  try {
+    const player = await currentPlayer();
+    const name = input.name.trim().slice(0, 40);
+    if (name.length < 3)
+      throw new Error("Dê um nome de ao menos 3 caracteres ao time.");
+    const uniqueIds = [...new Set(input.mascotIds)];
+    if (uniqueIds.length !== ARENA_DRAFT_RULES.teamSize)
+      throw new Error(
+        `Selecione exatamente ${ARENA_DRAFT_RULES.teamSize} mascotes diferentes.`,
+      );
+    const mascots = await prisma.mascot.findMany({
+      where: { id: { in: uniqueIds }, playerId: player.id },
+      select: {
+        id: true,
+        pokemonId: true,
+        nickname: true,
+        personality: true,
+        preferredCombatRole: true,
+        statForce: true,
+        statAgility: true,
+        statCharisma: true,
+        statInstinct: true,
+        statVitality: true,
+        megaEvolvedAt: true,
+        megaEvolvedFromPokemonId: true,
+      },
+    });
+    if (mascots.length !== uniqueIds.length)
+      throw new Error("Um ou mais mascotes não pertencem à sua conta.");
+    // Mantém a ordem escolhida pelo jogador.
+    const byId = new Map(mascots.map((m) => [m.id, m]));
+    const pets = uniqueIds.map((mascotId, slot) => {
+      const mascot = byId.get(mascotId)!;
+      return {
+        id: mascot.id,
+        slot,
+        speciesId: mascot.pokemonId,
+        isMega: Boolean(
+          mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId,
+        ),
+        nickname: mascot.nickname?.slice(0, 18) || undefined,
+        personality: mascot.personality,
+        posture: defaultCombatRoleFor({
+          preferredCombatRole: mascot.preferredCombatRole,
+          statForce: mascot.statForce,
+          statAgility: mascot.statAgility,
+          statVitality: mascot.statVitality,
+          statInstinct: mascot.statInstinct,
+          statCharisma: mascot.statCharisma,
+        }),
+        stats: {
+          force: mascot.statForce,
+          agility: mascot.statAgility,
+          charisma: mascot.statCharisma,
+          instinct: mascot.statInstinct,
+          vitality: mascot.statVitality,
+        },
+      };
+    });
+    const validation = validateArenaDraftPets(pets, "REAL");
+    if (!validation.valid) throw new Error(validation.errors[0] ?? "Time inválido.");
+    if (input.id) {
+      const existing = await prisma.arenaDraftPreset.findFirst({
+        where: { id: input.id, ownerId: player.id, source: "REAL" },
+      });
+      if (!existing) throw new Error("Time não encontrado.");
+      await prisma.arenaDraftPreset.update({
+        where: { id: input.id },
+        data: {
+          name,
+          petsJson: validation.pets as unknown as Prisma.InputJsonValue,
+          isReady: true,
+          needsReview: false,
+        },
+      });
+    } else {
+      const count = await prisma.arenaDraftPreset.count({
+        where: { ownerId: player.id, source: "REAL" },
+      });
+      if (count >= 10)
+        throw new Error("Você já atingiu o limite de 10 times. Exclua um antes.");
+      await prisma.arenaDraftPreset.create({
+        data: {
+          ownerId: player.id,
+          name,
+          source: "REAL",
+          petsJson: validation.pets as unknown as Prisma.InputJsonValue,
+          isReady: true,
+        },
+      });
+    }
+    revalidatePath("/combates/arena-draft");
+    return { success: "Time salvo." };
+  } catch (error) {
+    return {
+      error: error instanceof Error ? error.message : "Não foi possível salvar.",
+    };
+  }
 }
 
 export async function searchDraftOpponentsAction(query: string) {
@@ -193,13 +357,16 @@ export async function duplicateDraftPresetAction(id: string) {
       throw new Error(
         "Você já atingiu o limite de 10 presets. Exclua um antes de duplicar.",
       );
+    const dupMode = preset.source === "REAL" ? "REAL" : "CUSTOM";
     await prisma.arenaDraftPreset.create({
       data: {
         ownerId: player.id,
         name: `${preset.name} (cópia)`.slice(0, 40),
+        source: preset.source,
         petsJson: preset.petsJson as Prisma.InputJsonValue,
         isReady:
-          preset.isReady && validateArenaDraftPets(preset.petsJson).valid,
+          preset.isReady &&
+          validateArenaDraftPets(preset.petsJson, dupMode).valid,
       },
     });
     revalidatePath("/combates/arena-draft");
@@ -219,13 +386,17 @@ export async function joinDraftQueueAction(presetId: string) {
       where: { id: presetId, ownerId: player.id },
     });
     if (!preset) throw new Error("Selecione um preset completo e válido.");
-    if (!validateArenaDraftPets(preset.petsJson).valid)
+    const mode = preset.source === "REAL" ? "REAL" : "CUSTOM";
+    if (!validateArenaDraftPets(preset.petsJson, mode).valid)
       throw new Error(
-        "Este preset usa as regras antigas. Abra, ajuste os 4.500 pontos do time e salve novamente.",
+        mode === "REAL"
+          ? "Este time precisa de 12 mascotes válidos. Reabra e salve novamente."
+          : "Este preset usa as regras antigas. Abra, ajuste os 4.500 pontos do time e salve novamente.",
       );
-    await assertPresetMegasEnabled(
-      validateArenaDraftPets(preset.petsJson).pets,
-    );
+    if (mode === "CUSTOM")
+      await assertPresetMegasEnabled(
+        validateArenaDraftPets(preset.petsJson, mode).pets,
+      );
     const already = await prisma.arenaDraftMatch.findFirst({
       where: {
         OR: [{ playerAId: player.id }, { playerBId: player.id }],
@@ -235,11 +406,13 @@ export async function joinDraftQueueAction(presetId: string) {
     if (already)
       return { success: "Você já possui uma sala ativa.", matchId: already.id };
     const match = await prisma.$transaction(async (tx) => {
+      // Fila separada por modo: só pareia com quem espera no mesmo modo.
       const waiting = await tx.arenaDraftMatch.findFirst({
         where: {
           state: "CREATED",
           playerBId: null,
           playerAId: { not: player.id },
+          mode,
         },
         orderBy: { createdAt: "asc" },
       });
@@ -269,6 +442,7 @@ export async function joinDraftQueueAction(presetId: string) {
         data: {
           playerAId: player.id,
           presetASnapshot: snapshot,
+          mode,
           state: "CREATED",
         },
       });
@@ -373,13 +547,17 @@ export async function createDraftChallengeAction(
       }),
     ]);
     if (!preset) throw new Error("Escolha um preset válido.");
-    if (!validateArenaDraftPets(preset.petsJson).valid)
+    const mode = preset.source === "REAL" ? "REAL" : "CUSTOM";
+    if (!validateArenaDraftPets(preset.petsJson, mode).valid)
       throw new Error(
-        "Este preset precisa ser salvo novamente com 4.500 pontos no time.",
+        mode === "REAL"
+          ? "Este time precisa de 12 mascotes válidos."
+          : "Este preset precisa ser salvo novamente com 4.500 pontos no time.",
       );
-    await assertPresetMegasEnabled(
-      validateArenaDraftPets(preset.petsJson).pets,
-    );
+    if (mode === "CUSTOM")
+      await assertPresetMegasEnabled(
+        validateArenaDraftPets(preset.petsJson, mode).pets,
+      );
     if (!target) throw new Error("Jogador indisponível.");
     if (occupied) throw new Error("Esse jogador já está em uma sala.");
     const recentPair = await prisma.arenaDraftMatch.findFirst({
@@ -401,6 +579,7 @@ export async function createDraftChallengeAction(
       data: {
         playerAId: player.id,
         playerBId: targetPlayerId,
+        mode,
         presetASnapshot: preset.petsJson as Prisma.InputJsonValue,
         state: "CHALLENGE_PENDING",
         deadlineAt: new Date(Date.now() + 10 * 60_000),
@@ -447,17 +626,23 @@ export async function answerDraftChallengeAction(
       revalidatePath("/combates/arena-draft");
       return { success: "Desafio recusado." };
     }
+    const matchMode = match.mode === "REAL" ? "REAL" : "CUSTOM";
     const preset = await prisma.arenaDraftPreset.findFirst({
       where: { id: presetId ?? "", ownerId: player.id },
     });
     if (!preset) throw new Error("Selecione um preset válido para aceitar.");
-    if (!validateArenaDraftPets(preset.petsJson).valid)
+    if ((preset.source === "REAL" ? "REAL" : "CUSTOM") !== matchMode)
       throw new Error(
-        "Este preset precisa ser ajustado para as regras atuais.",
+        matchMode === "REAL"
+          ? "Este desafio é no modo Meus Mascotes: escolha um time de mascotes reais."
+          : "Este desafio é no modo Customizado: escolha um preset customizado.",
       );
-    await assertPresetMegasEnabled(
-      validateArenaDraftPets(preset.petsJson).pets,
-    );
+    if (!validateArenaDraftPets(preset.petsJson, matchMode).valid)
+      throw new Error("Este time precisa ser ajustado para as regras atuais.");
+    if (matchMode === "CUSTOM")
+      await assertPresetMegasEnabled(
+        validateArenaDraftPets(preset.petsJson, matchMode).pets,
+      );
     await prisma.arenaDraftMatch.update({
       where: { id: match.id },
       data: {
@@ -637,8 +822,11 @@ export async function submitArenaDraftAction(
 function draftFighter(
   pet: ReturnType<typeof validateArenaDraftPets>["pets"][number],
   ownerId: string,
+  mode: DraftMode,
 ): ArenaMascot {
-  const bonus = pet.isMega ? 10 : 0;
+  // Bônus de +10 da Mega vale só no modo CUSTOM; no REAL os status já são os
+  // reais do mascote.
+  const bonus = mode === "CUSTOM" && pet.isMega ? 10 : 0;
   const role = pet.posture;
   return {
     id: pet.id,
@@ -740,6 +928,7 @@ function buildDraftTeam(
   ownerId: string,
   activeIds: string[],
   postures: Record<string, ArenaMascot["combatRole"]>,
+  mode: DraftMode,
 ) {
   const active = new Set(activeIds);
   return pets
@@ -748,6 +937,7 @@ function buildDraftTeam(
       draftFighter(
         { ...pet, posture: postures[pet.id] ?? pet.posture },
         ownerId,
+        mode,
       ),
     );
 }
@@ -758,6 +948,7 @@ async function persistCombatSegment(
     id: string;
     playerAId: string;
     playerBId: string | null;
+    mode: string;
     presetASnapshot: Prisma.JsonValue;
     presetBSnapshot: Prisma.JsonValue | null;
     battleJson: Prisma.JsonValue | null;
@@ -765,19 +956,22 @@ async function persistCombatSegment(
   battle: DraftBattle,
 ) {
   if (!match.playerBId) throw new Error("Adversário ausente.");
-  const petsA = validateArenaDraftPets(match.presetASnapshot).pets;
-  const petsB = validateArenaDraftPets(match.presetBSnapshot).pets;
+  const mode: DraftMode = match.mode === "REAL" ? "REAL" : "CUSTOM";
+  const petsA = validateArenaDraftPets(match.presetASnapshot, mode).pets;
+  const petsB = validateArenaDraftPets(match.presetBSnapshot, mode).pets;
   const teamA = buildDraftTeam(
     petsA,
     match.playerAId,
     battle.activeA,
     battle.posturesA,
+    mode,
   );
   const teamB = buildDraftTeam(
     petsB,
     match.playerBId,
     battle.activeB,
     battle.posturesB,
+    mode,
   );
   if (teamA.length !== 6 || teamB.length !== 6)
     throw new Error("Formação final inválida.");
@@ -815,12 +1009,14 @@ async function persistCombatSegment(
     draftFighter(
       { ...p, posture: battle.posturesA[p.id] ?? p.posture },
       match.playerAId,
+      mode,
     ),
   );
   const allB = petsB.map((p) =>
     draftFighter(
       { ...p, posture: battle.posturesB[p.id] ?? p.posture },
       match.playerBId!,
+      mode,
     ),
   );
   await tx.arenaDraftMatch.update({

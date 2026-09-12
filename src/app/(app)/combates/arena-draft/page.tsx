@@ -182,20 +182,25 @@ export default async function ArenaDraftPage() {
   return (
     <ArenaDraftClient
       species={species}
-      presets={presets.map((p) => ({
-        id: p.id,
-        name: p.name,
-        isReady:
-          validateArenaDraftPets(p.petsJson).valid &&
-          !(p.petsJson as unknown as ArenaDraftPet[]).some(
-            (pet) =>
-              customMegaIds.has(pet.speciesId) &&
-              disabledMegaIds.has(pet.speciesId),
-          ),
-        pets: p.petsJson as unknown as ArenaDraftPet[],
-        needsReview: p.needsReview,
-        updatedAt: p.updatedAt.toISOString(),
-      }))}
+      presets={presets.map((p) => {
+        const mode = p.source === "REAL" ? "REAL" : "CUSTOM";
+        return {
+          id: p.id,
+          name: p.name,
+          source: mode,
+          isReady:
+            validateArenaDraftPets(p.petsJson, mode).valid &&
+            (mode === "REAL" ||
+              !(p.petsJson as unknown as ArenaDraftPet[]).some(
+                (pet) =>
+                  customMegaIds.has(pet.speciesId) &&
+                  disabledMegaIds.has(pet.speciesId),
+              )),
+          pets: p.petsJson as unknown as ArenaDraftPet[],
+          needsReview: p.needsReview,
+          updatedAt: p.updatedAt.toISOString(),
+        };
+      })}
       activeMatch={
         activeMatch
           ? {

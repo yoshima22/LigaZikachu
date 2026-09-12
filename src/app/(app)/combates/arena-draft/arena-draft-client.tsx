@@ -37,8 +37,10 @@ import {
   deleteDraftPresetAction,
   duplicateDraftPresetAction,
   getDraftQueueStatusAction,
+  getMyDraftMascotsAction,
   joinDraftQueueAction,
   renameDraftPresetAction,
+  saveRealRosterAction,
   searchDraftOpponentsAction,
   saveDraftPresetAction,
 } from "./actions";
@@ -53,10 +55,29 @@ type Species = {
 type Preset = {
   id: string;
   name: string;
+  source: "CUSTOM" | "REAL";
   isReady: boolean;
   pets: ArenaDraftPet[];
   needsReview?: boolean;
   updatedAt: string;
+};
+type RealMascot = {
+  id: string;
+  speciesId: number;
+  name: string;
+  nickname: string | null;
+  sprite: string;
+  level: number;
+  personality: string;
+  posture: string;
+  isMega: boolean;
+  stats: {
+    force: number;
+    agility: number;
+    charisma: number;
+    instinct: number;
+    vitality: number;
+  };
 };
 type Match = {
   id: string;
@@ -136,14 +157,22 @@ export function ArenaDraftClient({
   const [tutorialOpen, setTutorialOpen] = useState(false);
   const [missingPresetOpen, setMissingPresetOpen] = useState(false);
   const [presetPage, setPresetPage] = useState(1);
+  // Modo de montagem: "CUSTOM" (mascotes construídos) ou "REAL" (meus mascotes).
+  const [buildMode, setBuildMode] = useState<"CUSTOM" | "REAL">("CUSTOM");
   const [renamingPresetId, setRenamingPresetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   // Buffer de digitação dos status: guarda o texto cru enquanto o jogador digita
   // para não travar o mínimo (20) no meio de "80". Só ao sair do campo (blur) o
   // valor é ajustado para a faixa válida.
   const [statDrafts, setStatDrafts] = useState<Record<string, string>>({});
-  const presetPages = Math.max(1, Math.ceil(presets.length / 5));
-  const visiblePresets = presets.slice((presetPage - 1) * 5, presetPage * 5);
+  // A lista de "Meus presets" no editor customizado mostra só os customizados;
+  // os times reais aparecem no construtor "Meus mascotes".
+  const customPresets = presets.filter((p) => p.source !== "REAL");
+  const presetPages = Math.max(1, Math.ceil(customPresets.length / 5));
+  const visiblePresets = customPresets.slice(
+    (presetPage - 1) * 5,
+    presetPage * 5,
+  );
   useEffect(() => {
     if (window.localStorage.getItem("arena-draft-intro-v1") !== "seen")
       setTutorialOpen(true);
@@ -521,11 +550,40 @@ export function ArenaDraftClient({
       )}
 
       {tab === "BUILD" && (
-        <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
-          <section className="space-y-4">
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <div className="flex items-center justify-between">
-                <h2 className="font-black text-white">Meus presets</h2>
+        <div className="space-y-4">
+          {/* Seletor de modo bem sinalizado */}
+          <div className="flex flex-wrap gap-2 rounded-2xl border border-white/10 bg-slate-950/70 p-2">
+            {(
+              [
+                ["CUSTOM", "⚙️ Mascotes customizados"],
+                ["REAL", "🐾 Meus mascotes"],
+              ] as const
+            ).map(([m, label]) => (
+              <button
+                key={m}
+                onClick={() => setBuildMode(m)}
+                className={`flex-1 rounded-xl px-3 py-2.5 text-xs font-black transition ${buildMode === m ? (m === "REAL" ? "bg-emerald-400 text-slate-950" : "bg-cyan-300 text-slate-950") : "text-slate-400 hover:bg-white/5"}`}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
+          <p className="text-[11px] text-slate-400">
+            {buildMode === "REAL"
+              ? "Monte um time com os seus mascotes reais (status de verdade). As salas deste modo só pareiam com outros times reais."
+              : "Monte 12 mascotes com 4.500 pontos. As salas deste modo só pareiam com outros presets customizados."}
+          </p>
+          {buildMode === "REAL" ? (
+            <RealRosterBuilder
+              realPresets={presets.filter((p) => p.source === "REAL")}
+              onSaved={() => router.refresh()}
+            />
+          ) : (
+            <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
+              <section className="space-y-4">
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="font-black text-white">Meus presets</h2>
                 <button
                   disabled={presets.length >= 10}
                   onClick={() => {
@@ -540,9 +598,9 @@ export function ArenaDraftClient({
                 </button>
               </div>
               <div className="mt-3 space-y-2">
-                {presets.length === 0 ? (
+                {customPresets.length === 0 ? (
                   <p className="text-xs text-slate-500">
-                    Nenhum preset criado.
+                    Nenhum preset customizado criado.
                   </p>
                 ) : (
                   visiblePresets.map((p) => (
@@ -1245,6 +1303,8 @@ export function ArenaDraftClient({
               )}
             </div>
           </section>
+            </div>
+          )}
         </div>
       )}
 
@@ -1290,11 +1350,12 @@ export function ArenaDraftClient({
                         }
                         className="rounded-lg border border-white/10 bg-slate-950 px-2 text-xs"
                       >
-                        <option value="">Escolha o preset</option>
+                        <option value="">Escolha o preset (mesmo modo)</option>
                         {presets
                           .filter((preset) => preset.isReady)
                           .map((preset) => (
                             <option key={preset.id} value={preset.id}>
+                              {preset.source === "REAL" ? "🐾 " : "⚙️ "}
                               {preset.name}
                             </option>
                           ))}
@@ -1360,7 +1421,16 @@ export function ArenaDraftClient({
                       className="flex w-full items-center justify-between rounded-xl border border-white/10 p-3 text-left hover:border-cyan-300/40"
                     >
                       <span>
-                        <b className="block text-white">{p.name}</b>
+                        <b className="flex items-center gap-2 text-white">
+                          {p.name}
+                          <span
+                            className={`rounded-full border px-2 py-0.5 text-[8px] font-black uppercase ${p.source === "REAL" ? "border-emerald-400/40 bg-emerald-400/10 text-emerald-200" : "border-cyan-400/40 bg-cyan-400/10 text-cyan-200"}`}
+                          >
+                            {p.source === "REAL"
+                              ? "🐾 Meus mascotes"
+                              : "⚙️ Customizado"}
+                          </span>
+                        </b>
                         <small className="text-slate-500">
                           12 mascotes · {p.pets.filter((x) => x.isMega).length}{" "}
                           Megas
@@ -1399,6 +1469,7 @@ export function ArenaDraftClient({
                 .filter((preset) => preset.isReady)
                 .map((preset) => (
                   <option key={preset.id} value={preset.id}>
+                    {preset.source === "REAL" ? "🐾 " : "⚙️ "}
                     {preset.name}
                   </option>
                 ))}
@@ -1534,6 +1605,268 @@ export function ArenaDraftClient({
           </section>
         </div>
       )}
+    </div>
+  );
+}
+
+// Construtor do time "Meus mascotes": escolhe 12 mascotes reais do acervo.
+function RealRosterBuilder({
+  realPresets,
+  onSaved,
+}: {
+  realPresets: Preset[];
+  onSaved: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [mascots, setMascots] = useState<RealMascot[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [name, setName] = useState("Meu time real");
+  const [selected, setSelected] = useState<string[]>([]);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const perPage = 18;
+  useEffect(() => {
+    let alive = true;
+    getMyDraftMascotsAction()
+      .then((rows) => {
+        if (alive) setMascots(rows as RealMascot[]);
+      })
+      .catch(() => {})
+      .finally(() => alive && setLoading(false));
+    return () => {
+      alive = false;
+    };
+  }, []);
+  const byId = new Map(mascots.map((m) => [m.id, m]));
+  const filtered = mascots.filter(
+    (m) =>
+      !search ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      (m.nickname ?? "").toLowerCase().includes(search.toLowerCase()),
+  );
+  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const visible = filtered.slice((Math.min(page, pages) - 1) * perPage, Math.min(page, pages) * perPage);
+  const toggle = (id: string) =>
+    setSelected((cur) =>
+      cur.includes(id)
+        ? cur.filter((x) => x !== id)
+        : cur.length < 12
+          ? [...cur, id]
+          : cur,
+    );
+  const loadPreset = (preset: Preset) => {
+    setEditingId(preset.id);
+    setName(preset.name);
+    setSelected(preset.pets.map((p) => p.id).filter((id) => byId.has(id)));
+  };
+  const reset = () => {
+    setEditingId(null);
+    setName("Meu time real");
+    setSelected([]);
+  };
+  const save = () =>
+    start(async () => {
+      const result = await saveRealRosterAction({
+        id: editingId ?? undefined,
+        name,
+        mascotIds: selected,
+      });
+      if (result.error) toast.error(result.error);
+      else {
+        toast.success(result.success);
+        onSaved();
+      }
+    });
+  return (
+    <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
+      <section className="space-y-4">
+        <div className="rounded-2xl border border-emerald-400/20 bg-emerald-400/[.04] p-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-black text-white">Meus times reais</h2>
+            <button
+              onClick={reset}
+              className="rounded-lg bg-emerald-400 px-3 py-2 text-xs font-bold text-slate-950"
+            >
+              + Novo
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            {realPresets.length === 0 ? (
+              <p className="text-xs text-slate-500">
+                Nenhum time real criado ainda.
+              </p>
+            ) : (
+              realPresets.map((p) => (
+                <button
+                  key={p.id}
+                  onClick={() => loadPreset(p)}
+                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left ${editingId === p.id ? "border-emerald-400/50 bg-emerald-400/10" : "border-white/10 hover:border-emerald-400/30"}`}
+                >
+                  <span className="min-w-0">
+                    <b className="block truncate text-sm text-white">{p.name}</b>
+                    <small className="text-slate-500">
+                      {p.pets.length}/12 mascotes
+                    </small>
+                  </span>
+                  {p.isReady && (
+                    <CheckCircle2 className="text-emerald-300" size={15} />
+                  )}
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+        <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
+            Selecionados ({selected.length}/12)
+          </p>
+          <div className="mt-2 grid grid-cols-4 gap-1.5 sm:grid-cols-6">
+            {selected.map((id) => {
+              const m = byId.get(id);
+              if (!m) return null;
+              return (
+                <button
+                  key={id}
+                  onClick={() => toggle(id)}
+                  title="Remover"
+                  className="rounded-lg border border-emerald-400/40 bg-emerald-400/10 p-1 text-center"
+                >
+                  <img
+                    src={m.sprite}
+                    alt=""
+                    className="mx-auto h-8 w-8 object-contain [image-rendering:pixelated]"
+                  />
+                  <span className="block truncate text-[7px] text-white">
+                    {m.nickname?.trim() || m.name}
+                  </span>
+                </button>
+              );
+            })}
+            {selected.length === 0 && (
+              <p className="col-span-full py-3 text-center text-[10px] text-slate-600">
+                Escolha 12 mascotes ao lado.
+              </p>
+            )}
+          </div>
+        </div>
+      </section>
+      <section className="flex flex-col rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <input
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            className="max-w-xs flex-1 border-b border-white/10 bg-transparent text-lg font-black text-white outline-none"
+          />
+          <button
+            disabled={pending || selected.length !== 12}
+            onClick={save}
+            className="rounded-xl bg-emerald-400 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"
+          >
+            {editingId ? "Salvar alterações" : "Salvar time"} ({selected.length}
+            /12)
+          </button>
+        </div>
+        <input
+          value={search}
+          onChange={(e) => {
+            setSearch(e.target.value);
+            setPage(1);
+          }}
+          placeholder="Buscar mascote por nome ou apelido…"
+          className="mt-3 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm outline-none"
+        />
+        {loading ? (
+          <p className="py-12 text-center text-sm text-slate-500">
+            Carregando seus mascotes…
+          </p>
+        ) : (
+          <>
+            <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              {visible.map((m) => {
+                const picked = selected.includes(m.id);
+                const full = selected.length >= 12 && !picked;
+                return (
+                  <button
+                    key={m.id}
+                    disabled={full}
+                    onClick={() => toggle(m.id)}
+                    className={`rounded-xl border p-2 text-left transition disabled:opacity-40 ${picked ? "border-emerald-400 bg-emerald-400/10" : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
+                  >
+                    <div className="flex items-center gap-2">
+                      <img
+                        src={m.sprite}
+                        alt=""
+                        className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
+                      />
+                      <div className="min-w-0">
+                        <b className="block truncate text-[11px] text-white">
+                          {m.nickname?.trim() || m.name}
+                          {m.isMega && (
+                            <span className="ml-1 text-[8px] font-black text-amber-300">
+                              MEGA
+                            </span>
+                          )}
+                        </b>
+                        <span className="block truncate text-[9px] text-slate-500">
+                          Nv.{m.level} ·{" "}
+                          {PERSONALITY_LABEL[m.personality] ?? m.personality}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 grid grid-cols-5 gap-0.5 text-center">
+                      {(
+                        [
+                          ["FOR", m.stats.force],
+                          ["AGI", m.stats.agility],
+                          ["CAR", m.stats.charisma],
+                          ["INS", m.stats.instinct],
+                          ["VIT", m.stats.vitality],
+                        ] as const
+                      ).map(([label, value]) => (
+                        <span key={label} className="rounded bg-slate-950/70 py-0.5">
+                          <b className="block text-[7px] uppercase leading-none text-slate-500">
+                            {label}
+                          </b>
+                          <strong className="block text-[10px] tabular-nums text-slate-100">
+                            {value}
+                          </strong>
+                        </span>
+                      ))}
+                    </div>
+                  </button>
+                );
+              })}
+            </div>
+            {mascots.length === 0 && (
+              <p className="py-8 text-center text-sm text-slate-500">
+                Você ainda não tem mascotes para montar um time real.
+              </p>
+            )}
+            {pages > 1 && (
+              <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+                <button
+                  disabled={page <= 1}
+                  onClick={() => setPage((p) => p - 1)}
+                  className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                >
+                  Anterior
+                </button>
+                <span className="text-slate-500">
+                  {Math.min(page, pages)}/{pages}
+                </span>
+                <button
+                  disabled={page >= pages}
+                  onClick={() => setPage((p) => p + 1)}
+                  className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                >
+                  Próxima
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </section>
     </div>
   );
 }
