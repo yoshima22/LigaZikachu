@@ -14,6 +14,7 @@ import {
   Mountain,
   Navigation,
   RotateCcw,
+  Search,
   Shield,
   Sparkles,
   Store,
@@ -23,7 +24,9 @@ import { toast } from "sonner";
 import type { WorldEncounterConfig, WorldLocationConfig } from "@/world-data/types";
 import {
   finishWorldTravelNowAction,
+  exploreWorldLocationAction,
   resetAdminWorldAction,
+  resolveWorldEncounterAction,
   startWorldAdventureAction,
   startWorldTravelAction,
 } from "./actions";
@@ -41,6 +44,18 @@ type State = {
   travelStartedAt: string | null;
   travelEndsAt: string | null;
 } | null;
+type Encounter = {
+  id: string;
+  pokemonId: number;
+  rarity: string;
+  captureChance: number;
+  status: "ACTIVE" | "CAPTURED" | "ESCAPED" | "FAILED";
+  roll: number | null;
+  name: string;
+  spriteUrl?: string;
+  createdAt: string;
+  resolvedAt?: string | null;
+};
 
 const TYPE_STYLE: Record<string, { icon: typeof MapPin; color: string }> = {
   TOWN: { icon: MapPin, color: "#fbbf24" },
@@ -78,7 +93,7 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState }: { locations: Location[]; initialState: State }) {
+export function WorldModeClient({ locations, initialState, encounters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] } }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
@@ -186,6 +201,35 @@ export function WorldModeClient({ locations, initialState }: { locations: Locati
           </div>
         </aside>
       </div>
+
+      {current?.activities.includes("EXPLORE") && !initialState.travelingToId && (
+        <section className="overflow-hidden rounded-[2rem] border border-emerald-300/15 bg-[radial-gradient(circle_at_10%_20%,rgba(16,185,129,.13),transparent_35%),#060d17]">
+          {encounters.active ? (
+            <div className="grid items-center gap-5 p-5 md:grid-cols-[220px_1fr] md:p-7">
+              <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-3xl bg-[radial-gradient(circle,rgba(103,232,249,.2),transparent_60%)]">
+                <div className="absolute inset-x-8 bottom-8 h-8 rounded-[50%] bg-cyan-300/10 blur-md" />
+                {/* O sprite existente mantém o protótipo funcional; será substituído por arte de encontro quando houver asset. */}
+                <img src={encounters.active.spriteUrl} alt={encounters.active.name} className="relative h-36 w-36 object-contain [image-rendering:pixelated]" />
+              </div>
+              <div>
+                <span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Encontro selvagem · {RARITY_LABEL[encounters.active.rarity]}</span>
+                <h2 className="mt-1 text-3xl font-black text-white">Um {encounters.active.name} apareceu!</h2>
+                <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">O encontro fica salvo até você decidir. Uma tentativa consome 1 Poké Ball; fugir não consome itens.</p>
+                <div className="mt-5 flex flex-wrap gap-3">
+                  <button disabled={pending || (initialState.inventory.pokeBalls ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE"), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Usar Poké Ball · {encounters.active.captureChance}%</button>
+                  <button disabled={pending} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "ESCAPE"), "Você deixou o mascote seguir seu caminho." )} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-3 text-xs font-black text-slate-200">Fugir</button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-between gap-4 p-5 md:p-7">
+              <div><span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Exploração local</span><h2 className="mt-1 text-2xl font-black text-white">Procure sinais em {current.shortName}</h2><p className="mt-1 text-xs text-slate-400">Horário e pesos da tabela determinam o encontro no servidor.</p></div>
+              <button disabled={pending} onClick={() => act(exploreWorldLocationAction, "Você encontrou movimento por perto.")} className="rounded-xl bg-gradient-to-r from-emerald-300 to-cyan-300 px-6 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Search className="mr-2 inline h-4 w-4" />Explorar área</button>
+            </div>
+          )}
+          {encounters.history.length > 0 && <div className="border-t border-white/5 px-5 py-4 md:px-7"><p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-500">Últimos encontros</p><div className="flex flex-wrap gap-2">{encounters.history.map((entry) => <span key={entry.id} className={`rounded-lg border px-2.5 py-1.5 text-[9px] ${entry.status === "CAPTURED" ? "border-emerald-300/20 bg-emerald-300/5 text-emerald-200" : "border-white/10 bg-white/[.025] text-slate-400"}`}><b>{entry.name}</b> · {entry.status === "CAPTURED" ? "Capturado" : entry.status === "ESCAPED" ? "Liberado" : "Escapou da Poké Ball"}{entry.roll ? ` · rolagem ${entry.roll}/${entry.captureChance}` : ""}</span>)}</div></div>}
+        </section>
+      )}
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-4">
         <div className="flex flex-wrap gap-3 text-[10px] text-slate-300"><span><Backpack className="mr-1 inline h-3.5 w-3.5 text-amber-300" />{initialState.inventory.pokeBalls ?? 0} Poké Balls</span><span><FlaskConical className="mr-1 inline h-3.5 w-3.5 text-emerald-300" />{initialState.inventory.potions ?? 0} Potions</span><span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-cyan-300" />Chegada resolvida sob demanda, sem cron contínuo</span></div>

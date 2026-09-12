@@ -1,14 +1,17 @@
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
-import { getPokemonName } from "@/lib/mascot-data";
+import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { KANTO_MVP_LOCATIONS } from "@/world-data/kanto/mvp";
-import { getAdminWorldState } from "./actions";
+import { getAdminWorldEncounters, getAdminWorldState } from "./actions";
 import { WorldModeClient } from "./world-mode-client";
 
 export const dynamic = "force-dynamic";
 
 export default async function WorldModePage() {
   await requirePlatformAdmin();
-  const state = await getAdminWorldState();
+  const [state, encounterData] = await Promise.all([
+    getAdminWorldState(),
+    getAdminWorldEncounters(),
+  ]);
   const locations = KANTO_MVP_LOCATIONS.map((location) => ({
     ...location,
     encounters: location.encounters.map((encounter) => ({
@@ -19,6 +22,23 @@ export default async function WorldModePage() {
   return (
     <WorldModeClient
       locations={locations}
+      encounters={{
+        active: encounterData.active
+          ? {
+              ...encounterData.active,
+              name: getPokemonName(encounterData.active.pokemonId),
+              spriteUrl: getSpriteUrl(encounterData.active.pokemonId),
+              createdAt: encounterData.active.createdAt.toISOString(),
+              resolvedAt: null,
+            }
+          : null,
+        history: encounterData.history.map((entry) => ({
+          ...entry,
+          name: getPokemonName(entry.pokemonId),
+          resolvedAt: entry.resolvedAt?.toISOString() ?? null,
+          createdAt: entry.createdAt.toISOString(),
+        })),
+      }}
       initialState={
         state
           ? {
@@ -40,4 +60,3 @@ export default async function WorldModePage() {
     />
   );
 }
-
