@@ -138,7 +138,12 @@ export default async function DraftRoomPage({
           hp: battle?.runtime?.hp[p.id] ?? null,
           maxHp: Math.max(
             10,
-            Math.round(655 + (p.stats.vitality + (p.isMega ? 10 : 0)) * 4),
+            Math.round(
+              655 +
+                (p.stats.vitality +
+                  (match.mode === "CUSTOM" && p.isMega ? 10 : 0)) *
+                  4,
+            ),
           ),
         };
       }) ?? [];

@@ -482,6 +482,7 @@ export function DraftRoomClient({
       {state === "STRATEGY_WINDOW" && strategy ? (
         <StrategyWindow
           matchId={matchId}
+          mode={mode}
           pets={own}
           rival={rival}
           playerNames={playerNames}
@@ -554,6 +555,7 @@ export function DraftRoomClient({
 }
 function StrategyWindow({
   matchId,
+  mode,
   pets,
   rival,
   playerNames,
@@ -561,6 +563,7 @@ function StrategyWindow({
   battle,
 }: {
   matchId: string;
+  mode: "CUSTOM" | "REAL";
   pets: Pet[];
   rival: Pet[];
   playerNames: { own: string; rival: string };
@@ -732,13 +735,13 @@ function StrategyWindow({
                         {label}
                       </b>
                       <strong className="block text-[11px] leading-tight tabular-nums text-slate-100">
-                        {value + (p.isMega ? 10 : 0)}
+                        {value + (mode === "CUSTOM" && p.isMega ? 10 : 0)}
                       </strong>
                     </span>
                   ))}
                 </div>
               )}
-              {p.isMega && (
+              {mode === "CUSTOM" && p.isMega && (
                 <p className="mt-0.5 text-right text-[8px] text-fuchsia-300">
                   Inclui +10 de Mega em cada atributo
                 </p>
@@ -900,6 +903,7 @@ function AnimatedBattle({
   from = 0,
   to,
   controls = false,
+  initialCursor,
   onFinish,
 }: {
   leftName: string;
@@ -910,10 +914,13 @@ function AnimatedBattle({
   from?: number;
   to?: number;
   controls?: boolean;
+  /** Permite começar pelo segmento final sem remover do player os eventos
+   * anteriores, que ficam navegáveis quando os controles forem liberados. */
+  initialCursor?: number;
   onFinish?: () => void;
 }) {
   const end = to ?? events.length - 1;
-  const startCursor = Math.max(-1, from - 1);
+  const startCursor = Math.max(-1, (initialCursor ?? from) - 1);
   const [cursor, setCursor] = useState(startCursor);
   const [playing, setPlaying] = useState(true);
   // Ritmo lento por padrão para dar tempo de ler cada ação e efeito.
@@ -923,7 +930,7 @@ function AnimatedBattle({
     setCursor(Math.max(-1, from - 1));
     setPlaying(true);
     finishedRef.current = false;
-  }, [from, end, events.length]);
+  }, [from, initialCursor, end, events.length]);
   useEffect(() => {
     if (!playing) return;
     if (cursor >= end) {
@@ -953,11 +960,14 @@ function AnimatedBattle({
       hp.set(event.targetId, event.targetHpAfter);
   }
   const current = cursor >= from && cursor < events.length ? events[cursor] : null;
+  const navigationStartCursor = controls ? Math.max(-1, from - 1) : startCursor;
   const roleLabel = (value?: string) =>
     value ? (ROLE_LABELS[value as Role] ?? value) : null;
   const togglePlay = () => {
     if (cursor >= end) {
-      setCursor(startCursor);
+      // Depois da revelação, "Repetir" começa a luta completa. Durante a
+      // primeira exibição obrigatória, mantém o início no trecho pós-T45.
+      setCursor(navigationStartCursor);
       setPlaying(true);
     } else setPlaying((value) => !value);
   };
@@ -1187,7 +1197,7 @@ function AnimatedBattle({
           <button
             onClick={() => {
               setPlaying(false);
-              setCursor((value) => Math.max(startCursor, value - 1));
+              setCursor((value) => Math.max(navigationStartCursor, value - 1));
             }}
             className="rounded-lg border border-slate-700 px-3 py-1.5 text-xs text-white"
           >
@@ -1859,6 +1869,10 @@ function Replay({
     .map(statFor)
     .sort((a, b) => b.kos - a.kos || b.dealt - a.dealt);
   const mvp = stats[0];
+  const finalSegmentStart = Math.max(
+    0,
+    events.findIndex((event) => event.turn > 45),
+  );
   // O resultado (campeão/estatísticas) só aparece depois que a luta rolar até o
   // fim — evita spoiler e garante que a animação final seja assistida.
   const [revealed, setRevealed] = useState(events.length === 0);
@@ -1876,25 +1890,8 @@ function Replay({
         </Link>
       </div>
 
-      {/* O resultado é imediato: a partida já terminou no servidor. O replay
-          continua disponível abaixo sem esconder quem venceu. */}
-      <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
-          {winnerName ? "🏆" : "🤝"}
-        </div>
-        <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
-          {winnerName ? "Campeão da partida" : "Resultado"}
-        </p>
-        <h2 className="mt-1 text-3xl font-black text-white">
-          {winnerName ?? "Empate"}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {playerNames.own} × {playerNames.rival} ·{" "}
-          {battle.rounds ?? events.length} ações
-        </p>
-      </div>
-
-      {/* Replay animado */}
+      {/* Após a última janela, toca somente o trecho ainda não visto. Os
+          controles e o resultado são liberados juntos ao término. */}
       {events.length > 0 && (
         <div className="rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-4">
           <AnimatedBattle
@@ -1903,17 +1900,33 @@ function Replay({
             leftPets={leftPets}
             rightPets={rightPets}
             events={events}
-            controls
+            initialCursor={finalSegmentStart}
+            controls={revealed}
             onFinish={() => setRevealed(true)}
           />
           {!revealed && (
-            <button
-              onClick={() => setRevealed(true)}
-              className="mt-3 w-full rounded-xl border border-[#FFCB05]/40 py-2.5 text-xs font-black text-[#FFCB05] hover:bg-[#FFCB05]/10"
-            >
-              Pular para o resultado ▸
-            </button>
+            <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-cyan-200">
+              Resolvendo o trecho final do combate…
+            </p>
           )}
+        </div>
+      )}
+
+      {revealed && (
+        <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
+            {winnerName ? "🏆" : "🤝"}
+          </div>
+          <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
+            {winnerName ? "Campeão da partida" : "Resultado"}
+          </p>
+          <h2 className="mt-1 text-3xl font-black text-white">
+            {winnerName ?? "Empate"}
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            {playerNames.own} × {playerNames.rival} ·{" "}
+            {battle.rounds ?? events.length} ações
+          </p>
         </div>
       )}
 
