@@ -11,7 +11,8 @@ export type WorldTrainer = {
   name: string;
   title: string;
   intro: string;
-  portraitUrl: string;
+  portraitUrl?: string;
+  badgeId?: string;
   prerequisiteId?: string;
   team: WorldTrainerMascot[];
   firstWinReward: { pokeBalls?: number; potions?: number; antidotes?: number; zikaCoins?: number };
@@ -42,6 +43,30 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
       { pokemonId: 14, level: 6, role: "DEFENDER", stats: { force: 11, agility: 9, charisma: 10, instinct: 14, vitality: 22 } },
       { pokemonId: 15, level: 8, role: "DUELIST", stats: { force: 24, agility: 23, charisma: 13, instinct: 21, vitality: 18 } },
     ], firstWinReward: { pokeBalls: 2, potions: 1 },
+  },
+  {
+    id: "pewter-camper-liam", locationId: "pewter-city", name: "Liam", title: "Campista do Ginásio",
+    intro: "Pedra não precisa ser rápida quando sabe exatamente onde aguentar o impacto.",
+    team: [
+      { pokemonId: 74, level: 9, role: "DEFENDER", stats: { force: 22, agility: 11, charisma: 12, instinct: 15, vitality: 28 } },
+      { pokemonId: 524, level: 9, role: "GUARDIAN", stats: { force: 23, agility: 10, charisma: 16, instinct: 13, vitality: 29 } },
+    ], firstWinReward: { potions: 1, zikaCoins: 30 },
+  },
+  {
+    id: "pewter-hiker-marcus", locationId: "pewter-city", name: "Marcus", title: "Montanhista Veterano",
+    intro: "Força abre caminhos. Resistência decide quem permanece de pé quando a poeira baixa.", prerequisiteId: "pewter-camper-liam",
+    team: [
+      { pokemonId: 74, level: 10, role: "ATTACKER", stats: { force: 27, agility: 12, charisma: 12, instinct: 17, vitality: 26 } },
+      { pokemonId: 95, level: 11, role: "GUARDIAN", stats: { force: 30, agility: 13, charisma: 18, instinct: 18, vitality: 34 } },
+    ], firstWinReward: { pokeBalls: 2, zikaCoins: 50 },
+  },
+  {
+    id: "pewter-leader-brock", locationId: "pewter-city", name: "Brock", title: "Líder do Ginásio de Pewter",
+    intro: "Uma base sólida sustenta qualquer sonho. Mostre que sua equipe aprendeu a atravessar Kanto unida.", prerequisiteId: "pewter-hiker-marcus", badgeId: "boulder-badge",
+    team: [
+      { pokemonId: 74, level: 12, role: "DEFENDER", stats: { force: 30, agility: 14, charisma: 18, instinct: 19, vitality: 36 } },
+      { pokemonId: 95, level: 14, role: "GUARDIAN", stats: { force: 38, agility: 16, charisma: 22, instinct: 23, vitality: 44 } },
+    ], firstWinReward: { pokeBalls: 5, potions: 2, zikaCoins: 150 },
   },
 ];
 

@@ -251,6 +251,9 @@ export async function challengeWorldTrainerAction(trainerId: string) {
           where: { playerId: player.id },
           data: {
             defeatedTrainerIds: [...state.defeatedTrainerIds, trainer.id],
+            badges: trainer.badgeId && !state.badges.includes(trainer.badgeId)
+              ? [...state.badges, trainer.badgeId]
+              : state.badges,
             inventoryJson: {
               ...inventory,
               pokeBalls: Number(inventory.pokeBalls ?? 0) + (reward.pokeBalls ?? 0),

@@ -72,7 +72,8 @@ type Trainer = {
   name: string;
   title: string;
   intro: string;
-  portraitUrl: string;
+  portraitUrl?: string;
+  badgeId?: string;
   prerequisiteId?: string;
   firstWinReward: { pokeBalls?: number; potions?: number; antidotes?: number; zikaCoins?: number };
   team: Array<{ pokemonId: number; level: number; role: string; name: string; spriteUrl: string }>;
@@ -293,9 +294,9 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
             const defeated = initialState.defeatedTrainerIds.includes(trainer.id);
             const locked = Boolean(trainer.prerequisiteId && !initialState.defeatedTrainerIds.includes(trainer.prerequisiteId));
             return <article key={trainer.id} className={`relative overflow-hidden rounded-2xl border p-4 pt-40 ${defeated ? "border-emerald-300/20 bg-emerald-950/80" : locked ? "border-white/5 bg-slate-950/85 opacity-55" : "border-fuchsia-300/20 bg-slate-950/85"}`}>
-              <img src={trainer.portraitUrl} alt={trainer.name} className="pointer-events-none absolute -right-2 top-0 h-48 w-40 object-contain object-top" />
+              {trainer.portraitUrl ? <img src={trainer.portraitUrl} alt={trainer.name} className="pointer-events-none absolute -right-2 top-0 h-48 w-40 object-contain object-top" /> : <div className="pointer-events-none absolute inset-x-0 top-0 flex h-40 items-center justify-center bg-[radial-gradient(circle,rgba(217,70,239,.16),transparent_65%)]"><span className="font-pixel text-5xl text-white/10">VS</span></div>}
               <div className="absolute inset-x-0 top-24 h-20 bg-gradient-to-t from-slate-950 to-transparent" />
-              <div className="relative flex items-start justify-between gap-2"><div><span className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">{trainer.title}</span><h3 className="text-lg font-black text-white">{trainer.name}</h3></div>{defeated && <Trophy className="h-5 w-5 text-emerald-300" />}</div>
+              <div className="relative flex items-start justify-between gap-2"><div><span className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">{trainer.title}</span><h3 className="text-lg font-black text-white">{trainer.name}</h3>{trainer.badgeId && <span className="mt-1 inline-flex rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[8px] font-black uppercase text-amber-200">Vale a Boulder Badge</span>}</div>{defeated && <Trophy className="h-5 w-5 text-emerald-300" />}</div>
               <p className="mt-2 min-h-10 text-[10px] leading-4 text-slate-400">“{trainer.intro}”</p>
               <div className="mt-3 flex gap-2">{trainer.team.map((mascot, index) => <div key={`${trainer.id}-${index}`} className="min-w-0 flex-1 rounded-xl bg-slate-950/70 p-2 text-center"><img src={mascot.spriteUrl} alt={mascot.name} className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]" /><b className="block truncate text-[9px] text-white">{mascot.name}</b><span className="text-[8px] text-slate-500">Nv.{mascot.level}</span></div>)}</div>
               <button disabled={pending || locked || Boolean(encounters.active)} onClick={() => act(() => challengeWorldTrainerAction(trainer.id), `Batalha contra ${trainer.name} concluída.`)} className="mt-4 w-full rounded-xl bg-gradient-to-r from-fuchsia-300 to-violet-300 px-4 py-2.5 text-[10px] font-black text-slate-950 disabled:opacity-30"><Swords className="mr-1.5 inline h-3.5 w-3.5" />{locked ? "Derrote o treinador anterior" : defeated ? "Revanche sem nova recompensa" : "Desafiar treinador"}</button>
