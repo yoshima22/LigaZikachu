@@ -107,24 +107,27 @@ export function ArenaDraftClient({
   presets,
   activeMatch,
   history,
-  leaderboard,
+  leaderboards,
   isAdmin,
 }: {
   species: Species[];
   presets: Preset[];
   activeMatch: Match | null;
   history: Array<Match & { result: string }>;
-  leaderboard: Array<{
-    playerId: string;
-    name: string;
-    wins: number;
-    losses: number;
-    draws: number;
-    matches: number;
-    rating: number;
-    winRate: number;
-    provisional: boolean;
-  }>;
+  leaderboards: Record<
+    "CUSTOM" | "REAL",
+    Array<{
+      playerId: string;
+      name: string;
+      wins: number;
+      losses: number;
+      draws: number;
+      matches: number;
+      rating: number;
+      winRate: number;
+      provisional: boolean;
+    }>
+  >;
   isAdmin: boolean;
 }) {
   const router = useRouter();
@@ -159,6 +162,7 @@ export function ArenaDraftClient({
   const [presetPage, setPresetPage] = useState(1);
   // Modo de montagem: "CUSTOM" (mascotes construídos) ou "REAL" (meus mascotes).
   const [buildMode, setBuildMode] = useState<"CUSTOM" | "REAL">("CUSTOM");
+  const [rankMode, setRankMode] = useState<"CUSTOM" | "REAL">("CUSTOM");
   const [renamingPresetId, setRenamingPresetId] = useState<string | null>(null);
   const [renameValue, setRenameValue] = useState("");
   // Buffer de digitação dos status: guarda o texto cru enquanto o jogador digita
@@ -1536,19 +1540,36 @@ export function ArenaDraftClient({
               <b className="text-amber-300">provisório</b> (não disputa o topo
               oficial). Cancelamentos e partidas com admin não contam.
             </p>
+            {/* Ranking separado por modo */}
+            <div className="mt-3 flex gap-2">
+              {(
+                [
+                  ["CUSTOM", "⚙️ Customizado"],
+                  ["REAL", "🐾 Meus mascotes"],
+                ] as const
+              ).map(([m, label]) => (
+                <button
+                  key={m}
+                  onClick={() => setRankMode(m)}
+                  className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${rankMode === m ? (m === "REAL" ? "bg-emerald-400 text-slate-950" : "bg-cyan-300 text-slate-950") : "border border-white/10 text-slate-400"}`}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
             <Link
-              href="/combates/arena-draft/ranking-mascotes"
+              href={`/combates/arena-draft/ranking-mascotes?mode=${rankMode}`}
               className="mt-3 inline-flex rounded-lg border border-fuchsia-300/25 px-3 py-2 text-[10px] font-bold text-fuchsia-200 hover:bg-fuchsia-300/5"
             >
               Ver ranking por mascote
             </Link>
             <div className="mt-4 space-y-2">
-              {leaderboard.length === 0 ? (
+              {leaderboards[rankMode].length === 0 ? (
                 <p className="rounded-xl border border-dashed border-white/10 p-8 text-center text-sm text-slate-500">
-                  Aguardando amostra mínima.
+                  Aguardando amostra mínima neste modo.
                 </p>
               ) : (
-                leaderboard.map((r, i) => (
+                leaderboards[rankMode].map((r, i) => (
                   <div
                     key={r.playerId}
                     className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/10 p-3"

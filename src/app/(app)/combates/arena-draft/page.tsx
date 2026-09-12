@@ -72,11 +72,12 @@ export default async function ArenaDraftPage() {
           playerB: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
         },
         orderBy: { finishedAt: "desc" },
-        take: 500,
+        take: 800,
         select: {
           playerAId: true,
           playerBId: true,
           winnerId: true,
+          mode: true,
           playerA: { select: { displayName: true } },
           playerB: { select: { displayName: true } },
         },
@@ -107,78 +108,85 @@ export default async function ArenaDraftPage() {
         ? activeMatch.playerB?.displayName
         : activeMatch.playerA.displayName) ?? null)
     : null;
-  const ratings = new Map<string, number>();
-  for (const match of rankedMatches) {
-    const ratingA = ratings.get(match.playerAId) ?? 1000;
-    const ratingB = ratings.get(match.playerBId!) ?? 1000;
-    const expectedA = 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
-    const scoreA = !match.winnerId
-      ? 0.5
-      : match.winnerId === match.playerAId
-        ? 1
-        : 0;
-    ratings.set(
-      match.playerAId,
-      Math.round(ratingA + 32 * (scoreA - expectedA)),
-    );
-    ratings.set(
-      match.playerBId!,
-      Math.round(ratingB + 32 * (1 - scoreA - (1 - expectedA))),
-    );
-  }
-  const board = Array.from(
-    rankedMatches
-      .reduce<
-        Map<
-          string,
-          {
-            playerId: string;
-            name: string;
-            wins: number;
-            losses: number;
-            draws: number;
-            matches: number;
+  // Ranking Elo calculado por modo (partidas de modos diferentes não se
+  // misturam no mesmo rating).
+  const buildBoard = (
+    matches: typeof rankedMatches,
+  ) => {
+    const ratings = new Map<string, number>();
+    for (const match of matches) {
+      const ratingA = ratings.get(match.playerAId) ?? 1000;
+      const ratingB = ratings.get(match.playerBId!) ?? 1000;
+      const expectedA = 1 / (1 + 10 ** ((ratingB - ratingA) / 400));
+      const scoreA = !match.winnerId
+        ? 0.5
+        : match.winnerId === match.playerAId
+          ? 1
+          : 0;
+      ratings.set(
+        match.playerAId,
+        Math.round(ratingA + 32 * (scoreA - expectedA)),
+      );
+      ratings.set(
+        match.playerBId!,
+        Math.round(ratingB + 32 * (1 - scoreA - (1 - expectedA))),
+      );
+    }
+    return Array.from(
+      matches
+        .reduce<
+          Map<
+            string,
+            {
+              playerId: string;
+              name: string;
+              wins: number;
+              losses: number;
+              draws: number;
+              matches: number;
+            }
+          >
+        >((map, m) => {
+          for (const side of [
+            { id: m.playerAId, name: m.playerA.displayName },
+            { id: m.playerBId!, name: m.playerB!.displayName },
+          ]) {
+            const row = map.get(side.id) ?? {
+              playerId: side.id,
+              name: side.name,
+              wins: 0,
+              losses: 0,
+              draws: 0,
+              matches: 0,
+            };
+            row.matches++;
+            if (!m.winnerId) row.draws++;
+            else if (m.winnerId === side.id) row.wins++;
+            else row.losses++;
+            map.set(side.id, row);
           }
-        >
-      >((map, m) => {
-        for (const side of [
-          { id: m.playerAId, name: m.playerA.displayName },
-          { id: m.playerBId!, name: m.playerB!.displayName },
-        ]) {
-          const row = map.get(side.id) ?? {
-            playerId: side.id,
-            name: side.name,
-            wins: 0,
-            losses: 0,
-            draws: 0,
-            matches: 0,
-          };
-          row.matches++;
-          if (!m.winnerId) row.draws++;
-          else if (m.winnerId === side.id) row.wins++;
-          else row.losses++;
-          map.set(side.id, row);
-        }
-        return map;
-      }, new Map())
-      .values(),
-  )
-    .filter((r) => r.matches >= 1)
-    .map((row) => ({
-      ...row,
-      rating: ratings.get(row.playerId) ?? 1000,
-      winRate: Math.round((row.wins / row.matches) * 100),
-      // Abaixo do mínimo de partidas o jogador aparece, mas marcado como
-      // provisório (ainda não conta para o topo oficial da temporada).
-      provisional: row.matches < ARENA_DRAFT_RULES.minimumRankedMatches,
-    }))
-    // Qualificados primeiro (por rating); provisórios depois.
-    .sort(
-      (a, b) =>
-        Number(a.provisional) - Number(b.provisional) ||
-        b.rating - a.rating ||
-        b.wins - a.wins,
-    );
+          return map;
+        }, new Map())
+        .values(),
+    )
+      .filter((r) => r.matches >= 1)
+      .map((row) => ({
+        ...row,
+        rating: ratings.get(row.playerId) ?? 1000,
+        winRate: Math.round((row.wins / row.matches) * 100),
+        provisional: row.matches < ARENA_DRAFT_RULES.minimumRankedMatches,
+      }))
+      .sort(
+        (a, b) =>
+          Number(a.provisional) - Number(b.provisional) ||
+          b.rating - a.rating ||
+          b.wins - a.wins,
+      );
+  };
+  const boards = {
+    CUSTOM: buildBoard(rankedMatches.filter((m) => (m.mode ?? "CUSTOM") !== "REAL")),
+    REAL: buildBoard(rankedMatches.filter((m) => m.mode === "REAL")),
+  };
   return (
     <ArenaDraftClient
       species={species}
@@ -229,7 +237,7 @@ export default async function ArenaDraftPage() {
               ? "Derrota"
               : "Empate",
       }))}
-      leaderboard={board}
+      leaderboards={boards}
       isAdmin={
         session.user.role === "ADMIN" || session.user.role === "SUPER_ADMIN"
       }

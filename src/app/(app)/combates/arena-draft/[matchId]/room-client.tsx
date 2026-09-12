@@ -577,6 +577,12 @@ function StrategyWindow({
     () => pets.filter((p) => p.hp === null || p.hp > 0),
     [pets],
   );
+  // Só revela os cards de decisão (com o HP final do segmento) depois que a
+  // animação do combate termina — assim o banco não dá spoiler da luta.
+  const [revealed, setRevealed] = useState(false);
+  useEffect(() => {
+    setRevealed(false);
+  }, [strategy.checkpointTurn]);
   const toggle = (id: string) =>
     setActive((cur) =>
       cur.includes(id)
@@ -603,7 +609,26 @@ function StrategyWindow({
         playerNames={playerNames}
         battle={battle}
         checkpoint={strategy.checkpointTurn}
+        onFinish={() => setRevealed(true)}
       />
+      {!revealed && (
+        <div className="mb-4 rounded-2xl border border-cyan-300/20 bg-cyan-300/[.04] p-4 text-center">
+          <p className="text-sm font-bold text-cyan-100">
+            Assistindo ao combate deste segmento…
+          </p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            Os cards de decisão aparecem ao fim da animação (sem spoiler).
+          </p>
+          <button
+            onClick={() => setRevealed(true)}
+            className="mt-3 rounded-lg border border-cyan-300/40 px-4 py-2 text-xs font-black text-cyan-200 hover:bg-cyan-300/10"
+          >
+            Pular para as decisões ▸
+          </button>
+        </div>
+      )}
+      {revealed && (
+      <>
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-black text-cyan-200">
@@ -825,6 +850,8 @@ function StrategyWindow({
           </div>
         </div>
       </div>
+      </>
+      )}
       {/* Barra fixa com tempo + travar, sempre visível (padrão Torre dos Rebeldes). */}
       <div className="fixed inset-x-0 bottom-0 z-30 border-t border-white/10 bg-slate-950/90 p-3 backdrop-blur">
         <div className="mx-auto flex max-w-4xl items-center gap-3">
@@ -867,6 +894,7 @@ function AnimatedBattle({
   from = 0,
   to,
   controls = false,
+  onFinish,
 }: {
   leftName: string;
   rightName: string;
@@ -876,6 +904,7 @@ function AnimatedBattle({
   from?: number;
   to?: number;
   controls?: boolean;
+  onFinish?: () => void;
 }) {
   const end = to ?? events.length - 1;
   const startCursor = Math.max(-1, from - 1);
@@ -883,14 +912,20 @@ function AnimatedBattle({
   const [playing, setPlaying] = useState(true);
   // Ritmo lento por padrão para dar tempo de ler cada ação e efeito.
   const [speedMs, setSpeedMs] = useState(1300);
+  const finishedRef = useRef(false);
   useEffect(() => {
     setCursor(Math.max(-1, from - 1));
     setPlaying(true);
+    finishedRef.current = false;
   }, [from, end, events.length]);
   useEffect(() => {
     if (!playing) return;
     if (cursor >= end) {
       setPlaying(false);
+      if (!finishedRef.current) {
+        finishedRef.current = true;
+        onFinish?.();
+      }
       return;
     }
     const timer = window.setTimeout(
@@ -898,6 +933,7 @@ function AnimatedBattle({
       speedMs,
     );
     return () => window.clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [playing, cursor, end, speedMs]);
   const hp = new Map<string, number>();
   const petById = new Map<string, Pet>();
@@ -1208,12 +1244,14 @@ function CombatStage({
   playerNames,
   battle,
   checkpoint,
+  onFinish,
 }: {
   own: Pet[];
   rival: Pet[];
   playerNames: { own: string; rival: string };
   battle: Battle;
   checkpoint: number | null;
+  onFinish?: () => void;
 }) {
   const events = battle?.events ?? [];
   const previousCheckpoint =
@@ -1267,6 +1305,7 @@ function CombatStage({
             events={events}
             from={from}
             to={to}
+            onFinish={onFinish}
           />
         ) : (
           <p className="py-6 text-center text-xs text-slate-500">
@@ -1814,70 +1853,85 @@ function Replay({
     .map(statFor)
     .sort((a, b) => b.kos - a.kos || b.dealt - a.dealt);
   const mvp = stats[0];
+  // O resultado (campeão/estatísticas) só aparece depois que a luta rolar até o
+  // fim — evita spoiler e garante que a animação final seja assistida.
+  const [revealed, setRevealed] = useState(events.length === 0);
   return (
     <section className="space-y-4">
-      {/* Banner do campeão */}
-      <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
-        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
-          {winnerName ? "🏆" : "🤝"}
-        </div>
-        <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
-          {winnerName ? "Campeão da partida" : "Resultado"}
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
+          Reprodução do combate
         </p>
-        <h2 className="mt-1 text-3xl font-black text-white">
-          {winnerName ? winnerName : "Empate"}
-        </h2>
-        <p className="mt-1 text-xs text-slate-400">
-          {playerNames.own} × {playerNames.rival} · {battle.rounds ?? events.length} ações
-        </p>
-        {mvp && (
-          <div className="mx-auto mt-4 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.03] px-4 py-2">
-            <img
-              src={mvp.pet.sprite}
-              alt=""
-              className="h-12 w-12 object-contain [image-rendering:pixelated]"
-            />
-            <div className="text-left">
-              <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
-                Destaque da luta
-              </p>
-              <b className="text-sm text-white">{mvp.pet.name}</b>
-              <p className="text-[10px] text-slate-400">
-                {mvp.kos} KO · {mvp.dealt} de dano
-              </p>
-            </div>
-          </div>
-        )}
-        <div className="mt-5">
-          <Link
-            href="/combates/arena-draft"
-            className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-5 py-2.5 text-xs font-black text-white hover:bg-white/15"
-          >
-            ← Voltar para a Arena Draft
-          </Link>
-        </div>
+        <Link
+          href="/combates/arena-draft"
+          className="inline-flex items-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-black text-white hover:bg-white/15"
+        >
+          ← Voltar
+        </Link>
       </div>
 
-      {/* Replay animado com controles locais */}
+      {/* Replay animado — toca até o fim antes de revelar o resultado */}
       {events.length > 0 && (
         <div className="rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
-            Reprodução do combate
-          </p>
-          <div className="mt-3">
-            <AnimatedBattle
-              leftName={playerNames.own}
-              rightName={playerNames.rival}
-              leftPets={leftPets}
-              rightPets={rightPets}
-              events={events}
-              controls
-            />
+          <AnimatedBattle
+            leftName={playerNames.own}
+            rightName={playerNames.rival}
+            leftPets={leftPets}
+            rightPets={rightPets}
+            events={events}
+            controls
+            onFinish={() => setRevealed(true)}
+          />
+          {!revealed && (
+            <button
+              onClick={() => setRevealed(true)}
+              className="mt-3 w-full rounded-xl border border-[#FFCB05]/40 py-2.5 text-xs font-black text-[#FFCB05] hover:bg-[#FFCB05]/10"
+            >
+              Pular para o resultado ▸
+            </button>
+          )}
+        </div>
+      )}
+
+      {/* Banner do campeão (revelado ao fim) */}
+      {revealed && (
+        <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
+          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
+            {winnerName ? "🏆" : "🤝"}
           </div>
+          <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
+            {winnerName ? "Campeão da partida" : "Resultado"}
+          </p>
+          <h2 className="mt-1 text-3xl font-black text-white">
+            {winnerName ? winnerName : "Empate"}
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            {playerNames.own} × {playerNames.rival} ·{" "}
+            {battle.rounds ?? events.length} ações
+          </p>
+          {mvp && (
+            <div className="mx-auto mt-4 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.03] px-4 py-2">
+              <img
+                src={mvp.pet.sprite}
+                alt=""
+                className="h-12 w-12 object-contain [image-rendering:pixelated]"
+              />
+              <div className="text-left">
+                <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
+                  Destaque da luta
+                </p>
+                <b className="text-sm text-white">{mvp.pet.name}</b>
+                <p className="text-[10px] text-slate-400">
+                  {mvp.kos} KO · {mvp.dealt} de dano
+                </p>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* Estatísticas de luta */}
+      {revealed && (
       <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
         <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300">
           Estatísticas por mascote
@@ -1932,8 +1986,10 @@ function Replay({
           </table>
         </div>
       </div>
+      )}
 
       {/* Log completo, recolhido por padrão */}
+      {revealed && (
       <details className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
         <summary className="cursor-pointer text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-cyan-200">
           Ver log completo ({events.length} eventos)
@@ -1960,6 +2016,7 @@ function Replay({
           ))}
         </div>
       </details>
+      )}
     </section>
   );
 }

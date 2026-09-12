@@ -24,11 +24,19 @@ type Row = {
   healing: number;
   score: number;
 };
-export default async function MascotRankingPage() {
+export default async function MascotRankingPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ mode?: string }>;
+}) {
+  const { mode: modeParam } = await searchParams;
+  const mode = modeParam === "REAL" ? "REAL" : "CUSTOM";
   const matches = await prisma.arenaDraftMatch.findMany({
     where: {
       state: "FINISHED",
       playerBId: { not: null },
+      // Ranking por mascote separado por modo.
+      mode,
       playerA: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
       playerB: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
     },
@@ -116,6 +124,22 @@ export default async function MascotRankingPage() {
         <h1 className="mt-2 text-3xl font-black text-white">
           Ranking por mascote e jogador
         </h1>
+        <div className="mt-3 flex gap-2">
+          {(
+            [
+              ["CUSTOM", "⚙️ Customizado"],
+              ["REAL", "🐾 Meus mascotes"],
+            ] as const
+          ).map(([m, label]) => (
+            <Link
+              key={m}
+              href={`/combates/arena-draft/ranking-mascotes?mode=${m}`}
+              className={`rounded-lg px-3 py-1.5 text-[11px] font-bold ${mode === m ? (m === "REAL" ? "bg-emerald-400 text-slate-950" : "bg-cyan-300 text-slate-950") : "border border-white/10 text-slate-400"}`}
+            >
+              {label}
+            </Link>
+          ))}
+        </div>
         <p className="mt-2 max-w-3xl text-sm text-slate-400">
           Amostra mínima de 5 partidas por combinação. Partidas com
           administradores são removidas integralmente.
