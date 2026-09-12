@@ -1,0 +1,47 @@
+export type WorldTrainerMascot = {
+  pokemonId: number;
+  level: number;
+  role: string;
+  stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+};
+
+export type WorldTrainer = {
+  id: string;
+  locationId: string;
+  name: string;
+  title: string;
+  intro: string;
+  prerequisiteId?: string;
+  team: WorldTrainerMascot[];
+  firstWinReward: { pokeBalls?: number; potions?: number; antidotes?: number; zikaCoins?: number };
+};
+
+export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
+  {
+    id: "viridian-bug-catcher-01", locationId: "viridian-forest", name: "Noah", title: "Jovem Caçador de Insetos",
+    intro: "Você ouviu o farfalhar também? Meus parceiros conhecem cada curva desta trilha.",
+    team: [
+      { pokemonId: 10, level: 4, role: "ATTACKER", stats: { force: 12, agility: 14, charisma: 9, instinct: 12, vitality: 12 } },
+      { pokemonId: 13, level: 4, role: "OPPORTUNIST", stats: { force: 11, agility: 13, charisma: 8, instinct: 15, vitality: 11 } },
+    ], firstWinReward: { pokeBalls: 1 },
+  },
+  {
+    id: "viridian-bug-catcher-02", locationId: "viridian-forest", name: "Milo", title: "Caçador do Dossel",
+    intro: "A floresta recompensa paciência. Vamos ver se sua equipe sabe esperar a abertura certa.", prerequisiteId: "viridian-bug-catcher-01",
+    team: [
+      { pokemonId: 11, level: 5, role: "DEFENDER", stats: { force: 10, agility: 8, charisma: 10, instinct: 12, vitality: 20 } },
+      { pokemonId: 10, level: 5, role: "FLANK", stats: { force: 13, agility: 18, charisma: 9, instinct: 14, vitality: 12 } },
+    ], firstWinReward: { antidotes: 1 },
+  },
+  {
+    id: "viridian-bug-catcher-03", locationId: "viridian-forest", name: "Iris", title: "Veterana da Colmeia",
+    intro: "Você chegou longe. Agora enfrente uma equipe que luta como uma colmeia de verdade.", prerequisiteId: "viridian-bug-catcher-02",
+    team: [
+      { pokemonId: 13, level: 6, role: "OPPORTUNIST", stats: { force: 14, agility: 15, charisma: 10, instinct: 19, vitality: 13 } },
+      { pokemonId: 14, level: 6, role: "DEFENDER", stats: { force: 11, agility: 9, charisma: 10, instinct: 14, vitality: 22 } },
+      { pokemonId: 15, level: 8, role: "DUELIST", stats: { force: 24, agility: 23, charisma: 13, instinct: 21, vitality: 18 } },
+    ], firstWinReward: { pokeBalls: 2, potions: 1 },
+  },
+];
+
+export const KANTO_MVP_TRAINER_BY_ID = new Map(KANTO_MVP_TRAINERS.map((trainer) => [trainer.id, trainer]));

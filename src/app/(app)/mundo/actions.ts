@@ -11,6 +11,8 @@ import { PERSONALITIES } from "@/lib/mascot-data";
 import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
+import { KANTO_MVP_TRAINER_BY_ID } from "@/world-data/kanto/trainers";
+import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 
 const CAPTURE_CHANCE: Record<string, number> = {
   COMMON: 72,
@@ -59,6 +61,15 @@ export async function getAdminWorldEncounters() {
     }),
   ]);
   return { active, history };
+}
+
+export async function getAdminWorldBattles() {
+  const player = await adminPlayer();
+  return prisma.worldBattleSession.findMany({
+    where: { playerId: player.id },
+    orderBy: { createdAt: "desc" },
+    take: 4,
+  });
 }
 
 export async function exploreWorldLocationAction() {
@@ -201,6 +212,76 @@ export async function buyWorldMartItemAction(itemId: string, quantity: number) {
   }
 }
 
+export async function challengeWorldTrainerAction(trainerId: string) {
+  try {
+    const player = await adminPlayer();
+    const trainer = KANTO_MVP_TRAINER_BY_ID.get(trainerId);
+    if (!trainer) throw new Error("Treinador desconhecido.");
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const state = await tx.worldPlayerState.findUnique({ where: { playerId: player.id } });
+      if (!state || state.travelingToId || state.currentLocationId !== trainer.locationId) throw new Error("Você não está diante deste treinador.");
+      if (trainer.prerequisiteId && !state.defeatedTrainerIds.includes(trainer.prerequisiteId)) throw new Error("Derrote o treinador anterior primeiro.");
+      const activeEncounter = await tx.worldEncounterSession.findFirst({ where: { playerId: player.id, status: "ACTIVE" }, select: { id: true } });
+      if (activeEncounter) throw new Error("Resolva seu encontro selvagem antes da batalha.");
+      let mascots = await tx.mascot.findMany({ where: { playerId: player.id, isEquipped: true }, take: 6 });
+      if (mascots.length === 0) mascots = await tx.mascot.findMany({ where: { playerId: player.id }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }], take: 6 });
+      if (mascots.length === 0) throw new Error("Você precisa ter ao menos um mascote para batalhar.");
+      const teamA = mascots.map((mascot, index) => toLeagueMascot(mascot, index + 1, mascot.preferredCombatRole));
+      const teamB = trainer.team.map((entry, index) => toLeagueMascot({
+        id: `world-npc:${trainer.id}:${index}`,
+        playerId: `world-npc:${trainer.id}`,
+        pokemonId: entry.pokemonId,
+        nickname: null,
+        level: entry.level,
+        statForce: entry.stats.force,
+        statAgility: entry.stats.agility,
+        statCharisma: entry.stats.charisma,
+        statInstinct: entry.stats.instinct,
+        statVitality: entry.stats.vitality,
+        personality: null,
+      }, index + 1, entry.role));
+      const battle = runLeagueCombat(teamA, teamB);
+      const won = battle.winner === "A";
+      const firstWin = won && !state.defeatedTrainerIds.includes(trainer.id);
+      const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
+      const reward = firstWin ? trainer.firstWinReward : {};
+      if (firstWin) {
+        await tx.worldPlayerState.update({
+          where: { playerId: player.id },
+          data: {
+            defeatedTrainerIds: [...state.defeatedTrainerIds, trainer.id],
+            inventoryJson: {
+              ...inventory,
+              pokeBalls: Number(inventory.pokeBalls ?? 0) + (reward.pokeBalls ?? 0),
+              potions: Number(inventory.potions ?? 0) + (reward.potions ?? 0),
+              antidotes: Number(inventory.antidotes ?? 0) + (reward.antidotes ?? 0),
+            } as Prisma.InputJsonValue,
+          },
+        });
+        if (reward.zikaCoins) await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.MATCH_WIN_REWARD, amount: reward.zikaCoins, description: `World Mode: vitória contra ${trainer.name}` });
+      }
+      const session = await tx.worldBattleSession.create({
+        data: {
+          playerId: player.id,
+          locationId: trainer.locationId,
+          trainerId: trainer.id,
+          trainerName: trainer.name,
+          winner: battle.winner,
+          rounds: battle.rounds,
+          rewardJson: firstWin ? reward : Prisma.JsonNull,
+          resultJson: battle as unknown as Prisma.InputJsonValue,
+        },
+      });
+      return { won, draw: battle.winner === "DRAW", sessionId: session.id, firstWin };
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível iniciar a batalha." };
+  }
+}
+
 export async function startWorldAdventureAction() {
   try {
     const player = await adminPlayer();
@@ -333,6 +414,7 @@ export async function resetAdminWorldAction() {
       prisma.mascot.deleteMany({
         where: { playerId: player.id, hatchedFromEggOrigin: { startsWith: "WORLD:" } },
       }),
+      prisma.worldBattleSession.deleteMany({ where: { playerId: player.id } }),
       prisma.worldEncounterSession.deleteMany({ where: { playerId: player.id } }),
       prisma.worldTravelLog.deleteMany({ where: { playerId: player.id } }),
       prisma.worldPlayerState.deleteMany({ where: { playerId: player.id } }),

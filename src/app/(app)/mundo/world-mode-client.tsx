@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   ArrowRight,
   Backpack,
+  ChevronDown,
   Clock3,
   FlaskConical,
   Footprints,
@@ -20,13 +21,16 @@ import {
   ShoppingBasket,
   Sparkles,
   Store,
+  Swords,
   Trees,
+  Trophy,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { WorldEncounterConfig, WorldLocationConfig } from "@/world-data/types";
 import type { WorldMartItem } from "@/world-data/types";
 import {
   buyWorldMartItemAction,
+  challengeWorldTrainerAction,
   finishWorldTravelNowAction,
   exploreWorldLocationAction,
   resetAdminWorldAction,
@@ -43,6 +47,7 @@ type State = {
   currentLocationId: string;
   discoveredLocationIds: string[];
   badges: string[];
+  defeatedTrainerIds: string[];
   fatigue: number;
   inventory: { pokeBalls?: number; potions?: number; antidotes?: number };
   travelingToId: string | null;
@@ -60,6 +65,26 @@ type Encounter = {
   spriteUrl?: string;
   createdAt: string;
   resolvedAt?: string | null;
+};
+type Trainer = {
+  id: string;
+  locationId: string;
+  name: string;
+  title: string;
+  intro: string;
+  prerequisiteId?: string;
+  firstWinReward: { pokeBalls?: number; potions?: number; antidotes?: number; zikaCoins?: number };
+  team: Array<{ pokemonId: number; level: number; role: string; name: string; spriteUrl: string }>;
+};
+type Battle = {
+  id: string;
+  trainerId: string;
+  trainerName: string;
+  winner: string;
+  rounds: number;
+  reward: unknown;
+  result: unknown;
+  createdAt: string;
 };
 
 const TYPE_STYLE: Record<string, { icon: typeof MapPin; color: string }> = {
@@ -98,7 +123,7 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
@@ -114,6 +139,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
   const byId = useMemo(() => new Map(locations.map((location) => [location.id, location])), [locations]);
   const selected = byId.get(selectedId) ?? locations[0];
   const current = initialState ? byId.get(initialState.currentLocationId) : null;
+  const localTrainers = trainers.filter((trainer) => trainer.locationId === current?.id);
   const reachable = new Set(current?.connections.map((connection) => connection.to) ?? []);
   const act = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
@@ -251,6 +277,32 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
               <p className="mt-3 text-[9px] text-slate-600">Preços provisórios do protótipo, centralizados na configuração de Kanto.</p>
             </div>
           )}
+        </section>
+      )}
+
+      {!initialState.travelingToId && localTrainers.length > 0 && (
+        <section className="rounded-[2rem] border border-fuchsia-300/15 bg-[radial-gradient(circle_at_top_left,rgba(217,70,239,.13),transparent_38%),#070b16] p-5 md:p-7">
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-fuchsia-300">Treinadores da região</span><h2 className="mt-1 text-2xl font-black text-white">A trilha também testa sua equipe</h2><p className="mt-1 text-xs text-slate-400">O motor oficial resolve Agilidade, tipos, posturas, cura, buffs, debuffs e personalidades.</p></div><span className="rounded-full bg-white/[.04] px-3 py-1.5 text-[9px] font-bold text-slate-400">Equipe: até 6 mascotes equipados</span></div>
+          <div className="mt-5 grid gap-3 lg:grid-cols-3">{localTrainers.map((trainer) => {
+            const defeated = initialState.defeatedTrainerIds.includes(trainer.id);
+            const locked = Boolean(trainer.prerequisiteId && !initialState.defeatedTrainerIds.includes(trainer.prerequisiteId));
+            return <article key={trainer.id} className={`rounded-2xl border p-4 ${defeated ? "border-emerald-300/20 bg-emerald-300/[.035]" : locked ? "border-white/5 bg-white/[.015] opacity-55" : "border-fuchsia-300/20 bg-fuchsia-300/[.035]"}`}>
+              <div className="flex items-start justify-between gap-2"><div><span className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">{trainer.title}</span><h3 className="text-lg font-black text-white">{trainer.name}</h3></div>{defeated && <Trophy className="h-5 w-5 text-emerald-300" />}</div>
+              <p className="mt-2 min-h-10 text-[10px] leading-4 text-slate-400">“{trainer.intro}”</p>
+              <div className="mt-3 flex gap-2">{trainer.team.map((mascot, index) => <div key={`${trainer.id}-${index}`} className="min-w-0 flex-1 rounded-xl bg-slate-950/70 p-2 text-center"><img src={mascot.spriteUrl} alt={mascot.name} className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]" /><b className="block truncate text-[9px] text-white">{mascot.name}</b><span className="text-[8px] text-slate-500">Nv.{mascot.level}</span></div>)}</div>
+              <button disabled={pending || locked || Boolean(encounters.active)} onClick={() => act(() => challengeWorldTrainerAction(trainer.id), `Batalha contra ${trainer.name} concluída.`)} className="mt-4 w-full rounded-xl bg-gradient-to-r from-fuchsia-300 to-violet-300 px-4 py-2.5 text-[10px] font-black text-slate-950 disabled:opacity-30"><Swords className="mr-1.5 inline h-3.5 w-3.5" />{locked ? "Derrote o treinador anterior" : defeated ? "Revanche sem nova recompensa" : "Desafiar treinador"}</button>
+            </article>;
+          })}</div>
+        </section>
+      )}
+
+      {battles.length > 0 && (
+        <section className="rounded-[2rem] border border-cyan-300/15 bg-[#060c16] p-5 md:p-7">
+          <span className="text-[9px] font-black uppercase tracking-[.22em] text-cyan-300">Registro de batalhas</span><h2 className="mt-1 text-2xl font-black text-white">Consequências recentes</h2>
+          <div className="mt-4 space-y-2">{battles.map((battle, battleIndex) => {
+            const result = battle.result as { teamADamageDealt?: number; teamBDamageDealt?: number; teamASurvivors?: number; teamBSurvivors?: number; log?: Array<{ turn: number; actorName: string; targetName: string; action: string; damage: number; effect?: string }> };
+            return <details key={battle.id} open={battleIndex === 0} className="group rounded-xl border border-white/8 bg-white/[.025] p-3"><summary className="flex cursor-pointer list-none items-center justify-between gap-3"><div><b className={battle.winner === "A" ? "text-emerald-300" : battle.winner === "DRAW" ? "text-amber-300" : "text-rose-300"}>{battle.winner === "A" ? "Vitória" : battle.winner === "DRAW" ? "Empate" : "Derrota"}</b><span className="ml-2 text-xs text-white">contra {battle.trainerName}</span><p className="text-[9px] text-slate-500">{battle.rounds} rodadas · dano {result.teamADamageDealt ?? 0} × {result.teamBDamageDealt ?? 0} · sobreviventes {result.teamASurvivors ?? 0} × {result.teamBSurvivors ?? 0}</p></div><ChevronDown className="h-4 w-4 text-slate-500 transition group-open:rotate-180" /></summary><div className="mt-3 max-h-64 space-y-1 overflow-y-auto border-t border-white/5 pt-3">{result.log?.slice(-18).map((entry, index) => <p key={`${entry.turn}-${index}`} className="rounded-lg bg-slate-950/60 px-3 py-2 text-[9px] leading-4 text-slate-400"><b className="text-slate-200">T{entry.turn} · {entry.actorName}</b>{entry.action === "HEAL" ? ` curou ${entry.targetName} em ${entry.damage} HP.` : ` atingiu ${entry.targetName} por ${entry.damage}.`} {entry.effect}</p>)}</div></details>;
+          })}</div>
         </section>
       )}
 
