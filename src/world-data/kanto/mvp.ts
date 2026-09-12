@@ -95,6 +95,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
     biome: "Floresta labiríntica",
     description:
       "Uma floresta densa, úmida e cheia de sons. Insetos dominam as trilhas, mas encontros incomuns recompensam exploradores atentos.",
+    imageUrl: "/world-mode/kanto/viridian-forest/background.webp",
     danger: 2,
     map: { x: 54, y: 27 },
     services: [],
@@ -135,4 +136,3 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
 export const KANTO_MVP_BY_ID = new Map(
   KANTO_MVP_LOCATIONS.map((location) => [location.id, location]),
 );
-
