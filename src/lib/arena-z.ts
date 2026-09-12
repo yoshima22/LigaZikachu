@@ -699,6 +699,7 @@ function trySaboteurDisrupt(
 function tryHealerAction(
   actor: ArenaMascot,
   allies: ArenaMascot[],
+  opponents: ArenaMascot[],
   hp: Map<string, number>,
   healCount: Map<string, number>,
 ): {
@@ -706,6 +707,8 @@ function tryHealerAction(
   targetId: string;
   targetName: string;
   healAmount: number;
+  targetHpAfter: number;
+  suppressionPct: number;
 } | null {
   if (actor.combatRole !== "HEALER") return null;
   const count = healCount.get(actor.id) ?? 0;
@@ -720,15 +723,23 @@ function tryHealerAction(
   if (wounded.length === 0) return null;
   wounded.sort((a, b) => (hp.get(a.id) ?? 0) - (hp.get(b.id) ?? 0));
   const target = wounded[0];
-  const heal = getHealerHealAmount(actor);
+  const suppressionPct = aliveSaboteurSuppression(opponents, hp, actor);
+  const heal = Math.max(
+    1,
+    Math.round(getHealerHealAmount(actor) * (1 - suppressionPct)),
+  );
   const currentHp = hp.get(target.id) ?? 0;
-  hp.set(target.id, Math.min(target.hp, currentHp + heal));
+  const targetHpAfter = Math.min(target.hp, currentHp + heal);
+  const effectiveHeal = targetHpAfter - currentHp;
+  hp.set(target.id, targetHpAfter);
   healCount.set(actor.id, count + 1);
   return {
-    effect: `Cuidador ${actor.name} curou ${target.name} em ${heal} HP (${count + 1}/${maxHeals}).`,
+    effect: `Cuidador ${actor.name} curou ${target.name} em ${effectiveHeal} HP (${count + 1}/${maxHeals}).${suppressionPct > 0 ? ` Sabotador inimigo reduziu a cura em ${Math.round(suppressionPct * 100)}%.` : ""}`,
     targetId: target.id,
     targetName: target.name,
-    healAmount: heal,
+    healAmount: effectiveHeal,
+    targetHpAfter,
+    suppressionPct,
   };
 }
 
@@ -885,13 +896,18 @@ function runArenaCombatInternal(
     const all = [
       ...aAlive.map((m) => ({ mascot: m, side: "A" as const })),
       ...dAlive.map((m) => ({ mascot: m, side: "D" as const })),
-    ];
-    all.sort(
-      (x, y) =>
-        getEffectiveStat(y.mascot, debuffs, "agility") -
-        getEffectiveStat(x.mascot, debuffs, "agility") +
-        rand(-3, 3),
-    );
+    ].map((entry) => ({
+      ...entry,
+      initiative:
+        getEffectiveStat(entry.mascot, debuffs, "agility") *
+          personalityAgilityMult(
+            entry.mascot,
+            round,
+            playfulTeamBuff[entry.side],
+          ) +
+        (arenaRandom() * 6 - 3),
+    }));
+    all.sort((x, y) => y.initiative - x.initiative);
 
     for (const entry of all) {
       if ((hp.get(entry.mascot.id) ?? 0) <= 0) continue;
@@ -917,7 +933,13 @@ function runArenaCombatInternal(
         if (opponents.length === 0) break;
 
         // HEALER: may heal instead of attacking
-        const healResult = tryHealerAction(actor, allies, hp, healCount);
+        const healResult = tryHealerAction(
+          actor,
+          allies,
+          opponents,
+          hp,
+          healCount,
+        );
         if (healResult) {
           log.push({
             turn,
@@ -929,6 +951,7 @@ function runArenaCombatInternal(
             targetOwnerId: actor.ownerId,
             action: "HEAL",
             damage: healResult.healAmount,
+            targetHpAfter: healResult.targetHpAfter,
             attackerType: arenaElement(actor),
             defenderType: arenaElement(actor),
             multiplier: 1,

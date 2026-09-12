@@ -1094,7 +1094,12 @@ async function persistCombatSegment(
     battle.posturesB,
     mode,
   );
-  if (teamA.length !== 6 || teamB.length !== 6)
+  if (
+    teamA.length < 1 ||
+    teamA.length > ARENA_DRAFT_RULES.activeSize ||
+    teamB.length < 1 ||
+    teamB.length > ARENA_DRAFT_RULES.activeSize
+  )
     throw new Error("Formação final inválida.");
   const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint] ?? 80;
   const combat = runArenaCombat(teamA, teamB, {
@@ -1257,19 +1262,24 @@ export async function submitArenaDraftStrategyAction(input: {
         throw new Error("Sua estratégia já foi confirmada.");
       const eligible = side === "A" ? battle.eligibleA : battle.eligibleB;
       const unique = [...new Set(input.activeIds)];
-      if (unique.length !== 6 || unique.some((id) => !eligible.includes(id)))
-        throw new Error("Escolha exatamente 6 mascotes válidos.");
       const dead = new Set(
         Object.entries(battle.runtime?.hp ?? {})
           .filter(([, hp]) => hp <= 0)
           .map(([id]) => id),
       );
-      const currentlyActive = new Set(
-        side === "A" ? battle.activeA : battle.activeB,
+      const livingEligible = eligible.filter((id) => !dead.has(id));
+      const requiredActive = Math.min(
+        ARENA_DRAFT_RULES.activeSize,
+        livingEligible.length,
       );
-      if (unique.some((id) => dead.has(id) && !currentlyActive.has(id)))
+      if (
+        unique.length !== requiredActive ||
+        unique.some((id) => !eligible.includes(id) || dead.has(id))
+      )
         throw new Error(
-          "Mascotes derrotados não podem voltar do banco ao campo.",
+          requiredActive === ARENA_DRAFT_RULES.activeSize
+            ? "Escolha exatamente 6 mascotes vivos."
+            : `Sua equipe só possui ${requiredActive} mascote${requiredActive === 1 ? "" : "s"} vivo${requiredActive === 1 ? "" : "s"}; confirme com todos em campo.`,
         );
       const validRoles = new Set([
         "DEFENDER",

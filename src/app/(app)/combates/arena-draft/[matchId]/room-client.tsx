@@ -577,6 +577,7 @@ function StrategyWindow({
     () => pets.filter((p) => p.hp === null || p.hp > 0),
     [pets],
   );
+  const requiredActive = Math.min(6, living.length);
   // Só revela os cards de decisão (com o HP final do segmento) depois que a
   // animação do combate termina — assim o banco não dá spoiler da luta.
   const [revealed, setRevealed] = useState(false);
@@ -632,7 +633,7 @@ function StrategyWindow({
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <p className="text-xs font-black text-cyan-200">
-            {active.length}/6 em campo ·{" "}
+            {active.length}/{requiredActive} em campo ·{" "}
             {Math.max(0, living.length - active.length)} no banco
           </p>
           <p className="text-[11px] text-slate-400">
@@ -866,10 +867,15 @@ function StrategyWindow({
             </div>
           )}
           <span className="shrink-0 text-xs font-bold text-cyan-200">
-            {active.length}/6 em campo
+            {active.length}/{requiredActive} em campo
           </span>
           <button
-            disabled={pending || strategy.ownConfirmed || active.length !== 6}
+            disabled={
+              pending ||
+              strategy.ownConfirmed ||
+              active.length !== requiredActive ||
+              active.some((id) => !living.some((pet) => pet.id === id))
+            }
             onClick={submit}
             className="flex-1 rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"
           >
@@ -1870,7 +1876,25 @@ function Replay({
         </Link>
       </div>
 
-      {/* Replay animado — toca até o fim antes de revelar o resultado */}
+      {/* O resultado é imediato: a partida já terminou no servidor. O replay
+          continua disponível abaixo sem esconder quem venceu. */}
+      <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
+        <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
+          {winnerName ? "🏆" : "🤝"}
+        </div>
+        <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
+          {winnerName ? "Campeão da partida" : "Resultado"}
+        </p>
+        <h2 className="mt-1 text-3xl font-black text-white">
+          {winnerName ?? "Empate"}
+        </h2>
+        <p className="mt-1 text-xs text-slate-400">
+          {playerNames.own} × {playerNames.rival} ·{" "}
+          {battle.rounds ?? events.length} ações
+        </p>
+      </div>
+
+      {/* Replay animado */}
       {events.length > 0 && (
         <div className="rounded-2xl border border-cyan-300/20 bg-slate-950/80 p-4">
           <AnimatedBattle
@@ -1893,23 +1917,8 @@ function Replay({
         </div>
       )}
 
-      {/* Banner do campeão (revelado ao fim) */}
-      {revealed && (
-        <div className="overflow-hidden rounded-3xl border border-[#FFCB05]/30 bg-[radial-gradient(circle_at_top,rgba(255,203,5,.16),transparent_55%),#0a0a12] p-6 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 text-4xl">
-            {winnerName ? "🏆" : "🤝"}
-          </div>
-          <p className="mt-3 text-[10px] font-black uppercase tracking-[.25em] text-[#FFCB05]/80">
-            {winnerName ? "Campeão da partida" : "Resultado"}
-          </p>
-          <h2 className="mt-1 text-3xl font-black text-white">
-            {winnerName ? winnerName : "Empate"}
-          </h2>
-          <p className="mt-1 text-xs text-slate-400">
-            {playerNames.own} × {playerNames.rival} ·{" "}
-            {battle.rounds ?? events.length} ações
-          </p>
-          {mvp && (
+      {revealed && mvp && (
+        <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4 text-center">
             <div className="mx-auto mt-4 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.03] px-4 py-2">
               <img
                 src={mvp.pet.sprite}
@@ -1926,7 +1935,6 @@ function Replay({
                 </p>
               </div>
             </div>
-          )}
         </div>
       )}
 
