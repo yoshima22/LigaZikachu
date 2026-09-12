@@ -352,8 +352,49 @@ model Player {
   arenaDraftMatchesAsA        ArenaDraftMatch[]              @relation("ArenaDraftPlayerA")
   arenaDraftMatchesAsB        ArenaDraftMatch[]              @relation("ArenaDraftPlayerB")
   arenaDraftMatchesWon        ArenaDraftMatch[]              @relation("ArenaDraftWinner")
+  worldState                  WorldPlayerState?
+  worldTravelLogs             WorldTravelLog[]
 
   @@map("players")
+}
+
+/// Progresso isolado do World Mode. A coleção principal não é alterada até que
+/// uma captura ou recompensa seja explicitamente confirmada pelo modo.
+model WorldPlayerState {
+  id                    String    @id @default(cuid())
+  playerId              String    @unique
+  currentLocationId     String    @default("pallet-town")
+  discoveredLocationIds String[]  @default(["pallet-town"])
+  badges                String[]  @default([])
+  fatigue               Int       @default(0)
+  inventoryJson         Json      @default("{\"pokeBalls\":5,\"potions\":1,\"antidotes\":0}")
+  avatarJson            Json?
+  travelingToId         String?
+  travelStartedAt       DateTime?
+  travelEndsAt          DateTime?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  player                Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([currentLocationId])
+  @@index([travelEndsAt])
+  @@map("world_player_states")
+}
+
+model WorldTravelLog {
+  id              String    @id @default(cuid())
+  playerId        String
+  fromLocationId  String
+  toLocationId    String
+  durationMinutes Int
+  fatigueGained   Int
+  startedAt       DateTime
+  arrivedAt       DateTime?
+  createdAt       DateTime  @default(now())
+  player          Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, createdAt])
+  @@map("world_travel_logs")
 }
 
 /// Preset isolado da coleção normal. Os 12 mascotes PvP vivem no JSON validado

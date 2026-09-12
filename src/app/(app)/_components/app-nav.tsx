@@ -79,6 +79,14 @@ const combatLinks = [
     casual: true,
   },
   { href: "/combates/arena-draft", label: "Arena Draft", icon: Swords, adminOnly: false, beta: true },
+  {
+    href: "/mundo",
+    label: "World Mode",
+    icon: MapPinned,
+    adminOnly: true,
+    platformAdminOnly: true,
+    beta: true,
+  },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   {
     href: "/desafio-sincronizado",
