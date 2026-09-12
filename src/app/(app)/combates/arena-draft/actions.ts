@@ -11,7 +11,11 @@ import {
   ARENA_DRAFT_RULES,
   type DraftMode,
 } from "@/lib/arena-draft";
-import { getPokemonName, getPokemonTypes, getSpriteUrl } from "@/lib/mascot-data";
+import {
+  getPokemonName,
+  getPokemonTypes,
+  getSpriteUrl,
+} from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
@@ -37,7 +41,11 @@ export async function getMyDraftMascotsAction() {
   const player = await currentPlayer();
   const mascots = await prisma.mascot.findMany({
     where: { playerId: player.id },
-    orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+    orderBy: [
+      { isEquipped: "desc" },
+      { isFavorite: "desc" },
+      { level: "desc" },
+    ],
     take: 300,
     select: {
       id: true,
@@ -53,6 +61,8 @@ export async function getMyDraftMascotsAction() {
       statVitality: true,
       megaEvolvedAt: true,
       megaEvolvedFromPokemonId: true,
+      staticSpriteUrlOverride: true,
+      animatedSpriteUrlOverride: true,
     },
   });
   return mascots.map((mascot) => ({
@@ -60,7 +70,10 @@ export async function getMyDraftMascotsAction() {
     speciesId: mascot.pokemonId,
     name: getPokemonName(mascot.pokemonId),
     nickname: mascot.nickname,
-    sprite: getSpriteUrl(mascot.pokemonId),
+    sprite:
+      mascot.animatedSpriteUrlOverride ||
+      mascot.staticSpriteUrlOverride ||
+      getSpriteUrl(mascot.pokemonId),
     level: mascot.level,
     personality: mascot.personality,
     posture: defaultCombatRoleFor({
@@ -154,7 +167,8 @@ export async function saveRealRosterAction(input: {
       };
     });
     const validation = validateArenaDraftPets(pets, "REAL");
-    if (!validation.valid) throw new Error(validation.errors[0] ?? "Time inválido.");
+    if (!validation.valid)
+      throw new Error(validation.errors[0] ?? "Time inválido.");
     if (input.id) {
       const existing = await prisma.arenaDraftPreset.findFirst({
         where: { id: input.id, ownerId: player.id, source: "REAL" },
@@ -174,7 +188,9 @@ export async function saveRealRosterAction(input: {
         where: { ownerId: player.id, source: "REAL" },
       });
       if (count >= 10)
-        throw new Error("Você já atingiu o limite de 10 times. Exclua um antes.");
+        throw new Error(
+          "Você já atingiu o limite de 10 times. Exclua um antes.",
+        );
       await prisma.arenaDraftPreset.create({
         data: {
           ownerId: player.id,
@@ -189,7 +205,8 @@ export async function saveRealRosterAction(input: {
     return { success: "Time salvo." };
   } catch (error) {
     return {
-      error: error instanceof Error ? error.message : "Não foi possível salvar.",
+      error:
+        error instanceof Error ? error.message : "Não foi possível salvar.",
     };
   }
 }
@@ -515,7 +532,8 @@ export async function tryPairDraftAction(matchId: string) {
         (mine.playerAId !== player.id && mine.playerBId !== player.id)
       )
         return { matched: false, cancelled: true };
-      if (mine.state === "CANCELLED") return { matched: false, cancelled: true };
+      if (mine.state === "CANCELLED")
+        return { matched: false, cancelled: true };
       // Minha sala já avançou (alguém entrou) → navego para ela.
       if (mine.state !== "CREATED" || mine.playerBId)
         return { matched: true, matchId: mine.id };
@@ -598,7 +616,8 @@ export async function getDraftSyncStateAction(matchId: string) {
       },
       select: { stateVersion: true, state: true, deadlineAt: true },
     });
-    if (!match) return { stateVersion: -1, state: "CANCELLED", deadlinePassed: false };
+    if (!match)
+      return { stateVersion: -1, state: "CANCELLED", deadlinePassed: false };
     return {
       stateVersion: match.stateVersion,
       state: match.state,

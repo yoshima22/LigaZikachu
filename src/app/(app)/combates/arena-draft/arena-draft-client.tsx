@@ -145,14 +145,21 @@ export function ArenaDraftClient({
   const router = useRouter();
   const [pending, start] = useTransition();
   const [tab, setTab] = useState<"HOME" | "BUILD" | "PLAY" | "RANK">("HOME");
+  const initialCustomPreset = presets.find(
+    (preset) => preset.source !== "REAL",
+  );
   const [selectedId, setSelectedId] = useState<string | null>(
-    presets[0]?.id ?? null,
+    initialCustomPreset?.id ?? null,
   );
   const selected = presets.find((p) => p.id === selectedId);
-  const [name, setName] = useState(selected?.name ?? "Meu primeiro draft");
-  const [pets, setPets] = useState<ArenaDraftPet[]>(selected?.pets ?? []);
+  const [name, setName] = useState(
+    initialCustomPreset?.name ?? "Meu primeiro draft",
+  );
+  const [pets, setPets] = useState<ArenaDraftPet[]>(
+    initialCustomPreset?.pets ?? [],
+  );
   const [editingPetId, setEditingPetId] = useState<string | null>(
-    selected?.pets[0]?.id ?? null,
+    initialCustomPreset?.pets[0]?.id ?? null,
   );
   const [query, setQuery] = useState("");
   const [type, setType] = useState("ALL");
@@ -222,8 +229,7 @@ export function ArenaDraftClient({
       try {
         // Pareia salas do mesmo modo (resolve a corrida de criação simultânea).
         const r = await tryPairDraftAction(id);
-        if (r.matched)
-          router.push(`/combates/arena-draft/${r.matchId ?? id}`);
+        if (r.matched) router.push(`/combates/arena-draft/${r.matchId ?? id}`);
         else if (r.cancelled) router.refresh();
       } finally {
         busy = false;
@@ -605,725 +611,733 @@ export function ArenaDraftClient({
                 <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
                   <div className="flex items-center justify-between">
                     <h2 className="font-black text-white">Meus presets</h2>
-                <button
-                  disabled={presets.length >= 10}
-                  onClick={() => {
-                    setSelectedId(null);
-                    setName("Novo preset");
-                    setPets([]);
-                    setEditingPetId(null);
-                  }}
-                  className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-35"
-                >
-                  {presets.length >= 10 ? "Limite 10/10" : "+ Novo"}
-                </button>
-              </div>
-              <div className="mt-3 space-y-2">
-                {customPresets.length === 0 ? (
-                  <p className="text-xs text-slate-500">
-                    Nenhum preset customizado criado.
-                  </p>
-                ) : (
-                  visiblePresets.map((p) => (
-                    <div
-                      key={p.id}
-                      className={`rounded-xl border p-2 ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
+                    <button
+                      disabled={presets.length >= 10}
+                      onClick={() => {
+                        setSelectedId(null);
+                        setName("Novo preset");
+                        setPets([]);
+                        setEditingPetId(null);
+                      }}
+                      className="rounded-lg bg-fuchsia-500 px-3 py-2 text-xs font-bold text-white disabled:cursor-not-allowed disabled:opacity-35"
                     >
-                      {renamingPresetId === p.id ? (
-                        <div className="flex gap-2">
-                          <input
-                            autoFocus
-                            value={renameValue}
-                            maxLength={40}
-                            onChange={(event) =>
-                              setRenameValue(event.target.value)
-                            }
-                            onKeyDown={(event) => {
-                              if (event.key === "Escape")
-                                setRenamingPresetId(null);
-                            }}
-                            className="min-w-0 flex-1 rounded-lg border border-cyan-300/25 bg-slate-950 px-3 py-2 text-xs text-white outline-none"
-                          />
-                          <button
-                            disabled={pending}
-                            onClick={() =>
-                              start(async () => {
-                                const result = await renameDraftPresetAction(
-                                  p.id,
-                                  renameValue,
-                                );
-                                if (result.error) toast.error(result.error);
-                                else {
-                                  toast.success(result.success);
-                                  setRenamingPresetId(null);
-                                  router.refresh();
-                                }
-                              })
-                            }
-                            className="rounded-lg bg-cyan-300 px-3 text-[10px] font-black text-slate-950"
-                          >
-                            Salvar
-                          </button>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-1">
-                          <button
-                            onClick={() => choosePreset(p)}
-                            className="flex min-w-0 flex-1 items-center justify-between p-2 text-left"
-                          >
-                            <span className="min-w-0">
-                              <b className="block truncate text-sm text-white">
-                                {p.name}
-                              </b>
-                              <small className="text-slate-500">
-                                {p.pets.length}/12 ·{" "}
-                                {p.pets.filter((x) => x.isMega).length}/2 Megas
-                              </small>
-                              {p.needsReview && (
-                                <span className="mt-0.5 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-300">
-                                  ⚠ Revisar pontos
-                                </span>
-                              )}
-                            </span>
-                            {p.isReady && !p.needsReview && (
-                              <CheckCircle2
-                                className="shrink-0 text-emerald-300"
-                                size={16}
-                              />
-                            )}
-                          </button>
-                          <button
-                            title="Renomear preset"
-                            onClick={() => {
-                              setRenamingPresetId(p.id);
-                              setRenameValue(p.name);
-                            }}
-                            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
-                          >
-                            <Pencil size={13} />
-                          </button>
-                          <button
-                            title="Duplicar preset"
-                            disabled={pending || presets.length >= 10}
-                            onClick={() =>
-                              start(async () => {
-                                const result = await duplicateDraftPresetAction(
-                                  p.id,
-                                );
-                                result.error
-                                  ? toast.error(result.error)
-                                  : toast.success(result.success);
-                                router.refresh();
-                              })
-                            }
-                            className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-cyan-200 disabled:opacity-25"
-                          >
-                            <Copy size={13} />
-                          </button>
-                          <button
-                            title="Excluir preset"
-                            disabled={pending}
-                            onClick={() => {
-                              if (
-                                !window.confirm(
-                                  `Excluir o preset “${p.name}”? Esta ação não pode ser desfeita.`,
-                                )
-                              )
-                                return;
-                              start(async () => {
-                                const result = await deleteDraftPresetAction(
-                                  p.id,
-                                );
-                                if (result.error) toast.error(result.error);
-                                else {
-                                  toast.success(result.success);
-                                  if (selectedId === p.id) {
-                                    setSelectedId(null);
-                                    setPets([]);
-                                    setEditingPetId(null);
-                                  }
-                                  if (
-                                    visiblePresets.length === 1 &&
-                                    presetPage > 1
-                                  )
-                                    setPresetPage((page) => page - 1);
-                                  router.refresh();
-                                }
-                              });
-                            }}
-                            className="rounded-lg p-2 text-slate-400 hover:bg-rose-400/10 hover:text-rose-300"
-                          >
-                            <Trash2 size={13} />
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))
-                )}
-              </div>
-              {presets.length > 0 && (
-                <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
-                  <button
-                    disabled={presetPage <= 1}
-                    onClick={() => setPresetPage((page) => page - 1)}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
-                  >
-                    Anterior
-                  </button>
-                  <span className="text-[9px] text-slate-500">
-                    Página {presetPage}/{presetPages} · {presets.length}/10
-                  </span>
-                  <button
-                    disabled={presetPage >= presetPages}
-                    onClick={() => setPresetPage((page) => page + 1)}
-                    className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
-                  >
-                    Próxima
-                  </button>
-                </div>
-              )}
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-              <h2 className="font-black text-white">Catálogo livre</h2>
-              <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_145px_125px_130px]">
-                <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3">
-                  <Search size={14} />
-                  <input
-                    value={query}
-                    onChange={(e) => {
-                      setQuery(e.target.value);
-                      setCatalogPage(1);
-                    }}
-                    placeholder="Nome ou Pokédex"
-                    className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
-                  />
-                </label>
-                <select
-                  value={type}
-                  onChange={(e) => {
-                    setType(e.target.value);
-                    setCatalogPage(1);
-                  }}
-                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
-                >
-                  <option value="ALL">Todos os tipos</option>
-                  {types.map((t) => (
-                    <option key={t} value={t}>
-                      {TYPE_LABELS_PT[t] ?? t}
-                    </option>
-                  ))}
-                </select>
-                <select
-                  value={megaFilter}
-                  onChange={(e) => {
-                    setMegaFilter(e.target.value as typeof megaFilter);
-                    setCatalogPage(1);
-                  }}
-                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
-                >
-                  <option value="ALL">Todas as formas</option>
-                  <option value="COMMON">Sem Mega</option>
-                  <option value="MEGA">Somente Mega</option>
-                </select>
-                <select
-                  value={catalogOrder}
-                  onChange={(e) =>
-                    setCatalogOrder(e.target.value as typeof catalogOrder)
-                  }
-                  className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
-                >
-                  <option value="NAME">Ordem alfabética</option>
-                  <option value="ID">Ordem Pokédex</option>
-                </select>
-              </div>
-              <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
-                {visibleSpecies.map((item) => (
-                  <button
-                    key={item.id}
-                    onClick={() => addPet(item)}
-                    className={`relative rounded-xl border bg-white/[.025] p-2 hover:border-cyan-300/40 ${item.isMega ? "border-fuchsia-400/40" : "border-white/10"}`}
-                  >
-                    <img
-                      src={item.sprite}
-                      alt=""
-                      className="mx-auto h-12 w-12 object-contain"
-                    />
-                    <span className="block truncate text-[10px] font-bold text-white">
-                      {item.name}
-                    </span>
-                    <span className="text-[9px] text-slate-500">
-                      #{item.id}
-                    </span>
-                    {item.isMega && (
-                      <span className="absolute right-1 top-1 rounded bg-fuchsia-500 px-1 text-[7px] font-black text-white">
-                        MEGA
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
-                <button
-                  disabled={catalogPage <= 1}
-                  onClick={() => setCatalogPage((p) => p - 1)}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
-                >
-                  Anterior
-                </button>
-                <span className="text-center text-[9px] text-slate-400 sm:text-[10px]">
-                  <span className="block sm:inline">
-                    Página {Math.min(catalogPage, catalogPages)} de{" "}
-                    {catalogPages}
-                  </span>{" "}
-                  <span className="hidden sm:inline">· </span>
-                  <span className="block sm:inline">
-                    {filtered.length} espécies
-                  </span>
-                </span>
-                <button
-                  disabled={catalogPage >= catalogPages}
-                  onClick={() => setCatalogPage((p) => p + 1)}
-                  className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
-                >
-                  Próxima
-                </button>
-              </div>
-            </div>
-          </section>
-          <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <div className="min-w-0 flex-1">
-                <input
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  className="w-full max-w-md border-b border-white/10 bg-transparent text-lg font-black text-white outline-none sm:text-xl"
-                />
-                <p className="mt-1 flex min-h-[2.25rem] items-center text-xs text-slate-500">
-                  Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
-                  {allocatedPoints.toLocaleString("pt-BR")}
-                  /4.500 disponíveis
-                </p>
-                <div className="mt-1 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
-                  <div
-                    className="h-full rounded-full transition-all duration-300"
-                    style={{
-                      width: `${Math.min(100, (allocatedPoints / ARENA_DRAFT_RULES.statBudget) * 100)}%`,
-                      background:
-                        allocatedPoints > ARENA_DRAFT_RULES.statBudget
-                          ? "#fb7185"
-                          : allocatedPoints === ARENA_DRAFT_RULES.statBudget
-                            ? "#6ee7b7"
-                            : "linear-gradient(90deg,#22d3ee,#d946ef)",
-                    }}
-                  />
-                </div>
-                {/* Uso por status: teto de 900 em cada coluna. */}
-                <div className="mt-2 grid max-w-md grid-cols-5 gap-1">
-                  {(
-                    [
-                      ["FOR", "force"],
-                      ["AGI", "agility"],
-                      ["CAR", "charisma"],
-                      ["INS", "instinct"],
-                      ["VIT", "vitality"],
-                    ] as const
-                  ).map(([label, key]) => {
-                    const used = columnDistributed[key];
-                    const over = used > ARENA_DRAFT_RULES.perStatBudget;
-                    return (
-                      <div key={key} className="text-center">
-                        <div className="mb-0.5 flex justify-between text-[8px] font-bold uppercase">
-                          <span className="text-slate-500">{label}</span>
-                          <span
-                            className={
-                              over ? "text-rose-300" : "text-slate-400"
-                            }
-                          >
-                            {used}/900
-                          </span>
-                        </div>
-                        <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
-                          <div
-                            className="h-full rounded-full"
-                            style={{
-                              width: `${Math.min(100, (used / ARENA_DRAFT_RULES.perStatBudget) * 100)}%`,
-                              background: over
-                                ? "#fb7185"
-                                : used === ARENA_DRAFT_RULES.perStatBudget
-                                  ? "#6ee7b7"
-                                  : "#22d3ee",
-                            }}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-                {overStatCap && (
-                  <p className="mt-1 text-[10px] font-bold text-rose-300">
-                    Algum status passou de 900. Reduza para poder competir.
-                  </p>
-                )}
-              </div>
-              <button
-                disabled={pending}
-                onClick={save}
-                className="w-full rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50 sm:w-auto"
-              >
-                Salvar preset
-              </button>
-            </div>
-            {selected?.needsReview && (
-              <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-[11px] leading-4 text-amber-100">
-                <b>Revise este preset.</b> Uma nova regra limita cada status a 900
-                pontos no time. Ajustamos automaticamente os status que passavam
-                do limite e devolvemos os pontos excedentes como{" "}
-                <b>pontos livres</b> — redistribua-os e salve para atualizar o
-                time.
-              </div>
-            )}
-            <div className="mt-4 flex-1">
-              {pets.length === 0 ? (
-                <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
-                  Escolha mascotes no catálogo para começar.
-                </div>
-              ) : (
-                <>
-                  <div className="mb-2 flex items-center justify-between gap-2">
-                    <p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">
-                      Escalação selecionada
-                    </p>
-                    <span className="text-right text-[9px] text-slate-500">
-                      Toque em um mascote para editar
-                    </span>
+                      {presets.length >= 10 ? "Limite 10/10" : "+ Novo"}
+                    </button>
                   </div>
-                  <div className="grid grid-cols-3 gap-2">
-                    {pets.map((pet) => {
-                      const item = species.find(
-                        (candidate) => candidate.id === pet.speciesId,
-                      );
-                      const distributed = DRAFT_STAT_KEYS.reduce(
-                        (total, key) => total + pet.stats[key] - 20,
-                        0,
-                      );
-                      return (
-                        <button
-                          key={pet.id}
-                          onClick={() => setEditingPetId(pet.id)}
-                          className={`relative min-w-0 rounded-xl border p-2.5 text-left transition ${editingPetId === pet.id ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,.08)]" : "border-white/10 bg-white/[.025] hover:border-white/20"}`}
-                        >
-                          <span className="absolute left-1.5 top-1.5 text-[9px] font-black text-slate-500">
-                            {pet.slot + 1}
-                          </span>
-                          {pet.isMega && (
-                            <span className="absolute right-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[7px] font-black text-fuchsia-200">
-                              MEGA
-                            </span>
-                          )}
-                          <div className="flex flex-col items-center pt-2 text-center">
-                            <img
-                              src={item?.sprite}
-                              alt=""
-                              className="h-14 w-14 object-contain [image-rendering:pixelated]"
-                            />
-                            <b className="mt-1 block w-full break-words text-xs leading-tight text-white">
-                              {pet.nickname?.trim() || item?.name}
-                            </b>
-                            <small className="block text-[10px] text-cyan-200">
-                              {postureLabels[pet.posture]}
-                            </small>
-                            <small className="block text-[9px] text-slate-500">
-                              +{distributed} distribuídos
-                            </small>
-                          </div>
-                          <div className="mt-2 grid grid-cols-5 gap-1">
-                            {DRAFT_STAT_KEYS.map((key) => (
-                              <span
-                                key={key}
-                                className="rounded bg-slate-950/60 py-1 text-center"
-                              >
-                                <b className="block text-[8px] uppercase text-slate-500">
-                                  {
-                                    {
-                                      force: "FOR",
-                                      agility: "AGI",
-                                      charisma: "CAR",
-                                      instinct: "INS",
-                                      vitality: "VIT",
-                                    }[key]
-                                  }
-                                </b>
-                                <strong className="block text-[11px] tabular-nums text-white">
-                                  {pet.stats[key]}
-                                </strong>
-                              </span>
-                            ))}
-                          </div>
-                        </button>
-                      );
-                    })}
-                    {Array.from({ length: Math.max(0, 12 - pets.length) }).map(
-                      (_, index) => (
+                  <div className="mt-3 space-y-2">
+                    {customPresets.length === 0 ? (
+                      <p className="text-xs text-slate-500">
+                        Nenhum preset customizado criado.
+                      </p>
+                    ) : (
+                      visiblePresets.map((p) => (
                         <div
-                          key={`empty-${index}`}
-                          className="flex min-h-[128px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[10px] text-slate-700"
+                          key={p.id}
+                          className={`rounded-xl border p-2 ${selectedId === p.id ? "border-cyan-300/50 bg-cyan-300/5" : "border-white/10"}`}
                         >
-                          {pets.length + index + 1}
-                        </div>
-                      ),
-                    )}
-                  </div>
-                  {pets
-                    .filter((pet) => pet.id === editingPetId)
-                    .map((pet) => {
-                      const item = species.find((s) => s.id === pet.speciesId)!;
-                      const total = DRAFT_STAT_KEYS.reduce(
-                        (s, k) => s + pet.stats[k],
-                        0,
-                      );
-                      return (
-                        <article
-                          key={pet.id}
-                          className="mt-4 rounded-2xl border border-cyan-300/15 bg-white/[.025] p-3 sm:p-4"
-                        >
-                          <div className="flex gap-3">
-                            <span className="text-xs font-black text-slate-500">
-                              {pet.slot + 1}
-                            </span>
-                            <img
-                              src={item?.sprite}
-                              alt=""
-                              className="h-12 w-12 object-contain sm:h-14 sm:w-14"
-                            />
-                            <div className="min-w-0 flex-1">
-                              <div className="flex items-center justify-between">
-                                <b className="truncate text-white">
-                                  {item?.name}
-                                </b>
-                                <button
-                                  onClick={() => removePet(pet.id)}
-                                  className="text-rose-300"
-                                >
-                                  <Trash2 size={15} />
-                                </button>
-                              </div>
+                          {renamingPresetId === p.id ? (
+                            <div className="flex gap-2">
                               <input
-                                value={pet.nickname ?? ""}
-                                maxLength={18}
-                                onChange={(e) =>
-                                  updatePet(pet.id, {
-                                    nickname: e.target.value,
+                                autoFocus
+                                value={renameValue}
+                                maxLength={40}
+                                onChange={(event) =>
+                                  setRenameValue(event.target.value)
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === "Escape")
+                                    setRenamingPresetId(null);
+                                }}
+                                className="min-w-0 flex-1 rounded-lg border border-cyan-300/25 bg-slate-950 px-3 py-2 text-xs text-white outline-none"
+                              />
+                              <button
+                                disabled={pending}
+                                onClick={() =>
+                                  start(async () => {
+                                    const result =
+                                      await renameDraftPresetAction(
+                                        p.id,
+                                        renameValue,
+                                      );
+                                    if (result.error) toast.error(result.error);
+                                    else {
+                                      toast.success(result.success);
+                                      setRenamingPresetId(null);
+                                      router.refresh();
+                                    }
                                   })
                                 }
-                                placeholder={`Apelido (opcional) · ${item?.name ?? ""}`}
-                                className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/40"
+                                className="rounded-lg bg-cyan-300 px-3 text-[10px] font-black text-slate-950"
+                              >
+                                Salvar
+                              </button>
+                            </div>
+                          ) : (
+                            <div className="flex items-center gap-1">
+                              <button
+                                onClick={() => choosePreset(p)}
+                                className="flex min-w-0 flex-1 items-center justify-between p-2 text-left"
+                              >
+                                <span className="min-w-0">
+                                  <b className="block truncate text-sm text-white">
+                                    {p.name}
+                                  </b>
+                                  <small className="text-slate-500">
+                                    {p.pets.length}/12 ·{" "}
+                                    {p.pets.filter((x) => x.isMega).length}/2
+                                    Megas
+                                  </small>
+                                  {p.needsReview && (
+                                    <span className="mt-0.5 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-300">
+                                      ⚠ Revisar pontos
+                                    </span>
+                                  )}
+                                </span>
+                                {p.isReady && !p.needsReview && (
+                                  <CheckCircle2
+                                    className="shrink-0 text-emerald-300"
+                                    size={16}
+                                  />
+                                )}
+                              </button>
+                              <button
+                                title="Renomear preset"
+                                onClick={() => {
+                                  setRenamingPresetId(p.id);
+                                  setRenameValue(p.name);
+                                }}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-white"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                              <button
+                                title="Duplicar preset"
+                                disabled={pending || presets.length >= 10}
+                                onClick={() =>
+                                  start(async () => {
+                                    const result =
+                                      await duplicateDraftPresetAction(p.id);
+                                    result.error
+                                      ? toast.error(result.error)
+                                      : toast.success(result.success);
+                                    router.refresh();
+                                  })
+                                }
+                                className="rounded-lg p-2 text-slate-400 hover:bg-white/5 hover:text-cyan-200 disabled:opacity-25"
+                              >
+                                <Copy size={13} />
+                              </button>
+                              <button
+                                title="Excluir preset"
+                                disabled={pending}
+                                onClick={() => {
+                                  if (
+                                    !window.confirm(
+                                      `Excluir o preset “${p.name}”? Esta ação não pode ser desfeita.`,
+                                    )
+                                  )
+                                    return;
+                                  start(async () => {
+                                    const result =
+                                      await deleteDraftPresetAction(p.id);
+                                    if (result.error) toast.error(result.error);
+                                    else {
+                                      toast.success(result.success);
+                                      if (selectedId === p.id) {
+                                        setSelectedId(null);
+                                        setPets([]);
+                                        setEditingPetId(null);
+                                      }
+                                      if (
+                                        visiblePresets.length === 1 &&
+                                        presetPage > 1
+                                      )
+                                        setPresetPage((page) => page - 1);
+                                      router.refresh();
+                                    }
+                                  });
+                                }}
+                                className="rounded-lg p-2 text-slate-400 hover:bg-rose-400/10 hover:text-rose-300"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </div>
+                          )}
+                        </div>
+                      ))
+                    )}
+                  </div>
+                  {presets.length > 0 && (
+                    <div className="mt-3 flex items-center justify-between border-t border-white/5 pt-3">
+                      <button
+                        disabled={presetPage <= 1}
+                        onClick={() => setPresetPage((page) => page - 1)}
+                        className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
+                      >
+                        Anterior
+                      </button>
+                      <span className="text-[9px] text-slate-500">
+                        Página {presetPage}/{presetPages} · {presets.length}/10
+                      </span>
+                      <button
+                        disabled={presetPage >= presetPages}
+                        onClick={() => setPresetPage((page) => page + 1)}
+                        className="rounded-lg border border-white/10 px-3 py-1.5 text-[10px] text-slate-300 disabled:opacity-25"
+                      >
+                        Próxima
+                      </button>
+                    </div>
+                  )}
+                </div>
+                <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                  <h2 className="font-black text-white">Catálogo livre</h2>
+                  <div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-[1fr_145px_125px_130px]">
+                    <label className="flex items-center gap-2 rounded-xl border border-white/10 px-3">
+                      <Search size={14} />
+                      <input
+                        value={query}
+                        onChange={(e) => {
+                          setQuery(e.target.value);
+                          setCatalogPage(1);
+                        }}
+                        placeholder="Nome ou Pokédex"
+                        className="min-w-0 flex-1 bg-transparent py-2 text-sm outline-none"
+                      />
+                    </label>
+                    <select
+                      value={type}
+                      onChange={(e) => {
+                        setType(e.target.value);
+                        setCatalogPage(1);
+                      }}
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                    >
+                      <option value="ALL">Todos os tipos</option>
+                      {types.map((t) => (
+                        <option key={t} value={t}>
+                          {TYPE_LABELS_PT[t] ?? t}
+                        </option>
+                      ))}
+                    </select>
+                    <select
+                      value={megaFilter}
+                      onChange={(e) => {
+                        setMegaFilter(e.target.value as typeof megaFilter);
+                        setCatalogPage(1);
+                      }}
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                    >
+                      <option value="ALL">Todas as formas</option>
+                      <option value="COMMON">Sem Mega</option>
+                      <option value="MEGA">Somente Mega</option>
+                    </select>
+                    <select
+                      value={catalogOrder}
+                      onChange={(e) =>
+                        setCatalogOrder(e.target.value as typeof catalogOrder)
+                      }
+                      className="rounded-xl border border-white/10 bg-slate-950 px-3 text-xs"
+                    >
+                      <option value="NAME">Ordem alfabética</option>
+                      <option value="ID">Ordem Pokédex</option>
+                    </select>
+                  </div>
+                  <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4">
+                    {visibleSpecies.map((item) => (
+                      <button
+                        key={item.id}
+                        onClick={() => addPet(item)}
+                        className={`relative rounded-xl border bg-white/[.025] p-2 hover:border-cyan-300/40 ${item.isMega ? "border-fuchsia-400/40" : "border-white/10"}`}
+                      >
+                        <img
+                          src={item.sprite}
+                          alt=""
+                          className="mx-auto h-12 w-12 object-contain"
+                        />
+                        <span className="block truncate text-[10px] font-bold text-white">
+                          {item.name}
+                        </span>
+                        <span className="text-[9px] text-slate-500">
+                          #{item.id}
+                        </span>
+                        {item.isMega && (
+                          <span className="absolute right-1 top-1 rounded bg-fuchsia-500 px-1 text-[7px] font-black text-white">
+                            MEGA
+                          </span>
+                        )}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="mt-3 grid grid-cols-[auto_1fr_auto] items-center gap-2">
+                    <button
+                      disabled={catalogPage <= 1}
+                      onClick={() => setCatalogPage((p) => p - 1)}
+                      className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-center text-[9px] text-slate-400 sm:text-[10px]">
+                      <span className="block sm:inline">
+                        Página {Math.min(catalogPage, catalogPages)} de{" "}
+                        {catalogPages}
+                      </span>{" "}
+                      <span className="hidden sm:inline">· </span>
+                      <span className="block sm:inline">
+                        {filtered.length} espécies
+                      </span>
+                    </span>
+                    <button
+                      disabled={catalogPage >= catalogPages}
+                      onClick={() => setCatalogPage((p) => p + 1)}
+                      className="rounded-lg border border-white/10 px-3 py-2 text-xs disabled:opacity-30"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                </div>
+              </section>
+              <section className="flex h-full flex-col rounded-2xl border border-white/10 bg-slate-950/70 p-4">
+                <div className="flex flex-wrap items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
+                    <input
+                      value={name}
+                      onChange={(e) => setName(e.target.value)}
+                      className="w-full max-w-md border-b border-white/10 bg-transparent text-lg font-black text-white outline-none sm:text-xl"
+                    />
+                    <p className="mt-1 flex min-h-[2.25rem] items-center text-xs text-slate-500">
+                      Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
+                      {allocatedPoints.toLocaleString("pt-BR")}
+                      /4.500 disponíveis
+                    </p>
+                    <div className="mt-1 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${Math.min(100, (allocatedPoints / ARENA_DRAFT_RULES.statBudget) * 100)}%`,
+                          background:
+                            allocatedPoints > ARENA_DRAFT_RULES.statBudget
+                              ? "#fb7185"
+                              : allocatedPoints === ARENA_DRAFT_RULES.statBudget
+                                ? "#6ee7b7"
+                                : "linear-gradient(90deg,#22d3ee,#d946ef)",
+                        }}
+                      />
+                    </div>
+                    {/* Uso por status: teto de 900 em cada coluna. */}
+                    <div className="mt-2 grid max-w-md grid-cols-5 gap-1">
+                      {(
+                        [
+                          ["FOR", "force"],
+                          ["AGI", "agility"],
+                          ["CAR", "charisma"],
+                          ["INS", "instinct"],
+                          ["VIT", "vitality"],
+                        ] as const
+                      ).map(([label, key]) => {
+                        const used = columnDistributed[key];
+                        const over = used > ARENA_DRAFT_RULES.perStatBudget;
+                        return (
+                          <div key={key} className="text-center">
+                            <div className="mb-0.5 flex justify-between text-[8px] font-bold uppercase">
+                              <span className="text-slate-500">{label}</span>
+                              <span
+                                className={
+                                  over ? "text-rose-300" : "text-slate-400"
+                                }
+                              >
+                                {used}/900
+                              </span>
+                            </div>
+                            <div className="h-1.5 overflow-hidden rounded-full bg-white/10">
+                              <div
+                                className="h-full rounded-full"
+                                style={{
+                                  width: `${Math.min(100, (used / ARENA_DRAFT_RULES.perStatBudget) * 100)}%`,
+                                  background: over
+                                    ? "#fb7185"
+                                    : used === ARENA_DRAFT_RULES.perStatBudget
+                                      ? "#6ee7b7"
+                                      : "#22d3ee",
+                                }}
                               />
-                              <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
-                                <select
-                                  value={pet.personality}
-                                  onChange={(e) =>
-                                    updatePet(pet.id, {
-                                      personality: e.target
-                                        .value as ArenaDraftPet["personality"],
-                                    })
-                                  }
-                                  className="rounded-lg bg-slate-900 p-2 text-[10px]"
-                                >
-                                  {DRAFT_PERSONALITIES.map((x) => (
-                                    <option key={x} value={x}>
-                                      {PERSONALITY_LABEL[x]}
-                                    </option>
-                                  ))}
-                                </select>
-                                <select
-                                  value={pet.posture}
-                                  onChange={(e) =>
-                                    updatePet(pet.id, {
-                                      posture: e.target
-                                        .value as ArenaDraftPet["posture"],
-                                    })
-                                  }
-                                  className="rounded-lg bg-slate-900 p-2 text-[10px]"
-                                >
-                                  {DRAFT_POSTURES.map((x) => (
-                                    <option key={x} value={x}>
-                                      {postureLabels[x]}
-                                    </option>
-                                  ))}
-                                </select>
-                                <div
-                                  className={`flex items-center justify-center rounded-lg border p-2 text-[10px] ${pet.isMega ? "border-fuchsia-400 text-fuchsia-200" : "border-white/10 text-slate-500"}`}
-                                >
-                                  {pet.isMega
-                                    ? "Forma Mega · +10"
-                                    : "Forma comum"}
-                                </div>
-                              </div>
-                              <div className="mt-2 grid gap-2 sm:grid-cols-2">
-                                <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.04] p-2.5">
-                                  <p className="text-[9px] font-black uppercase tracking-wider text-fuchsia-300">
-                                    {PERSONALITY_LABEL[pet.personality] ??
-                                      pet.personality}{" "}
-                                    · efeito em combate
-                                  </p>
-                                  <p className="mt-1 text-[11px] leading-4 text-slate-300">
-                                    {PERSONALITY_DESIGN_BY_KEY[pet.personality]
-                                      ?.combat ??
-                                      "Sem efeito de combate específico."}
-                                  </p>
-                                </div>
-                                <div className="rounded-lg border border-[#FFCB05]/25 bg-[#FFCB05]/[.05] p-2.5">
-                                  <p className="text-[9px] font-black uppercase tracking-wider text-[#FFCB05]">
-                                    {postureLabels[pet.posture]} · como atua
-                                  </p>
-                                  <p className="mt-1 text-[11px] leading-4 text-slate-300">
-                                    {COMBAT_ROLE_DESCRIPTIONS[
-                                      pet.posture as CombatRole
-                                    ] ?? ""}
-                                  </p>
-                                </div>
-                              </div>
                             </div>
                           </div>
-                          <div className="mt-3 grid grid-cols-2 gap-2 min-[430px]:grid-cols-5 min-[430px]:gap-1">
-                            {DRAFT_STAT_KEYS.map((key) => (
-                              <label key={key} className="text-center">
-                                <span className="block truncate text-[8px] uppercase text-slate-500">
-                                  {
-                                    {
-                                      force: "Força",
-                                      agility: "Agilidade",
-                                      charisma: "Carisma",
-                                      instinct: "Instinto",
-                                      vitality: "Vitalidade",
-                                    }[key]
-                                  }
+                        );
+                      })}
+                    </div>
+                    {overStatCap && (
+                      <p className="mt-1 text-[10px] font-bold text-rose-300">
+                        Algum status passou de 900. Reduza para poder competir.
+                      </p>
+                    )}
+                  </div>
+                  <button
+                    disabled={pending}
+                    onClick={save}
+                    className="w-full rounded-xl bg-cyan-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-50 sm:w-auto"
+                  >
+                    Salvar preset
+                  </button>
+                </div>
+                {selected?.needsReview && (
+                  <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/10 p-3 text-[11px] leading-4 text-amber-100">
+                    <b>Revise este preset.</b> Uma nova regra limita cada status
+                    a 900 pontos no time. Ajustamos automaticamente os status
+                    que passavam do limite e devolvemos os pontos excedentes
+                    como <b>pontos livres</b> — redistribua-os e salve para
+                    atualizar o time.
+                  </div>
+                )}
+                <div className="mt-4 flex-1">
+                  {pets.length === 0 ? (
+                    <div className="rounded-2xl border border-dashed border-white/10 p-12 text-center text-sm text-slate-500">
+                      Escolha mascotes no catálogo para começar.
+                    </div>
+                  ) : (
+                    <>
+                      <div className="mb-2 flex items-center justify-between gap-2">
+                        <p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">
+                          Escalação selecionada
+                        </p>
+                        <span className="text-right text-[9px] text-slate-500">
+                          Toque em um mascote para editar
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2">
+                        {pets.map((pet) => {
+                          const item = species.find(
+                            (candidate) => candidate.id === pet.speciesId,
+                          );
+                          const distributed = DRAFT_STAT_KEYS.reduce(
+                            (total, key) => total + pet.stats[key] - 20,
+                            0,
+                          );
+                          return (
+                            <button
+                              key={pet.id}
+                              onClick={() => setEditingPetId(pet.id)}
+                              className={`relative min-w-0 rounded-xl border p-2.5 text-left transition ${editingPetId === pet.id ? "border-cyan-300/60 bg-cyan-300/10 shadow-[0_0_18px_rgba(34,211,238,.08)]" : "border-white/10 bg-white/[.025] hover:border-white/20"}`}
+                            >
+                              <span className="absolute left-1.5 top-1.5 text-[9px] font-black text-slate-500">
+                                {pet.slot + 1}
+                              </span>
+                              {pet.isMega && (
+                                <span className="absolute right-1 top-1 rounded bg-fuchsia-500/20 px-1 text-[7px] font-black text-fuchsia-200">
+                                  MEGA
                                 </span>
-                                <input
-                                  type="number"
-                                  inputMode="numeric"
-                                  min={20}
-                                  max={pet.isMega ? 240 : 250}
-                                  value={
-                                    statDrafts[`${pet.id}:${key}`] ??
-                                    String(pet.stats[key])
-                                  }
-                                  onChange={(e) => {
-                                    const raw = e.target.value;
-                                    if (!/^\d*$/.test(raw)) return;
-                                    const draftKey = `${pet.id}:${key}`;
-                                    if (raw === "") {
-                                      setStatDrafts((drafts) => ({
-                                        ...drafts,
-                                        [draftKey]: "",
-                                      }));
-                                      return;
-                                    }
-                                    const max = pet.isMega ? 240 : 250;
-                                    // Teto do orçamento do time: o que os demais
-                                    // status já distribuíram não pode deixar este
-                                    // ultrapassar os 4.500 pontos do time.
-                                    const otherDistributed =
-                                      allocatedPoints -
-                                      (pet.stats[key] - ARENA_DRAFT_RULES.baseStat);
-                                    const budgetMax =
-                                      ARENA_DRAFT_RULES.baseStat +
-                                      Math.max(
-                                        0,
-                                        ARENA_DRAFT_RULES.statBudget -
-                                          otherDistributed,
-                                      );
-                                    // Teto de 900 por status (coluna) no time.
-                                    const otherColumn =
-                                      columnDistributed[key] -
-                                      (pet.stats[key] -
-                                        ARENA_DRAFT_RULES.baseStat);
-                                    const columnMax =
-                                      ARENA_DRAFT_RULES.baseStat +
-                                      Math.max(
-                                        0,
-                                        ARENA_DRAFT_RULES.perStatBudget -
-                                          otherColumn,
-                                      );
-                                    const capped = Math.min(
-                                      max,
-                                      budgetMax,
-                                      columnMax,
-                                      Number(raw),
-                                    );
-                                    setStatDrafts((drafts) => ({
-                                      ...drafts,
-                                      [draftKey]:
-                                        capped === Number(raw)
-                                          ? raw
-                                          : String(capped),
-                                    }));
-                                    updatePet(pet.id, {
-                                      stats: { ...pet.stats, [key]: capped },
-                                    });
-                                  }}
-                                  onBlur={() => {
-                                    const draftKey = `${pet.id}:${key}`;
-                                    const max = pet.isMega ? 240 : 250;
-                                    const otherDistributed =
-                                      allocatedPoints -
-                                      (pet.stats[key] - ARENA_DRAFT_RULES.baseStat);
-                                    const budgetMax =
-                                      ARENA_DRAFT_RULES.baseStat +
-                                      Math.max(
-                                        0,
-                                        ARENA_DRAFT_RULES.statBudget -
-                                          otherDistributed,
-                                      );
-                                    const otherColumn =
-                                      columnDistributed[key] -
-                                      (pet.stats[key] -
-                                        ARENA_DRAFT_RULES.baseStat);
-                                    const columnMax =
-                                      ARENA_DRAFT_RULES.baseStat +
-                                      Math.max(
-                                        0,
-                                        ARENA_DRAFT_RULES.perStatBudget -
-                                          otherColumn,
-                                      );
-                                    updatePet(pet.id, {
-                                      stats: {
-                                        ...pet.stats,
-                                        [key]: Math.max(
-                                          20,
-                                          Math.min(
-                                            max,
-                                            budgetMax,
-                                            columnMax,
-                                            pet.stats[key] || 20,
-                                          ),
-                                        ),
-                                      },
-                                    });
-                                    setStatDrafts((drafts) => {
-                                      const next = { ...drafts };
-                                      delete next[draftKey];
-                                      return next;
-                                    });
-                                  }}
-                                  className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
+                              )}
+                              <div className="flex flex-col items-center pt-2 text-center">
+                                <img
+                                  src={item?.sprite}
+                                  alt=""
+                                  className="h-14 w-14 object-contain [image-rendering:pixelated]"
                                 />
-                              </label>
-                            ))}
+                                <b className="mt-1 block w-full break-words text-xs leading-tight text-white">
+                                  {pet.nickname?.trim() || item?.name}
+                                </b>
+                                <small className="block text-[10px] text-cyan-200">
+                                  {postureLabels[pet.posture]}
+                                </small>
+                                <small className="block text-[9px] text-slate-500">
+                                  +{distributed} distribuídos
+                                </small>
+                              </div>
+                              <div className="mt-2 grid grid-cols-5 gap-1">
+                                {DRAFT_STAT_KEYS.map((key) => (
+                                  <span
+                                    key={key}
+                                    className="rounded bg-slate-950/60 py-1 text-center"
+                                  >
+                                    <b className="block text-[8px] uppercase text-slate-500">
+                                      {
+                                        {
+                                          force: "FOR",
+                                          agility: "AGI",
+                                          charisma: "CAR",
+                                          instinct: "INS",
+                                          vitality: "VIT",
+                                        }[key]
+                                      }
+                                    </b>
+                                    <strong className="block text-[11px] tabular-nums text-white">
+                                      {pet.stats[key]}
+                                    </strong>
+                                  </span>
+                                ))}
+                              </div>
+                            </button>
+                          );
+                        })}
+                        {Array.from({
+                          length: Math.max(0, 12 - pets.length),
+                        }).map((_, index) => (
+                          <div
+                            key={`empty-${index}`}
+                            className="flex min-h-[128px] items-center justify-center rounded-xl border border-dashed border-white/[.07] text-[10px] text-slate-700"
+                          >
+                            {pets.length + index + 1}
                           </div>
-                          <p className="mt-2 text-right text-[10px] text-slate-400">
-                            20 iniciais em cada status · {total - 100} pontos
-                            distribuídos{" "}
-                            {pet.isMega &&
-                              "· bônus Mega calculado pelo servidor"}
-                          </p>
-                        </article>
-                      );
-                    })}
-                </>
-              )}
-            </div>
-          </section>
+                        ))}
+                      </div>
+                      {pets
+                        .filter((pet) => pet.id === editingPetId)
+                        .map((pet) => {
+                          const item = species.find(
+                            (s) => s.id === pet.speciesId,
+                          )!;
+                          const total = DRAFT_STAT_KEYS.reduce(
+                            (s, k) => s + pet.stats[k],
+                            0,
+                          );
+                          return (
+                            <article
+                              key={pet.id}
+                              className="mt-4 rounded-2xl border border-cyan-300/15 bg-white/[.025] p-3 sm:p-4"
+                            >
+                              <div className="flex gap-3">
+                                <span className="text-xs font-black text-slate-500">
+                                  {pet.slot + 1}
+                                </span>
+                                <img
+                                  src={item?.sprite}
+                                  alt=""
+                                  className="h-12 w-12 object-contain sm:h-14 sm:w-14"
+                                />
+                                <div className="min-w-0 flex-1">
+                                  <div className="flex items-center justify-between">
+                                    <b className="truncate text-white">
+                                      {item?.name}
+                                    </b>
+                                    <button
+                                      onClick={() => removePet(pet.id)}
+                                      className="text-rose-300"
+                                    >
+                                      <Trash2 size={15} />
+                                    </button>
+                                  </div>
+                                  <input
+                                    value={pet.nickname ?? ""}
+                                    maxLength={18}
+                                    onChange={(e) =>
+                                      updatePet(pet.id, {
+                                        nickname: e.target.value,
+                                      })
+                                    }
+                                    placeholder={`Apelido (opcional) · ${item?.name ?? ""}`}
+                                    className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-[11px] text-white outline-none focus:border-cyan-300/40"
+                                  />
+                                  <div className="mt-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
+                                    <select
+                                      value={pet.personality}
+                                      onChange={(e) =>
+                                        updatePet(pet.id, {
+                                          personality: e.target
+                                            .value as ArenaDraftPet["personality"],
+                                        })
+                                      }
+                                      className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                                    >
+                                      {DRAFT_PERSONALITIES.map((x) => (
+                                        <option key={x} value={x}>
+                                          {PERSONALITY_LABEL[x]}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <select
+                                      value={pet.posture}
+                                      onChange={(e) =>
+                                        updatePet(pet.id, {
+                                          posture: e.target
+                                            .value as ArenaDraftPet["posture"],
+                                        })
+                                      }
+                                      className="rounded-lg bg-slate-900 p-2 text-[10px]"
+                                    >
+                                      {DRAFT_POSTURES.map((x) => (
+                                        <option key={x} value={x}>
+                                          {postureLabels[x]}
+                                        </option>
+                                      ))}
+                                    </select>
+                                    <div
+                                      className={`flex items-center justify-center rounded-lg border p-2 text-[10px] ${pet.isMega ? "border-fuchsia-400 text-fuchsia-200" : "border-white/10 text-slate-500"}`}
+                                    >
+                                      {pet.isMega
+                                        ? "Forma Mega · +10"
+                                        : "Forma comum"}
+                                    </div>
+                                  </div>
+                                  <div className="mt-2 grid gap-2 sm:grid-cols-2">
+                                    <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.04] p-2.5">
+                                      <p className="text-[9px] font-black uppercase tracking-wider text-fuchsia-300">
+                                        {PERSONALITY_LABEL[pet.personality] ??
+                                          pet.personality}{" "}
+                                        · efeito em combate
+                                      </p>
+                                      <p className="mt-1 text-[11px] leading-4 text-slate-300">
+                                        {PERSONALITY_DESIGN_BY_KEY[
+                                          pet.personality
+                                        ]?.combat ??
+                                          "Sem efeito de combate específico."}
+                                      </p>
+                                    </div>
+                                    <div className="rounded-lg border border-[#FFCB05]/25 bg-[#FFCB05]/[.05] p-2.5">
+                                      <p className="text-[9px] font-black uppercase tracking-wider text-[#FFCB05]">
+                                        {postureLabels[pet.posture]} · como atua
+                                      </p>
+                                      <p className="mt-1 text-[11px] leading-4 text-slate-300">
+                                        {COMBAT_ROLE_DESCRIPTIONS[
+                                          pet.posture as CombatRole
+                                        ] ?? ""}
+                                      </p>
+                                    </div>
+                                  </div>
+                                </div>
+                              </div>
+                              <div className="mt-3 grid grid-cols-2 gap-2 min-[430px]:grid-cols-5 min-[430px]:gap-1">
+                                {DRAFT_STAT_KEYS.map((key) => (
+                                  <label key={key} className="text-center">
+                                    <span className="block truncate text-[8px] uppercase text-slate-500">
+                                      {
+                                        {
+                                          force: "Força",
+                                          agility: "Agilidade",
+                                          charisma: "Carisma",
+                                          instinct: "Instinto",
+                                          vitality: "Vitalidade",
+                                        }[key]
+                                      }
+                                    </span>
+                                    <input
+                                      type="number"
+                                      inputMode="numeric"
+                                      min={20}
+                                      max={pet.isMega ? 240 : 250}
+                                      value={
+                                        statDrafts[`${pet.id}:${key}`] ??
+                                        String(pet.stats[key])
+                                      }
+                                      onChange={(e) => {
+                                        const raw = e.target.value;
+                                        if (!/^\d*$/.test(raw)) return;
+                                        const draftKey = `${pet.id}:${key}`;
+                                        if (raw === "") {
+                                          setStatDrafts((drafts) => ({
+                                            ...drafts,
+                                            [draftKey]: "",
+                                          }));
+                                          return;
+                                        }
+                                        const max = pet.isMega ? 240 : 250;
+                                        // Teto do orçamento do time: o que os demais
+                                        // status já distribuíram não pode deixar este
+                                        // ultrapassar os 4.500 pontos do time.
+                                        const otherDistributed =
+                                          allocatedPoints -
+                                          (pet.stats[key] -
+                                            ARENA_DRAFT_RULES.baseStat);
+                                        const budgetMax =
+                                          ARENA_DRAFT_RULES.baseStat +
+                                          Math.max(
+                                            0,
+                                            ARENA_DRAFT_RULES.statBudget -
+                                              otherDistributed,
+                                          );
+                                        // Teto de 900 por status (coluna) no time.
+                                        const otherColumn =
+                                          columnDistributed[key] -
+                                          (pet.stats[key] -
+                                            ARENA_DRAFT_RULES.baseStat);
+                                        const columnMax =
+                                          ARENA_DRAFT_RULES.baseStat +
+                                          Math.max(
+                                            0,
+                                            ARENA_DRAFT_RULES.perStatBudget -
+                                              otherColumn,
+                                          );
+                                        const capped = Math.min(
+                                          max,
+                                          budgetMax,
+                                          columnMax,
+                                          Number(raw),
+                                        );
+                                        setStatDrafts((drafts) => ({
+                                          ...drafts,
+                                          [draftKey]:
+                                            capped === Number(raw)
+                                              ? raw
+                                              : String(capped),
+                                        }));
+                                        updatePet(pet.id, {
+                                          stats: {
+                                            ...pet.stats,
+                                            [key]: capped,
+                                          },
+                                        });
+                                      }}
+                                      onBlur={() => {
+                                        const draftKey = `${pet.id}:${key}`;
+                                        const max = pet.isMega ? 240 : 250;
+                                        const otherDistributed =
+                                          allocatedPoints -
+                                          (pet.stats[key] -
+                                            ARENA_DRAFT_RULES.baseStat);
+                                        const budgetMax =
+                                          ARENA_DRAFT_RULES.baseStat +
+                                          Math.max(
+                                            0,
+                                            ARENA_DRAFT_RULES.statBudget -
+                                              otherDistributed,
+                                          );
+                                        const otherColumn =
+                                          columnDistributed[key] -
+                                          (pet.stats[key] -
+                                            ARENA_DRAFT_RULES.baseStat);
+                                        const columnMax =
+                                          ARENA_DRAFT_RULES.baseStat +
+                                          Math.max(
+                                            0,
+                                            ARENA_DRAFT_RULES.perStatBudget -
+                                              otherColumn,
+                                          );
+                                        updatePet(pet.id, {
+                                          stats: {
+                                            ...pet.stats,
+                                            [key]: Math.max(
+                                              20,
+                                              Math.min(
+                                                max,
+                                                budgetMax,
+                                                columnMax,
+                                                pet.stats[key] || 20,
+                                              ),
+                                            ),
+                                          },
+                                        });
+                                        setStatDrafts((drafts) => {
+                                          const next = { ...drafts };
+                                          delete next[draftKey];
+                                          return next;
+                                        });
+                                      }}
+                                      className="mt-1 w-full rounded-lg border border-white/10 bg-slate-950 p-2 text-center text-xs text-white"
+                                    />
+                                  </label>
+                                ))}
+                              </div>
+                              <p className="mt-2 text-right text-[10px] text-slate-400">
+                                20 iniciais em cada status · {total - 100}{" "}
+                                pontos distribuídos{" "}
+                                {pet.isMega &&
+                                  "· bônus Mega calculado pelo servidor"}
+                              </p>
+                            </article>
+                          );
+                        })}
+                    </>
+                  )}
+                </div>
+              </section>
             </div>
           )}
         </div>
@@ -1453,8 +1467,8 @@ export function ArenaDraftClient({
                       </div>
                       {ready.length === 0 ? (
                         <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500">
-                          Nenhum time {MODE_LABEL[m]} pronto. Monte um em “Montar
-                          preset”.
+                          Nenhum time {MODE_LABEL[m]} pronto. Monte um em
+                          “Montar preset”.
                         </p>
                       ) : (
                         <div className="space-y-2">
@@ -1610,7 +1624,11 @@ export function ArenaDraftClient({
                     key={r.playerId}
                     className="grid grid-cols-[32px_1fr_auto] items-center gap-2 rounded-xl border border-white/10 p-3"
                   >
-                    <b className={r.provisional ? "text-slate-500" : "text-cyan-300"}>
+                    <b
+                      className={
+                        r.provisional ? "text-slate-500" : "text-cyan-300"
+                      }
+                    >
                       {r.provisional ? "—" : `#${i + 1}`}
                     </b>
                     <span className="flex min-w-0 items-center gap-2">
@@ -1704,7 +1722,10 @@ function RealRosterBuilder({
       (m.nickname ?? "").toLowerCase().includes(search.toLowerCase()),
   );
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
-  const visible = filtered.slice((Math.min(page, pages) - 1) * perPage, Math.min(page, pages) * perPage);
+  const visible = filtered.slice(
+    (Math.min(page, pages) - 1) * perPage,
+    Math.min(page, pages) * perPage,
+  );
   const toggle = (id: string) => {
     setSelected((cur) =>
       cur.includes(id)
@@ -1724,9 +1745,7 @@ function RealRosterBuilder({
     setSelected(preset.pets.map((p) => p.id).filter((id) => byId.has(id)));
     setPostures(
       Object.fromEntries(
-        preset.pets
-          .filter((p) => byId.has(p.id))
-          .map((p) => [p.id, p.posture]),
+        preset.pets.filter((p) => byId.has(p.id)).map((p) => [p.id, p.posture]),
       ),
     );
   };
@@ -1776,7 +1795,9 @@ function RealRosterBuilder({
                   className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left ${editingId === p.id ? "border-emerald-400/50 bg-emerald-400/10" : "border-white/10 hover:border-emerald-400/30"}`}
                 >
                   <span className="min-w-0">
-                    <b className="block truncate text-sm text-white">{p.name}</b>
+                    <b className="block truncate text-sm text-white">
+                      {p.name}
+                    </b>
                     <small className="text-slate-500">
                       {p.pets.length}/12 mascotes
                     </small>
@@ -1786,57 +1807,6 @@ function RealRosterBuilder({
                   )}
                 </button>
               ))
-            )}
-          </div>
-        </div>
-        <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-4">
-          <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
-            Selecionados ({selected.length}/12) · escolha a postura
-          </p>
-          <div className="mt-2 space-y-1.5">
-            {selected.map((id) => {
-              const m = byId.get(id);
-              if (!m) return null;
-              return (
-                <div
-                  key={id}
-                  className="flex items-center gap-2 rounded-lg border border-emerald-400/25 bg-emerald-400/[.06] p-1.5"
-                >
-                  <img
-                    src={m.sprite}
-                    alt=""
-                    className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
-                  />
-                  <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-white">
-                    {m.nickname?.trim() || m.name}
-                  </span>
-                  <select
-                    value={postures[id] ?? m.posture}
-                    onChange={(e) =>
-                      setPostures((cur) => ({ ...cur, [id]: e.target.value }))
-                    }
-                    className="max-w-[92px] rounded border border-[#FFCB05]/30 bg-slate-900 px-1 py-1 text-[9px] font-bold text-[#FFCB05]"
-                  >
-                    {DRAFT_POSTURES.map((r) => (
-                      <option key={r} value={r} className="text-white">
-                        {postureLabels[r]}
-                      </option>
-                    ))}
-                  </select>
-                  <button
-                    onClick={() => toggle(id)}
-                    title="Remover"
-                    className="shrink-0 rounded p-1 text-rose-300 hover:bg-rose-400/10"
-                  >
-                    <Trash2 size={13} />
-                  </button>
-                </div>
-              );
-            })}
-            {selected.length === 0 && (
-              <p className="py-3 text-center text-[10px] text-slate-600">
-                Escolha 12 mascotes ao lado.
-              </p>
             )}
           </div>
         </div>
@@ -1877,54 +1847,89 @@ function RealRosterBuilder({
                 const picked = selected.includes(m.id);
                 const full = selected.length >= 12 && !picked;
                 return (
-                  <button
+                  <article
                     key={m.id}
-                    disabled={full}
-                    onClick={() => toggle(m.id)}
                     className={`rounded-xl border p-2 text-left transition disabled:opacity-40 ${picked ? "border-emerald-400 bg-emerald-400/10" : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
                   >
-                    <div className="flex items-center gap-2">
-                      <img
-                        src={m.sprite}
-                        alt=""
-                        className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
-                      />
-                      <div className="min-w-0">
-                        <b className="block truncate text-[11px] text-white">
-                          {m.nickname?.trim() || m.name}
-                          {m.isMega && (
-                            <span className="ml-1 text-[8px] font-black text-amber-300">
-                              MEGA
-                            </span>
-                          )}
-                        </b>
-                        <span className="block truncate text-[9px] text-slate-500">
-                          Nv.{m.level} ·{" "}
-                          {PERSONALITY_LABEL[m.personality] ?? m.personality}
-                        </span>
-                      </div>
-                    </div>
-                    <div className="mt-1.5 grid grid-cols-5 gap-0.5 text-center">
-                      {(
-                        [
-                          ["FOR", m.stats.force],
-                          ["AGI", m.stats.agility],
-                          ["CAR", m.stats.charisma],
-                          ["INS", m.stats.instinct],
-                          ["VIT", m.stats.vitality],
-                        ] as const
-                      ).map(([label, value]) => (
-                        <span key={label} className="rounded bg-slate-950/70 py-0.5">
-                          <b className="block text-[7px] uppercase leading-none text-slate-500">
-                            {label}
+                    <button
+                      disabled={full}
+                      onClick={() => toggle(m.id)}
+                      className="w-full text-left disabled:opacity-40"
+                    >
+                      <div className="flex items-center gap-2">
+                        <img
+                          src={m.sprite}
+                          alt=""
+                          className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
+                        />
+                        <div className="min-w-0">
+                          <b className="block truncate text-[11px] text-white">
+                            {m.nickname?.trim() || m.name}
+                            {m.isMega && (
+                              <span className="ml-1 text-[8px] font-black text-amber-300">
+                                MEGA
+                              </span>
+                            )}
                           </b>
-                          <strong className="block text-[10px] tabular-nums text-slate-100">
-                            {value}
-                          </strong>
-                        </span>
-                      ))}
-                    </div>
-                  </button>
+                          <span className="block truncate text-[9px] text-slate-500">
+                            Nv.{m.level} ·{" "}
+                            {PERSONALITY_LABEL[m.personality] ?? m.personality}
+                          </span>
+                        </div>
+                      </div>
+                      <div className="mt-1.5 grid grid-cols-5 gap-0.5 text-center">
+                        {(
+                          [
+                            ["FOR", m.stats.force],
+                            ["AGI", m.stats.agility],
+                            ["CAR", m.stats.charisma],
+                            ["INS", m.stats.instinct],
+                            ["VIT", m.stats.vitality],
+                          ] as const
+                        ).map(([label, value]) => (
+                          <span
+                            key={label}
+                            className="rounded bg-slate-950/70 py-0.5"
+                          >
+                            <b className="block text-[7px] uppercase leading-none text-slate-500">
+                              {label}
+                            </b>
+                            <strong className="block text-[10px] tabular-nums text-slate-100">
+                              {value}
+                            </strong>
+                          </span>
+                        ))}
+                      </div>
+                    </button>
+                    {picked && (
+                      <div className="mt-2 flex items-center gap-1.5 border-t border-emerald-300/15 pt-2">
+                        <select
+                          aria-label={`Postura de ${m.nickname?.trim() || m.name}`}
+                          value={postures[m.id] ?? m.posture}
+                          onChange={(event) =>
+                            setPostures((current) => ({
+                              ...current,
+                              [m.id]: event.target.value,
+                            }))
+                          }
+                          className="min-w-0 flex-1 rounded-lg border border-[#FFCB05]/30 bg-slate-900 px-2 py-1.5 text-[9px] font-bold text-[#FFCB05]"
+                        >
+                          {DRAFT_POSTURES.map((role) => (
+                            <option key={role} value={role}>
+                              {postureLabels[role]}
+                            </option>
+                          ))}
+                        </select>
+                        <button
+                          onClick={() => toggle(m.id)}
+                          title="Remover do time"
+                          className="rounded-lg border border-rose-400/15 p-1.5 text-rose-300 hover:bg-rose-400/10"
+                        >
+                          <Trash2 size={12} />
+                        </button>
+                      </div>
+                    )}
+                  </article>
                 );
               })}
             </div>
