@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { Prisma } from "@prisma/client";
+import { Prisma, ZikaCoinTxType } from "@prisma/client";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { KANTO_MVP_BY_ID } from "@/world-data/kanto/mvp";
@@ -9,6 +9,8 @@ import { getSpeciesSnapshot } from "@/lib/species-registry";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { PERSONALITIES } from "@/lib/mascot-data";
 import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
+import { creditCoins } from "@/lib/zikacoins";
+import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
 
 const CAPTURE_CHANCE: Record<string, number> = {
   COMMON: 72,
@@ -150,6 +152,52 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
     return { ok: true as const, ...result };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível resolver o encontro." };
+  }
+}
+
+async function requireAvailableWorldService(playerId: string, service: "CENTER" | "MART", tx: Prisma.TransactionClient) {
+  const state = await tx.worldPlayerState.findUnique({ where: { playerId } });
+  if (!state) throw new Error("Inicie sua aventura primeiro.");
+  if (state.travelingToId) throw new Error("Este serviço não está disponível durante uma viagem.");
+  const location = KANTO_MVP_BY_ID.get(state.currentLocationId);
+  if (!location?.services.includes(service)) throw new Error("Este serviço não existe na localização atual.");
+  return state;
+}
+
+export async function restAtWorldCenterAction() {
+  try {
+    const player = await adminPlayer();
+    const recovered = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const state = await requireAvailableWorldService(player.id, "CENTER", tx);
+      await tx.worldPlayerState.update({ where: { playerId: player.id }, data: { fatigue: 0 } });
+      return state.fatigue;
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, recovered };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível descansar." };
+  }
+}
+
+export async function buyWorldMartItemAction(itemId: string, quantity: number) {
+  try {
+    const player = await adminPlayer();
+    const item = KANTO_MVP_MART_BY_ID.get(itemId as "pokeBalls" | "potions" | "antidotes");
+    const safeQuantity = Math.floor(quantity);
+    if (!item || safeQuantity < 1 || safeQuantity > 20) throw new Error("Compra inválida.");
+    const total = item.price * safeQuantity;
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const state = await requireAvailableWorldService(player.id, "MART", tx);
+      await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -total, description: `World Mode: ${safeQuantity}x ${item.name}` });
+      const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
+      await tx.worldPlayerState.update({ where: { playerId: player.id }, data: { inventoryJson: { ...inventory, [item.id]: Number(inventory[item.id] ?? 0) + safeQuantity } as Prisma.InputJsonValue } });
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, itemName: item.name, quantity: safeQuantity };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível concluir a compra." };
   }
 }
 

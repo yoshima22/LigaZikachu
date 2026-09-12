@@ -57,3 +57,9 @@ export type WorldLocationConfig = {
   locked?: boolean;
 };
 
+export type WorldMartItem = {
+  id: "pokeBalls" | "potions" | "antidotes";
+  name: string;
+  description: string;
+  price: number;
+};

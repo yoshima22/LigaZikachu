@@ -3,6 +3,8 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { KANTO_MVP_LOCATIONS } from "@/world-data/kanto/mvp";
 import { getAdminWorldEncounters, getAdminWorldState } from "./actions";
 import { WorldModeClient } from "./world-mode-client";
+import { KANTO_MVP_MART } from "@/world-data/kanto/mart";
+import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
 
@@ -12,6 +14,9 @@ export default async function WorldModePage() {
     getAdminWorldState(),
     getAdminWorldEncounters(),
   ]);
+  const wallet = state
+    ? await prisma.zikaCoinWallet.findUnique({ where: { playerId: state.playerId }, select: { balance: true } })
+    : null;
   const locations = KANTO_MVP_LOCATIONS.map((location) => ({
     ...location,
     encounters: location.encounters.map((encounter) => ({
@@ -39,6 +44,8 @@ export default async function WorldModePage() {
           createdAt: entry.createdAt.toISOString(),
         })),
       }}
+      martItems={KANTO_MVP_MART}
+      zikaCoins={wallet?.balance ?? 0}
       initialState={
         state
           ? {

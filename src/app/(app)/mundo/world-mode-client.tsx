@@ -8,6 +8,7 @@ import {
   Clock3,
   FlaskConical,
   Footprints,
+  HeartPulse,
   LockKeyhole,
   Map as MapIcon,
   MapPin,
@@ -16,16 +17,20 @@ import {
   RotateCcw,
   Search,
   Shield,
+  ShoppingBasket,
   Sparkles,
   Store,
   Trees,
 } from "lucide-react";
 import { toast } from "sonner";
 import type { WorldEncounterConfig, WorldLocationConfig } from "@/world-data/types";
+import type { WorldMartItem } from "@/world-data/types";
 import {
+  buyWorldMartItemAction,
   finishWorldTravelNowAction,
   exploreWorldLocationAction,
   resetAdminWorldAction,
+  restAtWorldCenterAction,
   resolveWorldEncounterAction,
   startWorldAdventureAction,
   startWorldTravelAction,
@@ -93,7 +98,7 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] } }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
@@ -228,6 +233,24 @@ export function WorldModeClient({ locations, initialState, encounters }: { locat
             </div>
           )}
           {encounters.history.length > 0 && <div className="border-t border-white/5 px-5 py-4 md:px-7"><p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-500">Últimos encontros</p><div className="flex flex-wrap gap-2">{encounters.history.map((entry) => <span key={entry.id} className={`rounded-lg border px-2.5 py-1.5 text-[9px] ${entry.status === "CAPTURED" ? "border-emerald-300/20 bg-emerald-300/5 text-emerald-200" : "border-white/10 bg-white/[.025] text-slate-400"}`}><b>{entry.name}</b> · {entry.status === "CAPTURED" ? "Capturado" : entry.status === "ESCAPED" ? "Liberado" : "Escapou da Poké Ball"}{entry.roll ? ` · rolagem ${entry.roll}/${entry.captureChance}` : ""}</span>)}</div></div>}
+        </section>
+      )}
+
+      {!initialState.travelingToId && current && (current.services.includes("CENTER") || current.services.includes("MART")) && (
+        <section className="grid gap-5 lg:grid-cols-2">
+          {current.services.includes("CENTER") && (
+            <div className="rounded-[2rem] border border-rose-300/15 bg-[radial-gradient(circle_at_top_left,rgba(251,113,133,.14),transparent_48%),#080d18] p-6">
+              <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-300/10 text-rose-300"><HeartPulse className="h-6 w-6" /></span><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-rose-300">Pokémon Center</span><h2 className="text-2xl font-black text-white">Recupere-se antes da rota</h2><p className="mt-2 text-xs leading-5 text-slate-400">O descanso remove toda a fadiga acumulada. Cura e condições dos mascotes serão conectadas junto ao sistema de combates do mundo.</p></div></div>
+              <button disabled={pending || initialState.fatigue === 0} onClick={() => act(restAtWorldCenterAction, "Descanso concluído. Sua fadiga foi removida.")} className="mt-5 w-full rounded-xl bg-gradient-to-r from-rose-300 to-pink-300 px-5 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">{initialState.fatigue > 0 ? `Descansar · remover ${initialState.fatigue} de fadiga` : "Você já está descansado"}</button>
+            </div>
+          )}
+          {current.services.includes("MART") && (
+            <div className="rounded-[2rem] border border-amber-300/15 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,.12),transparent_48%),#080d18] p-6">
+              <div className="flex items-center justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-amber-300">Poké Mart</span><h2 className="text-2xl font-black text-white">Suprimentos de viagem</h2></div><span className="rounded-xl border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-xs font-black text-amber-200">{zikaCoins.toLocaleString("pt-BR")} ZC</span></div>
+              <div className="mt-4 space-y-2">{martItems.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[.025] p-3"><div><b className="text-xs text-white">{item.name}</b><p className="mt-0.5 text-[9px] text-slate-500">{item.description}</p></div><button disabled={pending || zikaCoins < item.price} onClick={() => act(() => buyWorldMartItemAction(item.id, 1), `${item.name} adicionado à mochila.`)} className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[10px] font-black text-amber-200 disabled:opacity-35"><ShoppingBasket className="mr-1 inline h-3.5 w-3.5" />{item.price} ZC</button></div>)}</div>
+              <p className="mt-3 text-[9px] text-slate-600">Preços provisórios do protótipo, centralizados na configuração de Kanto.</p>
+            </div>
+          )}
         </section>
       )}
 
