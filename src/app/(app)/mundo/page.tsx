@@ -9,6 +9,7 @@ import {
 import {
   readWorldParty,
   readWorldMascotState,
+  readWorldWild,
   worldMaxHp,
 } from "@/world-data/party";
 import { WorldModeClient } from "./world-mode-client";
@@ -75,13 +76,25 @@ export default async function WorldModePage() {
       locations={locations}
       encounters={{
         active: encounterData.active
-          ? {
-              ...encounterData.active,
-              name: getPokemonName(encounterData.active.pokemonId),
-              spriteUrl: getSpriteUrl(encounterData.active.pokemonId),
-              createdAt: encounterData.active.createdAt.toISOString(),
-              resolvedAt: null,
-            }
+          ? (() => {
+              const w = readWorldWild(encounterData.active.wildJson);
+              const weakenPct = w ? 1 - w.hp / Math.max(1, w.maxHp) : 0;
+              const effectiveChance = Math.min(
+                95,
+                Math.round(encounterData.active.captureChance + weakenPct * 45),
+              );
+              return {
+                ...encounterData.active,
+                name: getPokemonName(encounterData.active.pokemonId),
+                spriteUrl: getSpriteUrl(encounterData.active.pokemonId),
+                createdAt: encounterData.active.createdAt.toISOString(),
+                resolvedAt: null,
+                wildHp: w?.hp ?? null,
+                wildMaxHp: w?.maxHp ?? null,
+                wildLevel: w?.level ?? null,
+                effectiveChance,
+              };
+            })()
           : null,
         history: encounterData.history.map((entry) => ({
           ...entry,

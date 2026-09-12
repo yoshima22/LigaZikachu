@@ -17,22 +17,31 @@ import {
   WORLD_PARTY_MAX,
   readWorldParty,
   readWorldMascotState,
+  readWorldWild,
   worldMaxHp,
   type WorldMascotStateMap,
+  type WorldWildState,
 } from "@/world-data/party";
 import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
+import { worldItemTable } from "@/world-data/kanto/items";
 import { KANTO_MVP_TRAINER_BY_ID } from "@/world-data/kanto/trainers";
-import { scaleTrainerTeam, playerLeaderHandicap } from "@/world-data/difficulty";
+import {
+  scaleTrainerTeam,
+  playerLeaderHandicap,
+  scaleWildProfile,
+} from "@/world-data/difficulty";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 
+// Chance-base (selvagem com vida cheia). Deliberadamente baixa: capturar exige
+// enfraquecer o selvagem em combate (bônus de até +45% por HP perdido).
 const CAPTURE_CHANCE: Record<string, number> = {
-  COMMON: 72,
-  UNCOMMON: 58,
-  RARE: 42,
-  VERY_RARE: 25,
-  SPECIAL: 12,
+  COMMON: 38,
+  UNCOMMON: 30,
+  RARE: 22,
+  VERY_RARE: 12,
+  SPECIAL: 6,
 };
 
 function randomInt(min: number, max: number) {
@@ -47,6 +56,52 @@ async function adminPlayer() {
   });
   if (!player) throw new Error("A conta administrativa não possui jogador vinculado.");
   return player;
+}
+
+// Referência de nível/força da equipe do jogador para escalar o desafio. Usa a
+// formação salva; senão equipados/favoritos; senão valores base.
+async function playerBattleRefTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  state: { partyJson: Prisma.JsonValue },
+) {
+  const party = readWorldParty(state.partyJson);
+  let mascots = party.length
+    ? await tx.mascot.findMany({
+        where: { id: { in: party.map((e) => e.mascotId) }, playerId },
+        select: {
+          level: true,
+          statForce: true,
+          statAgility: true,
+          statCharisma: true,
+          statInstinct: true,
+          statVitality: true,
+        },
+      })
+    : [];
+  if (mascots.length === 0)
+    mascots = await tx.mascot.findMany({
+      where: { playerId, isEquipped: true },
+      take: 6,
+      select: {
+        level: true,
+        statForce: true,
+        statAgility: true,
+        statCharisma: true,
+        statInstinct: true,
+        statVitality: true,
+      },
+    });
+  if (mascots.length === 0)
+    return { avgLevel: 5, avgStatTotal: 60 };
+  const avgLevel = mascots.reduce((s, m) => s + m.level, 0) / mascots.length;
+  const avgStatTotal =
+    mascots.reduce(
+      (s, m) =>
+        s + m.statForce + m.statAgility + m.statCharisma + m.statInstinct + m.statVitality,
+      0,
+    ) / mascots.length;
+  return { avgLevel, avgStatTotal };
 }
 
 export async function getAdminWorldState() {
@@ -254,6 +309,18 @@ export async function exploreWorldLocationAction() {
       let weightedRoll = Math.random() * totalWeight;
       const selected = pool.find((entry) => (weightedRoll -= entry.weight) <= 0) ?? pool[pool.length - 1];
       if (!selected) throw new Error("A tabela de encontros desta área está vazia.");
+      // Perfil de combate do selvagem, escalado à equipe do jogador. O selvagem
+      // precisa ser enfrentado (e enfraquecido) antes da captura.
+      const ref = await playerBattleRefTx(tx, player.id, state);
+      const profile = scaleWildProfile(selected.rarity, ref);
+      const maxHp = worldMaxHp(profile.level, profile.stats.vitality);
+      const wild: WorldWildState = {
+        level: profile.level,
+        role: profile.role,
+        stats: profile.stats,
+        maxHp,
+        hp: maxHp,
+      };
       return tx.worldEncounterSession.create({
         data: {
           playerId: player.id,
@@ -261,6 +328,7 @@ export async function exploreWorldLocationAction() {
           pokemonId: selected.speciesId,
           rarity: selected.rarity,
           captureChance: CAPTURE_CHANCE[selected.rarity] ?? 40,
+          wildJson: wild as unknown as Prisma.InputJsonValue,
         },
       });
     });
@@ -287,8 +355,16 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
       const pokeBalls = Number(inventory.pokeBalls ?? 0);
       if (pokeBalls < 1) throw new Error("Você não possui Poké Balls.");
+      // Chance efetiva: base da raridade + bônus por enfraquecer o selvagem
+      // (até +45 quando quase desmaiado), limitada a 95%.
+      const wild = readWorldWild(encounter.wildJson);
+      const weakenPct = wild ? 1 - wild.hp / Math.max(1, wild.maxHp) : 0;
+      const effectiveChance = Math.min(
+        95,
+        Math.round(encounter.captureChance + weakenPct * 45),
+      );
       const roll = randomInt(1, 100);
-      const captured = roll <= encounter.captureChance;
+      const captured = roll <= effectiveChance;
       let mascotId: string | undefined;
       if (captured) {
         const personality = PERSONALITIES[randomInt(0, PERSONALITIES.length - 1)] as MascotPersonality;
@@ -323,6 +399,169 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
     return { ok: true as const, ...result };
   } catch (error) {
     return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível resolver o encontro." };
+  }
+}
+
+// Escaramuça contra o selvagem: enfraquece-o para elevar a chance de captura.
+// Usa o motor oficial com limite de rodadas; HP persiste dos dois lados.
+export async function battleWildAction(encounterId: string) {
+  try {
+    const player = await adminPlayer();
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const encounter = await tx.worldEncounterSession.findFirst({
+        where: { id: encounterId, playerId: player.id, status: "ACTIVE" },
+      });
+      if (!encounter) throw new Error("Este encontro já foi resolvido.");
+      const state = await tx.worldPlayerState.findUnique({ where: { playerId: player.id } });
+      if (!state || state.currentLocationId !== encounter.locationId || state.travelingToId)
+        throw new Error("Você não está mais no local deste encontro.");
+      const wild = readWorldWild(encounter.wildJson);
+      if (!wild) throw new Error("Este encontro é antigo; deixe-o ir e explore novamente.");
+      if (wild.hp <= 0) throw new Error("O selvagem já foi derrotado.");
+
+      // Equipe do jogador pronta (HP persistente).
+      const party = readWorldParty(state.partyJson);
+      const mascotState = readWorldMascotState(state.mascotStateJson);
+      let mascots = party.length
+        ? await tx.mascot.findMany({ where: { id: { in: party.map((e) => e.mascotId) }, playerId: player.id } })
+        : [];
+      if (mascots.length === 0)
+        mascots = await tx.mascot.findMany({ where: { playerId: player.id, isEquipped: true }, take: 6 });
+      if (mascots.length === 0)
+        mascots = await tx.mascot.findMany({ where: { playerId: player.id }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }], take: 6 });
+      if (mascots.length === 0) throw new Error("Você precisa de ao menos um mascote para lutar.");
+      const postureById = new Map(party.map((e) => [e.mascotId, e.posture]));
+      const maxHpById = new Map(mascots.map((m) => [m.id, worldMaxHp(m.level, m.statVitality)] as const));
+      const currentHp = (m: (typeof mascots)[number]) => mascotState[m.id]?.hp ?? maxHpById.get(m.id)!;
+      const ready = mascots.filter((m) => currentHp(m) > 0);
+      if (ready.length === 0)
+        throw new Error("Toda a sua equipe está desmaiada. Recupere-a no Pokémon Center.");
+      // Combatente ativo = maior HP atual entre os prontos.
+      const fighter = [...ready].sort((x, y) => currentHp(y) - currentHp(x))[0];
+
+      const wildId = `world-wild:${encounter.id}`;
+      const teamA = [toLeagueMascot(fighter, 1, postureById.get(fighter.id) ?? fighter.preferredCombatRole)];
+      const teamB = [toLeagueMascot({
+        id: wildId,
+        playerId: "world-wild",
+        pokemonId: encounter.pokemonId,
+        nickname: null,
+        level: wild.level,
+        statForce: wild.stats.force,
+        statAgility: wild.stats.agility,
+        statCharisma: wild.stats.charisma,
+        statInstinct: wild.stats.instinct,
+        statVitality: wild.stats.vitality,
+        personality: null,
+      }, 1, wild.role)];
+      const startingHp = new Map<string, number>([
+        [fighter.id, currentHp(fighter)],
+        [wildId, wild.hp],
+      ]);
+      // Escaramuça curta (2 rodadas) para permitir enfraquecer aos poucos.
+      const battle = runLeagueCombat(teamA, teamB, null, [], [], { startingHp, maxRounds: 2 });
+
+      // Reconstrói o HP final dos dois lados a partir do log.
+      const endHp = new Map(startingHp);
+      for (const entry of battle.log)
+        if (entry.targetId && typeof entry.targetHpAfter === "number")
+          endHp.set(entry.targetId, entry.targetHpAfter);
+      const fighterMax = maxHpById.get(fighter.id)!;
+      const fighterHp = Math.max(0, Math.min(fighterMax, endHp.get(fighter.id) ?? currentHp(fighter)));
+      const wildHp = Math.max(0, Math.min(wild.maxHp, endHp.get(wildId) ?? wild.hp));
+
+      const nextMascotState: WorldMascotStateMap = { ...mascotState };
+      nextMascotState[fighter.id] = { hp: fighterHp, poisoned: mascotState[fighter.id]?.poisoned ?? false };
+      await tx.worldPlayerState.update({
+        where: { playerId: player.id },
+        data: { mascotStateJson: nextMascotState as unknown as Prisma.InputJsonValue },
+      });
+
+      const wildFainted = wildHp <= 0;
+      if (wildFainted) {
+        await tx.worldEncounterSession.update({
+          where: { id: encounter.id },
+          data: { status: "FAILED", resolvedAt: new Date(), wildJson: { ...wild, hp: 0 } as unknown as Prisma.InputJsonValue },
+        });
+      } else {
+        await tx.worldEncounterSession.update({
+          where: { id: encounter.id },
+          data: { wildJson: { ...wild, hp: wildHp } as unknown as Prisma.InputJsonValue },
+        });
+      }
+      return {
+        wildHp,
+        wildMaxHp: wild.maxHp,
+        wildFainted,
+        fighterName: fighter.nickname?.trim() || getPokemonName(fighter.pokemonId),
+        fighterHp,
+        fighterMax,
+        partyDown: ready.length === 1 && fighterHp <= 0,
+      };
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível lutar." };
+  }
+}
+
+const ITEM_SEARCH_FATIGUE = 2;
+
+// Vasculha a área por itens (ITEM_SEARCH). Resultado decidido no servidor por
+// tabela ponderada; custa um pouco de fadiga. Não aceita nada do cliente.
+export async function searchWorldItemsAction() {
+  try {
+    const player = await adminPlayer();
+    const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
+      const state = await tx.worldPlayerState.findUnique({ where: { playerId: player.id } });
+      if (!state) throw new Error("Inicie sua aventura antes de vasculhar.");
+      if (state.travelingToId) throw new Error("Você não pode vasculhar durante uma viagem.");
+      const active = await tx.worldEncounterSession.findFirst({
+        where: { playerId: player.id, status: "ACTIVE" },
+        select: { id: true },
+      });
+      if (active) throw new Error("Resolva o encontro atual antes de vasculhar.");
+      const location = KANTO_MVP_BY_ID.get(state.currentLocationId);
+      if (!location?.activities.includes("ITEM_SEARCH"))
+        throw new Error("Não há o que vasculhar por aqui.");
+      const table = worldItemTable(location.id);
+      const totalWeight = table.reduce((sum, entry) => sum + entry.weight, 0);
+      let roll = Math.random() * totalWeight;
+      const drop = table.find((entry) => (roll -= entry.weight) <= 0) ?? table[table.length - 1];
+      const amount = randomInt(drop.min, drop.max);
+      const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
+      if (drop.itemId === "zc") {
+        await creditCoins(tx, {
+          playerId: player.id,
+          type: ZikaCoinTxType.MATCH_WIN_REWARD,
+          amount,
+          description: `World Mode: item encontrado em ${location.name}`,
+        });
+        await tx.worldPlayerState.update({
+          where: { playerId: player.id },
+          data: { fatigue: { increment: ITEM_SEARCH_FATIGUE } },
+        });
+      } else {
+        await tx.worldPlayerState.update({
+          where: { playerId: player.id },
+          data: {
+            fatigue: { increment: ITEM_SEARCH_FATIGUE },
+            inventoryJson: {
+              ...inventory,
+              [drop.itemId]: Number(inventory[drop.itemId] ?? 0) + amount,
+            } as Prisma.InputJsonValue,
+          },
+        });
+      }
+      return { label: drop.label, amount, isCoins: drop.itemId === "zc" };
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, ...result };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível vasculhar." };
   }
 }
 

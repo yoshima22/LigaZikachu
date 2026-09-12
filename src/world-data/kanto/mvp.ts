@@ -58,6 +58,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
     connections: [
       { to: "route-1", minutes: 20, fatigue: 5 },
       { to: "route-2", minutes: 12, fatigue: 3 },
+      { to: "route-mtpath", minutes: 15, fatigue: 6 },
     ],
   },
   {
@@ -116,6 +117,33 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
     ],
   },
   {
+    id: "route-mtpath",
+    name: "Trilha da Serra",
+    shortName: "Serra",
+    region: "kanto",
+    type: "ROUTE",
+    biome: "Encosta rochosa",
+    description:
+      "Um atalho por encostas de pedra que contorna a Viridian Forest. É mais rápido até Pewter, mas o terreno íngreme cansa mais e abriga Pokémon do tipo Pedra e Terra.",
+    danger: 2,
+    map: { x: 58, y: 44 },
+    services: [],
+    activities: ["EXPLORE", "CAPTURE", "TRAINER_BATTLE", "ITEM_SEARCH"],
+    encounters: [
+      { speciesId: 74, weight: 50, rarity: "COMMON", timeOfDay: "ANY" },
+      { speciesId: 27, weight: 45, rarity: "COMMON", timeOfDay: "DAY" },
+      { speciesId: 21, weight: 40, rarity: "COMMON", timeOfDay: "DAY" },
+      { speciesId: 41, weight: 35, rarity: "COMMON", timeOfDay: "NIGHT" },
+      { speciesId: 66, weight: 22, rarity: "UNCOMMON", timeOfDay: "ANY" },
+      { speciesId: 104, weight: 10, rarity: "RARE", timeOfDay: "NIGHT" },
+      { speciesId: 95, weight: 4, rarity: "VERY_RARE", timeOfDay: "ANY" },
+    ],
+    connections: [
+      { to: "viridian-city", minutes: 15, fatigue: 6 },
+      { to: "pewter-city", minutes: 20, fatigue: 10 },
+    ],
+  },
+  {
     id: "pewter-city",
     name: "Pewter City",
     shortName: "Pewter",
@@ -129,7 +157,10 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
     services: ["CENTER", "MART", "GYM"],
     activities: ["DELIVERY", "TRAINER_BATTLE"],
     encounters: [],
-    connections: [{ to: "viridian-forest", minutes: 25, fatigue: 8 }],
+    connections: [
+      { to: "viridian-forest", minutes: 25, fatigue: 8 },
+      { to: "route-mtpath", minutes: 20, fatigue: 10 },
+    ],
   },
 ];
 

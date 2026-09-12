@@ -110,6 +110,47 @@ Assets prováveis para as próximas etapas (ainda não solicitados/produzidos):
     fluxo de batalha selvagem (reaproveitando o motor + `startingHp`) antes da
     tentativa de captura.
 
+## Bloco adicional (implementado, ainda não enviado)
+
+Validado localmente (typecheck + build). Aguardando autorização para push.
+
+### Captura por batalha (HP persistente dos dois lados)
+
+- Motor da Liga ganhou `options.maxRounds` (limite de rodadas, backward-compatible)
+  para **escaramuças curtas** — sem reimplementar combate.
+- `WorldEncounterSession.wildJson` guarda o perfil de combate do selvagem
+  (nível, status, HP) escalado à equipe do jogador (`scaleWildProfile`).
+- `battleWildAction`: 1v1 (mascote de maior HP pronto vs selvagem), 2 rodadas,
+  **dano persiste** dos dois lados (jogador curado só no Center).
+- Captura passa a exigir enfraquecer: **chances-base reduzidas**
+  (COMMON 38 … SPECIAL 6) + **bônus de até +45%** proporcional ao HP perdido
+  (teto 95%). Selvagem desmaiado = perdido.
+- UI: barra de HP e nível do selvagem, botão **Atacar** e Poké Ball com a
+  **chance efetiva**.
+
+### Mapa: rota alternativa
+
+- Nova localização **Trilha da Serra** (`route-mtpath`) ligando
+  **Viridian ↔ Pewter** por fora da floresta: mais rápida, porém mais cansativa,
+  com encontros de Pedra/Terra. O grafo já suportava múltiplas conexões; agora
+  há **dois caminhos** para Pewter. (Sem arte dedicada — usa gradiente.)
+
+### Busca de itens (ITEM_SEARCH)
+
+- `src/world-data/kanto/items.ts`: tabelas ponderadas por área.
+- `searchWorldItemsAction`: concede Poké Ball/Potion/Antídoto/ZC pela tabela,
+  custa +2 de fadiga, valida a atividade no servidor.
+- UI: botão **Vasculhar itens** ao lado de Explorar.
+
+### Migração
+
+```text
+prisma/migrations/20260912220000_add_world_wild_battle  (wildJson)
+```
+
+Aplicada em produção via `prisma db execute` (idempotente). O código só entra no
+ar no próximo push.
+
 ## Próximos passos recomendados
 
 1. **Captura por batalha** usando o motor + HP persistente (encaixa direto no

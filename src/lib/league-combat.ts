@@ -50,6 +50,9 @@ export type LeagueCombatOptions = {
   // HP inicial por mascote (World Mode: dano persistente entre batalhas). O
   // valor máximo continua sendo `mascot.hp`; ausente = começa com vida cheia.
   startingHp?: Map<string, number>;
+  // Limite de rodadas (World Mode: escaramuças curtas para enfraquecer o
+  // selvagem antes da captura). Ausente = 150 (batalha completa).
+  maxRounds?: number;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -385,7 +388,8 @@ export function runLeagueCombat(
   let totalDmgA = 0;
   let totalDmgB = 0;
 
-  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= 150) {
+  const roundCap = Math.max(1, Math.min(150, options.maxRounds ?? 150));
+  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= roundCap) {
     if (options.lastMascotVitalityBonus) {
       for (const [side, team] of [["A", a], ["B", b]] as const) {
         const standing = alive(team, hp);

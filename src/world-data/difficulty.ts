@@ -66,6 +66,50 @@ export function scaleTrainerTeam(
   });
 }
 
+// Perfil do Pokémon selvagem escalado ao jogador. Raridades mais altas são
+// mais fortes (e valem mais no combate de captura).
+const WILD_RARITY: Record<string, { levelBump: number; strength: number; role: string; base: number }> = {
+  COMMON: { levelBump: 0, strength: 0.8, role: "ATTACKER", base: 55 },
+  UNCOMMON: { levelBump: 1, strength: 0.92, role: "FLANK", base: 60 },
+  RARE: { levelBump: 2, strength: 1.05, role: "DUELIST", base: 68 },
+  VERY_RARE: { levelBump: 3, strength: 1.2, role: "OPPORTUNIST", base: 75 },
+  SPECIAL: { levelBump: 4, strength: 1.4, role: "SURVIVOR", base: 85 },
+};
+
+export type WildStats = {
+  force: number;
+  agility: number;
+  charisma: number;
+  instinct: number;
+  vitality: number;
+};
+
+/** Gera nível, postura e status de um selvagem escalados ao jogador. O HP máximo
+ * deve ser calculado com worldMaxHp(level, stats.vitality). */
+export function scaleWildProfile(
+  rarity: string,
+  ref: PlayerBattleRef,
+): { level: number; role: string; stats: WildStats } {
+  const params = WILD_RARITY[rarity] ?? WILD_RARITY.COMMON;
+  const level = Math.max(2, Math.round(ref.avgLevel) + params.levelBump);
+  const total = Math.max(params.base, Math.round(ref.avgStatTotal * params.strength));
+  // Distribuição levemente ofensiva; vitalidade sustenta o HP para dar tempo de
+  // enfraquecer antes da captura.
+  const weights = { force: 0.24, agility: 0.22, charisma: 0.12, instinct: 0.2, vitality: 0.22 };
+  const stat = (w: number) => Math.max(1, Math.min(250, Math.round(total * w)));
+  return {
+    level,
+    role: params.role,
+    stats: {
+      force: stat(weights.force),
+      agility: stat(weights.agility),
+      charisma: stat(weights.charisma),
+      instinct: stat(weights.instinct),
+      vitality: stat(weights.vitality),
+    },
+  };
+}
+
 /** Handicap ofensivo aplicado ao jogador (líderes reduzem levemente força,
  * agilidade, instinto e carisma — não mexe na vitalidade para manter o HP
  * persistente consistente). */

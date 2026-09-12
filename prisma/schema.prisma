@@ -416,6 +416,7 @@ model WorldEncounterSession {
   pokemonId     Int
   rarity        String
   captureChance Int
+  wildJson      Json?
   status        WorldEncounterStatus @default(ACTIVE)
   roll          Int?
   mascotId      String?

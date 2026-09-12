@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import type { WorldEncounterConfig, WorldLocationConfig } from "@/world-data/types";
 import type { WorldMartItem } from "@/world-data/types";
 import {
+  battleWildAction,
   buyWorldMartItemAction,
   challengeWorldTrainerAction,
   finishWorldTravelNowAction,
@@ -38,6 +39,7 @@ import {
   restAtWorldCenterAction,
   resolveWorldEncounterAction,
   saveWorldPartyAction,
+  searchWorldItemsAction,
   startWorldAdventureAction,
   startWorldTravelAction,
   useWorldItemAction,
@@ -99,6 +101,10 @@ type Encounter = {
   spriteUrl?: string;
   createdAt: string;
   resolvedAt?: string | null;
+  wildHp?: number | null;
+  wildMaxHp?: number | null;
+  wildLevel?: number | null;
+  effectiveChance?: number;
 };
 type Trainer = {
   id: string;
@@ -285,19 +291,48 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
                 <img src={encounters.active.spriteUrl} alt={encounters.active.name} className="relative h-36 w-36 object-contain [image-rendering:pixelated]" />
               </div>
               <div>
-                <span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Encontro selvagem · {RARITY_LABEL[encounters.active.rarity]}</span>
+                <span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Encontro selvagem · {RARITY_LABEL[encounters.active.rarity]}{encounters.active.wildLevel ? ` · Nv.${encounters.active.wildLevel}` : ""}</span>
                 <h2 className="mt-1 text-3xl font-black text-white">Um {encounters.active.name} apareceu!</h2>
-                <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">O encontro fica salvo até você decidir. Uma tentativa consome 1 Poké Ball; fugir não consome itens.</p>
+                {encounters.active.wildMaxHp ? (
+                  <div className="mt-3 max-w-md">
+                    <div className="flex items-center gap-2">
+                      <span className="h-2.5 flex-1 overflow-hidden rounded-full bg-white/10">
+                        <span
+                          className="block h-full transition-all"
+                          style={{
+                            width: `${Math.max(0, Math.min(100, ((encounters.active.wildHp ?? 0) / encounters.active.wildMaxHp) * 100))}%`,
+                            background:
+                              (encounters.active.wildHp ?? 0) / encounters.active.wildMaxHp > 0.5
+                                ? "#6ee7b7"
+                                : (encounters.active.wildHp ?? 0) / encounters.active.wildMaxHp > 0.2
+                                  ? "#fcd34d"
+                                  : "#fb7185",
+                          }}
+                        />
+                      </span>
+                      <small className="w-16 shrink-0 text-right text-[10px] tabular-nums text-slate-400">
+                        {Math.max(0, encounters.active.wildHp ?? 0)}/{encounters.active.wildMaxHp}
+                      </small>
+                    </div>
+                  </div>
+                ) : null}
+                <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">Enfraqueça o selvagem em combate para elevar a chance de captura. Suas escaramuças e o HP dele ficam salvos; sua equipe só é curada no Pokémon Center.</p>
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <button disabled={pending || (initialState.inventory.pokeBalls ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE"), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Usar Poké Ball · {encounters.active.captureChance}%</button>
+                  <button disabled={pending} onClick={() => act(() => battleWildAction(encounters.active!.id), "Escaramuça resolvida." )} className="rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Swords className="mr-1.5 inline h-4 w-4" />Atacar</button>
+                  <button disabled={pending || (initialState.inventory.pokeBalls ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE"), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Usar Poké Ball · {encounters.active.effectiveChance ?? encounters.active.captureChance}%</button>
                   <button disabled={pending} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "ESCAPE"), "Você deixou o mascote seguir seu caminho." )} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-3 text-xs font-black text-slate-200">Fugir</button>
                 </div>
               </div>
             </div>
           ) : (
             <div className="flex flex-wrap items-center justify-between gap-4 p-5 md:p-7">
-              <div><span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Exploração local</span><h2 className="mt-1 text-2xl font-black text-white">Procure sinais em {current.shortName}</h2><p className="mt-1 text-xs text-slate-400">Horário e pesos da tabela determinam o encontro no servidor.</p></div>
-              <button disabled={pending} onClick={() => act(exploreWorldLocationAction, "Você encontrou movimento por perto.")} className="rounded-xl bg-gradient-to-r from-emerald-300 to-cyan-300 px-6 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Search className="mr-2 inline h-4 w-4" />Explorar área</button>
+              <div><span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">Exploração local</span><h2 className="mt-1 text-2xl font-black text-white">Procure sinais em {current.shortName}</h2><p className="mt-1 text-xs text-slate-400">Horário e pesos da tabela determinam o encontro no servidor. Vasculhar custa um pouco de fadiga.</p></div>
+              <div className="flex flex-wrap gap-2">
+                <button disabled={pending} onClick={() => act(exploreWorldLocationAction, "Você encontrou movimento por perto.")} className="rounded-xl bg-gradient-to-r from-emerald-300 to-cyan-300 px-6 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Search className="mr-2 inline h-4 w-4" />Explorar área</button>
+                {current.activities.includes("ITEM_SEARCH") && (
+                  <button disabled={pending} onClick={() => startTransition(async () => { const r = await searchWorldItemsAction(); if (!r.ok) toast.error(r.error ?? "Falha ao vasculhar."); else toast.success(r.isCoins ? `Você achou ${r.amount} ZC!` : `Você achou ${r.amount}x ${r.label}!`); router.refresh(); })} className="rounded-xl border border-amber-300/25 bg-amber-300/10 px-6 py-3 text-xs font-black text-amber-200 disabled:opacity-40"><Backpack className="mr-2 inline h-4 w-4" />Vasculhar itens</button>
+                )}
+              </div>
             </div>
           )}
           {encounters.history.length > 0 && <div className="border-t border-white/5 px-5 py-4 md:px-7"><p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-500">Últimos encontros</p><div className="flex flex-wrap gap-2">{encounters.history.map((entry) => <span key={entry.id} className={`rounded-lg border px-2.5 py-1.5 text-[9px] ${entry.status === "CAPTURED" ? "border-emerald-300/20 bg-emerald-300/5 text-emerald-200" : "border-white/10 bg-white/[.025] text-slate-400"}`}><b>{entry.name}</b> · {entry.status === "CAPTURED" ? "Capturado" : entry.status === "ESCAPED" ? "Liberado" : "Escapou da Poké Ball"}{entry.roll ? ` · rolagem ${entry.roll}/${entry.captureChance}` : ""}</span>)}</div></div>}

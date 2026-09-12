@@ -30,6 +30,37 @@ export function worldMaxHp(level: number, vitality: number): number {
 export type WorldMascotCondition = { hp: number; poisoned?: boolean };
 export type WorldMascotStateMap = Record<string, WorldMascotCondition>;
 
+// Estado do selvagem no encontro (combate de captura).
+export type WorldWildState = {
+  level: number;
+  role: string;
+  stats: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
+  maxHp: number;
+  hp: number;
+};
+
+export function readWorldWild(value: unknown): WorldWildState | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const v = value as Record<string, unknown>;
+  const stats = v.stats as Record<string, unknown> | undefined;
+  if (!stats) return null;
+  const num = (x: unknown, d = 1) => (Number.isFinite(Number(x)) ? Number(x) : d);
+  const maxHp = num(v.maxHp, 10);
+  return {
+    level: Math.max(1, Math.round(num(v.level, 5))),
+    role: typeof v.role === "string" ? v.role : "ATTACKER",
+    stats: {
+      force: num(stats.force),
+      agility: num(stats.agility),
+      charisma: num(stats.charisma),
+      instinct: num(stats.instinct),
+      vitality: num(stats.vitality),
+    },
+    maxHp: Math.max(10, Math.round(maxHp)),
+    hp: Math.max(0, Math.min(Math.round(maxHp), Math.round(num(v.hp, maxHp)))),
+  };
+}
+
 export function readWorldMascotState(value: unknown): WorldMascotStateMap {
   if (!value || typeof value !== "object" || Array.isArray(value)) return {};
   const out: WorldMascotStateMap = {};
