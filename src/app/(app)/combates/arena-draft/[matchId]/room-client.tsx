@@ -680,6 +680,36 @@ function StrategyWindow({
                   </span>
                 </div>
               </div>
+              {p.stats && (
+                <div className="mt-2 grid grid-cols-5 gap-1">
+                  {(
+                    [
+                      ["FOR", p.stats.force],
+                      ["AGI", p.stats.agility],
+                      ["CAR", p.stats.charisma],
+                      ["INS", p.stats.instinct],
+                      ["VIT", p.stats.vitality],
+                    ] as const
+                  ).map(([label, value]) => (
+                    <span
+                      key={label}
+                      className="rounded bg-slate-950/70 py-1 text-center"
+                    >
+                      <b className="block text-[7px] uppercase leading-none text-slate-500">
+                        {label}
+                      </b>
+                      <strong className="block text-[11px] leading-tight tabular-nums text-slate-100">
+                        {value + (p.isMega ? 10 : 0)}
+                      </strong>
+                    </span>
+                  ))}
+                </div>
+              )}
+              {p.isMega && (
+                <p className="mt-0.5 text-right text-[8px] text-fuchsia-300">
+                  Inclui +10 de Mega em cada atributo
+                </p>
+              )}
               <button
                 disabled={
                   strategy.ownConfirmed || (dead && !selected) || benchFull
