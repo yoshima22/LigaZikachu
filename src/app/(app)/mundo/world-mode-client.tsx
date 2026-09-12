@@ -33,12 +33,34 @@ import {
   challengeWorldTrainerAction,
   finishWorldTravelNowAction,
   exploreWorldLocationAction,
+  getWorldPartyMascotsAction,
   resetAdminWorldAction,
   restAtWorldCenterAction,
   resolveWorldEncounterAction,
+  saveWorldPartyAction,
   startWorldAdventureAction,
   startWorldTravelAction,
 } from "./actions";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
+
+type WorldMascot = {
+  id: string;
+  speciesId: number;
+  name: string;
+  nickname: string | null;
+  sprite: string;
+  level: number;
+  personality: string;
+  posture: string;
+  stats: {
+    force: number;
+    agility: number;
+    charisma: number;
+    instinct: number;
+    vitality: number;
+  };
+};
+type PartyEntry = { mascotId: string; posture: string };
 
 type Location = Omit<WorldLocationConfig, "encounters"> & {
   encounters: Array<WorldEncounterConfig & { name: string }>;
@@ -53,6 +75,7 @@ type State = {
   travelingToId: string | null;
   travelStartedAt: string | null;
   travelEndsAt: string | null;
+  party: PartyEntry[];
 } | null;
 type Encounter = {
   id: string;
@@ -289,7 +312,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         <section className="relative overflow-hidden rounded-[2rem] border border-fuchsia-300/15 bg-[#070b16] p-5 md:p-7">
           {current?.imageUrl && <><div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${current.imageUrl})` }} /><div className="absolute inset-0 bg-gradient-to-r from-[#070b16] via-[#070b16]/90 to-[#070b16]/70" /></>}
           <div className="relative">
-          <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-fuchsia-300">Treinadores da região</span><h2 className="mt-1 text-2xl font-black text-white">A trilha também testa sua equipe</h2><p className="mt-1 text-xs text-slate-400">O motor oficial resolve Agilidade, tipos, posturas, cura, buffs, debuffs e personalidades.</p></div><span className="rounded-full bg-white/[.04] px-3 py-1.5 text-[9px] font-bold text-slate-400">Equipe: até 6 mascotes equipados</span></div>
+          <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-fuchsia-300">Treinadores da região</span><h2 className="mt-1 text-2xl font-black text-white">A trilha também testa sua equipe</h2><p className="mt-1 text-xs text-slate-400">O motor oficial resolve Agilidade, tipos, posturas, cura, buffs, debuffs e personalidades.</p></div><span className="rounded-full bg-white/[.04] px-3 py-1.5 text-[9px] font-bold text-slate-400">Equipe: {initialState.party.length > 0 ? `${initialState.party.length}/6 na formação` : "sem formação (usa equipados)"}</span></div>
           <div className="mt-5 grid gap-3 lg:grid-cols-3">{localTrainers.map((trainer) => {
             const defeated = initialState.defeatedTrainerIds.includes(trainer.id);
             const locked = Boolean(trainer.prerequisiteId && !initialState.defeatedTrainerIds.includes(trainer.prerequisiteId));
@@ -316,10 +339,284 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         </section>
       )}
 
+      <WorldPartyPanel initialParty={initialState.party} onSaved={() => router.refresh()} />
+
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-4">
         <div className="flex flex-wrap gap-3 text-[10px] text-slate-300"><span><Backpack className="mr-1 inline h-3.5 w-3.5 text-amber-300" />{initialState.inventory.pokeBalls ?? 0} Poké Balls</span><span><FlaskConical className="mr-1 inline h-3.5 w-3.5 text-emerald-300" />{initialState.inventory.potions ?? 0} Potions</span><span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-cyan-300" />Chegada resolvida sob demanda, sem cron contínuo</span></div>
         <button disabled={pending} onClick={() => { if (window.confirm("Apagar todo o seu progresso de teste no World Mode?")) act(resetAdminWorldAction, "Teste do World Mode reiniciado."); }} className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-200"><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Resetar protótipo</button>
       </section>
     </main>
+  );
+}
+
+// Formação persistente do World Mode: até 6 mascotes do próprio jogador, com
+// postura editável. Não altera a coleção principal (isEquipped intacto).
+function WorldPartyPanel({
+  initialParty,
+  onSaved,
+}: {
+  initialParty: PartyEntry[];
+  onSaved: () => void;
+}) {
+  const [pending, start] = useTransition();
+  const [open, setOpen] = useState(false);
+  const [mascots, setMascots] = useState<WorldMascot[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [loaded, setLoaded] = useState(false);
+  const [party, setParty] = useState<PartyEntry[]>(initialParty);
+  const [search, setSearch] = useState("");
+  const [page, setPage] = useState(1);
+  const perPage = 18;
+  useEffect(() => {
+    if (!open || loaded) return;
+    setLoading(true);
+    getWorldPartyMascotsAction()
+      .then((rows) => setMascots(rows as WorldMascot[]))
+      .catch(() => setMascots([]))
+      .finally(() => {
+        setLoaded(true);
+        setLoading(false);
+      });
+  }, [open, loaded]);
+  const byId = useMemo(() => new Map(mascots.map((m) => [m.id, m])), [mascots]);
+  const filtered = mascots.filter(
+    (m) =>
+      !search ||
+      m.name.toLowerCase().includes(search.toLowerCase()) ||
+      (m.nickname ?? "").toLowerCase().includes(search.toLowerCase()),
+  );
+  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const visible = filtered.slice(
+    (Math.min(page, pages) - 1) * perPage,
+    Math.min(page, pages) * perPage,
+  );
+  const inParty = (id: string) => party.some((e) => e.mascotId === id);
+  const toggle = (m: WorldMascot) =>
+    setParty((cur) =>
+      cur.some((e) => e.mascotId === m.id)
+        ? cur.filter((e) => e.mascotId !== m.id)
+        : cur.length < 6
+          ? [...cur, { mascotId: m.id, posture: m.posture }]
+          : cur,
+    );
+  const setPosture = (id: string, posture: string) =>
+    setParty((cur) =>
+      cur.map((e) => (e.mascotId === id ? { ...e, posture } : e)),
+    );
+  const save = () =>
+    start(async () => {
+      const result = await saveWorldPartyAction(party);
+      if (!result.ok) toast.error(result.error ?? "Falha ao salvar.");
+      else {
+        toast.success(`Equipe salva (${result.size}/6).`);
+        onSaved();
+      }
+    });
+  return (
+    <section className="rounded-[2rem] border border-emerald-300/15 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,.1),transparent_45%),#070d17] p-5 md:p-7">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div>
+          <span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">
+            Formação da aventura
+          </span>
+          <h2 className="mt-1 text-2xl font-black text-white">
+            Sua equipe do World Mode
+          </h2>
+          <p className="mt-1 text-xs text-slate-400">
+            Até 6 mascotes do seu acervo com postura escolhida. Não altera a
+            equipe da Arena ou de outros modos.
+          </p>
+        </div>
+        <button
+          onClick={() => setOpen((v) => !v)}
+          className="rounded-xl border border-emerald-300/30 bg-emerald-300/10 px-4 py-2 text-xs font-black text-emerald-200"
+        >
+          {open ? "Fechar editor" : party.length ? "Editar equipe" : "Montar equipe"}
+        </button>
+      </div>
+
+      {/* Equipe atual (resumo) */}
+      <div className="mt-4 grid grid-cols-3 gap-2 sm:grid-cols-6">
+        {party.length === 0 ? (
+          <p className="col-span-full rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500">
+            Nenhuma equipe montada. Enquanto não houver, as batalhas usam seus
+            mascotes equipados como fallback.
+          </p>
+        ) : (
+          party.map((entry) => {
+            const m = byId.get(entry.mascotId);
+            return (
+              <div
+                key={entry.mascotId}
+                className="rounded-xl border border-emerald-300/20 bg-emerald-300/[.06] p-2 text-center"
+              >
+                {m ? (
+                  <>
+                    <img
+                      src={m.sprite}
+                      alt=""
+                      className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]"
+                    />
+                    <b className="block truncate text-[9px] text-white">
+                      {m.nickname?.trim() || m.name}
+                    </b>
+                  </>
+                ) : (
+                  <b className="block truncate text-[9px] text-slate-400">
+                    Mascote #{entry.mascotId.slice(0, 4)}
+                  </b>
+                )}
+                <span className="text-[8px] text-emerald-200">
+                  {getCombatRoleLabel(entry.posture)}
+                </span>
+              </div>
+            );
+          })
+        )}
+      </div>
+
+      {open && (
+        <div className="mt-5 grid gap-4 lg:grid-cols-[1fr_1.3fr]">
+          {/* Selecionados com postura */}
+          <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] font-black uppercase tracking-widest text-emerald-300">
+                Selecionados ({party.length}/6)
+              </p>
+              <button
+                disabled={pending || party.length === 0}
+                onClick={save}
+                className="rounded-lg bg-emerald-400 px-3 py-1.5 text-[11px] font-black text-slate-950 disabled:opacity-40"
+              >
+                Salvar equipe
+              </button>
+            </div>
+            <div className="mt-2 space-y-1.5">
+              {party.length === 0 && (
+                <p className="py-3 text-center text-[10px] text-slate-600">
+                  Escolha mascotes ao lado.
+                </p>
+              )}
+              {party.map((entry) => {
+                const m = byId.get(entry.mascotId);
+                return (
+                  <div
+                    key={entry.mascotId}
+                    className="flex items-center gap-2 rounded-lg border border-emerald-300/20 bg-emerald-300/[.05] p-1.5"
+                  >
+                    {m && (
+                      <img
+                        src={m.sprite}
+                        alt=""
+                        className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]"
+                      />
+                    )}
+                    <span className="min-w-0 flex-1 truncate text-[11px] font-bold text-white">
+                      {m ? m.nickname?.trim() || m.name : entry.mascotId.slice(0, 6)}
+                    </span>
+                    <select
+                      value={entry.posture}
+                      onChange={(e) => setPosture(entry.mascotId, e.target.value)}
+                      className="max-w-[100px] rounded border border-emerald-300/30 bg-slate-900 px-1 py-1 text-[9px] font-bold text-emerald-200"
+                    >
+                      {COMBAT_ROLE_OPTIONS.map((option) => (
+                        <option key={option.value} value={option.value} className="text-white">
+                          {option.label}
+                        </option>
+                      ))}
+                    </select>
+                    {m && (
+                      <button
+                        onClick={() => toggle(m)}
+                        className="shrink-0 rounded p-1 text-rose-300 hover:bg-rose-400/10"
+                        title="Remover"
+                      >
+                        <RotateCcw className="h-3.5 w-3.5" />
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+          {/* Catálogo de mascotes */}
+          <div className="rounded-2xl border border-white/10 bg-slate-950/70 p-3">
+            <input
+              value={search}
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setPage(1);
+              }}
+              placeholder="Buscar mascote por nome ou apelido…"
+              className="w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-sm outline-none"
+            />
+            {loading ? (
+              <p className="py-10 text-center text-sm text-slate-500">
+                Carregando seus mascotes…
+              </p>
+            ) : (
+              <>
+                <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
+                  {visible.map((m) => {
+                    const picked = inParty(m.id);
+                    const full = party.length >= 6 && !picked;
+                    return (
+                      <button
+                        key={m.id}
+                        disabled={full}
+                        onClick={() => toggle(m)}
+                        className={`rounded-xl border p-2 text-left transition disabled:opacity-40 ${picked ? "border-emerald-400 bg-emerald-400/10" : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <img
+                            src={m.sprite}
+                            alt=""
+                            className="h-10 w-10 shrink-0 object-contain [image-rendering:pixelated]"
+                          />
+                          <div className="min-w-0">
+                            <b className="block truncate text-[11px] text-white">
+                              {m.nickname?.trim() || m.name}
+                            </b>
+                            <span className="block truncate text-[9px] text-slate-500">
+                              Nv.{m.level} · {getCombatRoleLabel(m.posture)}
+                            </span>
+                          </div>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+                {mascots.length === 0 && (
+                  <p className="py-8 text-center text-sm text-slate-500">
+                    Você ainda não tem mascotes.
+                  </p>
+                )}
+                {pages > 1 && (
+                  <div className="mt-3 flex items-center justify-center gap-3 text-xs">
+                    <button
+                      disabled={page <= 1}
+                      onClick={() => setPage((p) => p - 1)}
+                      className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                    >
+                      Anterior
+                    </button>
+                    <span className="text-slate-500">
+                      {Math.min(page, pages)}/{pages}
+                    </span>
+                    <button
+                      disabled={page >= pages}
+                      onClick={() => setPage((p) => p + 1)}
+                      className="rounded border border-slate-700 px-3 py-1 disabled:opacity-30"
+                    >
+                      Próxima
+                    </button>
+                  </div>
+                )}
+              </>
+            )}
+          </div>
+        </div>
+      )}
+    </section>
   );
 }

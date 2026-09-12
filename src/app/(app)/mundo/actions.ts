@@ -7,7 +7,13 @@ import { prisma } from "@/lib/prisma";
 import { KANTO_MVP_BY_ID } from "@/world-data/kanto/mvp";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
-import { PERSONALITIES } from "@/lib/mascot-data";
+import {
+  PERSONALITIES,
+  getPokemonName,
+  getSpriteUrl,
+} from "@/lib/mascot-data";
+import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { WORLD_PARTY_MAX, readWorldParty } from "@/world-data/party";
 import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
@@ -70,6 +76,97 @@ export async function getAdminWorldBattles() {
     orderBy: { createdAt: "desc" },
     take: 4,
   });
+}
+
+// ── Formação própria do World Mode (até 6 mascotes) ──────────────────────────
+// Lista os mascotes do jogador para montar a equipe da aventura.
+export async function getWorldPartyMascotsAction() {
+  const player = await adminPlayer();
+  const mascots = await prisma.mascot.findMany({
+    where: { playerId: player.id },
+    orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+    take: 400,
+    select: {
+      id: true,
+      pokemonId: true,
+      nickname: true,
+      level: true,
+      personality: true,
+      preferredCombatRole: true,
+      statForce: true,
+      statAgility: true,
+      statCharisma: true,
+      statInstinct: true,
+      statVitality: true,
+    },
+  });
+  return mascots.map((mascot) => ({
+    id: mascot.id,
+    speciesId: mascot.pokemonId,
+    name: getPokemonName(mascot.pokemonId),
+    nickname: mascot.nickname,
+    sprite: getSpriteUrl(mascot.pokemonId),
+    level: mascot.level,
+    personality: mascot.personality,
+    posture: defaultCombatRoleFor({
+      preferredCombatRole: mascot.preferredCombatRole,
+      statForce: mascot.statForce,
+      statAgility: mascot.statAgility,
+      statVitality: mascot.statVitality,
+      statInstinct: mascot.statInstinct,
+      statCharisma: mascot.statCharisma,
+    }),
+    stats: {
+      force: mascot.statForce,
+      agility: mascot.statAgility,
+      charisma: mascot.statCharisma,
+      instinct: mascot.statInstinct,
+      vitality: mascot.statVitality,
+    },
+  }));
+}
+
+// Salva a formação (IDs + posturas). Valida propriedade sem tocar em isEquipped.
+export async function saveWorldPartyAction(
+  entries: Array<{ mascotId: string; posture: string }>,
+) {
+  try {
+    const player = await adminPlayer();
+    const seen = new Set<string>();
+    const cleaned = entries
+      .filter((entry) => {
+        if (seen.has(entry.mascotId)) return false;
+        seen.add(entry.mascotId);
+        return true;
+      })
+      .slice(0, WORLD_PARTY_MAX);
+    if (cleaned.length === 0)
+      throw new Error("Escolha ao menos um mascote para a equipe.");
+    const owned = await prisma.mascot.findMany({
+      where: { id: { in: cleaned.map((e) => e.mascotId) }, playerId: player.id },
+      select: { id: true },
+    });
+    const ownedIds = new Set(owned.map((m) => m.id));
+    const party = cleaned
+      .filter((entry) => ownedIds.has(entry.mascotId))
+      .map((entry) => ({
+        mascotId: entry.mascotId,
+        posture: normalizeCombatRole(entry.posture),
+      }));
+    if (party.length !== cleaned.length)
+      throw new Error("Um ou mais mascotes não pertencem à sua conta.");
+    await prisma.worldPlayerState.update({
+      where: { playerId: player.id },
+      data: { partyJson: party as unknown as Prisma.InputJsonValue },
+    });
+    revalidatePath("/mundo");
+    return { ok: true as const, size: party.length };
+  } catch (error) {
+    return {
+      ok: false as const,
+      error: error instanceof Error ? error.message : "Não foi possível salvar a equipe.",
+    };
+  }
 }
 
 export async function exploreWorldLocationAction() {
@@ -224,10 +321,29 @@ export async function challengeWorldTrainerAction(trainerId: string) {
       if (trainer.prerequisiteId && !state.defeatedTrainerIds.includes(trainer.prerequisiteId)) throw new Error("Derrote o treinador anterior primeiro.");
       const activeEncounter = await tx.worldEncounterSession.findFirst({ where: { playerId: player.id, status: "ACTIVE" }, select: { id: true } });
       if (activeEncounter) throw new Error("Resolva seu encontro selvagem antes da batalha.");
-      let mascots = await tx.mascot.findMany({ where: { playerId: player.id, isEquipped: true }, take: 6 });
-      if (mascots.length === 0) mascots = await tx.mascot.findMany({ where: { playerId: player.id }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }], take: 6 });
-      if (mascots.length === 0) throw new Error("Você precisa ter ao menos um mascote para batalhar.");
-      const teamA = mascots.map((mascot, index) => toLeagueMascot(mascot, index + 1, mascot.preferredCombatRole));
+      // Formação própria do World Mode (persistente). Se ainda não houver uma
+      // salva, cai nos equipados/favoritos como fallback temporário.
+      const party = readWorldParty(state.partyJson);
+      let mascots: Awaited<ReturnType<typeof tx.mascot.findMany>>;
+      const postureById = new Map(party.map((e) => [e.mascotId, e.posture]));
+      if (party.length > 0) {
+        const found = await tx.mascot.findMany({
+          where: { id: { in: party.map((e) => e.mascotId) }, playerId: player.id },
+        });
+        const byId = new Map(found.map((m) => [m.id, m]));
+        mascots = party
+          .map((entry) => byId.get(entry.mascotId))
+          .filter((m): m is (typeof found)[number] => Boolean(m));
+        if (mascots.length === 0)
+          throw new Error("Sua equipe do World Mode está vazia ou inválida. Refaça a formação.");
+      } else {
+        mascots = await tx.mascot.findMany({ where: { playerId: player.id, isEquipped: true }, take: 6 });
+        if (mascots.length === 0) mascots = await tx.mascot.findMany({ where: { playerId: player.id }, orderBy: [{ isFavorite: "desc" }, { level: "desc" }], take: 6 });
+        if (mascots.length === 0) throw new Error("Monte a equipe do World Mode ou tenha ao menos um mascote.");
+      }
+      const teamA = mascots.map((mascot, index) =>
+        toLeagueMascot(mascot, index + 1, postureById.get(mascot.id) ?? mascot.preferredCombatRole),
+      );
       const teamB = trainer.team.map((entry, index) => toLeagueMascot({
         id: `world-npc:${trainer.id}:${index}`,
         playerId: `world-npc:${trainer.id}`,

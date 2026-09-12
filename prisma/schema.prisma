@@ -371,6 +371,7 @@ model WorldPlayerState {
   defeatedTrainerIds    String[]  @default([])
   fatigue               Int       @default(0)
   inventoryJson         Json      @default("{\"pokeBalls\":5,\"potions\":1,\"antidotes\":0}")
+  partyJson             Json      @default("[]")
   avatarJson            Json?
   travelingToId         String?
   travelStartedAt       DateTime?

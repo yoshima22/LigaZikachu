@@ -1,7 +1,12 @@
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { KANTO_MVP_LOCATIONS } from "@/world-data/kanto/mvp";
-import { getAdminWorldBattles, getAdminWorldEncounters, getAdminWorldState } from "./actions";
+import {
+  getAdminWorldBattles,
+  getAdminWorldEncounters,
+  getAdminWorldState,
+} from "./actions";
+import { readWorldParty } from "@/world-data/party";
 import { WorldModeClient } from "./world-mode-client";
 import { KANTO_MVP_MART } from "@/world-data/kanto/mart";
 import { prisma } from "@/lib/prisma";
@@ -78,6 +83,7 @@ export default async function WorldModePage() {
               travelingToId: state.travelingToId,
               travelStartedAt: state.travelStartedAt?.toISOString() ?? null,
               travelEndsAt: state.travelEndsAt?.toISOString() ?? null,
+              party: readWorldParty(state.partyJson),
             }
           : null
       }
