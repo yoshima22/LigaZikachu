@@ -24,6 +24,7 @@ import type { MascotPersonality, WorldEncounterStatus } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
 import { KANTO_MVP_MART_BY_ID } from "@/world-data/kanto/mart";
 import { KANTO_MVP_TRAINER_BY_ID } from "@/world-data/kanto/trainers";
+import { scaleTrainerTeam, playerLeaderHandicap } from "@/world-data/difficulty";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 
 const CAPTURE_CHANCE: Record<string, number> = {
@@ -420,14 +421,49 @@ export async function challengeWorldTrainerAction(trainerId: string) {
       );
       if (battleReady.length === 0)
         throw new Error("Toda a sua equipe está desmaiada. Recupere-a no Pokémon Center.");
+      // Referência do jogador para escalar o desafio ao seu nível/força.
+      const avgLevel =
+        battleReady.reduce((sum, m) => sum + m.level, 0) / battleReady.length;
+      const avgStatTotal =
+        battleReady.reduce(
+          (sum, m) =>
+            sum +
+            m.statForce +
+            m.statAgility +
+            m.statCharisma +
+            m.statInstinct +
+            m.statVitality,
+          0,
+        ) / battleReady.length;
+      const handicap = playerLeaderHandicap(trainer.tier);
       const teamA = battleReady.map((mascot, index) =>
-        toLeagueMascot(mascot, index + 1, postureById.get(mascot.id) ?? mascot.preferredCombatRole),
+        toLeagueMascot(
+          // Líderes aplicam uma leve pressão nos status ofensivos do jogador
+          // (vitalidade intacta para manter o HP persistente coerente).
+          handicap === 1
+            ? mascot
+            : {
+                ...mascot,
+                statForce: Math.max(1, Math.round(mascot.statForce * handicap)),
+                statAgility: Math.max(1, Math.round(mascot.statAgility * handicap)),
+                statInstinct: Math.max(1, Math.round(mascot.statInstinct * handicap)),
+                statCharisma: Math.max(1, Math.round(mascot.statCharisma * handicap)),
+              },
+          index + 1,
+          postureById.get(mascot.id) ?? mascot.preferredCombatRole,
+        ),
       );
       // HP inicial = HP persistente da aventura (ou cheio).
       const startingHp = new Map(
         battleReady.map((m) => [m.id, mascotState[m.id]?.hp ?? maxHpById.get(m.id)!] as const),
       );
-      const teamB = trainer.team.map((entry, index) => toLeagueMascot({
+      // Escala a equipe do treinador ao nível/força do jogador (bots mais duros
+      // que a Arena; líderes no topo).
+      const scaledTeam = scaleTrainerTeam(trainer.team, trainer.tier, {
+        avgLevel,
+        avgStatTotal,
+      });
+      const teamB = scaledTeam.map((entry, index) => toLeagueMascot({
         id: `world-npc:${trainer.id}:${index}`,
         playerId: `world-npc:${trainer.id}`,
         pokemonId: entry.pokemonId,
@@ -440,7 +476,11 @@ export async function challengeWorldTrainerAction(trainerId: string) {
         statVitality: entry.stats.vitality,
         personality: null,
       }, index + 1, entry.role));
-      const battle = runLeagueCombat(teamA, teamB, null, [], [], { startingHp });
+      // Líderes tomam a iniciativa como vantagem adicional.
+      const battle = runLeagueCombat(teamA, teamB, null, [], [], {
+        startingHp,
+        ...(trainer.tier === "LEADER" ? { initiativeTeam: "B" as const } : {}),
+      });
       const won = battle.winner === "A";
       const firstWin = won && !state.defeatedTrainerIds.includes(trainer.id);
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;

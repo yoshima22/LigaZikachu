@@ -15,6 +15,7 @@ import { WorldModeClient } from "./world-mode-client";
 import { KANTO_MVP_MART } from "@/world-data/kanto/mart";
 import { prisma } from "@/lib/prisma";
 import { KANTO_MVP_TRAINERS } from "@/world-data/kanto/trainers";
+import { TIER_PARAMS } from "@/world-data/difficulty";
 
 export const dynamic = "force-dynamic";
 
@@ -94,6 +95,7 @@ export default async function WorldModePage() {
       partyMascots={partyMascots}
       trainers={KANTO_MVP_TRAINERS.map((trainer) => ({
         ...trainer,
+        difficultyLabel: TIER_PARAMS[trainer.tier].label,
         team: trainer.team.map((mascot) => ({ ...mascot, name: getPokemonName(mascot.pokemonId), spriteUrl: getSpriteUrl(mascot.pokemonId) })),
       }))}
       battles={battleData.map((battle) => ({
