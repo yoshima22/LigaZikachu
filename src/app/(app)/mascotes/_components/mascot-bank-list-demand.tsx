@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, ChevronUp, Loader2, Search, Utensils } from "lucide-react";
 import { toast } from "sonner";
+import { SweetKindMenu, type SweetKind } from "./sweet-kind-menu";
 import { getHungerStatus, getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { mascotOriginIcon, HUNGER_ICON_URL } from "@/lib/mascot-origin-icons";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
@@ -235,13 +236,15 @@ function QuickFeedButton({
   icon,
   disabled,
   disabledReason,
+  className = "",
 }: {
   mascotId: string;
-  type: "FEED_FOOD" | "FEED_SWEET";
+  type: "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET";
   label: string;
   icon: React.ReactNode;
   disabled: boolean;
   disabledReason?: string;
+  className?: string;
 }) {
   const [pending, startTransition] = useTransition();
   const [accepted, setAccepted] = useState(false);
@@ -266,23 +269,34 @@ function QuickFeedButton({
       onClick={handleClick}
       title={disabled ? disabledReason : accepted ? `${label}: enviado` : label}
       aria-label={label}
-      className="inline-flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40 shrink-0"
+      className={`inline-flex items-center gap-1 rounded-lg border border-slate-700/60 bg-slate-800/60 px-2 py-1 text-[10px] font-semibold text-slate-300 transition-colors hover:border-[#FFCB05]/40 hover:text-[#FFCB05] disabled:cursor-not-allowed disabled:opacity-40 shrink-0 ${className}`}
     >
       {pending ? <Loader2 size={10} className="animate-spin" /> : icon} {label}
     </button>
   );
 }
 
+/** Enfileira a escolha da setinha na mesma fila durável do botão principal. */
+async function queueSweet(mascotId: string, kind: SweetKind) {
+  try {
+    await queueMascotInteraction(mascotId, kind);
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Falha ao registrar a interacao.");
+  }
+}
+
 function BankRow({
   mascot,
   hasFood,
   hasSweet,
+  hasRareSweet,
   isAdmin,
   spritePreferences,
 }: {
   mascot: BankMascot;
   hasFood: boolean;
   hasSweet: boolean;
+  hasRareSweet: boolean;
   isAdmin: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
 }) {
@@ -452,14 +466,24 @@ function BankRow({
             disabled={!hasFood || arenaLocked}
             disabledReason={!hasFood ? "Sem comida no estoque" : "Indisponível (arena/ferido)"}
           />
-          <QuickFeedButton
-            mascotId={mascot.id}
-            type="FEED_SWEET"
-            label="Doce"
-            icon={<Candy size={11} />}
-            disabled={!hasSweet || arenaLocked || inExpedition}
-            disabledReason={!hasSweet ? "Sem doces no estoque" : inExpedition ? "Em expedição" : "Indisponível (arena/ferido)"}
-          />
+          <div className="flex shrink-0 items-stretch">
+            <QuickFeedButton
+              mascotId={mascot.id}
+              type="FEED_SWEET"
+              label="Doce"
+              icon={<Candy size={11} />}
+              disabled={!hasSweet || arenaLocked || inExpedition}
+              disabledReason={!hasSweet ? "Sem doces no estoque" : inExpedition ? "Em expedição" : "Indisponível (arena/ferido)"}
+              className="rounded-r-none"
+            />
+            <SweetKindMenu
+              size="sm"
+              hasSweet={hasSweet}
+              hasRareSweet={hasRareSweet}
+              disabled={arenaLocked || inExpedition || (!hasSweet && !hasRareSweet)}
+              onPick={(kind) => void queueSweet(mascot.id, kind)}
+            />
+          </div>
           {/* Chevron no PC (final da fila de ações) */}
           <button type="button" onClick={handleExpand} className="hidden shrink-0 self-center sm:block" aria-label={open ? "Recolher" : "Expandir"}>
             {chevron}
@@ -495,7 +519,7 @@ function BankRow({
               </div>
               <div className="px-2 pb-2">
                 <MascotCard
-                  mascot={{ ...fullData, hasFood, hasSweet, lastPlayedAt: localLastPlayedAt, lastPettedAt: localLastPettedAt }}
+                  mascot={{ ...fullData, hasFood, hasSweet, hasRareSweet, lastPlayedAt: localLastPlayedAt, lastPettedAt: localLastPettedAt }}
                   isAdmin={isAdmin}
                   compactView={view === "basic"}
                   onRefresh={fetchFull}
@@ -515,6 +539,7 @@ export function MascotBankList({
   totalCount,
   hasFood,
   hasSweet,
+  hasRareSweet = false,
   isAdmin,
   spritePreferences,
 }: {
@@ -522,6 +547,7 @@ export function MascotBankList({
   totalCount?: number;
   hasFood: boolean;
   hasSweet: boolean;
+  hasRareSweet?: boolean;
   isAdmin: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
 }) {
@@ -530,14 +556,17 @@ export function MascotBankList({
   // Estoque de comida/doce reativo: desabilita os botões quando a última unidade acaba.
   const [foodAvailable, setFoodAvailable] = useState(hasFood);
   const [sweetAvailable, setSweetAvailable] = useState(hasSweet);
+  const [rareSweetAvailable, setRareSweetAvailable] = useState(hasRareSweet);
   useEffect(() => { setFoodAvailable(hasFood); }, [hasFood]);
   useEffect(() => { setSweetAvailable(hasSweet); }, [hasSweet]);
+  useEffect(() => { setRareSweetAvailable(hasRareSweet); }, [hasRareSweet]);
   useEffect(() => {
     const onInventory = (event: Event) => {
-      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET"; remaining: number }>).detail;
+      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET"; remaining: number }>).detail;
       if (!detail) return;
       if (detail.type === "FEED_FOOD") setFoodAvailable(detail.remaining > 0);
       if (detail.type === "FEED_SWEET") setSweetAvailable(detail.remaining > 0);
+      if (detail.type === "FEED_RARE_SWEET") setRareSweetAvailable(detail.remaining > 0);
     };
     window.addEventListener("mascot-food-inventory", onInventory);
     return () => window.removeEventListener("mascot-food-inventory", onInventory);
@@ -754,6 +783,7 @@ export function MascotBankList({
               mascot={mascot}
               hasFood={foodAvailable}
               hasSweet={sweetAvailable}
+              hasRareSweet={rareSweetAvailable}
               isAdmin={isAdmin}
               spritePreferences={spritePreferences}
             />

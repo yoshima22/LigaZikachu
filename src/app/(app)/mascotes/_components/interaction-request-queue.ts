@@ -1,7 +1,7 @@
 "use client";
 
-type InteractionType = "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET";
-const INTERACTION_TYPES: InteractionType[] = ["PLAY", "PET", "FEED_FOOD", "FEED_SWEET"];
+type InteractionType = "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET";
+const INTERACTION_TYPES: InteractionType[] = ["PLAY", "PET", "FEED_FOOD", "FEED_SWEET", "FEED_RARE_SWEET"];
 function isInteractionType(value: unknown): value is InteractionType {
   return value === "PLAY" || value === "PET" || value === "FEED_FOOD" || value === "FEED_SWEET";
 }

@@ -7,6 +7,7 @@ import { Gamepad2, Hand, Loader2, Users, Utensils } from "lucide-react";
 import { feedAllAction } from "../actions";
 import { clearPlayed, clearPetted, hydrateInteractionCooldown, markPlayed, markPetted, isPlayOnCooldown, isPetOnCooldown } from "./mascot-card";
 import { formatRemaining } from "@/hooks/use-timer-expiry";
+import { RARE_SWEET_IMAGE_URL } from "./sweet-kind-menu";
 
 interface Props {
   scope: "ALL" | "FAVORITES";
@@ -19,7 +20,9 @@ function pluralMascot(count: number) {
 }
 
 type HungerLevel = "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED";
-type FeedType = "FOOD" | "SWEET";
+type FeedType = "FOOD" | "SWEET" | "RARE_SWEET";
+
+const FEED_LABEL: Record<FeedType, string> = { FOOD: "Comida", SWEET: "Doce", RARE_SWEET: "Doce Raro" };
 
 const HUNGER_OPTIONS: { value: HungerLevel; label: string }[] = [
   { value: "STARVING",  label: "Faminto" },
@@ -217,10 +220,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
         <div className="flex min-h-[60px] flex-col justify-center gap-2">
           <div className="flex flex-wrap items-center gap-2">
             <span className="w-24 shrink-0 text-[10px] font-semibold uppercase tracking-wide text-slate-500">Item</span>
-            {([
-              { value: "FOOD" as const, label: "Comida" },
-              { value: "SWEET" as const, label: "Doce" },
-            ]).map(opt => (
+            {(["FOOD", "SWEET", "RARE_SWEET"] as const).map(value => ({ value, label: FEED_LABEL[value] })).map(opt => (
               <button
                 key={opt.value}
                 type="button"
@@ -231,6 +231,9 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
                     : "border-slate-700 bg-slate-800 text-slate-400 hover:border-[#FFCB05]/30 hover:text-[#FFCB05]"
                 }`}
               >
+                {opt.value === "RARE_SWEET" && (
+                  <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="mr-1 inline-block h-3 w-3 object-contain align-text-bottom" />
+                )}
                 {opt.label}
               </button>
             ))}
@@ -259,7 +262,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             className="flex min-h-[38px] items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
-            Alimentar Todos com {feedType === "SWEET" ? "Doce" : "Comida"}
+            Alimentar Todos com {FEED_LABEL[feedType]}
           </button>
         </div>
       </div>

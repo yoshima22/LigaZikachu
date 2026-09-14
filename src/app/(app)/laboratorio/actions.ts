@@ -47,7 +47,16 @@ const WEEKLY_LIMITS = { coinsTraded: 5, commonEggs: 10, rareEggs: 4, specialEggs
 const SHOP_COSTS = { coins: 10, commonEgg: 15, rareEgg: 25, specialEgg: 40 } as const;
 const MONTHLY_SHOP_COSTS = { labEgg: 250, evolutionStone: 300 } as const;
 const SHOP_REWARDS = { coins: 400 } as const;
-const FOOD_TRADE_COSTS = { SWEET: 10, HONEY_CANDY: 150, FRESH_WATER: 100 } as const;
+const FOOD_TRADE_COSTS = { SWEET: 10, RARE_SWEET: 20, HONEY_CANDY: 150, FRESH_WATER: 100 } as const;
+// Moeda de cada troca. Todas gastam Comida, menos o Doce Raro, que e comprado
+// com Doces comuns — por isso o tipo consumido nao pode ser fixo em FOOD.
+const FOOD_TRADE_CURRENCY = {
+  SWEET: FoodType.FOOD,
+  RARE_SWEET: FoodType.SWEET,
+  HONEY_CANDY: FoodType.FOOD,
+  FRESH_WATER: FoodType.FOOD,
+} as const;
+const FOOD_TRADE_CURRENCY_LABEL = { [FoodType.FOOD]: "comidas", [FoodType.SWEET]: "doces", [FoodType.RARE_SWEET]: "doces raros" } as const;
 const FOOD_TRADE_LIMITS = { honeyCandies: 3, freshWaters: 3 } as const;
 
 // ── Auth helper ───────────────────────────────────────────────────────────────
@@ -198,6 +207,7 @@ export async function getLabDataAction() {
     foodTrades: {
       food: foodItems.find((item) => item.type === FoodType.FOOD)?.quantity ?? 0,
       sweets: foodItems.find((item) => item.type === FoodType.SWEET)?.quantity ?? 0,
+      rareSweets: foodItems.find((item) => item.type === FoodType.RARE_SWEET)?.quantity ?? 0,
       costs: FOOD_TRADE_COSTS,
       limits: FOOD_TRADE_LIMITS,
     },
@@ -205,7 +215,7 @@ export async function getLabDataAction() {
 }
 
 // ── Trocas de comida ────────────────────────────────────────────────────────
-export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) {
+export async function tradeFoodInLabAction(kind: "SWEET" | "RARE_SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) {
   const me = await requirePlayer();
   const lockReason = await getLabLockReason();
   if (lockReason) return { ok: false as const, error: lockReason };
@@ -237,16 +247,19 @@ export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRES
         if (qty > remaining) throw new Error(`Você só pode fazer mais ${remaining} desta troca nesta semana.`);
       }
 
+      const currency = FOOD_TRADE_CURRENCY[kind];
+      const currencyLabel = FOOD_TRADE_CURRENCY_LABEL[currency];
       const consumed = await tx.mascotFoodItem.updateMany({
-        where: { playerId: me.id, type: FoodType.FOOD, quantity: { gte: totalCost } },
+        where: { playerId: me.id, type: currency, quantity: { gte: totalCost } },
         data: { quantity: { decrement: totalCost } },
       });
-      if (consumed.count !== 1) throw new Error(`Comida insuficiente. Necessário: ${totalCost} comidas.`);
+      if (consumed.count !== 1) throw new Error(`Estoque insuficiente. Necessário: ${totalCost} ${currencyLabel}.`);
 
-      if (kind === "SWEET") {
+      if (kind === "SWEET" || kind === "RARE_SWEET") {
+        const rewardType = kind === "SWEET" ? FoodType.SWEET : FoodType.RARE_SWEET;
         await tx.mascotFoodItem.upsert({
-          where: { playerId_type: { playerId: me.id, type: FoodType.SWEET } },
-          create: { playerId: me.id, type: FoodType.SWEET, quantity: qty },
+          where: { playerId_type: { playerId: me.id, type: rewardType } },
+          create: { playerId: me.id, type: rewardType, quantity: qty },
           update: { quantity: { increment: qty } },
         });
       } else {
@@ -270,18 +283,18 @@ export async function tradeFoodInLabAction(kind: "SWEET" | "HONEY_CANDY" | "FRES
         });
       }
 
-      const rewardName = kind === "SWEET" ? "Doce" : kind === "HONEY_CANDY" ? "Bala de Mel" : "Água Fresca";
+      const rewardName = kind === "SWEET" ? "Doce" : kind === "RARE_SWEET" ? "Doce Raro" : kind === "HONEY_CANDY" ? "Bala de Mel" : "Água Fresca";
       const rewardLabel = `${qty} ${rewardName}${qty > 1 ? "s" : ""}`;
       await recordPlayerActivity(tx, {
         playerId: me.id,
         category: "ITEM",
         action: "LAB_FOOD_TRADE",
-        summary: `Laboratório: ${totalCost} comidas trocadas por ${rewardLabel}`,
+        summary: `Laboratório: ${totalCost} ${currencyLabel} trocadas por ${rewardLabel}`,
         source: "LABORATORY",
         entityType: "labFoodTrade",
         entityId: kind,
         amount: totalCost,
-        unit: "FOOD",
+        unit: currency,
         after: { kind, foodSpent: totalCost, rewardLabel, rewardQuantity: qty },
       });
 

@@ -341,6 +341,7 @@ export default async function MascotesPage() {
 
   const hasFood    = foods.some(f => f.type === "FOOD"  && f.quantity > 0);
   const hasSweet   = foods.some(f => f.type === "SWEET" && f.quantity > 0);
+  const hasRareSweet = foods.some(f => f.type === "RARE_SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
   const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
@@ -413,7 +414,7 @@ export default async function MascotesPage() {
       }
     })),
     events: [],
-    hasFood, hasSweet,
+    hasFood, hasSweet, hasRareSweet,
     // Admin: lista de outros mascotes para trigger de batalha/amizade
     otherMascots: admin ? featuredMascots.filter(o => o.id !== m.id && (o.isFavorite || o.isEquipped)).map(o => ({
       id: o.id,
@@ -700,6 +701,7 @@ export default async function MascotesPage() {
             bankMascotCount={bankMascotCount}
             hasFood={hasFood}
             hasSweet={hasSweet}
+            hasRareSweet={hasRareSweet}
             isAdmin={admin}
             spritePreferences={spritePreferences}
             eventExpBonusPct={expeditionEventExpBonusPct}

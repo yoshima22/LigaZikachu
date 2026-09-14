@@ -10,7 +10,7 @@ import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
-  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS,
+  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS, RARE_SWEET_EXP_MULTIPLIER, sweetFeedBaseExp,
   expeditionPersonalityExpMult,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getMascotRarity, mascotPrimaryType, getTypeAdvantageMultiplier,
@@ -980,7 +980,20 @@ export async function rewardEquippedMascot(
 
 // ── Interações ────────────────────────────────────────────────────────────────
 
-export type InteractionType = "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET";
+export type InteractionType = "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET";
+
+/** Tipos que consomem item de comida e atualizam lastFedAt. */
+export type FeedInteractionType = Extract<InteractionType, `FEED_${string}`>;
+
+/**
+ * Fonte unica para "isto e uma alimentacao?". Antes cada chamador repetia
+ * `type !== "FEED_FOOD" && type !== "FEED_SWEET"`; com um terceiro tipo de
+ * doce, qualquer copia esquecida viraria bug silencioso (cooldown social
+ * aplicado a comida, mood recalculado antes de alimentar, etc).
+ */
+export function isFeedInteraction(type: InteractionType): type is FeedInteractionType {
+  return type === "FEED_FOOD" || type === "FEED_SWEET" || type === "FEED_RARE_SWEET";
+}
 
 export interface InteractionResult {
   success: boolean;
@@ -1034,7 +1047,7 @@ export async function interactWithMascot(
     }
   }
   // Verifica se um rival travou as interações
-  if (type !== "FEED_FOOD" && type !== "FEED_SWEET" && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
+  if (!isFeedInteraction(type) && mascot.socialCooldownUntil && mascot.socialCooldownUntil > now && !skipCooldown) {
     const remaining = Math.ceil((mascot.socialCooldownUntil.getTime() - now.getTime()) / 60_000);
     return { success: false, message: `Um rival atordoou este mascote! Interações travadas por mais ${remaining} min.`, happinessChange: 0, expGained: 0, refused: true };
   }
@@ -1161,9 +1174,31 @@ export async function interactWithMascot(
       happinessChange = Math.round(35 * (mascot.personality === "GLUTTON" ? 1.5 : 1));
       // Guloso: comida e doces dão +15% de EXP. (O +3% de Vitalidade temporária do
       // doce é um buff de combate — entra na fase de combate.)
-      expGained = calcFinalExp(EXP_REWARDS.FEED_SWEET * (mascot.personality === "GLUTTON" ? 1.15 : 1));
+      expGained = calcFinalExp(sweetFeedBaseExp("SWEET", mascot.personality === "GLUTTON"));
       newMood = "EXCITED";
       message = `${mascotName} amou o doce! Olha aquela energia! (+${expGained} EXP)`;
+      break;
+    }
+
+    case "FEED_RARE_SWEET": {
+      const consumed = await prisma.mascotFoodItem.updateMany({
+        where: { playerId, type: "RARE_SWEET", quantity: { gt: 0 } },
+        data: { quantity: { decrement: 1 } },
+      });
+      if (consumed.count === 0) {
+        return { success: false, message: "Você não tem Doces Raros no inventário.", happinessChange: 0, expGained: 0 };
+      }
+      const rare = await prisma.mascotFoodItem.findUnique({ where: { playerId_type: { playerId, type: "RARE_SWEET" } }, select: { quantity: true } });
+      inventoryRemaining = rare?.quantity ?? 0;
+      // Sacia exatamente como o doce comum: mesma felicidade, mesmo mood, um
+      // unico lastFedAt. A diferenca esta so no EXP.
+      happinessChange = Math.round(35 * (mascot.personality === "GLUTTON" ? 1.5 : 1));
+      // EXP de 8 doces de uma vez. O multiplicador entra ANTES de calcFinalExp
+      // para que bonus percentuais (guloso, favorito, ativo) incidam sobre o
+      // total, igual a alimentar 8 vezes seguidas.
+      expGained = calcFinalExp(sweetFeedBaseExp("RARE_SWEET", mascot.personality === "GLUTTON"));
+      newMood = "EXCITED";
+      message = `${mascotName} devorou o Doce Raro! Energia de ${RARE_SWEET_EXP_MULTIPLIER} doces de uma vez! ✨ (+${expGained} EXP)`;
       break;
     }
   }
@@ -1188,7 +1223,7 @@ export async function interactWithMascot(
       lastInteractedAt: type === "PLAY" || type === "PET" ? now : mascot.lastInteractedAt,
       lastPlayedAt: type === "PLAY" ? now : mascot.lastPlayedAt,
       lastPettedAt: type === "PET" ? now : mascot.lastPettedAt,
-      lastFedAt: type.startsWith("FEED") ? now : mascot.lastFedAt,
+      lastFedAt: isFeedInteraction(type) ? now : mascot.lastFedAt,
     }
   });
 
