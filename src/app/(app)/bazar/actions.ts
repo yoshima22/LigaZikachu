@@ -202,6 +202,9 @@ function getListingQuantity(payload: Record<string, unknown>): number {
 }
 
 const HIDDEN_BAZAR_ITEM_TYPES = new Set([
+  // Doce Raro so se obtem trocando 20 doces no Laboratorio — nao e negociavel.
+  "RARE_SWEET",
+  "MASCOT_RARE_SWEET",
   "TRACE_MAP_SHORT",
   "TRACE_MAP_MEDIUM",
   "TRACE_MAP_LONG",
@@ -2558,8 +2561,6 @@ async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: str
     await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "FOOD", quantity: 1 } });
   } else if (offer.itemType === "MASCOT_SWEET") {
     await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "SWEET", quantity: 1 } });
-  } else if (offer.itemType === "MASCOT_RARE_SWEET") {
-    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "RARE_SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "RARE_SWEET", quantity: 1 } });
   } else if (offer.shopItemId) {
     await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1, source: "MIAUVADAO" } });
   } else {

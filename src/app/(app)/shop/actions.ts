@@ -116,17 +116,6 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
     price: 350,
     sortOrder: 50,
   },
-  {
-    type: ShopItemType.MASCOT_RARE_SWEET,
-    name: "Doce Raro",
-    description: "Sacia como um doce comum, mas concede o EXP de 8 doces de uma vez.",
-    imageUrl: "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/shop/Items/DoceRaro.png",
-    rarity: ShopItemRarity.EPIC,
-    // 8x o EXP por 20 doces no Laboratorio; na loja o preco acompanha os 20
-    // doces (350 x 20 = 7000) com desconto de 20% por gastar ZC direto.
-    price: 5600,
-    sortOrder: 55,
-  },
   // ── Itens Especiais ───────────────────────────────────────────────────────
   {
     type: ShopItemType.LUCKY_EGG,
@@ -673,15 +662,11 @@ export async function purchaseItem(
           update: { quantity: { increment: quantity } },
           create: { playerId: player.id, itemId, quantity }
         });
-      } else if (
-        item.type === ShopItemType.MASCOT_FOOD
-        || item.type === ShopItemType.MASCOT_SWEET
-        || item.type === ShopItemType.MASCOT_RARE_SWEET
-      ) {
-        // Compra de comida/doce → adiciona ao inventário de comida
-        const foodType = item.type === ShopItemType.MASCOT_FOOD
-          ? FoodType.FOOD
-          : item.type === ShopItemType.MASCOT_SWEET ? FoodType.SWEET : FoodType.RARE_SWEET;
+      } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
+        // Compra de comida/doce → adiciona ao inventário de comida.
+        // Doce Raro nao entra aqui: a unica via de aquisicao e a troca de 20
+        // doces no Laboratorio.
+        const foodType = item.type === ShopItemType.MASCOT_FOOD ? FoodType.FOOD : FoodType.SWEET;
         await tx.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: player.id, type: foodType } },
           update: { quantity: { increment: quantity } },

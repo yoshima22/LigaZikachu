@@ -106,7 +106,10 @@ export async function GET() {
     return NextResponse.json({
       mascots,
       eggs,
-      foods: foods.map(f => ({ type: f.type, quantity: f.quantity })),
+      // Doce Raro fora: nao e negociavel no Bazar (so troca no Laboratorio).
+      foods: foods
+        .filter(f => f.type !== "RARE_SWEET")
+        .map(f => ({ type: f.type, quantity: f.quantity })),
       // Todos os itens do inventário com info completa do shop
       inventoryItems: inventoryItems.map(inv => ({
         inventoryId: inv.id,
