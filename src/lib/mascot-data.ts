@@ -1235,9 +1235,16 @@ export const RARE_SWEET_EXP_MULTIPLIER = 8;
  * funcao para que a relacao "raro = N doces" nao possa divergir entre os dois
  * caminhos de codigo.
  */
-export function sweetFeedBaseExp(kind: "SWEET" | "RARE_SWEET", isGlutton: boolean): number {
-  const items = kind === "RARE_SWEET" ? RARE_SWEET_EXP_MULTIPLIER : 1;
-  return EXP_REWARDS.FEED_SWEET * items * (isGlutton ? 1.15 : 1);
+export function feedBaseExp(
+  type: "FOOD" | "SWEET" | "RARE_SWEET",
+  personality?: string | null,
+): number {
+  if (type === "FOOD") {
+    // Leal +10%; Guloso +15%.
+    return EXP_REWARDS.FEED_FOOD * (personality === "GLUTTON" ? 1.15 : personality === "LOYAL" ? 1.10 : 1);
+  }
+  const items = type === "RARE_SWEET" ? RARE_SWEET_EXP_MULTIPLIER : 1;
+  return EXP_REWARDS.FEED_SWEET * items * (personality === "GLUTTON" ? 1.15 : 1);
 }
 
 // ── Bônus de EXP de expedição por personalidade ───────────────────────────────

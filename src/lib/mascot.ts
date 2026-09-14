@@ -10,7 +10,7 @@ import { getShopItemMeta } from "@/lib/shop-cache";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, PERSONALITIES, INCUBATION_DURATION_MS,
-  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS, RARE_SWEET_EXP_MULTIPLIER, sweetFeedBaseExp,
+  EXPEDITION_DURATIONS, TRAINING_EXP_MULT, expToNextLevel, EXP_REWARDS, RARE_SWEET_EXP_MULTIPLIER, feedBaseExp,
   expeditionPersonalityExpMult,
   EGG_STAT_RANGES, EGG_SHINY_CHANCE,
   getSpriteUrl, getPokemonName, getMascotRarity, mascotPrimaryType, getTypeAdvantageMultiplier,
@@ -1154,8 +1154,7 @@ export async function interactWithMascot(
       // Preguiçoso e Guloso: comida gera +50% de felicidade.
       happinessChange = Math.round(25 * ((mascot.personality === "LAZY" || mascot.personality === "GLUTTON") ? 1.5 : 1));
       // Leal +10% de EXP ao alimentar; Guloso +15% (comida e doces).
-      const foodExpMult = mascot.personality === "GLUTTON" ? 1.15 : mascot.personality === "LOYAL" ? 1.10 : 1;
-      expGained = calcFinalExp(EXP_REWARDS.FEED_FOOD * foodExpMult);
+      expGained = calcFinalExp(feedBaseExp("FOOD", mascot.personality));
       newMood = "HAPPY";
       message = `${mascotName} comeu e está satisfeito! (+${expGained} EXP)`;
       break;
@@ -1174,7 +1173,7 @@ export async function interactWithMascot(
       happinessChange = Math.round(35 * (mascot.personality === "GLUTTON" ? 1.5 : 1));
       // Guloso: comida e doces dão +15% de EXP. (O +3% de Vitalidade temporária do
       // doce é um buff de combate — entra na fase de combate.)
-      expGained = calcFinalExp(sweetFeedBaseExp("SWEET", mascot.personality === "GLUTTON"));
+      expGained = calcFinalExp(feedBaseExp("SWEET", mascot.personality));
       newMood = "EXCITED";
       message = `${mascotName} amou o doce! Olha aquela energia! (+${expGained} EXP)`;
       break;
@@ -1196,7 +1195,7 @@ export async function interactWithMascot(
       // EXP de 8 doces de uma vez. O multiplicador entra ANTES de calcFinalExp
       // para que bonus percentuais (guloso, favorito, ativo) incidam sobre o
       // total, igual a alimentar 8 vezes seguidas.
-      expGained = calcFinalExp(sweetFeedBaseExp("RARE_SWEET", mascot.personality === "GLUTTON"));
+      expGained = calcFinalExp(feedBaseExp("RARE_SWEET", mascot.personality));
       newMood = "EXCITED";
       message = `${mascotName} devorou o Doce Raro! Energia de ${RARE_SWEET_EXP_MULTIPLIER} doces de uma vez! ✨ (+${expGained} EXP)`;
       break;
