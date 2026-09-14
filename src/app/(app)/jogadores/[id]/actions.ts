@@ -30,6 +30,7 @@ const EGG_TYPE_MAP: Record<string, EggType> = {
 const FOOD_TYPE_MAP: Record<string, FoodType> = {
   MASCOT_FOOD: FoodType.FOOD,
   MASCOT_SWEET: FoodType.SWEET,
+  MASCOT_RARE_SWEET: FoodType.RARE_SWEET,
 };
 
 export async function reactivatePlayerAccount(
@@ -277,7 +278,7 @@ export async function revokeEggFromPlayer(playerId: string, eggId: string): Prom
 
 // ── Admin: grant/revoke food ─────────────────────────────────────────────
 
-export async function grantFoodToPlayer(playerId: string, foodType: "FOOD" | "SWEET", quantity = 1): Promise<{ error?: string }> {
+export async function grantFoodToPlayer(playerId: string, foodType: "FOOD" | "SWEET" | "RARE_SWEET", quantity = 1): Promise<{ error?: string }> {
   try {
     const admin = await requireAdmin();
     await prisma.mascotFoodItem.upsert({
@@ -297,7 +298,7 @@ export async function grantFoodToPlayer(playerId: string, foodType: "FOOD" | "SW
   }
 }
 
-export async function revokeFoodFromPlayer(playerId: string, foodType: "FOOD" | "SWEET", quantity = 1): Promise<{ error?: string }> {
+export async function revokeFoodFromPlayer(playerId: string, foodType: "FOOD" | "SWEET" | "RARE_SWEET", quantity = 1): Promise<{ error?: string }> {
   try {
     await requireAdmin();
     const item = await prisma.mascotFoodItem.findUnique({

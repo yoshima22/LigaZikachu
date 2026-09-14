@@ -17,6 +17,11 @@ const EGG_TYPES = [
 type PlayerEgg = { id: string; type: string; obtainedAt: string; origin: string | null };
 type PlayerFood = { type: string; quantity: number };
 
+const GRANT_FOOD_TYPE = { food: "FOOD", sweet: "SWEET", rareSweet: "RARE_SWEET" } as const;
+
+const RARE_SWEET_IMAGE_URL =
+  "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/shop/Items/DoceRaro.png";
+
 export function AdminEggFoodPanel({
   playerId,
   eggs,
@@ -32,12 +37,12 @@ export function AdminEggFoodPanel({
   const [eggQty, setEggQty] = useState(1);
   const [foodQty, setFoodQty] = useState(1);
 
-  const grant = (type: "egg" | "food" | "sweet") => {
+  const grant = (type: "egg" | "food" | "sweet" | "rareSweet") => {
     startTransition(async () => {
       try {
         const res = type === "egg"
           ? await grantEggToPlayer(playerId, eggType, eggQty)
-          : await grantFoodToPlayer(playerId, type === "food" ? "FOOD" : "SWEET", foodQty);
+          : await grantFoodToPlayer(playerId, GRANT_FOOD_TYPE[type], foodQty);
         if (res.error) { toast.error(res.error); return; }
         toast.success(`Concedido!`);
         router.refresh();
@@ -57,7 +62,7 @@ export function AdminEggFoodPanel({
     });
   };
 
-  const revokeFood = (foodType: "FOOD" | "SWEET") => {
+  const revokeFood = (foodType: "FOOD" | "SWEET" | "RARE_SWEET") => {
     startTransition(async () => {
       try {
         const res = await revokeFoodFromPlayer(playerId, foodType, foodQty);
@@ -75,6 +80,7 @@ export function AdminEggFoodPanel({
 
   const foodCount = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
+  const rareSweetCount = foods.find(f => f.type === "RARE_SWEET")?.quantity ?? 0;
 
   return (
     <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
@@ -144,6 +150,10 @@ export function AdminEggFoodPanel({
         <div className="flex flex-wrap gap-2 text-[10px] text-slate-300">
           <span>🍖 Comida: ×{foodCount}</span>
           <span>🍬 Doce: ×{sweetCount}</span>
+          <span className="flex items-center gap-1">
+            <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+            Doce Raro: ×{rareSweetCount}
+          </span>
         </div>
         <div className="flex flex-wrap items-end gap-2">
           <div>
@@ -159,6 +169,10 @@ export function AdminEggFoodPanel({
             className="rounded-lg border border-pink-500/30 bg-pink-500/10 px-2 py-1.5 text-[10px] font-bold text-pink-300 disabled:opacity-40">
             <Plus size={10} className="inline mr-0.5" />Doce
           </button>
+          <button onClick={() => grant("rareSweet")} disabled={pending}
+            className="rounded-lg border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-2 py-1.5 text-[10px] font-bold text-[#FFCB05] disabled:opacity-40">
+            <Plus size={10} className="inline mr-0.5" />Doce Raro
+          </button>
           <button onClick={() => revokeFood("FOOD")} disabled={pending || foodCount === 0}
             className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[10px] font-bold text-red-300 disabled:opacity-40">
             <Minus size={10} className="inline mr-0.5" />Comida
@@ -166,6 +180,10 @@ export function AdminEggFoodPanel({
           <button onClick={() => revokeFood("SWEET")} disabled={pending || sweetCount === 0}
             className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[10px] font-bold text-red-300 disabled:opacity-40">
             <Minus size={10} className="inline mr-0.5" />Doce
+          </button>
+          <button onClick={() => revokeFood("RARE_SWEET")} disabled={pending || rareSweetCount === 0}
+            className="rounded-lg border border-red-500/30 bg-red-500/10 px-2 py-1.5 text-[10px] font-bold text-red-300 disabled:opacity-40">
+            <Minus size={10} className="inline mr-0.5" />Doce Raro
           </button>
         </div>
       </div>

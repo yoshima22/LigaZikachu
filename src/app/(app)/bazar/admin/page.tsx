@@ -17,6 +17,7 @@ const ITEM_TYPES = [
   { value: "EGG_EVENT",      label: "Ovo de Evento" },
   { value: "MASCOT_FOOD",    label: "🍖 Comida" },
   { value: "MASCOT_SWEET",   label: "🍬 Doce" },
+  { value: "MASCOT_RARE_SWEET", label: "✨ Doce Raro" },
   { value: "MASCOT_BUFF_EXP", label: "⚡ Vitamina Elétrica" },
   { value: "MASCOT_BUFF_STAT", label: "💊 Proteína Zika" },
   { value: "MASCOT_BUFF_HAPPY", label: "🍯 Bala de Mel" },

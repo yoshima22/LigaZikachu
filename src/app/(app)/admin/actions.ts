@@ -495,6 +495,7 @@ export async function sendItemToAllPlayers(
     const FOOD_MAP: Record<string, FoodType> = {
       MASCOT_FOOD: FoodType.FOOD,
       MASCOT_SWEET: FoodType.SWEET,
+      MASCOT_RARE_SWEET: FoodType.RARE_SWEET,
     };
 
     let sent = 0, skipped = 0;

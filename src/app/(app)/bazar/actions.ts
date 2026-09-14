@@ -148,6 +148,7 @@ function canonicalBazarItemName(itemType: string) {
   if (TICKER_EGG_LABELS[itemType]) return TICKER_EGG_LABELS[itemType];
   if (itemType === "FOOD") return "Comida de Mascote";
   if (itemType === "SWEET") return "Doce de Mascote";
+  if (itemType === "RARE_SWEET") return "Doce Raro";
   return itemType.replaceAll("_", " ");
 }
 
@@ -2557,6 +2558,8 @@ async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: str
     await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "FOOD", quantity: 1 } });
   } else if (offer.itemType === "MASCOT_SWEET") {
     await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "SWEET", quantity: 1 } });
+  } else if (offer.itemType === "MASCOT_RARE_SWEET") {
+    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "RARE_SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "RARE_SWEET", quantity: 1 } });
   } else if (offer.shopItemId) {
     await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1, source: "MIAUVADAO" } });
   } else {
@@ -3643,7 +3646,7 @@ export async function getShellGameCooldown(): Promise<{ cooldownMs: number }> {
 // ── Auto-cleanup silencioso (chamado no page load do bazar) ──────────────────
 
 const EGG_TYPES_SET = new Set(EGG_OFFER_TYPES);
-const FOOD_TYPES_SET = new Set(["FOOD","SWEET","MASCOT_FOOD","MASCOT_SWEET"]);
+const FOOD_TYPES_SET = new Set(["FOOD","SWEET","RARE_SWEET","MASCOT_FOOD","MASCOT_SWEET","MASCOT_RARE_SWEET"]);
 
 /** Verifica se o item de um listing ainda existe em escrow */
 async function isListingItemStale(listing: { id: string; playerId: string; payload: unknown }): Promise<boolean> {
@@ -3665,7 +3668,7 @@ async function isListingItemStale(listing: { id: string; playerId: string; paylo
   }
 
   // ── Comida / Doce (quantidade decrementada no escrow) ────────────────────
-  const foodKey = itemType === "MASCOT_FOOD" ? "FOOD" : itemType === "MASCOT_SWEET" ? "SWEET" : itemType;
+  const foodKey = itemType === "MASCOT_FOOD" ? "FOOD" : itemType === "MASCOT_SWEET" ? "SWEET" : itemType === "MASCOT_RARE_SWEET" ? "RARE_SWEET" : itemType;
   if (FOOD_TYPES_SET.has(foodKey)) {
     const food = await prisma.mascotFoodItem.findUnique({
       where: { playerId_type: { playerId: listing.playerId, type: foodKey as "FOOD" | "SWEET" } },
