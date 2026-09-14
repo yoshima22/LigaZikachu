@@ -327,17 +327,32 @@ export async function autoRefreshMiauvadaoIfNeeded(options?: {
   try {
     // A rotação é uma escrita crítica: sempre confira o estado real do banco.
     // Usar o cache aqui pode fazer o cron enxergar o ciclo anterior como atual.
-    const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } })
-      ?? await prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
-
-    const offers = (config.dailyOffers as unknown as MiauvadaoOffer[]) ?? [];
     const rotation = getMiauvadaoRotation();
-    const firstOffer = offers[0];
-    const expired = !firstOffer
-      || !config.offersRefreshedAt
-      || config.offersRefreshedAt < rotation.start;
 
-    if (!expired) return null;
+    // Fase 1 — só a data. Esta função roda em TODO page load do Bazar, mas a
+    // rotação só acontece 4x/dia: ler a linha inteira (~270 kB, por causa de
+    // dailyOffers/offerStockOverrides/playerRefreshData) em toda visita era o
+    // maior consumo de egress da página.
+    // ponytail: o check antigo também regenerava quando dailyOffers estava vazio
+    // com data fresca. Nenhum dos 5 escritores de dailyOffers encurta o array
+    // (todos substituem em posição), então esse estado não é alcançável; se um
+    // escritor futuro passar a remover ofertas, restaure o `!offers[0]` aqui.
+    const stamp = await prisma.miauvadaoConfig.findUnique({
+      where: { id: "singleton" },
+      select: { offersRefreshedAt: true },
+    });
+    if (stamp && stamp.offersRefreshedAt && stamp.offersRefreshedAt >= rotation.start) return null;
+
+    // Fase 2 — expirou de fato: agora vale ler os campos pesados da rotação.
+    const config = stamp
+      ? await prisma.miauvadaoConfig.findUniqueOrThrow({
+          where: { id: "singleton" },
+          select: { vaultBalance: true, offerStockOverrides: true },
+        })
+      : await prisma.miauvadaoConfig.create({
+          data: { id: "singleton" },
+          select: { vaultBalance: true, offerStockOverrides: true },
+        });
 
     const newOffers = await rollMiauvadaoOffers(
       config.vaultBalance,
@@ -727,9 +742,24 @@ export async function getMiauvadaoConfig() {
 }
 
 /** Leitura autoritativa usada no limite da rotação; não pode reutilizar a vitrine anterior. */
+// Campos consumidos por bazar/page.tsx. Os Json pesados que ficam de fora
+// (offerStockOverrides e playerRefreshData, este ultimo cresce por jogador)
+// respondem pela maior parte dos ~270 kB da linha singleton e nao sao lidos
+// aqui — puxa-los a cada page load do Bazar era egress puro.
+const MIAUVADAO_PAGE_FIELDS = {
+  dailyOffers: true,
+  slotRefreshUsedCycle: true,
+  vaultBalance: true,
+  lastNpcMessage: true,
+  lastWinnerMessage: true,
+} as const;
+
 export async function getCurrentMiauvadaoConfig() {
-  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-  return config ?? prisma.miauvadaoConfig.create({ data: { id: "singleton" } });
+  const config = await prisma.miauvadaoConfig.findUnique({
+    where: { id: "singleton" },
+    select: MIAUVADAO_PAGE_FIELDS,
+  });
+  return config ?? prisma.miauvadaoConfig.create({ data: { id: "singleton" }, select: MIAUVADAO_PAGE_FIELDS });
 }
 
 export async function invalidateMiauvadaoCache() {
