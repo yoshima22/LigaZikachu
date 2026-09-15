@@ -29,3 +29,6 @@ windows-transmitter/obj/
 pnpm-lock.yaml
 pnpm-workspace.yaml
 scripts/export-egg-pools.ts
+
+# Grafo de conhecimento gerado localmente pelo graphify
+graphify-out/

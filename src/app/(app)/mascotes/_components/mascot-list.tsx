@@ -41,7 +41,7 @@ interface MascotData {
   hatchedAt: Date; lastInteractedAt: Date | null; lastPlayedAt?: Date | null; lastPettedAt?: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; startedAt?: Date; finishAt: Date; status: string; mode?: string }[];
   events: { id: string; emoji: string; description: string; createdAt: Date }[];
-  hasFood: boolean; hasSweet: boolean;
+  hasFood: boolean; hasSweet: boolean; hasRareSweet?: boolean;
   otherMascots?: { id: string; name: string }[];
 }
 
@@ -223,6 +223,7 @@ export function MascotList({
   bankMascotCount,
   hasFood = false,
   hasSweet = false,
+  hasRareSweet = false,
   isAdmin = false,
   spritePreferences = null,
   eventExpBonusPct,
@@ -232,6 +233,7 @@ export function MascotList({
   bankMascotCount?: number;
   hasFood?: boolean;
   hasSweet?: boolean;
+  hasRareSweet?: boolean;
   isAdmin?: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
   eventExpBonusPct?: Partial<Record<import("@/lib/mascot-data").ExpeditionMode, number>>;
@@ -515,6 +517,7 @@ export function MascotList({
               totalCount={bankMascotCount}
               hasFood={hasFood}
               hasSweet={hasSweet}
+              hasRareSweet={hasRareSweet}
               isAdmin={isAdmin}
               spritePreferences={spritePreferences}
             />

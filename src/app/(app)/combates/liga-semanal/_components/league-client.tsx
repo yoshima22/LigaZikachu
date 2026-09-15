@@ -858,6 +858,10 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
   };
 
   const [saveError, setSaveError] = useState<string | null>(null);
+  // Falha de reposicionamento vira janela, nao toast: a regra que barrou a troca
+  // (teto de megas, combate ja resolvido, janela travada) precisa ficar na tela
+  // ate o jogador ler — um toast some antes de ele entender o que aconteceu.
+  const [swapError, setSwapError] = useState<{ from: string; to: string; reason: string } | null>(null);
 
   const handleMascotPositionClick = (slot: number, index: number, name: string) => {
     if (!data.currentLeague) return;
@@ -876,16 +880,65 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       try {
         const res = await swapTeamMascotPositionsAction(data.currentLeague.id, from.slot, from.index, slot, index);
         if (res && "error" in res) {
-          toast.error(res.error);
+          setSwapError({
+            from: `${from.name} (Time ${from.slot})`,
+            to: `Time ${slot}, posição ${index + 1}`,
+            reason: res.error ?? "Não foi possível concluir a troca.",
+          });
           return;
         }
         toast.success(`${from.name} reposicionado.`);
         refresh();
       } catch (err) {
-        toast.error(`Erro: ${String(err).slice(0, 100)}`);
+        setSwapError({
+          from: `${from.name} (Time ${from.slot})`,
+          to: `Time ${slot}, posição ${index + 1}`,
+          reason: String(err).slice(0, 200),
+        });
       }
     });
   };
+
+  const swapErrorDialog = swapError ? (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="swap-error-title"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4"
+      onClick={() => setSwapError(null)}
+    >
+      <div
+        className="w-full max-w-md rounded-2xl border border-red-500/30 bg-[#1A1A2E] p-5 shadow-2xl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="flex items-start gap-3">
+          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-red-500/15 text-lg">⚠️</div>
+          <div className="min-w-0 flex-1">
+            <h2 id="swap-error-title" className="font-pixel text-sm text-red-300">Troca não realizada</h2>
+            <p className="mt-2 text-xs text-slate-400">
+              Tentativa: <strong className="text-slate-200">{swapError.from}</strong> → <strong className="text-slate-200">{swapError.to}</strong>
+            </p>
+            <p className="mt-3 rounded-xl border border-red-500/20 bg-red-500/5 p-3 text-xs leading-relaxed text-slate-200">
+              {swapError.reason}
+            </p>
+            <p className="mt-3 text-[11px] text-slate-500">
+              Nada foi alterado — os dois times seguem como estavam.
+            </p>
+          </div>
+        </div>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            autoFocus
+            onClick={() => setSwapError(null)}
+            className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700]"
+          >
+            Entendi
+          </button>
+        </div>
+      </div>
+    </div>
+  ) : null;
 
   const saveTeam = () => {
     setSaveError(null);
@@ -1257,6 +1310,8 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         <p>Mascotes disponíveis: {data.availableMascots.length}</p>
         <p>Precisa de 18 mascotes diferentes para os 3 combates do dia.</p>
       </div>
+
+      {swapErrorDialog}
     </div>
   );
 }

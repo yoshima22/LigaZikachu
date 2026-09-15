@@ -11,13 +11,12 @@ import {
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
   applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
   claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
-  rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds,
-} from "@/lib/mascot";
+  rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds, isFeedInteraction } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import type { ExpeditionMode } from "@/lib/mascot-data";
-import { EGG_SHINY_CHANCE, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, feedBaseExp, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
   eligibleFormVariants,
@@ -948,13 +947,13 @@ export async function interactAction(
     if (!player) return { error: "Perfil não encontrado." };
 
     // Não recalcula mood antes de alimentar — o decay comeria o ganho de felicidade
-    if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+    if (!isFeedInteraction(type)) {
       await recalculateMood(mascotId);
     }
 
     const isAdminUser = user.role === "ADMIN" || user.role === "SUPER_ADMIN";
     const result = await interactWithMascot(player.id, mascotId, type, isAdminUser);
-    if (result.success && (type === "FEED_FOOD" || type === "FEED_SWEET")) {
+    if (result.success && isFeedInteraction(type)) {
       await clearRunawayWarningIfRecovered(player.id, mascotId, prisma, true).catch(() => false);
     }
 
@@ -1012,12 +1011,12 @@ export async function interactAllAction(
     // Pequenos lotes reduzem muito o tempo da ação sem abrir conexões demais no banco.
     // Mantemos a ordem da lista e fazemos uma única invalidação de cache ao final.
     // Alimentação continua serial para não haver disputa pelo mesmo saldo de itens.
-    const concurrency = type === "FEED_FOOD" || type === "FEED_SWEET" ? 1 : 4;
+    const concurrency = isFeedInteraction(type) ? 1 : 4;
     for (let index = 0; index < mascots.length; index += concurrency) {
       const batch = mascots.slice(index, index + concurrency);
       const batchResults = await Promise.all(batch.map(async (mascot) => {
         try {
-          if (type !== "FEED_FOOD" && type !== "FEED_SWEET") {
+          if (!isFeedInteraction(type)) {
             await recalculateMood(mascot.id);
           }
 
@@ -2193,7 +2192,7 @@ function hungerMinHours(status: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED",
 
 export async function feedAllAction(
   minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL",
-  foodType: "FOOD" | "SWEET" = "FOOD",
+  foodType: "FOOD" | "SWEET" | "RARE_SWEET" = "FOOD",
 ): Promise<{
   error?: string; fed: number; skipped: number; noFood: boolean;
 }> {
@@ -2217,7 +2216,7 @@ export async function feedAllAction(
         playerId: player.id,
         arenaState: { notIn: ["INJURED", "ARENA"] },
       },
-      select: { id: true, happiness: true, lastFedAt: true, isEquipped: true },
+      select: { id: true, happiness: true, lastFedAt: true, isEquipped: true, personality: true },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
     });
 
@@ -2243,13 +2242,24 @@ export async function feedAllAction(
         prisma.mascot.update({
           where: { id: m.id },
           data: {
-            happiness: Math.min(100, m.happiness + (foodType === "SWEET" ? 35 : 20)),
+            happiness: Math.min(100, m.happiness + (foodType === "FOOD" ? 20 : 35)),
             mood: "HAPPY",
             lastFedAt: now,
           },
         })
       ),
     ]);
+
+    // A transação acima só concede felicidade. O EXP vem aqui, com a mesma
+    // fórmula do botão individual (feedBaseExp), para que o mesmo item valha o
+    // mesmo EXP não importa por onde o jogador alimente.
+    // ponytail: um addExp por mascote — addExp resolve level up e evolução, que
+    // não dá para fazer em batch. "Alimentar todos" é uma ação deliberada e
+    // pontual; se virar gargalo, o caminho é um addExpMany em lote.
+    for (const m of toFeed) {
+      const gained = Math.round(feedBaseExp(foodType, m.personality));
+      await addExp(m.id, gained, { source: `FEED_${foodType}_BULK` }).catch(() => null);
+    }
 
     // Clear runaway warnings fora da transaction (não-crítico)
     for (const m of toFeed) {

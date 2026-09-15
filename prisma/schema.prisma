@@ -1754,6 +1754,7 @@ enum ShopItemType {
   EGG_GEN6PLUS
   MASCOT_FOOD
   MASCOT_SWEET
+  MASCOT_RARE_SWEET
   MASCOT_BUFF_EXP
   MASCOT_BUFF_STAT
   MASCOT_BUFF_HAPPY
@@ -2493,6 +2494,8 @@ enum ExpeditionStatus {
 enum FoodType {
   FOOD
   SWEET
+  /// Doce Raro: sacia igual ao doce comum, mas concede o EXP de 8 doces de uma vez.
+  RARE_SWEET
 }
 
 enum MascotArenaState {

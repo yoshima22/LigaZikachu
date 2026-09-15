@@ -663,7 +663,9 @@ export async function purchaseItem(
           create: { playerId: player.id, itemId, quantity }
         });
       } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
-        // Compra de comida/doce → adiciona ao inventário de comida
+        // Compra de comida/doce → adiciona ao inventário de comida.
+        // Doce Raro nao entra aqui: a unica via de aquisicao e a troca de 20
+        // doces no Laboratorio.
         const foodType = item.type === ShopItemType.MASCOT_FOOD ? FoodType.FOOD : FoodType.SWEET;
         await tx.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: player.id, type: foodType } },

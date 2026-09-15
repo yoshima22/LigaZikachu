@@ -44,9 +44,13 @@ type MonthlyCosts = { labEgg: number; evolutionStone: number };
 type FoodTrades = {
   food: number;
   sweets: number;
-  costs: { SWEET: number; HONEY_CANDY: number; FRESH_WATER: number };
+  rareSweets: number;
+  costs: { SWEET: number; RARE_SWEET: number; HONEY_CANDY: number; FRESH_WATER: number };
   limits: { honeyCandies: number; freshWaters: number };
 };
+
+export const RARE_SWEET_IMAGE_URL =
+  "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/shop/Items/DoceRaro.png";
 
 const RARITY_LABEL: Record<MascotRarity, string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
 const RARITY_COLOR: Record<MascotRarity, string> = {
@@ -225,14 +229,18 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
     });
   };
 
-  const handleFoodTrade = (kind: "SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) => {
+  const handleFoodTrade = (kind: "SWEET" | "RARE_SWEET" | "HONEY_CANDY" | "FRESH_WATER", quantity = 1) => {
     start(async () => {
       const res = await tradeFoodInLabAction(kind, quantity);
       if (!res.ok) { showFeedback(false, res.error); return; }
       setFoodTrades((current) => ({
         ...current,
-        food: current.food - res.foodSpent,
-        sweets: kind === "SWEET" ? current.sweets + quantity : current.sweets,
+        // O Doce Raro e a unica troca paga em doces; as demais debitam comida.
+        food: kind === "RARE_SWEET" ? current.food : current.food - res.foodSpent,
+        sweets: kind === "SWEET"
+          ? current.sweets + quantity
+          : kind === "RARE_SWEET" ? current.sweets - res.foodSpent : current.sweets,
+        rareSweets: kind === "RARE_SWEET" ? current.rareSweets + quantity : current.rareSweets,
       }));
       if (kind === "HONEY_CANDY") {
         setWeeklyUsage((usage) => ({ ...usage, honeyCandies: usage.honeyCandies + quantity }));
@@ -561,6 +569,10 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
               <div className="flex items-center gap-3 text-[11px] text-slate-400">
                 <span>🍖 <strong className="text-slate-200">{foodTrades.food}</strong> comidas</span>
                 <span>🍬 <strong className="text-slate-200">{foodTrades.sweets}</strong> doces</span>
+                <span className="flex items-center gap-1">
+                  <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-4 w-4 object-contain" />
+                  <strong className="text-slate-200">{foodTrades.rareSweets}</strong> raros
+                </span>
               </div>
             </div>
           </div>
@@ -572,6 +584,18 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             food={foodTrades.food}
             isPending={isPending}
             onBuy={(q) => handleFoodTrade("SWEET", q)}
+          />
+          <FoodTradeItem
+            title="1 Doce Raro"
+            description={`Converta ${foodTrades.costs.RARE_SWEET} doces comuns em um Doce Raro: sacia como um doce, mas rende o EXP de 8 de uma vez. Sem limite.`}
+            emoji="✨"
+            imageUrl={RARE_SWEET_IMAGE_URL}
+            currencyEmoji="🍬"
+            currencyNoun="doce"
+            cost={foodTrades.costs.RARE_SWEET}
+            food={foodTrades.sweets}
+            isPending={isPending}
+            onBuy={(q) => handleFoodTrade("RARE_SWEET", q)}
           />
           <FoodTradeItem
             title="1 Bala de Mel"
@@ -668,10 +692,15 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
   );
 }
 
-function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isPending, onBuy }: {
+function FoodTradeItem({ title, description, emoji, imageUrl, currencyEmoji = "🍖", currencyNoun = "comida", cost, food, used, limit, isPending, onBuy }: {
   title: string;
   description: string;
   emoji: string;
+  /** Arte do item; quando ausente cai no emoji. */
+  imageUrl?: string;
+  /** Moeda da troca — o Doce Raro e pago em doces, nao em comida. */
+  currencyEmoji?: string;
+  currencyNoun?: string;
   cost: number;
   food: number;
   used?: number;
@@ -690,12 +719,14 @@ function FoodTradeItem({ title, description, emoji, cost, food, used, limit, isP
 
   return (
     <div className="flex items-center gap-4 rounded-2xl border border-amber-500/20 bg-slate-900 px-4 py-3">
-      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xl">{emoji}</div>
+      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-amber-500/10 text-xl">
+        {imageUrl ? <img src={imageUrl} alt="" aria-hidden className="h-8 w-8 object-contain" /> : emoji}
+      </div>
       <div className="min-w-0 flex-1">
         <p className="font-semibold text-white">{title}</p>
         <p className="text-xs text-slate-400">{description}</p>
         <div className="mt-1 flex items-center gap-3">
-          <span className="text-xs font-bold text-amber-300">🍖 {totalCost} comida{totalCost !== 1 ? "s" : ""}{clampedQty > 1 ? ` (${cost}×${clampedQty})` : ""}</span>
+          <span className="text-xs font-bold text-amber-300">{currencyEmoji} {totalCost} {currencyNoun}{totalCost !== 1 ? "s" : ""}{clampedQty > 1 ? ` (${cost}×${clampedQty})` : ""}</span>
           {typeof limit === "number" ? (
             <span className={`text-[10px] ${atLimit ? "text-red-400" : "text-slate-500"}`}>{used ?? 0}/{limit} esta semana</span>
           ) : (

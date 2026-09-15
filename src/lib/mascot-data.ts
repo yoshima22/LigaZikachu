@@ -1221,6 +1221,32 @@ export const EXP_REWARDS = {
   EXPEDITION:      50,  // era 20 — base para expedições padrão
 };
 
+/**
+ * Doce Raro: sacia como um doce comum (mesma felicidade, mesmo lastFedAt), mas
+ * entrega o EXP de 8 doces de uma vez consumindo um unico item. O multiplicador
+ * vive aqui, junto de EXP_REWARDS, para que balanceamento e exibicao leiam o
+ * mesmo numero — a UI mostra "x8" a partir desta constante.
+ */
+export const RARE_SWEET_EXP_MULTIPLIER = 8;
+
+/**
+ * EXP base de uma alimentacao com doce, antes dos multiplicadores gerais
+ * (favorito, ativo, banco, buffs). Doce comum e Doce Raro compartilham esta
+ * funcao para que a relacao "raro = N doces" nao possa divergir entre os dois
+ * caminhos de codigo.
+ */
+export function feedBaseExp(
+  type: "FOOD" | "SWEET" | "RARE_SWEET",
+  personality?: string | null,
+): number {
+  if (type === "FOOD") {
+    // Leal +10%; Guloso +15%.
+    return EXP_REWARDS.FEED_FOOD * (personality === "GLUTTON" ? 1.15 : personality === "LOYAL" ? 1.10 : 1);
+  }
+  const items = type === "RARE_SWEET" ? RARE_SWEET_EXP_MULTIPLIER : 1;
+  return EXP_REWARDS.FEED_SWEET * items * (personality === "GLUTTON" ? 1.15 : 1);
+}
+
 // ── Bônus de EXP de expedição por personalidade ───────────────────────────────
 // Fonte única de verdade, usada tanto no cálculo real (claimExpedition) quanto na
 // prévia do card, para que o valor previsto e o recebido batam. Determinístico a

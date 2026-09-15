@@ -11,7 +11,7 @@ interface ShopItem { id: string; name: string; type: string; rarity: string; act
 const TYPE_EMOJI: Record<string, string> = {
   TITLE: "🏷", BANNER: "🖼", FRAME: "🔵", ZIKALOOT_TICKET: "🎟",
   EGG_COMMON: "O", EGG_RARE: "R", EGG_SPECIAL: "S", EGG_LAB: "L", EGG_EVENT: "E",
-  MASCOT_FOOD: "🍖", MASCOT_SWEET: "🍬",
+  MASCOT_FOOD: "🍖", MASCOT_SWEET: "🍬", MASCOT_RARE_SWEET: "✨",
   MASCOT_BUFF_EXP: "⚡", MASCOT_BUFF_STAT: "💊",
   MASCOT_BUFF_HAPPY: "🍯", MASCOT_BUFF_LUCK: "🍀", MASCOT_BUFF_MOOD: "💧",
 };

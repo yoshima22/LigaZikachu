@@ -995,13 +995,22 @@ export async function swapTeamMascotPositionsAction(
       const allIds = [...new Set([...sourceIds, ...targetIds].filter(Boolean))];
       const mons = await prisma.mascot.findMany({
         where: { id: { in: allIds }, playerId: player.id },
-        select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
+        // pokemonId entra porque isMegaEvolvedMascot() tambem trata forma Mega
+        // pelo proprio id da especie; sem ele, um mascote nessa condicao passaria
+        // despercebido e furaria o teto de megas.
+        select: { id: true, pokemonId: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true },
       });
       const byId = new Map(mons.map((m) => [m.id, m]));
-      for (const ids of [sourceIds, targetIds]) {
-        const team = ids.map((id) => byId.get(id)).filter(Boolean) as { id: string; megaEvolvedAt: Date | null; megaEvolvedFromPokemonId: number | null }[];
+      // Nomeia o time que estourou: a mensagem crua ("esta formação possui 3
+      // megas") nao dizia qual dos dois, e o jogador olha para tres times na tela.
+      for (const [slot, ids] of [[fromSlot, sourceIds], [toSlot, targetIds]] as const) {
+        const team = ids.map((id) => byId.get(id)).filter(Boolean) as { id: string; pokemonId: number; megaEvolvedAt: Date | null; megaEvolvedFromPokemonId: number | null }[];
         const check = validateBattleDivision(team, division);
-        if (!check.valid) return { error: check.message };
+        if (!check.valid) {
+          return {
+            error: `Time ${slot}: a troca deixaria ${check.megaCount} megas nesta equipe, mas a divisão Limitada da Liga Semanal permite no máximo ${check.maxMegas}.`,
+          };
+        }
       }
     }
 

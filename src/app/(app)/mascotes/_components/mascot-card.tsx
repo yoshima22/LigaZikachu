@@ -4,6 +4,7 @@ import { useState, useTransition, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
+import { SweetKindMenu } from "./sweet-kind-menu";
 import {
   getSpriteUrl, getStaticSpriteUrl, getPokemonName, getPokemonTypes, expToNextLevel as expToNext,
   MOOD_EMOJI, MOOD_LABEL, PERSONALITY_LABEL, shortMascotCode,
@@ -98,6 +99,7 @@ interface MascotData {
   events: MascotEvent[];
   hasFood: boolean;
   hasSweet: boolean;
+  hasRareSweet?: boolean;
   // Admin: lista de outros mascotes para debug
   otherMascots?: { id: string; name: string }[];
 }
@@ -519,6 +521,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [imgFailed, setImgFailed] = useState(false);
   const [hasFood, setHasFood] = useState(mascot.hasFood);
   const [hasSweet, setHasSweet] = useState(mascot.hasSweet);
+  const [hasRareSweet, setHasRareSweet] = useState(Boolean(mascot.hasRareSweet));
   const [expeditionReward, setExpeditionReward] = useState<ExpeditionRewardDisplay | null>(null);
   const [expeditionRewardPendingRefresh, setExpeditionRewardPendingRefresh] = useState(false);
   const closeExpeditionReward = () => {
@@ -554,11 +557,13 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalIsFavorite(mascot.isFavorite); }, [mascot.isFavorite]);
   useEffect(() => { setHasFood(mascot.hasFood); },           [mascot.hasFood]);
   useEffect(() => { setHasSweet(mascot.hasSweet); },         [mascot.hasSweet]);
+  useEffect(() => { setHasRareSweet(Boolean(mascot.hasRareSweet)); }, [mascot.hasRareSweet]);
   useEffect(() => {
     const syncInventory = (event: Event) => {
-      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET"; remaining: number }>).detail;
+      const detail = (event as CustomEvent<{ type: "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET"; remaining: number }>).detail;
       if (detail.type === "FEED_FOOD") setHasFood(detail.remaining > 0);
       if (detail.type === "FEED_SWEET") setHasSweet(detail.remaining > 0);
+      if (detail.type === "FEED_RARE_SWEET") setHasRareSweet(detail.remaining > 0);
     };
     window.addEventListener("mascot-food-inventory", syncInventory);
     return () => window.removeEventListener("mascot-food-inventory", syncInventory);
@@ -641,6 +646,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const canPet       = !arenaLocked && !inExpedition && !petOnCooldown && localMood !== "ANGRY" && !(mascot.personality === "TIMID" && localHappiness < 40);
   const canFeedFood  = !arenaLocked && hasFood  && hungerStatus !== "STUFFED"; // comida permitida em expedição
   const canFeedSweet = !arenaLocked && !inExpedition && hasSweet && hungerStatus !== "STUFFED";
+  const canFeedRareSweet = !arenaLocked && !inExpedition && hasRareSweet && hungerStatus !== "STUFFED";
 
   const act = (fn: () => Promise<{ error?: string; result?: unknown }>, successMsg?: string) => {
     startTransition(async () => {
@@ -689,7 +695,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     });
   };
 
-  const handleInteract = (type: "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET") => {
+  const handleInteract = (type: "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET") => {
     startTransition(async () => {
       const r = await interactAction(mascot.id, type);
       if (r.error) { toast.error(r.error); return; }
@@ -722,8 +728,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             return exp;
           });
         }
-        if (type === "FEED_FOOD" || type === "FEED_SWEET") setLocalLastFed(new Date());
-        if ((type === "FEED_FOOD" || type === "FEED_SWEET") && typeof r.result.inventoryRemaining === "number") {
+        if (type.startsWith("FEED")) setLocalLastFed(new Date());
+        if (type.startsWith("FEED") && typeof r.result.inventoryRemaining === "number") {
           window.dispatchEvent(new CustomEvent("mascot-food-inventory", {
             detail: { type, remaining: r.result.inventoryRemaining },
           }));
@@ -1317,12 +1323,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <Utensils size={12}/> Comida
             </button>
           </Tip>
-          <Tip text={!canFeedSweet ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : !hasSweet ? "Sem doces no estoque" : "Em expedição") : "Doce: bônus de EXP e anima o mascote"}>
-            <button type="button" disabled={pending || !canFeedSweet} onClick={() => handleInteract("FEED_SWEET")}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl border border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
-              <Candy size={12}/> Doce
-            </button>
-          </Tip>
+          <div className="flex items-stretch">
+            <div className="min-w-0 flex-1">
+              <Tip text={!canFeedSweet ? (hungerStatus === "STUFFED" ? "Já está empanturrado" : !hasSweet ? "Sem doces no estoque" : "Em expedição") : "Doce: bônus de EXP e anima o mascote. Use a seta para escolher o Doce Raro."}>
+                <button type="button" disabled={pending || !canFeedSweet} onClick={() => handleInteract("FEED_SWEET")}
+                  className="flex w-full items-center justify-center gap-1.5 rounded-l-xl border border-r-0 border-border py-2 text-xs font-medium text-slate-300 hover:border-slate-500 disabled:opacity-30 disabled:cursor-not-allowed">
+                  <Candy size={12}/> Doce
+                </button>
+              </Tip>
+            </div>
+            <SweetKindMenu
+              hasSweet={canFeedSweet}
+              hasRareSweet={canFeedRareSweet}
+              disabled={pending || (!canFeedSweet && !canFeedRareSweet)}
+              onPick={(kind) => handleInteract(kind)}
+            />
+          </div>
         </div>
 
         {/* ── Expedição + Equipar/Desequipar ── */}

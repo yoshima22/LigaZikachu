@@ -195,9 +195,19 @@ async function buildPremiumMessage(listing: {
 /** Publica no máximo um chamariz global a cada janela aleatória de 30–55 minutos. */
 export async function publishDuePremiumBazarTicker() {
   const now = new Date();
-  await prisma.miauvadaoConfig.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
-  const config = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" } });
-  if (config?.premiumTickerNextAt && config.premiumTickerNextAt > now) return { published: false, reason: "waiting" as const };
+  // A linha singleton de miauvadao_config passa de 270 kB (offerStockOverrides,
+  // dailyOffers e playerRefreshData sao Json grandes). Este cron roda a cada 5 min
+  // e so usa dois campos: ler a linha inteira custava ~78 MB/dia de egress.
+  // O upsert incondicional tambem bumpava `updatedAt` a cada execucao (288 writes/dia
+  // numa linha de 270 kB); agora so criamos quando a linha realmente nao existe.
+  const TICKER_FIELDS = { premiumTickerNextAt: true, premiumTickerLastListingId: true } as const;
+  const config =
+    (await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" }, select: TICKER_FIELDS })) ??
+    (await prisma.miauvadaoConfig
+      .create({ data: { id: "singleton" }, select: TICKER_FIELDS })
+      // Duas execucoes concorrentes podem criar ao mesmo tempo; a perdedora so rele.
+      .catch(() => prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: TICKER_FIELDS })));
+  if (config.premiumTickerNextAt && config.premiumTickerNextAt > now) return { published: false, reason: "waiting" as const };
 
   const listings = await prisma.bazarListing.findMany({
     where: { status: "ACTIVE", expiresAt: { gt: now }, premiumUntil: { gt: now } },
@@ -221,7 +231,7 @@ export async function publishDuePremiumBazarTicker() {
   });
   if (!claim.count) return { published: false, reason: "claimed" as const };
 
-  const alternatives = listings.filter((item) => item.id !== config?.premiumTickerLastListingId);
+  const alternatives = listings.filter((item) => item.id !== config.premiumTickerLastListingId);
   const pool = alternatives.length ? alternatives : listings;
   const listing = pool[Math.floor(Math.random() * pool.length)];
   const message = await buildPremiumMessage(listing);
