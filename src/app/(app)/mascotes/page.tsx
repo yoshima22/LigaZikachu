@@ -10,6 +10,7 @@ import {
 import { getPokemonName } from "@/lib/mascot-data";
 import { isAdmin } from "@/lib/auth/permissions";
 import { MascotList } from "./_components/mascot-list";
+import { RARE_SWEET_IMAGE_URL } from "./_components/sweet-kind-menu";
 import { IncubatorPanel } from "./_components/incubator-panel";
 import { BuffPanel } from "./_components/buff-panel";
 import { BulkInteractPanel } from "./_components/bulk-interact-panel";
@@ -344,6 +345,7 @@ export default async function MascotesPage() {
   const hasRareSweet = foods.some(f => f.type === "RARE_SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
+  const rareSweetCount = foods.find(f => f.type === "RARE_SWEET")?.quantity ?? 0;
   const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
   const [orderMascotAttack, orderMascotStepState] = await Promise.all([
     getRandomMascotInjurySabotage().catch((error) => {
@@ -443,6 +445,11 @@ export default async function MascotesPage() {
             <span>🍬</span>
             <span className="font-semibold text-slate-300">{sweetCount}</span>
             <span className="text-slate-500">doces</span>
+          </div>
+          <div className="flex items-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2 text-xs">
+            <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-4 w-4 object-contain" />
+            <span className="font-semibold text-[#FFCB05]">{rareSweetCount}</span>
+            <span className="text-slate-500">doces raros</span>
           </div>
           <Link href="/shop" className="flex items-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-3 py-2 text-xs font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/20">
             <ShoppingBag size={12}/> Loja
