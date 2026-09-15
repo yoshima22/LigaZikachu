@@ -32,9 +32,12 @@ import {
   battleWildAction,
   buyWorldMartItemAction,
   challengeWorldTrainerAction,
+  chooseWorldStarterAction,
   finishWorldTravelNowAction,
   exploreWorldLocationAction,
   getWorldPartyMascotsAction,
+  getWorldRosterSummaryAction,
+  moveWorldInventoryAction,
   resetAdminWorldAction,
   restAtWorldCenterAction,
   resolveWorldEncounterAction,
@@ -85,10 +88,13 @@ type State = {
   defeatedTrainerIds: string[];
   fatigue: number;
   inventory: { pokeBalls?: number; potions?: number; antidotes?: number };
+  chest: Record<string, number>;
+  backpackCapacity: number;
   travelingToId: string | null;
   travelStartedAt: string | null;
   travelEndsAt: string | null;
   party: PartyEntry[];
+  starterPokemonId: number | null;
 } | null;
 type Encounter = {
   id: string;
@@ -111,6 +117,7 @@ type Trainer = {
   locationId: string;
   name: string;
   title: string;
+  cooldownUntil: string | null;
   intro: string;
   tier: "TRAINER" | "VETERAN" | "LEADER";
   difficultyLabel: string;
@@ -130,6 +137,7 @@ type Battle = {
   result: unknown;
   createdAt: string;
 };
+type Starter = { generation: number; pokemonId: number; name: string; spriteUrl: string };
 
 const TYPE_STYLE: Record<string, { icon: typeof MapPin; color: string }> = {
   TOWN: { icon: MapPin, color: "#fbbf24" },
@@ -167,10 +175,11 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles, partyMascots }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[] }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles, partyMascots, starters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[]; starters: Starter[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
+  const [fighterId, setFighterId] = useState(partyMascots.find((mascot) => mascot.hp > 0)?.id ?? "");
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!initialState?.travelEndsAt) return;
@@ -208,6 +217,10 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         </section>
       </main>
     );
+  }
+
+  if (!initialState.starterPokemonId) {
+    return <StarterSelection starters={starters} pending={pending} onChoose={(pokemonId) => act(() => chooseWorldStarterAction(pokemonId), "Seu inicial foi registrado no World Mode.")} />;
   }
 
   return (
@@ -317,8 +330,9 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
                   </div>
                 ) : null}
                 <p className="mt-2 max-w-2xl text-xs leading-5 text-slate-400">Enfraqueça o selvagem em combate para elevar a chance de captura. Suas escaramuças e o HP dele ficam salvos; sua equipe só é curada no Pokémon Center.</p>
+                <label className="mt-4 block max-w-sm text-[9px] font-black uppercase tracking-widest text-cyan-200">Mascote ativo<select value={fighterId} onChange={(event) => setFighterId(event.target.value)} className="mt-1.5 w-full rounded-xl border border-cyan-300/20 bg-slate-950 px-3 py-2.5 text-xs normal-case tracking-normal text-white">{partyMascots.filter((mascot) => mascot.hp > 0).map((mascot) => <option key={mascot.id} value={mascot.id}>{mascot.name} · Nv.{mascot.level} · {mascot.hp}/{mascot.maxHp} HP</option>)}</select></label>
                 <div className="mt-5 flex flex-wrap gap-3">
-                  <button disabled={pending} onClick={() => act(() => battleWildAction(encounters.active!.id), "Escaramuça resolvida." )} className="rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Swords className="mr-1.5 inline h-4 w-4" />Atacar</button>
+                  <button disabled={pending || !fighterId} onClick={() => act(() => battleWildAction(encounters.active!.id, fighterId), "Turno de combate resolvido." )} className="rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Swords className="mr-1.5 inline h-4 w-4" />Atacar</button>
                   <button disabled={pending || (initialState.inventory.pokeBalls ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE"), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Usar Poké Ball · {encounters.active.effectiveChance ?? encounters.active.captureChance}%</button>
                   <button disabled={pending} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "ESCAPE"), "Você deixou o mascote seguir seu caminho." )} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-3 text-xs font-black text-slate-200">Fugir</button>
                 </div>
@@ -365,13 +379,15 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
           <div className="mt-5 grid gap-3 lg:grid-cols-3">{localTrainers.map((trainer) => {
             const defeated = initialState.defeatedTrainerIds.includes(trainer.id);
             const locked = Boolean(trainer.prerequisiteId && !initialState.defeatedTrainerIds.includes(trainer.prerequisiteId));
+            const cooldownMs = trainer.cooldownUntil ? new Date(trainer.cooldownUntil).getTime() - now : 0;
+            const onCooldown = cooldownMs > 0;
             return <article key={trainer.id} className={`relative overflow-hidden rounded-2xl border p-4 pt-40 ${defeated ? "border-emerald-300/20 bg-emerald-950/80" : locked ? "border-white/5 bg-slate-950/85 opacity-55" : "border-fuchsia-300/20 bg-slate-950/85"}`}>
               {trainer.portraitUrl ? <img src={trainer.portraitUrl} alt={trainer.name} className="pointer-events-none absolute -right-2 top-0 h-48 w-40 object-contain object-top" /> : <div className="pointer-events-none absolute inset-x-0 top-0 flex h-40 items-center justify-center bg-[radial-gradient(circle,rgba(217,70,239,.16),transparent_65%)]"><span className="font-pixel text-5xl text-white/10">VS</span></div>}
               <div className="absolute inset-x-0 top-24 h-20 bg-gradient-to-t from-slate-950 to-transparent" />
               <div className="relative flex items-start justify-between gap-2"><div><span className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">{trainer.title}</span><h3 className="text-lg font-black text-white">{trainer.name}</h3><span className={`mt-1 inline-flex rounded-full px-2 py-0.5 text-[8px] font-black uppercase ${trainer.tier === "LEADER" ? "border border-rose-400/30 bg-rose-500/15 text-rose-200" : trainer.tier === "VETERAN" ? "border border-amber-300/25 bg-amber-300/10 text-amber-200" : "border border-cyan-300/20 bg-cyan-300/10 text-cyan-100"}`}>{trainer.difficultyLabel}</span>{trainer.badgeId && <span className="ml-1 inline-flex rounded-full border border-amber-300/20 bg-amber-300/10 px-2 py-0.5 text-[8px] font-black uppercase text-amber-200">Boulder Badge</span>}</div>{defeated && <Trophy className="h-5 w-5 text-emerald-300" />}</div>
               <p className="mt-2 min-h-10 text-[10px] leading-4 text-slate-400">“{trainer.intro}”</p>
               <div className="mt-3 flex gap-2">{trainer.team.map((mascot, index) => <div key={`${trainer.id}-${index}`} className="min-w-0 flex-1 rounded-xl bg-slate-950/70 p-2 text-center"><img src={mascot.spriteUrl} alt={mascot.name} className="mx-auto h-10 w-10 object-contain [image-rendering:pixelated]" /><b className="block truncate text-[9px] text-white">{mascot.name}</b><span className="text-[8px] text-slate-500">Nv.{mascot.level}</span></div>)}</div>
-              <button disabled={pending || locked || Boolean(encounters.active)} onClick={() => act(() => challengeWorldTrainerAction(trainer.id), `Batalha contra ${trainer.name} concluída.`)} className="mt-4 w-full rounded-xl bg-gradient-to-r from-fuchsia-300 to-violet-300 px-4 py-2.5 text-[10px] font-black text-slate-950 disabled:opacity-30"><Swords className="mr-1.5 inline h-3.5 w-3.5" />{locked ? "Derrote o treinador anterior" : defeated ? "Revanche sem nova recompensa" : "Desafiar treinador"}</button>
+              <button disabled={pending || locked || onCooldown || Boolean(encounters.active)} onClick={() => act(() => challengeWorldTrainerAction(trainer.id), `Batalha contra ${trainer.name} concluída.`)} className="mt-4 w-full rounded-xl bg-gradient-to-r from-fuchsia-300 to-violet-300 px-4 py-2.5 text-[10px] font-black text-slate-950 disabled:opacity-30"><Swords className="mr-1.5 inline h-3.5 w-3.5" />{locked ? "Derrote o treinador anterior" : onCooldown ? `Líder descansa · ${Math.ceil(cooldownMs / 60_000)} min` : defeated ? "Revanche sem nova recompensa" : "Desafiar treinador"}</button>
             </article>;
           })}</div>
           </div>
@@ -396,6 +412,14 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         onSaved={() => router.refresh()}
       />
 
+      <WorldInventoryPanel
+        inventory={initialState.inventory}
+        chest={initialState.chest}
+        capacity={initialState.backpackCapacity}
+        safe={Boolean(current?.services.some((service) => service === "CENTER" || service === "STORAGE")) && !initialState.travelingToId}
+      />
+      <WorldRosterPanel />
+
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-4">
         <div className="flex flex-wrap gap-3 text-[10px] text-slate-300"><span><Backpack className="mr-1 inline h-3.5 w-3.5 text-amber-300" />{initialState.inventory.pokeBalls ?? 0} Poké Balls</span><span><FlaskConical className="mr-1 inline h-3.5 w-3.5 text-emerald-300" />{initialState.inventory.potions ?? 0} Potions</span><span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-cyan-300" />Chegada resolvida sob demanda, sem cron contínuo</span></div>
         <button disabled={pending} onClick={() => { if (window.confirm("Apagar todo o seu progresso de teste no World Mode?")) act(resetAdminWorldAction, "Teste do World Mode reiniciado."); }} className="rounded-xl border border-rose-400/25 bg-rose-500/10 px-3 py-2 text-[10px] font-black text-rose-200"><RotateCcw className="mr-1 inline h-3.5 w-3.5" />Resetar protótipo</button>
@@ -406,6 +430,51 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
 
 // Formação persistente do World Mode: até 6 mascotes do próprio jogador, com
 // postura editável. Não altera a coleção principal (isEquipped intacto).
+function StarterSelection({ starters, pending, onChoose }: { starters: Starter[]; pending: boolean; onChoose: (pokemonId: number) => void }) {
+  const [generation, setGeneration] = useState(1);
+  const choices = starters.filter((starter) => starter.generation === generation);
+  return <main className="mx-auto max-w-6xl px-4 py-8">
+    <section className="overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_15%_15%,rgba(34,211,238,.18),transparent_35%),radial-gradient(circle_at_85%_20%,rgba(217,70,239,.15),transparent_35%),#050b16] p-6 md:p-10">
+      <span className="text-[9px] font-black uppercase tracking-[.24em] text-cyan-300">Registro inicial · escolha permanente</span>
+      <h1 className="mt-2 text-3xl font-black text-white md:text-5xl">Qual história começa com você?</h1>
+      <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">Escolha um dos três iniciais oficiais de qualquer geração. Você recebe uma cópia de origem de Ovo Comum na coleção e um exemplar de nível 1 exclusivo desta aventura.</p>
+      <div className="mt-6 flex flex-wrap gap-2">{Array.from({ length: 9 }, (_, index) => index + 1).map((value) => <button key={value} onClick={() => setGeneration(value)} className={`rounded-xl px-3 py-2 text-xs font-black ${generation === value ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/[.035] text-slate-400"}`}>Geração {value}</button>)}</div>
+      <div className="mt-8 grid gap-4 md:grid-cols-3">{choices.map((starter) => <article key={starter.pokemonId} className="group rounded-3xl border border-white/10 bg-white/[.035] p-5 text-center transition hover:-translate-y-1 hover:border-cyan-300/35 hover:bg-cyan-300/[.06]"><div className="flex min-h-48 items-center justify-center rounded-2xl bg-[radial-gradient(circle,rgba(103,232,249,.15),transparent_65%)]"><img src={starter.spriteUrl} alt={starter.name} className="h-36 w-36 object-contain [image-rendering:pixelated] transition group-hover:scale-110" /></div><h2 className="mt-3 text-xl font-black text-white">{starter.name}</h2><p className="mt-1 text-[10px] text-slate-500">Nível 1 no World Mode · origem comum na coleção</p><button disabled={pending} onClick={() => { if (window.confirm(`Escolher ${starter.name} como seu inicial permanente?`)) onChoose(starter.pokemonId); }} className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Escolher {starter.name}</button></article>)}</div>
+    </section>
+  </main>;
+}
+
+function WorldRosterPanel() {
+  const [open, setOpen] = useState(false);
+  const [rows, setRows] = useState<Array<{ pokemonId: number; name: string; sprite: string; worldCopies: number }>>([]);
+  const [loading, setLoading] = useState(false);
+  const load = () => {
+    setOpen((value) => !value);
+    if (rows.length || loading) return;
+    setLoading(true);
+    getWorldRosterSummaryAction().then(setRows).catch(() => toast.error("Não foi possível carregar as licenças.")).finally(() => setLoading(false));
+  };
+  return <section className="rounded-[2rem] border border-cyan-300/15 bg-[#080d17] p-5 md:p-7"><div className="flex flex-wrap items-center justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-cyan-300">Pokédex e exemplares</span><h2 className="mt-1 text-2xl font-black text-white">Espécies autorizadas</h2><p className="mt-1 max-w-3xl text-xs text-slate-400">Sua Pokédex principal libera quais espécies podem aparecer e evoluir. Para viajar ou lutar, você ainda precisa obter um exemplar próprio no World Mode.</p></div><button onClick={load} className="rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-2 text-xs font-black text-cyan-100">{open ? "Ocultar licenças" : "Ver licenças"}</button></div>{open && <div className="mt-4 grid max-h-80 grid-cols-2 gap-2 overflow-y-auto pr-1 sm:grid-cols-3 md:grid-cols-5 lg:grid-cols-7">{loading ? <p className="col-span-full p-5 text-center text-xs text-slate-500">Carregando…</p> : rows.map((row) => <div key={row.pokemonId} className={`rounded-xl border p-2 text-center ${row.worldCopies ? "border-emerald-300/25 bg-emerald-300/[.06]" : "border-white/8 bg-white/[.025]"}`}><img src={row.sprite} alt="" className={`mx-auto h-12 w-12 object-contain [image-rendering:pixelated] ${row.worldCopies ? "" : "grayscale opacity-45"}`} /><b className="block truncate text-[10px] text-white">{row.name}</b><span className={`text-[8px] ${row.worldCopies ? "text-emerald-300" : "text-slate-500"}`}>{row.worldCopies ? `${row.worldCopies} disponível(is)` : "Licença apenas"}</span></div>)}</div>}</section>;
+}
+
+function WorldInventoryPanel({ inventory, chest, capacity, safe }: { inventory: Record<string, number | undefined>; chest: Record<string, number>; capacity: number; safe: boolean }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const labels: Record<string, string> = { pokeBalls: "Poké Balls", potions: "Potions", antidotes: "Antídotos" };
+  const used = Object.values(inventory).reduce<number>((sum, amount) => sum + Math.max(0, Number(amount) || 0), 0);
+  const keys = Array.from(new Set([...Object.keys(inventory), ...Object.keys(chest)])).filter((key) => (inventory[key] ?? 0) > 0 || (chest[key] ?? 0) > 0);
+  const move = (itemId: string, direction: "TO_CHEST" | "TO_BACKPACK") => start(async () => {
+    const result = await moveWorldInventoryAction(itemId, 1, direction);
+    if (!result.ok) toast.error(result.error ?? "Não foi possível mover o item.");
+    else router.refresh();
+  });
+  return <section className="rounded-[2rem] border border-amber-300/15 bg-[#080d17] p-5 md:p-7">
+    <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Logística da expedição</span><h2 className="mt-1 text-2xl font-black text-white">Mochila e baú seguro</h2><p className="mt-1 text-xs text-slate-400">Você só usa o que carrega. O baú pode ser acessado em Centros e áreas com armazenamento.</p></div><b className="rounded-full bg-amber-300/10 px-3 py-1.5 text-xs text-amber-200">{used}/{capacity} espaços</b></div>
+    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{keys.map((key) => <div key={key} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><b className="text-xs text-white">{labels[key] ?? key}</b><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400"><span>Mochila: {inventory[key] ?? 0}</span><span>Baú: {chest[key] ?? 0}</span></div><div className="mt-2 grid grid-cols-2 gap-1"><button disabled={pending || !safe || (inventory[key] ?? 0) < 1} onClick={() => move(key, "TO_CHEST")} className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-slate-300 disabled:opacity-30">Guardar 1</button><button disabled={pending || !safe || (chest[key] ?? 0) < 1 || used >= capacity} onClick={() => move(key, "TO_BACKPACK")} className="rounded-lg border border-amber-300/20 px-2 py-1.5 text-[9px] font-bold text-amber-200 disabled:opacity-30">Levar 1</button></div></div>)}</div>
+    {!safe && <p className="mt-3 text-[10px] text-slate-500">Encontre uma área segura para abrir o baú e reorganizar a carga.</p>}
+  </section>;
+}
+
 function WorldPartyPanel({
   initialParty,
   partyMascots,
@@ -510,8 +579,8 @@ function WorldPartyPanel({
       <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {partyMascots.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-center text-[11px] text-slate-500 sm:col-span-2 lg:col-span-3">
-            Nenhuma equipe montada. Enquanto não houver, as batalhas usam seus
-            mascotes equipados como fallback.
+            Nenhuma equipe montada. Vá a uma área segura e escolha quais mascotes
+            do World Mode viajarão com você.
           </p>
         ) : (
           partyMascots.map((m) => {

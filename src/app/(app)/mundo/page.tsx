@@ -8,7 +8,6 @@ import {
 } from "./actions";
 import {
   readWorldParty,
-  readWorldMascotState,
   readWorldWild,
   worldMaxHp,
 } from "@/world-data/party";
@@ -17,6 +16,7 @@ import { KANTO_MVP_MART } from "@/world-data/kanto/mart";
 import { prisma } from "@/lib/prisma";
 import { KANTO_MVP_TRAINERS } from "@/world-data/kanto/trainers";
 import { TIER_PARAMS } from "@/world-data/difficulty";
+import { WORLD_STARTERS } from "@/world-data/starters";
 
 export const dynamic = "force-dynamic";
 
@@ -32,17 +32,18 @@ export default async function WorldModePage() {
     : null;
   // Resolve os mascotes da formação com HP/condições persistentes para exibição.
   const party = state ? readWorldParty(state.partyJson) : [];
-  const mascotState = state ? readWorldMascotState(state.mascotStateJson) : {};
   const partyRows =
     state && party.length
-      ? await prisma.mascot.findMany({
-          where: { id: { in: party.map((e) => e.mascotId) }, playerId: state.playerId },
+      ? await prisma.worldMascot.findMany({
+          where: { id: { in: party.map((e) => e.mascotId) }, playerId: state.playerId, isInParty: true },
           select: {
             id: true,
             pokemonId: true,
             nickname: true,
             level: true,
             statVitality: true,
+            currentHp: true,
+            poisoned: true,
           },
         })
       : [];
@@ -58,9 +59,9 @@ export default async function WorldModePage() {
         sprite: getSpriteUrl(m.pokemonId),
         level: m.level,
         posture: entry.posture,
-        hp: mascotState[m.id]?.hp ?? maxHp,
+        hp: m.currentHp,
         maxHp,
-        poisoned: mascotState[m.id]?.poisoned ?? false,
+        poisoned: m.poisoned,
       };
     })
     .filter((m): m is NonNullable<typeof m> => Boolean(m));
@@ -105,9 +106,17 @@ export default async function WorldModePage() {
       }}
       martItems={KANTO_MVP_MART}
       zikaCoins={wallet?.balance ?? 0}
+      starters={WORLD_STARTERS.map((starter) => ({
+        ...starter,
+        name: getPokemonName(starter.pokemonId),
+        spriteUrl: getSpriteUrl(starter.pokemonId),
+      }))}
       partyMascots={partyMascots}
       trainers={KANTO_MVP_TRAINERS.map((trainer) => ({
         ...trainer,
+        cooldownUntil: state && trainer.tier === "LEADER"
+          ? String((state.gymCooldownJson as Record<string, unknown> | null)?.[trainer.id] ?? "") || null
+          : null,
         difficultyLabel: TIER_PARAMS[trainer.tier].label,
         team: trainer.team.map((mascot) => ({ ...mascot, name: getPokemonName(mascot.pokemonId), spriteUrl: getSpriteUrl(mascot.pokemonId) })),
       }))}
@@ -134,10 +143,13 @@ export default async function WorldModePage() {
                 potions?: number;
                 antidotes?: number;
               },
+              chest: state.chestJson as Record<string, number>,
+              backpackCapacity: state.backpackCapacity,
               travelingToId: state.travelingToId,
               travelStartedAt: state.travelStartedAt?.toISOString() ?? null,
               travelEndsAt: state.travelEndsAt?.toISOString() ?? null,
               party: readWorldParty(state.partyJson),
+              starterPokemonId: state.starterPokemonId,
             }
           : null
       }

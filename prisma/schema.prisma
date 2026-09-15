@@ -356,6 +356,7 @@ model Player {
   worldTravelLogs             WorldTravelLog[]
   worldEncounters             WorldEncounterSession[]
   worldBattles                WorldBattleSession[]
+  worldMascots                WorldMascot[]
 
   @@map("players")
 }
@@ -371,8 +372,12 @@ model WorldPlayerState {
   defeatedTrainerIds    String[]  @default([])
   fatigue               Int       @default(0)
   inventoryJson         Json      @default("{\"pokeBalls\":5,\"potions\":1,\"antidotes\":0}")
+  chestJson             Json      @default("{}")
+  backpackCapacity      Int       @default(12)
   partyJson             Json      @default("[]")
   mascotStateJson       Json      @default("{}")
+  gymCooldownJson       Json      @default("{}")
+  starterPokemonId      Int?
   avatarJson            Json?
   travelingToId         String?
   travelStartedAt       DateTime?
@@ -447,6 +452,33 @@ model WorldBattleSession {
   @@map("world_battle_sessions")
 }
 
+model WorldMascot {
+  id           String            @id @default(cuid())
+  playerId     String
+  mainMascotId String?
+  pokemonId    Int
+  nickname     String?
+  level        Int               @default(1)
+  exp          Int               @default(0)
+  personality  MascotPersonality
+  statForce    Int               @default(10)
+  statAgility  Int               @default(10)
+  statCharisma Int               @default(10)
+  statInstinct Int               @default(10)
+  statVitality Int               @default(10)
+  currentHp    Int
+  poisoned     Boolean           @default(false)
+  origin       String
+  isInParty    Boolean           @default(false)
+  createdAt    DateTime          @default(now())
+  updatedAt    DateTime          @updatedAt
+  player       Player            @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([playerId, isInParty])
+  @@index([playerId, pokemonId])
+  @@map("world_mascots")
+}
+
 /// Preset isolado da coleção normal. Os 12 mascotes PvP vivem no JSON validado
 /// pelo servidor para permitir snapshots históricos imutáveis por partida.
 model ArenaDraftPreset {
@@ -459,33 +491,33 @@ model ArenaDraftPreset {
   needsReview Boolean  @default(false)
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
-  owner     Player   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  owner       Player   @relation(fields: [ownerId], references: [id], onDelete: Cascade)
 
   @@index([ownerId, updatedAt])
   @@map("arena_draft_presets")
 }
 
 model ArenaDraftMatch {
-  id              String             @id @default(cuid())
+  id              String               @id @default(cuid())
   playerAId       String
   playerBId       String?
   winnerId        String?
-  mode            String             @default("CUSTOM")
-  state           String             @default("CREATED")
-  stateVersion    Int                @default(1)
+  mode            String               @default("CUSTOM")
+  state           String               @default("CREATED")
+  stateVersion    Int                  @default(1)
   deadlineAt      DateTime?
   presetASnapshot Json
   presetBSnapshot Json?
   draftJson       Json?
   battleJson      Json?
   metricsJson     Json?
-  eventSequence   Int                @default(0)
-  createdAt       DateTime           @default(now())
-  updatedAt       DateTime           @updatedAt
+  eventSequence   Int                  @default(0)
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
   finishedAt      DateTime?
-  playerA         Player             @relation("ArenaDraftPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
-  playerB         Player?            @relation("ArenaDraftPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
-  winner          Player?            @relation("ArenaDraftWinner", fields: [winnerId], references: [id], onDelete: SetNull)
+  playerA         Player               @relation("ArenaDraftPlayerA", fields: [playerAId], references: [id], onDelete: Cascade)
+  playerB         Player?              @relation("ArenaDraftPlayerB", fields: [playerBId], references: [id], onDelete: SetNull)
+  winner          Player?              @relation("ArenaDraftWinner", fields: [winnerId], references: [id], onDelete: SetNull)
   actions         ArenaDraftAction[]
   presences       ArenaDraftPresence[]
 
