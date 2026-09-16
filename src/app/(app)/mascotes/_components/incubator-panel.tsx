@@ -26,7 +26,12 @@ interface IncubatorData {
   hatched: boolean;
 }
 
-interface EggItem { id: string; type: string; obtainedAt: Date; origin: string | null; hatchRarityBonusPct?: number }
+interface EggItem { id: string; type: string; obtainedAt: Date | string; origin: string | null; hatchRarityBonusPct?: number }
+
+function eggObtainedAtMs(value: Date | string): number {
+  const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
+  return Number.isFinite(timestamp) ? timestamp : 0;
+}
 
 type HatchResult = NonNullable<Awaited<ReturnType<typeof hatchEggAction>>["result"]>;
 type LabChoice = { pokemonId: number; isShiny: boolean };
@@ -392,8 +397,8 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     return list.sort((a, b) =>
       eggSort === "BONUS"
         ? (b.hatchRarityBonusPct ?? 0) - (a.hatchRarityBonusPct ?? 0) ||
-          b.obtainedAt.getTime() - a.obtainedAt.getTime()
-        : b.obtainedAt.getTime() - a.obtainedAt.getTime(),
+          eggObtainedAtMs(b.obtainedAt) - eggObtainedAtMs(a.obtainedAt)
+        : eggObtainedAtMs(b.obtainedAt) - eggObtainedAtMs(a.obtainedAt),
     );
   }, [eggs, eggType, eggBonusOnly, eggSort]);
   const eggPageCount = Math.max(1, Math.ceil(filteredEggs.length / eggPageSize));
