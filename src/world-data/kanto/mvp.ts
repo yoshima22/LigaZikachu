@@ -12,6 +12,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "Uma pequena cidade à beira-mar. O Laboratório do Professor Oak é o ponto de partida para registrar esta nova aventura.",
     danger: 0,
     map: { x: 20, y: 82 },
+    imageUrl: "/world-mode/kanto/generated/pallet-town.png",
     services: ["LAB", "STORAGE"],
     activities: ["DELIVERY"],
     encounters: [],
@@ -28,6 +29,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "A primeira estrada de Kanto. Trilhas abertas, pequenos desníveis e treinadores começando suas próprias jornadas.",
     danger: 1,
     map: { x: 28, y: 66 },
+    imageUrl: "/world-mode/kanto/generated/route-1.png",
     services: [],
     activities: ["EXPLORE", "CAPTURE", "TRAINER_BATTLE", "ITEM_SEARCH", "DELIVERY"],
     encounters: [
@@ -52,6 +54,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "O primeiro centro urbano da jornada. Oferece descanso, suprimentos e caminhos para o norte; seu ginásio permanece fechado.",
     danger: 0,
     map: { x: 34, y: 49 },
+    imageUrl: "/world-mode/kanto/generated/viridian-city.png",
     services: ["CENTER", "MART", "GYM"],
     activities: ["DELIVERY"],
     encounters: [],
@@ -72,6 +75,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "Uma rota estreita cercada por árvores. O caminho principal conduz à entrada da Viridian Forest.",
     danger: 1,
     map: { x: 42, y: 36 },
+    imageUrl: "/world-mode/kanto/generated/route-2.png",
     services: [],
     activities: ["EXPLORE", "CAPTURE", "TRAINER_BATTLE", "ITEM_SEARCH"],
     encounters: [
@@ -127,6 +131,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "Um atalho por encostas de pedra que contorna a Viridian Forest. É mais rápido até Pewter, mas o terreno íngreme cansa mais e abriga Pokémon do tipo Pedra e Terra.",
     danger: 2,
     map: { x: 58, y: 44 },
+    imageUrl: "/world-mode/kanto/generated/mountain-trail.png",
     services: [],
     activities: ["EXPLORE", "CAPTURE", "TRAINER_BATTLE", "ITEM_SEARCH"],
     encounters: [
@@ -154,6 +159,7 @@ export const KANTO_MVP_LOCATIONS: WorldLocationConfig[] = [
       "Construída entre montanhas e rochas antigas. O museu observa a cidade, enquanto Brock aguarda no primeiro ginásio da jornada.",
     danger: 0,
     map: { x: 70, y: 17 },
+    imageUrl: "/world-mode/kanto/generated/pewter-city.png",
     services: ["CENTER", "MART", "GYM"],
     activities: ["DELIVERY", "TRAINER_BATTLE"],
     encounters: [],

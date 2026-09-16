@@ -195,6 +195,11 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
   const localTrainers = trainers.filter((trainer) => trainer.locationId === current?.id);
   const needsHeal = partyMascots.some((m) => m.hp < m.maxHp || m.poisoned);
   const reachable = new Set(current?.connections.map((connection) => connection.to) ?? []);
+  const encounterBackdrop = current?.type === "FOREST"
+    ? "/world-mode/kanto/generated/battle-forest.png"
+    : current?.id === "route-mtpath" || current?.id === "pewter-city"
+      ? "/world-mode/kanto/generated/battle-mountain.png"
+      : "/world-mode/kanto/generated/battle-grassland.png";
   const act = (action: () => Promise<{ ok: boolean; error?: string }>, success: string) =>
     startTransition(async () => {
       const result = await action();
@@ -251,6 +256,8 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
 
       <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]">
         <section className="relative min-h-[620px] overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_25%_70%,rgba(16,185,129,.16),transparent_30%),radial-gradient(circle_at_70%_20%,rgba(56,189,248,.13),transparent_35%),#050c16]">
+          <div className="absolute inset-0 bg-cover bg-center opacity-65" style={{ backgroundImage: "url(/world-mode/kanto/generated/kanto-regional-map.png)" }} />
+          <div className="absolute inset-0 bg-gradient-to-b from-slate-950/35 via-slate-950/15 to-slate-950/70" />
           <div className="absolute inset-0 opacity-20 [background-image:linear-gradient(rgba(103,232,249,.1)_1px,transparent_1px),linear-gradient(90deg,rgba(103,232,249,.1)_1px,transparent_1px)] [background-size:36px_36px]" />
           <div className="absolute left-5 top-5 z-20"><p className="text-[9px] font-black uppercase tracking-[.25em] text-cyan-300">Mapa regional</p><h2 className="text-2xl font-black text-white">Sul de Kanto</h2></div>
           <svg className="absolute inset-0 h-full w-full" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden>
@@ -295,7 +302,10 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
       </div>
 
       {current?.activities.includes("EXPLORE") && !initialState.travelingToId && (
-        <section className="overflow-hidden rounded-[2rem] border border-emerald-300/15 bg-[radial-gradient(circle_at_10%_20%,rgba(16,185,129,.13),transparent_35%),#060d17]">
+        <section className="relative overflow-hidden rounded-[2rem] border border-emerald-300/15 bg-[#060d17]">
+          <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${encounterBackdrop})` }} />
+          <div className="absolute inset-0 bg-gradient-to-r from-[#060d17]/95 via-[#060d17]/80 to-[#060d17]/55" />
+          <div className="relative">
           {encounters.active ? (
             <div className="grid items-center gap-5 p-5 md:grid-cols-[220px_1fr] md:p-7">
               <div className="relative flex min-h-52 items-center justify-center overflow-hidden rounded-3xl bg-[radial-gradient(circle,rgba(103,232,249,.2),transparent_60%)]">
@@ -350,19 +360,20 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
             </div>
           )}
           {encounters.history.length > 0 && <div className="border-t border-white/5 px-5 py-4 md:px-7"><p className="mb-2 text-[9px] font-black uppercase tracking-widest text-slate-500">Últimos encontros</p><div className="flex flex-wrap gap-2">{encounters.history.map((entry) => <span key={entry.id} className={`rounded-lg border px-2.5 py-1.5 text-[9px] ${entry.status === "CAPTURED" ? "border-emerald-300/20 bg-emerald-300/5 text-emerald-200" : "border-white/10 bg-white/[.025] text-slate-400"}`}><b>{entry.name}</b> · {entry.status === "CAPTURED" ? "Capturado" : entry.status === "ESCAPED" ? "Liberado" : "Escapou da Poké Ball"}{entry.roll ? ` · rolagem ${entry.roll}/${entry.captureChance}` : ""}</span>)}</div></div>}
+          </div>
         </section>
       )}
 
       {!initialState.travelingToId && current && (current.services.includes("CENTER") || current.services.includes("MART")) && (
         <section className="grid gap-5 lg:grid-cols-2">
           {current.services.includes("CENTER") && (
-            <div className="rounded-[2rem] border border-rose-300/15 bg-[radial-gradient(circle_at_top_left,rgba(251,113,133,.14),transparent_48%),#080d18] p-6">
+            <div className="rounded-[2rem] border border-rose-300/15 bg-cover bg-center p-6" style={{ backgroundImage: "linear-gradient(90deg,rgba(8,13,24,.96),rgba(8,13,24,.78)),url(/world-mode/kanto/generated/healing-center.png)" }}>
               <div className="flex items-start gap-4"><span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-300/10 text-rose-300"><HeartPulse className="h-6 w-6" /></span><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-rose-300">Pokémon Center</span><h2 className="text-2xl font-black text-white">Recupere-se antes da rota</h2><p className="mt-2 text-xs leading-5 text-slate-400">O descanso remove toda a fadiga acumulada e restaura o HP e as condições de toda a sua equipe da aventura.</p></div></div>
               <button disabled={pending || (initialState.fatigue === 0 && !needsHeal)} onClick={() => act(restAtWorldCenterAction, "Descanso concluído. Equipe recuperada.")} className="mt-5 w-full rounded-xl bg-gradient-to-r from-rose-300 to-pink-300 px-5 py-3 text-xs font-black text-slate-950 disabled:cursor-not-allowed disabled:opacity-35">{initialState.fatigue > 0 || needsHeal ? `Descansar · remover fadiga e curar equipe` : "Equipe e fadiga já estão em ordem"}</button>
             </div>
           )}
           {current.services.includes("MART") && (
-            <div className="rounded-[2rem] border border-amber-300/15 bg-[radial-gradient(circle_at_top_right,rgba(251,191,36,.12),transparent_48%),#080d18] p-6">
+            <div className="rounded-[2rem] border border-amber-300/15 bg-cover bg-center p-6" style={{ backgroundImage: "linear-gradient(90deg,rgba(8,13,24,.94),rgba(8,13,24,.76)),url(/world-mode/kanto/generated/regional-shop.png)" }}>
               <div className="flex items-center justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-amber-300">Poké Mart</span><h2 className="text-2xl font-black text-white">Suprimentos de viagem</h2></div><span className="rounded-xl border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-xs font-black text-amber-200">{zikaCoins.toLocaleString("pt-BR")} ZC</span></div>
               <div className="mt-4 space-y-2">{martItems.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[.025] p-3"><div><b className="text-xs text-white">{item.name}</b><p className="mt-0.5 text-[9px] text-slate-500">{item.description}</p></div><button disabled={pending || zikaCoins < item.price} onClick={() => act(() => buyWorldMartItemAction(item.id, 1), `${item.name} adicionado à mochila.`)} className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[10px] font-black text-amber-200 disabled:opacity-35"><ShoppingBasket className="mr-1 inline h-3.5 w-3.5" />{item.price} ZC</button></div>)}</div>
               <p className="mt-3 text-[9px] text-slate-600">Preços provisórios do protótipo, centralizados na configuração de Kanto.</p>
@@ -434,12 +445,15 @@ function StarterSelection({ starters, pending, onChoose }: { starters: Starter[]
   const [generation, setGeneration] = useState(1);
   const choices = starters.filter((starter) => starter.generation === generation);
   return <main className="mx-auto max-w-6xl px-4 py-8">
-    <section className="overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_15%_15%,rgba(34,211,238,.18),transparent_35%),radial-gradient(circle_at_85%_20%,rgba(217,70,239,.15),transparent_35%),#050b16] p-6 md:p-10">
+    <section className="relative overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[radial-gradient(circle_at_15%_15%,rgba(34,211,238,.18),transparent_35%),radial-gradient(circle_at_85%_20%,rgba(217,70,239,.15),transparent_35%),#050b16] p-6 md:p-10">
+      <img src="/world-mode/kanto/generated/professor-starter.png" alt="Professor responsável pelos iniciais" className="pointer-events-none absolute -right-12 top-3 hidden h-[420px] w-72 object-contain object-top opacity-65 lg:block" />
+      <div className="relative lg:pr-64">
       <span className="text-[9px] font-black uppercase tracking-[.24em] text-cyan-300">Registro inicial · escolha permanente</span>
       <h1 className="mt-2 text-3xl font-black text-white md:text-5xl">Qual história começa com você?</h1>
       <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-400">Escolha um dos três iniciais oficiais de qualquer geração. Você recebe uma cópia de origem de Ovo Comum na coleção e um exemplar de nível 1 exclusivo desta aventura.</p>
       <div className="mt-6 flex flex-wrap gap-2">{Array.from({ length: 9 }, (_, index) => index + 1).map((value) => <button key={value} onClick={() => setGeneration(value)} className={`rounded-xl px-3 py-2 text-xs font-black ${generation === value ? "bg-cyan-300 text-slate-950" : "border border-white/10 bg-white/[.035] text-slate-400"}`}>Geração {value}</button>)}</div>
       <div className="mt-8 grid gap-4 md:grid-cols-3">{choices.map((starter) => <article key={starter.pokemonId} className="group rounded-3xl border border-white/10 bg-white/[.035] p-5 text-center transition hover:-translate-y-1 hover:border-cyan-300/35 hover:bg-cyan-300/[.06]"><div className="flex min-h-48 items-center justify-center rounded-2xl bg-[radial-gradient(circle,rgba(103,232,249,.15),transparent_65%)]"><img src={starter.spriteUrl} alt={starter.name} className="h-36 w-36 object-contain [image-rendering:pixelated] transition group-hover:scale-110" /></div><h2 className="mt-3 text-xl font-black text-white">{starter.name}</h2><p className="mt-1 text-[10px] text-slate-500">Nível 1 no World Mode · origem comum na coleção</p><button disabled={pending} onClick={() => { if (window.confirm(`Escolher ${starter.name} como seu inicial permanente?`)) onChoose(starter.pokemonId); }} className="mt-4 w-full rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Escolher {starter.name}</button></article>)}</div>
+      </div>
     </section>
   </main>;
 }
@@ -468,10 +482,12 @@ function WorldInventoryPanel({ inventory, chest, capacity, safe }: { inventory: 
     if (!result.ok) toast.error(result.error ?? "Não foi possível mover o item.");
     else router.refresh();
   });
-  return <section className="rounded-[2rem] border border-amber-300/15 bg-[#080d17] p-5 md:p-7">
-    <div className="flex flex-wrap items-end justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Logística da expedição</span><h2 className="mt-1 text-2xl font-black text-white">Mochila e baú seguro</h2><p className="mt-1 text-xs text-slate-400">Você só usa o que carrega. O baú pode ser acessado em Centros e áreas com armazenamento.</p></div><b className="rounded-full bg-amber-300/10 px-3 py-1.5 text-xs text-amber-200">{used}/{capacity} espaços</b></div>
-    <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{keys.map((key) => <div key={key} className="rounded-xl border border-white/8 bg-white/[.025] p-3"><b className="text-xs text-white">{labels[key] ?? key}</b><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400"><span>Mochila: {inventory[key] ?? 0}</span><span>Baú: {chest[key] ?? 0}</span></div><div className="mt-2 grid grid-cols-2 gap-1"><button disabled={pending || !safe || (inventory[key] ?? 0) < 1} onClick={() => move(key, "TO_CHEST")} className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-slate-300 disabled:opacity-30">Guardar 1</button><button disabled={pending || !safe || (chest[key] ?? 0) < 1 || used >= capacity} onClick={() => move(key, "TO_BACKPACK")} className="rounded-lg border border-amber-300/20 px-2 py-1.5 text-[9px] font-bold text-amber-200 disabled:opacity-30">Levar 1</button></div></div>)}</div>
-    {!safe && <p className="mt-3 text-[10px] text-slate-500">Encontre uma área segura para abrir o baú e reorganizar a carga.</p>}
+  const backpackImage = capacity >= 40 ? "backpack-expedition.png" : capacity >= 24 ? "backpack-medium.png" : "backpack-small.png";
+  return <section className="relative overflow-hidden rounded-[2rem] border border-amber-300/15 bg-[#080d17] p-5 md:p-7">
+    <div className="absolute inset-0 bg-cover bg-center opacity-15" style={{ backgroundImage: "url(/world-mode/kanto/generated/safe-storage.png)" }} />
+    <div className="relative flex flex-wrap items-end justify-between gap-3"><div className="flex items-center gap-4"><img src={`/world-mode/kanto/generated/${backpackImage}`} alt="Mochila equipada" className="h-20 w-20 object-contain" /><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Logística da expedição</span><h2 className="mt-1 text-2xl font-black text-white">Mochila e baú seguro</h2><p className="mt-1 text-xs text-slate-400">Você só usa o que carrega. O baú pode ser acessado em Centros e áreas com armazenamento.</p></div></div><div className="flex items-center gap-2"><img src={`/world-mode/kanto/generated/storage-chest-${safe ? "open" : "closed"}.png`} alt="Baú seguro" className="h-16 w-20 object-contain" /><b className="rounded-full bg-amber-300/10 px-3 py-1.5 text-xs text-amber-200">{used}/{capacity} espaços</b></div></div>
+    <div className="relative mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{keys.map((key) => <div key={key} className="rounded-xl border border-white/8 bg-slate-950/75 p-3"><b className="text-xs text-white">{labels[key] ?? key}</b><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400"><span>Mochila: {inventory[key] ?? 0}</span><span>Baú: {chest[key] ?? 0}</span></div><div className="mt-2 grid grid-cols-2 gap-1"><button disabled={pending || !safe || (inventory[key] ?? 0) < 1} onClick={() => move(key, "TO_CHEST")} className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-slate-300 disabled:opacity-30">Guardar 1</button><button disabled={pending || !safe || (chest[key] ?? 0) < 1 || used >= capacity} onClick={() => move(key, "TO_BACKPACK")} className="rounded-lg border border-amber-300/20 px-2 py-1.5 text-[9px] font-bold text-amber-200 disabled:opacity-30">Levar 1</button></div></div>)}</div>
+    {!safe && <p className="relative mt-3 text-[10px] text-slate-500">Encontre uma área segura para abrir o baú e reorganizar a carga.</p>}
   </section>;
 }
 
