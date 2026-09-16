@@ -56,6 +56,16 @@ async function main() {
     const input = path.join(source, sourceNames[sourceKey]);
     const file = `wm-avatar-chibi-${id}.png`;
     let buffer = await cleanAlpha(input);
+    if (id === "body-chibi") {
+      // O corpo recebido é uma ilustração completa. Remove somente as áreas que
+      // sempre ficam sob roupas para impedir ombros, quadril e coxas de vazarem
+      // pelas aberturas das camadas, preservando cabeça, pescoço, mãos e braços.
+      const clothingCutout = Buffer.from(`<svg width="1024" height="1536" xmlns="http://www.w3.org/2000/svg">
+        <path d="M330 650 L694 650 L724 875 L676 1065 L348 1065 L300 875 Z" fill="white"/>
+        <path d="M330 900 L694 900 L790 1536 L234 1536 Z" fill="white"/>
+      </svg>`);
+      buffer = await sharp(buffer).composite([{ input: clothingCutout, blend: "dest-out" }]).png().toBuffer();
+    }
     if (id === "hair-brown") {
       buffer = await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: buffer, left: 0, top: -75 }]).png().toBuffer();
     }
