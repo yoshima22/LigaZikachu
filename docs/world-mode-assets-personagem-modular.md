@@ -273,6 +273,21 @@ Nenhuma peça pode alterar a pose, posição da cabeça, altura dos ombros ou lo
 
 Itens de mão precisam usar uma mão-base comum. Não modificar a pose do braço para cada item no primeiro lote. Caso sejam desejadas poses alternativas no futuro, elas devem ser tratadas como um conjunto completo e explicitamente incompatível com a pose neutra.
 
+### Regra crítica para gerar roupas
+
+Não gerar cada roupa como uma nova ilustração independente. Mesmo usando o mesmo canvas, isso altera ombros, cintura, pernas e pés e produz peças visualmente maiores ou deslocadas.
+
+O fluxo obrigatório é:
+
+1. manter o corpo-base aprovado como referência bloqueada;
+2. desenhar ou gerar a roupa diretamente por cima desse corpo;
+3. preservar pose, anatomia, escala e enquadramento do corpo sem qualquer alteração;
+4. remover o corpo da saída usando uma máscara, deixando somente a peça de roupa;
+5. sobrepor novamente a peça exportada sobre o corpo original;
+6. comparar a composição pixel a pixel com a prévia aprovada.
+
+Para calçados, a base dos pés não pode mudar. Para calças, cintura e cavalo precisam coincidir com o corpo. Para camisas, pescoço, ombros e aberturas das mangas precisam seguir a anatomia original. Uma prévia bonita não é suficiente: a própria camada transparente deve ser testada sobre o PNG original do corpo-base.
+
 ---
 
 ## 9. Nomenclatura dos arquivos

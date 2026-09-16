@@ -473,11 +473,14 @@ function avatarOption(selection: WorldAvatarSelection, category: keyof WorldAvat
 }
 
 function WorldAvatarPreview({ selection, compact = false }: { selection: WorldAvatarSelection; compact?: boolean }) {
-  const selectedAssets = ["body", "bottom", "shoes", "top", "hair", "backpack", "headwear", "accessory"]
-    .flatMap((category) => avatarOption(selection, category as keyof WorldAvatarSelection)?.assetFiles ?? []);
+  const selectedLayers = ["body", "bottom", "shoes", "top", "hair", "backpack", "headwear", "accessory"]
+    .flatMap((category) => {
+      const selected = avatarOption(selection, category as keyof WorldAvatarSelection);
+      return (selected?.assetFiles ?? []).map((file) => ({ file }));
+    });
   const hasRealBody = Boolean(avatarOption(selection, "body")?.assetFiles?.length);
   if (hasRealBody) return <div className={`relative mx-auto overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,.17),transparent_50%),linear-gradient(#0b1728,#050914)] ${compact ? "h-28 w-20" : "h-[360px] w-60"}`}>
-    {selectedAssets.map((file) => <img key={file} src={worldAvatarAssetUrl(file)} alt="" className="absolute inset-0 h-full w-full object-contain" />)}
+    {selectedLayers.map(({ file }) => <img key={file} src={worldAvatarAssetUrl(file)} alt="" className="absolute inset-0 h-full w-full object-contain" />)}
     {!compact && <span className="absolute bottom-2 right-2 rounded-full bg-slate-950/80 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-emerald-300">Kit real de teste</span>}
   </div>;
   const skin = avatarOption(selection, "skin")?.color ?? "#e6b98d";
@@ -511,6 +514,24 @@ function WorldCharacterPanel({ initialAvatar, players, locations }: { initialAva
   const [playerFilter, setPlayerFilter] = useState("");
   const locationById = useMemo(() => new Map(locations.map((entry) => [entry.id, entry])), [locations]);
   const filteredPlayers = players.filter((entry) => !playerFilter || entry.displayName.toLowerCase().includes(playerFilter.toLowerCase()));
+  const usingRealKit = Boolean(avatarOption(selection, "body")?.assetFiles?.length);
+  const realKitCategories = new Set(["body", "hair", "top", "bottom", "shoes"]);
+  useEffect(() => {
+    if (!usingRealKit) return;
+    setSelection((current) => {
+      let changed = false;
+      const next = { ...current };
+      for (const category of WORLD_AVATAR_CATEGORIES) {
+        if (!realKitCategories.has(category)) continue;
+        const available = WORLD_AVATAR_OPTIONS.filter((entry) => entry.category === category && entry.assetFiles?.length);
+        if (available.length && !available.some((entry) => entry.id === current[category])) {
+          next[category] = available[0].id;
+          changed = true;
+        }
+      }
+      return changed ? next : current;
+    });
+  }, [usingRealKit]);
   const save = () => start(async () => {
     const result = await saveWorldAvatarAction(selection);
     if (!result.ok) toast.error(result.error ?? "Falha ao salvar personagem.");
@@ -523,7 +544,7 @@ function WorldCharacterPanel({ initialAvatar, players, locations }: { initialAva
         <button onClick={() => setEditing((value) => !value)} className="mt-4 w-full rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-xs font-black text-cyan-100">{editing ? "Fechar customização" : "Customizar personagem"}</button>
       </div>
       <div className="p-5 md:p-7"><span className="text-[9px] font-black uppercase tracking-[.22em] text-cyan-300">Identidade no World Mode</span><h2 className="mt-1 text-2xl font-black text-white">Treinadores no mundo</h2><p className="mt-1 text-xs text-slate-400">O avatar modular representa o jogador nas cidades e no mapa. Durante o protótipo, formas e cores substituem os PNGs oficiais.</p>
-        {editing ? <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{WORLD_AVATAR_CATEGORIES.map((category)=><label key={category} className="text-[9px] font-black uppercase tracking-widest text-slate-500">{category}<select value={selection[category]} onChange={(event)=>setSelection((current)=>({...current,[category]:event.target.value}))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-xs normal-case text-white">{WORLD_AVATAR_OPTIONS.filter((entry)=>entry.category===category).map((entry)=><option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>)}<button disabled={pending} onClick={save} className="self-end rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Salvar visual</button></div> : <><div className="mt-5 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-white">Jogadores localizados</h3><input value={playerFilter} onChange={(event)=>setPlayerFilter(event.target.value)} placeholder="Buscar nickname" className="w-48 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs text-white outline-none"/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{filteredPlayers.map((entry)=><article key={entry.playerId} className="rounded-2xl border border-white/8 bg-white/[.025] p-3"><div className="flex gap-3"><WorldAvatarPreview selection={entry.avatar} compact/><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><b className="truncate text-xs text-white">{entry.displayName}</b>{entry.isSelf&&<span className="rounded-full bg-cyan-300/10 px-2 py-0.5 text-[7px] font-black text-cyan-200">VOCÊ</span>}</div><p className="mt-1 text-[9px] text-emerald-300"><MapPin className="mr-1 inline h-3 w-3"/>{locationById.get(entry.locationId)?.shortName ?? entry.locationId}</p><p className="mt-1 text-[8px] text-amber-200">{entry.badges.length} insígnias</p><div className="mt-2 flex -space-x-1">{entry.team.slice(0,6).map((mascot,index)=><img key={`${mascot.pokemonId}-${index}`} src={mascot.sprite} title={`${mascot.name} · Nv.${mascot.level}`} alt={mascot.name} className="h-7 w-7 rounded-full border border-slate-800 bg-slate-950 object-contain"/>)}</div></div></div></article>)}{filteredPlayers.length===0&&<p className="text-xs text-slate-500">Nenhum treinador encontrado.</p>}</div></>}
+        {editing ? <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{WORLD_AVATAR_CATEGORIES.map((category)=>{const available=usingRealKit&&realKitCategories.has(category)?WORLD_AVATAR_OPTIONS.filter((entry)=>entry.category===category&&entry.assetFiles?.length):WORLD_AVATAR_OPTIONS.filter((entry)=>entry.category===category);const disabled=usingRealKit&&!realKitCategories.has(category);return <label key={category} className="text-[9px] font-black uppercase tracking-widest text-slate-500">{category}{disabled?<div className="mt-1.5 rounded-xl border border-dashed border-white/10 bg-slate-950/60 px-3 py-2.5 text-[10px] normal-case text-slate-600">Ainda não incluído neste kit</div>:<select value={available.some((entry)=>entry.id===selection[category])?selection[category]:available[0]?.id} onChange={(event)=>setSelection((current)=>({...current,[category]:event.target.value}))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-xs normal-case text-white">{available.map((entry)=><option key={entry.id} value={entry.id}>{entry.label}</option>)}</select>}</label>})}<button disabled={pending} onClick={save} className="self-end rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Salvar visual</button><p className="self-center text-[9px] leading-4 text-slate-500 sm:col-span-2">O kit atual contém corpo, cabelo, roupa, calça e calçado. Pele, rosto, mochila, chapéu e acessórios serão liberados quando as respectivas camadas chegarem.</p></div> : <><div className="mt-5 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-white">Jogadores localizados</h3><input value={playerFilter} onChange={(event)=>setPlayerFilter(event.target.value)} placeholder="Buscar nickname" className="w-48 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs text-white outline-none"/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{filteredPlayers.map((entry)=><article key={entry.playerId} className="rounded-2xl border border-white/8 bg-white/[.025] p-3"><div className="flex gap-3"><WorldAvatarPreview selection={entry.avatar} compact/><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><b className="truncate text-xs text-white">{entry.displayName}</b>{entry.isSelf&&<span className="rounded-full bg-cyan-300/10 px-2 py-0.5 text-[7px] font-black text-cyan-200">VOCÊ</span>}</div><p className="mt-1 text-[9px] text-emerald-300"><MapPin className="mr-1 inline h-3 w-3"/>{locationById.get(entry.locationId)?.shortName ?? entry.locationId}</p><p className="mt-1 text-[8px] text-amber-200">{entry.badges.length} insígnias</p><div className="mt-2 flex -space-x-1">{entry.team.slice(0,6).map((mascot,index)=><img key={`${mascot.pokemonId}-${index}`} src={mascot.sprite} title={`${mascot.name} · Nv.${mascot.level}`} alt={mascot.name} className="h-7 w-7 rounded-full border border-slate-800 bg-slate-950 object-contain"/>)}</div></div></div></article>)}{filteredPlayers.length===0&&<p className="text-xs text-slate-500">Nenhum treinador encontrado.</p>}</div></>}
       </div>
     </div>
   </section>;
