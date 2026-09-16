@@ -21,6 +21,20 @@ async function cleanAlpha(input: string) {
   return sharp(data, { raw: info }).png().toBuffer();
 }
 
+async function placeCrop(
+  buffer: Buffer,
+  crop: { left: number; top: number; width: number; height: number },
+  placement: { left: number; top: number; width: number; height: number },
+) {
+  const resized = await sharp(buffer).extract(crop).resize(placement.width, placement.height, {
+    fit: "fill",
+    kernel: sharp.kernel.nearest,
+  }).png().toBuffer();
+  return sharp({
+    create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } },
+  }).composite([{ input: resized, left: placement.left, top: placement.top }]).png().toBuffer();
+}
+
 async function main() {
   const source = path.resolve(process.argv[2] || ".asset-staging/world-avatar-chibi");
   const output = path.resolve(process.argv[3] || ".asset-staging/world-avatar-chibi-ready");
@@ -53,11 +67,25 @@ async function main() {
       </svg>`);
       buffer = await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: scalp }, { input: buffer }]).png().toBuffer();
     }
+    if (id === "top-red") {
+      buffer = await placeCrop(buffer,
+        { left: 178, top: 585, width: 683, height: 505 },
+        { left: 232, top: 615, width: 560, height: 414 });
+    }
+    if (id === "top-black") {
+      buffer = await placeCrop(buffer,
+        { left: 170, top: 601, width: 689, height: 511 },
+        { left: 232, top: 615, width: 560, height: 415 });
+    }
+    if (id === "bottom-jeans") {
+      buffer = await placeCrop(buffer,
+        { left: 282, top: 655, width: 513, height: 610 },
+        { left: 282, top: 775, width: 513, height: 610 });
+    }
     if (id === "shoes-red-black") {
-      // A arte recebida está centralizada no tórax. Recorta o conteúdo, reduz e
-      // ancora a dupla de tênis na linha dos pés do corpo-base.
-      const cropped = await sharp(buffer).extract({ left: 100, top: 588, width: 825, height: 539 }).resize(520, 340, { fit: "fill" }).png().toBuffer();
-      buffer = await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: cropped, left: 252, top: 1120 }]).png().toBuffer();
+      buffer = await placeCrop(buffer,
+        { left: 100, top: 588, width: 825, height: 539 },
+        { left: 255, top: 1218, width: 515, height: 232 });
     }
     await fs.writeFile(path.join(output, file), buffer);
     assets.push({ id, label, category, file, layer });
