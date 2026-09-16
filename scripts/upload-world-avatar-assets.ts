@@ -21,12 +21,16 @@ async function main() {
   await loadEnvFile(".env.local");
   await loadEnvFile(".env");
   const source = path.resolve(process.argv[2] || ".asset-staging/world-avatar-test");
-  const target = (process.argv[3] || "world-mode/avatars/test-kit-v1").replace(/^\/+|\/+$/g, "");
+  const target = (process.argv[3] || "world-mode/avatars/chibi-v1").replace(/^\/+|\/+$/g, "");
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) throw new Error("Storage do Supabase não configurado.");
   const manifest = JSON.parse(await fs.readFile(path.join(source, "manifest.json"), "utf8")) as { canvas?: { width?: number; height?: number }; assets?: Array<{ file?: string }> };
-  if (manifest.canvas?.width !== 1200 || manifest.canvas?.height !== 1800) throw new Error("Canvas do manifesto deve ser 1200x1800.");
+  const canvasWidth = Number(manifest.canvas?.width ?? 0);
+  const canvasHeight = Number(manifest.canvas?.height ?? 0);
+  if (!Number.isInteger(canvasWidth) || !Number.isInteger(canvasHeight) || canvasWidth < 256 || canvasHeight < 256) {
+    throw new Error("O manifesto deve informar um canvas válido.");
+  }
   const files = Array.from(new Set([...(manifest.assets ?? []).map((entry) => entry.file).filter((file): file is string => Boolean(file)), "manifest.json"]));
   const supabase = createClient(supabaseUrl, serviceKey, { auth: { autoRefreshToken: false, persistSession: false } });
   for (const file of files) {
