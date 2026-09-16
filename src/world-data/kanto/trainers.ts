@@ -1,4 +1,5 @@
 import type { TrainerTier } from "@/world-data/difficulty";
+import { worldModeAsset } from "@/world-data/assets";
 
 export type WorldTrainerMascot = {
   pokemonId: number;
@@ -24,7 +25,7 @@ export type WorldTrainer = {
 export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   {
     id: "viridian-bug-catcher-01", locationId: "viridian-forest", name: "Noah", title: "Jovem Caçador de Insetos",
-    intro: "Você ouviu o farfalhar também? Meus parceiros conhecem cada curva desta trilha.", portraitUrl: "/world-mode/kanto/viridian-forest/trainer-noah.webp",
+    intro: "Você ouviu o farfalhar também? Meus parceiros conhecem cada curva desta trilha.", portraitUrl: worldModeAsset("viridian-forest/trainer-noah.webp"),
     tier: "TRAINER",
     team: [
       { pokemonId: 10, level: 4, role: "ATTACKER", stats: { force: 12, agility: 14, charisma: 9, instinct: 12, vitality: 12 } },
@@ -33,7 +34,7 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   },
   {
     id: "viridian-bug-catcher-02", locationId: "viridian-forest", name: "Milo", title: "Caçador do Dossel",
-    intro: "A floresta recompensa paciência. Vamos ver se sua equipe sabe esperar a abertura certa.", portraitUrl: "/world-mode/kanto/viridian-forest/trainer-milo.webp", prerequisiteId: "viridian-bug-catcher-01",
+    intro: "A floresta recompensa paciência. Vamos ver se sua equipe sabe esperar a abertura certa.", portraitUrl: worldModeAsset("viridian-forest/trainer-milo.webp"), prerequisiteId: "viridian-bug-catcher-01",
     tier: "TRAINER",
     team: [
       { pokemonId: 11, level: 5, role: "DEFENDER", stats: { force: 10, agility: 8, charisma: 10, instinct: 12, vitality: 20 } },
@@ -42,7 +43,7 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   },
   {
     id: "viridian-bug-catcher-03", locationId: "viridian-forest", name: "Iris", title: "Veterana da Colmeia",
-    intro: "Você chegou longe. Agora enfrente uma equipe que luta como uma colmeia de verdade.", portraitUrl: "/world-mode/kanto/viridian-forest/trainer-iris.webp", prerequisiteId: "viridian-bug-catcher-02",
+    intro: "Você chegou longe. Agora enfrente uma equipe que luta como uma colmeia de verdade.", portraitUrl: worldModeAsset("viridian-forest/trainer-iris.webp"), prerequisiteId: "viridian-bug-catcher-02",
     tier: "VETERAN",
     team: [
       { pokemonId: 13, level: 6, role: "OPPORTUNIST", stats: { force: 14, agility: 15, charisma: 10, instinct: 19, vitality: 13 } },
@@ -53,7 +54,7 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   {
     id: "pewter-camper-liam", locationId: "pewter-city", name: "Liam", title: "Campista do Ginásio",
     intro: "Pedra não precisa ser rápida quando sabe exatamente onde aguentar o impacto.",
-    portraitUrl: "/world-mode/kanto/generated/trainer-liam.png",
+    portraitUrl: worldModeAsset("trainer-liam.webp"),
     tier: "TRAINER",
     team: [
       { pokemonId: 74, level: 9, role: "DEFENDER", stats: { force: 22, agility: 11, charisma: 12, instinct: 15, vitality: 28 } },
@@ -63,7 +64,7 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   {
     id: "pewter-hiker-marcus", locationId: "pewter-city", name: "Marcus", title: "Montanhista Veterano",
     intro: "Força abre caminhos. Resistência decide quem permanece de pé quando a poeira baixa.", prerequisiteId: "pewter-camper-liam",
-    portraitUrl: "/world-mode/kanto/generated/trainer-marcus.png",
+    portraitUrl: worldModeAsset("trainer-marcus.webp"),
     tier: "VETERAN",
     team: [
       { pokemonId: 74, level: 10, role: "ATTACKER", stats: { force: 27, agility: 12, charisma: 12, instinct: 17, vitality: 26 } },
@@ -73,7 +74,7 @@ export const KANTO_MVP_TRAINERS: WorldTrainer[] = [
   {
     id: "pewter-leader-brock", locationId: "pewter-city", name: "Brock", title: "Líder do Ginásio de Pewter",
     intro: "Uma base sólida sustenta qualquer sonho. Mostre que sua equipe aprendeu a atravessar Kanto unida.", prerequisiteId: "pewter-hiker-marcus", badgeId: "boulder-badge",
-    portraitUrl: "/world-mode/kanto/generated/leader-brock.png",
+    portraitUrl: worldModeAsset("leader-brock.webp"),
     tier: "LEADER",
     team: [
       { pokemonId: 74, level: 12, role: "DEFENDER", stats: { force: 30, agility: 14, charisma: 18, instinct: 19, vitality: 36 } },

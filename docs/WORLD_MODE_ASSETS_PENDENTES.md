@@ -1,6 +1,6 @@
 # World Mode — assets pendentes
 
-> Atualização de 16/09/2026: o conjunto principal abaixo foi gerado novamente em alta qualidade, sem textos ou recortes, e integrado em `public/world-mode/kanto/generated`. Este arquivo permanece como referência de direção e de formatos para expansões futuras.
+> Atualização de 16/09/2026: o conjunto principal abaixo foi gerado novamente em alta qualidade, sem textos ou recortes, convertido para WebP e publicado no bucket `assets/world-mode/kanto` do Supabase Storage. Este arquivo permanece como referência de direção e de formatos para expansões futuras.
 
 Todos os cenários devem ser entregues sem personagens, textos, botões ou marcadores. A interface posicionará esses elementos por cima da arte. Preferência por WebP; PNG transparente para personagens e objetos isolados.
 
