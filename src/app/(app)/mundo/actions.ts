@@ -35,6 +35,7 @@ import { WORLD_STARTER_IDS } from "@/world-data/starters";
 import { getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { worldLevelCap } from "@/world-data/progression";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
+import { normalizeWorldAvatar, type WorldAvatarSelection } from "@/world-data/avatar";
 
 // Chance-base (selvagem com vida cheia). Deliberadamente baixa: capturar exige
 // enfraquecer o selvagem em combate (bônus de até +45% por HP perdido).
@@ -107,6 +108,34 @@ export async function getAdminWorldState() {
     state = await finishTravel(player.id, false);
   }
   return state;
+}
+
+export async function saveWorldAvatarAction(selection: WorldAvatarSelection) {
+  try {
+    const player = await adminPlayer();
+    const state = await prisma.worldPlayerState.findUnique({ where: { playerId: player.id }, select: { avatarJson: true } });
+    if (!state) throw new Error("Inicie sua aventura primeiro.");
+    const previous = state.avatarJson && typeof state.avatarJson === "object" && !Array.isArray(state.avatarJson) ? state.avatarJson as Record<string, unknown> : {};
+    const avatar = normalizeWorldAvatar(selection);
+    await prisma.worldPlayerState.update({ where: { playerId: player.id }, data: { avatarJson: { ...previous, ...avatar, presenceAt: new Date().toISOString() } as Prisma.InputJsonValue } });
+    revalidatePath("/mundo");
+    return { ok: true as const };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível salvar o personagem." };
+  }
+}
+
+export async function touchWorldPresenceAction() {
+  try {
+    const player = await adminPlayer();
+    const state = await prisma.worldPlayerState.findUnique({ where: { playerId: player.id }, select: { avatarJson: true } });
+    if (!state) return { ok: false as const, error: "Aventura não iniciada." };
+    const previous = state.avatarJson && typeof state.avatarJson === "object" && !Array.isArray(state.avatarJson) ? state.avatarJson as Record<string, unknown> : {};
+    await prisma.worldPlayerState.update({ where: { playerId: player.id }, data: { avatarJson: { ...previous, presenceAt: new Date().toISOString() } as Prisma.InputJsonValue } });
+    return { ok: true as const };
+  } catch {
+    return { ok: false as const, error: "Presença indisponível." };
+  }
 }
 
 export async function getAdminWorldEncounters() {

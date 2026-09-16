@@ -17,6 +17,7 @@ import { prisma } from "@/lib/prisma";
 import { KANTO_MVP_TRAINERS } from "@/world-data/kanto/trainers";
 import { TIER_PARAMS } from "@/world-data/difficulty";
 import { WORLD_STARTERS } from "@/world-data/starters";
+import { normalizeWorldAvatar } from "@/world-data/avatar";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,15 @@ export default async function WorldModePage() {
       };
     })
     .filter((m): m is NonNullable<typeof m> => Boolean(m));
+  const publicStates = state ? await prisma.worldPlayerState.findMany({
+    where: { starterPokemonId: { not: null } },
+    orderBy: { updatedAt: "desc" },
+    take: 40,
+    select: { playerId: true, currentLocationId: true, badges: true, partyJson: true, avatarJson: true, updatedAt: true, player: { select: { displayName: true } } },
+  }) : [];
+  const publicPartyIds = publicStates.flatMap((entry) => readWorldParty(entry.partyJson).map((partyEntry) => partyEntry.mascotId));
+  const publicPartyRows = publicPartyIds.length ? await prisma.worldMascot.findMany({ where: { id: { in: publicPartyIds } }, select: { id: true, pokemonId: true, nickname: true, level: true } }) : [];
+  const publicPartyById = new Map(publicPartyRows.map((entry) => [entry.id, entry]));
   const locations = KANTO_MVP_LOCATIONS.map((location) => ({
     ...location,
     encounters: location.encounters.map((encounter) => ({
@@ -108,6 +118,17 @@ export default async function WorldModePage() {
       martItems={KANTO_MVP_MART}
       zikaCoins={wallet?.balance ?? 0}
       ligaCash={ligaCashWallet?.balance ?? 0}
+      avatar={normalizeWorldAvatar(state?.avatarJson)}
+      worldPlayers={publicStates.map((entry) => ({
+        playerId: entry.playerId,
+        displayName: entry.player.displayName,
+        isSelf: entry.playerId === state?.playerId,
+        locationId: entry.currentLocationId,
+        badges: entry.badges,
+        avatar: normalizeWorldAvatar(entry.avatarJson),
+        updatedAt: entry.updatedAt.toISOString(),
+        team: readWorldParty(entry.partyJson).map((partyEntry) => publicPartyById.get(partyEntry.mascotId)).filter((mascot): mascot is NonNullable<typeof mascot> => Boolean(mascot)).map((mascot) => ({ name: mascot.nickname?.trim() || getPokemonName(mascot.pokemonId), pokemonId: mascot.pokemonId, level: mascot.level, sprite: getSpriteUrl(mascot.pokemonId) })),
+      }))}
       starters={WORLD_STARTERS.map((starter) => ({
         ...starter,
         name: getPokemonName(starter.pokemonId),

@@ -47,9 +47,12 @@ import {
   startWorldTravelAction,
   useWorldItemAction,
   setWorldMascotBaseAction,
+  saveWorldAvatarAction,
+  touchWorldPresenceAction,
 } from "./actions";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
 import { worldModeAsset } from "@/world-data/assets";
+import { WORLD_AVATAR_CATEGORIES, WORLD_AVATAR_OPTIONS, worldAvatarAssetUrl, type WorldAvatarSelection } from "@/world-data/avatar";
 
 type WorldMascot = {
   id: string;
@@ -142,6 +145,7 @@ type Battle = {
   createdAt: string;
 };
 type Starter = { generation: number; pokemonId: number; name: string; spriteUrl: string };
+type WorldPlayerPresence = { playerId: string; displayName: string; isSelf: boolean; locationId: string; badges: string[]; avatar: WorldAvatarSelection; updatedAt: string; team: Array<{ name: string; pokemonId: number; level: number; sprite: string }> };
 
 const TYPE_STYLE: Record<string, { icon: typeof MapPin; color: string }> = {
   TOWN: { icon: MapPin, color: "#fbbf24" },
@@ -179,7 +183,7 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, ligaCash, trainers, battles, partyMascots, starters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; ligaCash: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[]; starters: Starter[] }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, ligaCash, trainers, battles, partyMascots, starters, avatar, worldPlayers }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; ligaCash: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[]; starters: Starter[]; avatar: WorldAvatarSelection; worldPlayers: WorldPlayerPresence[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
@@ -199,6 +203,13 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
       setFighterId(partyMascots.find((mascot) => mascot.hp > 0)?.id ?? "");
     }
   }, [partyMascots, fighterId]);
+  useEffect(() => {
+    const key = "world-presence-touched-at";
+    const previous = Number(window.sessionStorage.getItem(key) ?? 0);
+    if (Date.now() - previous < 5 * 60_000) return;
+    window.sessionStorage.setItem(key, String(Date.now()));
+    void touchWorldPresenceAction();
+  }, []);
   const byId = useMemo(() => new Map(locations.map((location) => [location.id, location])), [locations]);
   const selected = byId.get(selectedId) ?? locations[0];
   const current = initialState ? byId.get(initialState.currentLocationId) : null;
@@ -253,8 +264,10 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
       </header>
 
       <nav className="sticky top-2 z-40 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/90 p-1.5 shadow-xl backdrop-blur">
-        {[["#world-map","Mapa"],["#world-expedition","Expedição"],["#world-team","Equipe"],["#world-inventory","Mochila e baú"],["#world-roster","Mascotes"]].map(([href,label])=><a key={href} href={href} className="whitespace-nowrap rounded-xl px-4 py-2 text-[10px] font-black text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-200">{label}</a>)}
+        {[["#world-character","Personagem"],["#world-map","Mapa"],["#world-expedition","Expedição"],["#world-team","Equipe"],["#world-inventory","Mochila e baú"],["#world-roster","Mascotes"]].map(([href,label])=><a key={href} href={href} className="whitespace-nowrap rounded-xl px-4 py-2 text-[10px] font-black text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-200">{label}</a>)}
       </nav>
+
+      <WorldCharacterPanel initialAvatar={avatar} players={worldPlayers} locations={locations} />
 
       {initialState.travelingToId && (
         <section className="rounded-3xl border border-cyan-300/25 bg-[linear-gradient(120deg,rgba(6,182,212,.14),rgba(15,23,42,.92))] p-5">
@@ -453,6 +466,67 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
       </section>
     </main>
   );
+}
+
+function avatarOption(selection: WorldAvatarSelection, category: keyof WorldAvatarSelection) {
+  return WORLD_AVATAR_OPTIONS.find((entry) => entry.id === selection[category]);
+}
+
+function WorldAvatarPreview({ selection, compact = false }: { selection: WorldAvatarSelection; compact?: boolean }) {
+  const selectedAssets = ["body", "bottom", "shoes", "top", "hair", "backpack", "headwear", "accessory"]
+    .flatMap((category) => avatarOption(selection, category as keyof WorldAvatarSelection)?.assetFiles ?? []);
+  const hasRealBody = Boolean(avatarOption(selection, "body")?.assetFiles?.length);
+  if (hasRealBody) return <div className={`relative mx-auto overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,.17),transparent_50%),linear-gradient(#0b1728,#050914)] ${compact ? "h-28 w-20" : "h-[360px] w-60"}`}>
+    {selectedAssets.map((file) => <img key={file} src={worldAvatarAssetUrl(file)} alt="" className="absolute inset-0 h-full w-full object-contain" />)}
+    {!compact && <span className="absolute bottom-2 right-2 rounded-full bg-slate-950/80 px-2 py-1 text-[7px] font-black uppercase tracking-widest text-emerald-300">Kit real de teste</span>}
+  </div>;
+  const skin = avatarOption(selection, "skin")?.color ?? "#e6b98d";
+  const hair = avatarOption(selection, "hair")?.color ?? "#172033";
+  const top = avatarOption(selection, "top")?.color ?? "#22d3ee";
+  const bottom = avatarOption(selection, "bottom")?.color ?? "#334155";
+  const shoes = avatarOption(selection, "shoes")?.color ?? "#f8fafc";
+  const pack = avatarOption(selection, "backpack")?.color ?? "#ef4444";
+  const headwear = avatarOption(selection, "headwear");
+  const accessory = avatarOption(selection, "accessory");
+  const wide = selection.body === "body-c" || selection.body === "body-d";
+  return <div className={`relative mx-auto overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_50%_30%,rgba(34,211,238,.17),transparent_50%),linear-gradient(#0b1728,#050914)] ${compact ? "h-28 w-20" : "h-[360px] w-60"}`}>
+    <div className="absolute inset-x-[28%] bottom-[13%] top-[25%] rounded-[45%_45%_20%_20%]" style={{ background: top, transform: `scaleX(${wide ? 1.15 : .95})` }} />
+    <div className="absolute left-1/2 top-[9%] aspect-square w-[30%] -translate-x-1/2 rounded-full border-2 border-black/10" style={{ background: skin }} />
+    <div className="absolute left-1/2 top-[5%] h-[18%] w-[36%] -translate-x-1/2 rounded-[55%_55%_35%_35%]" style={{ background: hair }} />
+    <div className="absolute left-[25%] top-[34%] h-[38%] w-[11%] rotate-3 rounded-full" style={{ background: skin }} /><div className="absolute right-[25%] top-[34%] h-[38%] w-[11%] -rotate-3 rounded-full" style={{ background: skin }} />
+    <div className="absolute bottom-[10%] left-[34%] h-[38%] w-[13%] rounded-b-xl" style={{ background: bottom }} /><div className="absolute bottom-[10%] right-[34%] h-[38%] w-[13%] rounded-b-xl" style={{ background: bottom }} />
+    <div className="absolute bottom-[7%] left-[28%] h-[7%] w-[22%] rounded-full" style={{ background: shoes }} /><div className="absolute bottom-[7%] right-[28%] h-[7%] w-[22%] rounded-full" style={{ background: shoes }} />
+    <div className="absolute right-[20%] top-[30%] h-[36%] w-[18%] rounded-xl border border-black/20" style={{ background: pack }} />
+    {headwear?.id !== "headwear-none" && <div className="absolute left-1/2 top-[3%] h-[8%] w-[43%] -translate-x-1/2 rounded-t-full" style={{ background: headwear?.color }} />}
+    {accessory?.id !== "accessory-none" && <div className="absolute left-1/2 top-[23%] h-[3%] w-[32%] -translate-x-1/2 rounded-full" style={{ background: accessory?.color }} />}
+    {!compact && <span className="absolute inset-x-3 bottom-2 text-center text-[8px] font-black uppercase tracking-widest text-slate-500">Placeholder modular</span>}
+  </div>;
+}
+
+function WorldCharacterPanel({ initialAvatar, players, locations }: { initialAvatar: WorldAvatarSelection; players: WorldPlayerPresence[]; locations: Location[] }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [editing, setEditing] = useState(false);
+  const [selection, setSelection] = useState(initialAvatar);
+  const [playerFilter, setPlayerFilter] = useState("");
+  const locationById = useMemo(() => new Map(locations.map((entry) => [entry.id, entry])), [locations]);
+  const filteredPlayers = players.filter((entry) => !playerFilter || entry.displayName.toLowerCase().includes(playerFilter.toLowerCase()));
+  const save = () => start(async () => {
+    const result = await saveWorldAvatarAction(selection);
+    if (!result.ok) toast.error(result.error ?? "Falha ao salvar personagem.");
+    else { toast.success("Visual do World Mode salvo."); setEditing(false); router.refresh(); }
+  });
+  return <section id="world-character" className="scroll-mt-20 overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[#070d17]">
+    <div className="grid lg:grid-cols-[330px_1fr]">
+      <div className="border-b border-white/5 bg-[radial-gradient(circle_at_top,rgba(34,211,238,.12),transparent_65%)] p-5 lg:border-b-0 lg:border-r">
+        <WorldAvatarPreview selection={selection}/>
+        <button onClick={() => setEditing((value) => !value)} className="mt-4 w-full rounded-xl border border-cyan-300/25 bg-cyan-300/10 px-4 py-3 text-xs font-black text-cyan-100">{editing ? "Fechar customização" : "Customizar personagem"}</button>
+      </div>
+      <div className="p-5 md:p-7"><span className="text-[9px] font-black uppercase tracking-[.22em] text-cyan-300">Identidade no World Mode</span><h2 className="mt-1 text-2xl font-black text-white">Treinadores no mundo</h2><p className="mt-1 text-xs text-slate-400">O avatar modular representa o jogador nas cidades e no mapa. Durante o protótipo, formas e cores substituem os PNGs oficiais.</p>
+        {editing ? <div className="mt-5 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{WORLD_AVATAR_CATEGORIES.map((category)=><label key={category} className="text-[9px] font-black uppercase tracking-widest text-slate-500">{category}<select value={selection[category]} onChange={(event)=>setSelection((current)=>({...current,[category]:event.target.value}))} className="mt-1.5 w-full rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-xs normal-case text-white">{WORLD_AVATAR_OPTIONS.filter((entry)=>entry.category===category).map((entry)=><option key={entry.id} value={entry.id}>{entry.label}</option>)}</select></label>)}<button disabled={pending} onClick={save} className="self-end rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-4 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Salvar visual</button></div> : <><div className="mt-5 flex items-center justify-between gap-3"><h3 className="text-sm font-black text-white">Jogadores localizados</h3><input value={playerFilter} onChange={(event)=>setPlayerFilter(event.target.value)} placeholder="Buscar nickname" className="w-48 rounded-xl border border-white/10 bg-slate-950 px-3 py-2 text-xs text-white outline-none"/></div><div className="mt-3 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{filteredPlayers.map((entry)=><article key={entry.playerId} className="rounded-2xl border border-white/8 bg-white/[.025] p-3"><div className="flex gap-3"><WorldAvatarPreview selection={entry.avatar} compact/><div className="min-w-0 flex-1"><div className="flex items-center gap-2"><b className="truncate text-xs text-white">{entry.displayName}</b>{entry.isSelf&&<span className="rounded-full bg-cyan-300/10 px-2 py-0.5 text-[7px] font-black text-cyan-200">VOCÊ</span>}</div><p className="mt-1 text-[9px] text-emerald-300"><MapPin className="mr-1 inline h-3 w-3"/>{locationById.get(entry.locationId)?.shortName ?? entry.locationId}</p><p className="mt-1 text-[8px] text-amber-200">{entry.badges.length} insígnias</p><div className="mt-2 flex -space-x-1">{entry.team.slice(0,6).map((mascot,index)=><img key={`${mascot.pokemonId}-${index}`} src={mascot.sprite} title={`${mascot.name} · Nv.${mascot.level}`} alt={mascot.name} className="h-7 w-7 rounded-full border border-slate-800 bg-slate-950 object-contain"/>)}</div></div></div></article>)}{filteredPlayers.length===0&&<p className="text-xs text-slate-500">Nenhum treinador encontrado.</p>}</div></>}
+      </div>
+    </div>
+  </section>;
 }
 
 // Formação persistente do World Mode: até 6 mascotes do próprio jogador, com
