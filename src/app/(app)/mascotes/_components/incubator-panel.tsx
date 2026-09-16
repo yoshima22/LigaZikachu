@@ -376,6 +376,39 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
   const dropPageCount = Math.max(1, Math.ceil(filteredDrops.length / dropPageSize));
   const visibleDrops = filteredDrops.slice((dropPage - 1) * dropPageSize, dropPage * dropPageSize);
 
+  // Filtro/ordenação/paginação do inventário de ovos.
+  const [eggType, setEggType] = useState("ALL");
+  const [eggBonusOnly, setEggBonusOnly] = useState(false);
+  const [eggSort, setEggSort] = useState<"RECENT" | "BONUS">("RECENT");
+  const [eggPage, setEggPage] = useState(1);
+  const eggPageSize = 12;
+  const eggTypes = useMemo(() => [...new Set(eggs.map((egg) => egg.type))], [eggs]);
+  const filteredEggs = useMemo(() => {
+    const list = eggs.filter(
+      (egg) =>
+        (eggType === "ALL" || egg.type === eggType) &&
+        (!eggBonusOnly || !!egg.hatchRarityBonusPct),
+    );
+    return list.sort((a, b) =>
+      eggSort === "BONUS"
+        ? (b.hatchRarityBonusPct ?? 0) - (a.hatchRarityBonusPct ?? 0) ||
+          b.obtainedAt.getTime() - a.obtainedAt.getTime()
+        : b.obtainedAt.getTime() - a.obtainedAt.getTime(),
+    );
+  }, [eggs, eggType, eggBonusOnly, eggSort]);
+  const eggPageCount = Math.max(1, Math.ceil(filteredEggs.length / eggPageSize));
+  const eggPageClamped = Math.min(eggPage, eggPageCount);
+  const visibleEggs = filteredEggs.slice(
+    (eggPageClamped - 1) * eggPageSize,
+    eggPageClamped * eggPageSize,
+  );
+  useEffect(() => {
+    setEggPage(1);
+  }, [eggType, eggBonusOnly, eggSort]);
+  useEffect(() => {
+    setEggPage((current) => Math.min(current, eggPageCount));
+  }, [eggPageCount]);
+
   useEffect(() => {
     const saved = window.localStorage.getItem(HATCH_ANIMATION_PREFERENCE_KEY);
     if (saved !== null) setShowHatchAnimation(saved !== "false");
@@ -855,15 +888,36 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       {/* Inventário de ovos */}
       {eggs.length > 0 && (
         <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
-          <h2 className="flex items-center gap-2 font-semibold text-slate-200">
-            🗂️ Meus Ovos
-            <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{eggs.length}</span>
-          </h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="flex items-center gap-2 font-semibold text-slate-200">
+              🗂️ Meus Ovos
+              <span className="ml-1 rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">{eggs.length}</span>
+            </h2>
+            <div className="flex flex-wrap items-center gap-2 text-xs">
+              <select value={eggType} onChange={(e) => setEggType(e.target.value)}
+                className="rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-slate-200">
+                <option value="ALL">Todos os tipos</option>
+                {eggTypes.map((type) => <option key={type} value={type}>{EGG_LABEL[type] ?? type}</option>)}
+              </select>
+              <select value={eggSort} onChange={(e) => setEggSort(e.target.value as "RECENT" | "BONUS")}
+                className="rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-slate-200">
+                <option value="RECENT">Mais recentes</option>
+                <option value="BONUS">Maior chance elevada</option>
+              </select>
+              <button type="button" onClick={() => setEggBonusOnly((v) => !v)}
+                className={`rounded-lg border px-2.5 py-1.5 font-semibold transition ${eggBonusOnly ? "border-purple-400/50 bg-purple-500/15 text-purple-200" : "border-border bg-slate-950 text-slate-300 hover:border-purple-400/40"}`}>
+                ✨ Só chance elevada
+              </button>
+            </div>
+          </div>
 
           {/* Seletor de geração: abre modal ao clicar em Incubar */}
 
+          {filteredEggs.length === 0 ? (
+            <p className="rounded-xl border border-dashed border-border p-6 text-center text-xs text-slate-500">Nenhum ovo com esses filtros.</p>
+          ) : (
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-            {eggs.map(egg => (
+            {visibleEggs.map(egg => (
               <div key={egg.id} className={`flex items-center gap-3 rounded-xl border-2 p-3 ${EGG_COLORS[egg.type]}`}>
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-950/40 p-1">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -885,6 +939,16 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               </div>
             ))}
           </div>
+          )}
+          {eggPageCount > 1 && (
+            <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
+              <button type="button" disabled={eggPageClamped <= 1} onClick={() => setEggPage(eggPageClamped - 1)}
+                className="rounded-lg border border-border px-3 py-1.5 text-slate-300 disabled:opacity-30">Anterior</button>
+              <span>Página {eggPageClamped} de {eggPageCount} · {filteredEggs.length} ovo(s)</span>
+              <button type="button" disabled={eggPageClamped >= eggPageCount} onClick={() => setEggPage(eggPageClamped + 1)}
+                className="rounded-lg border border-border px-3 py-1.5 text-slate-300 disabled:opacity-30">Próxima</button>
+            </div>
+          )}
         </div>
       )}
     </div>
