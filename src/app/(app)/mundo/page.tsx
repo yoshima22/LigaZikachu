@@ -27,9 +27,10 @@ export default async function WorldModePage() {
     getAdminWorldEncounters(),
     getAdminWorldBattles(),
   ]);
-  const wallet = state
-    ? await prisma.zikaCoinWallet.findUnique({ where: { playerId: state.playerId }, select: { balance: true } })
-    : null;
+  const [wallet, ligaCashWallet] = state ? await Promise.all([
+    prisma.zikaCoinWallet.findUnique({ where: { playerId: state.playerId }, select: { balance: true } }),
+    prisma.ligaCoinWallet.findUnique({ where: { playerId: state.playerId }, select: { balance: true } }),
+  ]) : [null, null];
   // Resolve os mascotes da formação com HP/condições persistentes para exibição.
   const party = state ? readWorldParty(state.partyJson) : [];
   const partyRows =
@@ -106,6 +107,7 @@ export default async function WorldModePage() {
       }}
       martItems={KANTO_MVP_MART}
       zikaCoins={wallet?.balance ?? 0}
+      ligaCash={ligaCashWallet?.balance ?? 0}
       starters={WORLD_STARTERS.map((starter) => ({
         ...starter,
         name: getPokemonName(starter.pokemonId),
@@ -141,6 +143,7 @@ export default async function WorldModePage() {
               inventory: state.inventoryJson as {
                 pokeBalls?: number;
                 potions?: number;
+                megaPotions?: number;
                 antidotes?: number;
               },
               chest: state.chestJson as Record<string, number>,

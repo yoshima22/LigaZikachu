@@ -33,6 +33,8 @@ import {
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { WORLD_STARTER_IDS } from "@/world-data/starters";
 import { getPokemonTypes, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
+import { worldLevelCap } from "@/world-data/progression";
+import { changeLigaCash } from "@/lib/liga-cash-wallet";
 
 // Chance-base (selvagem com vida cheia). Deliberadamente baixa: capturar exige
 // enfraquecer o selvagem em combate (bônus de até +45% por HP perdido).
@@ -136,11 +138,11 @@ export async function getAdminWorldBattles() {
 // Lista os mascotes do jogador para montar a equipe da aventura.
 export async function getWorldPartyMascotsAction() {
   const player = await adminPlayer();
-  const mascots = await prisma.worldMascot.findMany({
+  const [mascots, mainMascots] = await Promise.all([prisma.worldMascot.findMany({
     where: { playerId: player.id },
     orderBy: [{ isInParty: "desc" }, { level: "desc" }, { createdAt: "asc" }],
     take: 400,
-  });
+  }), prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true } })]);
   return mascots.map((mascot) => ({
     id: mascot.id,
     speciesId: mascot.pokemonId,
@@ -149,6 +151,8 @@ export async function getWorldPartyMascotsAction() {
     sprite: getSpriteUrl(mascot.pokemonId),
     level: mascot.level,
     personality: mascot.personality,
+    mainMascotId: mascot.mainMascotId,
+    baseOptions: mainMascots.filter((base) => base.pokemonId === mascot.pokemonId).map((base) => ({ id: base.id, label: `${base.nickname?.trim() || getPokemonName(base.pokemonId)} · Nv.${base.level}` })),
     posture: defaultCombatRoleFor({
       preferredCombatRole: null,
       statForce: mascot.statForce,
@@ -165,6 +169,23 @@ export async function getWorldPartyMascotsAction() {
       vitality: mascot.statVitality,
     },
   }));
+}
+
+export async function setWorldMascotBaseAction(worldMascotId: string, mainMascotId: string) {
+  try {
+    const player = await adminPlayer();
+    const [worldMascot, mainMascot] = await Promise.all([
+      prisma.worldMascot.findFirst({ where: { id: worldMascotId, playerId: player.id } }),
+      prisma.mascot.findFirst({ where: { id: mainMascotId, playerId: player.id } }),
+    ]);
+    if (!worldMascot || !mainMascot) throw new Error("Mascote de referência indisponível.");
+    if (worldMascot.pokemonId !== mainMascot.pokemonId) throw new Error("A referência deve ser da mesma espécie.");
+    await prisma.worldMascot.update({ where: { id: worldMascot.id }, data: { mainMascotId: mainMascot.id } });
+    revalidatePath("/mundo");
+    return { ok: true as const };
+  } catch (error) {
+    return { ok: false as const, error: error instanceof Error ? error.message : "Não foi possível vincular a referência." };
+  }
 }
 
 export async function getWorldRosterSummaryAction() {
@@ -232,11 +253,12 @@ export async function saveWorldPartyAction(
 }
 
 const POTION_HEAL = 60;
+const MEGA_POTION_HEAL = 180;
 
 // Usa um item da mochila num mascote da aventura: Potion cura HP, Antidote
 // remove veneno. Consome o item e persiste o estado.
 export async function useWorldItemAction(
-  kind: "POTION" | "ANTIDOTE",
+  kind: "POTION" | "MEGA_POTION" | "ANTIDOTE",
   mascotId: string,
 ) {
   try {
@@ -256,12 +278,12 @@ export async function useWorldItemAction(
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
       const max = worldMaxHp(mascot.level, mascot.statVitality);
       const current = { hp: mascot.currentHp, poisoned: mascot.poisoned };
-      const itemKey = kind === "POTION" ? "potions" : "antidotes";
+      const itemKey = kind === "POTION" ? "potions" : kind === "MEGA_POTION" ? "megaPotions" : "antidotes";
       const have = Number(inventory[itemKey] ?? 0);
-      if (have < 1) throw new Error(kind === "POTION" ? "Você não tem Potions." : "Você não tem Antidotes.");
-      if (kind === "POTION") {
+      if (have < 1) throw new Error(kind === "ANTIDOTE" ? "Você não tem Antídotos." : kind === "MEGA_POTION" ? "Você não tem Mega Potions." : "Você não tem Potions.");
+      if (kind === "POTION" || kind === "MEGA_POTION") {
         if (current.hp >= max) throw new Error("Este mascote já está com o HP cheio.");
-        current.hp = Math.min(max, current.hp + POTION_HEAL);
+        current.hp = Math.min(max, current.hp + (kind === "MEGA_POTION" ? MEGA_POTION_HEAL : POTION_HEAL));
       } else {
         if (!current.poisoned) throw new Error("Este mascote não está envenenado.");
         current.poisoned = false;
@@ -305,7 +327,8 @@ export async function exploreWorldLocationAction() {
       // Perfil de combate do selvagem, escalado à equipe do jogador. O selvagem
       // precisa ser enfrentado (e enfraquecido) antes da captura.
       const ref = await playerBattleRefTx(tx, player.id, state);
-      const profile = scaleWildProfile(selected.rarity, ref);
+      const scaled = scaleWildProfile(selected.rarity, ref);
+      const profile = { ...scaled, level: Math.min(scaled.level, worldLevelCap(location.id)) };
       const maxHp = worldMaxHp(profile.level, profile.stats.vitality);
       const wild: WorldWildState = {
         level: profile.level,
@@ -332,7 +355,7 @@ export async function exploreWorldLocationAction() {
   }
 }
 
-export async function resolveWorldEncounterAction(encounterId: string, choice: "CAPTURE" | "ESCAPE") {
+export async function resolveWorldEncounterAction(encounterId: string, choice: "CAPTURE" | "ESCAPE", ballId: "pokeBalls" = "pokeBalls") {
   try {
     const player = await adminPlayer();
     const result = await prisma.$transaction(async (tx) => {
@@ -346,7 +369,8 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
         return { captured: false, escaped: true };
       }
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
-      const pokeBalls = Number(inventory.pokeBalls ?? 0);
+      if (ballId !== "pokeBalls") throw new Error("Este tipo de Poké Ball ainda não foi liberado.");
+      const pokeBalls = Number(inventory[ballId] ?? 0);
       if (pokeBalls < 1) throw new Error("Você não possui Poké Balls.");
       // Chance efetiva: base da raridade + bônus por enfraquecer o selvagem
       // (até +45 quando quase desmaiado), limitada a 95%.
@@ -361,23 +385,10 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
       let mascotId: string | undefined;
       if (captured) {
         const personality = PERSONALITIES[randomInt(0, PERSONALITIES.length - 1)] as MascotPersonality;
-        const mascot = await tx.mascot.create({
-          data: {
-            playerId: player.id,
-            pokemonId: encounter.pokemonId,
-            ...(await getSpeciesSnapshot(encounter.pokemonId, tx)),
-            hatchedPokemonId: encounter.pokemonId,
-            hatchedFromEggType: null,
-            hatchedFromEggOrigin: `WORLD:${encounter.locationId}`,
-            personality,
-            statForce: randomInt(8, 12),
-            statAgility: randomInt(8, 12),
-            statCharisma: randomInt(8, 12),
-            statInstinct: randomInt(8, 12),
-            statVitality: randomInt(8, 12),
-          },
-        });
-        mascotId = mascot.id;
+        // Captura pertence ao World Mode. Ela não fabrica uma nova cópia na
+        // coleção principal; uma cópia já existente da mesma espécie pode ser
+        // vinculada apenas como referência, sem importar nível ou atributos.
+        const baseMascot = await tx.mascot.findFirst({ where: { playerId: player.id, pokemonId: encounter.pokemonId }, orderBy: { id: "asc" }, select: { id: true } });
         const worldStats = {
           force: randomInt(8, 12),
           agility: randomInt(8, 12),
@@ -385,31 +396,30 @@ export async function resolveWorldEncounterAction(encounterId: string, choice: "
           instinct: randomInt(8, 12),
           vitality: randomInt(8, 12),
         };
-        await tx.worldMascot.create({
+        const capturedWorldMascot = await tx.worldMascot.create({
           data: {
             playerId: player.id,
-            mainMascotId: mascot.id,
+            mainMascotId: baseMascot?.id ?? null,
             pokemonId: encounter.pokemonId,
-            level: 1,
+            level: Math.min(wild?.level ?? 1, worldLevelCap(encounter.locationId)),
             personality,
             statForce: worldStats.force,
             statAgility: worldStats.agility,
             statCharisma: worldStats.charisma,
             statInstinct: worldStats.instinct,
             statVitality: worldStats.vitality,
-            currentHp: worldMaxHp(1, worldStats.vitality),
+            currentHp: worldMaxHp(Math.min(wild?.level ?? 1, worldLevelCap(encounter.locationId)), worldStats.vitality),
             origin: `CAPTURE:${encounter.locationId}`,
             isInParty: false,
           },
         });
+        mascotId = capturedWorldMascot.id;
         await registerPokemonDiscovery({ playerId: player.id, pokemonId: encounter.pokemonId, source: `world:${encounter.locationId}` }, tx);
       }
-      await tx.worldPlayerState.update({
-        where: { playerId: player.id },
-        data: { inventoryJson: { ...inventory, pokeBalls: pokeBalls - 1 } as Prisma.InputJsonValue },
-      });
-      const status: WorldEncounterStatus = captured ? "CAPTURED" : "FAILED";
-      await tx.worldEncounterSession.update({ where: { id: encounter.id }, data: { status, roll, mascotId, resolvedAt: new Date() } });
+      // Enquanto o modo está restrito ao admin, Poké Balls são ilimitadas para
+      // teste, mas ao menos uma precisa estar fisicamente na mochila.
+      const status: WorldEncounterStatus = captured ? "CAPTURED" : "ACTIVE";
+      await tx.worldEncounterSession.update({ where: { id: encounter.id }, data: { status, roll, mascotId, resolvedAt: captured ? new Date() : null } });
       return { captured, escaped: false };
     });
     revalidatePath("/mundo");
@@ -605,17 +615,18 @@ export async function restAtWorldCenterAction() {
   }
 }
 
-export async function buyWorldMartItemAction(itemId: string, quantity: number) {
+export async function buyWorldMartItemAction(itemId: string, quantity: number, currency: "ZC" | "LC" = "ZC") {
   try {
     const player = await adminPlayer();
-    const item = KANTO_MVP_MART_BY_ID.get(itemId as "pokeBalls" | "potions" | "antidotes");
+    const item = KANTO_MVP_MART_BY_ID.get(itemId as "pokeBalls" | "potions" | "megaPotions" | "antidotes");
     const safeQuantity = Math.floor(quantity);
     if (!item || safeQuantity < 1 || safeQuantity > 20) throw new Error("Compra inválida.");
-    const total = item.price * safeQuantity;
+    const total = (currency === "LC" ? item.ligaCashPrice : item.price) * safeQuantity;
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`world:${player.id}`}))`;
       const state = await requireAvailableWorldService(player.id, "MART", tx);
-      await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -total, description: `World Mode: ${safeQuantity}x ${item.name}` });
+      if (currency === "LC") await changeLigaCash(tx, { playerId: player.id, amount: -total, spentDelta: total, reason: "WORLD_MODE_PURCHASE", referenceType: "WorldMart", referenceId: item.id });
+      else await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -total, description: `World Mode: ${safeQuantity}x ${item.name}` });
       const inventory = (state.inventoryJson ?? {}) as Record<string, unknown>;
       const chest = (state.chestJson ?? {}) as Record<string, unknown>;
       const freeSlots = Math.max(0, state.backpackCapacity - inventorySize(state.inventoryJson));

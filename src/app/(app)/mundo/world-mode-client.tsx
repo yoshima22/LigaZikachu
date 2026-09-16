@@ -46,6 +46,7 @@ import {
   startWorldAdventureAction,
   startWorldTravelAction,
   useWorldItemAction,
+  setWorldMascotBaseAction,
 } from "./actions";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
 import { worldModeAsset } from "@/world-data/assets";
@@ -58,6 +59,8 @@ type WorldMascot = {
   sprite: string;
   level: number;
   personality: string;
+  mainMascotId: string | null;
+  baseOptions: Array<{ id: string; label: string }>;
   posture: string;
   stats: {
     force: number;
@@ -88,7 +91,7 @@ type State = {
   badges: string[];
   defeatedTrainerIds: string[];
   fatigue: number;
-  inventory: { pokeBalls?: number; potions?: number; antidotes?: number };
+  inventory: { pokeBalls?: number; potions?: number; megaPotions?: number; antidotes?: number };
   chest: Record<string, number>;
   backpackCapacity: number;
   travelingToId: string | null;
@@ -176,11 +179,12 @@ function remainingLabel(endsAt: string | null, now: number) {
   return `${String(minutes).padStart(2, "0")}:${String(seconds % 60).padStart(2, "0")}`;
 }
 
-export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, trainers, battles, partyMascots, starters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[]; starters: Starter[] }) {
+export function WorldModeClient({ locations, initialState, encounters, martItems, zikaCoins, ligaCash, trainers, battles, partyMascots, starters }: { locations: Location[]; initialState: State; encounters: { active: Encounter | null; history: Encounter[] }; martItems: WorldMartItem[]; zikaCoins: number; ligaCash: number; trainers: Trainer[]; battles: Battle[]; partyMascots: PartyMascot[]; starters: Starter[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selectedId, setSelectedId] = useState(initialState?.currentLocationId ?? "pallet-town");
   const [fighterId, setFighterId] = useState(partyMascots.find((mascot) => mascot.hp > 0)?.id ?? "");
+  const [ballId, setBallId] = useState<"pokeBalls">("pokeBalls");
   const [now, setNow] = useState(Date.now());
   useEffect(() => {
     if (!initialState?.travelEndsAt) return;
@@ -190,6 +194,11 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
     }, 1000);
     return () => window.clearInterval(timer);
   }, [initialState?.travelEndsAt, router]);
+  useEffect(() => {
+    if (!partyMascots.some((mascot) => mascot.id === fighterId && mascot.hp > 0)) {
+      setFighterId(partyMascots.find((mascot) => mascot.hp > 0)?.id ?? "");
+    }
+  }, [partyMascots, fighterId]);
   const byId = useMemo(() => new Map(locations.map((location) => [location.id, location])), [locations]);
   const selected = byId.get(selectedId) ?? locations[0];
   const current = initialState ? byId.get(initialState.currentLocationId) : null;
@@ -243,6 +252,10 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         </div>
       </header>
 
+      <nav className="sticky top-2 z-40 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-slate-950/90 p-1.5 shadow-xl backdrop-blur">
+        {[["#world-map","Mapa"],["#world-expedition","Expedição"],["#world-team","Equipe"],["#world-inventory","Mochila e baú"],["#world-roster","Mascotes"]].map(([href,label])=><a key={href} href={href} className="whitespace-nowrap rounded-xl px-4 py-2 text-[10px] font-black text-slate-300 hover:bg-cyan-300/10 hover:text-cyan-200">{label}</a>)}
+      </nav>
+
       {initialState.travelingToId && (
         <section className="rounded-3xl border border-cyan-300/25 bg-[linear-gradient(120deg,rgba(6,182,212,.14),rgba(15,23,42,.92))] p-5">
           <div className="flex flex-wrap items-center justify-between gap-4">
@@ -255,7 +268,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         </section>
       )}
 
-      <div className="grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]">
+      <div id="world-map" className="scroll-mt-20 grid gap-5 xl:grid-cols-[minmax(0,1.55fr)_minmax(340px,.75fr)]">
         <section className="relative min-h-[620px] overflow-hidden rounded-[2rem] border border-cyan-300/15 bg-[radial-gradient(circle_at_25%_70%,rgba(16,185,129,.16),transparent_30%),radial-gradient(circle_at_70%_20%,rgba(56,189,248,.13),transparent_35%),#050c16]">
           <div className="absolute inset-0 bg-cover bg-center opacity-65" style={{ backgroundImage: `url(${worldModeAsset("kanto-regional-map.webp")})` }} />
           <div className="absolute inset-0 bg-gradient-to-b from-slate-950/35 via-slate-950/15 to-slate-950/70" />
@@ -303,7 +316,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
       </div>
 
       {current?.activities.includes("EXPLORE") && !initialState.travelingToId && (
-        <section className="relative overflow-hidden rounded-[2rem] border border-emerald-300/15 bg-[#060d17]">
+        <section id="world-expedition" className="scroll-mt-20 relative overflow-hidden rounded-[2rem] border border-emerald-300/15 bg-[#060d17]">
           <div className="absolute inset-0 bg-cover bg-center opacity-30" style={{ backgroundImage: `url(${encounterBackdrop})` }} />
           <div className="absolute inset-0 bg-gradient-to-r from-[#060d17]/95 via-[#060d17]/80 to-[#060d17]/55" />
           <div className="relative">
@@ -344,7 +357,8 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
                 <label className="mt-4 block max-w-sm text-[9px] font-black uppercase tracking-widest text-cyan-200">Mascote ativo<select value={fighterId} onChange={(event) => setFighterId(event.target.value)} className="mt-1.5 w-full rounded-xl border border-cyan-300/20 bg-slate-950 px-3 py-2.5 text-xs normal-case tracking-normal text-white">{partyMascots.filter((mascot) => mascot.hp > 0).map((mascot) => <option key={mascot.id} value={mascot.id}>{mascot.name} · Nv.{mascot.level} · {mascot.hp}/{mascot.maxHp} HP</option>)}</select></label>
                 <div className="mt-5 flex flex-wrap gap-3">
                   <button disabled={pending || !fighterId} onClick={() => act(() => battleWildAction(encounters.active!.id, fighterId), "Turno de combate resolvido." )} className="rounded-xl bg-gradient-to-r from-cyan-300 to-emerald-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40"><Swords className="mr-1.5 inline h-4 w-4" />Atacar</button>
-                  <button disabled={pending || (initialState.inventory.pokeBalls ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE"), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Usar Poké Ball · {encounters.active.effectiveChance ?? encounters.active.captureChance}%</button>
+                  <label className="rounded-xl border border-amber-300/20 bg-slate-950 px-3 py-2 text-[9px] font-black uppercase text-amber-200">Poké Ball<select value={ballId} onChange={(event) => setBallId(event.target.value as "pokeBalls")} className="ml-2 bg-transparent text-xs normal-case text-white"><option value="pokeBalls">Comum · {initialState.inventory.pokeBalls ?? 0} na mochila</option></select></label>
+                  <button disabled={pending || (initialState.inventory[ballId] ?? 0) < 1} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "CAPTURE", ballId), "Tentativa de captura resolvida." )} className="rounded-xl bg-gradient-to-r from-amber-300 to-orange-300 px-5 py-3 text-xs font-black text-slate-950 disabled:opacity-40">Lançar · {encounters.active.effectiveChance ?? encounters.active.captureChance}% <small className="block text-[8px]">∞ no teste; exige 1 carregada</small></button>
                   <button disabled={pending} onClick={() => act(() => resolveWorldEncounterAction(encounters.active!.id, "ESCAPE"), "Você deixou o mascote seguir seu caminho." )} className="rounded-xl border border-white/10 bg-white/[.04] px-5 py-3 text-xs font-black text-slate-200">Fugir</button>
                 </div>
               </div>
@@ -375,8 +389,8 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
           )}
           {current.services.includes("MART") && (
             <div className="rounded-[2rem] border border-amber-300/15 bg-cover bg-center p-6" style={{ backgroundImage: `linear-gradient(90deg,rgba(8,13,24,.94),rgba(8,13,24,.76)),url(${worldModeAsset("regional-shop.webp")})` }}>
-              <div className="flex items-center justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-amber-300">Poké Mart</span><h2 className="text-2xl font-black text-white">Suprimentos de viagem</h2></div><span className="rounded-xl border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-xs font-black text-amber-200">{zikaCoins.toLocaleString("pt-BR")} ZC</span></div>
-              <div className="mt-4 space-y-2">{martItems.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[.025] p-3"><div><b className="text-xs text-white">{item.name}</b><p className="mt-0.5 text-[9px] text-slate-500">{item.description}</p></div><button disabled={pending || zikaCoins < item.price} onClick={() => act(() => buyWorldMartItemAction(item.id, 1), `${item.name} adicionado à mochila.`)} className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-3 py-2 text-[10px] font-black text-amber-200 disabled:opacity-35"><ShoppingBasket className="mr-1 inline h-3.5 w-3.5" />{item.price} ZC</button></div>)}</div>
+              <div className="flex items-center justify-between gap-3"><div><span className="text-[9px] font-black uppercase tracking-[.2em] text-amber-300">Poké Mart</span><h2 className="text-2xl font-black text-white">Suprimentos de viagem</h2></div><div className="flex gap-2"><span className="rounded-xl border border-amber-300/15 bg-amber-300/5 px-3 py-2 text-xs font-black text-amber-200">{zikaCoins.toLocaleString("pt-BR")} ZC</span><span className="rounded-xl border border-cyan-300/15 bg-cyan-300/5 px-3 py-2 text-xs font-black text-cyan-200">{ligaCash.toLocaleString("pt-BR")} LC</span></div></div>
+              <div className="mt-4 space-y-2">{martItems.map((item) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl border border-white/5 bg-white/[.025] p-3"><div><b className="text-xs text-white">{item.name}</b><p className="mt-0.5 text-[9px] text-slate-500">{item.description}</p></div><div className="flex gap-1"><button disabled={pending || zikaCoins < item.price} onClick={() => act(() => buyWorldMartItemAction(item.id, 1, "ZC"), `${item.name} adicionado à carga.`)} className="shrink-0 rounded-lg border border-amber-300/20 bg-amber-300/10 px-2.5 py-2 text-[9px] font-black text-amber-200 disabled:opacity-35"><ShoppingBasket className="mr-1 inline h-3 w-3" />{item.price} ZC</button><button disabled={pending || ligaCash < item.ligaCashPrice} onClick={() => act(() => buyWorldMartItemAction(item.id, 1, "LC"), `${item.name} adicionado à carga.`)} className="shrink-0 rounded-lg border border-cyan-300/20 bg-cyan-300/10 px-2.5 py-2 text-[9px] font-black text-cyan-200 disabled:opacity-35">{item.ligaCashPrice} LC</button></div></div>)}</div>
               <p className="mt-3 text-[9px] text-slate-600">Preços provisórios do protótipo, centralizados na configuração de Kanto.</p>
             </div>
           )}
@@ -420,6 +434,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         initialParty={initialState.party}
         partyMascots={partyMascots}
         potions={initialState.inventory.potions ?? 0}
+        megaPotions={initialState.inventory.megaPotions ?? 0}
         antidotes={initialState.inventory.antidotes ?? 0}
         onSaved={() => router.refresh()}
       />
@@ -430,7 +445,7 @@ export function WorldModeClient({ locations, initialState, encounters, martItems
         capacity={initialState.backpackCapacity}
         safe={Boolean(current?.services.some((service) => service === "CENTER" || service === "STORAGE")) && !initialState.travelingToId}
       />
-      <WorldRosterPanel />
+      <div id="world-roster" className="scroll-mt-20"><WorldRosterPanel /></div>
 
       <section className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-4">
         <div className="flex flex-wrap gap-3 text-[10px] text-slate-300"><span><Backpack className="mr-1 inline h-3.5 w-3.5 text-amber-300" />{initialState.inventory.pokeBalls ?? 0} Poké Balls</span><span><FlaskConical className="mr-1 inline h-3.5 w-3.5 text-emerald-300" />{initialState.inventory.potions ?? 0} Potions</span><span><Clock3 className="mr-1 inline h-3.5 w-3.5 text-cyan-300" />Chegada resolvida sob demanda, sem cron contínuo</span></div>
@@ -475,7 +490,7 @@ function WorldRosterPanel() {
 function WorldInventoryPanel({ inventory, chest, capacity, safe }: { inventory: Record<string, number | undefined>; chest: Record<string, number>; capacity: number; safe: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const labels: Record<string, string> = { pokeBalls: "Poké Balls", potions: "Potions", antidotes: "Antídotos" };
+  const labels: Record<string, string> = { pokeBalls: "Poké Balls", potions: "Potions", megaPotions: "Mega Potions", antidotes: "Antídotos" };
   const used = Object.values(inventory).reduce<number>((sum, amount) => sum + Math.max(0, Number(amount) || 0), 0);
   const keys = Array.from(new Set([...Object.keys(inventory), ...Object.keys(chest)])).filter((key) => (inventory[key] ?? 0) > 0 || (chest[key] ?? 0) > 0);
   const move = (itemId: string, direction: "TO_CHEST" | "TO_BACKPACK") => start(async () => {
@@ -484,11 +499,13 @@ function WorldInventoryPanel({ inventory, chest, capacity, safe }: { inventory: 
     else router.refresh();
   });
   const backpackImage = capacity >= 40 ? "backpack-expedition.webp" : capacity >= 24 ? "backpack-medium.webp" : "backpack-small.webp";
-  return <section className="relative overflow-hidden rounded-[2rem] border border-amber-300/15 bg-[#080d17] p-5 md:p-7">
-    <div className="absolute inset-0 bg-cover bg-center opacity-15" style={{ backgroundImage: `url(${worldModeAsset("safe-storage.webp")})` }} />
-    <div className="relative flex flex-wrap items-end justify-between gap-3"><div className="flex items-center gap-4"><img src={worldModeAsset(backpackImage)} alt="Mochila equipada" className="h-20 w-20 object-contain" /><div><span className="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Logística da expedição</span><h2 className="mt-1 text-2xl font-black text-white">Mochila e baú seguro</h2><p className="mt-1 text-xs text-slate-400">Você só usa o que carrega. O baú pode ser acessado em Centros e áreas com armazenamento.</p></div></div><div className="flex items-center gap-2"><img src={worldModeAsset(`storage-chest-${safe ? "open" : "closed"}.webp`)} alt="Baú seguro" className="h-16 w-20 object-contain" /><b className="rounded-full bg-amber-300/10 px-3 py-1.5 text-xs text-amber-200">{used}/{capacity} espaços</b></div></div>
-    <div className="relative mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{keys.map((key) => <div key={key} className="rounded-xl border border-white/8 bg-slate-950/75 p-3"><b className="text-xs text-white">{labels[key] ?? key}</b><div className="mt-2 flex items-center justify-between text-[10px] text-slate-400"><span>Mochila: {inventory[key] ?? 0}</span><span>Baú: {chest[key] ?? 0}</span></div><div className="mt-2 grid grid-cols-2 gap-1"><button disabled={pending || !safe || (inventory[key] ?? 0) < 1} onClick={() => move(key, "TO_CHEST")} className="rounded-lg border border-white/10 px-2 py-1.5 text-[9px] font-bold text-slate-300 disabled:opacity-30">Guardar 1</button><button disabled={pending || !safe || (chest[key] ?? 0) < 1 || used >= capacity} onClick={() => move(key, "TO_BACKPACK")} className="rounded-lg border border-amber-300/20 px-2 py-1.5 text-[9px] font-bold text-amber-200 disabled:opacity-30">Levar 1</button></div></div>)}</div>
-    {!safe && <p className="relative mt-3 text-[10px] text-slate-500">Encontre uma área segura para abrir o baú e reorganizar a carga.</p>}
+  return <section id="world-inventory" className="scroll-mt-20 rounded-[2rem] border border-amber-300/15 bg-[#080d17] p-5 md:p-7">
+    <div><span className="text-[9px] font-black uppercase tracking-[.22em] text-amber-300">Logística da expedição</span><h2 className="mt-1 text-2xl font-black text-white">Carga da viagem</h2><p className="mt-1 text-xs text-slate-400">Somente a coluna da mochila acompanha você e pode ser usada em campo.</p></div>
+    <div className="mt-5 grid gap-4 lg:grid-cols-2">
+      <article className="rounded-3xl border border-amber-300/20 bg-amber-300/[.04] p-4"><div className="flex items-center gap-3"><img src={worldModeAsset(backpackImage)} alt="Mochila equipada" className="h-20 w-20 object-contain"/><div className="flex-1"><p className="text-[9px] font-black uppercase tracking-widest text-amber-300">Na mochila · disponível em campo</p><b className="text-xl text-white">{used}/{capacity} espaços usados</b><div className="mt-2 h-2 overflow-hidden rounded-full bg-white/10"><span className="block h-full bg-gradient-to-r from-amber-300 to-orange-400" style={{width:`${Math.min(100,used/capacity*100)}%`}}/></div></div></div><div className="mt-3 space-y-2">{keys.map((key)=><div key={key} className="flex items-center justify-between rounded-xl bg-slate-950/70 p-3"><span className="text-xs font-bold text-white">{labels[key]??key} <b className="ml-1 text-amber-200">×{inventory[key]??0}</b></span><button disabled={pending||!safe||(inventory[key]??0)<1} onClick={()=>move(key,"TO_CHEST")} className="rounded-lg border border-white/10 px-2 py-1 text-[9px] disabled:opacity-30">Guardar no baú</button></div>)}</div></article>
+      <article className="relative overflow-hidden rounded-3xl border border-cyan-300/15 bg-cyan-300/[.03] p-4"><div className="absolute inset-0 bg-cover bg-center opacity-10" style={{backgroundImage:`url(${worldModeAsset("safe-storage.webp")})`}}/><div className="relative flex items-center gap-3"><img src={worldModeAsset(`storage-chest-${safe?"open":"closed"}.webp`)} alt="Baú seguro" className="h-20 w-24 object-contain"/><div><p className="text-[9px] font-black uppercase tracking-widest text-cyan-300">No baú · fica na cidade</p><b className="text-xl text-white">Armazenamento seguro</b><p className="text-[10px] text-slate-400">{safe?"Aberto nesta área segura.":"Indisponível fora da cidade."}</p></div></div><div className="relative mt-3 space-y-2">{keys.map((key)=><div key={key} className="flex items-center justify-between rounded-xl bg-slate-950/75 p-3"><span className="text-xs font-bold text-white">{labels[key]??key} <b className="ml-1 text-cyan-200">×{chest[key]??0}</b></span><button disabled={pending||!safe||(chest[key]??0)<1||used>=capacity} onClick={()=>move(key,"TO_BACKPACK")} className="rounded-lg border border-cyan-300/20 px-2 py-1 text-[9px] text-cyan-200 disabled:opacity-30">Levar na mochila</button></div>)}</div></article>
+    </div>
+    {!safe && <p className="mt-3 text-[10px] text-slate-500">Visite uma cidade com Centro ou armazenamento para reorganizar a carga.</p>}
   </section>;
 }
 
@@ -496,23 +513,25 @@ function WorldPartyPanel({
   initialParty,
   partyMascots,
   potions,
+  megaPotions,
   antidotes,
   onSaved,
 }: {
   initialParty: PartyEntry[];
   partyMascots: PartyMascot[];
   potions: number;
+  megaPotions: number;
   antidotes: number;
   onSaved: () => void;
 }) {
   const [pending, start] = useTransition();
   const router = useRouter();
-  const useItem = (kind: "POTION" | "ANTIDOTE", mascotId: string) =>
+  const useItem = (kind: "POTION" | "MEGA_POTION" | "ANTIDOTE", mascotId: string) =>
     start(async () => {
       const result = await useWorldItemAction(kind, mascotId);
       if (!result.ok) toast.error(result.error ?? "Falha ao usar item.");
       else {
-        toast.success(kind === "POTION" ? "Potion usada." : "Antídoto aplicado.");
+        toast.success(kind === "ANTIDOTE" ? "Antídoto aplicado." : kind === "MEGA_POTION" ? "Mega Potion usada." : "Potion usada.");
         router.refresh();
       }
     });
@@ -570,7 +589,7 @@ function WorldPartyPanel({
       }
     });
   return (
-    <section className="rounded-[2rem] border border-emerald-300/15 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,.1),transparent_45%),#070d17] p-5 md:p-7">
+    <section id="world-team" className="scroll-mt-20 rounded-[2rem] border border-emerald-300/15 bg-[radial-gradient(circle_at_top_left,rgba(16,185,129,.1),transparent_45%),#070d17] p-5 md:p-7">
       <div className="flex flex-wrap items-center justify-between gap-3">
         <div>
           <span className="text-[9px] font-black uppercase tracking-[.22em] text-emerald-300">
@@ -646,6 +665,7 @@ function WorldPartyPanel({
                   >
                     Potion (+{60}) · {potions}
                   </button>
+                  <button disabled={pending || megaPotions < 1 || m.hp >= m.maxHp} onClick={() => useItem("MEGA_POTION", m.id)} className="flex-1 rounded-lg border border-cyan-300/25 bg-cyan-300/10 px-2 py-1.5 text-[9px] font-black text-cyan-200 disabled:opacity-35">Mega (+180) · {megaPotions}</button>
                   <button
                     disabled={pending || antidotes < 1 || !m.poisoned}
                     onClick={() => useItem("ANTIDOTE", m.id)}
@@ -746,13 +766,11 @@ function WorldPartyPanel({
                     const picked = inParty(m.id);
                     const full = party.length >= 6 && !picked;
                     return (
-                      <button
+                      <div
                         key={m.id}
-                        disabled={full}
-                        onClick={() => toggle(m)}
                         className={`rounded-xl border p-2 text-left transition disabled:opacity-40 ${picked ? "border-emerald-400 bg-emerald-400/10" : "border-slate-800 bg-slate-950 hover:border-slate-600"}`}
                       >
-                        <div className="flex items-center gap-2">
+                        <button disabled={full} onClick={() => toggle(m)} className="flex w-full items-center gap-2 text-left disabled:opacity-40">
                           <img
                             src={m.sprite}
                             alt=""
@@ -766,8 +784,9 @@ function WorldPartyPanel({
                               Nv.{m.level} · {getCombatRoleLabel(m.posture)}
                             </span>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                        <label className="mt-2 block text-[8px] font-black uppercase tracking-wide text-slate-500">Mascote-base<select value={m.mainMascotId ?? ""} disabled={!m.baseOptions.length || pending} onChange={(event) => start(async()=>{const result=await setWorldMascotBaseAction(m.id,event.target.value); if(!result.ok) toast.error(result.error); else {toast.success("Referência atualizada."); setMascots((rows)=>rows.map((row)=>row.id===m.id?{...row,mainMascotId:event.target.value}:row));}})} className="mt-1 w-full rounded-md border border-white/10 bg-slate-900 px-1.5 py-1 text-[9px] normal-case text-slate-300"><option value="">Escolha uma referência</option>{m.baseOptions.map((option)=><option key={option.id} value={option.id}>{option.label}</option>)}</select></label>
+                      </div>
                     );
                   })}
                 </div>

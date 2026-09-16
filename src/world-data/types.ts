@@ -58,8 +58,9 @@ export type WorldLocationConfig = {
 };
 
 export type WorldMartItem = {
-  id: "pokeBalls" | "potions" | "antidotes";
+  id: "pokeBalls" | "potions" | "megaPotions" | "antidotes";
   name: string;
   description: string;
   price: number;
+  ligaCashPrice: number;
 };
