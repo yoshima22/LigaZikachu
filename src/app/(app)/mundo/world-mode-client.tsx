@@ -473,7 +473,7 @@ function avatarOption(selection: WorldAvatarSelection, category: keyof WorldAvat
 }
 
 function WorldAvatarPreview({ selection, compact = false }: { selection: WorldAvatarSelection; compact?: boolean }) {
-  const selectedLayers = ["body", "bottom", "shoes", "top", "hair"]
+  const selectedLayers = ["body", "bottom", "top", "shoes", "hair"]
     .flatMap((category) => {
       const selected = avatarOption(selection, category as keyof WorldAvatarSelection);
       return (selected?.assetFiles ?? []).map((file) => ({ file }));

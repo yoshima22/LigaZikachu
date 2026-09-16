@@ -61,19 +61,22 @@ async function main() {
       // sempre ficam sob roupas para impedir ombros, quadril e coxas de vazarem
       // pelas aberturas das camadas, preservando cabeça, pescoço, mãos e braços.
       const clothingCutout = Buffer.from(`<svg width="1024" height="1536" xmlns="http://www.w3.org/2000/svg">
+        <ellipse cx="512" cy="245" rx="250" ry="145" fill="white"/>
         <path d="M330 650 L694 650 L724 875 L676 1065 L348 1065 L300 875 Z" fill="white"/>
         <path d="M330 900 L694 900 L790 1536 L234 1536 Z" fill="white"/>
       </svg>`);
       buffer = await sharp(buffer).composite([{ input: clothingCutout, blend: "dest-out" }]).png().toBuffer();
     }
-    if (id === "hair-brown") {
-      buffer = await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: buffer, left: 0, top: -75 }]).png().toBuffer();
-    }
     if (category === "hair") {
       const color = id === "hair-blue" ? "#243455" : id === "hair-blond" ? "#f2c863" : "#76503d";
+      const hairPlacement = id === "hair-brown"
+        ? [{ left: 160, top: 190, width: 710, height: 545 }, { left: 193, top: 105, width: 639, height: 491 }]
+        : id === "hair-blue"
+          ? [{ left: 169, top: 115, width: 669, height: 514 }, { left: 204, top: 100, width: 615, height: 473 }]
+          : [{ left: 197, top: 115, width: 618, height: 473 }, { left: 228, top: 100, width: 568, height: 435 }];
+      buffer = await placeCrop(buffer, hairPlacement[0], hairPlacement[1]);
       const scalp = Buffer.from(`<svg width="1024" height="1536" xmlns="http://www.w3.org/2000/svg">
-        <ellipse cx="512" cy="235" rx="242" ry="132" fill="#2b1714"/>
-        <ellipse cx="512" cy="238" rx="229" ry="119" fill="${color}"/>
+        <ellipse cx="512" cy="233" rx="216" ry="133" fill="${color}"/>
       </svg>`);
       buffer = await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).composite([{ input: scalp }, { input: buffer }]).png().toBuffer();
     }
@@ -102,7 +105,7 @@ async function main() {
   }
   await fs.writeFile(path.join(output, "manifest.json"), JSON.stringify({ version: 1, canvas: { width: 1024, height: 1536 }, colorSpace: "sRGB", assets }, null, 2));
   const first = (category: string) => assets.find((asset) => asset.category === category)!.file;
-  await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 5, g: 12, b: 22, alpha: 1 } } }).composite(["body", "bottom", "shoes", "top", "hair"].map((category) => ({ input: path.join(output, first(category)) }))).png().toFile(path.join(output, "preview.png"));
+  await sharp({ create: { width: 1024, height: 1536, channels: 4, background: { r: 5, g: 12, b: 22, alpha: 1 } } }).composite(["body", "bottom", "top", "shoes", "hair"].map((category) => ({ input: path.join(output, first(category)) }))).png().toFile(path.join(output, "preview.png"));
 }
 
 main().catch((error) => { console.error(error); process.exit(1); });

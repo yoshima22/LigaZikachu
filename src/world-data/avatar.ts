@@ -1,5 +1,5 @@
 export const WORLD_AVATAR_STORAGE_BASE =
-  "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/world-mode/avatars/chibi-v2";
+  "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/world-mode/avatars/chibi-v3";
 
 export const WORLD_AVATAR_CATEGORIES = ["body", "hair", "top", "bottom", "shoes"] as const;
 

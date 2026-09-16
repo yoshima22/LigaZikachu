@@ -21,7 +21,7 @@ async function main() {
   await loadEnvFile(".env.local");
   await loadEnvFile(".env");
   const source = path.resolve(process.argv[2] || ".asset-staging/world-avatar-test");
-  const target = (process.argv[3] || "world-mode/avatars/chibi-v2").replace(/^\/+|\/+$/g, "");
+  const target = (process.argv[3] || "world-mode/avatars/chibi-v3").replace(/^\/+|\/+$/g, "");
   const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const serviceKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
   if (!supabaseUrl || !serviceKey) throw new Error("Storage do Supabase não configurado.");
