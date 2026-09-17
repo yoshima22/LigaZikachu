@@ -8,6 +8,12 @@ export const BONDS_V2_BALANCE = {
   nemesis: { maxScore: -80, damagePct: 8, directRounds: 3 },
   motivation: { activationsPerMascotPerDay: 1 },
   caps: { expeditionTimeReductionPct: 8, trainingExpPct: 10 },
+  publicSpaces: {
+    maxMascotsPerPlayer: 8,
+    maxMascotsPerPlayerInSameLocation: 3,
+    moveCooldownMinutes: 120,
+    automaticEventIntervalHours: 4,
+  },
 } as const;
 
 /** Bônus real isolado para contas administrativas durante a prévia. */

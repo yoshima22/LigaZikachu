@@ -19,6 +19,7 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { getWeeklyTeamEditWindow, WEEKLY_TEAM_LOCK_MESSAGE } from "./team-edit-window";
 import { isMegaEvolvedMascot, type MegaCandidate } from "@/lib/battle-divisions";
 import { getBattleModeDivision } from "@/lib/battle-division-settings";
+import { getOpposingBondCombatEffects, getTeamBondCombatContext } from "@/lib/mascot-bonds";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -1324,7 +1325,8 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     }
 
     const [itemsA, itemsB] = await Promise.all([loadItems(pair.aId), loadItems(pair.bId!)]);
-    const result = runLeagueCombat(teamAMascots, teamBMascots, modifier, itemsA, itemsB, { weeklySabotage });
+    const [bondsA, bondsB, opposingBondEffects] = await Promise.all([getTeamBondCombatContext(teamAMascots.map((mascot) => mascot.id)), getTeamBondCombatContext(teamBMascots.map((mascot) => mascot.id)), getOpposingBondCombatEffects(teamAMascots.map((mascot) => mascot.id), teamBMascots.map((mascot) => mascot.id))]);
+    const result = runLeagueCombat(teamAMascots, teamBMascots, modifier, itemsA, itemsB, { weeklySabotage, bondLinks: [...bondsA.links, ...bondsB.links], opposingBondEffects });
 
     const winnerId = result.winner === "A" ? pair.aId : result.winner === "B" ? pair.bId : null;
     const loserId = result.winner === "A" ? pair.bId : result.winner === "B" ? pair.aId : null;
@@ -1510,7 +1512,8 @@ export async function regenerateReplaysAction(leagueId: string) {
 
       if (teamA.length < 6 || teamB.length < 6) continue;
 
-      const result = runLeagueCombat(teamA, teamB, modifier, [], [], { weeklySabotage });
+      const [bondsA, bondsB, opposingBondEffects] = await Promise.all([getTeamBondCombatContext(teamA.map((mascot) => mascot.id)), getTeamBondCombatContext(teamB.map((mascot) => mascot.id)), getOpposingBondCombatEffects(teamA.map((mascot) => mascot.id), teamB.map((mascot) => mascot.id))]);
+      const result = runLeagueCombat(teamA, teamB, modifier, [], [], { weeklySabotage, bondLinks: [...bondsA.links, ...bondsB.links], opposingBondEffects });
 
       // Only update replay — keep winner, points, everything else untouched
       await prisma.weeklyMascotLeagueMatch.update({

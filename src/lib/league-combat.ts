@@ -5,6 +5,7 @@ import { debuffResistanceFactor } from "./personality-combat";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
+import type { BondCombatLink, OpposingBondCombatEffect } from "@/lib/mascot-bonds";
 
 // ── Types ──────────────────────────────────────────────────────────────────
 
@@ -53,6 +54,8 @@ export type LeagueCombatOptions = {
   // Limite de rodadas (World Mode: escaramuças curtas para enfraquecer o
   // selvagem antes da captura). Ausente = 150 (batalha completa).
   maxRounds?: number;
+  bondLinks?: BondCombatLink[];
+  opposingBondEffects?: OpposingBondCombatEffect[];
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -323,6 +326,27 @@ export function runLeagueCombat(
   b = appliedB.team;
 
   const log: ArenaTurnLog[] = [];
+  const bondLinks = options.bondLinks ?? [];
+  const opposingBondEffects = options.opposingBondEffects ?? [];
+  const opposingBondHits = new Map<string, number>();
+  for (const link of bondLinks) {
+    const first = [...a, ...b].find((mascot) => mascot.id === link.mascotAId);
+    const second = [...a, ...b].find((mascot) => mascot.id === link.mascotBId);
+    if (!first || !second) continue;
+    log.push({
+      turn: 0, actorId: first.id, actorName: first.name, actorOwnerId: first.ownerId, actorPokemonId: first.pokemonId, actorLevel: first.level,
+      targetId: second.id, targetName: second.name, targetOwnerId: second.ownerId, targetPokemonId: second.pokemonId, targetLevel: second.level,
+      action: "DEFEND", damage: 0, attackerType: elementOf(first), defenderType: elementOf(second), multiplier: 1, advantageApplied: false,
+      actorRole: getCombatRoleLabel(first.combatRole), targetRole: getCombatRoleLabel(second.combatRole),
+      effect: `LAÇO:${link.kind}:${link.label}: +${link.damagePct}% de dano${link.defensePct ? ` e -${link.defensePct}% de dano recebido` : ""}.`,
+    });
+  }
+  for (const effect of opposingBondEffects) {
+    const first = [...a, ...b].find((mascot) => mascot.id === effect.attackerId);
+    const second = [...a, ...b].find((mascot) => mascot.id === effect.targetId);
+    if (!first || !second) continue;
+    log.push({ turn: 0, actorId: first.id, actorName: first.name, actorOwnerId: first.ownerId, actorPokemonId: first.pokemonId, actorLevel: first.level, targetId: second.id, targetName: second.name, targetOwnerId: second.ownerId, targetPokemonId: second.pokemonId, targetLevel: second.level, action: "DEFEND", damage: 0, attackerType: elementOf(first), defenderType: elementOf(second), multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(first.combatRole), targetRole: getCombatRoleLabel(second.combatRole), effect: `LAÇO:OPONENTES:${effect.label}: ${effect.damagePct > 0 ? "+" : ""}${effect.damagePct}% de dano${effect.directHitLimit ? ` nos ${effect.directHitLimit} primeiro(s) confronto(s) direto(s)` : " contra este mascote"}.` });
+  }
   if (options.weeklySabotage) {
     const percent = Math.round((1 - options.weeklySabotage.statMultiplier) * 100);
     const slots = options.weeklySabotage.affectedSlots.join(", ");
@@ -560,6 +584,17 @@ export function runLeagueCombat(
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
+      const offensiveBond = bondLinks.find((link) => (link.mascotAId === actor.id || link.mascotBId === actor.id) && (hp.get(link.mascotAId === actor.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
+      const defensiveBond = bondLinks.find((link) => link.defensePct > 0 && (link.mascotAId === target.id || link.mascotBId === target.id) && (hp.get(link.mascotAId === target.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
+      if (offensiveBond) damage = Math.max(1, Math.round(damage * (1 + offensiveBond.damagePct / 100)));
+      if (defensiveBond) damage = Math.max(1, Math.round(damage * (1 - defensiveBond.defensePct / 100)));
+      const opposingBond = opposingBondEffects.find((effect) => effect.attackerId === actor.id && effect.targetId === target.id);
+      if (opposingBond) {
+        const key = `${actor.id}:${target.id}`;
+        const hits = opposingBondHits.get(key) ?? 0;
+        if (opposingBond.directHitLimit === null || hits < opposingBond.directHitLimit) damage = Math.max(1, Math.round(damage * (1 + opposingBond.damagePct / 100)));
+        opposingBondHits.set(key, hits + 1);
+      }
       if (chaosCritical) damage = Math.max(1, Math.round(damage * 1.5));
       if (provoked) damage = Math.round(damage * 0.92);
 

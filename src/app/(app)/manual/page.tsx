@@ -6,6 +6,13 @@ import { EditableText } from "./_components/EditableText";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
 import { PERSONALITY_DESIGN, STAT_LABEL, DEBUFF_RESISTANCE, ROLE_EFFECT_ATTRIBUTES } from "@/lib/personality-design";
+import {
+  EXP_REWARDS,
+  RARE_SWEET_EXP_MULTIPLIER,
+  TRAINING_EXP_MULT,
+  expForLevel,
+  totalExpForLevel,
+} from "@/lib/mascot-data";
 
 function Section({ id, title, emoji, children }: { id: string; title: string; emoji: string; children: React.ReactNode }) {
   return (
@@ -56,6 +63,38 @@ function Note({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2 text-xs text-slate-400">
       <span className="text-[#FFCB05] font-semibold">ℹ </span>{children}
+    </div>
+  );
+}
+
+const EXP_LEVEL_RANGES = [
+  { label: "Níveis 2–25", start: 2, end: 25 },
+  { label: "Níveis 26–50", start: 26, end: 50 },
+  { label: "Níveis 51–75", start: 51, end: 75 },
+  { label: "Níveis 76–100", start: 76, end: 100 },
+] as const;
+
+const formatExp = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
+
+function ExpProgressionTable() {
+  return (
+    <div className="grid gap-2 sm:grid-cols-2">
+      {EXP_LEVEL_RANGES.map((range, index) => (
+        <details key={range.label} open={index === 0} className="group rounded-xl border border-border bg-slate-950/50">
+          <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-slate-200 marker:text-[#FFCB05]">
+            {range.label}
+          </summary>
+          <div className="max-h-80 overflow-y-auto border-t border-border/60">
+            <Table
+              headers={["Nível alcançado", "EXP necessária", "Total acumulado"]}
+              rows={Array.from({ length: range.end - range.start + 1 }, (_, offset) => {
+                const level = range.start + offset;
+                return [level, formatExp(expForLevel(level)), formatExp(totalExpForLevel(level))];
+              })}
+            />
+          </div>
+        </details>
+      ))}
     </div>
   );
 }
@@ -120,34 +159,31 @@ export default async function ManualPage() {
       <Section id="mascotes" title="Mascotes & EXP" emoji="⚡">
         <Sub title="Como o EXP funciona">
           {ET("mascotes.intro", "text-xs text-slate-400")}
-          <Table
-            headers={["Nível", "EXP p/ próximo", "EXP total acumulado"]}
-            rows={[
-              [1, 120, 0],
-              [2, 140, 120],
-              [5, 200, 700],
-              [10, 300, 2200],
-              [15, 400, 4700],
-              [20, 500, 8200],
-            ]}
-          />
+          <p className="text-xs text-slate-500">
+            A tabela mostra quanto é necessário para alcançar cada nível e o total acumulado desde o nível 1. Abra cada faixa para consultar até o nível 100.
+          </p>
+          <ExpProgressionTable />
         </Sub>
 
         <Sub title="Fontes de EXP (base, sem bônus)">
           <Table
             headers={["Atividade", "EXP base"]}
             rows={[
-              ["Partida TCG jogada", 15],
-              ["Vitória em partida TCG", 35],
-              ["Vitória em sequência (streak)", 15],
-              ["Deck submetido à semana", 5],
-              ["Brincar com mascote", 25],
-              ["Acariciar mascote", 10],
-              ["Alimentar com comida", 15],
-              ["Alimentar com doce", 35],
-              ["Expedição concluída (base)", 50],
+              ["Partida TCG jogada (companheiro equipado)", EXP_REWARDS.MATCH_PLAYED],
+              ["Bônus adicional por vitória TCG", `+${EXP_REWARDS.MATCH_WIN} (vencedor recebe ${EXP_REWARDS.MATCH_PLAYED + EXP_REWARDS.MATCH_WIN} no total)`],
+              ["Deck submetido à semana (companheiro equipado)", EXP_REWARDS.DECK_SUBMITTED],
+              ["Brincar", `${EXP_REWARDS.PLAY_WITH} + 3 a cada 10 níveis`],
+              ["Acariciar", `${EXP_REWARDS.PET} + 1 a cada 10 níveis`],
+              ["Comida", `${EXP_REWARDS.FEED_FOOD} (antes de personalidade e bônus)`],
+              ["Doce", `${EXP_REWARDS.FEED_SWEET} (antes de personalidade e bônus)`],
+              ["Doce Raro", `${EXP_REWARDS.FEED_SWEET * RARE_SWEET_EXP_MULTIPLIER} (${RARE_SWEET_EXP_MULTIPLIER} doces)`],
+              ["Expedição Padrão — 30 min / 1 h / 3 h / 6 h", "25 / 60 / 160 / 350, antes dos bônus"],
+              ["Expedição de Treino — 30 min / 1 h / 3 h / 6 h", `${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["30min"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["1h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["3h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["6h"]}, antes dos bônus`],
             ]}
           />
+          <p className="text-[11px] leading-relaxed text-slate-500">
+            “Base” é o valor antes de posição, nível, personalidade, relações, itens e eventos. Expedições também aplicam bônus de nível, aliados, rivais e outros efeitos ativos.
+          </p>
         </Sub>
 
         <Sub title="Multiplicadores de EXP por posição">
@@ -156,7 +192,8 @@ export default async function ManualPage() {
             rows={[
               ["Companheiro Ativo (equipado)", "×1.5 em interações"],
               ["Equipe Favorita (favorito)", "×1.25 em interações"],
-              ["Banco (não favorito)", "×0.5 (expedições / batch)"],
+              ["Banco (não favorito)", "×1.0 em interações"],
+              ["Expedições", "Sem redução por posição"],
             ]}
           />
         </Sub>
@@ -191,23 +228,26 @@ export default async function ManualPage() {
           <Table
             headers={["Ação", "EXP base", "Felicidade", "Cooldown"]}
             rows={[
-              ["Brincar (PLAY)", 25, "+5 a +15", "45 min"],
-              ["Acariciar (PET)", 10, "+3 a +8", "30 min"],
-              ["Alimentar — Comida", 15, "+5 a +10", "2 h"],
-              ["Alimentar — Doce", 35, "+10 a +20", "2 h"],
+              ["Brincar", "25 + nível", "8 + nível", "45 min"],
+              ["Acariciar", "10 + nível", "5 + nível", "25 min"],
+              ["Alimentar — Comida", 15, "+25", "2 h"],
+              ["Alimentar — Doce", 35, "+35", "2 h"],
+              ["Alimentar — Doce Raro", 280, "+35", "2 h"],
             ]}
           />
+          <p className="text-[11px] text-slate-500">Nos valores “+ nível”, o bônus é calculado a cada 10 níveis. Personalidades podem alterar EXP, felicidade ou aceitação da interação.</p>
         </Sub>
         <Sub title="Bônus social (aliados e rivais)">
           {ET("interacoes.social", "text-xs text-slate-400")}
           <Table
             headers={["Relação", "Bônus de EXP"]}
             rows={[
-              ["Amigo (Friend)", "+5%"],
-              ["Melhor Amigo (Best Friend)", "+10%"],
-              ["Super Amigo", "+15%"],
-              ["Rival", "+5% por rival (máx +15%)"],
-              ["Rival Direto (3+ interações)", "+10% por rival direto"],
+              ["1 amizade ativa", "+5%"],
+              ["2 ou mais amizades ativas", "+10%"],
+              ["Possui Super Amigo", "+10% adicional"],
+              ["Possui rival", "+5%"],
+              ["Possui Rival Direto", "+10% no lugar dos +5%"],
+              ["Limite combinado", "+25%"],
             ]}
           />
         </Sub>

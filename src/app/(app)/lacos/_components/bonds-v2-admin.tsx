@@ -4,8 +4,9 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondDirectoryV2, BondsTutorial, RefugeLocationsTabs } from "./bonds-v2-controls";
+import { BondsV2SectionTabs, BondDirectoryV2, BondsTutorial, RefugeLocationsTabs } from "./bonds-v2-controls";
 import { ResolveBondOptionButton } from "./bond-actions";
+import { BOND_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
@@ -13,14 +14,14 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
-  const [mascots, publicRoutines, relations, memories, pendingEvents, recentEvents, settings] = await Promise.all([
+  const [mascots, publicRoutines, relations, memories, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
       take: 60,
       select: {
         id: true, pokemonId: true, nickname: true, level: true, personality: true,
-        routine: { select: { locationType: true } },
+        routine: { select: { locationType: true, status: true, startedAt: true, updatedAt: true } },
       },
     }),
     prisma.mascotRoutine.findMany({
@@ -28,7 +29,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: { lastProcessedAt: "desc" },
       take: 192,
       select: {
-        locationType: true,
+        locationType: true, startedAt: true, updatedAt: true,
         mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, personality: true, playerId: true, player: { select: { displayName: true } } } },
       },
     }),
@@ -43,9 +44,9 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     prisma.mascotBondMemory.findMany({
-      where: { OR: [{ mascotA: { playerId } }, { mascotB: { playerId } }] },
+      where: { sourceType: "REFUGE" },
       orderBy: { createdAt: "desc" },
-      take: 24,
+      take: 400,
       include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
     }),
     prisma.mascotSocialEvent.findMany({
@@ -56,6 +57,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     }),
     prisma.mascotSocialEvent.count({ where: { ownerId: playerId, createdAt: { gte: since } } }),
     prisma.siteContent.findUnique({ where: { id: "bonds-v2-settings" }, select: { data: true } }),
+    prisma.playerInventory.findMany({ where: { playerId, quantity: { gt: 0 }, item: { type: { in: [...BOND_SHOP_ITEM_TYPES] as never[] } } }, orderBy: { item: { sortOrder: "asc" } }, select: { quantity: true, item: { select: { id: true, type: true, name: true, description: true, rarity: true } } } }),
   ]);
 
   const rawSettings = settings?.data && typeof settings.data === "object" && !Array.isArray(settings.data)
@@ -74,7 +76,9 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     personality: mascot.personality,
     owner: "Você",
     own: true,
-    location: mascot.routine?.locationType ?? null,
+    location: mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType : null,
+    startedAt: mascot.routine?.status === "ACTIVE" ? mascot.routine.startedAt.toISOString() : null,
+    moveAvailableAt: mascot.routine ? new Date(mascot.routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString() : null,
   }));
   const bondItems = relations.map((relation) => ({
     id: relation.id,
@@ -117,13 +121,15 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       owner: routine.mascot.playerId === playerId ? "Você" : routine.mascot.player.displayName,
       own: routine.mascot.playerId === playerId,
       location,
+      startedAt: routine.startedAt.toISOString(),
+      moveAvailableAt: new Date(routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
     }));
     const stories = memories.filter((memory) => {
       const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
       return metadata.location === location;
-    }).slice(0, 3).map((memory) => {
+    }).slice(0, 100).map((memory) => {
       const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
-      return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) };
+      return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) };
     });
     return { location, occupants, backgroundUrl: typeof backgrounds[location] === "string" ? backgrounds[location] as string : "", stories };
   });
@@ -147,16 +153,32 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       </div>
     </header>
 
+    <BondsV2SectionTabs
+      pendingCount={pendingEvents.length}
+      bondCount={relations.length}
+      refuge={<>
     <section>
       <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-emerald-300">Espaços públicos e persistentes</p><h2 className="text-2xl font-black text-white">Explore o Refúgio</h2><p className="mt-1 max-w-3xl text-sm text-slate-400">Cada local favorece acontecimentos diferentes. Procure um mascote, envie-o para uma rotina e observe quem está dividindo o espaço com ele.</p></div>
       <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} />
     </section>
-
+      </>}
+      moments={<>
+    <section className="mb-5 rounded-3xl border border-violet-300/15 bg-violet-300/[.035] p-4"><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-violet-300">Recursos exclusivos e negociáveis</p><h2 className="text-lg font-black text-white">Sua bolsa de itens dos Laços</h2><p className="mt-1 text-xs text-slate-400">Produzidos pelos espaços públicos e consumidos nas decisões. Podem ser negociados no Bazar, mas não aparecem no Miauvadão ou em ofertas exclusivas.</p></div>{bondInventory.length === 0 ? <Empty text="Nenhum item de Laços ainda. As rotinas públicas podem produzir os primeiros recursos." /> : <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{bondInventory.map(({ item, quantity }) => <article key={item.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><div className="flex items-start gap-2"><span className="text-xl">{getShopItemEmoji(item.type)}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-xs font-bold text-white">{item.name}</p><span className="rounded-full bg-violet-300/10 px-2 py-0.5 text-[10px] font-black text-violet-200">×{quantity}</span></div><p className="mt-1 text-[10px] leading-4 text-slate-400">{item.description}</p></div></div></article>)}</div>}</section>
     <section>
       <div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Escolhas que mudam histórias</p><h2 className="text-xl font-black text-white">Momentos importantes</h2><p className="mt-1 text-xs text-slate-500">Acontecimentos comuns entram no diário. Somente decisões de impacto pedem sua intervenção.</p></div>
       {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <div className="grid gap-3 lg:grid-cols-2">{pendingEvents.map((event) => <article key={event.id} className="rounded-2xl border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,.07),rgba(15,23,42,.7))] p-4"><div className="flex items-center gap-3"><div className="flex -space-x-2"><img src={getSpriteUrl(event.mascotA.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />{event.mascotB && <img src={getSpriteUrl(event.mascotB.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />}</div><div><p className="text-[10px] uppercase tracking-wider text-amber-300">{event.sourceType} · {event.isImportant ? "momento decisivo" : "decisão social"}</p><h3 className="font-bold text-white">{event.title}</h3></div></div><p className="my-3 text-sm leading-6 text-slate-300">{event.description}</p><div className="grid gap-2">{normalizeBondOptions(event.optionsJson).map((option) => <ResolveBondOptionButton key={option.id} eventId={event.id} option={option} />)}</div></article>)}</div>}
     </section>
-
+      </>}
+      social={<>
+    <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
+      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-300">Além das duplas</p><h2 className="text-xl font-black text-white">Mapa social e outros treinadores</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">Grupos são leituras da rede de Laços Ativos, não um bônus separado. Eles ajudam a descobrir mascotes que conectam várias amizades e treinadores com quem sua coleção possui mais histórias.</p></div>
+      <div className="grid gap-5 lg:grid-cols-2">
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <article key={group.leader} className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.035] p-3"><div className="flex items-center gap-2"><img src={group.sprite} alt="" className="h-11 w-11 rounded-full bg-slate-900 object-contain" /><div><p className="text-xs font-black uppercase tracking-wider text-fuchsia-300">Ponto de encontro</p><p className="font-bold text-white">Círculo de {group.leader}</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{group.members.map((member) => <span key={member.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300"><img src={member.sprite} alt="" className="h-5 w-5 object-contain" />{member.name} · +{member.score}</span>)}</div></article>)}</div>}</div>
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3>{trainerComparisons.length === 0 ? <Empty text="Ainda não há outros treinadores para comparar." /> : <div className="space-y-2">{trainerComparisons.map((item) => { const average = Math.round(item.scoreTotal / Math.max(1, item.total)); return <div key={item.trainer} className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-white">{item.trainer}</p><p className="text-[10px] text-slate-500">{item.total} relações · média direcional {average > 0 ? "+" : ""}{average}</p></div><div className="flex gap-2 text-[10px]"><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-300">{item.friends} amizades</span><span className="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{item.rivals} rivalidades</span></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={average >= 0 ? "h-full bg-emerald-400" : "ml-auto h-full bg-rose-400"} style={{ width: `${Math.min(100, Math.max(8, Math.abs(average)))}%` }} /></div></div>; })}</div>}</div>
+      </div>
+    </section>
+      </>}
+      bonds={<div className="space-y-6">
     <section className="rounded-3xl border border-white/10 bg-slate-950/65 p-5">
       <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Consequência, não decoração</p><h2 className="text-xl font-black text-white">Impactos em teste</h2><p className="mt-1 text-xs text-slate-400">Valores experimentais da prévia administrativa. Bônus de amizade já podem ser validados em expedições e treinos sem afetar jogadores comuns.</p></div>
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-4">
@@ -167,18 +189,12 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       </div>
     </section>
 
-    <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
-      <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-cyan-300">Além das duplas</p><h2 className="text-xl font-black text-white">Mapa social e outros treinadores</h2><p className="mt-1 max-w-3xl text-xs leading-5 text-slate-400">Grupos são leituras da rede de Laços Ativos, não um bônus separado. Eles ajudam a descobrir mascotes que conectam várias amizades e treinadores com quem sua coleção possui mais histórias.</p></div>
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <article key={group.leader} className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.035] p-3"><div className="flex items-center gap-2"><img src={group.sprite} alt="" className="h-11 w-11 rounded-full bg-slate-900 object-contain" /><div><p className="text-xs font-black uppercase tracking-wider text-fuchsia-300">Ponto de encontro</p><p className="font-bold text-white">Círculo de {group.leader}</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{group.members.map((member) => <span key={member.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300"><img src={member.sprite} alt="" className="h-5 w-5 object-contain" />{member.name} · +{member.score}</span>)}</div></article>)}</div>}</div>
-        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3>{trainerComparisons.length === 0 ? <Empty text="Ainda não há outros treinadores para comparar." /> : <div className="space-y-2">{trainerComparisons.map((item) => { const average = Math.round(item.scoreTotal / Math.max(1, item.total)); return <div key={item.trainer} className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-white">{item.trainer}</p><p className="text-[10px] text-slate-500">{item.total} relações · média direcional {average > 0 ? "+" : ""}{average}</p></div><div className="flex gap-2 text-[10px]"><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-300">{item.friends} amizades</span><span className="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{item.rivals} rivalidades</span></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={average >= 0 ? "h-full bg-emerald-400" : "ml-auto h-full bg-rose-400"} style={{ width: `${Math.min(100, Math.max(8, Math.abs(average)))}%` }} /></div></div>; })}</div>}</div>
-      </div>
-    </section>
-
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
       <div><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-fuchsia-300">Rede social dos mascotes</p><h2 className="text-xl font-black text-white">Laços e efeitos</h2><p className="mt-1 text-xs text-slate-500">Relações são direcionais: o que um mascote sente pode não ser correspondido.</p></div><BondDirectoryV2 relations={bondItems} /></div>
       <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias do Refúgio</h2><p className="text-xs text-slate-500">O diário explica por que cada relação mudou.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{memories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : memories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{memory.sourceType} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
     </section>
+      </div>}
+    />
   </div>;
 }
 

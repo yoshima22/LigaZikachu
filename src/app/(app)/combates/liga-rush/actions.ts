@@ -12,6 +12,7 @@ import { normalizeBattleDivision, validateBattleDivision, evaluateBattleTeam } f
 import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
+import { getOpposingBondCombatEffects, getTeamBondCombatContext } from "@/lib/mascot-bonds";
 
 const PATH = "/combates/liga-rush";
 // Horários padrão (BRT). Ajustáveis pelo admin em rush-settings.data.
@@ -690,7 +691,8 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
       const rolesA = (teamA!.rolesJson ?? {}) as Record<string, string>; const rolesB = (teamB!.rolesJson ?? {}) as Record<string, string>;
       const a = idsA.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesA[id]));
       const b = idsB.map((id, i) => toLeagueMascot(map.get(id)!, i + 1, rolesB[id]));
-      const result = runLeagueCombat(a, b);
+      const [bondsA, bondsB, opposingBondEffects] = await Promise.all([getTeamBondCombatContext(a.map((mascot) => mascot.id)), getTeamBondCombatContext(b.map((mascot) => mascot.id)), getOpposingBondCombatEffects(a.map((mascot) => mascot.id), b.map((mascot) => mascot.id))]);
+      const result = runLeagueCombat(a, b, null, [], [], { bondLinks: [...bondsA.links, ...bondsB.links], opposingBondEffects });
       if(repetition!=="UNRESTRICTED")for(const id of [...idsA,...idsB])globallyUsed.add(id);
       const winnerId = result.winner === "A" ? match.playerAId : result.winner === "B" ? match.playerBId : null;
       const loserId = winnerId ? (winnerId === match.playerAId ? match.playerBId : match.playerAId) : null;

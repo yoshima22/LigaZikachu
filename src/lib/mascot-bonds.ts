@@ -4,6 +4,7 @@ import { addExp } from "@/lib/mascot";
 import { getPokemonName } from "@/lib/mascot-data";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { isStandbyActive } from "@/lib/account-standby";
+import { sendNotificationToPlayers } from "@/lib/notifications";
 
 export type BondBehavior =
   | "FREE"
@@ -21,8 +22,8 @@ export type BondOption = {
   id: string;
   label: string;
   type: "POSITIVE" | "NEUTRAL" | "AGGRESSIVE";
-  cost?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number };
-  costs?: { kind: "FOOD" | "SWEET" | "COINS"; quantity: number }[];
+  cost?: { kind: "FOOD" | "SWEET" | "COINS" | "BOND_ITEM"; quantity: number; itemType?: string; itemName?: string };
+  costs?: { kind: "FOOD" | "SWEET" | "COINS" | "BOND_ITEM"; quantity: number; itemType?: string; itemName?: string }[];
   scoreDelta: number;
   scoreDeltaB?: number;
   intention?: string;
@@ -196,7 +197,7 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
     select: { relationshipScore: true, interactionCount: true },
   });
   const nextScore = clampScore((existing?.relationshipScore ?? 0) + delta);
-  return tx.mascotRelation.upsert({
+  const relation = await tx.mascotRelation.upsert({
     where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
     update: {
       relationshipScore: nextScore,
@@ -215,6 +216,7 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
       specialBondType: specialBondFromScore(nextScore),
     },
   });
+  return { relation, previousScore: existing?.relationshipScore ?? 0, nextScore };
 }
 
 function specialBondFromScore(score: number) {
@@ -291,6 +293,14 @@ export async function createBondEventForPlayer(playerId: string) {
       expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
     },
   });
+}
+
+function crossedNotifiableTier(previous: number, next: number) {
+  if (previous < 80 && next >= 80) return { tier: "Super Amigo", threshold: 80 };
+  if (previous < 40 && next >= 40) return { tier: "Amigo", threshold: 40 };
+  if (previous > -80 && next <= -80) return { tier: "Nêmesis", threshold: -80 };
+  if (previous > -50 && next <= -50) return { tier: "Inimigo", threshold: -50 };
+  return null;
 }
 
 export async function ensureBondEventCadence(
@@ -487,7 +497,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
       include: {
         owner: { select: { id: true, mascotBondBehavior: true } },
         mascotA: { select: { id: true, playerId: true, pokemonId: true } },
-        mascotB: { select: { id: true, playerId: true } },
+        mascotB: { select: { id: true, playerId: true, pokemonId: true } },
       },
     });
     if (!event) throw new Error("Evento nao encontrado.");
@@ -509,9 +519,26 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
     }
 
     const mascotBId = event.mascotBId;
+    const milestones: Array<{ playerId: string; tier: string; threshold: number; direction: string }> = [];
     if (mascotBId) {
-      await ensureDirectionalRelation(tx, event.mascotAId, mascotBId, option.scoreDelta);
-      await ensureDirectionalRelation(tx, mascotBId, event.mascotAId, option.scoreDeltaB ?? option.scoreDelta);
+      const relationA = await ensureDirectionalRelation(tx, event.mascotAId, mascotBId, option.scoreDelta);
+      const relationB = await ensureDirectionalRelation(tx, mascotBId, event.mascotAId, option.scoreDeltaB ?? option.scoreDelta);
+      const milestoneA = crossedNotifiableTier(relationA.previousScore, relationA.nextScore);
+      const milestoneB = crossedNotifiableTier(relationB.previousScore, relationB.nextScore);
+      if (milestoneA) milestones.push({ playerId: event.mascotA.playerId, ...milestoneA, direction: "A" });
+      if (milestoneB && event.mascotB) milestones.push({ playerId: event.mascotB.playerId, ...milestoneB, direction: "B" });
+      for (const milestone of milestones) {
+        const rewardType = milestone.threshold === 80 ? "BOND_PROMISE_CHARM" : milestone.threshold === 40 ? "BOND_MEMORY_ALBUM" : milestone.threshold === -80 ? "BOND_RIVAL_CIRCUIT_PASS" : "BOND_CHALLENGE_LETTER";
+        const rewardItem = await tx.shopItem.findFirst({ where: { type: rewardType as never }, select: { id: true, name: true } });
+        if (rewardItem) {
+          await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: milestone.playerId, itemId: rewardItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId: milestone.playerId, itemId: rewardItem.id, quantity: 1, source: "BONDS_MILESTONE" } });
+        }
+        await tx.playerNotification.upsert({
+          where: { eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
+          update: {},
+          create: { playerId: milestone.playerId, category: "BONDS", type: "BOND_TIER_CHANGED", title: `Novo Laço: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier} (${milestone.threshold > 0 ? "+" : ""}${milestone.threshold}).${rewardItem ? ` Você recebeu 1x ${rewardItem.name}.` : ""}`, href: "/lacos", entityId: event.id, eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
+        });
+      }
     }
 
     if (option.happinessA) {
@@ -631,8 +658,11 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
       },
     });
 
-    return { option, resultJson, eventType: event.eventType, mascotAId: event.mascotAId, ownerId: event.ownerId };
+    return { option, resultJson, eventType: event.eventType, mascotAId: event.mascotAId, ownerId: event.ownerId, milestones };
   }).then(async (result) => {
+    for (const milestone of result.milestones) {
+      await sendNotificationToPlayers([milestone.playerId], { title: `Laços: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier}. Abra Laços para ver os efeitos deste marco.`, url: "/lacos", data: { eventKey: `bonds:tier:${eventId}:${milestone.direction}:${milestone.threshold}` } }).catch(() => undefined);
+    }
     if (result.eventType === RUNAWAY_WARNING_TYPE && result.option.id === "let_run") {
       await createRunawayRescueEvent(result.mascotAId, result.ownerId).catch(() => null);
     }
@@ -703,6 +733,17 @@ async function consumeBondCost(tx: Prisma.TransactionClient, playerId: string, c
     await tx.mascotFoodItem.update({ where: { playerId_type: { playerId, type: cost.kind } }, data: { quantity: { decrement: cost.quantity } } });
     return;
   }
+  if (cost.kind === "BOND_ITEM") {
+    if (!cost.itemType?.startsWith("BOND_")) throw new Error("Item de Laços inválido.");
+    const inventory = await tx.playerInventory.findFirst({
+      where: { playerId, item: { type: cost.itemType as never } },
+      select: { id: true, quantity: true, item: { select: { name: true } } },
+    });
+    if (!inventory || inventory.quantity < cost.quantity) throw new Error(`Você precisa de ${cost.quantity}x ${cost.itemName ?? inventory?.item.name ?? "item de Laços"}.`);
+    if (inventory.quantity === cost.quantity) await tx.playerInventory.delete({ where: { id: inventory.id } });
+    else await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: cost.quantity } } });
+    return;
+  }
   const wallet = await tx.zikaCoinWallet.findUnique({ where: { playerId } });
   if (!wallet || wallet.balance < cost.quantity) throw new Error("ZikaCoins insuficientes.");
   await tx.zikaCoinWallet.update({ where: { playerId }, data: { balance: { decrement: cost.quantity } } });
@@ -722,19 +763,54 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
   return resolved;
 }
 
-export async function getBondCombatModifier(mascotIds: string[]) {
-  if (mascotIds.length < 2) return new Map<string, number>();
+export type BondCombatLink = { mascotAId: string; mascotBId: string; kind: "FRIEND" | "SUPER_FRIEND" | "RIVAL"; label: string; damagePct: number; defensePct: number };
+export type OpposingBondCombatEffect = { attackerId: string; targetId: string; kind: "FRIEND" | "SUPER_FRIEND" | "RIVAL" | "ENEMY" | "NEMESIS"; label: string; damagePct: number; directHitLimit: number | null };
+
+export async function getTeamBondCombatContext(mascotIds: string[]) {
+  if (mascotIds.length < 2) return { modifiers: new Map(mascotIds.map((id) => [id, 1])), links: [] as BondCombatLink[] };
   const relations = await prisma.mascotRelation.findMany({
-    where: { mascotAId: { in: mascotIds }, mascotBId: { in: mascotIds } },
+    where: { mascotAId: { in: mascotIds }, mascotBId: { in: mascotIds }, isActive: true },
     select: { mascotAId: true, mascotBId: true, relationshipScore: true, specialBondType: true, type: true, interactionCount: true },
     take: mascotIds.length * 8,
   }).catch(() => []);
   const modifier = new Map<string, number>();
+  const links: BondCombatLink[] = [];
+  const seen = new Set<string>();
   for (const id of mascotIds) modifier.set(id, 1);
   for (const rel of relations) {
     const score = effectiveRelationScore(rel);
-    const delta = score >= 80 ? 0.05 : score >= 60 ? 0.035 : score >= 35 ? 0.02 : score <= -80 ? -0.04 : score <= -60 ? -0.025 : 0;
-    if (delta !== 0) modifier.set(rel.mascotAId, Math.max(0.9, Math.min(1.08, (modifier.get(rel.mascotAId) ?? 1) + delta)));
+    const delta = score >= 80 ? 0.03 : score >= 40 ? 0.02 : score <= -15 && score > -50 ? 0.02 : 0;
+    if (delta !== 0) modifier.set(rel.mascotAId, Math.max(modifier.get(rel.mascotAId) ?? 1, 1 + delta));
+    const pairKey = [rel.mascotAId, rel.mascotBId].sort().join(":");
+    if (!seen.has(pairKey) && delta !== 0) {
+      seen.add(pairKey);
+      links.push({ mascotAId: rel.mascotAId, mascotBId: rel.mascotBId, kind: score >= 80 ? "SUPER_FRIEND" : score >= 40 ? "FRIEND" : "RIVAL", label: score >= 80 ? "Cobertura de Super Amigos" : score >= 40 ? "Sintonia de Amigos" : "Competição entre Rivais", damagePct: Math.round(delta * 100), defensePct: score >= 40 ? Math.round(delta * 100) : 0 });
+    }
   }
-  return modifier;
+  return { modifiers: modifier, links };
+}
+
+export async function getBondCombatModifier(mascotIds: string[]) {
+  const context = await getTeamBondCombatContext(mascotIds);
+  return context.modifiers;
+}
+
+export async function getOpposingBondCombatEffects(teamAIds: string[], teamBIds: string[]) {
+  if (!teamAIds.length || !teamBIds.length) return [] as OpposingBondCombatEffect[];
+  const relations = await prisma.mascotRelation.findMany({
+    where: { isActive: true, OR: [
+      { mascotAId: { in: teamAIds }, mascotBId: { in: teamBIds } },
+      { mascotAId: { in: teamBIds }, mascotBId: { in: teamAIds } },
+    ] },
+    select: { mascotAId: true, mascotBId: true, relationshipScore: true, type: true, interactionCount: true },
+  }).catch(() => []);
+  return relations.flatMap((relation): OpposingBondCombatEffect[] => {
+    const score = effectiveRelationScore(relation);
+    if (score >= 80) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "SUPER_FRIEND", label: "Hesitação entre Super Amigos", damagePct: -10, directHitLimit: 1 }];
+    if (score >= 40) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "FRIEND", label: "Hesitação entre Amigos", damagePct: -5, directHitLimit: 1 }];
+    if (score <= -80) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "NEMESIS", label: "Acerto de Contas", damagePct: 8, directHitLimit: 3 }];
+    if (score <= -50) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "ENEMY", label: "Tenho Algo a Provar", damagePct: 5, directHitLimit: null }];
+    if (score <= -15) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "RIVAL", label: "Duelo de Rivais", damagePct: 3, directHitLimit: null }];
+    return [];
+  });
 }

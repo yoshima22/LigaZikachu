@@ -2022,8 +2022,6 @@ function applyBondModifiersToArenaMascots(
     return {
       ...mascot,
       force: Math.max(1, Math.round(mascot.force * mult)),
-      agility: Math.max(1, Math.round(mascot.agility * mult)),
-      instinct: Math.max(1, Math.round(mascot.instinct * mult)),
       vitality: Math.max(1, Math.round(mascot.vitality * mult)),
       hp: Math.max(10, Math.round(mascot.hp * mult)),
     };

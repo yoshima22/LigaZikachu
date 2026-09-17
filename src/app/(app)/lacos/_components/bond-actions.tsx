@@ -92,7 +92,7 @@ export function ResolveBondOptionButton({ eventId, option, disabled }: { eventId
   const router = useRouter();
   const costs = option.costs ?? (option.cost ? [option.cost] : []);
   const costLabel = costs.length
-    ? costs.map((cost) => `${cost.quantity} ${cost.kind === "FOOD" ? "Comida" : cost.kind === "SWEET" ? "Doce" : "ZC"}`).join(" + ")
+    ? costs.map((cost) => `${cost.quantity} ${cost.kind === "FOOD" ? "Comida" : cost.kind === "SWEET" ? "Doce" : cost.kind === "BOND_ITEM" ? (cost.itemName ?? "item de Laços") : "ZC"}`).join(" + ")
     : "Sem custo";
   const tone =
     option.type === "POSITIVE"

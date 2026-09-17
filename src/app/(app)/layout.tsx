@@ -197,10 +197,12 @@ export default async function AppLayout({
       ? getNavNotificationSnapshot(navData.player.id).catch(() => ({
           messageCount: 0,
           bazarCount: 0,
+          bondsCount: 0,
           messageAlerts: [],
           bazarAlerts: [],
+          bondsAlerts: [],
         }))
-      : Promise.resolve({ messageCount: 0, bazarCount: 0, messageAlerts: [], bazarAlerts: [] }),
+      : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [] }),
     getZikaTvLiveStatus().catch(() => false),
   ]);
   const livePvpVisible = canAccessLivePvp(

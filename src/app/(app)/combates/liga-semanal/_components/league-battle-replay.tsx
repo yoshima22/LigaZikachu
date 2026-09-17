@@ -253,8 +253,10 @@ export function LeagueBattleReplayModal({
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
+  const [showBondIntro, setShowBondIntro] = useState(false);
   const onFinishRef = useRef(onFinish);
   const cinematicReplay = useMemo(() => buildCinematicReplay(replay), [replay]);
+  const bondIntros = useMemo(() => replay.filter((turn) => turn.effect?.startsWith("LAÇO:")).slice(0, 4), [replay]);
   useEffect(() => { onFinishRef.current = onFinish; });
 
   // baseFighters é DERIVADO — recomputar não reinicia a reprodução. Isso evita que
@@ -265,6 +267,12 @@ export function LeagueBattleReplayModal({
   );
   // Só volta ao início quando o replay em si muda (outra partida), não a cada render.
   useEffect(() => { setTurnIdx(-1); }, [cinematicReplay]);
+  useEffect(() => {
+    if (bondIntros.length === 0) return;
+    setShowBondIntro(true);
+    const timer = window.setTimeout(() => setShowBondIntro(false), 3000);
+    return () => window.clearTimeout(timer);
+  }, [bondIntros]);
 
   // Derive current HP state from baseFighters + all turns up to turnIdx
   const fighters = useMemo(() => {
@@ -292,11 +300,11 @@ export function LeagueBattleReplayModal({
   const delay = Math.round(baseDelay / speed);
 
   useEffect(() => {
-    if (!autoPlay) return;
+    if (!autoPlay || showBondIntro) return;
     if (turnIdx >= cinematicReplay.length) return;
     const t = setTimeout(() => setTurnIdx(prev => prev + 1), turnIdx < 0 ? 600 / speed : delay);
     return () => clearTimeout(t);
-  }, [turnIdx, autoPlay, cinematicReplay, delay, speed]);
+  }, [turnIdx, autoPlay, cinematicReplay, delay, speed, showBondIntro]);
 
   const current = turnIdx >= 0 && turnIdx < cinematicReplay.length ? cinematicReplay[turnIdx] : null;
   const finished = turnIdx >= cinematicReplay.length;
@@ -324,7 +332,8 @@ export function LeagueBattleReplayModal({
       `}</style>
 
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2" onClick={onFinish}>
-        <div className="w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="relative w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+          {showBondIntro && <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-slate-950/95 p-5 backdrop-blur-md"><p className="text-[10px] font-black uppercase tracking-[.28em] text-fuchsia-300">Laços ativos neste combate</p>{bondIntros.map((bond, index) => { const parts = bond.effect?.split(":") ?? []; return <div key={`${bond.actorId}-${bond.targetId}-${index}`} className="w-full max-w-lg rounded-2xl border border-fuchsia-300/25 bg-fuchsia-300/[.06] p-3"><div className="grid grid-cols-[1fr_80px_1fr] items-center gap-2"><div className="text-center"><img src={getSpriteUrl(bond.actorPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.actorName, bond.actorPokemonId)}</p></div><div><div className="h-1 rounded-full bg-gradient-to-r from-cyan-300 via-fuchsia-400 to-rose-300 shadow-[0_0_18px_rgba(217,70,239,.8)]" /><p className="mt-1 text-center text-[8px] font-black uppercase text-fuchsia-200">{parts[2] ?? "Laço ativo"}</p></div><div className="text-center"><img src={getSpriteUrl(bond.targetPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.targetName, bond.targetPokemonId)}</p></div></div><p className="mt-2 text-center text-[10px] text-slate-300">{parts.slice(3).join(":")}</p></div>; })}<p className="text-[9px] text-slate-500">O replay começa em instantes…</p></div>}
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-5 pb-2">
             <p className="text-sm font-bold uppercase tracking-widest text-[#FFCB05]">⚔️ Replay da Batalha</p>

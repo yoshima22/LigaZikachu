@@ -19,7 +19,7 @@ export async function refreshNavNotificationsAction(): Promise<NavNotificationSn
 }
 
 export async function markNavAlertViewedAction(input: {
-  category: "MESSAGE" | "BAZAR";
+  category: "MESSAGE" | "BAZAR" | "BONDS";
   id: string;
   entityId: string;
 }) {

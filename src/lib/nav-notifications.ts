@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 
 export type NavAlert = {
   id: string;
-  category: "MESSAGE" | "BAZAR";
+  category: "MESSAGE" | "BAZAR" | "BONDS";
   title: string;
   body: string;
   href: string;
@@ -17,8 +17,10 @@ export type NavAlert = {
 export type NavNotificationSnapshot = {
   messageCount: number;
   bazarCount: number;
+  bondsCount: number;
   messageAlerts: NavAlert[];
   bazarAlerts: NavAlert[];
+  bondsAlerts: NavAlert[];
 };
 
 type NotificationDb = PrismaClient | Prisma.TransactionClient;
@@ -44,7 +46,7 @@ export async function createPlayerNotification(
 }
 
 export async function getNavNotificationSnapshot(playerId: string): Promise<NavNotificationSnapshot> {
-  const [messages, messageGroups, bazar, bazarCount] = await Promise.all([
+  const [messages, messageGroups, bazar, bazarCount, bonds, bondsCount] = await Promise.all([
     prisma.directMessage.findMany({
       where: { receiverId: playerId, readAt: null },
       orderBy: { createdAt: "desc" },
@@ -73,6 +75,12 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
     prisma.playerNotification.count({
       where: { playerId, category: "BAZAR", readAt: null },
     }),
+    prisma.playerNotification.findMany({
+      where: { playerId, category: "BONDS", readAt: null },
+      orderBy: { createdAt: "desc" }, take: 5,
+      select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
+    }),
+    prisma.playerNotification.count({ where: { playerId, category: "BONDS", readAt: null } }),
   ]);
 
   const senderCounts = new Map(messageGroups.map((group) => [group.senderId, group._count._all]));
@@ -100,6 +108,7 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
   return {
     messageCount: messageGroups.reduce((total, group) => total + group._count._all, 0),
     bazarCount,
+    bondsCount,
     messageAlerts,
     bazarAlerts: bazar.slice(0, 5).map((notification) => ({
       id: notification.id,
@@ -109,6 +118,10 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
       href: notification.href,
       entityId: notification.entityId ?? notification.id,
       createdAt: notification.createdAt.toISOString(),
+    })),
+    bondsAlerts: bonds.map((notification) => ({
+      id: notification.id, category: "BONDS" as const, title: notification.title, body: notification.body,
+      href: notification.href, entityId: notification.entityId ?? notification.id, createdAt: notification.createdAt.toISOString(),
     })),
   };
 }

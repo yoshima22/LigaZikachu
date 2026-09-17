@@ -9,7 +9,7 @@ export const MANUAL_DEFAULTS: ManualContentMap = {
   "mascotes.intro":
     "Cada mascote possui um medidor de EXP que avança com atividades. O EXP necessário para subir de nível é calculado como 100 + (nível atual × 20) EXP.",
   "mascotes.pos.note":
-    "Mascotes na bancada recebem 50% do EXP em expedições e ações em massa. Promova à Equipe Favorita para maximizar o ganho.",
+    "A posição altera as interações manuais: Companheiro Ativo recebe ×1,5, favorito recebe ×1,25 e os demais recebem ×1. Expedições não sofrem redução por posição.",
 
   // ── Evoluções ───────────────────────────────────────────────────────────────
   "evolucoes.intro":

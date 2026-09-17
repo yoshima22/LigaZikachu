@@ -4,7 +4,7 @@ import { revalidatePath } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
+import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { Prisma } from "@prisma/client";
 import {
@@ -36,18 +36,44 @@ async function getAdminPlayerId() {
 export async function setMascotRoutineV2Action(mascotId: string, location: RefugeLocation | "NONE") {
   try {
     const playerId = await getAdminPlayerId();
-    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true } });
+    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
     if (!mascot) throw new Error("Mascote não encontrado na sua conta.");
     if (location === "NONE") {
-      await prisma.mascotRoutine.deleteMany({ where: { mascotId, playerId } });
+      await prisma.mascotRoutine.updateMany({ where: { mascotId, playerId, status: "ACTIVE" }, data: { status: "INACTIVE" } });
     } else {
       if (!REFUGE_LOCATIONS[location]) throw new Error("Local inválido.");
-      const occupied = await prisma.mascotRoutine.count({ where: { playerId, locationType: location, status: "ACTIVE", mascotId: { not: mascotId } } });
+      if (mascot.routine && (mascot.routine.status !== "ACTIVE" || mascot.routine.locationType !== location)) {
+        const cooldownMs = BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000;
+        const availableAt = new Date(mascot.routine.updatedAt.getTime() + cooldownMs);
+        if (availableAt > new Date()) {
+          const wait = Math.max(1, Math.ceil((availableAt.getTime() - Date.now()) / 60_000));
+          throw new Error(`Este mascote ainda está se adaptando. A troca de espaço libera em ${wait} min.`);
+        }
+      }
+      const [occupied, playerTotal, playerInLocation] = await Promise.all([
+        prisma.mascotRoutine.count({ where: { locationType: location, status: "ACTIVE", mascotId: { not: mascotId } } }),
+        prisma.mascotRoutine.count({ where: { playerId, status: "ACTIVE", mascotId: { not: mascotId } } }),
+        prisma.mascotRoutine.count({ where: { playerId, locationType: location, status: "ACTIVE", mascotId: { not: mascotId } } }),
+      ]);
       if (occupied >= REFUGE_LOCATIONS[location].capacity) throw new Error(`${REFUGE_LOCATIONS[location].label} está lotado.`);
-      await prisma.mascotRoutine.upsert({
-        where: { mascotId },
-        update: { playerId, locationType: location, status: "ACTIVE", startedAt: new Date(), lastProcessedAt: new Date(), accumulatedUnits: 0 },
-        create: { playerId, mascotId, locationType: location },
+      if (playerTotal >= BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayer) throw new Error(`Cada treinador pode manter até ${BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayer} mascotes nos espaços públicos.`);
+      if (playerInLocation >= BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayerInSameLocation) throw new Error(`Você pode manter até ${BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayerInSameLocation} mascotes em ${REFUGE_LOCATIONS[location].label}.`);
+      const previousLocation = mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType as RefugeLocation : null;
+      await prisma.$transaction(async (tx) => {
+        await tx.mascotRoutine.upsert({
+          where: { mascotId },
+          update: { playerId, locationType: location, status: "ACTIVE", startedAt: new Date(), lastProcessedAt: new Date(), accumulatedUnits: 0 },
+          create: { playerId, mascotId, locationType: location },
+        });
+        if (previousLocation && previousLocation !== location) {
+          const mascotLabel = mascot.nickname?.trim() || `Mascote #${mascot.pokemonId}`;
+          const transitionText = previousLocation === "TRAINING" && location === "REST"
+            ? `${mascotLabel} chegou do Campo de Treino ainda cheio de energia. A algazarra interrompeu alguns cochilos e chamou a atenção de toda a Área de Descanso.`
+            : `${mascotLabel} deixou ${REFUGE_LOCATIONS[previousLocation]?.label ?? "o espaço anterior"} e começou a se adaptar a ${REFUGE_LOCATIONS[location].label}. Os habitantes perceberam a mudança na rotina.`;
+          await tx.mascotBondMemory.create({
+            data: { mascotAId: mascot.id, memoryType: "MUDANCA_DE_ROTINA", sourceType: "REFUGE", sourceId: location, title: `Mudança para ${REFUGE_LOCATIONS[location].label}`, description: transitionText, metadata: { location, previousLocation, transition: true } },
+          });
+        }
       });
     }
     revalidatePath("/lacos");

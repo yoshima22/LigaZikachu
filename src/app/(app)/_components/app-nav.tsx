@@ -319,7 +319,7 @@ export function AppNav({
 
   useEffect(() => {
     const viewed = (event: Event) => {
-      const detail = (event as CustomEvent<{ category: "MESSAGE" | "BAZAR"; entityId: string }>).detail;
+      const detail = (event as CustomEvent<{ category: "MESSAGE" | "BAZAR" | "BONDS"; entityId: string }>).detail;
       if (!detail) return;
       setNotifications((current) => {
         if (detail.category === "MESSAGE") {
@@ -329,6 +329,10 @@ export function AppNav({
             messageCount: Math.max(0, current.messageCount - (removed?.unreadCount ?? 0)),
             messageAlerts: current.messageAlerts.filter((item) => item.entityId !== detail.entityId),
           };
+        }
+        if (detail.category === "BONDS") {
+          const removed = current.bondsAlerts.filter((item) => item.entityId === detail.entityId);
+          return { ...current, bondsCount: Math.max(0, current.bondsCount - removed.length), bondsAlerts: current.bondsAlerts.filter((item) => item.entityId !== detail.entityId) };
         }
         const removed = current.bazarAlerts.filter((item) => item.entityId === detail.entityId);
         return {
@@ -387,6 +391,11 @@ export function AppNav({
           messageCount: Math.max(0, current.messageCount - (removed?.unreadCount ?? 0)),
           messageAlerts: current.messageAlerts.filter((item) => item.entityId !== alert.entityId),
         };
+        window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+        return next;
+      }
+      if (alert.category === "BONDS") {
+        const next = { ...current, bondsCount: Math.max(0, current.bondsCount - 1), bondsAlerts: current.bondsAlerts.filter((item) => item.id !== alert.id) };
         window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
         return next;
       }
@@ -491,6 +500,9 @@ export function AppNav({
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
+            badgeHrefs={{ "/lacos": notifications.bondsCount }}
+            alerts={notifications.bondsAlerts}
+            onAlertClick={dismissAlert}
           />
           <NavDropdown
             id="perfil"
@@ -596,6 +608,9 @@ export function AppNav({
               admin={admin}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
+              badgeHrefs={{ "/lacos": notifications.bondsCount }}
+              alerts={notifications.bondsAlerts}
+              onAlertClick={dismissAlert}
             />
             <MobileNavGroup
               id="mobile-perfil"

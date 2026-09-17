@@ -121,9 +121,21 @@ export const MASCOT_SHOP_ITEM_TYPES = [
   ...LEAGUE_SHOP_ITEM_TYPES,
 ] as const;
 
+// Produzidos e consumidos exclusivamente pelo Laços 2.0. Eles entram no
+// inventário negociável do Bazar, mas ficam deliberadamente fora de
+// MASCOT_SHOP_ITEM_TYPES — a lista usada pelo Miauvadão e ofertas pessoais.
+export const BOND_SHOP_ITEM_TYPES = [
+  "BOND_SHARED_BERRY", "BOND_CALMING_HERB", "BOND_REVENGE_TOKEN", "BOND_TRAINING_RIBBON",
+  "BOND_SHARED_PILLOW", "BOND_NIGHT_TEA", "BOND_YARD_TOY", "BOND_ILLUSTRATED_INVITATION",
+  "BOND_MEMORY_ALBUM", "BOND_TRUCE_BELL", "BOND_PROMISE_CHARM", "BOND_CHALLENGE_LETTER",
+  "BOND_TAUNT_WHISTLE", "BOND_CHALLENGE_BOARD", "BOND_SECOND_PLACE_MEDAL", "BOND_SURPASS_ME_BAND",
+  "BOND_CRACKED_TROPHY", "BOND_RIVAL_CIRCUIT_PASS",
+] as const;
+
 export const CONSUMABLE_SHOP_ITEM_TYPES = [
   "ZIKALOOT_TICKET",
   ...MASCOT_SHOP_ITEM_TYPES,
+  ...BOND_SHOP_ITEM_TYPES,
 ] as const;
 
 export const SHOP_ITEM_EMOJI: Record<string, string> = {
@@ -144,6 +156,11 @@ export const SHOP_ITEM_EMOJI: Record<string, string> = {
   XP_SHARE: "📡",
   XP_SHARE_TEAM: "📡",
   RAINBOW_FEATHER: "🌈",
+  BOND_SHARED_BERRY: "🫐", BOND_CALMING_HERB: "🌿", BOND_REVENGE_TOKEN: "🪙", BOND_TRAINING_RIBBON: "🎗️",
+  BOND_SHARED_PILLOW: "🛏️", BOND_NIGHT_TEA: "🍵", BOND_YARD_TOY: "🪀", BOND_ILLUSTRATED_INVITATION: "💌",
+  BOND_MEMORY_ALBUM: "📔", BOND_TRUCE_BELL: "🔔", BOND_PROMISE_CHARM: "🤝", BOND_CHALLENGE_LETTER: "✉️",
+  BOND_TAUNT_WHISTLE: "📣", BOND_CHALLENGE_BOARD: "📋", BOND_SECOND_PLACE_MEDAL: "🥈", BOND_SURPASS_ME_BAND: "🥋",
+  BOND_CRACKED_TROPHY: "🏆", BOND_RIVAL_CIRCUIT_PASS: "🎫",
 };
 
 export function getShopItemEmoji(type: string): string {
