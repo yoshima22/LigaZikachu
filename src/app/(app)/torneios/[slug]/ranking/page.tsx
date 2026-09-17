@@ -77,7 +77,7 @@ export default async function TournamentRankingPage({
         </Card>
       ) : (
         <Card className="overflow-hidden p-0">
-          <RankingTable ranking={ranking} />
+          <RankingTable ranking={ranking} tournament />
         </Card>
       )}
 

@@ -5,10 +5,23 @@ import { PlayerTag } from "@/components/player/player-tag";
 interface RankingTableProps {
   ranking: PlayerRankingEntry[];
   compact?: boolean;
+  /** Ranking de campeonato: troca "Eventos" por "Conquistas" + "Pts Conq.". */
+  tournament?: boolean;
 }
 
-export function RankingTable({ ranking, compact = false }: RankingTableProps) {
+export function RankingTable({ ranking, compact = false, tournament = false }: RankingTableProps) {
   if (ranking.length === 0) return null;
+
+  // Coluna variável: no campeonato mostra conquistas (contagem + pontos, teto 15);
+  // nos demais rankings mantém "Eventos".
+  const achievementCols = tournament
+    ? [
+        { label: "Conquistas",  key: "achievementsCount",    color: "text-purple-300",               mobileHide: true  },
+        { label: "Pts Conq.",   key: "achievementPoints",    color: "text-purple-300 font-semibold", mobileHide: true  },
+      ]
+    : [
+        { label: "Eventos",     key: "eventsCount",          color: "text-slate-300",                mobileHide: true  },
+      ];
 
   // Colunas visiveis. mobile: apenas as essenciais; sm+: todas.
   const cols = [
@@ -20,7 +33,7 @@ export function RankingTable({ ranking, compact = false }: RankingTableProps) {
     { label: "D",            key: "losses",               color: "text-red-400",                  mobileHide: false },
     { label: "E",            key: "draws",                color: "text-slate-400",                mobileHide: true  },
     { label: "J",            key: "matchesPlayed",        color: "text-slate-300",                mobileHide: true  },
-    { label: "Eventos",      key: "eventsCount",          color: "text-slate-300",                mobileHide: true  },
+    ...achievementCols,
     { label: "Insígnias",    key: "badgesOwned",          color: "text-[#FFCB05]",                mobileHide: true  },
     { label: "Pts Insígnia", key: "badgePoints",          color: "text-[#FFCB05]",                mobileHide: true  },
     { label: "Pts Bônus",    key: "bonusPoints",          color: "text-fuchsia-300 font-semibold", mobileHide: true  },

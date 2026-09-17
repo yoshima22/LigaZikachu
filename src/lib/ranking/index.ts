@@ -43,6 +43,10 @@ export interface PlayerRankingEntry {
   bonusPoints: number;
   /** Nº de eventos (torneios) da temporada em que o jogador está inscrito. */
   eventsCount: number;
+  /** Nº de conquistas do campeonato realizadas pelo jogador. */
+  achievementsCount: number;
+  /** Pontos de conquistas somados ao total (limitado a 15). */
+  achievementPoints: number;
   /** "Nível de Gameplay": índice que ordena o ranking geral (ver computeGameplayScore). */
   gameplayScore: number;
 }
@@ -302,19 +306,24 @@ export async function computeTournamentRanking(
     }
   }
 
-  // ── Conquistas: soma pointsAwarded de conquistas deste torneio ────────────
-  const achievementBonuses = await prisma.playerAchievement.findMany({
-    where: { achievement: { tournamentId, active: true }, pointsAwarded: { gt: 0 } },
+  // ── Conquistas: conta as realizadas e soma seus pontos (limitado a 15) ─────
+  const ACHIEVEMENT_PTS_CAP = 15;
+  const playerAchievements = await prisma.playerAchievement.findMany({
+    where: { achievement: { tournamentId, active: true } },
     select: { playerId: true, pointsAwarded: true }
   });
-  if (achievementBonuses.length > 0) {
-    const bonusMap = new Map<string, number>();
-    for (const a of achievementBonuses) {
-      bonusMap.set(a.playerId, (bonusMap.get(a.playerId) ?? 0) + (a.pointsAwarded ?? 0));
+  if (playerAchievements.length > 0) {
+    const countMap = new Map<string, number>();
+    const rawPointsMap = new Map<string, number>();
+    for (const a of playerAchievements) {
+      countMap.set(a.playerId, (countMap.get(a.playerId) ?? 0) + 1);
+      rawPointsMap.set(a.playerId, (rawPointsMap.get(a.playerId) ?? 0) + (a.pointsAwarded ?? 0));
     }
     for (const entry of entries) {
-      const bonus = bonusMap.get(entry.playerId) ?? 0;
-      if (bonus > 0) entry.points += bonus;
+      entry.achievementsCount = countMap.get(entry.playerId) ?? 0;
+      // Teto de 15 pontos na tabela, mesmo que a soma real passe disso.
+      entry.achievementPoints = Math.min(ACHIEVEMENT_PTS_CAP, rawPointsMap.get(entry.playerId) ?? 0);
+      entry.points += entry.achievementPoints;
     }
   }
 
@@ -692,6 +701,8 @@ function emptyStats(playerId: string): RankingStats {
     badgePoints: 0,
     bonusPoints: 0,
     eventsCount: 0,
+    achievementsCount: 0,
+    achievementPoints: 0,
     gameplayScore: 0
   };
 }
