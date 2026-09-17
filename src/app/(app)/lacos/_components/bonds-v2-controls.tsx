@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { BookOpen, ChevronLeft, ChevronRight, HelpCircle, ImagePlus, LogOut, MapPin, Search, ShieldCheck, Sparkles, Users, X } from "lucide-react";
 import { saveRefugeBackgroundV2Action, setMascotRoutineV2Action, simulateRefugeV2Action, updateActiveBondV2Action } from "../actions";
@@ -9,6 +10,7 @@ import { ImageUpload } from "@/components/ui/image-upload";
 
 export function RoutineSelect({ mascotId, value }: { mascotId: string; value: string }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <select
       value={value}
@@ -18,7 +20,10 @@ export function RoutineSelect({ mascotId, value }: { mascotId: string; value: st
         startTransition(async () => {
           const result = await setMascotRoutineV2Action(mascotId, next);
           if (result.error) toast.error(result.error);
-          else toast.success(next === "NONE" ? "Rotina removida." : "Rotina atualizada.");
+          else {
+            toast.success(next === "NONE" ? "Rotina removida." : "Rotina atualizada.");
+            router.refresh();
+          }
         });
       }}
       className="w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-fuchsia-400/50 disabled:opacity-50"
@@ -110,6 +115,7 @@ export function RefugeLocationsTabs({ locations, ownMascots }: { locations: Refu
 
 export function RefugeLocationScene({ location, occupants, ownMascots, backgroundUrl, stories }: { location: RefugeLocation; occupants: SceneMascot[]; ownMascots: SceneMascot[]; backgroundUrl: string; stories: SceneStory[] }) {
   const definition = REFUGE_LOCATIONS[location];
+  const router = useRouter();
   const [query, setQuery] = useState("");
   const [occupantQuery, setOccupantQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("ALL");
@@ -142,14 +148,20 @@ export function RefugeLocationScene({ location, occupants, ownMascots, backgroun
   function allocate(mascotId: string) {
     startTransition(async () => {
       const result = await setMascotRoutineV2Action(mascotId, location);
-      if (result.error) toast.error(result.error); else toast.success(`${definition.label} virou a nova rotina do mascote.`);
+      if (result.error) toast.error(result.error); else {
+        toast.success(`${definition.label} virou a nova rotina do mascote.`);
+        router.refresh();
+      }
     });
   }
 
   function remove(mascotId: string) {
     startTransition(async () => {
       const result = await setMascotRoutineV2Action(mascotId, "NONE");
-      if (result.error) toast.error(result.error); else toast.success("Mascote retirado dos espaços públicos.");
+      if (result.error) toast.error(result.error); else {
+        toast.success("Mascote retirado dos espaços públicos.");
+        router.refresh();
+      }
     });
   }
 
@@ -169,7 +181,7 @@ export function RefugeLocationScene({ location, occupants, ownMascots, backgroun
 
   return <article className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/20">
     <div className="relative min-h-[390px] overflow-hidden bg-slate-900">
-      {backgroundUrl ? <><div className="absolute inset-0 scale-110 bg-cover bg-center opacity-45 blur-xl" style={{ backgroundImage: `url(${backgroundUrl})` }} /><div className="absolute inset-0 bg-contain bg-center bg-no-repeat" style={{ backgroundImage: `url(${backgroundUrl})` }} /></> : <div className={`absolute inset-0 ${location === "GARDEN" ? "bg-[radial-gradient(circle_at_30%_30%,#39734b,#10251c_55%,#07120d)]" : location === "TRAINING" ? "bg-[radial-gradient(circle_at_70%_20%,#81441d,#29180e_55%,#100a08)]" : location === "REST" ? "bg-[radial-gradient(circle_at_50%_20%,#24467a,#121d3c_55%,#080c1c)]" : "bg-[radial-gradient(circle_at_50%_25%,#643a87,#251333_55%,#0e0815)]"}`} />}
+      {backgroundUrl ? <div className="absolute inset-0 bg-cover bg-center bg-no-repeat" style={{ backgroundImage: `url(${backgroundUrl})` }} /> : <div className={`absolute inset-0 ${location === "GARDEN" ? "bg-[radial-gradient(circle_at_30%_30%,#39734b,#10251c_55%,#07120d)]" : location === "TRAINING" ? "bg-[radial-gradient(circle_at_70%_20%,#81441d,#29180e_55%,#100a08)]" : location === "REST" ? "bg-[radial-gradient(circle_at_50%_20%,#24467a,#121d3c_55%,#080c1c)]" : "bg-[radial-gradient(circle_at_50%_25%,#643a87,#251333_55%,#0e0815)]"}`} />}
       <div className="absolute inset-0 bg-slate-950/45" /><div className="absolute inset-0 bg-gradient-to-t from-slate-950 via-slate-950/25 to-black/65" />
       <div className="absolute left-4 top-4 z-10 max-w-[calc(100%-2rem)] rounded-2xl border border-white/15 bg-slate-950/80 px-4 py-3 shadow-xl backdrop-blur-md sm:left-5 sm:top-5"><div className="flex items-center gap-2"><span className="text-3xl drop-shadow-lg">{definition.icon}</span><div><h3 className="text-xl font-black text-white">{definition.label}</h3><p className="text-xs font-medium text-slate-200">{definition.purpose}</p></div></div><p className="mt-2 max-w-2xl text-[10px] leading-4 text-slate-300"><strong className="text-white">Impacto:</strong> {definition.impact}</p></div>
       <div className="absolute right-5 top-5 z-20 hidden rounded-full border border-white/15 bg-slate-950/85 px-3 py-1.5 text-[10px] font-bold text-white shadow-lg backdrop-blur sm:block"><Users size={12} className="mr-1 inline" /> {filteredOccupants.length === occupants.length ? occupants.length : `${filteredOccupants.length}/${occupants.length}`} habitando agora</div>

@@ -38,18 +38,23 @@ export async function setMascotRoutineV2Action(mascotId: string, location: Refug
     const playerId = await getAdminPlayerId();
     const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
     if (!mascot) throw new Error("Mascote não encontrado na sua conta.");
+    const changingRoutine = mascot.routine && (
+      location === "NONE"
+        ? mascot.routine.status === "ACTIVE"
+        : mascot.routine.status !== "ACTIVE" || mascot.routine.locationType !== location
+    );
+    if (changingRoutine) {
+      const cooldownMs = BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000;
+      const availableAt = new Date(mascot.routine!.updatedAt.getTime() + cooldownMs);
+      if (availableAt > new Date()) {
+        const wait = Math.max(1, Math.ceil((availableAt.getTime() - Date.now()) / 60_000));
+        throw new Error(`Este mascote ainda está se adaptando. A troca de espaço libera em ${wait} min.`);
+      }
+    }
     if (location === "NONE") {
       await prisma.mascotRoutine.updateMany({ where: { mascotId, playerId, status: "ACTIVE" }, data: { status: "INACTIVE" } });
     } else {
       if (!REFUGE_LOCATIONS[location]) throw new Error("Local inválido.");
-      if (mascot.routine && (mascot.routine.status !== "ACTIVE" || mascot.routine.locationType !== location)) {
-        const cooldownMs = BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000;
-        const availableAt = new Date(mascot.routine.updatedAt.getTime() + cooldownMs);
-        if (availableAt > new Date()) {
-          const wait = Math.max(1, Math.ceil((availableAt.getTime() - Date.now()) / 60_000));
-          throw new Error(`Este mascote ainda está se adaptando. A troca de espaço libera em ${wait} min.`);
-        }
-      }
       const [occupied, playerTotal, playerInLocation] = await Promise.all([
         prisma.mascotRoutine.count({ where: { locationType: location, status: "ACTIVE", mascotId: { not: mascotId } } }),
         prisma.mascotRoutine.count({ where: { playerId, status: "ACTIVE", mascotId: { not: mascotId } } }),
