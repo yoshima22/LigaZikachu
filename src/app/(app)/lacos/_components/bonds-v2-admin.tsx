@@ -4,7 +4,7 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondDirectoryV2, BondsTutorial, RefugeLocationScene } from "./bonds-v2-controls";
+import { BondDirectoryV2, BondsTutorial, RefugeLocationsTabs } from "./bonds-v2-controls";
 import { ResolveBondOptionButton } from "./bond-actions";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
@@ -26,7 +26,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     prisma.mascotRoutine.findMany({
       where: { status: "ACTIVE" },
       orderBy: { lastProcessedAt: "desc" },
-      take: 80,
+      take: 192,
       select: {
         locationType: true,
         mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, personality: true, playerId: true, player: { select: { displayName: true } } } },
@@ -107,6 +107,26 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   }, {})).sort((a, b) => b.total - a.total).slice(0, 6);
   const strongestFriend = relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).sort((a, b) => b.relationshipScore - a.relationshipScore)[0];
   const strongestRival = relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).sort((a, b) => a.relationshipScore - b.relationshipScore)[0];
+  const refugeTabs = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => {
+    const occupants = publicRoutines.filter((routine) => routine.locationType === location).map((routine) => ({
+      id: routine.mascot.id,
+      name: mascotName(routine.mascot),
+      sprite: getSpriteUrl(routine.mascot.pokemonId),
+      level: routine.mascot.level,
+      personality: routine.mascot.personality,
+      owner: routine.mascot.playerId === playerId ? "Você" : routine.mascot.player.displayName,
+      own: routine.mascot.playerId === playerId,
+      location,
+    }));
+    const stories = memories.filter((memory) => {
+      const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
+      return metadata.location === location;
+    }).slice(0, 3).map((memory) => {
+      const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
+      return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) };
+    });
+    return { location, occupants, backgroundUrl: typeof backgrounds[location] === "string" ? backgrounds[location] as string : "", stories };
+  });
 
   return <div className="space-y-8">
     <header className="relative overflow-hidden rounded-3xl border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,.24),transparent_40%),linear-gradient(135deg,#070d1d,#120826)] p-6 shadow-2xl shadow-fuchsia-950/20">
@@ -129,28 +149,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
 
     <section>
       <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-emerald-300">Espaços públicos e persistentes</p><h2 className="text-2xl font-black text-white">Explore o Refúgio</h2><p className="mt-1 max-w-3xl text-sm text-slate-400">Cada local favorece acontecimentos diferentes. Procure um mascote, envie-o para uma rotina e observe quem está dividindo o espaço com ele.</p></div>
-      <div className="grid gap-6 2xl:grid-cols-2">
-        {(Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => {
-          const occupants = publicRoutines.filter((routine) => routine.locationType === location).map((routine) => ({
-            id: routine.mascot.id,
-            name: mascotName(routine.mascot),
-            sprite: getSpriteUrl(routine.mascot.pokemonId),
-            level: routine.mascot.level,
-            personality: routine.mascot.personality,
-            owner: routine.mascot.playerId === playerId ? "Você" : routine.mascot.player.displayName,
-            own: routine.mascot.playerId === playerId,
-            location,
-          }));
-          const stories = memories.filter((memory) => {
-            const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
-            return metadata.location === location;
-          }).slice(0, 3).map((memory) => {
-            const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
-            return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" }) };
-          });
-          return <RefugeLocationScene key={location} location={location} occupants={occupants} ownMascots={ownMascots} backgroundUrl={typeof backgrounds[location] === "string" ? backgrounds[location] : ""} stories={stories} />;
-        })}
-      </div>
+      <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} />
     </section>
 
     <section>

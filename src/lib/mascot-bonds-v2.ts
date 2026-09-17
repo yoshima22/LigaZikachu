@@ -3,10 +3,10 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
 
 export const REFUGE_LOCATIONS = {
-  GARDEN: { label: "Horta", icon: "🌱", capacity: 4, accent: "emerald", purpose: "Comida, cuidado e cooperação", impact: "Favorece amizade (+4). Mascotes Gulosos podem iniciar disputas (-2)." },
-  TRAINING: { label: "Campo de Treino", icon: "🥊", capacity: 3, accent: "amber", purpose: "EXP leve, motivação e rivalidade", impact: "Favorece rivalidade (-2). Competitivos intensificam o desafio (-5)." },
-  REST: { label: "Área de Descanso", icon: "🌙", capacity: 4, accent: "sky", purpose: "Recuperação, conforto e reconciliação", impact: "Aproxima relações (+3). Serenos e Tímidos recebem efeito maior (+5)." },
-  YARD: { label: "Pátio", icon: "✨", capacity: 6, accent: "violet", purpose: "Novos encontros e interação social", impact: "Cria aproximações (+3). Brincalhões e Curiosos interagem mais (+5)." },
+  GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Comida, cuidado e cooperação", impact: "Favorece amizade (+4). Mascotes Gulosos podem iniciar disputas (-2)." },
+  TRAINING: { label: "Campo de Treino", icon: "🥊", capacity: 48, accent: "amber", purpose: "EXP leve, motivação e rivalidade", impact: "Favorece rivalidade (-2). Competitivos intensificam o desafio (-5)." },
+  REST: { label: "Área de Descanso", icon: "🌙", capacity: 48, accent: "sky", purpose: "Recuperação, conforto e reconciliação", impact: "Aproxima relações (+3). Serenos e Tímidos recebem efeito maior (+5)." },
+  YARD: { label: "Pátio", icon: "✨", capacity: 48, accent: "violet", purpose: "Novos encontros e interação social", impact: "Cria aproximações (+3). Brincalhões e Curiosos interagem mais (+5)." },
 } as const;
 
 export type RefugeLocation = keyof typeof REFUGE_LOCATIONS;
