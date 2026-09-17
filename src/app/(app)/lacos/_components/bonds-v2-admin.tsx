@@ -57,7 +57,10 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     }),
     prisma.mascotSocialEvent.count({ where: { ownerId: playerId, createdAt: { gte: since } } }),
     prisma.siteContent.findUnique({ where: { id: "bonds-v2-settings" }, select: { data: true } }),
-    prisma.playerInventory.findMany({ where: { playerId, quantity: { gt: 0 }, item: { type: { in: [...BOND_SHOP_ITEM_TYPES] as never[] } } }, orderBy: { item: { sortOrder: "asc" } }, select: { quantity: true, item: { select: { id: true, type: true, name: true, description: true, rarity: true } } } }),
+    // A leitura do inventário não deve derrubar toda a página enquanto uma
+    // implantação ainda está aplicando os novos valores do enum ShopItemType.
+    // Assim que a migração termina, a consulta volta a preencher a bolsa.
+    prisma.playerInventory.findMany({ where: { playerId, quantity: { gt: 0 }, item: { type: { in: [...BOND_SHOP_ITEM_TYPES] as never[] } } }, orderBy: { item: { sortOrder: "asc" } }, select: { quantity: true, item: { select: { id: true, type: true, name: true, description: true, rarity: true } } } }).catch(() => []),
   ]);
 
   const rawSettings = settings?.data && typeof settings.data === "object" && !Array.isArray(settings.data)
