@@ -140,11 +140,11 @@ export function buildImportantRefugeOptions(location: RefugeLocation, conflict: 
   ];
 }
 
-/** Processador experimental isolado: só é chamado pelas ações administrativas da prévia. */
+/** Processa um ciclo social automático de um local público. */
 export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerId: string, location: RefugeLocation) {
   const definition = REFUGE_LOCATIONS[location];
   const ownRoutines = await tx.mascotRoutine.findMany({
-    where: { playerId, locationType: location, status: "ACTIVE" },
+    where: { playerId, locationType: location, status: "ACTIVE", player: { user: { role: "PLAYER" } } },
     orderBy: [{ nextEventAt: "asc" }, { startedAt: "asc" }],
     take: definition.capacity,
     include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
@@ -154,7 +154,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   // Os locais são públicos. Priorizamos um visitante de outra conta para que
   // a simulação represente encontros reais; sem visitante, usamos outro mascote do dono.
   const visitor = await tx.mascotRoutine.findFirst({
-    where: { playerId: { not: playerId }, locationType: location, status: "ACTIVE" },
+    where: { playerId: { not: playerId }, locationType: location, status: "ACTIVE", player: { user: { role: "PLAYER" } } },
     orderBy: [{ nextEventAt: "asc" }, { lastProcessedAt: "asc" }],
     include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
   });
@@ -162,7 +162,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
 
   const first = routines[0].mascot;
   const second = routines[1]?.mascot ?? null;
-  const locationMascots = await tx.mascotRoutine.findMany({ where: { locationType: location, status: "ACTIVE" }, select: { mascotId: true }, take: definition.capacity });
+  const locationMascots = await tx.mascotRoutine.findMany({ where: { locationType: location, status: "ACTIVE", player: { user: { role: "PLAYER" } } }, select: { mascotId: true }, take: definition.capacity });
   const nearbyRelations = await tx.mascotRelation.findMany({ where: { mascotAId: first.id, mascotBId: { in: locationMascots.map((entry) => entry.mascotId) }, isActive: true }, select: { relationshipScore: true } });
   const friendCircleActive = nearbyRelations.filter((relation) => relation.relationshipScore >= 15).length >= 2;
   const fightClubActive = nearbyRelations.filter((relation) => relation.relationshipScore <= -15).length >= 2;

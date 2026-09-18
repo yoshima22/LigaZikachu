@@ -12,12 +12,10 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 }
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
-  const viewer = await prisma.player.findUnique({ where: { id: playerId }, select: { user: { select: { role: true } } } });
-  const admin = viewer?.user.role === "ADMIN" || viewer?.user.role === "SUPER_ADMIN";
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
   const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
     prisma.mascot.findMany({
-      where: { playerId },
+      where: { playerId, player: { user: { role: "PLAYER" } } },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
       take: 60,
       select: {
@@ -26,7 +24,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     prisma.mascotRoutine.findMany({
-      where: { status: "ACTIVE" },
+      where: { status: "ACTIVE", mascot: { player: { user: { role: "PLAYER" } } } },
       orderBy: { lastProcessedAt: "desc" },
       take: 192,
       select: {
@@ -35,7 +33,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     prisma.mascotRelation.findMany({
-      where: { mascotA: { playerId }, isActive: true },
+      where: { mascotA: { playerId, player: { user: { role: "PLAYER" } } }, mascotB: { player: { user: { role: "PLAYER" } } }, isActive: true },
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
       take: 100,
       select: {
@@ -45,7 +43,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     Promise.all((Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => prisma.mascotBondMemory.findMany({
-      where: { sourceType: "REFUGE", metadata: { path: ["location"], equals: location } },
+      where: { sourceType: "REFUGE", metadata: { path: ["location"], equals: location }, mascotA: { player: { user: { role: "PLAYER" } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: "PLAYER" } } } }] },
       orderBy: { createdAt: "desc" },
       // O limite é individual por região: uma Horta lotada não apaga o
       // histórico visível de Descanso, Treino ou Pátio.
@@ -56,12 +54,12 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }))),
     prisma.mascotSocialEvent.findMany({
-      where: { ownerId: playerId, status: "PENDING" },
+      where: { ownerId: playerId, owner: { user: { role: "PLAYER" } }, status: "PENDING", mascotA: { player: { user: { role: "PLAYER" } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: "PLAYER" } } } }] },
       orderBy: [{ isImportant: "desc" }, { createdAt: "desc" }],
       take: 20,
       include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
     }),
-    prisma.mascotSocialEvent.count({ where: { ownerId: playerId, createdAt: { gte: since } } }),
+    prisma.mascotSocialEvent.count({ where: { ownerId: playerId, owner: { user: { role: "PLAYER" } }, createdAt: { gte: since } } }),
     prisma.siteContent.findUnique({ where: { id: "bonds-v2-settings" }, select: { data: true } }),
     // A leitura do inventário não deve derrubar toda a página enquanto uma
     // implantação ainda está aplicando os novos valores do enum ShopItemType.
@@ -209,7 +207,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       refuge={<>
     <section>
       <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-emerald-300">Espaços públicos e persistentes</p><h2 className="text-2xl font-black text-white">Explore o Refúgio</h2><p className="mt-1 max-w-3xl text-sm text-slate-400">Cada local favorece acontecimentos diferentes. Procure um mascote, envie-o para uma rotina e observe quem está dividindo o espaço com ele.</p></div>
-      <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} admin={admin} />
+      <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} />
     </section>
       </>}
       moments={<>
@@ -218,7 +216,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <ImportantMomentsList moments={importantMoments} />}
     </section>
       </>}
-      inventory={<BondInventoryV2 items={inventoryItems} admin={admin} />}
+      inventory={<BondInventoryV2 items={inventoryItems} />}
       social={<>
     <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
       <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Além das duplas</p><h2 className="text-xl font-semibold text-white">Mapa social e outros treinadores</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Aqui você compara sua rede por treinador. Círculos de amizade e Clubes da Luta são explicados e filtrados diretamente em “Laços e efeitos”, onde seus benefícios também aparecem.</p></div>

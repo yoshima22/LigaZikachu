@@ -16,24 +16,18 @@ import {
   ChevronRight,
   Clock3,
   HeartHandshake,
-  ImagePlus,
   LogOut,
   MapPin,
-  RefreshCw,
   Search,
   Sparkles,
   Users,
   X,
 } from "lucide-react";
 import {
-  adjustBondItemDebugV2Action,
   claimRefugeRewardV2Action,
   contestBondDistanceV2Action,
-  refreshPendingRefugeOptionsV2Action,
-  saveRefugeBackgroundV2Action,
   setMascotRoutineV2Action,
   setRefugeInfluenceV2Action,
-  simulateRefugeV2Action,
   updateActiveBondV2Action,
   useBondDistanceItemV2Action,
 } from "../actions";
@@ -45,7 +39,6 @@ import {
 } from "@/lib/mascot-bonds-v2";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import type { BondOption } from "@/lib/mascot-bonds";
-import { ImageUpload } from "@/components/ui/image-upload";
 import { ResolveBondOptionButton } from "./bond-actions";
 
 export function RoutineSelect({
@@ -82,39 +75,6 @@ export function RoutineSelect({
       <option value="REST">🌙 Descanso</option>
       <option value="YARD">✨ Pátio</option>
     </select>
-  );
-}
-
-export function SimulateRefugeButton({
-  location,
-}: {
-  location: RefugeLocation;
-}) {
-  const [pending, startTransition] = useTransition();
-  const router = useRouter();
-  return (
-    <button
-      type="button"
-      disabled={pending}
-      onClick={() =>
-        startTransition(async () => {
-          const result = await simulateRefugeV2Action(location);
-          if (result.error) toast.error(result.error);
-          else {
-            toast.success(
-              result.importantEventCreated
-                ? "Momento importante criado. Veja a aba de decisões."
-                : (result.message ??
-                    "Momento processado e registrado no diário."),
-            );
-            router.refresh();
-          }
-        })
-      }
-      className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
-    >
-      {pending ? "Processando..." : "Simular momento"}
-    </button>
   );
 }
 
@@ -385,11 +345,9 @@ const POSITIONS = [
 export function RefugeLocationsTabs({
   locations,
   ownMascots,
-  admin,
 }: {
   locations: RefugeLocationTab[];
   ownMascots: SceneMascot[];
-  admin: boolean;
 }) {
   const [active, setActive] = useState<RefugeLocation>(
     locations[0]?.location ?? "GARDEN",
@@ -435,7 +393,6 @@ export function RefugeLocationsTabs({
           key={current.location}
           {...current}
           ownMascots={ownMascots}
-          admin={admin}
         />
       </div>
     </div>
@@ -448,14 +405,12 @@ export function RefugeLocationScene({
   ownMascots,
   backgroundUrl,
   stories,
-  admin,
 }: {
   location: RefugeLocation;
   occupants: SceneMascot[];
   ownMascots: SceneMascot[];
   backgroundUrl: string;
   stories: SceneStory[];
-  admin: boolean;
 }) {
   const definition = REFUGE_LOCATIONS[location];
   const router = useRouter();
@@ -469,7 +424,6 @@ export function RefugeLocationScene({
   );
   const [storyPage, setStoryPage] = useState(1);
   const [now, setNow] = useState<number | null>(null);
-  const [image, setImage] = useState(backgroundUrl);
   const [selectedOccupant, setSelectedOccupant] = useState<SceneMascot | null>(
     null,
   );
@@ -703,7 +657,6 @@ export function RefugeLocationScene({
             Azul: seu mascote · clique em qualquer habitante para abrir sua
             ficha social
           </p>
-          {admin && <SimulateRefugeButton location={location} />}
         </div>
       </div>
       {selectedOccupant && (
@@ -966,40 +919,6 @@ export function RefugeLocationScene({
             })}
           </div>
         </div>
-        {admin && (
-          <details className="group rounded-xl border border-white/10 bg-white/[.025] p-3">
-            <summary className="flex cursor-pointer list-none items-center gap-2 text-[11px] font-bold text-slate-300">
-              <ImagePlus size={14} /> Cenário do local
-            </summary>
-            <div className="mt-3">
-              <ImageUpload
-                value={image}
-                onChange={setImage}
-                label="Background personalizado"
-                hint="Recomendado: 1600×900, JPG ou WEBP."
-                compress
-                maxWidth={1800}
-                maxHeight={1000}
-              />
-              <button
-                disabled={pending || image === backgroundUrl}
-                onClick={() =>
-                  startTransition(async () => {
-                    const result = await saveRefugeBackgroundV2Action(
-                      location,
-                      image,
-                    );
-                    if (result.error) toast.error(result.error);
-                    else toast.success("Cenário salvo.");
-                  })
-                }
-                className="mt-2 w-full rounded-lg bg-fuchsia-400 px-3 py-2 text-[10px] font-black text-slate-950 disabled:opacity-40"
-              >
-                Salvar cenário
-              </button>
-            </div>
-          </details>
-        )}
       </div>
       <div className="border-t border-white/10 bg-[#050914] p-4">
         <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -1140,7 +1059,6 @@ export function ImportantMomentsList({
   moments: ImportantMoment[];
 }) {
   const router = useRouter();
-  const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
   const [context, setContext] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -1161,34 +1079,6 @@ export function ImportantMomentsList({
   const visible = filtered.slice((safePage - 1) * perPage, safePage * perPage);
   return (
     <div>
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3">
-        <p className="max-w-2xl text-[10px] leading-4 text-slate-400">
-          As opções são montadas pelo local, tipo de acontecimento e mascotes
-          envolvidos. Decisões antigas podem manter o modelo anterior até serem
-          renovadas.
-        </p>
-        <button
-          disabled={refreshing}
-          onClick={() =>
-            startRefresh(async () => {
-              const result = await refreshPendingRefugeOptionsV2Action();
-              if (result.error) toast.error(result.error);
-              else {
-                toast.success(
-                  result.updated
-                    ? `${result.updated} momento(s) receberam novas opções.`
-                    : "Todas as decisões já usam opções modulares.",
-                );
-                router.refresh();
-              }
-            })
-          }
-          className="inline-flex items-center gap-2 rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.07] px-3 py-2 text-[10px] font-bold text-fuchsia-200 disabled:opacity-40"
-        >
-          <RefreshCw size={13} className={refreshing ? "animate-spin" : ""} />{" "}
-          Renovar decisões antigas
-        </button>
-      </div>
       <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_220px]">
         <div className="relative">
           <Search
@@ -2300,10 +2190,8 @@ export type BondInventoryItem = {
 
 export function BondInventoryV2({
   items,
-  admin,
 }: {
   items: BondInventoryItem[];
-  admin: boolean;
 }) {
   const [pending, startTransition] = useTransition();
   const [query, setQuery] = useState("");
@@ -2313,18 +2201,6 @@ export function BondInventoryV2({
       .toLocaleLowerCase("pt-BR")
       .includes(query.toLocaleLowerCase("pt-BR")),
   );
-  function adjust(item: BondInventoryItem, delta: 1 | -1) {
-    startTransition(async () => {
-      const result = await adjustBondItemDebugV2Action(item.type, delta);
-      if (result.error) toast.error(result.error);
-      else {
-        toast.success(
-          `${result.name}: ${delta > 0 ? "+1" : "−1"} no inventário de teste.`,
-        );
-        router.refresh();
-      }
-    });
-  }
   return (
     <section className="space-y-4 font-sans">
       <div className="rounded-3xl border border-violet-300/15 bg-violet-300/[.035] p-5">
@@ -2356,18 +2232,6 @@ export function BondInventoryV2({
           </Link>
         </div>
       </div>
-      {admin && (
-        <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[.04] p-4">
-          <p className="text-sm font-semibold text-amber-200">
-            Ferramenta de teste do administrador
-          </p>
-          <p className="mt-1 text-xs leading-5 text-slate-400">
-            Os botões +1 e −1 manipulam apenas o seu inventário para validar
-            decisões, produção e negociação. Jogadores comuns receberão itens
-            pelas atividades normais.
-          </p>
-        </div>
-      )}
       <input
         value={query}
         onChange={(event) => setQuery(event.target.value)}
@@ -2401,24 +2265,6 @@ export function BondInventoryV2({
                 <p className="mt-3 text-xs leading-5 text-slate-300">
                   {item.description}
                 </p>
-                {admin && (
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      disabled={pending}
-                      onClick={() => adjust(item, 1)}
-                      className="rounded-lg bg-emerald-300/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 disabled:opacity-40"
-                    >
-                      +1 debug
-                    </button>
-                    <button
-                      disabled={pending || item.quantity < 1}
-                      onClick={() => adjust(item, -1)}
-                      className="rounded-lg bg-rose-300/10 px-3 py-1.5 text-xs font-semibold text-rose-200 disabled:opacity-40"
-                    >
-                      −1
-                    </button>
-                  </div>
-                )}
               </div>
             </div>
           </article>

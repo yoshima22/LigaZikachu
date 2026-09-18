@@ -27,6 +27,16 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();
+  // Contas administrativas não participam da rede social pública. Remova
+  // qualquer vínculo legado que ainda contenha um mascote dessas contas.
+  const adminRelations = await prisma.mascotRelation.findMany({
+    where: { OR: [
+      { mascotA: { player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } } } },
+      { mascotB: { player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } } } },
+    ] },
+    select: { id: true },
+  });
+  if (adminRelations.length) await prisma.mascotRelation.deleteMany({ where: { id: { in: adminRelations.map((relation) => relation.id) } } });
   // Um Amuleto ativo pausa o prazo normal. Se sobreviver às 6 horas sem
   // Escudo, preserva o vínculo e encerra toda a disputa.
   const resolvedCharms = await prisma.mascotRelation.findMany({ where: { isActive: true, promiseCharmResolvesAt: { lte: now } }, select: { mascotAId: true, mascotBId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
@@ -82,7 +92,7 @@ export async function GET(req: NextRequest) {
 
   // Saúde é processada para todas as contas ativas com mascotes, mesmo sem
   // sessão ou visita à página. O cron roda a cada quatro horas.
-  const diseasePlayers = await prisma.player.findMany({ where: { active: true, mascots: { some: {} }, user: { status: "ACTIVE" } }, select: { id: true }, take: 500 });
+  const diseasePlayers = await prisma.player.findMany({ where: { active: true, mascots: { some: {} }, user: { role: "PLAYER", status: "ACTIVE" } }, select: { id: true }, take: 500 });
   for (let index = 0; index < diseasePlayers.length; index += 10) {
     const results = await Promise.allSettled(diseasePlayers.slice(index, index + 10).map((player) => processMascotDiseaseForPlayer(player.id)));
     for (const result of results) {
@@ -123,6 +133,7 @@ export async function GET(req: NextRequest) {
       where: {
         locationType: location,
         status: "ACTIVE",
+        player: { user: { role: "PLAYER" } },
         OR: [{ nextEventAt: { lte: dueBefore } }, { nextEventAt: null }],
       },
       distinct: ["playerId"],
