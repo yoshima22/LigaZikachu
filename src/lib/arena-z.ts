@@ -1937,13 +1937,17 @@ export async function validateArenaMascots(
 
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: unique }, playerId },
-    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } },
+    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 }, routine: { select: { status: true, locationType: true } } },
   });
   if (mascots.length !== unique.length)
     throw new Error("Um ou mais mascotes nao pertencem ao jogador.");
 
   const now = new Date();
   for (const m of mascots) {
+    if (m.routine?.status === "ACTIVE")
+      throw new Error(
+        `${m.nickname ?? getPokemonName(m.pokemonId)} esta ocupado no Refugio. Retire-o da area publica antes de montar a equipe.`,
+      );
     if (m.expeditions.length > 0)
       throw new Error(
         `${m.nickname ?? getPokemonName(m.pokemonId)} esta em expedicao.`,

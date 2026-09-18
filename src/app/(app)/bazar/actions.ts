@@ -3087,7 +3087,7 @@ async function assertMascotTradeableInBazar(
     throw new Error(`${name} está escalado na Liga Semanal e não pode ser oferecido no Bazar.`);
   }
 
-  const [activeExpedition, activeArenaMember] = await Promise.all([
+  const [activeExpedition, activeArenaMember, activeRefugeRoutine] = await Promise.all([
     client.mascotExpedition.findFirst({
       where: { mascotId: mascot.id, status: "ACTIVE" },
       select: { id: true },
@@ -3096,10 +3096,15 @@ async function assertMascotTradeableInBazar(
       where: { mascotId: mascot.id, team: { status: "ACTIVE" } },
       select: { id: true },
     }),
+    client.mascotRoutine.findFirst({
+      where: { mascotId: mascot.id, status: "ACTIVE" },
+      select: { id: true, locationType: true },
+    }),
   ]);
 
   if (activeExpedition) throw new Error(`${name} está em expedição e não pode ser oferecido agora.`);
   if (activeArenaMember) throw new Error(`${name} está em uma equipe ativa da Arena Z.`);
+  if (activeRefugeRoutine) throw new Error(`${name} está ocupado no Refúgio. Retire-o da área pública antes de anunciá-lo.`);
 }
 
 async function _reserveProposalOffers(tx: TxClient, playerId: string, items: ProposalOfferItem[]): Promise<ProposalOfferItem[]> {

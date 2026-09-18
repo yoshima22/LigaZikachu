@@ -1531,8 +1531,9 @@ export async function startExpedition(
   durationKey: ExpeditionDuration = "1h",
   mode: ExpeditionMode = "STANDARD"
 ) {
-  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
+  const mascot = await prisma.mascot.findUnique({ where: { id: mascotId }, include: { routine: { select: { status: true, locationType: true } } } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
+  if (mascot.routine?.status === "ACTIVE") throw new Error("Mascote ocupado no Refugio. Retire-o da area publica antes de iniciar outra atividade.");
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z nao pode sair em expedicao.");
   if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido nao pode sair em expedicao.");
   if (mascot.arenaState === "TRACE_HIDING" || mascot.arenaState === "TRACE_HUNTING") throw new Error("Mascote em Caçada de Rastros nao pode sair em expedicao.");

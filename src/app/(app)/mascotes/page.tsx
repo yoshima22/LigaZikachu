@@ -106,6 +106,7 @@ async function fetchMascotPageData(playerId: string) {
           take: 1,
           select: { id: true, startedAt: true, finishAt: true, status: true, rewardJson: true }
         },
+        routine: { select: { status: true, locationType: true } },
       },
       // Equipado sempre primeiro; depois favoritos na ordem manual (favoriteOrder).
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { favoriteOrder: "asc" }, { level: "desc" }, { id: "asc" }],
@@ -404,6 +405,7 @@ export default async function MascotesPage() {
       id: e.id, startedAt: e.startedAt, finishAt: e.finishAt, status: e.status,
       mode: (e.rewardJson as Record<string,unknown> | null)?.mode as string | undefined ?? "STANDARD",
     })),
+    refugeRoutine: m.routine?.status === "ACTIVE" ? { locationType: m.routine.locationType } : null,
     relations: (m.relationsAsA ?? []).map(r => ({
       type: r.type,
       interactionCount: r.interactionCount,

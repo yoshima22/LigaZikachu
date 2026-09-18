@@ -40,6 +40,7 @@ interface MascotData {
   relations?: Array<{ type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }>;
   hatchedAt: Date; lastInteractedAt: Date | null; lastPlayedAt?: Date | null; lastPettedAt?: Date | null; lastFedAt: Date | null;
   expeditions: { id: string; startedAt?: Date; finishAt: Date; status: string; mode?: string }[];
+  refugeRoutine?: { locationType: string } | null;
   events: { id: string; emoji: string; description: string; createdAt: Date }[];
   hasFood: boolean; hasSweet: boolean; hasRareSweet?: boolean;
   otherMascots?: { id: string; name: string }[];

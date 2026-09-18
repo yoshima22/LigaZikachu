@@ -26,7 +26,8 @@ import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
-type OcupFilter = "all" | "free" | "busy" | "expedition" | "bazar" | "arena" | "resting" | "injured" | "buff";
+type OcupFilter = "all" | "free" | "busy" | "expedition" | "refuge" | "bazar" | "arena" | "resting" | "injured" | "buff";
+type BankMascotWithRoutine = BankMascot & { routine?: { status: string; locationType: string } | null };
 
 const PAGE_SIZE = 9;
 
@@ -79,6 +80,7 @@ const OCUP_OPTIONS: { value: OcupFilter; label: string }[] = [
   { value: "free", label: "Livre" },
   { value: "busy", label: "Ocupado" },
   { value: "expedition", label: "Expedicao" },
+  { value: "refuge", label: "No Refugio" },
   { value: "bazar", label: "No Bazar" },
   { value: "arena", label: "Na Arena" },
   { value: "resting", label: "Repouso" },
@@ -97,8 +99,10 @@ function statNameColor(m: Pick<BankMascot, "statForce" | "statAgility" | "statCh
 }
 
 function isBusy(mascot: BankMascot) {
+  const routine = (mascot as BankMascotWithRoutine).routine;
   return (
     mascot.expeditions.length > 0 ||
+    routine?.status === "ACTIVE" ||
     mascot.bazarListed ||
     mascot.arenaState !== "FREE" ||
     Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date()) ||
@@ -108,7 +112,9 @@ function isBusy(mascot: BankMascot) {
 
 function getOccupationChips(mascot: BankMascot) {
   const chips: { label: string; cls: string }[] = [];
+  const routine = (mascot as BankMascotWithRoutine).routine;
   if (mascot.expeditions.length > 0) chips.push({ label: "Expedicao", cls: "bg-blue-500/15 text-blue-300 border-blue-500/20" });
+  if (routine?.status === "ACTIVE") chips.push({ label: `Refugio · ${({ GARDEN: "Horta", TRAINING: "Treino", REST: "Descanso", YARD: "Patio" } as Record<string, string>)[routine.locationType] ?? "Area publica"}`, cls: "bg-fuchsia-500/15 text-fuchsia-200 border-fuchsia-500/20" });
   if (mascot.bazarListed) chips.push({ label: "Bazar", cls: "bg-yellow-500/15 text-yellow-300 border-yellow-500/20" });
   if (mascot.arenaState === "ARENA") chips.push({ label: "Arena", cls: "bg-red-500/15 text-red-300 border-red-500/20" });
   if (mascot.arenaState === "RESTING") chips.push({ label: "Repouso", cls: "bg-sky-500/15 text-sky-300 border-sky-500/20" });

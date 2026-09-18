@@ -1956,13 +1956,17 @@ export async function getBankMascotsPageAction(input?: {
           bazarListed: false,
           expeditions: { none: { status: "ACTIVE" } },
           buffs: { none: { expiresAt: { gt: now } } },
-          OR: [{ restingUntil: null }, { restingUntil: { lte: now } }],
+          AND: [
+            { OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }] },
+            { OR: [{ restingUntil: null }, { restingUntil: { lte: now } }] },
+          ],
         });
         break;
       case "busy":
         and.push({
           OR: [
             { expeditions: { some: { status: "ACTIVE" } } },
+            { routine: { status: "ACTIVE" } },
             { bazarListed: true },
             { arenaState: { not: "FREE" } },
             { restingUntil: { gt: now } },
@@ -1972,6 +1976,9 @@ export async function getBankMascotsPageAction(input?: {
         break;
       case "expedition":
         and.push({ expeditions: { some: { status: "ACTIVE" } } });
+        break;
+      case "refuge":
+        and.push({ routine: { status: "ACTIVE" } });
         break;
       case "bazar":
         and.push({ bazarListed: true });
@@ -2001,6 +2008,7 @@ export async function getBankMascotsPageAction(input?: {
       ivRating: true, ivScore: true, performanceTag: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
       expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true } },
+      routine: { select: { status: true, locationType: true } },
       buffs: { where: { expiresAt: { gt: now } }, select: { id: true }, take: 1 },
     } satisfies Prisma.MascotSelect;
 
@@ -2073,6 +2081,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
+    refugeRoutine: { locationType: string } | null;
     events: { id: string; emoji: string; description: string; createdAt: Date }[];
   };
 }> {
@@ -2087,6 +2096,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
       where: { id: mascotId },
       include: {
         expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true, rewardJson: true } },
+        routine: { select: { status: true, locationType: true } },
         relationsAsA: {
           take: 10,
           include: { mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { id: true, displayName: true } } } } },
@@ -2133,6 +2143,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
           id: e.id, finishAt: e.finishAt, status: e.status,
           mode: (e.rewardJson as Record<string, unknown> | null)?.mode as string ?? "STANDARD",
         })),
+        refugeRoutine: m.routine?.status === "ACTIVE" ? { locationType: m.routine.locationType } : null,
         events: [],
       },
     };

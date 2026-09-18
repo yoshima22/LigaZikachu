@@ -97,6 +97,7 @@ interface MascotData {
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
+  refugeRoutine?: { locationType: string } | null;
   events: MascotEvent[];
   hasFood: boolean;
   hasSweet: boolean;
@@ -996,11 +997,16 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       })()}
 
       {/* Status badges */}
-      {(mascot.bazarListed || mascot.arenaState !== "FREE" || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (
+      {(mascot.bazarListed || mascot.arenaState !== "FREE" || mascot.refugeRoutine || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (
         <div className="flex flex-wrap gap-1.5 border-b border-border/40 px-4 py-2 bg-slate-900/30">
           {mascot.bazarListed && (
             <span className="flex items-center gap-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[9px] font-semibold text-[#FFCB05]">
               🛒 No Bazar
+            </span>
+          )}
+          {mascot.refugeRoutine && (
+            <span className="flex items-center gap-1 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold text-fuchsia-200">
+              🏡 Refúgio · {({ GARDEN: "Horta", TRAINING: "Campo de Treino", REST: "Descanso", YARD: "Pátio" } as Record<string, string>)[mascot.refugeRoutine.locationType] ?? "Área pública"}
             </span>
           )}
           {mascot.arenaState === "ARENA" && (

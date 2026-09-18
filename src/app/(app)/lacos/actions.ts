@@ -39,8 +39,13 @@ async function getAdminPlayerId() {
 export async function setMascotRoutineV2Action(mascotId: string, location: RefugeLocation | "NONE") {
   try {
     const playerId = await getPlayerId();
-    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
+    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, arenaState: true, bazarListed: true, expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 }, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
     if (!mascot) throw new Error("Mascote não encontrado na sua conta.");
+    if (location !== "NONE") {
+      if (mascot.expeditions.length) throw new Error("Este mascote está em uma expedição e não pode entrar no Refúgio.");
+      if (mascot.bazarListed) throw new Error("Este mascote está reservado no Bazar e não pode entrar no Refúgio.");
+      if (mascot.arenaState !== "FREE") throw new Error("Este mascote está ocupado em outra atividade e não pode entrar no Refúgio.");
+    }
     const changingRoutine = mascot.routine && (
       location === "NONE"
         ? mascot.routine.status === "ACTIVE"
