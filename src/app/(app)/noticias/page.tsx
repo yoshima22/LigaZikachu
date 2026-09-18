@@ -52,12 +52,11 @@ export default async function NoticiasPage() {
   const user = session?.user;
   const admin = user ? isAdmin(user.role) : false;
   const player = user ? await getSessionPlayer(user.id) : null;
+  // Catálogo completo da loja (cosméticos, ovos, comidas, buffs, pedras...):
+  // a recompensa da notícia é escolhida digitando o nome do item.
   const cosmeticOptions = admin
     ? await prisma.shopItem.findMany({
-        where: {
-          type: { in: ["TITLE", "BANNER", "FRAME"] },
-          inventoryEnabled: true,
-        },
+        where: { inventoryEnabled: true },
         select: { id: true, name: true, type: true, rarity: true },
         orderBy: [{ type: "asc" }, { sortOrder: "asc" }, { name: "asc" }],
       })

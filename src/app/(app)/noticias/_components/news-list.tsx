@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ImageUpload } from "@/components/ui/image-upload";
 import { claimNewsReward, markNewsPostsRead, updateNewsPost } from "../actions";
-import type { CosmeticRewardOption } from "./news-composer";
+import { ShopItemPicker, type CosmeticRewardOption } from "./news-composer";
 
 export type NewsPostView = {
   id: string;
@@ -26,27 +26,13 @@ export type NewsPostView = {
 const rewardKinds = [
   { value: "NONE", label: "Sem recompensa" },
   { value: "ZIKA_COINS", label: "ZikaCoins" },
-  { value: "MASCOT_EGG", label: "Ovo de mascote" },
-  { value: "MASCOT_FOOD", label: "Comida/Doce" },
-  { value: "MASCOT_BUFF", label: "Item da loja" },
-  { value: "SHOP_ITEM", label: "Cosmético da ZikaShop" },
+  { value: "SHOP_ITEM", label: "Item da loja" },
+  // Mantidos só para não trocar a recompensa de notícias antigas ao editá-las.
+  { value: "MASCOT_EGG", label: "Ovo de mascote (legado)" },
+  { value: "MASCOT_FOOD", label: "Comida/Doce (legado)" },
+  { value: "MASCOT_BUFF", label: "Item de mascote (legado)" },
 ] as const;
 
-const eggTypes = ["COMMON", "RARE", "SPECIAL", "EVENT", "GEN1", "GEN2", "GEN3", "GEN4", "GEN5", "GEN6", "GEN7", "GEN8", "GEN9"];
-const foodTypes = [
-  { value: "FOOD", label: "Comida" },
-  { value: "SWEET", label: "Doce" },
-];
-const buffTypes = [
-  { value: "MASCOT_BUFF_EXP", label: "Buff de EXP" },
-  { value: "MASCOT_BUFF_STAT", label: "Buff de atributo" },
-  { value: "MASCOT_BUFF_HAPPY", label: "Buff de felicidade" },
-  { value: "MASCOT_BUFF_LUCK", label: "Buff de sorte" },
-  { value: "MASCOT_BUFF_MOOD", label: "Buff de humor" },
-  { value: "LUCKY_EGG", label: "Lucky Egg" },
-  { value: "PICNIC_BASKET", label: "Cesta de Picnic" },
-  { value: "XP_SHARE", label: "XP Share" },
-];
 
 function inlineParts(text: string) {
   const parts: Array<{ type: "text" | "bold" | "link"; value: string; href?: string }> = [];
@@ -242,19 +228,6 @@ function NewsEditForm({
   const [rewardTitle, setRewardTitle] = useState(post.rewardTitle ?? "");
   const [isPending, startTransition] = useTransition();
 
-  const typeOptions = rewardKind === "MASCOT_EGG"
-    ? eggTypes.map((value) => ({ value, label: value }))
-    : rewardKind === "MASCOT_FOOD"
-      ? foodTypes
-      : rewardKind === "MASCOT_BUFF"
-        ? buffTypes
-        : rewardKind === "SHOP_ITEM"
-          ? cosmeticOptions.map((item) => ({
-              value: item.id,
-              label: `${item.type === "TITLE" ? "Título" : item.type === "BANNER" ? "Banner" : "Moldura"} · ${item.name} (${item.rarity})`,
-            }))
-        : [];
-
   function save() {
     startTransition(async () => {
       const result = await updateNewsPost(post.id, {
@@ -301,11 +274,8 @@ function NewsEditForm({
           {rewardKind !== "NONE" && (
             <>
               <input type="number" min={1} value={rewardAmount} onChange={(event) => setRewardAmount(Number(event.target.value))} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" />
-              {typeOptions.length > 0 && (
-                <select value={rewardType} onChange={(event) => setRewardType(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
-                  <option value="">{rewardKind === "SHOP_ITEM" ? "Selecione o cosmético" : "Padrao"}</option>
-                  {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+              {rewardKind === "SHOP_ITEM" && (
+                <ShopItemPicker options={cosmeticOptions} value={rewardType} onChange={setRewardType} />
               )}
               <input value={rewardTitle} onChange={(event) => setRewardTitle(event.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Nome exibido" />
             </>

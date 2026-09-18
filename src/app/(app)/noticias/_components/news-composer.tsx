@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useId, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { ImageIcon, Loader2, Send, Sparkles } from "lucide-react";
 import { toast } from "sonner";
@@ -11,10 +11,7 @@ const rewardKinds = [
   { value: "NONE", label: "Sem recompensa" },
   { value: "ZIKA_COINS", label: "ZikaCoins" },
   { value: "LIGA_CASH", label: "LigaCash (LC)" },
-  { value: "MASCOT_EGG", label: "Ovo de mascote" },
-  { value: "MASCOT_FOOD", label: "Comida/Doce" },
-  { value: "MASCOT_BUFF", label: "Item da loja" },
-  { value: "SHOP_ITEM", label: "Cosmético da ZikaShop" },
+  { value: "SHOP_ITEM", label: "Item da loja" },
 ] as const;
 
 export type CosmeticRewardOption = {
@@ -24,21 +21,72 @@ export type CosmeticRewardOption = {
   rarity: string;
 };
 
-const eggTypes = ["COMMON", "RARE", "SPECIAL", "EVENT", "GEN1", "GEN2", "GEN3", "GEN4", "GEN5", "GEN6", "GEN7", "GEN8", "GEN9"];
-const foodTypes = [
-  { value: "FOOD", label: "Comida" },
-  { value: "SWEET", label: "Doce" },
-];
-const buffTypes = [
-  { value: "MASCOT_BUFF_EXP", label: "Buff de EXP" },
-  { value: "MASCOT_BUFF_STAT", label: "Buff de atributo" },
-  { value: "MASCOT_BUFF_HAPPY", label: "Buff de felicidade" },
-  { value: "MASCOT_BUFF_LUCK", label: "Buff de sorte" },
-  { value: "MASCOT_BUFF_MOOD", label: "Buff de humor" },
-  { value: "LUCKY_EGG", label: "Lucky Egg" },
-  { value: "PICNIC_BASKET", label: "Cesta de Picnic" },
-  { value: "XP_SHARE", label: "XP Share" },
-];
+const ITEM_TYPE_LABELS: Record<string, string> = {
+  TITLE: "Título",
+  BANNER: "Banner",
+  FRAME: "Moldura",
+};
+
+function itemTypeLabel(type: string) {
+  return ITEM_TYPE_LABELS[type] ?? type;
+}
+
+/**
+ * Campo único: o admin digita o nome do item (com autocomplete nativo via
+ * datalist) e o id correspondente é resolvido na hora. Substitui a cascata de
+ * selects por categoria, que escondia a maior parte do catálogo da loja.
+ */
+export function ShopItemPicker({
+  options,
+  value,
+  onChange,
+}: {
+  options: CosmeticRewardOption[];
+  value: string;
+  onChange: (itemId: string) => void;
+}) {
+  const listId = useId();
+  const [query, setQuery] = useState(() => options.find((item) => item.id === value)?.name ?? "");
+  const selected = options.find((item) => item.id === value) ?? null;
+
+  function handleChange(nextQuery: string) {
+    setQuery(nextQuery);
+    const normalized = nextQuery.trim().toLowerCase();
+    const exact = options.find((item) => item.name.toLowerCase() === normalized);
+    const partial = normalized.length >= 3
+      ? options.filter((item) => item.name.toLowerCase().includes(normalized))
+      : [];
+    // Nome parcial só resolve quando não houver ambiguidade.
+    const match = exact ?? (partial.length === 1 ? partial[0] : null);
+    onChange(match?.id ?? "");
+  }
+
+  return (
+    <div className="md:col-span-2">
+      <input
+        list={listId}
+        value={query}
+        onChange={(event) => handleChange(event.target.value)}
+        placeholder="Nome do item (ex: Vitamina, Ovo Raro, Amuleto...)"
+        className="w-full rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white outline-none focus:border-[#FFCB05]"
+      />
+      <datalist id={listId}>
+        {options.map((item) => (
+          <option key={item.id} value={item.name}>
+            {itemTypeLabel(item.type)}
+          </option>
+        ))}
+      </datalist>
+      <p className={`mt-1 text-[11px] ${selected ? "text-emerald-400" : query.trim() ? "text-red-400" : "text-slate-500"}`}>
+        {selected
+          ? `Selecionado: ${selected.name} (${itemTypeLabel(selected.type)})`
+          : query.trim()
+            ? "Nenhum item da loja com esse nome. Continue digitando ou escolha na lista."
+            : `Digite o nome do item — ${options.length} itens disponíveis.`}
+      </p>
+    </div>
+  );
+}
 
 function insertMarkup(body: string, setBody: (value: string) => void, markup: string) {
   const suffix = body && !body.endsWith("\n") ? "\n" : "";
@@ -56,19 +104,6 @@ export function NewsComposer({ cosmeticOptions }: { cosmeticOptions: CosmeticRew
   const [rewardType, setRewardType] = useState("");
   const [rewardTitle, setRewardTitle] = useState("");
   const [isPending, startTransition] = useTransition();
-
-  const typeOptions = rewardKind === "MASCOT_EGG"
-    ? eggTypes.map((value) => ({ value, label: value }))
-    : rewardKind === "MASCOT_FOOD"
-      ? foodTypes
-      : rewardKind === "MASCOT_BUFF"
-        ? buffTypes
-        : rewardKind === "SHOP_ITEM"
-          ? cosmeticOptions.map((item) => ({
-              value: item.id,
-              label: `${item.type === "TITLE" ? "Título" : item.type === "BANNER" ? "Banner" : "Moldura"} · ${item.name} (${item.rarity})`,
-            }))
-        : [];
 
   function submit() {
     startTransition(async () => {
@@ -171,13 +206,10 @@ export function NewsComposer({ cosmeticOptions }: { cosmeticOptions: CosmeticRew
           {rewardKind !== "NONE" && (
             <>
               <input type="number" min={1} value={rewardAmount} onChange={(e) => setRewardAmount(Number(e.target.value))} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Quantidade" />
-              {typeOptions.length > 0 && (
-                <select value={rewardType} onChange={(e) => setRewardType(e.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white">
-                  <option value="">{rewardKind === "SHOP_ITEM" ? "Selecione o cosmético" : "Padrao"}</option>
-                  {typeOptions.map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
-                </select>
+              {rewardKind === "SHOP_ITEM" && (
+                <ShopItemPicker options={cosmeticOptions} value={rewardType} onChange={setRewardType} />
               )}
-              <input value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Nome exibido da recompensa" />
+              <input value={rewardTitle} onChange={(e) => setRewardTitle(e.target.value)} className="rounded-xl border border-border bg-slate-950 px-3 py-2 text-sm text-white" placeholder="Nome exibido (opcional)" />
             </>
           )}
         </div>

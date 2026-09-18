@@ -9,6 +9,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { creditCoins } from "@/lib/zikacoins";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
+import { EGG_SHOP_TO_EGG_TYPE, isEggShopItemType } from "@/lib/shop-config";
 
 const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "LIGA_CASH", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF", "SHOP_ITEM"]);
 
@@ -64,20 +65,18 @@ async function buildRewardPayload(data: z.infer<typeof newsSchema>) {
     };
   }
   if (data.rewardKind === "SHOP_ITEM") {
-    if (!data.rewardType) throw new Error("Selecione um item cosmético da ZikaShop.");
+    if (!data.rewardType) throw new Error("Escolha um item da loja.");
+    // Qualquer item da ZikaShop (cosmético, ovo, comida, buff, pedra...) — a
+    // entrega é roteada por tipo no resgate, igual à compra na loja.
     const item = await prisma.shopItem.findFirst({
-      where: {
-        id: data.rewardType,
-        type: { in: [ShopItemType.TITLE, ShopItemType.BANNER, ShopItemType.FRAME] },
-        inventoryEnabled: true,
-      },
+      where: { id: data.rewardType, inventoryEnabled: true },
       select: { id: true, name: true, type: true },
     });
-    if (!item) throw new Error("Item cosmético não encontrado ou indisponível no inventário.");
+    if (!item) throw new Error("Item da loja não encontrado ou indisponível.");
     const quantity = Math.max(1, data.rewardAmount || 1);
     return {
       rewardEnabled: true,
-      rewardTitle: data.rewardTitle || item.name,
+      rewardTitle: data.rewardTitle || (quantity > 1 ? `${quantity}x ${item.name}` : item.name),
       rewardPayload: {
         rewardKind: "SHOP_ITEM",
         shopItemId: item.id,
@@ -265,19 +264,35 @@ export async function claimNewsReward(postId: string) {
       } else if (rewardKind === "SHOP_ITEM" && typeof payload.shopItemId === "string") {
         const quantity = typeof payload.quantity === "number" ? Math.max(1, Math.floor(payload.quantity)) : 1;
         const item = await tx.shopItem.findFirst({
-          where: {
-            id: payload.shopItemId,
-            type: { in: [ShopItemType.TITLE, ShopItemType.BANNER, ShopItemType.FRAME] },
-            inventoryEnabled: true,
-          },
-          select: { id: true },
+          where: { id: payload.shopItemId, inventoryEnabled: true },
+          select: { id: true, type: true },
         });
-        if (!item) throw new Error("O item cosmético desta recompensa não está mais disponível.");
-        await tx.playerInventory.upsert({
-          where: { playerId_itemId: { playerId: player.id, itemId: item.id } },
-          create: { playerId: player.id, itemId: item.id, quantity, source: "NEWS_REWARD" },
-          update: { quantity: { increment: quantity } },
-        });
+        if (!item) throw new Error("O item desta recompensa não está mais disponível.");
+        // Mesma regra de entrega da compra na loja: ovo vira MascotEgg,
+        // comida/doce vai para o estoque de comida, o resto vai ao inventário.
+        if (isEggShopItemType(item.type)) {
+          const eggType = (EGG_SHOP_TO_EGG_TYPE[item.type] ?? EggType.COMMON) as EggType;
+          await tx.mascotEgg.createMany({
+            data: Array.from({ length: quantity }, () => ({
+              playerId: player.id,
+              type: eggType,
+              origin: `noticia:${post.id}`,
+            })),
+          });
+        } else if (item.type === ShopItemType.MASCOT_FOOD || item.type === ShopItemType.MASCOT_SWEET) {
+          const foodType = item.type === ShopItemType.MASCOT_SWEET ? FoodType.SWEET : FoodType.FOOD;
+          await tx.mascotFoodItem.upsert({
+            where: { playerId_type: { playerId: player.id, type: foodType } },
+            create: { playerId: player.id, type: foodType, quantity },
+            update: { quantity: { increment: quantity } },
+          });
+        } else {
+          await tx.playerInventory.upsert({
+            where: { playerId_itemId: { playerId: player.id, itemId: item.id } },
+            create: { playerId: player.id, itemId: item.id, quantity, source: "NEWS_REWARD" },
+            update: { quantity: { increment: quantity } },
+          });
+        }
       }
       await tx.newsRead.upsert({
         where: { postId_playerId: { postId, playerId: player.id } },
