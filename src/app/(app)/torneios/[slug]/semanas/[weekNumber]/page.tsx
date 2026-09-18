@@ -278,6 +278,8 @@ export default async function WeekDetailPage({
     .map((stats) => ({
       ...stats,
       members: [...stats.members].sort((a, b) => b.points - a.points || b.wins - a.wins || a.playerName.localeCompare(b.playerName, "pt-BR")),
+      // criterio de ordenacao (mesmo do Top do Dia); nao e exibido porque mistura
+      // duas escalas: vitorias (x3) + premios (0-6 por partida)
       averageScore: stats.matchesPlayed > 0 ? (stats.wins * 3 + stats.defendedPrizes) / stats.matchesPlayed : 0,
       winRate: stats.matchesPlayed > 0 ? stats.wins / stats.matchesPlayed : 0,
       averagePrizes: stats.matchesPlayed > 0 ? stats.defendedPrizes / stats.matchesPlayed : 0
@@ -652,7 +654,7 @@ export default async function WeekDetailPage({
                 Times e duplas do dia
               </h2>
               <p className="mt-1 text-xs text-slate-400">
-                Media do time = (vitorias x 3 + premios defendidos) / partidas jogadas pelo time. Quem foi escalado e ainda nao jogou aparece no elenco, mas nao entra na media.
+                Premios por partida = premios defendidos / partidas jogadas pelo time (0 a 6). A ordem segue o criterio do Top do Dia: aproveitamento de vitorias primeiro, premios por partida como desempate. Quem foi escalado e ainda nao jogou aparece no elenco, mas nao entra nas medias.
               </p>
             </div>
             {!!bonusRule?.winnerTeamBonus && (
@@ -675,8 +677,10 @@ export default async function WeekDetailPage({
                   </p>
                 </div>
                 <div className="text-right">
-                  <p className="font-pixel text-lg text-[#FFCB05]">{championTeam.averageScore.toFixed(2)}</p>
-                  <p className="text-[10px] uppercase tracking-widest text-slate-500">media por partida</p>
+                  <p className="font-pixel text-lg text-[#FFCB05]">{Math.round(championTeam.winRate * 100)}%</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500">vitorias</p>
+                  <p className="mt-1 font-pixel text-base text-slate-200">{championTeam.averagePrizes.toFixed(2)}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500">premios/partida</p>
                 </div>
               </div>
               <p className="mt-2 text-xs text-slate-400">
@@ -699,7 +703,6 @@ export default async function WeekDetailPage({
                     {team.teamName}
                   </p>
                   <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
-                    <span><span className="font-semibold text-slate-200">{team.averageScore.toFixed(2)}</span> media/partida</span>
                     <span><span className="font-semibold text-slate-200">{Math.round(team.winRate * 100)}%</span> vitorias</span>
                     <span><span className="font-semibold text-slate-200">{team.averagePrizes.toFixed(2)}</span> premios/partida</span>
                   </div>
