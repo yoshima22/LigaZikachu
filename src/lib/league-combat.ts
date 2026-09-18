@@ -348,7 +348,8 @@ export function runLeagueCombat(
     const first = [...a, ...b].find((mascot) => mascot.id === effect.attackerId);
     const second = [...a, ...b].find((mascot) => mascot.id === effect.targetId);
     if (!first || !second) continue;
-    log.push({ turn: 0, actorId: first.id, actorName: first.name, actorOwnerId: first.ownerId, actorPokemonId: first.pokemonId, actorLevel: first.level, targetId: second.id, targetName: second.name, targetOwnerId: second.ownerId, targetPokemonId: second.pokemonId, targetLevel: second.level, action: "DEFEND", damage: 0, attackerType: elementOf(first), defenderType: elementOf(second), multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(first.combatRole), targetRole: getCombatRoleLabel(second.combatRole), effect: `LAÇO:OPONENTES:${effect.label}: ${effect.damagePct > 0 ? "+" : ""}${effect.damagePct}% de dano${effect.directHitLimit ? ` nos ${effect.directHitLimit} primeiro(s) confronto(s) direto(s)` : " contra este mascote"}.` });
+    const pairKey = [first.id, second.id].sort().join(":");
+    if (!log.some((entry) => entry.effect?.startsWith("LAÇO:OPONENTES:") && [entry.actorId, entry.targetId].sort().join(":") === pairKey)) log.push({ turn: 0, actorId: first.id, actorName: first.name, actorOwnerId: first.ownerId, actorPokemonId: first.pokemonId, actorLevel: first.level, targetId: second.id, targetName: second.name, targetOwnerId: second.ownerId, targetPokemonId: second.pokemonId, targetLevel: second.level, action: "DEFEND", damage: 0, attackerType: elementOf(first), defenderType: elementOf(second), multiplier: 1, advantageApplied: false, actorRole: getCombatRoleLabel(first.combatRole), targetRole: getCombatRoleLabel(second.combatRole), effect: `LAÇO:OPONENTES:${effect.label}: ${effect.damagePct > 0 ? "+" : ""}${effect.damagePct}% de dano${effect.directHitLimit ? ` nos ${effect.directHitLimit} primeiro(s) confronto(s) direto(s)` : " contra este mascote"}.` });
   }
   if (options.weeklySabotage) {
     const percent = Math.round((1 - options.weeklySabotage.statMultiplier) * 100);
@@ -587,15 +588,19 @@ export function runLeagueCombat(
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
-      const strongestEligibleBond = (mascotId: string) => bondLinks
-        .filter((link) => (link.mascotAId === mascotId || link.mascotBId === mascotId) && (hp.get(link.mascotAId === mascotId ? link.mascotBId : link.mascotAId) ?? 0) > 0)
-        .sort((a, b) => (Math.abs(b.damagePct) + Math.abs(b.defensePct)) - (Math.abs(a.damagePct) + Math.abs(a.defensePct)))[0];
-      // Um único vínculo define o comportamento atual de cada mascote. Isso
-      // impede acumular amizade defensiva com rivalidade ofensiva na mesma ação.
-      const offensiveBond = strongestEligibleBond(actor.id);
-      const defensiveBond = strongestEligibleBond(target.id);
-      if (offensiveBond) damage = Math.max(1, Math.round(damage * (1 + offensiveBond.damagePct / 100)));
-      if (defensiveBond?.defensePct) damage = Math.max(1, Math.round(damage * (1 - defensiveBond.defensePct / 100)));
+      const eligibleBondFamilies = (mascotId: string) => {
+        const eligible = bondLinks.filter((link) => (link.mascotAId === mascotId || link.mascotBId === mascotId) && (hp.get(link.mascotAId === mascotId ? link.mascotBId : link.mascotAId) ?? 0) > 0);
+        const friendship = eligible.filter((link) => ["COLLEAGUE", "FRIEND", "SUPER_FRIEND"].includes(link.kind)).sort((a, b) => (b.damagePct + b.defensePct) - (a.damagePct + a.defensePct))[0];
+        const rivalry = eligible.filter((link) => ["RIVAL", "ENEMY", "NEMESIS"].includes(link.kind)).sort((a, b) => (b.damagePct + Math.abs(b.defensePct)) - (a.damagePct + Math.abs(a.defensePct)))[0];
+        return [friendship, rivalry].filter((link): link is BondCombatLink => Boolean(link));
+      };
+      // Amizades repetidas e rivalidades repetidas não empilham. Porém, a
+      // melhor de cada família pode atuar ao mesmo tempo e todas as duplas
+      // continuam registradas para consulta no replay.
+      const offensiveBondPct = eligibleBondFamilies(actor.id).reduce((sum, link) => sum + link.damagePct, 0);
+      const defensiveBondPct = eligibleBondFamilies(target.id).reduce((sum, link) => sum + link.defensePct, 0);
+      if (offensiveBondPct) damage = Math.max(1, Math.round(damage * (1 + offensiveBondPct / 100)));
+      if (defensiveBondPct) damage = Math.max(1, Math.round(damage * (1 - defensiveBondPct / 100)));
       const opposingBond = opposingBondEffects.find((effect) => effect.attackerId === actor.id && effect.targetId === target.id);
       if (opposingBond) {
         const key = `${actor.id}:${target.id}`;

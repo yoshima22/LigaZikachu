@@ -791,11 +791,10 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
 export async function processMascotDiseaseForPlayer(playerId: string) {
   const now = new Date();
   await prisma.mascotSocialEvent.updateMany({ where: { ownerId: playerId, eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] }, status: "PENDING" }, data: { status: "RESOLVED", resolvedBy: "SYSTEM", resolvedOptionId: "runaway_system_retired", resolvedAt: now } });
-  const withoutCareBefore = new Date(now.getTime() - 48 * 60 * 60_000);
   const spreadBefore = new Date(now.getTime() - 12 * 60 * 60_000);
   const mascots = await prisma.mascot.findMany({
     where: { playerId },
-    select: { id: true, pokemonId: true, nickname: true, isEquipped: true, lastFedAt: true, lastPettedAt: true, diseasedAt: true, diseaseLastSpreadAt: true },
+    select: { id: true, pokemonId: true, nickname: true, isEquipped: true, happiness: true, mood: true, lastFedAt: true, diseasedAt: true, diseaseLastSpreadAt: true },
     orderBy: { hatchedAt: "asc" },
   });
   let newCases = 0;
@@ -805,12 +804,12 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
     if (mascot.diseasedAt) continue;
     const starvingBefore = new Date(now.getTime() - (mascot.isEquipped ? 24 : 120) * 60 * 60_000);
     const starving = !mascot.lastFedAt || mascot.lastFedAt <= starvingBefore;
-    const withoutCare = !mascot.lastPettedAt || mascot.lastPettedAt <= withoutCareBefore;
-    if (!starving || !withoutCare) continue;
+    const emotionallyUnwell = mascot.happiness < 40 || mascot.mood === "ANGRY";
+    if (!starving || !emotionallyUnwell) continue;
     if (Math.random() >= 0.35) continue;
     await prisma.mascot.update({ where: { id: mascot.id }, data: { diseasedAt: now, diseaseLastSpreadAt: now, mood: "TIRED" } });
     newCases += 1;
-    await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: "Um mascote ficou doente", body: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou doente após muito tempo sem comida e carinho. Seus atributos estão 40% menores até receber um Antídoto.`, href: "/mascotes", entityId: mascot.id, eventKey: `disease:${mascot.id}:${now.toISOString().slice(0, 10)}` } }).catch(() => undefined);
+    await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: "Um mascote ficou doente", body: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou doente enquanto estava faminto e triste ou com raiva. Seus atributos estão 40% menores até receber um Antídoto.`, href: "/mascotes", entityId: mascot.id, eventKey: `disease:${mascot.id}:${now.toISOString().slice(0, 10)}` } }).catch(() => undefined);
   }
 
   const refreshed = await prisma.mascot.findMany({ where: { playerId }, select: { id: true, pokemonId: true, nickname: true, diseasedAt: true, diseaseLastSpreadAt: true } });
@@ -840,6 +839,8 @@ export async function getTeamBondCombatContext(mascotIds: string[]) {
     take: mascotIds.length * 8,
   }).catch(() => []);
   const modifier = new Map<string, number>();
+  const friendshipBonus = new Map<string, number>();
+  const rivalryBonus = new Map<string, number>();
   const links: BondCombatLink[] = [];
   const seen = new Set<string>();
   for (const id of mascotIds) modifier.set(id, 1);
@@ -860,8 +861,13 @@ export async function getTeamBondCombatContext(mascotIds: string[]) {
                 : null;
     const delta = profile?.delta ?? 0;
     if (delta !== 0) {
-      const current = modifier.get(rel.mascotAId) ?? 1;
-      modifier.set(rel.mascotAId, delta > 0 ? Math.max(current, 1 + delta) : Math.min(current, 1 + delta));
+      // O vínculo pertence ao par. Repetições da mesma família não acumulam:
+      // vale a amizade mais forte e a rivalidade mais intensa. As duas famílias
+      // podem coexistir para que nenhuma relação presente seja apagada.
+      const family = score >= 15 ? friendshipBonus : rivalryBonus;
+      for (const mascotId of [rel.mascotAId, rel.mascotBId]) {
+        family.set(mascotId, Math.max(family.get(mascotId) ?? 0, delta));
+      }
     }
     const pairKey = [rel.mascotAId, rel.mascotBId].sort().join(":");
     if (!seen.has(pairKey) && delta !== 0) {
@@ -869,6 +875,7 @@ export async function getTeamBondCombatContext(mascotIds: string[]) {
       links.push({ mascotAId: rel.mascotAId, mascotBId: rel.mascotBId, kind: profile!.kind, label: profile!.label, damagePct: Math.round(delta * 100), defensePct: profile!.defense });
     }
   }
+  for (const id of mascotIds) modifier.set(id, 1 + (friendshipBonus.get(id) ?? 0) + (rivalryBonus.get(id) ?? 0));
   return { modifiers: modifier, links };
 }
 
@@ -888,11 +895,15 @@ export async function getOpposingBondCombatEffects(teamAIds: string[], teamBIds:
   }).catch(() => []);
   return relations.flatMap((relation): OpposingBondCombatEffect[] => {
     const score = effectiveRelationScore(relation);
-    if (score >= 80) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "SUPER_FRIEND", label: "Hesitação entre Super Amigos", damagePct: -10, directHitLimit: 1 }];
-    if (score >= 40) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "FRIEND", label: "Hesitação entre Amigos", damagePct: -5, directHitLimit: 1 }];
-    if (score <= -80) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "NEMESIS", label: "Acerto de Contas", damagePct: 8, directHitLimit: 3 }];
-    if (score <= -50) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "ENEMY", label: "Tenho Algo a Provar", damagePct: 5, directHitLimit: null }];
-    if (score <= -15) return [{ attackerId: relation.mascotAId, targetId: relation.mascotBId, kind: "RIVAL", label: "Duelo de Rivais", damagePct: 3, directHitLimit: null }];
+    const pair = (kind: OpposingBondCombatEffect["kind"], label: string, damagePct: number, directHitLimit: number | null): OpposingBondCombatEffect[] => [
+      { attackerId: relation.mascotAId, targetId: relation.mascotBId, kind, label, damagePct, directHitLimit },
+      { attackerId: relation.mascotBId, targetId: relation.mascotAId, kind, label, damagePct, directHitLimit },
+    ];
+    if (score >= 80) return pair("SUPER_FRIEND", "Hesitação entre Super Amigos", -10, 1);
+    if (score >= 40) return pair("FRIEND", "Hesitação entre Amigos", -5, 1);
+    if (score <= -80) return pair("NEMESIS", "Acerto de Contas", 8, 3);
+    if (score <= -50) return pair("ENEMY", "Tenho Algo a Provar", 5, null);
+    if (score <= -15) return pair("RIVAL", "Duelo de Rivais", 3, null);
     return [];
   });
 }

@@ -145,7 +145,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const definition = REFUGE_LOCATIONS[location];
   const ownRoutines = await tx.mascotRoutine.findMany({
     where: { playerId, locationType: location, status: "ACTIVE" },
-    orderBy: { startedAt: "asc" },
+    orderBy: [{ nextEventAt: "asc" }, { startedAt: "asc" }],
     take: definition.capacity,
     include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
   });
@@ -155,7 +155,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   // a simulação represente encontros reais; sem visitante, usamos outro mascote do dono.
   const visitor = await tx.mascotRoutine.findFirst({
     where: { playerId: { not: playerId }, locationType: location, status: "ACTIVE" },
-    orderBy: { lastProcessedAt: "asc" },
+    orderBy: [{ nextEventAt: "asc" }, { lastProcessedAt: "asc" }],
     include: { mascot: { select: { id: true, playerId: true, pokemonId: true, nickname: true, personality: true } } },
   });
   const routines = [ownRoutines[0], visitor ?? ownRoutines[1]].filter((routine): routine is NonNullable<typeof routine> => Boolean(routine));
@@ -167,8 +167,11 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const friendCircleActive = nearbyRelations.filter((relation) => relation.relationshipScore >= 15).length >= 2;
   const fightClubActive = nearbyRelations.filter((relation) => relation.relationshipScore <= -15).length >= 2;
   const [firstName, secondName] = names([first, ...(second ? [second] : [])]);
-  const delta = second ? socialDelta(location, first.personality) : 0;
-  const conflict = Boolean(second && (delta < 0 || Math.random() < (location === "TRAINING" ? 0.55 : 0.18)));
+  const influence = second ? await tx.mascotSocialInfluence.findUnique({ where: { observerPlayerId_targetMascotId: { observerPlayerId: playerId, targetMascotId: second.id } }, select: { direction: true } }) : null;
+  const suggestion = influence?.direction === 1 ? 1 : influence?.direction === -1 ? -1 : 0;
+  const delta = second ? socialDelta(location, first.personality) + suggestion : 0;
+  const conflictChance = Math.max(0.05, Math.min(0.8, (location === "TRAINING" ? 0.55 : 0.18) - suggestion * 0.08));
+  const conflict = Boolean(second && (delta < 0 || Math.random() < conflictChance));
   const appliedDelta = conflict ? Math.min(-2, delta) : delta;
   const descriptions: Record<RefugeLocation, string> = {
     GARDEN: second ? `${pick(OPENINGS)} ${firstName} e ${secondName} cuidaram da Horta quando ${pick(REACTIONS.GARDEN)}. ${pick(conflict ? CONFLICT_ENDINGS.GARDEN : POSITIVE_ENDINGS.GARDEN)}` : `${firstName} cuidou da Horta e separou parte da produção.`,
@@ -187,7 +190,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       const next = clampScore((current?.isActive ? current.relationshipScore : 0) + appliedDelta);
       await tx.mascotRelation.upsert({
         where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
-        update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true, dormantAt: null },
+        update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true },
         create: { mascotAId: first.id, mascotBId: second.id, relationshipScore: next, type: relationTypeFromScore(next), interactionCount: 1, lastInteractionAt: new Date() },
       });
     }
@@ -203,7 +206,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       title: `${definition.icon} ${definition.label}`,
       description: descriptions[location],
       intensity: Math.abs(delta) >= 5 ? 2 : 1,
-      metadata: { location, scoreDelta: appliedDelta, conflict, personalities: [first.personality, second?.personality].filter(Boolean) },
+      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean) },
     },
   });
   let importantEventId: string | null = null;
@@ -230,16 +233,17 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     });
     importantEventId = event.id;
   }
-  await tx.mascotRoutine.updateMany({
-    where: { id: { in: routines.map((routine) => routine.id) } },
-    data: { accumulatedUnits: { increment: 1 }, lastProcessedAt: new Date() },
-  });
+  const processedAt = new Date();
+  for (const routine of routines) {
+    const nextMinutes = 180 + Math.floor(Math.random() * 121);
+    await tx.mascotRoutine.update({ where: { id: routine.id }, data: { accumulatedUnits: { increment: 1 }, lastProcessedAt: processedAt, nextEventAt: new Date(processedAt.getTime() + nextMinutes * 60_000) } });
+  }
 
   let reward: string | null = null;
   const rewardsToday = await tx.mascotBondMemory.count({
     where: { mascotAId: first.id, sourceType: "REFUGE_REWARD", createdAt: { gte: startOfTodayBrt() } },
   });
-  if (rewardsToday < 2) {
+  if (rewardsToday < 2 && !routines[0].pendingRewardType) {
     const roll = Math.random();
     // Círculos de amigos e Clubes da Luta têm benefícios equivalentes, mas
     // com identidades diferentes: cooperação fora do Treino e competição nele.
@@ -248,15 +252,8 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     if (itemType) {
       const item = await tx.shopItem.findFirst({ where: { type: itemType as never }, select: { id: true, name: true } });
       if (item) {
-        await tx.playerInventory.upsert({
-          where: { playerId_itemId: { playerId: first.playerId, itemId: item.id } },
-          update: { quantity: { increment: 1 } },
-          create: { playerId: first.playerId, itemId: item.id, quantity: 1, source: "BONDS_REFUGE" },
-        });
-        reward = `A rotina rendeu 1x ${item.name}.`;
-        await tx.mascotBondMemory.create({
-          data: { mascotAId: first.id, memoryType: "RECURSO_DE_LACOS", sourceType: "REFUGE_REWARD", sourceId: location, title: `Recurso encontrado em ${definition.label}`, description: `${firstName} encontrou 1x ${item.name} durante a rotina.`, metadata: { location, itemType, quantity: 1 } },
-        });
+        await tx.mascotRoutine.update({ where: { id: routines[0].id }, data: { pendingRewardType: itemType, pendingRewardAt: new Date() } });
+        reward = `${firstName} encontrou algo. Clique nele no Refúgio para resgatar 1x ${item.name}.`;
       }
     }
   }

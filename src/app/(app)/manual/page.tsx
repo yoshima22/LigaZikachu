@@ -5,7 +5,12 @@ import { getManualContent } from "@/lib/manual-content";
 import { EditableText } from "./_components/EditableText";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
-import { PERSONALITY_DESIGN, STAT_LABEL, DEBUFF_RESISTANCE, ROLE_EFFECT_ATTRIBUTES } from "@/lib/personality-design";
+import {
+  PERSONALITY_DESIGN,
+  STAT_LABEL,
+  DEBUFF_RESISTANCE,
+  ROLE_EFFECT_ATTRIBUTES,
+} from "@/lib/personality-design";
 import {
   EXP_REWARDS,
   RARE_SWEET_EXP_MULTIPLIER,
@@ -14,9 +19,22 @@ import {
   totalExpForLevel,
 } from "@/lib/mascot-data";
 
-function Section({ id, title, emoji, children }: { id: string; title: string; emoji: string; children: React.ReactNode }) {
+function Section({
+  id,
+  title,
+  emoji,
+  children,
+}: {
+  id: string;
+  title: string;
+  emoji: string;
+  children: React.ReactNode;
+}) {
   return (
-    <section id={id} className="rounded-2xl border border-border bg-slate-950/60 p-6 space-y-4 scroll-mt-6">
+    <section
+      id={id}
+      className="rounded-2xl border border-border bg-slate-950/60 p-6 space-y-4 scroll-mt-6"
+    >
       <h2 className="flex items-center gap-2 text-base font-bold text-[#FFCB05]">
         <span>{emoji}</span> {title}
       </h2>
@@ -25,7 +43,13 @@ function Section({ id, title, emoji, children }: { id: string; title: string; em
   );
 }
 
-function Sub({ title, children }: { title: string; children: React.ReactNode }) {
+function Sub({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
   return (
     <div className="space-y-2">
       <h3 className="text-sm font-semibold text-slate-200">{title}</h3>
@@ -34,22 +58,41 @@ function Sub({ title, children }: { title: string; children: React.ReactNode }) 
   );
 }
 
-function Table({ headers, rows }: { headers: string[]; rows: (string | number)[][] }) {
+function Table({
+  headers,
+  rows,
+}: {
+  headers: string[];
+  rows: (string | number)[][];
+}) {
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-xs border-collapse">
         <thead>
           <tr className="border-b border-border">
-            {headers.map(h => (
-              <th key={h} className="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap">{h}</th>
+            {headers.map((h) => (
+              <th
+                key={h}
+                className="text-left px-3 py-2 text-slate-400 font-semibold whitespace-nowrap"
+              >
+                {h}
+              </th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, i) => (
-            <tr key={i} className="border-b border-border/40 hover:bg-slate-900/30">
+            <tr
+              key={i}
+              className="border-b border-border/40 hover:bg-slate-900/30"
+            >
               {row.map((cell, j) => (
-                <td key={j} className="px-3 py-2 text-slate-300 whitespace-nowrap">{cell}</td>
+                <td
+                  key={j}
+                  className="px-3 py-2 text-slate-300 whitespace-nowrap"
+                >
+                  {cell}
+                </td>
               ))}
             </tr>
           ))}
@@ -62,7 +105,8 @@ function Table({ headers, rows }: { headers: string[]; rows: (string | number)[]
 function Note({ children }: { children: React.ReactNode }) {
   return (
     <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2 text-xs text-slate-400">
-      <span className="text-[#FFCB05] font-semibold">ℹ </span>{children}
+      <span className="text-[#FFCB05] font-semibold">ℹ </span>
+      {children}
     </div>
   );
 }
@@ -74,23 +118,35 @@ const EXP_LEVEL_RANGES = [
   { label: "Níveis 76–100", start: 76, end: 100 },
 ] as const;
 
-const formatExp = (value: number) => new Intl.NumberFormat("pt-BR").format(value);
+const formatExp = (value: number) =>
+  new Intl.NumberFormat("pt-BR").format(value);
 
 function ExpProgressionTable() {
   return (
     <div className="grid gap-2 sm:grid-cols-2">
       {EXP_LEVEL_RANGES.map((range, index) => (
-        <details key={range.label} open={index === 0} className="group rounded-xl border border-border bg-slate-950/50">
+        <details
+          key={range.label}
+          open={index === 0}
+          className="group rounded-xl border border-border bg-slate-950/50"
+        >
           <summary className="cursor-pointer select-none px-3 py-2 text-xs font-semibold text-slate-200 marker:text-[#FFCB05]">
             {range.label}
           </summary>
           <div className="max-h-80 overflow-y-auto border-t border-border/60">
             <Table
               headers={["Nível alcançado", "EXP necessária", "Total acumulado"]}
-              rows={Array.from({ length: range.end - range.start + 1 }, (_, offset) => {
-                const level = range.start + offset;
-                return [level, formatExp(expForLevel(level)), formatExp(totalExpForLevel(level))];
-              })}
+              rows={Array.from(
+                { length: range.end - range.start + 1 },
+                (_, offset) => {
+                  const level = range.start + offset;
+                  return [
+                    level,
+                    formatExp(expForLevel(level)),
+                    formatExp(totalExpForLevel(level)),
+                  ];
+                },
+              )}
             />
           </div>
         </details>
@@ -105,21 +161,22 @@ export default async function ManualPage() {
   const c = await getManualContent();
 
   const tocSections = [
-    { id: "mascotes",     label: "Mascotes & EXP" },
-    { id: "evolucoes",    label: "Evoluções" },
-    { id: "interacoes",   label: "Interações" },
-    { id: "expedicoes",   label: "Expedições" },
-    { id: "itens",        label: "Itens & Buffs" },
+    { id: "mascotes", label: "Mascotes & EXP" },
+    { id: "evolucoes", label: "Evoluções" },
+    { id: "interacoes", label: "Interações" },
+    { id: "lacos", label: "Laços & Refúgio" },
+    { id: "expedicoes", label: "Expedições" },
+    { id: "itens", label: "Itens & Buffs" },
     { id: "atributos-combate", label: "Atributos & Combate" },
-    { id: "posturas",     label: "Posturas" },
+    { id: "posturas", label: "Posturas" },
     { id: "personalidades", label: "Personalidades" },
     { id: "laboratorio-analise", label: "Lab & Análise" },
-    { id: "arena",        label: "Arena Z (PvP/PvE)" },
-    { id: "economia",     label: "Economia & ZikaCoins" },
-    { id: "bazar",        label: "Bazar" },
-    { id: "tcg",          label: "Partidas TCG" },
-    { id: "torneios",     label: "Torneios & Insígnias" },
-    { id: "apoiador",     label: "Passe Apoiador" },
+    { id: "arena", label: "Arena Z (PvP/PvE)" },
+    { id: "economia", label: "Economia & ZikaCoins" },
+    { id: "bazar", label: "Bazar" },
+    { id: "tcg", label: "Partidas TCG" },
+    { id: "torneios", label: "Torneios & Insígnias" },
+    { id: "apoiador", label: "Passe Apoiador" },
   ];
 
   function ET(key: string, className?: string) {
@@ -133,22 +190,31 @@ export default async function ManualPage() {
       <div className="flex items-center gap-3">
         <div>
           <h1 className="font-pixel text-base text-[#FFCB05] flex items-center gap-2">
-            <BookOpen size={18}/> Manual da Liga Zikachu
+            <BookOpen size={18} /> Manual da Liga Zikachu
           </h1>
           <p className="text-xs text-slate-500">
             Referência completa dos sistemas do jogo.
-            {admin && <span className="ml-2 text-[#FFCB05]">✎ Passe o mouse sobre os textos para editar.</span>}
+            {admin && (
+              <span className="ml-2 text-[#FFCB05]">
+                ✎ Passe o mouse sobre os textos para editar.
+              </span>
+            )}
           </p>
         </div>
       </div>
 
       {/* Índice */}
       <nav className="rounded-2xl border border-border bg-slate-950/60 p-4">
-        <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">Índice</p>
+        <p className="text-xs font-semibold text-slate-400 mb-3 uppercase tracking-wider">
+          Índice
+        </p>
         <div className="grid grid-cols-2 sm:grid-cols-3 gap-1">
-          {tocSections.map(s => (
-            <a key={s.id} href={`#${s.id}`}
-              className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:text-[#FFCB05] hover:bg-[#FFCB05]/5 transition-colors">
+          {tocSections.map((s) => (
+            <a
+              key={s.id}
+              href={`#${s.id}`}
+              className="rounded-lg px-2 py-1.5 text-xs text-slate-400 hover:text-[#FFCB05] hover:bg-[#FFCB05]/5 transition-colors"
+            >
               → {s.label}
             </a>
           ))}
@@ -160,7 +226,9 @@ export default async function ManualPage() {
         <Sub title="Como o EXP funciona">
           {ET("mascotes.intro", "text-xs text-slate-400")}
           <p className="text-xs text-slate-500">
-            A tabela mostra quanto é necessário para alcançar cada nível e o total acumulado desde o nível 1. Abra cada faixa para consultar até o nível 100.
+            A tabela mostra quanto é necessário para alcançar cada nível e o
+            total acumulado desde o nível 1. Abra cada faixa para consultar até
+            o nível 100.
           </p>
           <ExpProgressionTable />
         </Sub>
@@ -169,20 +237,46 @@ export default async function ManualPage() {
           <Table
             headers={["Atividade", "EXP base"]}
             rows={[
-              ["Partida TCG jogada (companheiro equipado)", EXP_REWARDS.MATCH_PLAYED],
-              ["Bônus adicional por vitória TCG", `+${EXP_REWARDS.MATCH_WIN} (vencedor recebe ${EXP_REWARDS.MATCH_PLAYED + EXP_REWARDS.MATCH_WIN} no total)`],
-              ["Deck submetido à semana (companheiro equipado)", EXP_REWARDS.DECK_SUBMITTED],
+              [
+                "Partida TCG jogada (companheiro equipado)",
+                EXP_REWARDS.MATCH_PLAYED,
+              ],
+              [
+                "Bônus adicional por vitória TCG",
+                `+${EXP_REWARDS.MATCH_WIN} (vencedor recebe ${EXP_REWARDS.MATCH_PLAYED + EXP_REWARDS.MATCH_WIN} no total)`,
+              ],
+              [
+                "Deck submetido à semana (companheiro equipado)",
+                EXP_REWARDS.DECK_SUBMITTED,
+              ],
               ["Brincar", `${EXP_REWARDS.PLAY_WITH} + 3 a cada 10 níveis`],
               ["Acariciar", `${EXP_REWARDS.PET} + 1 a cada 10 níveis`],
-              ["Comida", `${EXP_REWARDS.FEED_FOOD} (antes de personalidade e bônus)`],
-              ["Doce", `${EXP_REWARDS.FEED_SWEET} (antes de personalidade e bônus)`],
-              ["Doce Raro", `${EXP_REWARDS.FEED_SWEET * RARE_SWEET_EXP_MULTIPLIER} (${RARE_SWEET_EXP_MULTIPLIER} doces)`],
-              ["Expedição Padrão — 30 min / 1 h / 3 h / 6 h", "25 / 60 / 160 / 350, antes dos bônus"],
-              ["Expedição de Treino — 30 min / 1 h / 3 h / 6 h", `${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["30min"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["1h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["3h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["6h"]}, antes dos bônus`],
+              [
+                "Comida",
+                `${EXP_REWARDS.FEED_FOOD} (antes de personalidade e bônus)`,
+              ],
+              [
+                "Doce",
+                `${EXP_REWARDS.FEED_SWEET} (antes de personalidade e bônus)`,
+              ],
+              [
+                "Doce Raro",
+                `${EXP_REWARDS.FEED_SWEET * RARE_SWEET_EXP_MULTIPLIER} (${RARE_SWEET_EXP_MULTIPLIER} doces)`,
+              ],
+              [
+                "Expedição Padrão — 30 min / 1 h / 3 h / 6 h",
+                "25 / 60 / 160 / 350, antes dos bônus",
+              ],
+              [
+                "Expedição de Treino — 30 min / 1 h / 3 h / 6 h",
+                `${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["30min"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["1h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["3h"]} / ${EXP_REWARDS.EXPEDITION * TRAINING_EXP_MULT["6h"]}, antes dos bônus`,
+              ],
             ]}
           />
           <p className="text-[11px] leading-relaxed text-slate-500">
-            “Base” é o valor antes de posição, nível, personalidade, relações, itens e eventos. Expedições também aplicam bônus de nível, aliados, rivais e outros efeitos ativos.
+            “Base” é o valor antes de posição, nível, personalidade, relações,
+            itens e eventos. Expedições também aplicam bônus de nível, aliados,
+            rivais e outros efeitos ativos.
           </p>
         </Sub>
 
@@ -235,7 +329,11 @@ export default async function ManualPage() {
               ["Alimentar — Doce Raro", 280, "+35", "2 h"],
             ]}
           />
-          <p className="text-[11px] text-slate-500">Nos valores “+ nível”, o bônus é calculado a cada 10 níveis. Personalidades podem alterar EXP, felicidade ou aceitação da interação.</p>
+          <p className="text-[11px] text-slate-500">
+            Nos valores “+ nível”, o bônus é calculado a cada 10 níveis.
+            Personalidades podem alterar EXP, felicidade ou aceitação da
+            interação.
+          </p>
         </Sub>
         <Sub title="Bônus social (aliados e rivais)">
           {ET("interacoes.social", "text-xs text-slate-400")}
@@ -254,22 +352,209 @@ export default async function ManualPage() {
         <Note>{ET("interacoes.note", "inline")}</Note>
       </Section>
 
+      <Section id="lacos" title="Laços & Refúgio" emoji="♥">
+        <Sub title="Como as relações funcionam">
+          <p className="text-xs leading-5 text-slate-400">
+            Cada direção da relação vai de −100 a +100: o que um mascote sente
+            pode não ser correspondido. Você gerencia no máximo 10 vínculos por
+            mascote; não existe fila oculta para preencher automaticamente uma
+            vaga. Iniciar um afastamento abre um prazo de 24 horas e, quando
+            concluído, remove completamente a relação dos dois lados.
+          </p>
+          <Table
+            headers={[
+              "Nível",
+              "Pontuação",
+              "Na mesma equipe",
+              "Em equipes opostas",
+            ]}
+            rows={[
+              [
+                "Super Amigo",
+                "+80 a +100",
+                "+3% dano e −3% dano recebido",
+                "−10% no primeiro golpe direto entre eles",
+              ],
+              [
+                "Amigo",
+                "+40 a +79",
+                "+2% dano e −2% dano recebido",
+                "−5% no primeiro golpe direto entre eles",
+              ],
+              ["Colega", "+15 a +39", "+1% dano", "Sem efeito direto"],
+              ["Conhecido", "−14 a +14", "Sem efeito", "Sem efeito"],
+              [
+                "Rival",
+                "−15 a −49",
+                "+2% dano",
+                "+3% de dano um contra o outro",
+              ],
+              [
+                "Inimigo",
+                "−50 a −79",
+                "+4% dano e +2% dano recebido",
+                "+5% de dano um contra o outro",
+              ],
+              [
+                "Nêmesis",
+                "−80 a −100",
+                "+7% dano e +4% dano recebido",
+                "+8% nos 3 primeiros golpes diretos",
+              ],
+            ]}
+          />
+          <Note>
+            Os efeitos são simétricos para a dupla. Várias amizades não somam
+            entre si, e várias rivalidades também não: vale a mais forte de cada
+            família enquanto o parceiro relacionado estiver lutando. Amizade e
+            rivalidade podem atuar juntas, sem esconder nenhuma dupla presente.
+            A abertura revela os vínculos e o botão “Laços” permite consultar
+            todos durante o replay.
+          </Note>
+        </Sub>
+
+        <Sub title="Espaços públicos do Refúgio">
+          <Table
+            headers={["Local", "Foco", "Recursos próprios"]}
+            rows={[
+              [
+                "Horta",
+                "Cooperação, cuidado e disputas pela colheita",
+                "Frutinha da Partilha · Erva Apaziguadora",
+              ],
+              [
+                "Campo de Treino",
+                "Parcerias, desafios e rivalidades",
+                "Ficha de Revanche · Faixa de Treino em Dupla",
+              ],
+              [
+                "Área de Descanso",
+                "Cuidado, reconciliação e ensino",
+                "Almofada Compartilhada · Chá de Boa-Noite",
+              ],
+              [
+                "Pátio",
+                "Brincadeiras, encontros e grupos",
+                "Brinquedo de Pátio · Convite Ilustrado",
+              ],
+            ]}
+          />
+          <p className="text-xs leading-5 text-slate-400">
+            Cada jogador pode manter até 8 mascotes nos espaços públicos, no
+            máximo 3 em uma mesma área. A troca de área tem recarga individual
+            de 2 horas. Os ciclos e acontecimentos continuam no servidor mesmo
+            sem alguém manter a página aberta.
+          </p>
+        </Sub>
+
+        <Sub title="Momentos, grupos e itens">
+          <p className="text-xs leading-5 text-slate-400">
+            Momentos importantes apresentam decisões diferentes conforme local,
+            personalidade, histórico e intensidade. Círculos de amizade
+            favorecem cooperação e produção social; Clubes da Luta transformam
+            rivalidades em desafios e recursos competitivos. Os itens ficam na
+            Mochila de Laços e podem ser negociados entre jogadores no Bazar,
+            mas não aparecem nas ofertas do Miauvadão.
+          </p>
+          <p className="text-xs leading-5 text-slate-400">
+            A Bala de Mel continua levando a felicidade a 100 e pode criar uma
+            amizade, respeitando o limite de 10 vínculos, ou abrir um evento
+            social bônus.
+          </p>
+        </Sub>
+
+        <Sub title="Disputa de afastamento">
+          <Table
+            headers={["Etapa", "Regra"]}
+            rows={[
+              [
+                "Afastamento",
+                "O iniciador abre 24 horas para encerrar completamente o vínculo.",
+              ],
+              [
+                "Contestar",
+                "O outro treinador tenta uma vez, com 50% de chance de cancelar imediatamente.",
+              ],
+              [
+                "Amuleto de Promessa",
+                "Pausa as horas restantes e, após 6 horas sem bloqueio, cancela o afastamento com 100% de chance.",
+              ],
+              [
+                "Escudo do Desapego",
+                "O iniciador remove o Amuleto, bloqueia outro e faz o prazo restante voltar a correr.",
+              ],
+              [
+                "Conclusão",
+                "Ao acabar o prazo restante, a relação é removida nos dois sentidos; as memórias continuam no histórico.",
+              ],
+            ]}
+          />
+          <Note>
+            O site e o celular notificam os dois treinadores quando a disputa
+            começa, quando um item é usado e quando o resultado é concluído.
+          </Note>
+        </Sub>
+
+        <Sub title="Fome, estado emocional e doença">
+          <p className="text-xs leading-5 text-slate-400">
+            Um mascote só corre risco de adoecer quando está completamente
+            faminto <strong className="text-white">e</strong> também triste
+            (felicidade abaixo de 40) ou com raiva. Falta de carinho
+            isoladamente não causa doença, e um mascote alimentado não adoece
+            por negligência.
+          </p>
+          <Table
+            headers={["Estado", "Efeito"]}
+            rows={[
+              [
+                "Doente",
+                "−40% em Força, Agilidade, Carisma, Instinto e Vitalidade; pode contagiar outros mascotes da conta",
+              ],
+              [
+                "Antídoto",
+                "Cura imediatamente a doença e interrompe a redução de atributos daquele mascote",
+              ],
+            ]}
+          />
+        </Sub>
+      </Section>
+
       {/* ── 4. Expedições ─────────────────────────────────────────────────── */}
       <Section id="expedicoes" title="Expedições" emoji="🎒">
         <Sub title="Modos de expedição">
           <Table
             headers={["Modo", "Objetivo", "EXP", "Itens"]}
             rows={[
-              ["Padrão (STANDARD)", "EXP + itens balanceados", "✓ normal", "✓ ovos, comida, moedas"],
-              ["Treinamento (TRAINING)", "Foco total em EXP", "✓ muito alto", "✗ sem itens"],
-              ["Itens (ITEMS)", "Foco em drops de itens", "✗ sem EXP", "✓ ovos em destaque"],
+              [
+                "Padrão (STANDARD)",
+                "EXP + itens balanceados",
+                "✓ normal",
+                "✓ ovos, comida, moedas",
+              ],
+              [
+                "Treinamento (TRAINING)",
+                "Foco total em EXP",
+                "✓ muito alto",
+                "✗ sem itens",
+              ],
+              [
+                "Itens (ITEMS)",
+                "Foco em drops de itens",
+                "✗ sem EXP",
+                "✓ ovos em destaque",
+              ],
             ]}
           />
         </Sub>
 
         <Sub title="Multiplicadores de EXP por duração (modo Padrão)">
           <Table
-            headers={["Duração", "Mult. EXP Padrão", "Mult. EXP Treinamento", "Bônus de Recompensa"]}
+            headers={[
+              "Duração",
+              "Mult. EXP Padrão",
+              "Mult. EXP Treinamento",
+              "Bônus de Recompensa",
+            ]}
             rows={[
               ["30 min", "0.5×", "4×", "+0%"],
               ["1 hora", "1.2×", "8×", "+5%"],
@@ -295,10 +580,17 @@ export default async function ManualPage() {
         <Sub title="Drops de itens em expedição — Modo Padrão">
           <Note>{ET("expedicoes.padrao.note", "inline")}</Note>
           <Table
-            headers={["Duração", "Ovo", "Doce", "Comida", "Moedas", "Item Especial"]}
+            headers={[
+              "Duração",
+              "Ovo",
+              "Doce",
+              "Comida",
+              "Moedas",
+              "Item Especial",
+            ]}
             rows={[
               ["30 min", "~12%", "~11%", "~30%", "~47%", "0%"],
-              ["1 hora",  "~16%", "~12%", "~29%", "~43%", "0%"],
+              ["1 hora", "~16%", "~12%", "~29%", "~43%", "0%"],
               ["3 horas", "~22%", "~14%", "~27%", "~37%", "0%"],
               ["6 horas", "~29%", "~15%", "~25%", "~30%", "~3%"],
             ]}
@@ -311,7 +603,7 @@ export default async function ManualPage() {
             headers={["Duração", "Ovo", "Doce", "Comida", "Item Especial"]}
             rows={[
               ["30 min", "~18%", "~28%", "~51%", "~3%"],
-              ["1 hora",  "~21%", "~27%", "~48%", "~4%"],
+              ["1 hora", "~21%", "~27%", "~48%", "~4%"],
               ["3 horas", "~30%", "~25%", "~40%", "~5%"],
               ["6 horas", "~44%", "~20%", "~29%", "~7%"],
             ]}
@@ -354,9 +646,24 @@ export default async function ManualPage() {
           <Table
             headers={["Item", "Efeito", "Duração", "Onde se aplica"]}
             rows={[
-              ["⚡ Vitamina Elétrica", "+25% EXP em 1 mascote", "2h (admin config)", "Expedição, Arena, Interações"],
-              ["🧺 Cesta de Piquenique", "-30% na próxima duração; bônus de EXP/loot por modo", "3h para bônus; redução no próximo uso", "Expedições"],
-              ["🥚 Ovo da Sorte", "+20% EXP em 1 expedição", "1 uso (diário)", "Expedição de Treinamento"],
+              [
+                "⚡ Vitamina Elétrica",
+                "+25% EXP em 1 mascote",
+                "2h (admin config)",
+                "Expedição, Arena, Interações",
+              ],
+              [
+                "🧺 Cesta de Piquenique",
+                "-30% na próxima duração; bônus de EXP/loot por modo",
+                "3h para bônus; redução no próximo uso",
+                "Expedições",
+              ],
+              [
+                "🥚 Ovo da Sorte",
+                "+20% EXP em 1 expedição",
+                "1 uso (diário)",
+                "Expedição de Treinamento",
+              ],
             ]}
           />
           <Note>{ET("itens.buffs.note", "inline")}</Note>
@@ -371,15 +678,42 @@ export default async function ManualPage() {
           <Table
             headers={["Item", "Efeito"]}
             rows={[
-              ["🍀 Amuleto da Sorte", "Dobra chance de loot raro em expedições por 6h"],
-              ["💊 Proteína Zika", "+2 permanentes em todos os 5 atributos (máx 3 doses por mascote)"],
-              ["🍯 Bala de Mel", "Felicidade vai para 100 e tem 40% de chance de criar uma nova amizade (até 10 amigos) ou abrir um evento bônus com presente enviado por um amigo"],
-              ["💧 Água Sagrada", "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente"],
-              ["🛡️ Política de Fraqueza", "Consumível: use em um mascote ferido (SUS) ou em repouso para recuperá-lo na hora e colocá-lo de volta em combate. Não é equipável."],
-              ["📡 Compartilhador de XP", "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário."],
-              ["📡 Compartilhador Geral", "Distribui 10% da EXP de Treinamento a todos os outros favoritos. Apenas um Compartilhador pode ficar equipado."],
-              ["🏖️ Ticket de Férias", "Ao retornar, concede 4.000 EXP + 10 EXP por nível, além das recompensas de férias"],
-              ["🌈 Pena Arco-Íris", "IRREVERSÍVEL — volta ao Nv.1 e ressorteia personalidade/status no intervalo do ovo original; sem registro usa Ovo Raro"],
+              [
+                "🍀 Amuleto da Sorte",
+                "Dobra chance de loot raro em expedições por 6h",
+              ],
+              [
+                "💊 Proteína Zika",
+                "+2 permanentes em todos os 5 atributos (máx 3 doses por mascote)",
+              ],
+              [
+                "🍯 Bala de Mel",
+                "Felicidade vai para 100 e tem 40% de chance de criar uma nova amizade (até 10 amigos) ou abrir um evento bônus com presente enviado por um amigo",
+              ],
+              [
+                "💧 Água Sagrada",
+                "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente",
+              ],
+              [
+                "🛡️ Política de Fraqueza",
+                "Consumível: use em um mascote ferido (SUS) ou em repouso para recuperá-lo na hora e colocá-lo de volta em combate. Não é equipável.",
+              ],
+              [
+                "📡 Compartilhador de XP",
+                "Distribui 50% do EXP de Treinamento para mascotes com buff ativo. Pode ser desequipado pelo card do mascote — o item volta ao inventário.",
+              ],
+              [
+                "📡 Compartilhador Geral",
+                "Distribui 10% da EXP de Treinamento a todos os outros favoritos. Apenas um Compartilhador pode ficar equipado.",
+              ],
+              [
+                "🏖️ Ticket de Férias",
+                "Ao retornar, concede 4.000 EXP + 10 EXP por nível, além das recompensas de férias",
+              ],
+              [
+                "🌈 Pena Arco-Íris",
+                "IRREVERSÍVEL — volta ao Nv.1 e ressorteia personalidade/status no intervalo do ovo original; sem registro usa Ovo Raro",
+              ],
             ]}
           />
         </Sub>
@@ -389,7 +723,11 @@ export default async function ManualPage() {
             headers={["Tipo", "Efeito", "Cooldown"]}
             rows={[
               ["Comida de Mascote (FOOD)", "+15 EXP · melhora fome", "2h"],
-              ["Doce de Mascote (SWEET)", "+35 EXP · melhora fome · anima humor", "2h"],
+              [
+                "Doce de Mascote (SWEET)",
+                "+35 EXP · melhora fome · anima humor",
+                "2h",
+              ],
             ]}
           />
         </Sub>
@@ -398,29 +736,79 @@ export default async function ManualPage() {
           <Table
             headers={["Item", "Exemplo prático"]}
             rows={[
-              ["Vitamina Elétrica", "Se uma expedição renderia 240 EXP, com +25% ela rende 300 EXP."],
-              ["Ovo da Sorte", "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP."],
-              ["Cesta de Piquenique", "Treino recebe +25% EXP; Padrão +12% EXP e +1,5 ponto percentual em ovo/item especial; Itens +3 pontos percentuais em ovo/item especial."],
-              ["Proteína Zika", "+2 em Força, Agilidade, Carisma, Instinto e Vitalidade. Uma dose = +10 pontos totais; 3 doses = +30."],
-              ["Amuleto da Sorte", "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2."],
-              ["Mega Stone", "Só cai em expedição de Itens de 6h, com 0,5% antes da rolagem normal de recompensa."],
+              [
+                "Vitamina Elétrica",
+                "Se uma expedição renderia 240 EXP, com +25% ela rende 300 EXP.",
+              ],
+              [
+                "Ovo da Sorte",
+                "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP.",
+              ],
+              [
+                "Cesta de Piquenique",
+                "Treino recebe +25% EXP; Padrão +12% EXP e +1,5 ponto percentual em ovo/item especial; Itens +3 pontos percentuais em ovo/item especial.",
+              ],
+              [
+                "Proteína Zika",
+                "+2 em Força, Agilidade, Carisma, Instinto e Vitalidade. Uma dose = +10 pontos totais; 3 doses = +30.",
+              ],
+              [
+                "Amuleto da Sorte",
+                "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2.",
+              ],
+              [
+                "Mega Stone",
+                "Só cai em expedição de Itens de 6h, com 0,5% antes da rolagem normal de recompensa.",
+              ],
             ]}
           />
-          <Note>Os percentuais de drop são rolagens ponderadas: aumentar Instinto, usar Amuleto da Sorte e levar aliados melhora o peso de ovos/itens, mas não transforma todo resultado em item raro.</Note>
+          <Note>
+            Os percentuais de drop são rolagens ponderadas: aumentar Instinto,
+            usar Amuleto da Sorte e levar aliados melhora o peso de ovos/itens,
+            mas não transforma todo resultado em item raro.
+          </Note>
         </Sub>
       </Section>
 
       {/* ── 6. Atributos & Combate ────────────────────────────────────────── */}
-      <Section id="atributos-combate" title="Atributos & Cálculo de Combate" emoji="🧮">
+      <Section
+        id="atributos-combate"
+        title="Atributos & Cálculo de Combate"
+        emoji="🧮"
+      >
         <Sub title="O que cada atributo faz">
           <Table
-            headers={["Atributo", "Uso direto no combate", "Posturas que mais aproveitam"]}
+            headers={[
+              "Atributo",
+              "Uso direto no combate",
+              "Posturas que mais aproveitam",
+            ]}
             rows={[
-              ["Força", "Entra no dano base com peso 0,42. Também aumenta Atacante, Duelista e Especialista.", "Atacante, Duelista, Especialista"],
-              ["Agilidade", "Entra no dano base com peso 0,18. Ajuda Flanco/Batedor a furar defesa e escolher alvos frágeis.", "Flanco, Batedor, Sabotador"],
-              ["Instinto", "Entra no dano base com peso 0,12. Ajuda efeitos de debuff, alvo oportunista e sobrevivência.", "Oportunista, Sabotador, Duelista, Sobrevivente"],
-              ["Vitalidade", "Entra na defesa com peso 0,28 e sustenta HP, redução de dano e proteção.", "Defensor, Guardião, Sobrevivente"],
-              ["Carisma", "Entra na defesa com peso 0,08 e fortalece suporte, cura, provocação e bônus de equipe.", "Encorajador, Cuidador, Provocador, Guardião"],
+              [
+                "Força",
+                "Entra no dano base com peso 0,42. Também aumenta Atacante, Duelista e Especialista.",
+                "Atacante, Duelista, Especialista",
+              ],
+              [
+                "Agilidade",
+                "Entra no dano base com peso 0,18. Ajuda Flanco/Batedor a furar defesa e escolher alvos frágeis.",
+                "Flanco, Batedor, Sabotador",
+              ],
+              [
+                "Instinto",
+                "Entra no dano base com peso 0,12. Ajuda efeitos de debuff, alvo oportunista e sobrevivência.",
+                "Oportunista, Sabotador, Duelista, Sobrevivente",
+              ],
+              [
+                "Vitalidade",
+                "Entra na defesa com peso 0,28 e sustenta HP, redução de dano e proteção.",
+                "Defensor, Guardião, Sobrevivente",
+              ],
+              [
+                "Carisma",
+                "Entra na defesa com peso 0,08 e fortalece suporte, cura, provocação e bônus de equipe.",
+                "Encorajador, Cuidador, Provocador, Guardião",
+              ],
             ]}
           />
         </Sub>
@@ -429,23 +817,42 @@ export default async function ManualPage() {
           <Table
             headers={["Etapa", "Cálculo"]}
             rows={[
-              ["Dano base", "máx(5, Força × 0,42 + Agilidade × 0,18 + Instinto × 0,12)"],
+              [
+                "Dano base",
+                "máx(5, Força × 0,42 + Agilidade × 0,18 + Instinto × 0,12)",
+              ],
               ["Defesa do alvo", "Vitalidade × 0,28 + Carisma × 0,08"],
               ["Dano bruto", "máx(1, Dano base - Defesa × 0,35)"],
-              ["Dano final", "Dano bruto × vantagem de tipo × postura × variação aleatória de 0,85 a 1,15"],
+              [
+                "Dano final",
+                "Dano bruto × vantagem de tipo × postura × variação aleatória de 0,85 a 1,15",
+              ],
             ]}
           />
-          <Note>Modos especiais como Liga Semanal, Arena Sincronizada e Raid Boss podem aplicar modificadores por cima dessa base, mas a lógica principal parte desses atributos.</Note>
+          <Note>
+            Modos especiais como Liga Semanal, Arena Sincronizada e Raid Boss
+            podem aplicar modificadores por cima dessa base, mas a lógica
+            principal parte desses atributos.
+          </Note>
         </Sub>
 
         <Sub title="Exemplo de dano">
           <Table
             headers={["Situação", "Resultado aproximado"]}
             rows={[
-              ["Atacante: 120 Força, 80 Agilidade, 60 Instinto", "Dano base = 50,4 + 14,4 + 7,2 = 72"],
+              [
+                "Atacante: 120 Força, 80 Agilidade, 60 Instinto",
+                "Dano base = 50,4 + 14,4 + 7,2 = 72",
+              ],
               ["Alvo: 100 Vitalidade, 50 Carisma", "Defesa = 28 + 4 = 32"],
-              ["Sem postura e sem vantagem de tipo", "Dano bruto = 72 - 11,2 = 60,8, então cerca de 61 antes da variação"],
-              ["Mesmo mascote como Atacante", "Postura adiciona até +26%; 61 vira cerca de 77 antes da variação"],
+              [
+                "Sem postura e sem vantagem de tipo",
+                "Dano bruto = 72 - 11,2 = 60,8, então cerca de 61 antes da variação",
+              ],
+              [
+                "Mesmo mascote como Atacante",
+                "Postura adiciona até +26%; 61 vira cerca de 77 antes da variação",
+              ],
             ]}
           />
         </Sub>
@@ -454,12 +861,22 @@ export default async function ManualPage() {
       {/* ── 7. Posturas ───────────────────────────────────────────────────── */}
       <Section id="posturas" title="Posturas de Combate" emoji="🧭">
         <div className="rounded-xl border border-cyan-500/20 bg-cyan-500/5 p-3">
-          <p className="text-xs font-semibold text-cyan-200">Abra uma postura para ver turnos, iniciativa, alvos e fórmulas detalhadas.</p>
+          <p className="text-xs font-semibold text-cyan-200">
+            Abra uma postura para ver turnos, iniciativa, alvos e fórmulas
+            detalhadas.
+          </p>
           <div className="mt-2 flex flex-wrap gap-2">
             {COMBAT_ROLE_OPTIONS.map((role) => (
-              <div key={role.value} className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1 text-[10px] text-slate-300">
+              <div
+                key={role.value}
+                className="flex items-center gap-1 rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1 text-[10px] text-slate-300"
+              >
                 <span>{role.label}</span>
-                <CombatRoleHelpButton role={role.value} mode="GENERAL" className="h-5 w-5" />
+                <CombatRoleHelpButton
+                  role={role.value}
+                  mode="GENERAL"
+                  className="h-5 w-5"
+                />
               </div>
             ))}
           </div>
@@ -468,43 +885,156 @@ export default async function ManualPage() {
           <Table
             headers={["Postura", "Atributos diretos", "Efeito em números"]}
             rows={[
-              ["Defensor", "Vitalidade", "Até 250: 8% a 35% de redução. Atrai 78% dos ataques, ou 62% contra Atacantes."],
-              ["Atacante", "Força", "Até 250: +8% a +26% de dano; +15% extra contra Defensores."],
-              ["Flanco", "Agilidade", "Até 250: +4% a +18% de dano e 35% a 82% de chance de furar defesa; +12% contra suportes."],
-              ["Oportunista", "Instinto", "Até 250: 22% a 62% de chance e 8% a 25% de redução-base. Instinto/Vitalidade do alvo reduzem o valor final."],
-              ["Encorajador", "Carisma", "Até 250: +4% a +18% de dano para a equipe. Somente o melhor bônus ativo prevalece."],
-              ["Guardião", "Vitalidade + Carisma", "Intercepta 15% a 40% do dano de aliados; recebe 5% a 20% menos dano; causa 10% menos dano."],
-              ["Duelista", "Força + Instinto", "+6% a +18% de dano base; +12% enquanto mantém duelo no mesmo alvo."],
-              ["Sabotador", "Instinto + Agilidade", "A média até 250 dá 18% a 55% de interferência e reduz 15% a 40% da eficácia dos suportes."],
-              ["Cuidador", "Carisma + Vitalidade + nível", "Cura individualmente o aliado vivo ferido de menor HP. Cada cura vale (35% do Carisma + 25% da Vitalidade + nível) × 2,5; a quantidade de curas também escala com os atributos."],
-              ["Batedor", "Agilidade + Instinto", "A média até 250 dá até +8% de dano à equipe; Agilidade dá 35% a 82% de foco no alvo frágil; causa 5% menos dano."],
-              ["Provocador", "Carisma + Instinto", "A média até 250 dá 20% a 55% de chance de redirecionar ataques; reduz 8% do golpe e causa 8% menos dano."],
-              ["Especialista", "Maior atributo", "+6% a +20% de dano usando o melhor atributo do mascote."],
-              ["Sobrevivente", "Vitalidade + Instinto", "Reduz até 15% de dano; abaixo de 30% HP ganha +15% dano e redução extra de 25%; sobrevive uma vez com 1 HP."],
+              [
+                "Defensor",
+                "Vitalidade",
+                "Até 250: 8% a 35% de redução. Atrai 78% dos ataques, ou 62% contra Atacantes.",
+              ],
+              [
+                "Atacante",
+                "Força",
+                "Até 250: +8% a +26% de dano; +15% extra contra Defensores.",
+              ],
+              [
+                "Flanco",
+                "Agilidade",
+                "Até 250: +4% a +18% de dano e 35% a 82% de chance de furar defesa; +12% contra suportes.",
+              ],
+              [
+                "Oportunista",
+                "Instinto",
+                "Até 250: 22% a 62% de chance e 8% a 25% de redução-base. Instinto/Vitalidade do alvo reduzem o valor final.",
+              ],
+              [
+                "Encorajador",
+                "Carisma",
+                "Até 250: +4% a +18% de dano para a equipe. Somente o melhor bônus ativo prevalece.",
+              ],
+              [
+                "Guardião",
+                "Vitalidade + Carisma",
+                "Intercepta 15% a 40% do dano de aliados; recebe 5% a 20% menos dano; causa 10% menos dano.",
+              ],
+              [
+                "Duelista",
+                "Força + Instinto",
+                "+6% a +18% de dano base; +12% enquanto mantém duelo no mesmo alvo.",
+              ],
+              [
+                "Sabotador",
+                "Instinto + Agilidade",
+                "A média até 250 dá 18% a 55% de interferência e reduz 15% a 40% da eficácia dos suportes.",
+              ],
+              [
+                "Cuidador",
+                "Carisma + Vitalidade + nível",
+                "Cura individualmente o aliado vivo ferido de menor HP. Cada cura vale (35% do Carisma + 25% da Vitalidade + nível) × 2,5; a quantidade de curas também escala com os atributos.",
+              ],
+              [
+                "Batedor",
+                "Agilidade + Instinto",
+                "A média até 250 dá até +8% de dano à equipe; Agilidade dá 35% a 82% de foco no alvo frágil; causa 5% menos dano.",
+              ],
+              [
+                "Provocador",
+                "Carisma + Instinto",
+                "A média até 250 dá 20% a 55% de chance de redirecionar ataques; reduz 8% do golpe e causa 8% menos dano.",
+              ],
+              [
+                "Especialista",
+                "Maior atributo",
+                "+6% a +20% de dano usando o melhor atributo do mascote.",
+              ],
+              [
+                "Sobrevivente",
+                "Vitalidade + Instinto",
+                "Reduz até 15% de dano; abaixo de 30% HP ganha +15% dano e redução extra de 25%; sobrevive uma vez com 1 HP.",
+              ],
             ]}
           />
         </Sub>
-        <Note>Regra geral de Agilidade: cada mascote começa com 1 ação por rodada. Na Arena e Liga, recebe 2 ações quando sua Agilidade supera a média adversária em 60 pontos e 3 ações quando supera em 140. Na Raid, a comparação usa a média dos companheiros. Cuidador pode trocar essas ações por curas; buffs de Encorajador, Batedor, Guardião, Sabotador e Provocador são passivos e não impedem o ataque.</Note>
-        <Note>Regra geral de escala: efeitos de postura crescem continuamente com seus atributos principais e chegam ao teto publicado apenas em 250. Posturas com dois atributos usam a média dos dois. Debuffs ainda enfrentam a resistência do alvo: 60% do Instinto + 40% da Vitalidade ajustam a intensidade final entre 60% e 135% do valor-base.</Note>
-        <Note>A recomendação automática usa os atributos atuais do mascote. Ela é boa como ponto de partida, mas você pode trocar a postura para encaixar melhor na estratégia do time.</Note>
+        <Note>
+          Regra geral de Agilidade: cada mascote começa com 1 ação por rodada.
+          Na Arena e Liga, recebe 2 ações quando sua Agilidade supera a média
+          adversária em 60 pontos e 3 ações quando supera em 140. Na Raid, a
+          comparação usa a média dos companheiros. Cuidador pode trocar essas
+          ações por curas; buffs de Encorajador, Batedor, Guardião, Sabotador e
+          Provocador são passivos e não impedem o ataque.
+        </Note>
+        <Note>
+          Regra geral de escala: efeitos de postura crescem continuamente com
+          seus atributos principais e chegam ao teto publicado apenas em 250.
+          Posturas com dois atributos usam a média dos dois. Debuffs ainda
+          enfrentam a resistência do alvo: 60% do Instinto + 40% da Vitalidade
+          ajustam a intensidade final entre 60% e 135% do valor-base.
+        </Note>
+        <Note>
+          A recomendação automática usa os atributos atuais do mascote. Ela é
+          boa como ponto de partida, mas você pode trocar a postura para
+          encaixar melhor na estratégia do time.
+        </Note>
       </Section>
 
       {/* ── 8. Personalidades ─────────────────────────────────────────────── */}
-      <Section id="personalidades" title="Personalidades dos Mascotes" emoji="💬">
+      <Section
+        id="personalidades"
+        title="Personalidades dos Mascotes"
+        emoji="💬"
+      >
         <Sub title="Prós e contras de cada personalidade">
           <Table
             headers={["Personalidade", "Prós", "Contras / cuidado"]}
             rows={[
-              ["Leal", "Carinho dá +2 felicidade extra. No level-up, Carisma recebe peso ×1,15, então cresce melhor como suporte, Cuidador, Encorajador ou Provocador.", "Não melhora dano direto. Se o mascote tiver Força baixa, Leal não resolve isso sozinho."],
-              ["Orgulhoso", "Reage melhor quando está feliz, confiante ou vindo de vitórias. Combina com mascotes usados em destaque, arena e eventos sociais positivos.", "Sofre mais narrativamente com derrotas e rivalidades. Pode exigir mais manutenção de humor/felicidade para render bem."],
-              ["Travesso", "Tende a criar provocações e rivalidades leves, aumentando oportunidades de laços e eventos sociais entre mascotes.", "Pode acelerar rivalidades indesejadas. Bom para histórias e caos controlado; ruim se você quer um mascote sempre estável."],
-              ["Preguiçoso", "Pode funcionar bem em mascotes naturalmente resistentes: Vitalidade alta compensa a tendência de cansar.", "Ao brincar, tende a ficar Cansado em vez de Feliz. Precisa de comida, carinho e descanso com mais atenção."],
-              ["Competitivo", "Ganha 6 pontos brutos por nível em vez de 5 e favorece Força com peso ×1,15. Excelente para Atacante, Duelista e Especialista.", "Cresce ofensivamente, mas não dá defesa grátis. Se Vitalidade/Carisma forem baixos, pode bater forte e cair rápido."],
-              ["Dramático", "Quando está feliz ou confiante, tende a render melhor em eventos emocionais e relações marcantes.", "Ganha 4 pontos brutos por nível em vez de 5 e Vitalidade tem peso ×0,85. É uma personalidade charmosa, mas menos eficiente para tanque puro."],
-              ["Brincalhão", "Brincar dá +3 felicidade extra e cerca de +10% EXP nessa interação. Muito bom para evoluir mantendo humor alto.", "Depende de interação frequente. Se ficar abandonado, perde parte do valor prático."],
-              ["Elétrico", "Tem melhor ritmo em interações curtas e expedições rápidas. É bom para jogadores que entram várias vezes ao dia.", "O benefício aparece mais em rotina ativa. Em longos períodos parado, não substitui alimentação e cuidado."],
-              ["Tímido", "Depois que ganha confiança, tende a criar laços fortes e consistentes. Bom para mascotes de longo prazo.", "Se felicidade estiver abaixo de 40, pode recusar carinho. No começo exige mais paciência para estabilizar."],
-              ["Caótico", "Com Instinto alto, aumenta a chance de eventos sociais incomuns, viradas narrativas e interações fora do padrão entre mascotes.", "É menos previsível. Pode gerar situações boas ou inconvenientes; não é a melhor escolha para quem quer controle total."],
+              [
+                "Leal",
+                "Carinho dá +2 felicidade extra. No level-up, Carisma recebe peso ×1,15, então cresce melhor como suporte, Cuidador, Encorajador ou Provocador.",
+                "Não melhora dano direto. Se o mascote tiver Força baixa, Leal não resolve isso sozinho.",
+              ],
+              [
+                "Orgulhoso",
+                "Reage melhor quando está feliz, confiante ou vindo de vitórias. Combina com mascotes usados em destaque, arena e eventos sociais positivos.",
+                "Sofre mais narrativamente com derrotas e rivalidades. Pode exigir mais manutenção de humor/felicidade para render bem.",
+              ],
+              [
+                "Travesso",
+                "Tende a criar provocações e rivalidades leves, aumentando oportunidades de laços e eventos sociais entre mascotes.",
+                "Pode acelerar rivalidades indesejadas. Bom para histórias e caos controlado; ruim se você quer um mascote sempre estável.",
+              ],
+              [
+                "Preguiçoso",
+                "Pode funcionar bem em mascotes naturalmente resistentes: Vitalidade alta compensa a tendência de cansar.",
+                "Ao brincar, tende a ficar Cansado em vez de Feliz. Precisa de comida, carinho e descanso com mais atenção.",
+              ],
+              [
+                "Competitivo",
+                "Ganha 6 pontos brutos por nível em vez de 5 e favorece Força com peso ×1,15. Excelente para Atacante, Duelista e Especialista.",
+                "Cresce ofensivamente, mas não dá defesa grátis. Se Vitalidade/Carisma forem baixos, pode bater forte e cair rápido.",
+              ],
+              [
+                "Dramático",
+                "Quando está feliz ou confiante, tende a render melhor em eventos emocionais e relações marcantes.",
+                "Ganha 4 pontos brutos por nível em vez de 5 e Vitalidade tem peso ×0,85. É uma personalidade charmosa, mas menos eficiente para tanque puro.",
+              ],
+              [
+                "Brincalhão",
+                "Brincar dá +3 felicidade extra e cerca de +10% EXP nessa interação. Muito bom para evoluir mantendo humor alto.",
+                "Depende de interação frequente. Se ficar abandonado, perde parte do valor prático.",
+              ],
+              [
+                "Elétrico",
+                "Tem melhor ritmo em interações curtas e expedições rápidas. É bom para jogadores que entram várias vezes ao dia.",
+                "O benefício aparece mais em rotina ativa. Em longos períodos parado, não substitui alimentação e cuidado.",
+              ],
+              [
+                "Tímido",
+                "Depois que ganha confiança, tende a criar laços fortes e consistentes. Bom para mascotes de longo prazo.",
+                "Se felicidade estiver abaixo de 40, pode recusar carinho. No começo exige mais paciência para estabilizar.",
+              ],
+              [
+                "Caótico",
+                "Com Instinto alto, aumenta a chance de eventos sociais incomuns, viradas narrativas e interações fora do padrão entre mascotes.",
+                "É menos previsível. Pode gerar situações boas ou inconvenientes; não é a melhor escolha para quem quer controle total.",
+              ],
             ]}
           />
         </Sub>
@@ -513,39 +1043,80 @@ export default async function ManualPage() {
           <Table
             headers={["Tipo", "Pontos brutos antes dos multiplicadores"]}
             rows={[
-              ["Mascote comum", "5 pontos brutos por nível, depois ×0,55 e multiplicador de raridade/espécie."],
+              [
+                "Mascote comum",
+                "5 pontos brutos por nível, depois ×0,55 e multiplicador de raridade/espécie.",
+              ],
               ["Competitivo", "6 pontos brutos por nível e viés para Força."],
               ["Leal", "6 pontos brutos por nível e viés para Carisma."],
-              ["Dramático", "4 pontos brutos por nível e viés menor para Vitalidade."],
+              [
+                "Dramático",
+                "4 pontos brutos por nível e viés menor para Vitalidade.",
+              ],
               ["Pseudo/raros especiais", "Multiplicador de crescimento 1,1."],
-              ["Míticos/lendários especiais", "Multiplicador de crescimento 1,3."],
+              [
+                "Míticos/lendários especiais",
+                "Multiplicador de crescimento 1,3.",
+              ],
             ]}
           />
-          <Note>Exemplo: um mascote comum normalmente recebe arredondado perto de 3 pontos por nível (5 × 0,55). Um Competitivo recebe perto de 3 a 4, e ainda tende a jogar mais desses pontos em Força.</Note>
+          <Note>
+            Exemplo: um mascote comum normalmente recebe arredondado perto de 3
+            pontos por nível (5 × 0,55). Um Competitivo recebe perto de 3 a 4, e
+            ainda tende a jogar mais desses pontos em Força.
+          </Note>
         </Sub>
 
         <Sub title="Como ler personalidade na prática">
           <Table
             headers={["Objetivo", "Personalidades que combinam", "Por quê"]}
             rows={[
-              ["Dano bruto", "Competitivo, Brincalhão", "Competitivo cresce melhor em Força; Brincalhão facilita EXP por interação."],
-              ["Suporte e cura", "Leal, Orgulhoso", "Leal favorece Carisma; Orgulhoso se beneficia de humor alto e vitórias."],
-              ["Mascote social / laços", "Leal, Tímido, Travesso, Caótico", "Geram ou aproveitam melhor relações, confiança, rivalidade e eventos sociais."],
-              ["Tanque / sobrevivência", "Leal, Preguiçoso com Vitalidade alta", "Leal pode crescer suporte/defesa por Carisma; Preguiçoso só vale se a base defensiva já for boa."],
-              ["Build arriscada", "Dramático, Caótico", "Podem render momentos fortes, mas exigem mais leitura de humor, laços e contexto."],
+              [
+                "Dano bruto",
+                "Competitivo, Brincalhão",
+                "Competitivo cresce melhor em Força; Brincalhão facilita EXP por interação.",
+              ],
+              [
+                "Suporte e cura",
+                "Leal, Orgulhoso",
+                "Leal favorece Carisma; Orgulhoso se beneficia de humor alto e vitórias.",
+              ],
+              [
+                "Mascote social / laços",
+                "Leal, Tímido, Travesso, Caótico",
+                "Geram ou aproveitam melhor relações, confiança, rivalidade e eventos sociais.",
+              ],
+              [
+                "Tanque / sobrevivência",
+                "Leal, Preguiçoso com Vitalidade alta",
+                "Leal pode crescer suporte/defesa por Carisma; Preguiçoso só vale se a base defensiva já for boa.",
+              ],
+              [
+                "Build arriscada",
+                "Dramático, Caótico",
+                "Podem render momentos fortes, mas exigem mais leitura de humor, laços e contexto.",
+              ],
             ]}
           />
-          <Note>Personalidade não muda a espécie nem garante vitória. Ela inclina crescimento, humor e eventos sociais. O melhor mascote ainda depende de atributos, postura, nível, itens, laços e modo de jogo.</Note>
+          <Note>
+            Personalidade não muda a espécie nem garante vitória. Ela inclina
+            crescimento, humor e eventos sociais. O melhor mascote ainda depende
+            de atributos, postura, nível, itens, laços e modo de jogo.
+          </Note>
         </Sub>
 
         {/* ── Reformulação: Personalidades com impacto real ─────────────────── */}
         <Sub title="Reformulação: personalidades com impacto real (ativa)">
           <Note>
-            A personalidade agora muda decisões reais em <strong>interações, expedições e combate</strong> — com vantagens e
-            limitações claras. As <strong>afinidades</strong> guiam o crescimento, e os efeitos de combate valem na Arena Z,
-            Liga Semanal, Liga Rush e Arena Sincronizada (os sorteios ficam gravados no replay). Foram adicionadas 3 novas
-            personalidades (Curioso, Guloso, Sereno). Afinidades e atributos já existentes são preservados (nada é recalculado
-            retroativamente). Dica: no Laboratório, até <strong>26/08/2026</strong>, mascotes Caóticos podem fazer um
+            A personalidade agora muda decisões reais em{" "}
+            <strong>interações, expedições e combate</strong> — com vantagens e
+            limitações claras. As <strong>afinidades</strong> guiam o
+            crescimento, e os efeitos de combate valem na Arena Z, Liga Semanal,
+            Liga Rush e Arena Sincronizada (os sorteios ficam gravados no
+            replay). Foram adicionadas 3 novas personalidades (Curioso, Guloso,
+            Sereno). Afinidades e atributos já existentes são preservados (nada
+            é recalculado retroativamente). Dica: no Laboratório, até{" "}
+            <strong>26/08/2026</strong>, mascotes Caóticos podem fazer um
             <strong> re-roll caótico de status</strong> (uso único).
           </Note>
         </Sub>
@@ -555,24 +1126,60 @@ export default async function ManualPage() {
             headers={["Personalidade", "Muito útil", "Útil"]}
             rows={PERSONALITY_DESIGN.map((p) => [
               p.label + (p.isNew ? " (nova)" : ""),
-              p.affinity.veryUseful ? STAT_LABEL[p.affinity.veryUseful] : "Sem preferência fixa",
-              p.affinity.useful ? STAT_LABEL[p.affinity.useful] : "Sem preferência fixa",
+              p.affinity.veryUseful
+                ? STAT_LABEL[p.affinity.veryUseful]
+                : "Sem preferência fixa",
+              p.affinity.useful
+                ? STAT_LABEL[p.affinity.useful]
+                : "Sem preferência fixa",
             ])}
           />
-          <Note>Ao receber um efeito que busca um atributo &quot;útil&quot; ou &quot;muito útil&quot; (crescimento, buffs, debuffs inteligentes), o jogo consulta esta afinidade — priorizando candidatos e evitando apagar o atributo central da personalidade. O Caótico é a exceção: não respeita preferência fixa.</Note>
+          <Note>
+            Ao receber um efeito que busca um atributo &quot;útil&quot; ou
+            &quot;muito útil&quot; (crescimento, buffs, debuffs inteligentes), o
+            jogo consulta esta afinidade — priorizando candidatos e evitando
+            apagar o atributo central da personalidade. O Caótico é a exceção:
+            não respeita preferência fixa.
+          </Note>
         </Sub>
 
         <Sub title="Efeitos por personalidade">
           <div className="space-y-2">
             {PERSONALITY_DESIGN.map((p) => (
-              <div key={p.key} className="rounded-xl border border-border/60 bg-slate-900/40 p-3">
+              <div
+                key={p.key}
+                className="rounded-xl border border-border/60 bg-slate-900/40 p-3"
+              >
                 <p className="text-sm font-bold text-slate-100">
-                  {p.label}{p.isNew && <span className="ml-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300">Nova</span>}
+                  {p.label}
+                  {p.isNew && (
+                    <span className="ml-2 rounded-full border border-emerald-400/40 bg-emerald-400/10 px-1.5 py-0.5 text-[9px] font-black uppercase text-emerald-300">
+                      Nova
+                    </span>
+                  )}
                 </p>
-                <p className="mt-1 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Interações:</span> {p.interactions}</p>
-                <p className="mt-0.5 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Expedições:</span> {p.expeditions}</p>
-                <p className="mt-0.5 text-xs text-slate-300"><span className="font-semibold text-[#FFCB05]">Combate:</span> {p.combat}</p>
-                {p.limitation && <p className="mt-0.5 text-xs text-amber-300/90"><span className="font-semibold">Limitação:</span> {p.limitation}</p>}
+                <p className="mt-1 text-xs text-slate-300">
+                  <span className="font-semibold text-[#FFCB05]">
+                    Interações:
+                  </span>{" "}
+                  {p.interactions}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-300">
+                  <span className="font-semibold text-[#FFCB05]">
+                    Expedições:
+                  </span>{" "}
+                  {p.expeditions}
+                </p>
+                <p className="mt-0.5 text-xs text-slate-300">
+                  <span className="font-semibold text-[#FFCB05]">Combate:</span>{" "}
+                  {p.combat}
+                </p>
+                {p.limitation && (
+                  <p className="mt-0.5 text-xs text-amber-300/90">
+                    <span className="font-semibold">Limitação:</span>{" "}
+                    {p.limitation}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -580,61 +1187,149 @@ export default async function ManualPage() {
 
         <Sub title="Resistência de buff/debuff">
           <Note>
-            A força de um debuff usa principalmente o <strong>Instinto</strong> de quem aplica. A resistência do alvo usa{" "}
-            {Math.round(DEBUFF_RESISTANCE.targetInstinctWeight * 100)}% de Instinto + {Math.round(DEBUFF_RESISTANCE.targetVitalityWeight * 100)}% de Vitalidade.
-            O confronto ajusta o efeito base entre {Math.round(DEBUFF_RESISTANCE.minEffect * 100)}% e {Math.round(DEBUFF_RESISTANCE.maxEffect * 100)}% —
-            resistência reduz a intensidade em vez de virar falha total. Efeitos iguais não somam: o mais forte prevalece e uma nova
-            aplicação renova a duração; modificadores de atributos diferentes podem coexistir. Cada modificador guarda origem, fonte,
-            alvo, atributos usados, valor base, resistência, valor final, duração e regra de acúmulo.
+            A força de um debuff usa principalmente o <strong>Instinto</strong>{" "}
+            de quem aplica. A resistência do alvo usa{" "}
+            {Math.round(DEBUFF_RESISTANCE.targetInstinctWeight * 100)}% de
+            Instinto +{" "}
+            {Math.round(DEBUFF_RESISTANCE.targetVitalityWeight * 100)}% de
+            Vitalidade. O confronto ajusta o efeito base entre{" "}
+            {Math.round(DEBUFF_RESISTANCE.minEffect * 100)}% e{" "}
+            {Math.round(DEBUFF_RESISTANCE.maxEffect * 100)}% — resistência reduz
+            a intensidade em vez de virar falha total. Efeitos iguais não somam:
+            o mais forte prevalece e uma nova aplicação renova a duração;
+            modificadores de atributos diferentes podem coexistir. Cada
+            modificador guarda origem, fonte, alvo, atributos usados, valor
+            base, resistência, valor final, duração e regra de acúmulo.
           </Note>
           <Note>
-            <strong>Suportes:</strong> em todos os combates, consideram-se suportes o <strong>Provocador</strong>, o
-            <strong> Encorajador</strong> e o <strong>Cuidador</strong>. O <strong>Sabotador</strong> prioriza esses suportes e
-            reduz a eficácia deles (menos impulso do Encorajador, menos cura do Cuidador e menor chance de redirecionamento do
-            Provocador), conforme seu Instinto + Agilidade.
+            <strong>Suportes:</strong> em todos os combates, consideram-se
+            suportes o <strong>Provocador</strong>, o
+            <strong> Encorajador</strong> e o <strong>Cuidador</strong>. O{" "}
+            <strong>Sabotador</strong> prioriza esses suportes e reduz a
+            eficácia deles (menos impulso do Encorajador, menos cura do Cuidador
+            e menor chance de redirecionamento do Provocador), conforme seu
+            Instinto + Agilidade.
           </Note>
           <Table
             headers={["Postura (fonte)", "Atributos principais do efeito"]}
-            rows={Object.entries(ROLE_EFFECT_ATTRIBUTES).map(([role, attrs]) => [COMBAT_ROLE_OPTIONS.find((o) => o.value === role)?.label ?? role, attrs])}
+            rows={Object.entries(ROLE_EFFECT_ATTRIBUTES).map(
+              ([role, attrs]) => [
+                COMBAT_ROLE_OPTIONS.find((o) => o.value === role)?.label ??
+                  role,
+                attrs,
+              ],
+            )}
           />
         </Sub>
 
         <Sub title="Ícones e leitura nos replays">
           <p className="flex flex-wrap gap-2 text-xs">
-            {[["Buff", "bg-green-500/20 text-green-300 border-green-500/30"], ["Debuff", "bg-red-500/20 text-red-300 border-red-500/30"], ["Proteção", "bg-blue-500/20 text-blue-300 border-blue-500/30"], ["Personalidade", "bg-purple-500/20 text-purple-300 border-purple-500/30"], ["Item", "bg-yellow-400/20 text-yellow-300 border-yellow-400/30"]].map(([label, cls]) => (
-              <span key={label} className={`rounded-full border px-2 py-0.5 font-semibold ${cls}`}>{label}</span>
+            {[
+              ["Buff", "bg-green-500/20 text-green-300 border-green-500/30"],
+              ["Debuff", "bg-red-500/20 text-red-300 border-red-500/30"],
+              ["Proteção", "bg-blue-500/20 text-blue-300 border-blue-500/30"],
+              [
+                "Personalidade",
+                "bg-purple-500/20 text-purple-300 border-purple-500/30",
+              ],
+              ["Item", "bg-yellow-400/20 text-yellow-300 border-yellow-400/30"],
+            ].map(([label, cls]) => (
+              <span
+                key={label}
+                className={`rounded-full border px-2 py-0.5 font-semibold ${cls}`}
+              >
+                {label}
+              </span>
             ))}
           </p>
-          <Note>Ao tocar/passar o mouse num efeito, o replay mostra nome e origem, alvo (individual ou equipe), condição, duração restante, valor base, resistência aplicada, valor final, atributo responsável e regra de acúmulo. Assistir de novo nunca refaz sorteios: o resultado fica gravado no combate.</Note>
+          <Note>
+            Ao tocar/passar o mouse num efeito, o replay mostra nome e origem,
+            alvo (individual ou equipe), condição, duração restante, valor base,
+            resistência aplicada, valor final, atributo responsável e regra de
+            acúmulo. Assistir de novo nunca refaz sorteios: o resultado fica
+            gravado no combate.
+          </Note>
         </Sub>
       </Section>
 
       {/* ── 9. Laboratório & Análise ──────────────────────────────────────── */}
-      <Section id="laboratorio-analise" title="Laboratório & Análise de Potencial" emoji="🔬">
+      <Section
+        id="laboratorio-analise"
+        title="Laboratório & Análise de Potencial"
+        emoji="🔬"
+      >
         <Sub title="Como a previsão do Laboratório é calculada">
-          <Note>A análise do Laboratório é uma previsão aproximada baseada nas regras atuais do jogo. Ela não é promessa de resultado exato: mudanças futuras de balanceamento, itens usados depois da análise, travas de evolução, Mega Evolução e eventos especiais podem alterar o caminho real do mascote.</Note>
+          <Note>
+            A análise do Laboratório é uma previsão aproximada baseada nas
+            regras atuais do jogo. Ela não é promessa de resultado exato:
+            mudanças futuras de balanceamento, itens usados depois da análise,
+            travas de evolução, Mega Evolução e eventos especiais podem alterar
+            o caminho real do mascote.
+          </Note>
           <Table
             headers={["Parte da análise", "Como funciona"]}
             rows={[
-              ["Custo", "Cada análise custa ZikaCoins e salva o resultado no mascote para consulta posterior."],
-              ["Nível-alvo", "A simulação projeta o mascote até o nível escolhido, limitado ao Nv.100."],
-              ["Evolução", "Se evolução não estiver travada, o Lab simula a evolução no nível correto e aplica marcos de progresso."],
-              ["Crescimento", "Usa a mesma regra real de level-up: pontos por personalidade × 0,55 × multiplicador da espécie."],
-              ["Distribuição", "Os pontos vão para atributos com pesos baseados nos stats atuais, com variação determinística e anti-freeze para não abandonar atributo fraco."],
-              ["Poder projetado", "Força ×1,1 + Vitalidade ×1,0 + Agilidade ×0,95 + Instinto ×0,95 + Carisma ×0,9."],
+              [
+                "Custo",
+                "Cada análise custa ZikaCoins e salva o resultado no mascote para consulta posterior.",
+              ],
+              [
+                "Nível-alvo",
+                "A simulação projeta o mascote até o nível escolhido, limitado ao Nv.100.",
+              ],
+              [
+                "Evolução",
+                "Se evolução não estiver travada, o Lab simula a evolução no nível correto e aplica marcos de progresso.",
+              ],
+              [
+                "Crescimento",
+                "Usa a mesma regra real de level-up: pontos por personalidade × 0,55 × multiplicador da espécie.",
+              ],
+              [
+                "Distribuição",
+                "Os pontos vão para atributos com pesos baseados nos stats atuais, com variação determinística e anti-freeze para não abandonar atributo fraco.",
+              ],
+              [
+                "Poder projetado",
+                "Força ×1,1 + Vitalidade ×1,0 + Agilidade ×0,95 + Instinto ×0,95 + Carisma ×0,9.",
+              ],
             ]}
           />
         </Sub>
 
         <Sub title="Por que é previsão, não garantia">
           <Table
-            headers={["Fator", "O que o Lab consegue prever", "O que pode mudar depois"]}
+            headers={[
+              "Fator",
+              "O que o Lab consegue prever",
+              "O que pode mudar depois",
+            ]}
             rows={[
-              ["Level-up", "Simula o ganho de níveis com a regra atual, incluindo saltos de vários níveis.", "Novos itens, buffs permanentes ou ajustes de balanceamento podem mudar os atributos finais."],
-              ["Evolução", "Projeta a cadeia evolutiva se ela estiver destravada.", "Se o jogador travar evolução, destravar depois, usar Mega Stone ou Pena Arco-Íris, a rota muda."],
-              ["Personalidade", "Aplica os pesos reais: Competitivo favorece Força, Leal favorece Carisma, Dramático reduz Vitalidade.", "Humor, laços e escolhas do jogador ainda afetam eventos e desempenho situacional."],
-              ["Stats iniciais", "Estima a qualidade do nascimento removendo crescimento já conquistado.", "Como o jogo não salva cada ponto histórico separadamente, essa parte é uma estimativa conservadora."],
-              ["Combate", "Sugere posturas e calcula poder projetado por soma ponderada.", "Resultado real ainda depende de tipo, postura adversária, variação de dano, itens, laços e modificadores do modo."],
+              [
+                "Level-up",
+                "Simula o ganho de níveis com a regra atual, incluindo saltos de vários níveis.",
+                "Novos itens, buffs permanentes ou ajustes de balanceamento podem mudar os atributos finais.",
+              ],
+              [
+                "Evolução",
+                "Projeta a cadeia evolutiva se ela estiver destravada.",
+                "Se o jogador travar evolução, destravar depois, usar Mega Stone ou Pena Arco-Íris, a rota muda.",
+              ],
+              [
+                "Personalidade",
+                "Aplica os pesos reais: Competitivo favorece Força, Leal favorece Carisma, Dramático reduz Vitalidade.",
+                "Humor, laços e escolhas do jogador ainda afetam eventos e desempenho situacional.",
+              ],
+              [
+                "Stats iniciais",
+                "Estima a qualidade do nascimento removendo crescimento já conquistado.",
+                "Como o jogo não salva cada ponto histórico separadamente, essa parte é uma estimativa conservadora.",
+              ],
+              [
+                "Combate",
+                "Sugere posturas e calcula poder projetado por soma ponderada.",
+                "Resultado real ainda depende de tipo, postura adversária, variação de dano, itens, laços e modificadores do modo.",
+              ],
             ]}
           />
         </Sub>
@@ -643,13 +1338,29 @@ export default async function ManualPage() {
           <Table
             headers={["Componente", "Peso no score"]}
             rows={[
-              ["Qualidade estimada do nascimento", "55% do score. O Lab estima o roll inicial removendo crescimento já conquistado."],
-              ["Teto da espécie/evolução", "45% do score. Considera multiplicador da espécie e quantas evoluções ainda existem."],
-              ["Lendários/Míticos", "Teto de espécie tratado como alto por natureza."],
-              ["Ratings", "SSS ≥92, SS ≥82, S ≥72, A ≥60, B ≥47, C ≥34, D ≥20, E abaixo de 20."],
+              [
+                "Qualidade estimada do nascimento",
+                "55% do score. O Lab estima o roll inicial removendo crescimento já conquistado.",
+              ],
+              [
+                "Teto da espécie/evolução",
+                "45% do score. Considera multiplicador da espécie e quantas evoluções ainda existem.",
+              ],
+              [
+                "Lendários/Míticos",
+                "Teto de espécie tratado como alto por natureza.",
+              ],
+              [
+                "Ratings",
+                "SSS ≥92, SS ≥82, S ≥72, A ≥60, B ≥47, C ≥34, D ≥20, E abaixo de 20.",
+              ],
             ]}
           />
-          <Note>Use o IV Score como bússola de investimento, não como sentença. Um mascote B com boa postura e item certo pode ser mais útil em um modo específico do que um S mal encaixado.</Note>
+          <Note>
+            Use o IV Score como bússola de investimento, não como sentença. Um
+            mascote B com boa postura e item certo pode ser mais útil em um modo
+            específico do que um S mal encaixado.
+          </Note>
         </Sub>
 
         <Sub title="Pó de Criação ao reciclar">
@@ -669,7 +1380,11 @@ export default async function ManualPage() {
               ["2 ou mais duplicatas", "×3,0"],
             ]}
           />
-          <Note>Exemplo: reciclar um mascote Especial com 2 duplicatas rende 3 × 3,0 = 9 Pó de Criação. Favoritos, mascotes em Liga Semanal, Arena, expedição ou bazar não devem aparecer como recicláveis.</Note>
+          <Note>
+            Exemplo: reciclar um mascote Especial com 2 duplicatas rende 3 × 3,0
+            = 9 Pó de Criação. Favoritos, mascotes em Liga Semanal, Arena,
+            expedição ou bazar não devem aparecer como recicláveis.
+          </Note>
         </Sub>
       </Section>
 
@@ -678,13 +1393,19 @@ export default async function ManualPage() {
         <Sub title="Quem é registrado — mínimo de 18 mascotes">
           <p className="text-xs leading-6 text-slate-400">
             Só são registrados na Liga Semanal jogadores que tenham{" "}
-            <strong className="text-slate-200">ao menos 18 mascotes</strong> em posse.
-            Quem tiver menos que isso <strong className="text-slate-200">não é registrado
-            automaticamente</strong> — mesmo com o modo casual desligado. A regra evita
-            filas de W.O. durante a semana inteira por equipes que não conseguem ser
-            montadas.
+            <strong className="text-slate-200">ao menos 18 mascotes</strong> em
+            posse. Quem tiver menos que isso{" "}
+            <strong className="text-slate-200">
+              não é registrado automaticamente
+            </strong>{" "}
+            — mesmo com o modo casual desligado. A regra evita filas de W.O.
+            durante a semana inteira por equipes que não conseguem ser montadas.
           </p>
-          <Note>Se você foi removido por ter menos de 18 mascotes, é só conseguir mais mascotes (ovos, bazar, eventos): a partir de 18, você volta a ser registrado automaticamente na próxima liga.</Note>
+          <Note>
+            Se você foi removido por ter menos de 18 mascotes, é só conseguir
+            mais mascotes (ovos, bazar, eventos): a partir de 18, você volta a
+            ser registrado automaticamente na próxima liga.
+          </Note>
         </Sub>
       </Section>
 
@@ -697,8 +1418,14 @@ export default async function ManualPage() {
           <Table
             headers={["Tipo", "Descrição"]}
             rows={[
-              ["PvP (vs jogador)", "Desafie times de outros jogadores. Usa mecânica de tipos e atributos."],
-              ["PvE (vs bot)", "Enfrente times gerados automaticamente. Limite diário de ganhos em moedas."],
+              [
+                "PvP (vs jogador)",
+                "Desafie times de outros jogadores. Usa mecânica de tipos e atributos.",
+              ],
+              [
+                "PvE (vs bot)",
+                "Enfrente times gerados automaticamente. Limite diário de ganhos em moedas.",
+              ],
             ]}
           />
         </Sub>
@@ -714,7 +1441,10 @@ export default async function ManualPage() {
               ["Vitória em PvP", "ZikaCoins + EXP ao mascote"],
               ["Derrota em PvP", "EXP reduzido ao mascote"],
               ["Vitória PvE", "ZikaCoins (com cap diário)"],
-              ["Espólios do chão", "Chance aleatória de item extra ao vencer PvP"],
+              [
+                "Espólios do chão",
+                "Chance aleatória de item extra ao vencer PvP",
+              ],
             ]}
           />
         </Sub>
@@ -748,7 +1478,10 @@ export default async function ManualPage() {
           <Table
             headers={["Gasto", "Custo"]}
             rows={[
-              ["Troca global de um slot do Miauvadão", "250 ZC (1× por rotação de 6h)"],
+              [
+                "Troca global de um slot do Miauvadão",
+                "250 ZC (1× por rotação de 6h)",
+              ],
               ["Taxa de listagem no Bazar", "definida pelo admin"],
               ["Compras na ZikaShop", "variável por item"],
               ["Pacotes de figurinhas", "definido por pacote"],
@@ -769,10 +1502,19 @@ export default async function ManualPage() {
           <Table
             headers={["Regra", "Detalhe"]}
             rows={[
-              ["Limite de anúncios simultâneos", "8 anúncios ativos por jogador"],
+              [
+                "Limite de anúncios simultâneos",
+                "8 anúncios ativos por jogador",
+              ],
               ["Duração máxima do anúncio", "30 dias"],
-              ["Taxa de listagem", "cobrada ao criar o anúncio (vai ao cofre do Miauvadão)"],
-              ["Propostas de troca", "O anunciante aceita ou recusa manualmente"],
+              [
+                "Taxa de listagem",
+                "cobrada ao criar o anúncio (vai ao cofre do Miauvadão)",
+              ],
+              [
+                "Propostas de troca",
+                "O anunciante aceita ou recusa manualmente",
+              ],
             ]}
           />
         </Sub>
@@ -790,7 +1532,11 @@ export default async function ManualPage() {
             rows={[
               ["Vitória", "+2 pontos + prêmios", "35 EXP"],
               ["Derrota", "+0 pontos", "15 EXP"],
-              ["Partida jogada (qualquer)", "contabiliza para streaks e conquistas", "—"],
+              [
+                "Partida jogada (qualquer)",
+                "contabiliza para streaks e conquistas",
+                "—",
+              ],
             ]}
           />
         </Sub>
@@ -823,9 +1569,18 @@ export default async function ManualPage() {
           <Table
             headers={["Formato", "Descrição"]}
             rows={[
-              ["Semana Normal", "Partidas livres entre jogadores. Pontuam V/D, prêmios e insígnias."],
-              ["Guerra de Times", "Jogadores divididos em times. Média de pontos decide o vencedor."],
-              ["Desafio de Insígnia", "Partida oficial entre detentor e desafiante de uma insígnia."],
+              [
+                "Semana Normal",
+                "Partidas livres entre jogadores. Pontuam V/D, prêmios e insígnias.",
+              ],
+              [
+                "Guerra de Times",
+                "Jogadores divididos em times. Média de pontos decide o vencedor.",
+              ],
+              [
+                "Desafio de Insígnia",
+                "Partida oficial entre detentor e desafiante de uma insígnia.",
+              ],
             ]}
           />
         </Sub>
@@ -845,9 +1600,18 @@ export default async function ManualPage() {
           <Table
             headers={["Benefício", "Detalhe"]}
             rows={[
-              ["Dias de bônus liberados por calendário", "um dia de bônus por dia corrido"],
-              ["Bônus de EXP global", "+% em todas as fontes de EXP enquanto ativo"],
-              ["Itens exclusivos", "acesso a cosméticos e itens exclusivos de apoiador"],
+              [
+                "Dias de bônus liberados por calendário",
+                "um dia de bônus por dia corrido",
+              ],
+              [
+                "Bônus de EXP global",
+                "+% em todas as fontes de EXP enquanto ativo",
+              ],
+              [
+                "Itens exclusivos",
+                "acesso a cosméticos e itens exclusivos de apoiador",
+              ],
             ]}
           />
         </Sub>

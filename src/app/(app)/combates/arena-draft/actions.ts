@@ -20,6 +20,7 @@ import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
+import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import {
   runArenaCombat,
   type ArenaCombatRuntime,
@@ -1083,14 +1084,14 @@ async function persistCombatSegment(
   const mode: DraftMode = match.mode === "REAL" ? "REAL" : "CUSTOM";
   const petsA = validateArenaDraftPets(match.presetASnapshot, mode).pets;
   const petsB = validateArenaDraftPets(match.presetBSnapshot, mode).pets;
-  const teamA = buildDraftTeam(
+  let teamA = buildDraftTeam(
     petsA,
     match.playerAId,
     battle.activeA,
     battle.posturesA,
     mode,
   );
-  const teamB = buildDraftTeam(
+  let teamB = buildDraftTeam(
     petsB,
     match.playerBId,
     battle.activeB,
@@ -1104,6 +1105,21 @@ async function persistCombatSegment(
     teamB.length > ARENA_DRAFT_RULES.activeSize
   )
     throw new Error("Formação final inválida.");
+  // Presets reais preservam a identidade dos mascotes e, portanto, seus
+  // Laços. O modo customizado usa cópias sem vínculo com o Refúgio.
+  if (mode === "REAL") {
+    const [modifiersA, modifiersB] = await Promise.all([
+      getBondCombatModifier(teamA.map((mascot) => mascot.id)),
+      getBondCombatModifier(teamB.map((mascot) => mascot.id)),
+    ]);
+    const applyBonds = (team: ArenaMascot[], modifiers: Map<string, number>) => team.map((mascot) => {
+      const multiplier = modifiers.get(mascot.id) ?? 1;
+      if (multiplier === 1) return mascot;
+      return { ...mascot, force: Math.max(1, Math.round(mascot.force * multiplier)), vitality: Math.max(1, Math.round(mascot.vitality * multiplier)), hp: Math.max(10, Math.round(mascot.hp * multiplier)) };
+    });
+    teamA = applyBonds(teamA, modifiersA);
+    teamB = applyBonds(teamB, modifiersB);
+  }
   const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint] ?? 80;
   const combat = runArenaCombat(teamA, teamB, {
     runtime: battle.runtime,

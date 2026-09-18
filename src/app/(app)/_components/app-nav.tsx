@@ -87,7 +87,6 @@ const combatLinks = [
     platformAdminOnly: true,
     beta: true,
   },
-  { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false },
   {
     href: "/desafio-sincronizado",
     label: "Arena Sincronizada",
@@ -154,6 +153,7 @@ const rankingLinks = [
 
 const colecaoLinks = [
   { href: "/mascotes", label: "Mascotes", icon: Heart, adminOnly: false },
+  { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false, alpha: true },
   { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
   {
     href: "/professor",
@@ -244,6 +244,7 @@ type NavLink = {
   eventOnly?: boolean;
   livePvpOnly?: boolean;
   beta?: boolean;
+  alpha?: boolean;
   casual?: boolean;
 };
 
@@ -726,7 +727,7 @@ function NavDropdown({
             </div>
           )}
           {visibleLinks.map(
-            ({ href, label: itemLabel, icon: ItemIcon, beta, casual }) => (
+            ({ href, label: itemLabel, icon: ItemIcon, beta, alpha, casual }) => (
               <Link
                 key={href}
                 href={href}
@@ -742,6 +743,7 @@ function NavDropdown({
                       BETA
                     </span>
                   )}
+                  {alpha && <span className="ml-auto rounded bg-fuchsia-500/15 px-1.5 py-0.5 text-[8px] font-black text-fuchsia-300">ALPHA</span>}
                   {casual && (
                     <span className="rounded bg-cyan-500/20 px-1.5 py-0.5 text-[8px] font-black text-cyan-200">
                       CASUAL
@@ -865,7 +867,7 @@ function MobileNavGroup({
             </div>
           )}
           {visibleLinks.map(
-            ({ href, label: itemLabel, icon: ItemIcon, beta, casual }) => (
+            ({ href, label: itemLabel, icon: ItemIcon, beta, alpha, casual }) => (
               <Link
                 key={href}
                 href={href}
@@ -881,6 +883,7 @@ function MobileNavGroup({
                       BETA
                     </span>
                   )}
+                  {alpha && <span className="ml-auto rounded bg-fuchsia-500/15 px-1.5 py-0.5 text-[8px] font-black text-fuchsia-300">ALPHA</span>}
                   {casual && (
                     <span className="rounded bg-cyan-500/20 px-1 py-0.5 text-[7px] font-black text-cyan-200">
                       CASUAL

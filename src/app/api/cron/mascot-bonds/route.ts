@@ -27,9 +27,18 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();
+  // Um Amuleto ativo pausa o prazo normal. Se sobreviver às 6 horas sem
+  // Escudo, preserva o vínculo e encerra toda a disputa.
+  const resolvedCharms = await prisma.mascotRelation.findMany({ where: { isActive: true, promiseCharmResolvesAt: { lte: now } }, select: { mascotAId: true, mascotBId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
+  for (const relation of resolvedCharms) {
+    await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
+    const players = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
+    await prisma.playerNotification.createMany({ data: players.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
+    await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos" }).catch(() => undefined);
+  }
   // Afastamentos têm peso e tempo. Ao fim do prazo, as duas direções da
   // relação são removidas; memórias narrativas permanecem como histórico.
-  const dueDistances = await prisma.mascotRelation.findMany({ where: { isActive: true, dormantAt: { lte: now } }, select: { mascotAId: true, mascotBId: true } });
+  const dueDistances = await prisma.mascotRelation.findMany({ where: { isActive: true, dormantAt: { lte: now }, promiseCharmResolvesAt: null }, select: { mascotAId: true, mascotBId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
   const pairIds = dueDistances.flatMap((relation) => [relation.mascotAId, relation.mascotBId]);
   const distancesCompleted = dueDistances.length ? await prisma.mascotRelation.deleteMany({
     where: { OR: dueDistances.flatMap((relation) => [
@@ -37,6 +46,15 @@ export async function GET(req: NextRequest) {
       { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId },
     ]) },
   }) : { count: 0 };
+  const notifiedDistancePairs = new Set<string>();
+  for (const relation of dueDistances) {
+    const key = [relation.mascotAId, relation.mascotBId].sort().join(":");
+    if (notifiedDistancePairs.has(key)) continue;
+    notifiedDistancePairs.add(key);
+    const affected = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
+    await prisma.playerNotification.createMany({ data: affected.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
+    await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos" }).catch(() => undefined);
+  }
   // Limpa dados do desenho anterior. Relação inativa não é reserva nem fila.
   const staleRelationsRemoved = await prisma.mascotRelation.deleteMany({ where: { isActive: false } });
   const players = await prisma.player.findMany({
@@ -97,21 +115,19 @@ export async function GET(req: NextRequest) {
     }
   }
 
-  // O Refúgio é persistente: as histórias avançam pelo relógio do servidor,
-  // não pela abertura da página. Durante a prévia, somente contas admin entram
-  // neste processador para não alterar o Laços legado dos demais jogadores.
-  const dueBefore = new Date(now.getTime() - BONDS_V2_BALANCE.publicSpaces.automaticEventIntervalHours * 60 * 60_000);
+  // O Refúgio é persistente. Cada mascote recebe seu próximo horário aleatório
+  // entre 180 e 300 minutos; cada chamada processa somente alguns vencidos.
+  const dueBefore = now;
   for (const location of Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]) {
     const dueOwners = await prisma.mascotRoutine.findMany({
       where: {
         locationType: location,
         status: "ACTIVE",
-        lastProcessedAt: { lte: dueBefore },
-        player: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } },
+        OR: [{ nextEventAt: { lte: dueBefore } }, { nextEventAt: null }],
       },
       distinct: ["playerId"],
       orderBy: { lastProcessedAt: "asc" },
-      take: 25,
+      take: 12,
       select: { playerId: true },
     });
     for (const owner of dueOwners) {

@@ -129,7 +129,7 @@ export const MASCOT_SHOP_ITEM_TYPES = [
 export const BOND_SHOP_ITEM_TYPES = [
   "BOND_SHARED_BERRY", "BOND_CALMING_HERB", "BOND_REVENGE_TOKEN", "BOND_TRAINING_RIBBON",
   "BOND_SHARED_PILLOW", "BOND_NIGHT_TEA", "BOND_YARD_TOY", "BOND_ILLUSTRATED_INVITATION",
-  "BOND_MEMORY_ALBUM", "BOND_TRUCE_BELL", "BOND_PROMISE_CHARM", "BOND_CHALLENGE_LETTER",
+  "BOND_MEMORY_ALBUM", "BOND_TRUCE_BELL", "BOND_PROMISE_CHARM", "BOND_PROMISE_SHIELD", "BOND_CHALLENGE_LETTER",
   "BOND_TAUNT_WHISTLE", "BOND_CHALLENGE_BOARD", "BOND_SECOND_PLACE_MEDAL", "BOND_SURPASS_ME_BAND",
   "BOND_CRACKED_TROPHY", "BOND_RIVAL_CIRCUIT_PASS",
 ] as const;
@@ -146,6 +146,7 @@ export const BOND_ITEM_CATALOG = [
   { type: "BOND_MEMORY_ALBUM", name: "Álbum de Memórias", description: "Transforma uma lembrança comum em memória marcante sem alterar a relação.", rarity: "RARE" },
   { type: "BOND_TRUCE_BELL", name: "Sino de Trégua", description: "Limita a mudança de um conflito ao intervalo entre −2 e +2.", rarity: "RARE" },
   { type: "BOND_PROMISE_CHARM", name: "Amuleto de Promessa", description: "Recurso narrativo para decisões de compromisso e reconciliação entre mascotes.", rarity: "EPIC" },
+  { type: "BOND_PROMISE_SHIELD", name: "Escudo do Desapego", description: "Remove um Amuleto de Promessa em disputa, bloqueia outro amuleto e retoma o prazo restante do afastamento.", rarity: "EPIC" },
   { type: "BOND_CHALLENGE_LETTER", name: "Carta de Desafio", description: "Cria uma revanche direcionada entre mascotes que já sejam Rivais ou piores.", rarity: "RARE" },
   { type: "BOND_TAUNT_WHISTLE", name: "Apito de Provocação", description: "Acrescenta 35 pontos percentuais à chance de conflito no próximo treino.", rarity: "COMMON" },
   { type: "BOND_CHALLENGE_BOARD", name: "Quadro de Desafios", description: "Procura um novo oponente compatível e favorece a formação de um Rival.", rarity: "UNCOMMON" },
@@ -182,7 +183,7 @@ export const SHOP_ITEM_EMOJI: Record<string, string> = {
   RAINBOW_FEATHER: "🌈",
   BOND_SHARED_BERRY: "🫐", BOND_CALMING_HERB: "🌿", BOND_REVENGE_TOKEN: "🪙", BOND_TRAINING_RIBBON: "🎗️",
   BOND_SHARED_PILLOW: "🛏️", BOND_NIGHT_TEA: "🍵", BOND_YARD_TOY: "🪀", BOND_ILLUSTRATED_INVITATION: "💌",
-  BOND_MEMORY_ALBUM: "📔", BOND_TRUCE_BELL: "🔔", BOND_PROMISE_CHARM: "🤝", BOND_CHALLENGE_LETTER: "✉️",
+  BOND_MEMORY_ALBUM: "📔", BOND_TRUCE_BELL: "🔔", BOND_PROMISE_CHARM: "🤝", BOND_PROMISE_SHIELD: "🛡️", BOND_CHALLENGE_LETTER: "✉️",
   BOND_TAUNT_WHISTLE: "📣", BOND_CHALLENGE_BOARD: "📋", BOND_SECOND_PLACE_MEDAL: "🥈", BOND_SURPASS_ME_BAND: "🥋",
   BOND_CRACKED_TROPHY: "🏆", BOND_RIVAL_CIRCUIT_PASS: "🎫",
 };

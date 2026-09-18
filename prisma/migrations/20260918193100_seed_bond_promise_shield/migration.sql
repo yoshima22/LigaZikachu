@@ -1,0 +1,3 @@
+INSERT INTO "shop_items" ("id", "type", "name", "description", "rarity", "price", "active", "inventoryEnabled", "sortOrder", "metadata", "updatedAt")
+VALUES ('bond-promise-shield', 'BOND_PROMISE_SHIELD', 'Escudo do Desapego', 'Remove um Amuleto de Promessa em disputa, bloqueia outro amuleto e retoma o prazo restante do afastamento.', 'EPIC', 0, false, true, 911, '{"mode":"BONDS","effect":"blockPromiseCharm"}', NOW())
+ON CONFLICT ("id") DO UPDATE SET "name" = EXCLUDED."name", "description" = EXCLUDED."description", "inventoryEnabled" = true, "metadata" = EXCLUDED."metadata", "updatedAt" = NOW();

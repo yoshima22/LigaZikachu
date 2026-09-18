@@ -16,15 +16,8 @@ export const BONDS_V2_BALANCE = {
   },
 } as const;
 
-/** Bônus real isolado para contas administrativas durante a prévia. */
+/** Bônus do Laços Alpha para todos os jogadores. */
 export async function getBondsV2ExpeditionBonus(mascotId: string, mode: string) {
-  const mascot = await prisma.mascot.findUnique({
-    where: { id: mascotId },
-    select: { player: { select: { user: { select: { role: true } } } } },
-  });
-  if (!mascot || (mascot.player.user.role !== "ADMIN" && mascot.player.user.role !== "SUPER_ADMIN")) {
-    return { timeReductionPct: 0, trainingExpPct: 0, partnerName: null as string | null };
-  }
   const best = await prisma.mascotRelation.findFirst({
     where: {
       mascotAId: mascotId,

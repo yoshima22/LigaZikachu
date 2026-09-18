@@ -254,9 +254,11 @@ export function LeagueBattleReplayModal({
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
   const [showBondIntro, setShowBondIntro] = useState(false);
+  const [showBondDetails, setShowBondDetails] = useState(false);
   const onFinishRef = useRef(onFinish);
   const cinematicReplay = useMemo(() => buildCinematicReplay(replay), [replay]);
-  const bondIntros = useMemo(() => replay.filter((turn) => turn.effect?.startsWith("LAÇO:")).slice(0, 4), [replay]);
+  const bondEvents = useMemo(() => replay.filter((turn) => turn.effect?.startsWith("LAÇO:")), [replay]);
+  const bondIntros = useMemo(() => bondEvents.slice(0, 4), [bondEvents]);
   useEffect(() => { onFinishRef.current = onFinish; });
 
   // baseFighters é DERIVADO — recomputar não reinicia a reprodução. Isso evita que
@@ -338,6 +340,7 @@ export function LeagueBattleReplayModal({
           <div className="flex items-center justify-between px-5 pt-5 pb-2">
             <p className="text-sm font-bold uppercase tracking-widest text-[#FFCB05]">⚔️ Replay da Batalha</p>
             <div className="flex gap-1.5">
+              {bondEvents.length > 0 && <button onClick={() => { setShowBondDetails(true); setAutoPlay(false); }} className="rounded-lg border border-fuchsia-400/35 bg-fuchsia-400/10 px-2.5 py-1.5 text-xs font-bold text-fuchsia-200 hover:bg-fuchsia-400/20" title="Consultar os Laços ativos neste combate">♥ Laços ({bondEvents.length})</button>}
               <button onClick={() => setAutoPlay(!autoPlay)} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">
                 {autoPlay ? "⏸" : "▶"}
               </button>
@@ -350,6 +353,19 @@ export function LeagueBattleReplayModal({
               <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>
+
+          {showBondDetails && <div className="absolute inset-0 z-[60] flex items-center justify-center bg-slate-950/95 p-4 backdrop-blur-md">
+            <div className="flex max-h-[88%] w-full max-w-xl flex-col overflow-hidden rounded-2xl border border-fuchsia-300/30 bg-[#090817] shadow-2xl shadow-fuchsia-950/40">
+              <div className="flex items-start justify-between border-b border-white/10 p-4">
+                <div><p className="text-[10px] font-black uppercase tracking-[.25em] text-fuchsia-300">Consulta do replay</p><h3 className="mt-1 text-lg font-black text-white">Laços ativos na batalha</h3><p className="mt-1 text-xs text-slate-400">O replay fica pausado enquanto você consulta. Todos os pares são mostrados; bônus repetidos não acumulam, mas a melhor amizade e a rivalidade mais intensa podem atuar juntas.</p></div>
+                <button onClick={() => setShowBondDetails(false)} className="ml-3 rounded-lg border border-white/10 px-3 py-2 text-sm text-slate-300 hover:text-white">✕</button>
+              </div>
+              <div className="space-y-3 overflow-y-auto p-4">
+                {bondEvents.map((bond, index) => { const parts = bond.effect?.split(":") ?? []; return <div key={`${bond.actorId}-${bond.targetId}-${index}`} className="rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/[.05] p-3"><div className="grid grid-cols-[minmax(0,1fr)_72px_minmax(0,1fr)] items-center gap-2"><div className="text-center"><img src={getSpriteUrl(bond.actorPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.actorName, bond.actorPokemonId)}</p></div><div><div className="h-1 rounded-full bg-gradient-to-r from-cyan-300 via-fuchsia-400 to-rose-300 shadow-[0_0_14px_rgba(217,70,239,.65)]" /><p className="mt-1 text-center text-[8px] font-black uppercase text-fuchsia-200">{parts[2] ?? "Laço ativo"}</p></div><div className="text-center"><img src={getSpriteUrl(bond.targetPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.targetName, bond.targetPokemonId)}</p></div></div><p className="mt-3 rounded-xl bg-black/25 px-3 py-2 text-center text-[11px] leading-5 text-slate-300">{parts.slice(3).join(":").trim()}</p></div>; })}
+              </div>
+              <div className="border-t border-white/10 p-4"><button onClick={() => setShowBondDetails(false)} className="w-full rounded-xl bg-gradient-to-r from-cyan-300 to-fuchsia-400 py-2.5 text-sm font-black text-slate-950">Voltar ao replay</button></div>
+            </div>
+          </div>}
 
           {specialRule && (
             <div className="mx-5 mb-3 rounded-xl border border-purple-500/40 bg-purple-500/10 px-4 py-2 text-xs text-purple-100">

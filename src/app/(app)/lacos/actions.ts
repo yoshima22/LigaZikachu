@@ -9,6 +9,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { Prisma } from "@prisma/client";
+import { sendNotificationToPlayers } from "@/lib/notifications";
 import {
   applyBondOption,
   autoResolveExpiredBondEvents,
@@ -37,7 +38,7 @@ async function getAdminPlayerId() {
 
 export async function setMascotRoutineV2Action(mascotId: string, location: RefugeLocation | "NONE") {
   try {
-    const playerId = await getAdminPlayerId();
+    const playerId = await getPlayerId();
     const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
     if (!mascot) throw new Error("Mascote não encontrado na sua conta.");
     const changingRoutine = mascot.routine && (
@@ -69,8 +70,8 @@ export async function setMascotRoutineV2Action(mascotId: string, location: Refug
       await prisma.$transaction(async (tx) => {
         await tx.mascotRoutine.upsert({
           where: { mascotId },
-          update: { playerId, locationType: location, status: "ACTIVE", startedAt: new Date(), lastProcessedAt: new Date(), accumulatedUnits: 0 },
-          create: { playerId, mascotId, locationType: location },
+          update: { playerId, locationType: location, status: "ACTIVE", startedAt: new Date(), lastProcessedAt: new Date(), nextEventAt: new Date(Date.now() + (180 + Math.floor(Math.random() * 121)) * 60_000), accumulatedUnits: 0 },
+          create: { playerId, mascotId, locationType: location, nextEventAt: new Date(Date.now() + (180 + Math.floor(Math.random() * 121)) * 60_000) },
         });
         if (previousLocation && previousLocation !== location) {
           const mascotLabel = mascot.nickname?.trim() || `Mascote #${mascot.pokemonId}`;
@@ -158,15 +159,21 @@ export async function saveRefugeBackgroundV2Action(location: RefugeLocation, ima
 
 const BOND_DISTANCE_DELAY_MS = 24 * 60 * 60_000;
 
+async function notifyBondDispute(playerIds: string[], title: string, body: string, eventKey: string) {
+  const unique = [...new Set(playerIds)];
+  await prisma.playerNotification.createMany({ data: unique.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_DISPUTE", title, body, href: "/lacos", entityId: eventKey, eventKey: `${eventKey}:${playerId}` })), skipDuplicates: true });
+  await sendNotificationToPlayers(unique, { title, body, url: "/lacos", data: { eventKey } }).catch(() => undefined);
+}
+
 export async function updateActiveBondV2Action(relationId: string, operation: "START_DISTANCE" | "CANCEL_DISTANCE") {
   try {
-    const playerId = await getAdminPlayerId();
+    const playerId = await getPlayerId();
     const relation = await prisma.mascotRelation.findFirst({
       where: { id: relationId, mascotA: { playerId } },
       select: {
-        id: true, isActive: true, dormantAt: true, mascotAId: true, mascotBId: true,
-        mascotA: { select: { pokemonId: true, nickname: true } },
-        mascotB: { select: { pokemonId: true, nickname: true } },
+        id: true, isActive: true, dormantAt: true, mascotAId: true, mascotBId: true, distanceStartedByPlayerId: true,
+        mascotA: { select: { pokemonId: true, nickname: true, playerId: true } },
+        mascotB: { select: { pokemonId: true, nickname: true, playerId: true } },
       },
     });
     if (!relation) throw new Error("Laço não encontrado.");
@@ -176,11 +183,15 @@ export async function updateActiveBondV2Action(relationId: string, operation: "S
     if (operation === "START_DISTANCE") {
       if (!relation.isActive) throw new Error("Este vínculo já está distante.");
       if (relation.dormantAt && relation.dormantAt > now) throw new Error("O afastamento já está em andamento.");
-      await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: new Date(now.getTime() + BOND_DISTANCE_DELAY_MS), isProtected: false } });
+      const deadline = new Date(now.getTime() + BOND_DISTANCE_DELAY_MS);
+      await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: deadline, distanceStartedAt: now, distanceStartedByPlayerId: playerId, distanceRemainingMs: BOND_DISTANCE_DELAY_MS, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [], isProtected: false } });
       await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "AFASTAMENTO_INICIADO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Precisando de espaço", description: `${nameA} decidiu se afastar de ${nameB}. Durante as próximas 24 horas, uma nova interação ainda pode mudar esse rumo.`, intensity: 2 } });
+      const otherPlayerId = relation.mascotA.playerId === playerId ? relation.mascotB.playerId : relation.mascotA.playerId;
+      await notifyBondDispute([otherPlayerId], "Um afastamento foi iniciado", `${nameA} e ${nameB} podem perder o vínculo em 24 horas. Você pode contestar ou usar um Amuleto de Promessa.`, `bond-distance:${relation.id}:${now.toISOString()}`);
     } else if (operation === "CANCEL_DISTANCE") {
       if (!relation.isActive || !relation.dormantAt || relation.dormantAt <= now) throw new Error("Não há afastamento em andamento.");
-      await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null } });
+      if (relation.distanceStartedByPlayerId && relation.distanceStartedByPlayerId !== playerId) throw new Error("Use Contestar afastamento para reagir à decisão do outro treinador.");
+      await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
       await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "AFASTAMENTO_CANCELADO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Ainda havia algo entre eles", description: `${nameA} desistiu de se afastar de ${nameB}. O vínculo permaneceu presente.`, intensity: 2 } });
     }
     revalidatePath("/lacos");
@@ -188,6 +199,88 @@ export async function updateActiveBondV2Action(relationId: string, operation: "S
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível alterar o laço." };
   }
+}
+
+export async function contestBondDistanceV2Action(relationId: string) {
+  try {
+    const playerId = await getPlayerId();
+    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId }, isActive: true }, select: { mascotAId: true, mascotBId: true, dormantAt: true, distanceStartedByPlayerId: true, distanceContestants: true } });
+    if (!relation?.dormantAt || relation.distanceStartedByPlayerId === playerId) throw new Error("Este afastamento não foi iniciado pelo outro treinador.");
+    const attempted = Array.isArray(relation.distanceContestants) ? relation.distanceContestants.map(String) : [];
+    if (attempted.includes(playerId)) throw new Error("Você já contestou este afastamento.");
+    const won = Math.random() < 0.5;
+    const pair = { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] };
+    await prisma.mascotRelation.updateMany({ where: pair, data: won ? { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } : { distanceContestants: [...attempted, playerId] } });
+    await notifyBondDispute([playerId, relation.distanceStartedByPlayerId!], won ? "Contestação bem-sucedida" : "Contestação não convenceu", won ? "A chance de 50% funcionou e o afastamento foi cancelado." : "O afastamento continua contando. O Amuleto de Promessa ainda pode ser usado.", `bond-contest:${relationId}:${Date.now()}`);
+    revalidatePath("/lacos");
+    return { ok: true, won };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível contestar." }; }
+}
+
+async function consumeBondInventoryItem(playerId: string, type: "BOND_PROMISE_CHARM" | "BOND_PROMISE_SHIELD") {
+  const inventory = await prisma.playerInventory.findFirst({ where: { playerId, item: { type } }, select: { id: true, quantity: true } });
+  if (!inventory?.quantity) throw new Error(type === "BOND_PROMISE_CHARM" ? "Você não possui um Amuleto de Promessa." : "Você não possui um Escudo do Desapego.");
+  if (inventory.quantity === 1) await prisma.playerInventory.delete({ where: { id: inventory.id } });
+  else await prisma.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
+}
+
+export async function useBondDistanceItemV2Action(relationId: string, item: "CHARM" | "SHIELD") {
+  try {
+    const playerId = await getPlayerId();
+    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId }, isActive: true }, select: { mascotAId: true, mascotBId: true, dormantAt: true, distanceStartedByPlayerId: true, distanceRemainingMs: true, promiseCharmResolvesAt: true, promiseShielded: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
+    if (!relation?.dormantAt || !relation.distanceStartedByPlayerId) throw new Error("Não há afastamento em disputa.");
+    const now = new Date();
+    const pair = { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] };
+    const involved = [relation.mascotA.playerId, relation.mascotB.playerId];
+    if (item === "CHARM") {
+      if (relation.distanceStartedByPlayerId === playerId) throw new Error("Somente o outro treinador pode usar o Amuleto de Promessa.");
+      if (relation.promiseShielded) throw new Error("O Escudo do Desapego bloqueia novos amuletos nesta disputa.");
+      if (relation.promiseCharmResolvesAt) throw new Error("Já existe um Amuleto de Promessa ativo.");
+      await consumeBondInventoryItem(playerId, "BOND_PROMISE_CHARM");
+      const remaining = Math.max(0, relation.dormantAt.getTime() - now.getTime());
+      const resolvesAt = new Date(now.getTime() + 6 * 60 * 60_000);
+      await prisma.mascotRelation.updateMany({ where: pair, data: { dormantAt: resolvesAt, distanceRemainingMs: remaining, promiseCharmStartedAt: now, promiseCharmResolvesAt: resolvesAt, promiseCharmByPlayerId: playerId } });
+      await notifyBondDispute(involved, "Amuleto de Promessa ativado", "O prazo do afastamento foi pausado. Em 6 horas o vínculo será preservado, salvo se o iniciador usar um Escudo do Desapego.", `bond-charm:${relationId}:${now.toISOString()}`);
+    } else {
+      if (relation.distanceStartedByPlayerId !== playerId) throw new Error("Somente quem iniciou o afastamento pode usar o Escudo do Desapego.");
+      if (!relation.promiseCharmResolvesAt) throw new Error("Não existe Amuleto de Promessa ativo para bloquear.");
+      await consumeBondInventoryItem(playerId, "BOND_PROMISE_SHIELD");
+      const deadline = new Date(now.getTime() + Math.max(1, relation.distanceRemainingMs ?? BOND_DISTANCE_DELAY_MS));
+      await prisma.mascotRelation.updateMany({ where: pair, data: { dormantAt: deadline, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: true } });
+      await notifyBondDispute(involved, "Escudo do Desapego ativado", "O Amuleto foi removido. O prazo restante do afastamento voltou a correr e outro amuleto não poderá ser usado nesta disputa.", `bond-shield:${relationId}:${now.toISOString()}`);
+    }
+    revalidatePath("/lacos");
+    return { ok: true };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível usar o item." }; }
+}
+
+export async function setRefugeInfluenceV2Action(targetMascotId: string, direction: 1 | -1) {
+  try {
+    const playerId = await getPlayerId();
+    const target = await prisma.mascot.findFirst({ where: { id: targetMascotId, playerId: { not: playerId }, routine: { status: "ACTIVE" } }, select: { id: true } });
+    if (!target) throw new Error("Este visitante não está disponível para influência.");
+    await prisma.mascotSocialInfluence.upsert({ where: { observerPlayerId_targetMascotId: { observerPlayerId: playerId, targetMascotId } }, create: { observerPlayerId: playerId, targetMascotId, direction }, update: { direction } });
+    revalidatePath("/lacos");
+    return { ok: true };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível registrar a influência." }; }
+}
+
+export async function claimRefugeRewardV2Action(mascotId: string) {
+  try {
+    const playerId = await getPlayerId();
+    const routine = await prisma.mascotRoutine.findFirst({ where: { mascotId, playerId, status: "ACTIVE", pendingRewardType: { not: null } }, select: { id: true, locationType: true, pendingRewardType: true, mascot: { select: { id: true, pokemonId: true, nickname: true } } } });
+    if (!routine?.pendingRewardType) throw new Error("Este mascote ainda não tem um recurso para resgatar.");
+    const item = await prisma.shopItem.findFirst({ where: { type: routine.pendingRewardType as never }, select: { id: true, name: true } });
+    if (!item) throw new Error("O recurso encontrado ainda não está disponível no catálogo.");
+    await prisma.$transaction(async (tx) => {
+      await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: item.id } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: item.id, quantity: 1, source: "BONDS_REFUGE" } });
+      await tx.mascotRoutine.update({ where: { id: routine.id }, data: { pendingRewardType: null, pendingRewardAt: null } });
+      const name = routine.mascot.nickname ?? getPokemonName(routine.mascot.pokemonId);
+      await tx.mascotBondMemory.create({ data: { mascotAId: mascotId, memoryType: "RECURSO_DE_LACOS", sourceType: "REFUGE_REWARD", sourceId: routine.locationType, title: "Recurso resgatado", description: `${name} entregou 1x ${item.name} ao treinador.`, metadata: { location: routine.locationType, itemType: routine.pendingRewardType, quantity: 1 } } });
+    });
+    revalidatePath("/lacos");
+    return { ok: true, name: item.name };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível resgatar o recurso." }; }
 }
 
 export async function adjustBondItemDebugV2Action(itemType: string, delta: 1 | -1) {

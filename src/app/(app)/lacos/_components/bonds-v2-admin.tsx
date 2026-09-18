@@ -12,6 +12,8 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 }
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
+  const viewer = await prisma.player.findUnique({ where: { id: playerId }, select: { user: { select: { role: true } } } });
+  const admin = viewer?.user.role === "ADMIN" || viewer?.user.role === "SUPER_ADMIN";
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
   const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
     prisma.mascot.findMany({
@@ -19,8 +21,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
       take: 60,
       select: {
-        id: true, pokemonId: true, nickname: true, level: true, personality: true,
-        routine: { select: { locationType: true, status: true, startedAt: true, updatedAt: true } },
+        id: true, pokemonId: true, nickname: true, level: true, personality: true, performanceTag: true,
+        routine: { select: { locationType: true, status: true, startedAt: true, updatedAt: true, nextEventAt: true, pendingRewardType: true } },
       },
     }),
     prisma.mascotRoutine.findMany({
@@ -28,8 +30,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: { lastProcessedAt: "desc" },
       take: 192,
       select: {
-        locationType: true, startedAt: true, updatedAt: true,
-        mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, personality: true, playerId: true, player: { select: { displayName: true } } } },
+        locationType: true, startedAt: true, updatedAt: true, nextEventAt: true, pendingRewardType: true,
+        mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, personality: true, performanceTag: true, playerId: true, player: { select: { displayName: true } } } },
       },
     }),
     prisma.mascotRelation.findMany({
@@ -37,7 +39,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
       take: 100,
       select: {
-        id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true,
+        id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true, distanceStartedByPlayerId: true, promiseCharmResolvesAt: true, promiseShielded: true,
         mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
@@ -82,11 +84,15 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     sprite: getSpriteUrl(mascot.pokemonId),
     level: mascot.level,
     personality: PERSONALITY_LABEL[mascot.personality] ?? mascot.personality,
+    performanceTag: mascot.performanceTag,
     owner: "Você",
+    ownerId: playerId,
     own: true,
     location: mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType : null,
     startedAt: mascot.routine?.status === "ACTIVE" ? mascot.routine.startedAt.toISOString() : null,
     moveAvailableAt: mascot.routine ? new Date(mascot.routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString() : null,
+    nextActionAt: mascot.routine?.nextEventAt?.toISOString() ?? null,
+    pendingReward: Boolean(mascot.routine?.pendingRewardType),
   }));
   const bondItems = relations.map((relation) => ({
     id: relation.id,
@@ -103,6 +109,9 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     interactions: relation.interactionCount,
     active: relation.isActive,
     transitionAt: relation.dormantAt?.toISOString() ?? null,
+    startedByMe: relation.distanceStartedByPlayerId === playerId,
+    charmResolvesAt: relation.promiseCharmResolvesAt?.toISOString() ?? null,
+    shielded: relation.promiseShielded,
   }));
   const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, { leader: string; sprite: string; members: Array<{ name: string; sprite: string; score: number }> }>>((groups, relation) => {
     const key = mascotName(relation.mascotA);
@@ -144,11 +153,15 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       sprite: getSpriteUrl(routine.mascot.pokemonId),
       level: routine.mascot.level,
       personality: PERSONALITY_LABEL[routine.mascot.personality] ?? routine.mascot.personality,
+      performanceTag: routine.mascot.performanceTag,
       owner: routine.mascot.playerId === playerId ? "Você" : routine.mascot.player.displayName,
+      ownerId: routine.mascot.playerId,
       own: routine.mascot.playerId === playerId,
       location,
       startedAt: routine.startedAt.toISOString(),
       moveAvailableAt: new Date(routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
+      nextActionAt: routine.nextEventAt?.toISOString() ?? null,
+      pendingReward: Boolean(routine.pendingRewardType),
     }));
     const stories = memoriesByLocation[locationIndex].map((memory) => {
       const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
@@ -173,7 +186,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   return <div className="space-y-8 font-sans antialiased">
     <header className="relative overflow-hidden rounded-3xl border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,.24),transparent_40%),linear-gradient(135deg,#070d1d,#120826)] p-6 shadow-2xl shadow-fuchsia-950/20">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
-        <div className="rounded-full border border-amber-300/30 bg-amber-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-amber-200"><LockKeyhole size={12} className="mr-1 inline" /> Prévia exclusiva do admin</div>
+        <div className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-fuchsia-200"><LockKeyhole size={12} className="mr-1 inline" /> Alpha público</div>
         <BondsTutorial />
       </div>
       <p className="text-xs font-black uppercase tracking-[.25em] text-fuchsia-300">Laços 2.0 · vida social dos mascotes</p>
@@ -196,7 +209,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       refuge={<>
     <section>
       <div className="mb-4"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-emerald-300">Espaços públicos e persistentes</p><h2 className="text-2xl font-black text-white">Explore o Refúgio</h2><p className="mt-1 max-w-3xl text-sm text-slate-400">Cada local favorece acontecimentos diferentes. Procure um mascote, envie-o para uma rotina e observe quem está dividindo o espaço com ele.</p></div>
-      <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} />
+      <RefugeLocationsTabs locations={refugeTabs} ownMascots={ownMascots} admin={admin} />
     </section>
       </>}
       moments={<>
@@ -205,7 +218,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <ImportantMomentsList moments={importantMoments} />}
     </section>
       </>}
-      inventory={<BondInventoryV2 items={inventoryItems} />}
+      inventory={<BondInventoryV2 items={inventoryItems} admin={admin} />}
       social={<>
     <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
       <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Além das duplas</p><h2 className="text-xl font-semibold text-white">Mapa social e outros treinadores</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Aqui você compara sua rede por treinador. Círculos de amizade e Clubes da Luta são explicados e filtrados diretamente em “Laços e efeitos”, onde seus benefícios também aparecem.</p></div>

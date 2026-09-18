@@ -1893,6 +1893,7 @@ enum ShopItemType {
   BOND_MEMORY_ALBUM
   BOND_TRUCE_BELL
   BOND_PROMISE_CHARM
+  BOND_PROMISE_SHIELD
   BOND_CHALLENGE_LETTER
   BOND_TAUNT_WHISTLE
   BOND_CHALLENGE_BOARD
@@ -2788,6 +2789,14 @@ model MascotRelation {
   isActive          Boolean            @default(true)
   isProtected       Boolean            @default(false)
   dormantAt         DateTime?
+  distanceStartedAt DateTime?
+  distanceStartedByPlayerId String?
+  distanceRemainingMs Int?
+  promiseCharmStartedAt DateTime?
+  promiseCharmResolvesAt DateTime?
+  promiseCharmByPlayerId String?
+  promiseShielded Boolean @default(false)
+  distanceContestants Json @default("[]")
   mascotA           Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
   mascotB           Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
 
@@ -2916,12 +2925,28 @@ model MascotRoutine {
   accumulatedUnits Int      @default(0)
   startedAt        DateTime @default(now())
   lastProcessedAt  DateTime @default(now())
+  nextEventAt      DateTime?
+  pendingRewardType String?
+  pendingRewardAt DateTime?
   updatedAt        DateTime @updatedAt
   player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   mascot           Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@index([playerId, locationType, status])
   @@map("mascot_routines")
+}
+
+model MascotSocialInfluence {
+  id               String   @id @default(cuid())
+  observerPlayerId String
+  targetMascotId   String
+  direction        Int
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([observerPlayerId, targetMascotId])
+  @@index([targetMascotId, direction])
+  @@map("mascot_social_influences")
 }
 
 model MascotEvent {
