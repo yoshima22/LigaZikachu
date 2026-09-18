@@ -6,7 +6,8 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
-import { GachaPreview } from "./_components/gacha-preview";
+import { GachaPanel } from "./_components/gacha-panel";
+import { CELESTIAL_EGG_ICON, LAB_EGG_ICON, POKEBALL_ICON, ULTRABALL_ICON, currentWeekKey } from "@/lib/gacha";
 import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getActiveShopItems, getEnabledShopPromotions, invalidateShopCache } from "@/lib/shop-cache";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
@@ -40,6 +41,36 @@ async function ensureCoreMascotItems() {
     await prisma.shopItem.update({ where: { id: existing.id }, data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
     await invalidateShopCache();
   }
+}
+
+async function loadGachaData(playerId: string) {
+  const weekKey = currentWeekKey();
+  const [banners, missions, packs, wallet, progress] = await Promise.all([
+    prisma.gachaBanner.findMany({
+      orderBy: [{ active: "desc" }, { startsAt: "desc" }],
+      include: { entries: { orderBy: { weight: "desc" } }, pityRules: { orderBy: { everyPulls: "asc" } } },
+    }),
+    prisma.gachaMission.findMany({ orderBy: [{ sortOrder: "asc" }, { createdAt: "asc" }] }),
+    prisma.gachaPack.findMany({ orderBy: [{ sortOrder: "asc" }, { priceLc: "asc" }] }),
+    prisma.gachaWallet.findUnique({ where: { playerId } }),
+    prisma.gachaMissionProgress.findMany({ where: { playerId, weekKey } }),
+  ]);
+  const progressByMission = new Map(progress.map((row) => [row.missionId, row]));
+  return {
+    banners: banners.map((banner) => ({
+      ...banner,
+      startsAt: banner.startsAt.toISOString(),
+      endsAt: banner.endsAt.toISOString(),
+      entries: banner.entries.map((entry) => ({ ...entry, eggType: entry.eggType ? String(entry.eggType) : null })),
+    })),
+    missions: missions.map((mission) => ({
+      ...mission,
+      progress: progressByMission.get(mission.id)?.progress ?? 0,
+      claimed: Boolean(progressByMission.get(mission.id)?.claimedAt),
+    })),
+    packs,
+    wallet: { pokeballs: wallet?.pokeballs ?? 0, ultraballs: wallet?.ultraballs ?? 0 },
+  };
 }
 
 export default async function ShopPage() {
@@ -114,6 +145,8 @@ export default async function ShopPage() {
     && promotion.startsAt <= now
     && promotion.endsAt > now,
   ).sort((left, right) => right.discountPct - left.discountPct).slice(0, 1);
+
+  const gacha = platformAdmin && player ? await loadGachaData(player.id) : null;
 
   const ownedIds = new Set(inventoryRows.map((r) => r.itemId));
   const countByItemId = new Map(inventoryRows.map((r) => [r.itemId, r.quantity]));
@@ -254,11 +287,21 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
-          // Prévia admin-only do sistema de Invocações (banners de gacha).
-          ...(platformAdmin ? [{
+          // Invocações (banners de gacha) — admin-only enquanto o modo está em testes.
+          ...(platformAdmin && gacha ? [{
             id: "invocacoes", label: "Invocações", icon: TAB_ICONS.gacha,
             count: 1,
-            content: <GachaPreview />,
+            content: (
+              <GachaPanel
+                banners={gacha.banners}
+                missions={gacha.missions}
+                packs={gacha.packs}
+                wallet={gacha.wallet}
+                ligaCash={ligaCashWallet?.balance ?? 0}
+                shopItems={items.map((item) => ({ id: item.id, name: item.name }))}
+                icons={{ pokeball: POKEBALL_ICON, ultraball: ULTRABALL_ICON, celestialEgg: CELESTIAL_EGG_ICON, labEgg: LAB_EGG_ICON }}
+              />
+            ),
           }] : []),
         ]} />
       )}

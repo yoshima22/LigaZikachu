@@ -30,6 +30,7 @@ import {
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 import { sendNotificationToUser } from "@/lib/notifications";
+import { trackGachaObjective } from "@/lib/gacha";
 
 type ArenaStaleNotice = {
   attackerName?: string | null;
@@ -142,6 +143,7 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
     // já o fez E porque o próprio lockBot muda updatedAt, causando falso positivo.
     // O bloqueio por PvP não-visto é tratado dentro de runBotBattle via getUnseenPvpAttack.
     const result = await runBotBattle(playerId, teamId, difficulty);
+    if (result.result === "ATTACKER_WIN") after(() => trackGachaObjective(playerId, "ARENA_Z"));
     // Não revalidamos aqui para que o modal de resultado/animação permaneça aberto.
     // O router.refresh() é chamado pelo cliente ao fechar o modal.
     return { result };
@@ -165,6 +167,7 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
     const stale = await checkTeamStaleFromIncomingAttack(playerId, attackTeamId, attackTeamKnownUpdatedAt);
     if (stale) return { stale };
     const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
+    if (result.result === "ATTACKER_WIN") after(() => trackGachaObjective(playerId, "ARENA_Z"));
     if (defenseOwner && defenseOwner.playerId !== playerId && !result.isTrainingBattle) {
       const outcome = result.result === "DEFENDER_WIN"
         ? "Seu time venceu a defesa!"

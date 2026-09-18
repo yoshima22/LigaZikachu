@@ -11,7 +11,7 @@ export const ORIGIN_ICON_URL: Record<MascotOriginRarity, string> = {
   EVENT:   `${BASE}/IconeOrigem_Evento.png`,
   SPECIAL: `${BASE}/IconeOrigem_Especial.png`,
   LAB:     `${BASE}/IconeOrigem_Lab.png`,
-  CELESTIAL: `${BASE}/IconeOrigem_Celestial.png`,
+  CELESTIAL: `${BASE}/IconeOrigem_Celestial.webp`,
 };
 
 export const HUNGER_ICON_URL = `${BASE}/IconeMascote_Fome.png`;

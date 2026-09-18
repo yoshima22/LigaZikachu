@@ -36,6 +36,7 @@ import { createPlayerNotification } from "@/lib/nav-notifications";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
 import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
+import { trackGachaObjective } from "@/lib/gacha";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
@@ -1348,6 +1349,11 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${listing.player.userId}`);
+    // Missões semanais das Invocações: venda concluída e gasto no Bazar.
+    after(() => Promise.allSettled([
+      trackGachaObjective(listing.playerId, "BAZAR_VENDA"),
+      trackGachaObjective(player.id, currency === "LC" ? "BAZAR_GASTO_LC" : "BAZAR_GASTO_ZC", price),
+    ]).then(() => undefined));
     after(() => Promise.allSettled([
       sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
       sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),

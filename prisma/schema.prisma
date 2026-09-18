@@ -2775,31 +2775,31 @@ enum MascotRelationType {
 }
 
 model MascotRelation {
-  id                String             @id @default(cuid())
-  mascotAId         String
-  mascotBId         String
-  type              MascotRelationType @default(RIVAL)
-  relationshipScore Int                @default(0)
-  specialBondType   String?
-  wins              Int                @default(0)
-  losses            Int                @default(0)
-  interactionCount  Int                @default(1) // sobe com eventos; determina tier
-  lastInteractionAt DateTime?
-  createdAt         DateTime           @default(now())
-  updatedAt         DateTime           @updatedAt
-  isActive          Boolean            @default(true)
-  isProtected       Boolean            @default(false)
-  dormantAt         DateTime?
-  distanceStartedAt DateTime?
+  id                        String             @id @default(cuid())
+  mascotAId                 String
+  mascotBId                 String
+  type                      MascotRelationType @default(RIVAL)
+  relationshipScore         Int                @default(0)
+  specialBondType           String?
+  wins                      Int                @default(0)
+  losses                    Int                @default(0)
+  interactionCount          Int                @default(1) // sobe com eventos; determina tier
+  lastInteractionAt         DateTime?
+  createdAt                 DateTime           @default(now())
+  updatedAt                 DateTime           @updatedAt
+  isActive                  Boolean            @default(true)
+  isProtected               Boolean            @default(false)
+  dormantAt                 DateTime?
+  distanceStartedAt         DateTime?
   distanceStartedByPlayerId String?
-  distanceRemainingMs Int?
-  promiseCharmStartedAt DateTime?
-  promiseCharmResolvesAt DateTime?
-  promiseCharmByPlayerId String?
-  promiseShielded Boolean @default(false)
-  distanceContestants Json @default("[]")
-  mascotA           Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
-  mascotB           Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
+  distanceRemainingMs       Int?
+  promiseCharmStartedAt     DateTime?
+  promiseCharmResolvesAt    DateTime?
+  promiseCharmByPlayerId    String?
+  promiseShielded           Boolean            @default(false)
+  distanceContestants       Json               @default("[]")
+  mascotA                   Mascot             @relation("MascotRelationA", fields: [mascotAId], references: [id], onDelete: Cascade)
+  mascotB                   Mascot             @relation("MascotRelationB", fields: [mascotBId], references: [id], onDelete: Cascade)
 
   @@unique([mascotAId, mascotBId])
   @@index([mascotAId, relationshipScore])
@@ -2918,20 +2918,20 @@ model MascotBondMemory {
 }
 
 model MascotRoutine {
-  id               String   @id @default(cuid())
-  playerId         String
-  mascotId         String   @unique
-  locationType     String
-  status           String   @default("ACTIVE")
-  accumulatedUnits Int      @default(0)
-  startedAt        DateTime @default(now())
-  lastProcessedAt  DateTime @default(now())
-  nextEventAt      DateTime?
+  id                String    @id @default(cuid())
+  playerId          String
+  mascotId          String    @unique
+  locationType      String
+  status            String    @default("ACTIVE")
+  accumulatedUnits  Int       @default(0)
+  startedAt         DateTime  @default(now())
+  lastProcessedAt   DateTime  @default(now())
+  nextEventAt       DateTime?
   pendingRewardType String?
-  pendingRewardAt DateTime?
-  updatedAt        DateTime @updatedAt
-  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
-  mascot           Mascot   @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  pendingRewardAt   DateTime?
+  updatedAt         DateTime  @updatedAt
+  player            Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mascot            Mascot    @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@index([playerId, locationType, status])
   @@map("mascot_routines")
@@ -4609,4 +4609,214 @@ model EggPokemonToggle {
   updatedAt   DateTime @updatedAt @map("updated_at")
 
   @@map("egg_pokemon_toggle")
+}
+
+// ── Invocações (banners de gacha) ─────────────────────────────────────────────
+// Moedas exclusivas do modo: Pokébola (comum) e Ultra Bola (rara). Elas só
+// compram conteúdo de banner — nunca substituem ZC nem LC em outras telas.
+
+enum GachaCurrency {
+  POKEBALL
+  ULTRABALL
+}
+
+enum GachaRewardKind {
+  EGG
+  MASCOT
+  ITEM
+}
+
+enum GachaObjectiveSource {
+  ARENA_Z
+  LIGA_RUSH
+  LIGA_SEMANAL
+  BATALHA_TERRENO
+  ARENA_DRAFT
+  FIGURINHAS
+  BAZAR_VENDA
+  BAZAR_GASTO_ZC
+  BAZAR_GASTO_LC
+  OVOS_ABERTOS
+}
+
+model GachaWallet {
+  id         String   @id @default(cuid())
+  playerId   String   @unique
+  pokeballs  Int      @default(0)
+  ultraballs Int      @default(0)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@map("gacha_wallets")
+}
+
+model GachaLedger {
+  id           String        @id @default(cuid())
+  playerId     String
+  currency     GachaCurrency
+  amount       Int
+  balanceAfter Int
+  reason       String
+  actorUserId  String?
+  metadata     Json?
+  createdAt    DateTime      @default(now())
+
+  @@index([playerId, createdAt])
+  @@map("gacha_ledger")
+}
+
+model GachaBanner {
+  id           String  @id @default(cuid())
+  name         String
+  subtitle     String?
+  flavor       String?
+  imageUrl     String?
+  mascotArtUrl String?
+
+  startsAt     DateTime
+  durationDays Int      @default(14)
+  endsAt       DateTime
+  active       Boolean  @default(false)
+
+  costSingle      Int @default(1)
+  costMulti       Int @default(10)
+  ultraCostSingle Int @default(1)
+  ultraCostMulti  Int @default(10)
+
+  // Raridade mínima garantida na abertura x10 de cada moeda.
+  guaranteedRarity      String @default("RARE")
+  ultraGuaranteedRarity String @default("SPECIAL")
+
+  rateUpMultiplier Float @default(3)
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  entries    GachaBannerEntry[]
+  pityRules  GachaPityRule[]
+  missions   GachaMission[]
+  pulls      GachaPull[]
+  pityStates GachaPityState[]
+
+  @@index([active, startsAt])
+  @@map("gacha_banners")
+}
+
+model GachaBannerEntry {
+  id       String      @id @default(cuid())
+  bannerId String
+  banner   GachaBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  kind     GachaRewardKind
+  label    String
+  rarity   String          @default("COMMON")
+  weight   Float           @default(1)
+  rateUp   Boolean         @default(false)
+  imageUrl String?
+
+  eggType   EggType?
+  pokemonId Int?
+  itemId    String?
+  quantity  Int      @default(1)
+
+  @@index([bannerId])
+  @@map("gacha_banner_entries")
+}
+
+// "Barras" de garantia: a cada N aberturas daquela moeda, o jogador recebe
+// obrigatoriamente algo da raridade configurada. Várias barras por moeda.
+model GachaPityRule {
+  id       String      @id @default(cuid())
+  bannerId String
+  banner   GachaBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  currency   GachaCurrency
+  everyPulls Int
+  rarity     String
+
+  @@index([bannerId, currency])
+  @@map("gacha_pity_rules")
+}
+
+model GachaPityState {
+  id       String      @id @default(cuid())
+  bannerId String
+  banner   GachaBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  playerId String
+  ruleId   String
+  counter  Int         @default(0)
+
+  @@unique([playerId, ruleId])
+  @@index([bannerId, playerId])
+  @@map("gacha_pity_states")
+}
+
+model GachaPull {
+  id       String      @id @default(cuid())
+  bannerId String
+  banner   GachaBanner @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  playerId String
+
+  currency  GachaCurrency
+  count     Int
+  results   Json
+  createdAt DateTime      @default(now())
+
+  @@index([playerId, createdAt])
+  @@index([bannerId, createdAt])
+  @@map("gacha_pulls")
+}
+
+model GachaMission {
+  id       String       @id @default(cuid())
+  bannerId String?
+  banner   GachaBanner? @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+
+  title        String
+  source       GachaObjectiveSource
+  goal         Int
+  reward       GachaCurrency
+  rewardAmount Int                  @default(1)
+  rarityFilter String?
+  active       Boolean              @default(true)
+  sortOrder    Int                  @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  progress GachaMissionProgress[]
+
+  @@index([active, source])
+  @@map("gacha_missions")
+}
+
+model GachaMissionProgress {
+  id        String       @id @default(cuid())
+  missionId String
+  mission   GachaMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  playerId  String
+  weekKey   String
+  progress  Int          @default(0)
+  claimedAt DateTime?
+
+  @@unique([missionId, playerId, weekKey])
+  @@index([playerId, weekKey])
+  @@map("gacha_mission_progress")
+}
+
+model GachaPack {
+  id        String        @id @default(cuid())
+  name      String
+  currency  GachaCurrency
+  amount    Int
+  bonus     Int           @default(0)
+  priceLc   Int
+  active    Boolean       @default(true)
+  sortOrder Int           @default(0)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("gacha_packs")
 }
