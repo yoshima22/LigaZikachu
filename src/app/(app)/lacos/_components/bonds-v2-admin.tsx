@@ -91,7 +91,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     own: true,
     location: mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType : null,
     startedAt: mascot.routine?.status === "ACTIVE" ? mascot.routine.startedAt.toISOString() : null,
-    moveAvailableAt: mascot.routine ? new Date(mascot.routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString() : null,
+    moveAvailableAt: mascot.routine ? new Date(mascot.routine.startedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString() : null,
     nextActionAt: mascot.routine?.nextEventAt?.toISOString() ?? null,
     pendingReward: Boolean(mascot.routine?.pendingRewardType),
   }));
@@ -161,7 +161,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       own: routine.mascot.playerId === playerId,
       location,
       startedAt: routine.startedAt.toISOString(),
-      moveAvailableAt: new Date(routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
+      moveAvailableAt: new Date(routine.startedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
       nextActionAt: routine.nextEventAt?.toISOString() ?? null,
       pendingReward: Boolean(routine.pendingRewardType),
       influenceDirection: (influenceByMascot.get(routine.mascot.id) === 1 ? 1 : influenceByMascot.get(routine.mascot.id) === -1 ? -1 : null) as 1 | -1 | null,

@@ -40,7 +40,7 @@ async function getAdminPlayerId() {
 export async function setMascotRoutineV2Action(mascotId: string, location: RefugeLocation | "NONE") {
   try {
     const playerId = await getPlayerId();
-    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, arenaState: true, bazarListed: true, expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 }, routine: { select: { id: true, locationType: true, status: true, updatedAt: true } } } });
+    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId }, select: { id: true, pokemonId: true, nickname: true, arenaState: true, bazarListed: true, expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 }, routine: { select: { id: true, locationType: true, status: true, startedAt: true } } } });
     if (!mascot) throw new Error("Mascote não encontrado na sua conta.");
     if (location !== "NONE") {
       if (mascot.expeditions.length) throw new Error("Este mascote está em uma expedição e não pode entrar no Refúgio.");
@@ -53,8 +53,11 @@ export async function setMascotRoutineV2Action(mascotId: string, location: Refug
         : mascot.routine.status !== "ACTIVE" || mascot.routine.locationType !== location
     );
     if (changingRoutine) {
+      // Conta a partir de quando o jogador colocou o mascote ali (startedAt).
+      // updatedAt não serve: o ciclo automático do Refúgio toca a linha a cada
+      // processamento e empurrava o cooldown para sempre — o mascote nunca saía.
       const cooldownMs = BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000;
-      const availableAt = new Date(mascot.routine!.updatedAt.getTime() + cooldownMs);
+      const availableAt = new Date(mascot.routine!.startedAt.getTime() + cooldownMs);
       if (availableAt > new Date()) {
         const wait = Math.max(1, Math.ceil((availableAt.getTime() - Date.now()) / 60_000));
         throw new Error(`Este mascote ainda está se adaptando. A troca de espaço libera em ${wait} min.`);
