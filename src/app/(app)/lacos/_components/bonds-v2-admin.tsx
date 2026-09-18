@@ -4,18 +4,20 @@ import { getPokemonName, getSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-da
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
+import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondNotificationPreference, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getBondNotificationsEnabled } from "@/lib/bond-notification-preferences";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
 }
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
+  const bondsNotificationsEnabled = await getBondNotificationsEnabled(playerId);
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
   const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory, socialInfluences] = await Promise.all([
     prisma.mascot.findMany({
-      where: { playerId, player: { user: { role: "PLAYER" } } },
+      where: { playerId, player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
       take: 60,
       select: {
@@ -24,7 +26,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     prisma.mascotRoutine.findMany({
-      where: { status: "ACTIVE", mascot: { player: { user: { role: "PLAYER" } } } },
+      where: { status: "ACTIVE", mascot: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } } },
       orderBy: { lastProcessedAt: "desc" },
       take: 192,
       select: {
@@ -33,7 +35,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     prisma.mascotRelation.findMany({
-      where: { mascotA: { playerId, player: { user: { role: "PLAYER" } } }, mascotB: { player: { user: { role: "PLAYER" } } }, isActive: true },
+      where: { mascotA: { playerId, player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, mascotB: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, isActive: true },
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
       take: 100,
       select: {
@@ -43,7 +45,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }),
     Promise.all((Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => prisma.mascotBondMemory.findMany({
-      where: { sourceType: "REFUGE", metadata: { path: ["location"], equals: location }, mascotA: { player: { user: { role: "PLAYER" } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: "PLAYER" } } } }] },
+      where: { sourceType: "REFUGE", metadata: { path: ["location"], equals: location }, mascotA: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } } }] },
       orderBy: { createdAt: "desc" },
       // O limite é individual por região: uma Horta lotada não apaga o
       // histórico visível de Descanso, Treino ou Pátio.
@@ -54,12 +56,12 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       },
     }))),
     prisma.mascotSocialEvent.findMany({
-      where: { ownerId: playerId, owner: { user: { role: "PLAYER" } }, status: "PENDING", mascotA: { player: { user: { role: "PLAYER" } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: "PLAYER" } } } }] },
+      where: { ownerId: playerId, owner: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }, status: "PENDING", mascotA: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, OR: [{ mascotBId: null }, { mascotB: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } } }] },
       orderBy: [{ isImportant: "desc" }, { createdAt: "desc" }],
       take: 20,
       include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
     }),
-    prisma.mascotSocialEvent.count({ where: { ownerId: playerId, owner: { user: { role: "PLAYER" } }, createdAt: { gte: since } } }),
+    prisma.mascotSocialEvent.count({ where: { ownerId: playerId, owner: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } }, createdAt: { gte: since } } }),
     prisma.siteContent.findUnique({ where: { id: "bonds-v2-settings" }, select: { data: true } }),
     // A leitura do inventário não deve derrubar toda a página enquanto uma
     // implantação ainda está aplicando os novos valores do enum ShopItemType.
@@ -188,7 +190,10 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     <header className="relative overflow-hidden rounded-3xl border border-fuchsia-400/25 bg-[radial-gradient(circle_at_top_right,rgba(168,85,247,.24),transparent_40%),linear-gradient(135deg,#070d1d,#120826)] p-6 shadow-2xl shadow-fuchsia-950/20">
       <div className="mb-5 flex flex-wrap items-start justify-between gap-3">
         <div className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-fuchsia-200"><LockKeyhole size={12} className="mr-1 inline" /> Alpha público</div>
-        <BondsTutorial />
+        <div className="flex flex-col items-end gap-2">
+          <BondsTutorial />
+          <BondNotificationPreference initialEnabled={bondsNotificationsEnabled} />
+        </div>
       </div>
       <p className="text-xs font-black uppercase tracking-[.25em] text-fuchsia-300">Laços 2.0 · vida social dos mascotes</p>
       <h1 className="mt-3 max-w-2xl text-3xl font-black text-white">Veja onde eles vivem. Entenda por que se importam.</h1>

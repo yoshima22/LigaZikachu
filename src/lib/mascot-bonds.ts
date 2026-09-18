@@ -5,6 +5,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { isStandbyActive } from "@/lib/account-standby";
 import { sendNotificationToPlayers } from "@/lib/notifications";
+import { bondNotificationPreferenceId, preferenceEnabled } from "@/lib/bond-notification-preferences";
 
 export type BondBehavior =
   | "FREE"
@@ -557,11 +558,14 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
         if (rewardItem) {
           await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: milestone.playerId, itemId: rewardItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId: milestone.playerId, itemId: rewardItem.id, quantity: 1, source: "BONDS_MILESTONE" } });
         }
-        await tx.playerNotification.upsert({
-          where: { eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
-          update: {},
-          create: { playerId: milestone.playerId, category: "BONDS", type: "BOND_TIER_CHANGED", title: `Novo Laço: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier} (${milestone.threshold > 0 ? "+" : ""}${milestone.threshold}).${rewardItem ? ` Você recebeu 1x ${rewardItem.name}.` : ""}`, href: "/lacos", entityId: event.id, eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
-        });
+        const preference = await tx.siteContent.findUnique({ where: { id: bondNotificationPreferenceId(milestone.playerId) }, select: { data: true } });
+        if (preferenceEnabled(preference?.data)) {
+          await tx.playerNotification.upsert({
+            where: { eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
+            update: {},
+            create: { playerId: milestone.playerId, category: "BONDS", type: "BOND_TIER_CHANGED", title: `Novo Laço: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier} (${milestone.threshold > 0 ? "+" : ""}${milestone.threshold}).${rewardItem ? ` Você recebeu 1x ${rewardItem.name}.` : ""}`, href: "/lacos", entityId: event.id, eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
+          });
+        }
       }
     }
 

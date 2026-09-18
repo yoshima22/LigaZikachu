@@ -13,6 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { sendNotificationToPlayers } from "@/lib/notifications";
+import { filterBondNotificationRecipients } from "@/lib/bond-notification-preferences";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -42,9 +43,11 @@ export async function GET(req: NextRequest) {
   const resolvedCharms = await prisma.mascotRelation.findMany({ where: { isActive: true, promiseCharmResolvesAt: { lte: now } }, select: { mascotAId: true, mascotBId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
   for (const relation of resolvedCharms) {
     await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
-    const players = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
-    await prisma.playerNotification.createMany({ data: players.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
-    await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos" }).catch(() => undefined);
+    const players = await filterBondNotificationRecipients([relation.mascotA.playerId, relation.mascotB.playerId]);
+    if (players.length) {
+      await prisma.playerNotification.createMany({ data: players.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
+      await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos" }).catch(() => undefined);
+    }
   }
   // Afastamentos têm peso e tempo. Ao fim do prazo, as duas direções da
   // relação são removidas; memórias narrativas permanecem como histórico.
@@ -61,9 +64,11 @@ export async function GET(req: NextRequest) {
     const key = [relation.mascotAId, relation.mascotBId].sort().join(":");
     if (notifiedDistancePairs.has(key)) continue;
     notifiedDistancePairs.add(key);
-    const affected = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
-    await prisma.playerNotification.createMany({ data: affected.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
-    await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos" }).catch(() => undefined);
+    const affected = await filterBondNotificationRecipients([relation.mascotA.playerId, relation.mascotB.playerId]);
+    if (affected.length) {
+      await prisma.playerNotification.createMany({ data: affected.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
+      await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos" }).catch(() => undefined);
+    }
   }
   // Limpa dados do desenho anterior. Relação inativa não é reserva nem fila.
   const staleRelationsRemoved = await prisma.mascotRelation.deleteMany({ where: { isActive: false } });
@@ -72,7 +77,7 @@ export async function GET(req: NextRequest) {
       active: true,
       mascots: { some: {} },
       user: {
-        role: "PLAYER",
+        role: { notIn: ["ADMIN", "SUPER_ADMIN"] },
         status: "ACTIVE",
         sessions: { some: { expires: { gt: now } } },
       },
@@ -92,7 +97,7 @@ export async function GET(req: NextRequest) {
 
   // Saúde é processada para todas as contas ativas com mascotes, mesmo sem
   // sessão ou visita à página. O cron roda a cada quatro horas.
-  const diseasePlayers = await prisma.player.findMany({ where: { active: true, mascots: { some: {} }, user: { role: "PLAYER", status: "ACTIVE" } }, select: { id: true }, take: 500 });
+  const diseasePlayers = await prisma.player.findMany({ where: { active: true, mascots: { some: {} }, user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] }, status: "ACTIVE" } }, select: { id: true }, take: 500 });
   for (let index = 0; index < diseasePlayers.length; index += 10) {
     const results = await Promise.allSettled(diseasePlayers.slice(index, index + 10).map((player) => processMascotDiseaseForPlayer(player.id)));
     for (const result of results) {
@@ -133,7 +138,7 @@ export async function GET(req: NextRequest) {
       where: {
         locationType: location,
         status: "ACTIVE",
-        player: { user: { role: "PLAYER" } },
+        player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } },
         OR: [{ nextEventAt: { lte: dueBefore } }, { nextEventAt: null }],
       },
       distinct: ["playerId"],
@@ -147,25 +152,31 @@ export async function GET(req: NextRequest) {
         refugeMoments += 1;
         if (result.importantEventId && result.affectedPlayerIds.length) {
           importantRefugeMoments += 1;
-          await prisma.playerNotification.createMany({
-            data: result.affectedPlayerIds.map((affectedPlayerId) => ({
+          const recipients = await filterBondNotificationRecipients(result.affectedPlayerIds);
+          const notificationBody = (affectedPlayerId: string) => result.reward && result.rewardOwnerPlayerId !== affectedPlayerId
+            ? `${result.storyDescription} ${result.rewardMascotName} encontrou um recurso para o próprio treinador. Você não tem item para resgatar neste acontecimento.`
+            : result.description;
+          if (recipients.length) await prisma.playerNotification.createMany({
+            data: recipients.map((affectedPlayerId) => ({
               playerId: affectedPlayerId,
               category: "BONDS",
               type: "IMPORTANT_REFUGE_MOMENT",
               title: `Momento importante em ${REFUGE_LOCATIONS[location].label}`,
-              body: result.description,
+              body: notificationBody(affectedPlayerId),
               href: "/lacos",
               entityId: result.importantEventId!,
               eventKey: `bonds:refuge:${result.importantEventId}:${affectedPlayerId}`,
             })),
             skipDuplicates: true,
           });
-          await sendNotificationToPlayers(result.affectedPlayerIds, {
-            title: `Laços: algo aconteceu em ${REFUGE_LOCATIONS[location].label}`,
-            body: result.description,
-            url: "/lacos",
-            data: { eventKey: `bonds:refuge:${result.importantEventId}` },
-          });
+          for (const recipient of recipients) {
+            await sendNotificationToPlayers([recipient], {
+              title: `Laços: algo aconteceu em ${REFUGE_LOCATIONS[location].label}`,
+              body: notificationBody(recipient),
+              url: "/lacos",
+              data: { eventKey: `bonds:refuge:${result.importantEventId}` },
+            });
+          }
         }
       } catch {
         failures += 1;
