@@ -161,7 +161,7 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
   if (Math.random() >= HONEY_SOCIAL_EVENT_CHANCE) return null;
 
   const relations = await prisma.mascotRelation.findMany({
-    where: { mascotAId: mascotId },
+    where: { mascotAId: mascotId, isActive: true },
     select: {
       mascotBId: true,
       type: true,
@@ -178,7 +178,7 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
   });
 
   const friends = relations.filter((relation) => relation.type === "FRIEND");
-  if (friends.length < 10) {
+  if (relations.length < 10) {
     const candidates = await prisma.mascot.findMany({
       where: {
         id: { notIn: [mascotId, ...relations.map((relation) => relation.mascotBId)] },
@@ -194,7 +194,14 @@ async function maybeTriggerHoneyFriendship(mascotId: string, playerId: string): 
       orderBy: { lastInteractedAt: "desc" },
       take: 40,
     });
-    const candidate = candidates[Math.floor(Math.random() * candidates.length)];
+    const occupied = candidates.length ? await prisma.mascotRelation.groupBy({
+      by: ["mascotAId"],
+      where: { mascotAId: { in: candidates.map((candidate) => candidate.id) }, isActive: true },
+      _count: { _all: true },
+    }) : [];
+    const occupiedByMascot = new Map(occupied.map((entry) => [entry.mascotAId, entry._count._all]));
+    const availableCandidates = candidates.filter((candidate) => (occupiedByMascot.get(candidate.id) ?? 0) < 10);
+    const candidate = availableCandidates[Math.floor(Math.random() * availableCandidates.length)];
     if (candidate) {
       await formFriendship(mascotId, candidate.id);
       const partnerName = candidate.nickname ?? getPokemonName(candidate.pokemonId);

@@ -1,6 +1,6 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName } from "@/lib/mascot-data";
-import { clampScore, enforceActiveBondLimit, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
+import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Cultivo, cuidado e cooperação", impact: "Cooperar aproxima (+4); Gulosos podem disputar recursos (-2). Seus ciclos produzirão exclusivamente materiais de Laços, negociáveis entre jogadores." },
@@ -162,6 +162,10 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
 
   const first = routines[0].mascot;
   const second = routines[1]?.mascot ?? null;
+  const locationMascots = await tx.mascotRoutine.findMany({ where: { locationType: location, status: "ACTIVE" }, select: { mascotId: true }, take: definition.capacity });
+  const nearbyRelations = await tx.mascotRelation.findMany({ where: { mascotAId: first.id, mascotBId: { in: locationMascots.map((entry) => entry.mascotId) }, isActive: true }, select: { relationshipScore: true } });
+  const friendCircleActive = nearbyRelations.filter((relation) => relation.relationshipScore >= 15).length >= 2;
+  const fightClubActive = nearbyRelations.filter((relation) => relation.relationshipScore <= -15).length >= 2;
   const [firstName, secondName] = names([first, ...(second ? [second] : [])]);
   const delta = second ? socialDelta(location, first.personality) : 0;
   const conflict = Boolean(second && (delta < 0 || Math.random() < (location === "TRAINING" ? 0.55 : 0.18)));
@@ -176,15 +180,17 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   if (second) {
     const current = await tx.mascotRelation.findUnique({
       where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
-      select: { relationshipScore: true },
+      select: { id: true, relationshipScore: true, isActive: true },
     });
-    const next = clampScore((current?.relationshipScore ?? 0) + appliedDelta);
-    await tx.mascotRelation.upsert({
-      where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
-      update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true, dormantAt: null },
-      create: { mascotAId: first.id, mascotBId: second.id, relationshipScore: next, type: relationTypeFromScore(next), interactionCount: 1, lastInteractionAt: new Date() },
-    });
-    await enforceActiveBondLimit(tx, first.id);
+    if (current?.isActive || await tx.mascotRelation.count({ where: { mascotAId: first.id, isActive: true } }) < 10) {
+      if (current && !current.isActive) await tx.mascotRelation.delete({ where: { id: current.id } });
+      const next = clampScore((current?.isActive ? current.relationshipScore : 0) + appliedDelta);
+      await tx.mascotRelation.upsert({
+        where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } },
+        update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true, dormantAt: null },
+        create: { mascotAId: first.id, mascotBId: second.id, relationshipScore: next, type: relationTypeFromScore(next), interactionCount: 1, lastInteractionAt: new Date() },
+      });
+    }
   }
 
   await tx.mascotBondMemory.create({
@@ -201,7 +207,8 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     },
   });
   let importantEventId: string | null = null;
-  const important = Boolean(second && (Math.abs(appliedDelta) >= 5 || Math.random() < 0.3));
+  const groupEventBonus = friendCircleActive || (location === "TRAINING" && fightClubActive) ? 0.1 : 0;
+  const important = Boolean(second && (Math.abs(appliedDelta) >= 5 || Math.random() < 0.3 + groupEventBonus));
   if (second && important) {
     const event = await tx.mascotSocialEvent.create({
       data: {
@@ -216,7 +223,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
         affectedPlayerIds: [...new Set([playerId, second.playerId])] as Prisma.InputJsonValue,
         publicEligible: false,
         sourceType: "REFUGE",
-        contextJson: { location, conflict, generatedFrom: ["source", "fact", "personality", "relation", "interpretation", "reaction", "consequence"] },
+        contextJson: { location, conflict, friendCircleActive, fightClubActive, generatedFrom: ["source", "fact", "personality", "relation", "interpretation", "reaction", "consequence"] },
         isImportant: true,
         expiresAt: new Date(Date.now() + 24 * 60 * 60_000),
       },
@@ -234,7 +241,10 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   });
   if (rewardsToday < 2) {
     const roll = Math.random();
-    const itemType = roll < 0.1 ? LOCATION_ITEMS[location].uncommon : roll < 0.5 ? LOCATION_ITEMS[location].common : null;
+    // Círculos de amigos e Clubes da Luta têm benefícios equivalentes, mas
+    // com identidades diferentes: cooperação fora do Treino e competição nele.
+    const groupRewardBonus = friendCircleActive || (location === "TRAINING" && fightClubActive) ? 0.1 : 0;
+    const itemType = roll < 0.1 ? LOCATION_ITEMS[location].uncommon : roll < 0.5 + groupRewardBonus ? LOCATION_ITEMS[location].common : null;
     if (itemType) {
       const item = await tx.shopItem.findFirst({ where: { type: itemType as never }, select: { id: true, name: true } });
       if (item) {

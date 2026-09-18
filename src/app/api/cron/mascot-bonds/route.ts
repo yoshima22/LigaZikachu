@@ -26,12 +26,18 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();
-  // Afastamentos têm peso e tempo. Somente o relógio conclui a transição;
-  // abrir a página ou clicar novamente nunca remove um vínculo na hora.
-  const distancesCompleted = await prisma.mascotRelation.updateMany({
-    where: { isActive: true, dormantAt: { lte: now } },
-    data: { isActive: false, isProtected: false },
-  });
+  // Afastamentos têm peso e tempo. Ao fim do prazo, as duas direções da
+  // relação são removidas; memórias narrativas permanecem como histórico.
+  const dueDistances = await prisma.mascotRelation.findMany({ where: { isActive: true, dormantAt: { lte: now } }, select: { mascotAId: true, mascotBId: true } });
+  const pairIds = dueDistances.flatMap((relation) => [relation.mascotAId, relation.mascotBId]);
+  const distancesCompleted = dueDistances.length ? await prisma.mascotRelation.deleteMany({
+    where: { OR: dueDistances.flatMap((relation) => [
+      { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId },
+      { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId },
+    ]) },
+  }) : { count: 0 };
+  // Limpa dados do desenho anterior. Relação inativa não é reserva nem fila.
+  const staleRelationsRemoved = await prisma.mascotRelation.deleteMany({ where: { isActive: false } });
   const players = await prisma.player.findMany({
     where: {
       active: true,
@@ -135,5 +141,7 @@ export async function GET(req: NextRequest) {
     importantRefugeMoments,
     failures,
     distancesCompleted: distancesCompleted.count,
+    affectedMascots: new Set(pairIds).size,
+    staleRelationsRemoved: staleRelationsRemoved.count,
   });
 }

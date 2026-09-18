@@ -2,9 +2,10 @@
 
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { toast } from "sonner";
 import { BookOpen, ChevronLeft, ChevronRight, Clock3, HeartHandshake, ImagePlus, LogOut, MapPin, RefreshCw, Search, Sparkles, Users, X } from "lucide-react";
-import { refreshPendingRefugeOptionsV2Action, saveRefugeBackgroundV2Action, setMascotRoutineV2Action, simulateRefugeV2Action, updateActiveBondV2Action } from "../actions";
+import { adjustBondItemDebugV2Action, refreshPendingRefugeOptionsV2Action, saveRefugeBackgroundV2Action, setMascotRoutineV2Action, simulateRefugeV2Action, updateActiveBondV2Action } from "../actions";
 import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, relationEffectV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import type { BondOption } from "@/lib/mascot-bonds";
@@ -66,20 +67,20 @@ export function BondV2Buttons({ relationId, active, transitionAt }: { relationId
   const [pending, startTransition] = useTransition();
   const router = useRouter();
   const distancing = active && transitionAt !== null && new Date(transitionAt).getTime() > Date.now();
-  function run(operation: "START_DISTANCE" | "CANCEL_DISTANCE" | "RECONNECT") {
+  function run(operation: "START_DISTANCE" | "CANCEL_DISTANCE") {
     startTransition(async () => {
       const result = await updateActiveBondV2Action(relationId, operation);
       if (result.error) toast.error(result.error);
       else {
-        toast.success(operation === "START_DISTANCE" ? "Afastamento iniciado. Ele será concluído em 24 horas se nada reaproximar a dupla." : operation === "CANCEL_DISTANCE" ? "Afastamento cancelado. O vínculo continua presente." : "Reencontro concluído. O vínculo voltou a participar da vida social.");
+        toast.success(operation === "START_DISTANCE" ? "Afastamento iniciado. Em 24 horas, a relação será encerrada por completo." : "Afastamento cancelado. O vínculo continua existindo.");
         router.refresh();
       }
     });
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button disabled={pending} onClick={() => run(active ? (distancing ? "CANCEL_DISTANCE" : "START_DISTANCE") : "RECONNECT")} className={`rounded-md border px-2 py-1 text-[10px] disabled:opacity-50 ${distancing ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-white/10 text-slate-300 hover:bg-white/5"}`}>
-        {pending ? "Processando..." : active ? distancing ? "Cancelar afastamento" : "Iniciar afastamento" : "Tentar reencontro"}
+      <button disabled={pending || !active} onClick={() => run(distancing ? "CANCEL_DISTANCE" : "START_DISTANCE")} className={`rounded-md border px-3 py-1.5 text-xs disabled:opacity-50 ${distancing ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-white/10 text-slate-300 hover:bg-white/5"}`}>
+        {pending ? "Processando..." : distancing ? "Cancelar afastamento" : "Iniciar afastamento"}
       </button>
     </div>
   );
@@ -89,19 +90,20 @@ export type SceneMascot = { id: string; name: string; sprite: string; level: num
 export type SceneStory = { id: string; title: string; description: string; conflict: boolean; participants: string; owners: string; scoreDelta: number | null; when: string };
 export type RefugeLocationTab = { location: RefugeLocation; occupants: SceneMascot[]; backgroundUrl: string; stories: SceneStory[] };
 
-export function BondsV2SectionTabs({ refuge, moments, social, bonds, pendingCount, bondCount }: { refuge: ReactNode; moments: ReactNode; social: ReactNode; bonds: ReactNode; pendingCount: number; bondCount: number }) {
-  const [active, setActive] = useState<"REFUGE" | "MOMENTS" | "SOCIAL" | "BONDS">("REFUGE");
+export function BondsV2SectionTabs({ refuge, moments, social, bonds, inventory, pendingCount, bondCount, itemCount }: { refuge: ReactNode; moments: ReactNode; social: ReactNode; bonds: ReactNode; inventory: ReactNode; pendingCount: number; bondCount: number; itemCount: number }) {
+  const [active, setActive] = useState<"REFUGE" | "MOMENTS" | "SOCIAL" | "BONDS" | "ITEMS">("REFUGE");
   const tabs = [
     { id: "REFUGE" as const, icon: "🏡", label: "Explore o Refúgio", description: "Regiões e mascotes" },
     { id: "MOMENTS" as const, icon: "✦", label: "Momentos importantes", description: "Decisões aguardando", count: pendingCount },
     { id: "SOCIAL" as const, icon: "◉", label: "Mapa social", description: "Grupos e treinadores" },
     { id: "BONDS" as const, icon: "♥", label: "Laços e efeitos", description: "Relações e histórias", count: bondCount },
+    { id: "ITEMS" as const, icon: "🎒", label: "Itens dos Laços", description: "Bolsa e negociação", count: itemCount },
   ];
-  return <section className="space-y-5">
+  return <section className="space-y-5 font-sans">
     <nav className="sticky top-2 z-30 flex gap-1 overflow-x-auto rounded-2xl border border-white/10 bg-[#060a14]/95 p-2 shadow-2xl shadow-black/30 backdrop-blur-xl">
-      {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActive(tab.id)} className={`min-w-[190px] flex-1 rounded-xl px-4 py-3 text-left transition ${active === tab.id ? "bg-gradient-to-r from-fuchsia-400 to-violet-400 text-slate-950 shadow-lg shadow-fuchsia-950/40" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><span className="flex items-center gap-2"><span className="text-base">{tab.icon}</span><span className="text-xs font-black">{tab.label}</span>{typeof tab.count === "number" && <span className={`ml-auto rounded-full px-2 py-0.5 text-[9px] font-black ${active === tab.id ? "bg-slate-950/15" : "bg-white/5"}`}>{tab.count}</span>}</span><span className={`mt-1 block pl-7 text-[9px] ${active === tab.id ? "text-slate-900/65" : "text-slate-600"}`}>{tab.description}</span></button>)}
+      {tabs.map((tab) => <button key={tab.id} type="button" onClick={() => setActive(tab.id)} className={`min-w-[175px] flex-1 rounded-xl px-4 py-3 text-left transition ${active === tab.id ? "bg-gradient-to-r from-fuchsia-400 to-violet-400 text-slate-950 shadow-lg shadow-fuchsia-950/40" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}><span className="flex items-center gap-2"><span className="text-base">{tab.icon}</span><span className="text-sm font-semibold leading-5">{tab.label}</span>{typeof tab.count === "number" && <span className={`ml-auto rounded-full px-2 py-0.5 text-xs font-semibold ${active === tab.id ? "bg-slate-950/15" : "bg-white/5"}`}>{tab.count}</span>}</span><span className={`mt-1 block pl-7 text-xs leading-4 ${active === tab.id ? "text-slate-900/70" : "text-slate-500"}`}>{tab.description}</span></button>)}
     </nav>
-    <div>{active === "REFUGE" ? refuge : active === "MOMENTS" ? moments : active === "SOCIAL" ? social : bonds}</div>
+    <div>{active === "REFUGE" ? refuge : active === "MOMENTS" ? moments : active === "SOCIAL" ? social : active === "BONDS" ? bonds : inventory}</div>
   </section>;
 }
 
@@ -116,7 +118,7 @@ export function RefugeLocationsTabs({ locations, ownMascots }: { locations: Refu
   if (!current) return null;
   return <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/60">
     <div className="flex gap-1 overflow-x-auto border-b border-white/10 bg-slate-950/90 p-2">
-      {locations.map((entry) => { const definition = REFUGE_LOCATIONS[entry.location]; const selected = entry.location === current.location; return <button key={entry.location} type="button" onClick={() => setActive(entry.location)} className={`min-w-[170px] flex-1 rounded-xl px-3 py-3 text-left transition ${selected ? "bg-fuchsia-400 text-slate-950 shadow-lg shadow-fuchsia-950/40" : "text-slate-400 hover:bg-white/5 hover:text-white"}`}><span className="flex items-center justify-between gap-2"><span className="text-sm font-black"><span className="mr-2">{definition.icon}</span>{definition.label}</span><span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${selected ? "bg-slate-950/15" : "bg-white/5"}`}>{entry.occupants.length}</span></span><span className={`mt-1 block text-[9px] ${selected ? "text-slate-900/70" : "text-slate-600"}`}>{definition.purpose}</span></button>; })}
+      {locations.map((entry) => { const definition = REFUGE_LOCATIONS[entry.location]; const selected = entry.location === current.location; return <button key={entry.location} type="button" onClick={() => setActive(entry.location)} className={`min-w-[180px] flex-1 rounded-xl px-4 py-3 text-left font-sans transition ${selected ? "bg-fuchsia-400 text-slate-950 shadow-lg shadow-fuchsia-950/40" : "text-slate-300 hover:bg-white/5 hover:text-white"}`}><span className="flex items-center justify-between gap-2"><span className="text-sm font-semibold"><span className="mr-2">{definition.icon}</span>{definition.label}</span><span className={`rounded-full px-2 py-0.5 text-xs font-semibold ${selected ? "bg-slate-950/15" : "bg-white/5"}`}>{entry.occupants.length}</span></span><span className={`mt-1 block text-xs leading-4 ${selected ? "text-slate-900/70" : "text-slate-500"}`}>{definition.purpose}</span></button>; })}
     </div>
     <div className="p-3 sm:p-4"><RefugeLocationScene key={current.location} {...current} ownMascots={ownMascots} /></div>
   </div>;
@@ -294,8 +296,8 @@ export function BondsTutorial() {
       ["2. O mundo continua vivo", "A cada ciclo, os habitantes podem criar histórias, relações e itens mesmo que nenhum treinador esteja com a página aberta."],
       ["3. Momentos importantes", "Alguns acontecimentos pedem sua decisão. As opções mostram custos e resultados; se você não responder, o mascote decide sem gastar seus recursos."],
       ["4. Amizade e rivalidade", "Amizades ajudam na mesma equipe e em atividades. Rivalidades aumentam motivação e dano em confrontos específicos. As duas rotas são úteis."],
-      ["5. Vínculos presentes", "Até 10 vínculos participam da vida atual do mascote. Ao iniciar um afastamento, a relação ainda leva 24 horas para esfriar e uma nova interação pode reaproximar a dupla."],
-      ["6. Distância e reencontro", "Relações distantes preservam pontuação, sentimentos e memórias. Para trazê-las de volta, os dois mascotes precisam conviver por 2 horas no mesmo espaço público."],
+      ["5. Dez vínculos, sem fila", "Cada mascote mantém somente os 10 vínculos exibidos. Interações com outras criaturas ainda geram histórias, mas não criam um 11º vínculo oculto esperando uma vaga."],
+      ["6. Afastamento definitivo", "O afastamento leva 24 horas e pode ser cancelado durante o prazo. Ao concluir, a relação dos dois lados é removida por completo; somente as memórias históricas permanecem."],
     ].map(([title, text]) => <div key={title} className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><h3 className="font-bold text-white">{title}</h3><p className="mt-2 text-sm leading-6 text-slate-400">{text}</p></div>)}</div>}
     {tab === "RELATIONS" && <div><div className="mb-4 rounded-2xl border border-cyan-300/15 bg-cyan-300/[.05] p-4 text-xs leading-5 text-slate-300">A pontuação vai de <strong>−100</strong> a <strong>+100</strong>. Os efeitos dependem da dupla exata, somente vínculos presentes contam e bônus iguais não acumulam. Nos replays, uma ligação visual identifica os Laços ativados.</div><div className="grid gap-3 md:grid-cols-2">{GUIDE_RELATIONS.map((relation) => <article key={relation.name} className={`rounded-2xl border p-4 ${relation.tone}`}><div className="flex items-center justify-between gap-3"><h3 className="font-black">{relation.name}</h3><span className="rounded-full bg-black/25 px-2 py-1 text-[10px] font-bold">{relation.range}</span></div><p className="mt-2 text-xs leading-5 text-slate-300">{relationEffectV2(relation.score)}</p></article>)}</div><div className="mt-4 rounded-2xl bg-gradient-to-r from-emerald-400/10 to-rose-400/10 p-4 text-xs leading-5 text-slate-300"><strong className="text-emerald-300">Amizade</strong> oferece ataque e proteção estáveis. <strong className="text-rose-300">Rivalidade</strong> é a rota ofensiva: quanto mais intensa, maior o dano causado — mas Inimigos e Nêmesis também ficam mais vulneráveis por competir de forma imprudente.</div></div>}
     {tab === "LOCATIONS" && <div><div className="grid gap-4 md:grid-cols-2">{Object.entries(REFUGE_LOCATIONS).map(([id, location]) => <article key={id} className="rounded-2xl border border-white/10 bg-white/[.025] p-4"><div className="flex items-center gap-3"><span className="text-3xl">{location.icon}</span><div><h3 className="font-black text-white">{location.label}</h3><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{location.purpose}</p></div></div><p className="mt-3 text-xs leading-5 text-slate-300">{location.impact}</p></article>)}</div><div className="mt-4 rounded-2xl border border-white/10 bg-slate-950/70 p-4 text-xs leading-5 text-slate-400">Os locais são públicos: seus mascotes encontram mascotes de outros treinadores. Personalidade, histórico e área escolhida alteram o tom das histórias. Cada ciclo pode produzir até o limite diário de recursos exclusivos daquela área.</div></div>}
@@ -306,13 +308,66 @@ export function BondsTutorial() {
 type BondItem = { id: string; a: string; b: string; owner: string; spriteA: string; spriteB: string; score: number; tier: string; effect: string; interactions: number; active: boolean; transitionAt: string | null };
 
 export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
-  const [mode, setMode] = useState<"ACTIVE" | "DORMANT">("ACTIVE");
+  const [query, setQuery] = useState("");
+  const [owner, setOwner] = useState("ALL");
+  const [kind, setKind] = useState<"ALL" | "FRIEND" | "RIVAL" | "NEUTRAL">("ALL");
   const [page, setPage] = useState(1);
   const perPage = 6;
-  const filtered = relations.filter((relation) => relation.active === (mode === "ACTIVE"));
+  const owners = [...new Set(relations.map((relation) => relation.owner))].sort((a, b) => a.localeCompare(b, "pt-BR"));
+  const filtered = relations.filter((relation) => {
+    const term = query.trim().toLocaleLowerCase("pt-BR");
+    const matchesQuery = !term || relation.a.toLocaleLowerCase("pt-BR").includes(term) || relation.b.toLocaleLowerCase("pt-BR").includes(term) || relation.owner.toLocaleLowerCase("pt-BR").includes(term);
+    const matchesKind = kind === "ALL" || (kind === "FRIEND" ? relation.score >= 15 : kind === "RIVAL" ? relation.score <= -15 : relation.score > -15 && relation.score < 15);
+    return relation.active && matchesQuery && matchesKind && (owner === "ALL" || relation.owner === owner);
+  });
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
   const visible = filtered.slice((Math.min(page, pages) - 1) * perPage, Math.min(page, pages) * perPage);
-  return <div><div className="mb-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3"><div className="grid gap-2 sm:grid-cols-3"><InfoPill icon={<Sparkles size={14} />} title="Vínculo presente" text="Participa de histórias e ativa efeitos. Até 10 por mascote." /><InfoPill icon={<Clock3 size={14} />} title="Afastamento com peso" text="Leva 24 horas e uma nova interação pode impedir que a relação esfrie." /><InfoPill icon={<HeartHandshake size={14} />} title="Reencontro" text="Vínculos distantes voltam após 2 horas juntos no mesmo espaço público." /></div><p className="mt-2 rounded-lg bg-cyan-300/[.06] px-3 py-2 text-[10px] leading-4 text-cyan-100/80"><strong>Nenhum vínculo é apagado.</strong> Pontuação, memórias e histórico permanecem. O estado distante representa falta de convivência, não um botão que elimina sentimentos.</p></div><div className="mb-3 flex rounded-xl border border-white/10 bg-slate-950 p-1">{(["ACTIVE", "DORMANT"] as const).map((item) => <button key={item} onClick={() => { setMode(item); setPage(1); }} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${mode === item ? "bg-fuchsia-400 text-slate-950" : "text-slate-400"}`}>{item === "ACTIVE" ? `Presentes (${relations.filter((r) => r.active).length})` : `Distantes (${relations.filter((r) => !r.active).length})`}</button>)}</div><div className="space-y-2">{visible.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">Nenhum vínculo nesta categoria.</div> : visible.map((relation) => { const distancing = relation.active && relation.transitionAt !== null && new Date(relation.transitionAt).getTime() > Date.now(); return <article key={relation.id} className={`rounded-2xl border p-3 ${relation.score < -14 ? "border-rose-400/20 bg-rose-400/[.035]" : relation.score > 14 ? "border-emerald-400/20 bg-emerald-400/[.035]" : "border-white/10 bg-white/[.025]"}`}><div className="flex gap-3"><div className="flex -space-x-2"><img src={relation.spriteA} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /><img src={relation.spriteB} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{relation.a} → {relation.b}</p><p className="text-[10px] text-slate-500">{relation.owner} · {relation.interactions} interações</p>{distancing && <p className="mt-1 text-[9px] font-bold text-amber-300">Afastamento conclui em {new Date(relation.transitionAt!).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>}</div><div className="text-right"><p className="font-bold text-white">{relation.tier}</p><p className="text-xs text-slate-500">{relation.score > 0 ? "+" : ""}{relation.score}</p><span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[8px] font-black uppercase ${distancing ? "bg-amber-300/10 text-amber-200" : relation.active ? "bg-emerald-300/10 text-emerald-200" : "bg-slate-500/10 text-slate-400"}`}>{distancing ? "Afastando" : relation.active ? "Presente" : "Distante"}</span></div></div><div className="my-2 rounded-lg border border-white/5 bg-black/20 p-2"><p className="text-[9px] font-bold uppercase tracking-wider text-fuchsia-300">Impacto atual</p><p className="mt-1 text-xs leading-5 text-slate-400">{relation.effect}</p></div><BondV2Buttons relationId={relation.id} active={relation.active} transitionAt={relation.transitionAt} /></article>; })}</div>{pages > 1 && <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronLeft size={14} /></button><span>Página {Math.min(page, pages)} de {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronRight size={14} /></button></div>}</div>;
+  return <div className="font-sans">
+    <div className="mb-4 rounded-2xl border border-white/10 bg-slate-950/60 p-4">
+      <h3 className="text-base font-semibold text-white">Como os 10 vínculos funcionam</h3>
+      <div className="mt-3 grid gap-3 sm:grid-cols-3">
+        <InfoPill icon={<Sparkles size={16} />} title="10 relações, sem fila" text="Cada mascote gerencia somente os 10 vínculos exibidos. Não existe 11º vínculo esperando uma vaga." />
+        <InfoPill icon={<Clock3 size={16} />} title="24 horas para encerrar" text="Iniciar afastamento abre um prazo de 24 horas. Você ainda pode desistir durante esse período." />
+        <InfoPill icon={<HeartHandshake size={16} />} title="Encerramento completo" text="Ao terminar, Amigo, Conhecido ou Rival deixa de existir nas duas direções. Memórias antigas continuam apenas como histórico." />
+      </div>
+      <p className="mt-3 rounded-xl border border-amber-300/15 bg-amber-300/[.06] p-3 text-xs leading-5 text-amber-100/85"><strong>A vaga fica livre somente quando o prazo termina.</strong> Nenhuma relação antiga assume o lugar automaticamente. Uma nova relação precisará nascer de um novo acontecimento depois que houver espaço.</p>
+    </div>
+    <div className="mb-3 grid gap-2 md:grid-cols-[1.2fr_.8fr_.8fr]">
+      <input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Buscar mascote, apelido ou treinador..." className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-white outline-none placeholder:text-slate-600 focus:border-fuchsia-400/50" />
+      <select value={owner} onChange={(event) => { setOwner(event.target.value); setPage(1); }} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200"><option value="ALL">Todos os treinadores</option>{owners.map((name) => <option key={name} value={name}>{name}</option>)}</select>
+      <select value={kind} onChange={(event) => { setKind(event.target.value as typeof kind); setPage(1); }} className="rounded-xl border border-white/10 bg-slate-950 px-3 py-2.5 text-sm text-slate-200"><option value="ALL">Todos os vínculos</option><option value="FRIEND">Amizades</option><option value="RIVAL">Rivalidades</option><option value="NEUTRAL">Conhecidos</option></select>
+    </div>
+    <p className="mb-3 text-xs text-slate-500">Exibindo {filtered.length} dos {relations.filter((relation) => relation.active).length} vínculos presentes. Use os filtros para consultar relações com um jogador específico.</p>
+    <div className="space-y-2">{visible.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-sm text-slate-500">Nenhum vínculo corresponde aos filtros.</div> : visible.map((relation) => { const distancing = relation.transitionAt !== null && new Date(relation.transitionAt).getTime() > Date.now(); return <article key={relation.id} className={`rounded-2xl border p-4 ${relation.score < -14 ? "border-rose-400/20 bg-rose-400/[.035]" : relation.score > 14 ? "border-emerald-400/20 bg-emerald-400/[.035]" : "border-white/10 bg-white/[.025]"}`}><div className="flex gap-3"><div className="flex -space-x-2"><img src={relation.spriteA} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-900 object-contain" /><img src={relation.spriteB} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-900 object-contain" /></div><div className="min-w-0 flex-1"><p className="text-sm font-semibold text-white">{relation.a} → {relation.b}</p><p className="text-xs text-slate-500">Treinador: {relation.owner} · {relation.interactions} interações</p>{distancing && <p className="mt-1 text-xs font-semibold text-amber-300">Encerramento em {new Date(relation.transitionAt!).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" })}</p>}</div><div className="text-right"><p className="font-semibold text-white">{relation.tier}</p><p className="text-xs text-slate-400">{relation.score > 0 ? "+" : ""}{relation.score}</p><span className={`mt-1 inline-block rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase ${distancing ? "bg-amber-300/10 text-amber-200" : "bg-emerald-300/10 text-emerald-200"}`}>{distancing ? "Afastando" : "Presente"}</span></div></div><div className="my-3 rounded-xl border border-white/5 bg-black/20 p-3"><p className="text-xs font-semibold uppercase tracking-wider text-fuchsia-300">Efeito desta relação</p><p className="mt-1 text-sm leading-5 text-slate-300">{relation.effect}</p></div><BondV2Buttons relationId={relation.id} active={relation.active} transitionAt={relation.transitionAt} /></article>; })}</div>
+    {pages > 1 && <div className="mt-4 flex items-center justify-between text-sm text-slate-400"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronLeft size={16} /></button><span>Página {Math.min(page, pages)} de {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronRight size={16} /></button></div>}
+  </div>;
 }
 
-function InfoPill({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="flex gap-2 rounded-xl bg-white/[.035] p-2 text-slate-400"><span className="mt-0.5 text-fuchsia-300">{icon}</span><div><p className="text-[10px] font-bold text-white">{title}</p><p className="text-[9px]">{text}</p></div></div>; }
+function InfoPill({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="flex gap-2 rounded-xl bg-white/[.035] p-3 text-slate-300"><span className="mt-0.5 text-fuchsia-300">{icon}</span><div><p className="text-sm font-semibold text-white">{title}</p><p className="mt-1 text-xs leading-5">{text}</p></div></div>; }
+
+export type BondInventoryItem = { id: string; type: string; name: string; description: string; rarity: string; quantity: number };
+
+export function BondInventoryV2({ items }: { items: BondInventoryItem[] }) {
+  const [pending, startTransition] = useTransition();
+  const [query, setQuery] = useState("");
+  const router = useRouter();
+  const visible = items.filter((item) => `${item.name} ${item.description}`.toLocaleLowerCase("pt-BR").includes(query.toLocaleLowerCase("pt-BR")));
+  function adjust(item: BondInventoryItem, delta: 1 | -1) {
+    startTransition(async () => {
+      const result = await adjustBondItemDebugV2Action(item.type, delta);
+      if (result.error) toast.error(result.error);
+      else { toast.success(`${result.name}: ${delta > 0 ? "+1" : "−1"} no inventário de teste.`); router.refresh(); }
+    });
+  }
+  return <section className="space-y-4 font-sans">
+    <div className="rounded-3xl border border-violet-300/15 bg-violet-300/[.035] p-5">
+      <p className="text-xs font-semibold uppercase tracking-wider text-violet-300">Bolsa social</p>
+      <h2 className="mt-1 text-2xl font-semibold text-white">Itens dos Laços</h2>
+      <p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Itens aparecem aqui mesmo com quantidade zero. Eles são produzidos pelas rotinas do Refúgio, recebidos em marcos sociais e consumidos nas opções de Momentos importantes. Podem ser anunciados e trocados entre jogadores no Bazar, mas não aparecem no Miauvadão nem nas ofertas exclusivas.</p>
+      <div className="mt-4 flex flex-wrap gap-2"><Link href="/bazar/criar" className="rounded-xl bg-violet-300 px-4 py-2 text-sm font-semibold text-slate-950">Anunciar no Bazar</Link><Link href="/bazar" className="rounded-xl border border-white/10 px-4 py-2 text-sm font-semibold text-white">Consultar Bazar</Link></div>
+    </div>
+    <div className="rounded-2xl border border-amber-300/15 bg-amber-300/[.04] p-4"><p className="text-sm font-semibold text-amber-200">Ferramenta de teste do administrador</p><p className="mt-1 text-xs leading-5 text-slate-400">Os botões +1 e −1 manipulam apenas o seu inventário para validar decisões, produção e negociação. Jogadores comuns receberão itens pelas atividades normais.</p></div>
+    <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Buscar item ou efeito..." className="w-full rounded-xl border border-white/10 bg-slate-950 px-4 py-3 text-sm text-white outline-none placeholder:text-slate-600 focus:border-violet-300/50" />
+    <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">{visible.map((item) => <article key={item.id} className="rounded-2xl border border-white/10 bg-slate-950/65 p-4"><div className="flex items-start gap-3"><span className="text-3xl">{getShopItemEmoji(item.type)}</span><div className="min-w-0 flex-1"><div className="flex items-start justify-between gap-2"><div><h3 className="text-sm font-semibold text-white">{item.name}</h3><p className="mt-0.5 text-xs uppercase tracking-wider text-violet-300">{item.rarity}</p></div><span className={`rounded-full px-2.5 py-1 text-sm font-semibold ${item.quantity ? "bg-violet-300/15 text-violet-200" : "bg-white/5 text-slate-500"}`}>×{item.quantity}</span></div><p className="mt-3 text-xs leading-5 text-slate-300">{item.description}</p><div className="mt-3 flex gap-2"><button disabled={pending} onClick={() => adjust(item, 1)} className="rounded-lg bg-emerald-300/15 px-3 py-1.5 text-xs font-semibold text-emerald-200 disabled:opacity-40">+1 debug</button><button disabled={pending || item.quantity < 1} onClick={() => adjust(item, -1)} className="rounded-lg bg-rose-300/10 px-3 py-1.5 text-xs font-semibold text-rose-200 disabled:opacity-40">−1</button></div></div></div></article>)}</div>
+  </section>;
+}

@@ -194,8 +194,15 @@ export function defaultBondOptions(eventType: string): BondOption[] {
 export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, mascotAId: string, mascotBId: string, delta: number) {
   const existing = await tx.mascotRelation.findUnique({
     where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
-    select: { relationshipScore: true, interactionCount: true },
+    select: { id: true, relationshipScore: true, interactionCount: true, isActive: true },
   });
+  // Não há fila social: com os 10 espaços ocupados, uma interação com um
+  // décimo primeiro mascote vira memória/evento, mas não cria relação oculta.
+  if (!existing?.isActive) {
+    if (existing) await tx.mascotRelation.delete({ where: { id: existing.id } });
+    const activeCount = await tx.mascotRelation.count({ where: { mascotAId, isActive: true } });
+    if (activeCount >= 10) return { relation: null, previousScore: 0, nextScore: 0, slotUnavailable: true };
+  }
   const nextScore = clampScore((existing?.relationshipScore ?? 0) + delta);
   const relation = await tx.mascotRelation.upsert({
     where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
@@ -219,29 +226,12 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
       specialBondType: specialBondFromScore(nextScore),
     },
   });
-  await enforceActiveBondLimit(tx, mascotAId);
-  return { relation, previousScore: existing?.relationshipScore ?? 0, nextScore };
+  return { relation, previousScore: existing?.isActive ? existing.relationshipScore : 0, nextScore, slotUnavailable: false };
 }
 
 export async function enforceActiveBondLimit(tx: Prisma.TransactionClient, mascotId: string, limit = 10) {
-  const activeCount = await tx.mascotRelation.count({ where: { mascotAId: mascotId, isActive: true, dormantAt: null } });
-  const overflow = activeCount - limit;
-  if (overflow <= 0) return [] as string[];
-  const candidates = await tx.mascotRelation.findMany({
-    where: { mascotAId: mascotId, isActive: true, dormantAt: null },
-    orderBy: [{ lastInteractionAt: "asc" }, { updatedAt: "asc" }],
-    take: overflow,
-    select: { id: true },
-  });
-  if (candidates.length > 0) {
-    await tx.mascotRelation.updateMany({
-      where: { id: { in: candidates.map((relation) => relation.id) } },
-      // O vínculo não some ao surgir o 11º. Ele esfria por 24 horas e qualquer
-      // nova interação durante esse período cancela naturalmente o afastamento.
-      data: { dormantAt: new Date(Date.now() + 24 * 60 * 60_000), isProtected: false },
-    });
-  }
-  return candidates.map((relation) => relation.id);
+  const activeCount = await tx.mascotRelation.count({ where: { mascotAId: mascotId, isActive: true } });
+  return activeCount > limit ? [mascotId] : [];
 }
 
 function specialBondFromScore(score: number) {

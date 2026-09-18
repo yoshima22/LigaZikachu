@@ -2168,24 +2168,27 @@ export async function formFriendship(mascotAId: string, mascotBId: string): Prom
   ]);
   if (!a || !b) return;
 
-  // Skip if either mascot belongs to an admin
-  const adminRoles = ["ADMIN", "SUPER_ADMIN"];
-  const [playerA, playerB] = await Promise.all([
-    prisma.player.findUnique({ where: { id: a.playerId }, select: { user: { select: { role: true } } } }),
-    prisma.player.findUnique({ where: { id: b.playerId }, select: { user: { select: { role: true } } } }),
+  const [existingA, existingB, activeA, activeB] = await Promise.all([
+    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId, mascotBId } }, select: { isActive: true, relationshipScore: true } }),
+    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } }, select: { isActive: true, relationshipScore: true } }),
+    prisma.mascotRelation.count({ where: { mascotAId, isActive: true } }),
+    prisma.mascotRelation.count({ where: { mascotAId: mascotBId, isActive: true } }),
   ]);
-  if (adminRoles.includes(playerA?.user.role ?? "") || adminRoles.includes(playerB?.user.role ?? "")) return;
+  if ((!existingA?.isActive && activeA >= 10) || (!existingB?.isActive && activeB >= 10)) return;
+  await prisma.mascotRelation.deleteMany({
+    where: { isActive: false, OR: [{ mascotAId, mascotBId }, { mascotAId: mascotBId, mascotBId: mascotAId }] },
+  });
 
   await prisma.$transaction([
     prisma.mascotRelation.upsert({
       where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
-      update: { type: "FRIEND" },
-      create: { mascotAId, mascotBId, type: "FRIEND" },
+      update: { type: "FRIEND", relationshipScore: Math.max(40, existingA?.relationshipScore ?? 0), isActive: true, dormantAt: null },
+      create: { mascotAId, mascotBId, type: "FRIEND", relationshipScore: 40, isActive: true },
     }),
     prisma.mascotRelation.upsert({
       where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } },
-      update: { type: "FRIEND" },
-      create: { mascotAId: mascotBId, mascotBId: mascotAId, type: "FRIEND" },
+      update: { type: "FRIEND", relationshipScore: Math.max(40, existingB?.relationshipScore ?? 0), isActive: true, dormantAt: null },
+      create: { mascotAId: mascotBId, mascotBId: mascotAId, type: "FRIEND", relationshipScore: 40, isActive: true },
     }),
   ]);
 
