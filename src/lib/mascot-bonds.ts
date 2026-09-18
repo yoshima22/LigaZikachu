@@ -216,7 +216,27 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
       specialBondType: specialBondFromScore(nextScore),
     },
   });
+  await enforceActiveBondLimit(tx, mascotAId);
   return { relation, previousScore: existing?.relationshipScore ?? 0, nextScore };
+}
+
+export async function enforceActiveBondLimit(tx: Prisma.TransactionClient, mascotId: string, limit = 10) {
+  const activeCount = await tx.mascotRelation.count({ where: { mascotAId: mascotId, isActive: true } });
+  const overflow = activeCount - limit;
+  if (overflow <= 0) return [] as string[];
+  const candidates = await tx.mascotRelation.findMany({
+    where: { mascotAId: mascotId, isActive: true, isProtected: false },
+    orderBy: [{ lastInteractionAt: "asc" }, { updatedAt: "asc" }],
+    take: overflow,
+    select: { id: true },
+  });
+  if (candidates.length > 0) {
+    await tx.mascotRelation.updateMany({
+      where: { id: { in: candidates.map((relation) => relation.id) } },
+      data: { isActive: false, dormantAt: new Date() },
+    });
+  }
+  return candidates.map((relation) => relation.id);
 }
 
 function specialBondFromScore(score: number) {

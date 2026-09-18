@@ -1,6 +1,6 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName } from "@/lib/mascot-data";
-import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
+import { clampScore, enforceActiveBondLimit, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Cultivo, cuidado e cooperação", impact: "Cooperar aproxima (+4); Gulosos podem disputar recursos (-2). Seus ciclos produzirão exclusivamente materiais de Laços, negociáveis entre jogadores." },
@@ -85,7 +85,7 @@ function startOfTodayBrt(now = new Date()) {
 
 function pick<T>(items: T[]) { return items[Math.floor(Math.random() * items.length)]; }
 
-function importantOptions(location: RefugeLocation, conflict: boolean, firstName: string, secondName: string): BondOption[] {
+export function buildImportantRefugeOptions(location: RefugeLocation, conflict: boolean, firstName: string, secondName: string): BondOption[] {
   const local = {
     GARDEN: { challenge: "Organizar uma divisão justa da colheita", listen: "Descobrir quem cuidou de cada canteiro", cooperate: "Pedir que preparem uma cesta juntos", repeat: "Planejar uma nova colheita em dupla", positiveItem: "BOND_SHARED_BERRY", positiveName: "Frutinha da Partilha", rivalryItem: "BOND_CALMING_HERB", rivalryName: "Erva Apaziguadora" },
     TRAINING: { challenge: "Marcar uma revanche com regras claras", listen: "Rever o treino com os dois", cooperate: "Propor uma técnica que exige dupla", repeat: "Agendar uma nova sessão conjunta", positiveItem: "BOND_TRAINING_RIBBON", positiveName: "Faixa de Treino em Dupla", rivalryItem: "BOND_REVENGE_TOKEN", rivalryName: "Ficha de Revanche" },
@@ -184,6 +184,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true, dormantAt: null },
       create: { mascotAId: first.id, mascotBId: second.id, relationshipScore: next, type: relationTypeFromScore(next), interactionCount: 1, lastInteractionAt: new Date() },
     });
+    await enforceActiveBondLimit(tx, first.id);
   }
 
   await tx.mascotBondMemory.create({
@@ -210,7 +211,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
         eventType: conflict ? `REFUGE_${location}_CONFLICT` : `REFUGE_${location}_BOND`,
         title: conflict ? `Algo ficou mal resolvido em ${definition.label}` : `Um vínculo ganhou significado em ${definition.label}`,
         description: descriptions[location],
-        optionsJson: importantOptions(location, conflict, firstName, secondName) as unknown as Prisma.InputJsonValue,
+        optionsJson: buildImportantRefugeOptions(location, conflict, firstName, secondName) as unknown as Prisma.InputJsonValue,
         visibility: "INVOLVED_PLAYERS",
         affectedPlayerIds: [...new Set([playerId, second.playerId])] as Prisma.InputJsonValue,
         publicEligible: false,

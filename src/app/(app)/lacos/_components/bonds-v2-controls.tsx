@@ -3,8 +3,8 @@
 import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { BookOpen, ChevronLeft, ChevronRight, HelpCircle, ImagePlus, LogOut, MapPin, Search, ShieldCheck, Sparkles, Users, X } from "lucide-react";
-import { saveRefugeBackgroundV2Action, setMascotRoutineV2Action, simulateRefugeV2Action, updateActiveBondV2Action } from "../actions";
+import { BookOpen, ChevronLeft, ChevronRight, HelpCircle, ImagePlus, LogOut, MapPin, RefreshCw, Search, ShieldCheck, Sparkles, Users, X } from "lucide-react";
+import { refreshPendingRefugeOptionsV2Action, saveRefugeBackgroundV2Action, setMascotRoutineV2Action, simulateRefugeV2Action, updateActiveBondV2Action } from "../actions";
 import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, relationEffectV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import type { BondOption } from "@/lib/mascot-bonds";
@@ -42,6 +42,7 @@ export function RoutineSelect({ mascotId, value }: { mascotId: string; value: st
 
 export function SimulateRefugeButton({ location }: { location: RefugeLocation }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   return (
     <button
       type="button"
@@ -49,7 +50,10 @@ export function SimulateRefugeButton({ location }: { location: RefugeLocation })
       onClick={() => startTransition(async () => {
         const result = await simulateRefugeV2Action(location);
         if (result.error) toast.error(result.error);
-        else toast.success(result.message ?? "Momento processado.");
+        else {
+          toast.success(result.importantEventCreated ? "Momento importante criado. Veja a aba de decisões." : (result.message ?? "Momento processado e registrado no diário."));
+          router.refresh();
+        }
       })}
       className="rounded-lg border border-white/10 bg-white/5 px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-white/10 disabled:opacity-50"
     >
@@ -60,20 +64,24 @@ export function SimulateRefugeButton({ location }: { location: RefugeLocation })
 
 export function BondV2Buttons({ relationId, active, protectedBond }: { relationId: string; active: boolean; protectedBond: boolean }) {
   const [pending, startTransition] = useTransition();
+  const router = useRouter();
   function run(operation: "TOGGLE_ACTIVE" | "TOGGLE_PROTECTED") {
     startTransition(async () => {
       const result = await updateActiveBondV2Action(relationId, operation);
       if (result.error) toast.error(result.error);
-      else toast.success("Laço atualizado.");
+      else {
+        toast.success(operation === "TOGGLE_PROTECTED" ? (protectedBond ? "Proteção automática removida." : "Este Laço Ativo foi fixado e não será arquivado automaticamente.") : (active ? "Laço arquivado. O histórico e a pontuação foram preservados." : "Laço reativado."));
+        router.refresh();
+      }
     });
   }
   return (
     <div className="flex flex-wrap gap-1.5">
-      <button disabled={pending} onClick={() => run("TOGGLE_ACTIVE")} className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/5 disabled:opacity-50">
-        {active ? "Liberar slot" : "Reativar neste slot"}
+      <button disabled={pending} title={active ? "Arquiva este vínculo sem apagar pontuação ou memórias" : "Volta a usar um dos 10 espaços de Laços Ativos"} onClick={() => run("TOGGLE_ACTIVE")} className="rounded-md border border-white/10 px-2 py-1 text-[10px] text-slate-300 hover:bg-white/5 disabled:opacity-50">
+        {active ? "Arquivar vínculo" : "Reativar vínculo"}
       </button>
-      <button disabled={pending} onClick={() => run("TOGGLE_PROTECTED")} className={`rounded-md border px-2 py-1 text-[10px] disabled:opacity-50 ${protectedBond ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-white/10 text-slate-300 hover:bg-white/5"}`}>
-        {protectedBond ? "★ Protegido" : "☆ Proteger"}
+      <button disabled={pending || !active} title={!active ? "Reative o vínculo antes de fixá-lo" : protectedBond ? "Permite que este vínculo seja arquivado automaticamente quando os 10 espaços estiverem ocupados" : "Reserva este espaço: o sistema arquivará primeiro outro vínculo não fixado"} onClick={() => run("TOGGLE_PROTECTED")} className={`rounded-md border px-2 py-1 text-[10px] disabled:opacity-50 ${protectedBond ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-white/10 text-slate-300 hover:bg-white/5"}`}>
+        {protectedBond ? "★ Ativo fixado" : "☆ Fixar como ativo"}
       </button>
     </div>
   );
@@ -225,6 +233,8 @@ export type ImportantMoment = {
 };
 
 export function ImportantMomentsList({ moments }: { moments: ImportantMoment[] }) {
+  const router = useRouter();
+  const [refreshing, startRefresh] = useTransition();
   const [query, setQuery] = useState("");
   const [context, setContext] = useState("ALL");
   const [page, setPage] = useState(1);
@@ -238,6 +248,7 @@ export function ImportantMomentsList({ moments }: { moments: ImportantMoment[] }
   const safePage = Math.min(page, pages);
   const visible = filtered.slice((safePage - 1) * perPage, safePage * perPage);
   return <div>
+    <div className="mb-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-3"><p className="max-w-2xl text-[10px] leading-4 text-slate-400">As opções são montadas pelo local, tipo de acontecimento e mascotes envolvidos. Decisões antigas podem manter o modelo anterior até serem renovadas.</p><button disabled={refreshing} onClick={() => startRefresh(async () => { const result = await refreshPendingRefugeOptionsV2Action(); if (result.error) toast.error(result.error); else { toast.success(result.updated ? `${result.updated} momento(s) receberam novas opções.` : "Todas as decisões já usam opções modulares."); router.refresh(); } })} className="inline-flex items-center gap-2 rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.07] px-3 py-2 text-[10px] font-bold text-fuchsia-200 disabled:opacity-40"><RefreshCw size={13} className={refreshing ? "animate-spin" : ""} /> Renovar decisões antigas</button></div>
     <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_220px]"><div className="relative"><Search size={14} className="absolute left-3 top-2.5 text-slate-500" /><input value={query} onChange={(event) => { setQuery(event.target.value); setPage(1); }} placeholder="Buscar mascotes ou situação..." className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-amber-300/40" /></div><select value={context} onChange={(event) => { setContext(event.target.value); setPage(1); }} className="rounded-xl border border-white/10 bg-slate-900 px-3 py-2 text-xs text-white outline-none focus:border-amber-300/40"><option value="ALL">Todos os locais</option>{contexts.map((item) => <option key={item} value={item}>{item}</option>)}</select></div>
     {visible.length === 0 ? <div className="rounded-2xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">Nenhum momento corresponde aos filtros.</div> : <div className="grid gap-3 lg:grid-cols-2">{visible.map((moment) => <article key={moment.id} className="rounded-2xl border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,.07),rgba(15,23,42,.7))] p-4"><div className="flex items-center gap-3"><div className="flex -space-x-2"><img src={moment.spriteA} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />{moment.spriteB && <img src={moment.spriteB} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />}</div><div><p className="text-[10px] font-black uppercase tracking-wider text-amber-300">{moment.context}</p><h3 className="font-bold text-white">{moment.title}</h3><p className="text-[10px] text-slate-500">{moment.participants}</p></div></div><p className="my-3 text-sm leading-6 text-slate-300">{moment.description}</p><p className="mb-2 text-[10px] font-bold uppercase tracking-wider text-slate-500">Escolha uma intenção · os resultados são mostrados antes de confirmar</p><div className="grid gap-2">{moment.options.map((option) => <ResolveBondOptionButton key={option.id} eventId={moment.id} option={option} />)}</div></article>)}</div>}
     {pages > 1 && <div className="mt-4 flex items-center justify-center gap-3"><button disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25"><ChevronLeft size={14} /></button><span className="text-[10px] text-slate-500">Decisões {((safePage - 1) * perPage) + 1}–{Math.min(filtered.length, safePage * perPage)} de {filtered.length}</span><button disabled={safePage >= pages} onClick={() => setPage(safePage + 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25"><ChevronRight size={14} /></button></div>}
@@ -303,7 +314,7 @@ export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
   const filtered = relations.filter((relation) => relation.active === (mode === "ACTIVE"));
   const pages = Math.max(1, Math.ceil(filtered.length / perPage));
   const visible = filtered.slice((Math.min(page, pages) - 1) * perPage, Math.min(page, pages) * perPage);
-  return <div><div className="mb-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3"><div className="grid gap-2 sm:grid-cols-3"><InfoPill icon={<Sparkles size={14} />} title="Ativo" text="Ocupa 1 dos 10 slots e gera histórias e efeitos." /><InfoPill icon={<ShieldCheck size={14} />} title="Protegido" text="Não perde o slot automaticamente." /><InfoPill icon={<HelpCircle size={14} />} title="Liberar slot" text="Arquiva Amigo, Conhecido ou Rival sem apagar seu histórico." /></div></div><div className="mb-3 flex rounded-xl border border-white/10 bg-slate-950 p-1">{(["ACTIVE", "DORMANT"] as const).map((item) => <button key={item} onClick={() => { setMode(item); setPage(1); }} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${mode === item ? "bg-fuchsia-400 text-slate-950" : "text-slate-400"}`}>{item === "ACTIVE" ? `Ativos (${relations.filter((r) => r.active).length})` : `Arquivados (${relations.filter((r) => !r.active).length})`}</button>)}</div><div className="space-y-2">{visible.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">Nenhum laço nesta categoria.</div> : visible.map((relation) => <article key={relation.id} className={`rounded-2xl border p-3 ${relation.score < -14 ? "border-rose-400/20 bg-rose-400/[.035]" : relation.score > 14 ? "border-emerald-400/20 bg-emerald-400/[.035]" : "border-white/10 bg-white/[.025]"}`}><div className="flex gap-3"><div className="flex -space-x-2"><img src={relation.spriteA} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /><img src={relation.spriteB} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{relation.a} → {relation.b}</p><p className="text-[10px] text-slate-500">{relation.owner} · {relation.interactions} interações</p></div><div className="text-right"><p className="font-bold text-white">{relation.tier}</p><p className="text-xs text-slate-500">{relation.score > 0 ? "+" : ""}{relation.score}</p></div></div><div className="my-2 rounded-lg border border-white/5 bg-black/20 p-2"><p className="text-[9px] font-bold uppercase tracking-wider text-fuchsia-300">Impacto atual</p><p className="mt-1 text-xs leading-5 text-slate-400">{relation.effect}</p></div><BondV2Buttons relationId={relation.id} active={relation.active} protectedBond={relation.protectedBond} /></article>)}</div>{pages > 1 && <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronLeft size={14} /></button><span>Página {Math.min(page, pages)} de {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronRight size={14} /></button></div>}</div>;
+  return <div><div className="mb-3 rounded-2xl border border-white/10 bg-slate-950/60 p-3"><div className="grid gap-2 sm:grid-cols-3"><InfoPill icon={<Sparkles size={14} />} title="Laço Ativo" text="Ocupa 1 dos 10 espaços e pode gerar efeitos, histórias e bônus." /><InfoPill icon={<ShieldCheck size={14} />} title="Ativo fixado" text="Reserva este espaço. Quando faltar vaga, outro vínculo não fixado será arquivado primeiro." /><InfoPill icon={<HelpCircle size={14} />} title="Arquivar vínculo" text="Libera o espaço e desliga efeitos, sem apagar pontuação, nível ou memórias." /></div><p className="mt-2 rounded-lg bg-amber-300/[.06] px-3 py-2 text-[10px] leading-4 text-amber-100/80"><strong>Fixar não melhora o vínculo nem aumenta seus bônus.</strong> Serve apenas para impedir que o sistema escolha essa relação ao organizar o limite de 10 Laços Ativos do mascote.</p></div><div className="mb-3 flex rounded-xl border border-white/10 bg-slate-950 p-1">{(["ACTIVE", "DORMANT"] as const).map((item) => <button key={item} onClick={() => { setMode(item); setPage(1); }} className={`flex-1 rounded-lg px-3 py-2 text-xs font-bold ${mode === item ? "bg-fuchsia-400 text-slate-950" : "text-slate-400"}`}>{item === "ACTIVE" ? `Ativos (${relations.filter((r) => r.active).length})` : `Arquivados (${relations.filter((r) => !r.active).length})`}</button>)}</div><div className="space-y-2">{visible.length === 0 ? <div className="rounded-xl border border-dashed border-white/10 p-6 text-center text-xs text-slate-500">Nenhum laço nesta categoria.</div> : visible.map((relation) => <article key={relation.id} className={`rounded-2xl border p-3 ${relation.score < -14 ? "border-rose-400/20 bg-rose-400/[.035]" : relation.score > 14 ? "border-emerald-400/20 bg-emerald-400/[.035]" : "border-white/10 bg-white/[.025]"}`}><div className="flex gap-3"><div className="flex -space-x-2"><img src={relation.spriteA} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /><img src={relation.spriteB} alt="" className="h-10 w-10 rounded-full border border-slate-700 bg-slate-900 object-contain" /></div><div className="min-w-0 flex-1"><p className="text-sm font-bold text-white">{relation.a} → {relation.b}</p><p className="text-[10px] text-slate-500">{relation.owner} · {relation.interactions} interações</p></div><div className="text-right"><p className="font-bold text-white">{relation.tier}</p><p className="text-xs text-slate-500">{relation.score > 0 ? "+" : ""}{relation.score}</p>{relation.protectedBond && <span className="mt-1 inline-block rounded-full bg-amber-300/10 px-2 py-0.5 text-[8px] font-black uppercase text-amber-200">Ativo fixado</span>}</div></div><div className="my-2 rounded-lg border border-white/5 bg-black/20 p-2"><p className="text-[9px] font-bold uppercase tracking-wider text-fuchsia-300">Impacto atual</p><p className="mt-1 text-xs leading-5 text-slate-400">{relation.effect}</p></div><BondV2Buttons relationId={relation.id} active={relation.active} protectedBond={relation.protectedBond} /></article>)}</div>{pages > 1 && <div className="mt-3 flex items-center justify-between text-xs text-slate-400"><button disabled={page <= 1} onClick={() => setPage((value) => value - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronLeft size={14} /></button><span>Página {Math.min(page, pages)} de {pages}</span><button disabled={page >= pages} onClick={() => setPage((value) => value + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-30"><ChevronRight size={14} /></button></div>}</div>;
 }
 
 function InfoPill({ icon, title, text }: { icon: React.ReactNode; title: string; text: string }) { return <div className="flex gap-2 rounded-xl bg-white/[.035] p-2 text-slate-400"><span className="mt-0.5 text-fuchsia-300">{icon}</span><div><p className="text-[10px] font-bold text-white">{title}</p><p className="text-[9px]">{text}</p></div></div>; }

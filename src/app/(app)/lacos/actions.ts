@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { getAppSession } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
 import { isAdmin } from "@/lib/auth/permissions";
-import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
+import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, buildImportantRefugeOptions, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
+import { getPokemonName } from "@/lib/mascot-data";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { Prisma } from "@prisma/client";
 import {
@@ -94,9 +95,40 @@ export async function simulateRefugeV2Action(location: RefugeLocation) {
     if (!REFUGE_LOCATIONS[location]) throw new Error("Local inválido.");
     const result = await prisma.$transaction((tx) => simulateRefugeMoment(tx, playerId, location));
     revalidatePath("/lacos");
-    return { ok: true, message: result.description };
+    return { ok: true, message: result.description, importantEventCreated: Boolean(result.importantEventId) };
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível simular o Refúgio." };
+  }
+}
+
+export async function refreshPendingRefugeOptionsV2Action() {
+  try {
+    const playerId = await getAdminPlayerId();
+    const events = await prisma.mascotSocialEvent.findMany({
+      where: { ownerId: playerId, status: "PENDING", eventType: { startsWith: "REFUGE_" } },
+      include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
+      take: 30,
+    });
+    let updated = 0;
+    for (const event of events) {
+      const location = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).find((key) => event.eventType.includes(`REFUGE_${key}`));
+      if (!location || !event.mascotB) continue;
+      const current = Array.isArray(event.optionsJson) ? event.optionsJson as Array<{ id?: unknown }> : [];
+      // Opções novas recebem um identificador modular com o nome da região.
+      // Mantemos decisões já renovadas estáveis para não trocar o conteúdo a cada clique.
+      if (current.some((option) => typeof option?.id === "string" && option.id.includes(location.toLowerCase()))) continue;
+      const firstName = event.mascotA.nickname ?? getPokemonName(event.mascotA.pokemonId);
+      const secondName = event.mascotB.nickname ?? getPokemonName(event.mascotB.pokemonId);
+      await prisma.mascotSocialEvent.update({
+        where: { id: event.id },
+        data: { optionsJson: buildImportantRefugeOptions(location, event.eventType.endsWith("_CONFLICT"), firstName, secondName) as unknown as Prisma.InputJsonValue },
+      });
+      updated += 1;
+    }
+    revalidatePath("/lacos");
+    return { ok: true, updated };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível renovar as decisões pendentes." };
   }
 }
 
@@ -133,8 +165,9 @@ export async function updateActiveBondV2Action(relationId: string, operation: "T
         const activeCount = await prisma.mascotRelation.count({ where: { mascotAId: relation.mascotAId, isActive: true } });
         if (activeCount >= 10) throw new Error("Este mascote já possui 10 Laços Ativos.");
       }
-      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isActive: !relation.isActive, dormantAt: relation.isActive ? new Date() : null } });
+      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isActive: !relation.isActive, isProtected: relation.isActive ? false : relation.isProtected, dormantAt: relation.isActive ? new Date() : null } });
     } else {
+      if (!relation.isActive) throw new Error("Reative o vínculo antes de fixá-lo como ativo.");
       await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isProtected: !relation.isProtected } });
     }
     revalidatePath("/lacos");
