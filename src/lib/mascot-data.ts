@@ -1366,6 +1366,7 @@ export const EGG_STAT_RANGES: Record<string, [number, number]> = {
   RARE:         [11, 17],
   SPECIAL:      [13, 20],
   LAB:          [17, 26],  // +30% sobre SPECIAL
+  CELESTIAL:    [23, 30],  // exclusivo de banners de invocação
 };
 
 // Chance de nascer shiny (brilhante) por tipo de ovo
@@ -1384,6 +1385,7 @@ export const EGG_SHINY_CHANCE: Record<string, number> = {
   EGG_GEN6PLUS: 1 / 400,
   RARE:         1 / 300,   // 0.33%
   SPECIAL:      1 / 200,   // 0.5%
+  CELESTIAL:    1 / 100,   // 1%
 };
 
 // Stats buffados = acima do range normal (para comparação no log)

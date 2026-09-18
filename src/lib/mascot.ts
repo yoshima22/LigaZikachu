@@ -3442,14 +3442,17 @@ export async function applyRainbowFeather(
     ? getEggStatTypeKey(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin)
     : "RARE";
   const actualEggTier =
+    eggTypeKey === "CELESTIAL" ? "CELESTIAL" :
     eggTypeKey === "LAB" ? "LAB" :
     eggTypeKey === "SPECIAL" ? "SPECIAL" :
     eggTypeKey === "EVENT" ? "EVENT" :
     eggTypeKey === "RARE" || !mascot.hatchedFromEggType ? "RARE" :
     "COMMON";
-  const tierRank = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 } as const;
+  // Celestial fica acima de tudo: não existe pena Celestial, então nenhuma pena
+  // consegue rerrolar (e rebaixar) um mascote nascido de ovo Celestial.
+  const tierRank = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4, CELESTIAL: 5 } as const;
   if (expectedEggTier && tierRank[expectedEggTier] < tierRank[actualEggTier]) {
-    const labels = { COMMON: "Comum", RARE: "Rara", EVENT: "de Evento", SPECIAL: "Especial", LAB: "de Laboratório" };
+    const labels = { COMMON: "Comum", RARE: "Rara", EVENT: "de Evento", SPECIAL: "Especial", LAB: "de Laboratório", CELESTIAL: "Celestial" };
     throw new Error(`Esta pena não alcança a origem deste mascote. Use uma Pena Arco-Íris ${labels[actualEggTier]} ou superior.`);
   }
   const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? EGG_STAT_RANGES.RARE;

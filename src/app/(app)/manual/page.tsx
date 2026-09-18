@@ -310,6 +310,7 @@ export default async function ManualPage() {
               ["Ovo Especial", "Pokémon épicos e lendários"],
               ["Ovo Gen 1–9", "Pokémon específicos da geração"],
               ["Ovo de Evento", "Pokémon sazonais ou especiais"],
+              ["Ovo Celestial", "Exclusivo dos banners de invocação — atributos 23~30, a melhor pool do jogo. Não é vendido na ZikaShop nem sai nos slots do Bazar."],
             ]}
           />
         </Sub>

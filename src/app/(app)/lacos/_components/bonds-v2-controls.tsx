@@ -778,11 +778,6 @@ export function RefugeLocationScene({
                   </button>
                 </>
               )}
-              {influenceFeedback && !selectedOccupant.own && (
-                <p className="basis-full rounded-lg border border-cyan-300/20 bg-cyan-300/[.08] px-3 py-2 text-[11px] font-semibold text-cyan-200">
-                  {influenceFeedback}
-                </p>
-              )}
               <button
                 type="button"
                 onClick={() => {
@@ -827,6 +822,13 @@ export function RefugeLocationScene({
                 <X size={15} />
               </button>
             </div>
+            {/* Fica fora da linha dos botões: dentro dela, a frase esticava a
+                coluna de ações e espremia a ficha do mascote à esquerda. */}
+            {influenceFeedback && !selectedOccupant.own && (
+              <p className="w-full rounded-lg border border-cyan-300/20 bg-cyan-300/[.08] px-3 py-2 text-[11px] font-semibold text-cyan-200">
+                {influenceFeedback}
+              </p>
+            )}
           </div>
         </div>
       )}

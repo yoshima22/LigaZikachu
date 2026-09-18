@@ -71,6 +71,7 @@ function formatDropChance(value: number) {
   return `${value.toFixed(5)}%`;
 }
 function getEggLabel(type: string, origin?: string) {
+  if (type === "CELESTIAL") return "✨ Ovo Celestial";
   return EGG_LABEL[type] ?? (origin === "LAB" ? "🧪 Ovo de Laboratório" : "Ovo");
 }
 // Imagem específica por raridade (coloque os arquivos em /public/mascot/)

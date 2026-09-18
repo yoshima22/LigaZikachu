@@ -176,7 +176,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
             className="h-20 max-w-[80%] object-contain"
             onError={e => { (e.target as HTMLImageElement).style.display = "none"; }}
           />
-        ) : (payload.itemType as string)?.startsWith("EGG_") || ["COMMON","RARE","SPECIAL","EVENT"].includes(payload.itemType as string) ? (
+        ) : (payload.itemType as string)?.startsWith("EGG_") || ["COMMON","RARE","SPECIAL","EVENT","LAB","CELESTIAL"].includes(payload.itemType as string) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src="/mascot/egg-common.webp"

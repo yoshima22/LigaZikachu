@@ -154,7 +154,7 @@ const ALL_INITIAL_CANDIDATES = uniquePokemonIds(
   GENERATION_TYPES.flatMap((type) => EGG_POOLS[type] ?? []).concat(eliteInitialForms()),
 ).filter((id) => !ALL_EVOLVED_IDS.has(id));
 
-const PROFILE_WEIGHTS: Record<"COMMON" | "EVENT" | "RARE" | "SPECIAL" | "LAB", Record<EggPokemonTier, number>> = {
+const PROFILE_WEIGHTS: Record<"COMMON" | "EVENT" | "RARE" | "SPECIAL" | "LAB" | "CELESTIAL", Record<EggPokemonTier, number>> = {
   // Mantém, de forma explícita e sem sobreposição, as massas aproximadas que
   // as antigas subpools produziam de maneira indireta.
   COMMON:  { COMMON: 92,   PSEUDO_LEGENDARY: 3,   PARADOX: 4,    ELITE: 1 },
@@ -162,9 +162,12 @@ const PROFILE_WEIGHTS: Record<"COMMON" | "EVENT" | "RARE" | "SPECIAL" | "LAB", R
   RARE:    { COMMON: 83.5, PSEUDO_LEGENDARY: 9,   PARADOX: 4,    ELITE: 3.5 },
   SPECIAL: { COMMON: 58.5, PSEUDO_LEGENDARY: 18.5, PARADOX: 16.5, ELITE: 6.5 },
   LAB:     { COMMON: 73,   PSEUDO_LEGENDARY: 7,   PARADOX: 10,   ELITE: 10 },
+  // Celestial só existe em banner de invocação: a melhor pool do jogo.
+  CELESTIAL: { COMMON: 42, PSEUDO_LEGENDARY: 20, PARADOX: 20, ELITE: 18 },
 };
 
 function profileKeyForEgg(eggType: string): keyof typeof PROFILE_WEIGHTS {
+  if (eggType === "CELESTIAL") return "CELESTIAL";
   if (eggType === "LAB" || eggType === "EGG_LAB") return "LAB";
   if (eggType === "SPECIAL" || eggType === "EGG_SPECIAL") return "SPECIAL";
   if (eggType === "RARE" || eggType === "EGG_RARE") return "RARE";

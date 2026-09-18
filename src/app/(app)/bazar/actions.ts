@@ -117,7 +117,7 @@ function parseDirectState(value: string | null | undefined): DirectNegotiationSt
 }
 
 const EGG_OFFER_TYPES = [
-  "COMMON","RARE","SPECIAL","EVENT","LAB",
+  "COMMON","RARE","SPECIAL","EVENT","LAB","CELESTIAL",
   "EGG_GEN1","EGG_GEN2","EGG_GEN3","EGG_GEN4","EGG_GEN5",
   "EGG_GEN6","EGG_GEN7","EGG_GEN8","EGG_GEN9","EGG_GEN6PLUS",
 ];
@@ -132,6 +132,7 @@ const TICKER_EGG_LABELS: Record<string, string> = {
   RARE: "Ovo Raro",
   SPECIAL: "Ovo Especial",
   LAB: "Ovo de Laboratório",
+  CELESTIAL: "Ovo Celestial",
   EGG_GEN1: "Ovo de Geração 1",
   EGG_GEN2: "Ovo de Geração 2",
   EGG_GEN3: "Ovo de Geração 3",

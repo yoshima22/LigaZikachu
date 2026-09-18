@@ -413,6 +413,7 @@ const EGG_TYPE_LABEL: Record<string, string> = {
   SPECIAL: "Ovo Especial",
   EVENT: "Ovo de Evento",
   LAB: "Ovo de Laboratorio",
+  CELESTIAL: "Ovo Celestial",
 };
 
 function getHatchedEggLabel(type?: string | null, origin?: string | null) {

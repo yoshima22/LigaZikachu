@@ -3,7 +3,7 @@
 
 const BASE = "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/Icons";
 
-export type MascotOriginRarity = "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB";
+export type MascotOriginRarity = "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" | "CELESTIAL";
 
 export const ORIGIN_ICON_URL: Record<MascotOriginRarity, string> = {
   COMMON:  `${BASE}/IconeOrigem_Comum.png`,
@@ -11,6 +11,7 @@ export const ORIGIN_ICON_URL: Record<MascotOriginRarity, string> = {
   EVENT:   `${BASE}/IconeOrigem_Evento.png`,
   SPECIAL: `${BASE}/IconeOrigem_Especial.png`,
   LAB:     `${BASE}/IconeOrigem_Lab.png`,
+  CELESTIAL: `${BASE}/IconeOrigem_Celestial.png`,
 };
 
 export const HUNGER_ICON_URL = `${BASE}/IconeMascote_Fome.png`;
@@ -21,6 +22,7 @@ const ORIGIN_LABEL: Record<MascotOriginRarity, string> = {
   EVENT: "Ovo de Evento",
   SPECIAL: "Ovo Especial",
   LAB: "Ovo de Laboratório",
+  CELESTIAL: "Ovo Celestial",
 };
 
 /**
@@ -30,6 +32,7 @@ const ORIGIN_LABEL: Record<MascotOriginRarity, string> = {
  */
 export function resolveMascotOriginRarity(type?: string | null, origin?: string | null): MascotOriginRarity | null {
   if (!type) return null;
+  if (type === "CELESTIAL") return "CELESTIAL";
   if (origin?.startsWith("LAB_REGION:")) return "LAB";
   if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
     const original = origin.split(":")[1];

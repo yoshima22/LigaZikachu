@@ -4,6 +4,7 @@ const EGG_TYPE_LABEL: Record<string, string> = {
   SPECIAL: "Ovo Especial",
   EVENT: "Ovo de Evento",
   LAB: "Ovo de Laboratório",
+  CELESTIAL: "Ovo Celestial",
 };
 
 export function getHatchedEggLabel(type?: string | null, origin?: string | null) {
