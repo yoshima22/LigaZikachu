@@ -629,7 +629,7 @@ export function RefugeLocationScene({
                 className="h-16 w-16 object-contain drop-shadow-[0_5px_7px_rgba(0,0,0,.8)] sm:h-20 sm:w-20"
               />
             </div>
-            <div className="pointer-events-none absolute left-1/2 top-full mt-1 hidden min-w-max -translate-x-1/2 rounded-lg border border-white/10 bg-slate-950/95 px-2 py-1 text-center group-hover:block group-focus:block">
+            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-max -translate-x-1/2 rounded-lg border border-white/10 bg-slate-950/95 px-2 py-1 text-center shadow-xl group-hover:block group-focus:block">
               <p className="text-[10px] font-bold text-white">
                 {mascot.name} · Nv.{mascot.level}
               </p>
