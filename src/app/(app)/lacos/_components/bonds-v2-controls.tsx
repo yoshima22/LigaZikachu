@@ -427,6 +427,7 @@ export function RefugeLocationScene({
   const [selectedOccupant, setSelectedOccupant] = useState<SceneMascot | null>(
     null,
   );
+  const [influenceFeedback, setInfluenceFeedback] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
   const available = useMemo(
     () =>
@@ -542,15 +543,23 @@ export function RefugeLocationScene({
     return Math.max(0, Math.ceil((new Date(iso).getTime() - now) / 60_000));
   }
   function influence(mascotId: string, direction: 1 | -1) {
+    setInfluenceFeedback(null);
     startTransition(async () => {
       const result = await setRefugeInfluenceV2Action(mascotId, direction);
       if (result.error) toast.error(result.error);
-      else
+      else {
+        setInfluenceFeedback(
+          direction > 0
+            ? "Sugestão positiva registrada para os próximos eventos."
+            : "Sugestão negativa registrada para os próximos eventos.",
+        );
         toast.success(
           direction > 0
             ? "Influência positiva registrada como sugestão."
             : "Influência negativa registrada como sugestão.",
         );
+        router.refresh();
+      }
     });
   }
   function claim(mascotId: string) {
@@ -720,6 +729,11 @@ export function RefugeLocationScene({
                     Influência negativa
                   </button>
                 </>
+              )}
+              {influenceFeedback && !selectedOccupant.own && (
+                <p className="basis-full rounded-lg border border-cyan-300/20 bg-cyan-300/[.08] px-3 py-2 text-[11px] font-semibold text-cyan-200">
+                  {influenceFeedback}
+                </p>
               )}
               <button
                 type="button"
