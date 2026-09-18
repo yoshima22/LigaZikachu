@@ -210,6 +210,7 @@ export type SceneMascot = {
   moveAvailableAt: string | null;
   nextActionAt: string | null;
   pendingReward: boolean;
+  influenceDirection?: 1 | -1 | null;
 };
 export type SceneStory = {
   id: string;
@@ -332,14 +333,18 @@ export function BondsV2SectionTabs({
 }
 
 const POSITIONS = [
-  "left-[8%] bottom-[12%]",
-  "left-[27%] bottom-[25%]",
-  "left-[48%] bottom-[10%]",
-  "left-[68%] bottom-[28%]",
-  "left-[82%] bottom-[12%]",
-  "left-[18%] bottom-[48%]",
-  "left-[58%] bottom-[50%]",
-  "left-[78%] bottom-[52%]",
+  "left-[10%] bottom-[18%]",
+  "left-[30%] bottom-[18%]",
+  "left-[50%] bottom-[18%]",
+  "left-[70%] bottom-[18%]",
+  "left-[90%] bottom-[18%]",
+  "left-[17%] bottom-[42%]",
+  "left-[39%] bottom-[42%]",
+  "left-[61%] bottom-[42%]",
+  "left-[83%] bottom-[42%]",
+  "left-[25%] bottom-[66%]",
+  "left-[50%] bottom-[66%]",
+  "left-[75%] bottom-[66%]",
 ];
 
 export function RefugeLocationsTabs({
@@ -548,6 +553,7 @@ export function RefugeLocationScene({
       const result = await setRefugeInfluenceV2Action(mascotId, direction);
       if (result.error) toast.error(result.error);
       else {
+        setSelectedOccupant((current) => current?.id === mascotId ? { ...current, influenceDirection: direction } : current);
         setInfluenceFeedback(
           direction > 0
             ? "Sugestão positiva registrada para os próximos eventos."
@@ -576,7 +582,7 @@ export function RefugeLocationScene({
 
   return (
     <article className="overflow-visible rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/20">
-      <div className="relative min-h-[390px] overflow-visible rounded-t-3xl bg-slate-900">
+      <div className="relative min-h-[620px] overflow-visible rounded-t-3xl bg-slate-900 sm:min-h-[680px]">
         {backgroundUrl ? (
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
@@ -615,7 +621,10 @@ export function RefugeLocationScene({
         {visibleOccupants.map((mascot, index) => (
           <button
             type="button"
-            onClick={() => setSelectedOccupant(mascot)}
+            onClick={() => {
+              setSelectedOccupant(mascot);
+              setInfluenceFeedback(null);
+            }}
             aria-label={`Abrir ficha social de ${mascot.name}`}
             key={mascot.id}
             className={`group absolute z-10 -translate-x-1/2 ${POSITIONS[index]} transition hover:z-20 hover:scale-110 focus:z-20 focus:outline-none`}
@@ -638,7 +647,12 @@ export function RefugeLocationScene({
                 className="h-16 w-16 object-contain drop-shadow-[0_5px_7px_rgba(0,0,0,.8)] sm:h-20 sm:w-20"
               />
             </div>
-            <div className="pointer-events-none absolute bottom-full left-1/2 z-50 mb-1 hidden min-w-max -translate-x-1/2 rounded-lg border border-white/10 bg-slate-950/95 px-2 py-1 text-center shadow-xl group-hover:block group-focus:block">
+            {!mascot.own && mascot.influenceDirection && (
+              <span className={`absolute -left-2 -top-2 z-30 grid h-6 w-6 place-items-center rounded-full border text-xs font-black shadow-lg ${mascot.influenceDirection > 0 ? "border-emerald-200/50 bg-emerald-400 text-slate-950" : "border-rose-200/50 bg-rose-400 text-slate-950"}`}>
+                {mascot.influenceDirection > 0 ? "+" : "−"}
+              </span>
+            )}
+            <div className={`pointer-events-none absolute left-1/2 z-50 hidden min-w-max -translate-x-1/2 rounded-lg border border-white/10 bg-slate-950/95 px-2 py-1 text-center shadow-xl group-hover:block group-focus:block ${index >= 9 ? "top-full mt-1" : "bottom-full mb-1"}`}>
               <p className="text-[10px] font-bold text-white">
                 {mascot.name} · Nv.{mascot.level}
               </p>
@@ -715,18 +729,22 @@ export function RefugeLocationScene({
                     Ver treinador
                   </Link>
                   <button
+                    type="button"
                     disabled={pending}
                     onClick={() => influence(selectedOccupant.id, 1)}
-                    className="rounded-xl border border-emerald-300/20 px-3 py-2 text-xs font-bold text-emerald-200"
+                    aria-pressed={selectedOccupant.influenceDirection === 1}
+                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${selectedOccupant.influenceDirection === 1 ? "border-emerald-300 bg-emerald-300 text-slate-950 shadow-lg shadow-emerald-500/20" : "border-emerald-300/20 text-emerald-200 hover:bg-emerald-300/10"}`}
                   >
-                    Influência positiva
+                    {selectedOccupant.influenceDirection === 1 ? "✓ Influência positiva ativa" : "Influência positiva"}
                   </button>
                   <button
+                    type="button"
                     disabled={pending}
                     onClick={() => influence(selectedOccupant.id, -1)}
-                    className="rounded-xl border border-rose-300/20 px-3 py-2 text-xs font-bold text-rose-200"
+                    aria-pressed={selectedOccupant.influenceDirection === -1}
+                    className={`rounded-xl border px-3 py-2 text-xs font-bold transition ${selectedOccupant.influenceDirection === -1 ? "border-rose-300 bg-rose-300 text-slate-950 shadow-lg shadow-rose-500/20" : "border-rose-300/20 text-rose-200 hover:bg-rose-300/10"}`}
                   >
-                    Influência negativa
+                    {selectedOccupant.influenceDirection === -1 ? "✓ Influência negativa ativa" : "Influência negativa"}
                   </button>
                 </>
               )}

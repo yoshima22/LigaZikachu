@@ -13,7 +13,7 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
-  const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
+  const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory, socialInfluences] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId, player: { user: { role: "PLAYER" } } },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
@@ -65,6 +65,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     // implantação ainda está aplicando os novos valores do enum ShopItemType.
     // Assim que a migração termina, a consulta volta a preencher a bolsa.
     prisma.shopItem.findMany({ where: { type: { in: [...BOND_SHOP_ITEM_TYPES] as never[] } }, orderBy: { sortOrder: "asc" }, select: { id: true, type: true, name: true, description: true, rarity: true, ownerships: { where: { playerId }, select: { quantity: true }, take: 1 } } }).catch(() => []),
+    prisma.mascotSocialInfluence.findMany({ where: { observerPlayerId: playerId }, select: { targetMascotId: true, direction: true } }),
   ]);
 
   const rawSettings = settings?.data && typeof settings.data === "object" && !Array.isArray(settings.data)
@@ -129,6 +130,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     const item = bondInventory.find((candidate) => candidate.type === definition.type);
     return { id: item?.id ?? definition.type, type: definition.type, name: definition.name, description: definition.description, rarity: item?.rarity ?? definition.rarity, quantity: item?.ownerships[0]?.quantity ?? 0 };
   });
+  const influenceByMascot = new Map(socialInfluences.map((influence) => [influence.targetMascotId, influence.direction]));
   const importantMoments = pendingEvents.map((event) => {
     const locationKey = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).find((location) => event.eventType.includes(`REFUGE_${location}`));
     const nameA = mascotName(event.mascotA);
@@ -160,6 +162,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       moveAvailableAt: new Date(routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
       nextActionAt: routine.nextEventAt?.toISOString() ?? null,
       pendingReward: Boolean(routine.pendingRewardType),
+      influenceDirection: (influenceByMascot.get(routine.mascot.id) === 1 ? 1 : influenceByMascot.get(routine.mascot.id) === -1 ? -1 : null) as 1 | -1 | null,
     }));
     const stories = memoriesByLocation[locationIndex].map((memory) => {
       const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
