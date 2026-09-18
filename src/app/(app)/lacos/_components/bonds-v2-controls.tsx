@@ -356,7 +356,7 @@ export function RefugeLocationsTabs({
     locations.find((entry) => entry.location === active) ?? locations[0];
   if (!current) return null;
   return (
-    <div className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950/60">
+    <div className="overflow-visible rounded-3xl border border-white/10 bg-slate-950/60">
       <div className="flex gap-1 overflow-x-auto border-b border-white/10 bg-slate-950/90 p-2">
         {locations.map((entry) => {
           const definition = REFUGE_LOCATIONS[entry.location];
@@ -566,8 +566,8 @@ export function RefugeLocationScene({
   }
 
   return (
-    <article className="overflow-hidden rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/20">
-      <div className="relative min-h-[390px] overflow-hidden bg-slate-900">
+    <article className="overflow-visible rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/20">
+      <div className="relative min-h-[390px] overflow-visible rounded-t-3xl bg-slate-900">
         {backgroundUrl ? (
           <div
             className="absolute inset-0 bg-cover bg-center bg-no-repeat"
