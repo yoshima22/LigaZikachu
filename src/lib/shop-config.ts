@@ -132,6 +132,27 @@ export const BOND_SHOP_ITEM_TYPES = [
   "BOND_CRACKED_TROPHY", "BOND_RIVAL_CIRCUIT_PASS",
 ] as const;
 
+export const BOND_ITEM_CATALOG = [
+  { type: "BOND_SHARED_BERRY", name: "Frutinha da Partilha", description: "Em uma escolha positiva, concede +4 de relação principal e +2 recíproca.", rarity: "COMMON" },
+  { type: "BOND_CALMING_HERB", name: "Erva Apaziguadora", description: "Evita até 5 pontos negativos de um conflito e registra uma trégua.", rarity: "UNCOMMON" },
+  { type: "BOND_REVENGE_TOKEN", name: "Ficha de Revanche", description: "Cria rivalidade controlada em −4 e impede uma consequência mais severa.", rarity: "COMMON" },
+  { type: "BOND_TRAINING_RIBBON", name: "Faixa de Treino em Dupla", description: "Concede +5 de relação e registra uma memória de parceria no treino.", rarity: "UNCOMMON" },
+  { type: "BOND_SHARED_PILLOW", name: "Almofada Compartilhada", description: "Concede +4 de relação e favorece uma memória de cuidado ou ensino.", rarity: "COMMON" },
+  { type: "BOND_NIGHT_TEA", name: "Chá de Boa-Noite", description: "Remove a tensão anterior e concede +2 de relação nas duas direções.", rarity: "UNCOMMON" },
+  { type: "BOND_YARD_TOY", name: "Brinquedo de Pátio", description: "Favorece um acontecimento com três ou mais mascotes e a formação de grupo.", rarity: "COMMON" },
+  { type: "BOND_ILLUSTRATED_INVITATION", name: "Convite Ilustrado", description: "Escolhe o alvo preferencial do próximo encontro sem definir seu resultado.", rarity: "UNCOMMON" },
+  { type: "BOND_MEMORY_ALBUM", name: "Álbum de Memórias", description: "Transforma uma lembrança comum em memória marcante sem alterar a relação.", rarity: "RARE" },
+  { type: "BOND_TRUCE_BELL", name: "Sino de Trégua", description: "Limita a mudança de um conflito ao intervalo entre −2 e +2.", rarity: "RARE" },
+  { type: "BOND_PROMISE_CHARM", name: "Amuleto de Promessa", description: "Recurso narrativo para decisões de compromisso e reconciliação entre mascotes.", rarity: "EPIC" },
+  { type: "BOND_CHALLENGE_LETTER", name: "Carta de Desafio", description: "Cria uma revanche direcionada entre mascotes que já sejam Rivais ou piores.", rarity: "RARE" },
+  { type: "BOND_TAUNT_WHISTLE", name: "Apito de Provocação", description: "Acrescenta 35 pontos percentuais à chance de conflito no próximo treino.", rarity: "COMMON" },
+  { type: "BOND_CHALLENGE_BOARD", name: "Quadro de Desafios", description: "Procura um novo oponente compatível e favorece a formação de um Rival.", rarity: "UNCOMMON" },
+  { type: "BOND_SECOND_PLACE_MEDAL", name: "Medalha de Segundo Lugar", description: "Após uma derrota, aplica −5 do perdedor para o vencedor e registra revanche.", rarity: "UNCOMMON" },
+  { type: "BOND_SURPASS_ME_BAND", name: "Faixa ‘Me Supere’", description: "Aplica −4 nas duas direções e cria uma rivalidade saudável.", rarity: "UNCOMMON" },
+  { type: "BOND_CRACKED_TROPHY", name: "Troféu Rachado", description: "Transforma um Conhecido em Rival (−15) após uma interação prévia.", rarity: "RARE" },
+  { type: "BOND_RIVAL_CIRCUIT_PASS", name: "Passe do Circuito Rival", description: "Abre até três desafios separados contra oponentes diferentes.", rarity: "EPIC" },
+] as const;
+
 export const CONSUMABLE_SHOP_ITEM_TYPES = [
   "ZIKALOOT_TICKET",
   ...MASCOT_SHOP_ITEM_TYPES,

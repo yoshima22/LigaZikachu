@@ -1,11 +1,11 @@
 import { Activity, Archive, Brain, HeartHandshake, LockKeyhole, Network, Sparkles, Users } from "lucide-react";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs } from "./bonds-v2-controls";
-import { BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
+import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
@@ -38,7 +38,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       take: 100,
       select: {
         id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true,
-        mascotA: { select: { pokemonId: true, nickname: true } },
+        mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
     }),
@@ -81,7 +81,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     name: mascotName(mascot),
     sprite: getSpriteUrl(mascot.pokemonId),
     level: mascot.level,
-    personality: mascot.personality,
+    personality: PERSONALITY_LABEL[mascot.personality] ?? mascot.personality,
     owner: "Você",
     own: true,
     location: mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType : null,
@@ -93,6 +93,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     a: mascotName(relation.mascotA),
     b: mascotName(relation.mascotB),
     owner: relation.mascotB.player.displayName,
+    ownerA: relation.mascotA.player.displayName,
+    ownerB: relation.mascotB.player.displayName,
     spriteA: getSpriteUrl(relation.mascotA.pokemonId),
     spriteB: getSpriteUrl(relation.mascotB.pokemonId),
     score: relation.relationshipScore,
@@ -114,18 +116,12 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     groups[key].members.push({ name: mascotName(relation.mascotB), sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore });
     return groups;
   }, {})).filter((group) => group.members.length >= 2).sort((a, b) => b.members.length - a.members.length).slice(0, 4);
-  const trainerComparisons = Object.values(relations.reduce<Record<string, { trainer: string; friends: number; rivals: number; total: number; scoreTotal: number }>>((groups, relation) => {
-    const trainer = relation.mascotB.player.displayName;
-    groups[trainer] ??= { trainer, friends: 0, rivals: 0, total: 0, scoreTotal: 0 };
-    groups[trainer].total += 1;
-    groups[trainer].scoreTotal += relation.relationshipScore;
-    if (relation.relationshipScore >= 15) groups[trainer].friends += 1;
-    if (relation.relationshipScore <= -15) groups[trainer].rivals += 1;
-    return groups;
-  }, {})).sort((a, b) => b.total - a.total).slice(0, 6);
   const strongestFriend = relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).sort((a, b) => b.relationshipScore - a.relationshipScore)[0];
   const strongestRival = relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).sort((a, b) => a.relationshipScore - b.relationshipScore)[0];
-  const inventoryItems = bondInventory.map((item) => ({ id: item.id, type: item.type, name: item.name, description: item.description ?? "Item social do Refúgio.", rarity: item.rarity, quantity: item.ownerships[0]?.quantity ?? 0 }));
+  const inventoryItems = BOND_ITEM_CATALOG.map((definition) => {
+    const item = bondInventory.find((candidate) => candidate.type === definition.type);
+    return { id: item?.id ?? definition.type, type: definition.type, name: definition.name, description: definition.description, rarity: item?.rarity ?? definition.rarity, quantity: item?.ownerships[0]?.quantity ?? 0 };
+  });
   const importantMoments = pendingEvents.map((event) => {
     const locationKey = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).find((location) => event.eventType.includes(`REFUGE_${location}`));
     const nameA = mascotName(event.mascotA);
@@ -147,7 +143,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       name: mascotName(routine.mascot),
       sprite: getSpriteUrl(routine.mascot.pokemonId),
       level: routine.mascot.level,
-      personality: routine.mascot.personality,
+      personality: PERSONALITY_LABEL[routine.mascot.personality] ?? routine.mascot.personality,
       owner: routine.mascot.playerId === playerId ? "Você" : routine.mascot.player.displayName,
       own: routine.mascot.playerId === playerId,
       location,
@@ -215,7 +211,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Além das duplas</p><h2 className="text-xl font-semibold text-white">Mapa social e outros treinadores</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Aqui você compara sua rede por treinador. Círculos de amizade e Clubes da Luta são explicados e filtrados diretamente em “Laços e efeitos”, onde seus benefícios também aparecem.</p></div>
       <div className="grid gap-5 lg:grid-cols-2">
         <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <article key={group.leader} className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.035] p-3"><div className="flex items-center gap-2"><img src={group.sprite} alt="" className="h-11 w-11 rounded-full bg-slate-900 object-contain" /><div><p className="text-xs font-black uppercase tracking-wider text-fuchsia-300">Ponto de encontro</p><p className="font-bold text-white">Círculo de {group.leader}</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{group.members.map((member) => <span key={member.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300"><img src={member.sprite} alt="" className="h-5 w-5 object-contain" />{member.name} · +{member.score}</span>)}</div></article>)}</div>}</div>
-        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3>{trainerComparisons.length === 0 ? <Empty text="Ainda não há outros treinadores para comparar." /> : <div className="space-y-2">{trainerComparisons.map((item) => { const average = Math.round(item.scoreTotal / Math.max(1, item.total)); return <div key={item.trainer} className="rounded-xl border border-white/10 bg-black/20 p-3"><div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold text-white">{item.trainer}</p><p className="text-[10px] text-slate-500">{item.total} relações · média direcional {average > 0 ? "+" : ""}{average}</p></div><div className="flex gap-2 text-[10px]"><span className="rounded-full bg-emerald-400/10 px-2 py-1 text-emerald-300">{item.friends} amizades</span><span className="rounded-full bg-rose-400/10 px-2 py-1 text-rose-300">{item.rivals} rivalidades</span></div></div><div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className={average >= 0 ? "h-full bg-emerald-400" : "ml-auto h-full bg-rose-400"} style={{ width: `${Math.min(100, Math.max(8, Math.abs(average)))}%` }} /></div></div>; })}</div>}</div>
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3><TrainerBondExplorer relations={bondItems} /></div>
       </div>
     </section>
       </>}
@@ -237,7 +233,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
 
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
       <div><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-fuchsia-300">Rede social dos mascotes</p><h2 className="text-xl font-black text-white">Laços e efeitos</h2><p className="mt-1 text-xs text-slate-500">Relações são direcionais: o que um mascote sente pode não ser correspondido.</p></div><BondDirectoryV2 relations={bondItems} /></div>
-      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias recentes do Refúgio</h2><p className="text-xs text-slate-500">Resumo cronológico; o diário completo e filtrável fica dentro de cada região.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{recentMemories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : recentMemories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{memory.sourceType} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
+      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias recentes do Refúgio</h2><p className="text-xs text-slate-500">Resumo cronológico; o diário completo e filtrável fica dentro de cada região.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{recentMemories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : recentMemories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{({ REFUGE: "Refúgio", REFUGE_REWARD: "Recompensa do Refúgio", BOND_MANAGEMENT: "Gestão de vínculo", SOCIAL: "Interação social", COMBAT: "Combate", TRAINING: "Treino", EXPEDITION: "Expedição" } as Record<string, string>)[memory.sourceType] ?? "Acontecimento"} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
     </section>
       </div>}
     />

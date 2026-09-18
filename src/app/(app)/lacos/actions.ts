@@ -7,7 +7,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { BONDS_V2_BALANCE, REFUGE_LOCATIONS, buildImportantRefugeOptions, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { getPokemonName } from "@/lib/mascot-data";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
-import { BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { Prisma } from "@prisma/client";
 import {
   applyBondOption,
@@ -194,8 +194,12 @@ export async function adjustBondItemDebugV2Action(itemType: string, delta: 1 | -
   try {
     const playerId = await getAdminPlayerId();
     if (!(BOND_SHOP_ITEM_TYPES as readonly string[]).includes(itemType)) throw new Error("Item de Laços inválido.");
-    const item = await prisma.shopItem.findFirst({ where: { type: itemType as never }, select: { id: true, name: true } });
-    if (!item) throw new Error("Este item ainda não foi registrado no catálogo.");
+    const definition = BOND_ITEM_CATALOG.find((entry) => entry.type === itemType);
+    if (!definition) throw new Error("Este item ainda não foi registrado no catálogo.");
+    const existingItem = await prisma.shopItem.findFirst({ where: { type: itemType as never }, select: { id: true } });
+    const item = existingItem
+      ? await prisma.shopItem.update({ where: { id: existingItem.id }, data: { name: definition.name, description: definition.description, inventoryEnabled: true }, select: { id: true, name: true } })
+      : await prisma.shopItem.create({ data: { id: itemType.toLowerCase().replaceAll("_", "-"), type: itemType as never, name: definition.name, description: definition.description, rarity: definition.rarity, price: 0, active: false, inventoryEnabled: true, sortOrder: 900 + BOND_ITEM_CATALOG.indexOf(definition) }, select: { id: true, name: true } });
     const current = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId, itemId: item.id } }, select: { quantity: true } });
     if (delta < 0 && (!current || current.quantity < 1)) throw new Error("Você não possui este item para remover.");
     if (delta > 0) await prisma.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: item.id } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: item.id, quantity: 1, source: "BONDS_ADMIN_DEBUG" } });
