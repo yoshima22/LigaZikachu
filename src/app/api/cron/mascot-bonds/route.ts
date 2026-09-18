@@ -26,6 +26,12 @@ export async function GET(req: NextRequest) {
   if (!authorized(req)) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const now = new Date();
+  // Afastamentos têm peso e tempo. Somente o relógio conclui a transição;
+  // abrir a página ou clicar novamente nunca remove um vínculo na hora.
+  const distancesCompleted = await prisma.mascotRelation.updateMany({
+    where: { isActive: true, dormantAt: { lte: now } },
+    data: { isActive: false, isProtected: false },
+  });
   const players = await prisma.player.findMany({
     where: {
       active: true,
@@ -128,5 +134,6 @@ export async function GET(req: NextRequest) {
     refugeMoments,
     importantRefugeMoments,
     failures,
+    distancesCompleted: distancesCompleted.count,
   });
 }

@@ -338,7 +338,7 @@ export function runLeagueCombat(
       targetId: second.id, targetName: second.name, targetOwnerId: second.ownerId, targetPokemonId: second.pokemonId, targetLevel: second.level,
       action: "DEFEND", damage: 0, attackerType: elementOf(first), defenderType: elementOf(second), multiplier: 1, advantageApplied: false,
       actorRole: getCombatRoleLabel(first.combatRole), targetRole: getCombatRoleLabel(second.combatRole),
-      effect: `LAÇO:${link.kind}:${link.label}: +${link.damagePct}% de dano${link.defensePct ? ` e -${link.defensePct}% de dano recebido` : ""}.`,
+      effect: `LAÇO:${link.kind}:${link.label}: ${link.damagePct > 0 ? "+" : ""}${link.damagePct}% de dano${link.defensePct ? ` e ${link.defensePct > 0 ? "-" : "+"}${Math.abs(link.defensePct)}% de dano recebido` : ""}.`,
     });
   }
   for (const effect of opposingBondEffects) {
@@ -585,7 +585,7 @@ export function runLeagueCombat(
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
       const offensiveBond = bondLinks.find((link) => (link.mascotAId === actor.id || link.mascotBId === actor.id) && (hp.get(link.mascotAId === actor.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
-      const defensiveBond = bondLinks.find((link) => link.defensePct > 0 && (link.mascotAId === target.id || link.mascotBId === target.id) && (hp.get(link.mascotAId === target.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
+      const defensiveBond = bondLinks.find((link) => link.defensePct !== 0 && (link.mascotAId === target.id || link.mascotBId === target.id) && (hp.get(link.mascotAId === target.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
       if (offensiveBond) damage = Math.max(1, Math.round(damage * (1 + offensiveBond.damagePct / 100)));
       if (defensiveBond) damage = Math.max(1, Math.round(damage * (1 - defensiveBond.defensePct / 100)));
       const opposingBond = opposingBondEffects.find((effect) => effect.attackerId === actor.id && effect.targetId === target.id);

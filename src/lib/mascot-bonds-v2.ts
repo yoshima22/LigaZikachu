@@ -23,11 +23,11 @@ export function relationTierV2(score: number) {
 }
 
 export function relationEffectV2(score: number) {
-  if (score <= -80) return "Nêmesis — Acerto de Contas: +8% de dano contra este Nêmesis nos 3 primeiros turnos de confronto direto. Na mesma equipe, não concede cooperação.";
-  if (score <= -50) return "Inimigo — Tenho Algo a Provar: +5% de dano apenas contra este Inimigo específico. Na mesma equipe, não concede cooperação.";
+  if (score <= -80) return "Nêmesis — Acerto de Contas: +8% de dano contra este Nêmesis nos 3 primeiros confrontos diretos. Na mesma equipe, a sabotagem entre os dois reduz em 5% o dano causado e aumenta em 5% o dano recebido enquanto ambos estiverem aptos.";
+  if (score <= -50) return "Inimigo — Tenho Algo a Provar: +5% de dano apenas contra este Inimigo específico. Na mesma equipe, a hostilidade reduz em 3% o dano causado e aumenta em 3% o dano recebido enquanto ambos estiverem aptos.";
   if (score <= -15) return "Rival — Competição: +3% de dano contra este Rival; na mesma equipe, ambos causam +2% de dano enquanto estiverem aptos. Não acumula com outro Laço.";
   if (score <= 14) return "Sem efeito mecânico; novas experiências definem o rumo da relação.";
-  if (score <= 39) return "Colega: participa de histórias e interações, sem bônus numérico fixo.";
+  if (score <= 39) return "Colega — Entrosamento: na mesma equipe, ambos causam +1% de dano enquanto estiverem aptos. É um benefício leve e não acumula com outro Laço.";
   if (score <= 79) return "Amigo — Sintonia: na mesma equipe, +2% de dano causado e −2% de dano recebido enquanto ambos estiverem aptos. Em lados opostos, o primeiro ataque direto causa −5% de dano por hesitação. Também: −3% no tempo de expedição e +5% de EXP em treino conjunto.";
   return "Super Amigo — Cobertura: na mesma equipe, +3% de dano causado e −3% recebido; uma vez por combate, reduz em mais 5% o golpe que deixaria o amigo abaixo de 20% de HP. Em lados opostos, o primeiro ataque direto causa −10% de dano. Também: −7% de expedição e +10% de EXP em treino conjunto.";
 }

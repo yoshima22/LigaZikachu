@@ -155,20 +155,44 @@ export async function saveRefugeBackgroundV2Action(location: RefugeLocation, ima
   }
 }
 
-export async function updateActiveBondV2Action(relationId: string, operation: "TOGGLE_ACTIVE" | "TOGGLE_PROTECTED") {
+const BOND_DISTANCE_DELAY_MS = 24 * 60 * 60_000;
+const BOND_REUNION_MIN_MS = 2 * 60 * 60_000;
+
+export async function updateActiveBondV2Action(relationId: string, operation: "START_DISTANCE" | "CANCEL_DISTANCE" | "RECONNECT") {
   try {
     const playerId = await getAdminPlayerId();
-    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId } }, select: { id: true, isActive: true, isProtected: true, mascotAId: true } });
+    const relation = await prisma.mascotRelation.findFirst({
+      where: { id: relationId, mascotA: { playerId } },
+      select: {
+        id: true, isActive: true, dormantAt: true, mascotAId: true, mascotBId: true,
+        mascotA: { select: { pokemonId: true, nickname: true, routine: { select: { locationType: true, status: true, startedAt: true } } } },
+        mascotB: { select: { pokemonId: true, nickname: true, routine: { select: { locationType: true, status: true, startedAt: true } } } },
+      },
+    });
     if (!relation) throw new Error("Laço não encontrado.");
-    if (operation === "TOGGLE_ACTIVE") {
-      if (!relation.isActive) {
-        const activeCount = await prisma.mascotRelation.count({ where: { mascotAId: relation.mascotAId, isActive: true } });
-        if (activeCount >= 10) throw new Error("Este mascote já possui 10 Laços Ativos.");
-      }
-      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isActive: !relation.isActive, isProtected: relation.isActive ? false : relation.isProtected, dormantAt: relation.isActive ? new Date() : null } });
+    const now = new Date();
+    const nameA = relation.mascotA.nickname ?? getPokemonName(relation.mascotA.pokemonId);
+    const nameB = relation.mascotB.nickname ?? getPokemonName(relation.mascotB.pokemonId);
+    if (operation === "START_DISTANCE") {
+      if (!relation.isActive) throw new Error("Este vínculo já está distante.");
+      if (relation.dormantAt && relation.dormantAt > now) throw new Error("O afastamento já está em andamento.");
+      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { dormantAt: new Date(now.getTime() + BOND_DISTANCE_DELAY_MS), isProtected: false } });
+      await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "AFASTAMENTO_INICIADO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Precisando de espaço", description: `${nameA} decidiu se afastar de ${nameB}. Durante as próximas 24 horas, uma nova interação ainda pode mudar esse rumo.`, intensity: 2 } });
+    } else if (operation === "CANCEL_DISTANCE") {
+      if (!relation.isActive || !relation.dormantAt || relation.dormantAt <= now) throw new Error("Não há afastamento em andamento.");
+      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { dormantAt: null } });
+      await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "AFASTAMENTO_CANCELADO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Ainda havia algo entre eles", description: `${nameA} desistiu de se afastar de ${nameB}. O vínculo permaneceu presente.`, intensity: 2 } });
     } else {
-      if (!relation.isActive) throw new Error("Reative o vínculo antes de fixá-lo como ativo.");
-      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isProtected: !relation.isProtected } });
+      if (relation.isActive) throw new Error("Este vínculo já está presente.");
+      const routineA = relation.mascotA.routine;
+      const routineB = relation.mascotB.routine;
+      const samePlace = routineA?.status === "ACTIVE" && routineB?.status === "ACTIVE" && routineA.locationType === routineB.locationType;
+      const togetherLongEnough = samePlace && now.getTime() - Math.max(routineA.startedAt.getTime(), routineB.startedAt.getTime()) >= BOND_REUNION_MIN_MS;
+      if (!togetherLongEnough) throw new Error("Para reaproximar, mantenha os dois mascotes no mesmo espaço público por pelo menos 2 horas.");
+      const activeCount = await prisma.mascotRelation.count({ where: { mascotAId: relation.mascotAId, isActive: true, dormantAt: null } });
+      if (activeCount >= 10) throw new Error("Este mascote já mantém 10 vínculos presentes. Um deles precisa concluir seu afastamento primeiro.");
+      await prisma.mascotRelation.update({ where: { id: relation.id }, data: { isActive: true, dormantAt: null, isProtected: false, lastInteractionAt: now } });
+      await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "REENCONTRO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Um reencontro de verdade", description: `Depois de conviverem no mesmo espaço, ${nameA} e ${nameB} deixaram a distância para trás.`, intensity: 3, isMilestone: true } });
     }
     revalidatePath("/lacos");
     return { ok: true };

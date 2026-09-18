@@ -205,6 +205,9 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
       interactionCount: { increment: 1 },
       lastInteractionAt: new Date(),
       specialBondType: specialBondFromScore(nextScore),
+      isActive: true,
+      dormantAt: null,
+      isProtected: false,
     },
     create: {
       mascotAId,
@@ -221,11 +224,11 @@ export async function ensureDirectionalRelation(tx: Prisma.TransactionClient, ma
 }
 
 export async function enforceActiveBondLimit(tx: Prisma.TransactionClient, mascotId: string, limit = 10) {
-  const activeCount = await tx.mascotRelation.count({ where: { mascotAId: mascotId, isActive: true } });
+  const activeCount = await tx.mascotRelation.count({ where: { mascotAId: mascotId, isActive: true, dormantAt: null } });
   const overflow = activeCount - limit;
   if (overflow <= 0) return [] as string[];
   const candidates = await tx.mascotRelation.findMany({
-    where: { mascotAId: mascotId, isActive: true, isProtected: false },
+    where: { mascotAId: mascotId, isActive: true, dormantAt: null },
     orderBy: [{ lastInteractionAt: "asc" }, { updatedAt: "asc" }],
     take: overflow,
     select: { id: true },
@@ -233,7 +236,9 @@ export async function enforceActiveBondLimit(tx: Prisma.TransactionClient, masco
   if (candidates.length > 0) {
     await tx.mascotRelation.updateMany({
       where: { id: { in: candidates.map((relation) => relation.id) } },
-      data: { isActive: false, dormantAt: new Date() },
+      // O vínculo não some ao surgir o 11º. Ele esfria por 24 horas e qualquer
+      // nova interação durante esse período cancela naturalmente o afastamento.
+      data: { dormantAt: new Date(Date.now() + 24 * 60 * 60_000), isProtected: false },
     });
   }
   return candidates.map((relation) => relation.id);
@@ -783,7 +788,7 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
   return resolved;
 }
 
-export type BondCombatLink = { mascotAId: string; mascotBId: string; kind: "FRIEND" | "SUPER_FRIEND" | "RIVAL"; label: string; damagePct: number; defensePct: number };
+export type BondCombatLink = { mascotAId: string; mascotBId: string; kind: "COLLEAGUE" | "FRIEND" | "SUPER_FRIEND" | "RIVAL" | "ENEMY" | "NEMESIS"; label: string; damagePct: number; defensePct: number };
 export type OpposingBondCombatEffect = { attackerId: string; targetId: string; kind: "FRIEND" | "SUPER_FRIEND" | "RIVAL" | "ENEMY" | "NEMESIS"; label: string; damagePct: number; directHitLimit: number | null };
 
 export async function getTeamBondCombatContext(mascotIds: string[]) {
@@ -799,12 +804,28 @@ export async function getTeamBondCombatContext(mascotIds: string[]) {
   for (const id of mascotIds) modifier.set(id, 1);
   for (const rel of relations) {
     const score = effectiveRelationScore(rel);
-    const delta = score >= 80 ? 0.03 : score >= 40 ? 0.02 : score <= -15 && score > -50 ? 0.02 : 0;
-    if (delta !== 0) modifier.set(rel.mascotAId, Math.max(modifier.get(rel.mascotAId) ?? 1, 1 + delta));
+    const profile = score >= 80
+      ? { delta: 0.03, defense: 3, kind: "SUPER_FRIEND" as const, label: "Cobertura de Super Amigos" }
+      : score >= 40
+        ? { delta: 0.02, defense: 2, kind: "FRIEND" as const, label: "Sintonia de Amigos" }
+        : score >= 15
+          ? { delta: 0.01, defense: 0, kind: "COLLEAGUE" as const, label: "Entrosamento entre Colegas" }
+          : score <= -80
+            ? { delta: -0.05, defense: -5, kind: "NEMESIS" as const, label: "Conflito entre Nêmesis" }
+            : score <= -50
+              ? { delta: -0.03, defense: -3, kind: "ENEMY" as const, label: "Hostilidade entre Inimigos" }
+              : score <= -15
+                ? { delta: 0.02, defense: 0, kind: "RIVAL" as const, label: "Competição entre Rivais" }
+                : null;
+    const delta = profile?.delta ?? 0;
+    if (delta !== 0) {
+      const current = modifier.get(rel.mascotAId) ?? 1;
+      modifier.set(rel.mascotAId, delta > 0 ? Math.max(current, 1 + delta) : Math.min(current, 1 + delta));
+    }
     const pairKey = [rel.mascotAId, rel.mascotBId].sort().join(":");
     if (!seen.has(pairKey) && delta !== 0) {
       seen.add(pairKey);
-      links.push({ mascotAId: rel.mascotAId, mascotBId: rel.mascotBId, kind: score >= 80 ? "SUPER_FRIEND" : score >= 40 ? "FRIEND" : "RIVAL", label: score >= 80 ? "Cobertura de Super Amigos" : score >= 40 ? "Sintonia de Amigos" : "Competição entre Rivais", damagePct: Math.round(delta * 100), defensePct: score >= 40 ? Math.round(delta * 100) : 0 });
+      links.push({ mascotAId: rel.mascotAId, mascotBId: rel.mascotBId, kind: profile!.kind, label: profile!.label, damagePct: Math.round(delta * 100), defensePct: profile!.defense });
     }
   }
   return { modifiers: modifier, links };

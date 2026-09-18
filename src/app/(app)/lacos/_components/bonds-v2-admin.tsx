@@ -34,10 +34,10 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     }),
     prisma.mascotRelation.findMany({
       where: { mascotA: { playerId } },
-      orderBy: [{ isActive: "desc" }, { isProtected: "desc" }, { updatedAt: "desc" }],
+      orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
       take: 100,
       select: {
-        id: true, relationshipScore: true, isActive: true, isProtected: true, interactionCount: true, updatedAt: true,
+        id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true,
         mascotA: { select: { pokemonId: true, nickname: true } },
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
@@ -100,7 +100,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     effect: relationEffectV2(relation.relationshipScore),
     interactions: relation.interactionCount,
     active: relation.isActive,
-    protectedBond: relation.isProtected,
+    transitionAt: relation.dormantAt?.toISOString() ?? null,
   }));
   const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, { leader: string; sprite: string; members: Array<{ name: string; sprite: string; score: number }> }>>((groups, relation) => {
     const key = mascotName(relation.mascotA);
