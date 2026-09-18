@@ -6,6 +6,7 @@ import Link from "next/link";
 import { Coins, ShoppingBag, Settings } from "lucide-react";
 import { ShopGrid } from "./_components/shop-grid";
 import { ShopTabs, TAB_ICONS } from "./_components/shop-tabs";
+import { GachaPreview } from "./_components/gacha-preview";
 import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getActiveShopItems, getEnabledShopPromotions, invalidateShopCache } from "@/lib/shop-cache";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
@@ -253,6 +254,12 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
+          // Prévia admin-only do sistema de Invocações (banners de gacha).
+          ...(platformAdmin ? [{
+            id: "invocacoes", label: "Invocações", icon: TAB_ICONS.gacha,
+            count: 1,
+            content: <GachaPreview />,
+          }] : []),
         ]} />
       )}
     </div>

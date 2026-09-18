@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ShoppingBag, Crown, ImageIcon, Package, Egg, Heart } from "lucide-react";
+import { ShoppingBag, Crown, ImageIcon, Package, Egg, Heart, Sparkles } from "lucide-react";
 
 export interface ShopTab {
   id: string;
@@ -51,4 +51,5 @@ export const TAB_ICONS = {
   tickets: <ShoppingBag size={14} />,
   mascots: <Egg size={14} />,
   buffs:   <Heart size={14} />,
+  gacha:   <Sparkles size={14} />,
 };
