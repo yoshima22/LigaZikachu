@@ -226,30 +226,71 @@ export default async function WeekDetailPage({
       ] as const)
       .filter(([, assignment]) => assignment.playerId && assignment.teamName)
   );
+  const rankingByPlayer = new Map(topDoDiaRanking.map((entry) => [entry.playerId, entry] as const));
+  const manualBonuses =
+    bonusRule && Array.isArray(bonusRule.manualBonuses)
+      ? (bonusRule.manualBonuses as Array<Record<string, unknown>>)
+      : [];
+
+  type TeamMemberStat = {
+    playerId: string; playerName: string; matchesPlayed: number;
+    wins: number; losses: number; draws: number; points: number; defendedPrizes: number;
+  };
+  type TeamStat = {
+    teamName: string; members: TeamMemberStat[]; playedCount: number; matchesPlayed: number;
+    wins: number; losses: number; draws: number; points: number; defendedPrizes: number;
+  };
+  // Média do time = (vitórias × 3 + prêmios defendidos) / partidas jogadas pelo time.
+  // O denominador é a PARTIDA, não o número de jogadores: mesma fórmula do Top do Dia,
+  // e quem foi escalado mas ainda não jogou aparece no elenco sem distorcer a média.
   const teamStats = Array.from(
-    topDoDiaRanking.reduce((map, entry) => {
-      const assignment = teamAssignmentsByPlayer.get(entry.playerId);
-      if (!assignment) return map;
-      const current = map.get(assignment.teamName) ?? {
-        teamName: assignment.teamName,
-        playerCount: 0,
-        totalPoints: 0,
-        wins: 0,
-        defendedPrizes: 0
-      };
-      current.playerCount += 1;
-      current.totalPoints += entry.points;
-      current.wins += entry.wins;
-      current.defendedPrizes += entry.defendedPrizes;
-      map.set(assignment.teamName, current);
-      return map;
-    }, new Map<string, { teamName: string; playerCount: number; totalPoints: number; wins: number; defendedPrizes: number }>())
+    Array.from(teamAssignmentsByPlayer.values())
+      .reduce((map, assignment) => {
+        const entry = rankingByPlayer.get(assignment.playerId);
+        const current = map.get(assignment.teamName) ?? {
+          teamName: assignment.teamName, members: [], playedCount: 0, matchesPlayed: 0,
+          wins: 0, losses: 0, draws: 0, points: 0, defendedPrizes: 0
+        };
+        current.members.push({
+          playerId: assignment.playerId,
+          playerName: entry?.displayName ?? assignment.playerName,
+          matchesPlayed: entry?.matchesPlayed ?? 0,
+          wins: entry?.wins ?? 0,
+          losses: entry?.losses ?? 0,
+          draws: entry?.draws ?? 0,
+          points: entry?.points ?? 0,
+          defendedPrizes: entry?.defendedPrizes ?? 0
+        });
+        if (entry && entry.matchesPlayed > 0) {
+          current.playedCount += 1;
+          current.matchesPlayed += entry.matchesPlayed;
+          current.wins += entry.wins;
+          current.losses += entry.losses;
+          current.draws += entry.draws;
+          current.points += entry.points;
+          current.defendedPrizes += entry.defendedPrizes;
+        }
+        map.set(assignment.teamName, current);
+        return map;
+      }, new Map<string, TeamStat>())
+      .values()
   )
-    .map(([, stats]) => ({
+    .map((stats) => ({
       ...stats,
-      averagePoints: stats.playerCount > 0 ? stats.totalPoints / stats.playerCount : 0
+      members: [...stats.members].sort((a, b) => b.points - a.points || b.wins - a.wins || a.playerName.localeCompare(b.playerName, "pt-BR")),
+      averageScore: stats.matchesPlayed > 0 ? (stats.wins * 3 + stats.defendedPrizes) / stats.matchesPlayed : 0,
+      winRate: stats.matchesPlayed > 0 ? stats.wins / stats.matchesPlayed : 0,
+      averagePrizes: stats.matchesPlayed > 0 ? stats.defendedPrizes / stats.matchesPlayed : 0
     }))
-    .sort((a, b) => b.averagePoints - a.averagePoints || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes);
+    .sort((a, b) => b.averageScore - a.averageScore || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes || a.teamName.localeCompare(b.teamName, "pt-BR"));
+
+  const championTeam = teamStats[0] && teamStats[0].matchesPlayed > 0 ? teamStats[0] : null;
+  const championIsTied = Boolean(
+    championTeam && teamStats[1] &&
+      teamStats[1].averageScore === championTeam.averageScore &&
+      teamStats[1].wins === championTeam.wins &&
+      teamStats[1].defendedPrizes === championTeam.defendedPrizes
+  );
 
   const statusConfig: Record<string, { label: string; cls: string }> = {
     PLANNED: { label: "Planejada", cls: "border-slate-500/30 bg-slate-500/10 text-slate-400" },
@@ -494,12 +535,30 @@ export default async function WeekDetailPage({
           <p className="mt-2 text-xs text-slate-500">
             Os pontos são somados ao bônus manual atual do jogador neste dia (use valores negativos para remover). Para zerar, aplique o oposto do total atual.
           </p>
+          {manualBonuses.length > 0 && (
+            <div className="mt-3 rounded-lg border border-border bg-slate-900/40 p-3">
+              <p className="mb-1 text-xs font-semibold uppercase tracking-widest text-slate-500">Bonus manual acumulado neste dia</p>
+              <div className="space-y-1">
+                {manualBonuses.map((bonus) => (
+                  <div key={String(bonus.playerId)} className="flex items-center justify-between gap-2 text-xs">
+                    <span className="text-slate-300">{String(bonus.playerName ?? bonus.playerId)}</span>
+                    <span className="flex items-center gap-2">
+                      {!!bonus.reason && <span className="text-slate-500">{String(bonus.reason)}</span>}
+                      <span className={Number(bonus.points) >= 0 ? "font-semibold text-[#7AC74C]" : "font-semibold text-red-400"}>
+                        {Number(bonus.points) > 0 ? "+" : ""}{Number(bonus.points)} pts
+                      </span>
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {admin && (
         <div className="rounded-xl border border-border bg-slate-950/50 p-5">
-          <h2 className="mb-3 font-semibold text-slate-200">Times e duplas do dia</h2>
+          <h2 className="mb-3 font-semibold text-slate-200">Escalar times e duplas</h2>
           <form
             className="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_auto]"
             action={async (formData) => {
@@ -544,7 +603,7 @@ export default async function WeekDetailPage({
             </div>
           </form>
 
-          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+          <div className="mt-4">
             <div className="rounded-lg border border-border bg-slate-900/40 p-3">
               <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Escalacoes</p>
               {teamAssignments.length === 0 ? (
@@ -580,28 +639,93 @@ export default async function WeekDetailPage({
                 </div>
               )}
             </div>
-            <div className="rounded-lg border border-border bg-slate-900/40 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-widest text-slate-500">Resultado por media</p>
-              {teamStats.length === 0 ? (
-                <p className="text-sm text-slate-500">Valide partidas para calcular o time/dupla vencedor.</p>
-              ) : (
-                <div className="space-y-2">
-                  {teamStats.map((team, index) => (
-                    <div key={team.teamName} className="flex items-center justify-between rounded-lg bg-slate-950/70 px-3 py-2 text-sm">
-                      <div>
-                        <p className="font-semibold text-white">
-                          {index === 0 ? "Vencedor: " : ""}{team.teamName}
-                        </p>
-                        <p className="text-xs text-slate-500">
-                          {team.playerCount} jogadores - {team.wins} vitorias - {team.defendedPrizes} premios defendidos
-                        </p>
-                      </div>
-                      <span className="font-semibold text-[#FFCB05]">{team.averagePoints.toFixed(2)} media</span>
+          </div>
+        </div>
+      )}
+
+      {teamStats.length > 0 && (
+        <div className="rounded-xl border border-border bg-slate-950/50 p-5">
+          <div className="mb-4 flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <h2 className="flex items-center gap-2 font-semibold text-slate-200">
+                <Crown size={16} className="text-[#FFCB05]" />
+                Times e duplas do dia
+              </h2>
+              <p className="mt-1 text-xs text-slate-400">
+                Media do time = (vitorias x 3 + premios defendidos) / partidas jogadas pelo time. Quem foi escalado e ainda nao jogou aparece no elenco, mas nao entra na media.
+              </p>
+            </div>
+            {!!bonusRule?.winnerTeamBonus && (
+              <span className="rounded-full border border-[#EE8130]/40 bg-[#EE8130]/10 px-3 py-1 text-xs font-semibold text-[#EE8130]">
+                +{String(bonusRule.winnerTeamBonus)}pt ao time campeao (aplicar no bonus manual)
+              </span>
+            )}
+          </div>
+
+          {championTeam ? (
+            <div className="mb-4 rounded-xl border border-[#FFCB05]/40 bg-gradient-to-r from-[#FFCB05]/15 to-transparent p-4">
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <p className="flex items-center gap-2 text-xs font-semibold uppercase tracking-widest text-[#FFCB05]">
+                    <Crown size={14} /> {championIsTied ? "Lideranca empatada" : "Time campeao do dia"}
+                  </p>
+                  <p className="mt-1 font-pixel text-base text-white">{championTeam.teamName}</p>
+                  <p className="mt-1 text-xs text-slate-400">
+                    {championTeam.wins}V-{championTeam.draws}E-{championTeam.losses}D em {championTeam.matchesPlayed} partidas - {championTeam.defendedPrizes} premios defendidos - {championTeam.points} pts somados
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="font-pixel text-lg text-[#FFCB05]">{championTeam.averageScore.toFixed(2)}</p>
+                  <p className="text-[10px] uppercase tracking-widest text-slate-500">media por partida</p>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-slate-400">
+                {championTeam.members.map((member) => member.playerName).join(", ")}
+              </p>
+            </div>
+          ) : (
+            <p className="mb-4 text-sm text-slate-500">Valide partidas para definir o time campeao do dia.</p>
+          )}
+
+          <div className="space-y-3">
+            {teamStats.map((team, index) => (
+              <div
+                key={team.teamName}
+                className={`rounded-xl border p-3 ${index === 0 && championTeam ? "border-[#FFCB05]/40 bg-[#FFCB05]/5" : "border-border bg-slate-900/40"}`}
+              >
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="font-semibold text-white">
+                    <span className="mr-2 text-slate-500">{index + 1}o</span>
+                    {team.teamName}
+                  </p>
+                  <div className="flex flex-wrap items-center gap-3 text-xs text-slate-400">
+                    <span><span className="font-semibold text-slate-200">{team.averageScore.toFixed(2)}</span> media/partida</span>
+                    <span><span className="font-semibold text-slate-200">{Math.round(team.winRate * 100)}%</span> vitorias</span>
+                    <span><span className="font-semibold text-slate-200">{team.averagePrizes.toFixed(2)}</span> premios/partida</span>
+                  </div>
+                </div>
+                <p className="mt-1 text-xs text-slate-500">
+                  {team.members.length} escalados ({team.playedCount} jogaram) - {team.matchesPlayed} partidas - {team.wins}V-{team.draws}E-{team.losses}D - {team.defendedPrizes} premios defendidos - {team.points} pts
+                </p>
+                <div className="mt-2 grid gap-1 sm:grid-cols-2">
+                  {team.members.map((member) => (
+                    <div key={member.playerId} className="flex items-center justify-between gap-2 rounded-lg bg-slate-950/70 px-2 py-1 text-xs">
+                      <span className={member.matchesPlayed > 0 ? "text-slate-200" : "text-slate-500"}>
+                        {member.playerName}
+                        {member.matchesPlayed === 0 && (
+                          <span className="ml-1 text-[10px] text-slate-600">(sem partida validada)</span>
+                        )}
+                      </span>
+                      <span className="shrink-0 text-slate-400">
+                        {member.matchesPlayed > 0
+                          ? `${member.wins}V-${member.draws}E-${member.losses}D - ${member.defendedPrizes} premios - ${member.points} pts`
+                          : "-"}
+                      </span>
                     </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            ))}
           </div>
         </div>
       )}
