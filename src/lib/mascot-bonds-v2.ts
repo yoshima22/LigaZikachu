@@ -92,17 +92,51 @@ function importantOptions(location: RefugeLocation, conflict: boolean, firstName
     REST: { challenge: "Combinar limites para o horário de descanso", listen: "Ouvir quem precisava de silêncio", cooperate: "Montar juntos um canto confortável", repeat: "Sugerir que compartilhem esse lugar novamente", positiveItem: "BOND_SHARED_PILLOW", positiveName: "Almofada Compartilhada", rivalryItem: "BOND_NIGHT_TEA", rivalryName: "Chá de Boa-Noite" },
     YARD: { challenge: "Transformar a disputa em uma brincadeira com regras", listen: "Perguntar como cada um entendeu a cena", cooperate: "Organizar uma busca em dupla", repeat: "Incentivar um novo encontro no Pátio", positiveItem: "BOND_YARD_TOY", positiveName: "Brinquedo de Pátio", rivalryItem: "BOND_ILLUSTRATED_INVITATION", rivalryName: "Convite Ilustrado" },
   }[location];
+  const choose = (variants: BondOption[]) => pick(variants);
+  const suffix = `${location.toLowerCase()}_${Math.floor(Math.random() * 1_000_000)}`;
   if (conflict) return [
-    { id: "channel_rivalry", intention: "Transformar tensão em motivação", label: local.challenge, outcomePreview: `${firstName} e ${secondName} preservam o motivo da rivalidade: relação -5/-2 e uma promessa de continuação.`, type: "AGGRESSIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.rivalryItem, itemName: local.rivalryName }, scoreDelta: -5, scoreDeltaB: -2, expA: location === "TRAINING" ? 18 : 8 },
-    { id: "listen_both", intention: "Compreender antes de decidir", label: local.listen, outcomePreview: "A tensão diminui sem apagar o motivo do conflito; os dois ganham respeito em ritmos diferentes.", type: "NEUTRAL", scoreDelta: 2, scoreDeltaB: 4 },
-    { id: "repair_together", intention: "Reconstruir confiança", label: local.cooperate, outcomePreview: "A convivência melhora: relação +7/+5, felicidade +3 para ambos e uma memória de reconciliação.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 3, happinessB: 3 },
-    { id: "let_them_settle", intention: "Confiar na personalidade deles", label: "Não interferir e observar a consequência", outcomePreview: "Sem custo. Cada mascote reage de acordo com sua personalidade e a rivalidade pode se intensificar.", type: "NEUTRAL", scoreDelta: -1, scoreDeltaB: 1 },
+    choose([
+      { id: `channel_${suffix}`, intention: "Transformar tensão em motivação", label: local.challenge, outcomePreview: `${firstName} e ${secondName} mantêm uma rivalidade controlada: relação −5/−2, EXP para quem tomou a iniciativa e uma promessa de revanche.`, type: "AGGRESSIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.rivalryItem, itemName: local.rivalryName }, scoreDelta: -5, scoreDeltaB: -2, expA: location === "TRAINING" ? 18 : 8 },
+      { id: `stakes_${suffix}`, intention: "Aumentar o desafio", label: `Pedir que ${firstName} prove seu ponto em uma disputa justa`, outcomePreview: "A rivalidade cresce nas duas direções (−4/−4), mas ambos saem motivados e o conflito vira memória competitiva.", type: "AGGRESSIVE", scoreDelta: -4, scoreDeltaB: -4, expA: 10, expB: 10 },
+      { id: `private_rivalry_${suffix}`, intention: "Preservar a competição", label: `Deixar ${secondName} escolher as regras da revanche`, outcomePreview: "A relação de quem foi desafiado cai −3; o desafiante ganha +12 EXP e a revanche continua aberta.", type: "AGGRESSIVE", scoreDelta: -1, scoreDeltaB: -3, expA: 12 },
+    ]),
+    choose([
+      { id: `repair_${suffix}`, intention: "Reconstruir confiança", label: local.cooperate, outcomePreview: "A convivência melhora em +7/+5, ambos recebem +3 de felicidade e guardam uma memória de reconciliação.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 3, happinessB: 3 },
+      { id: `gesture_${suffix}`, intention: "Oferecer um gesto concreto", label: `${firstName} entrega o recurso a ${secondName}`, outcomePreview: "O gesto custa um item local, concede +6/+4 de relação e +4 de felicidade a quem o recebe.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 6, scoreDeltaB: 4, happinessB: 4 },
+      { id: `shared_task_${suffix}`, intention: "Trocar discussão por cooperação", label: `Dar aos dois uma tarefa que só funciona em dupla`, outcomePreview: "A tensão vira cooperação: +5 nas duas direções e +8 EXP para cada mascote.", type: "POSITIVE", scoreDelta: 5, scoreDeltaB: 5, expA: 8, expB: 8 },
+    ]),
+    choose([
+      { id: `listen_${suffix}`, intention: "Compreender antes de decidir", label: local.listen, outcomePreview: "A tensão diminui sem apagar sua causa: +2/+4 de relação e uma memória sobre as duas versões.", type: "NEUTRAL", scoreDelta: 2, scoreDeltaB: 4 },
+      { id: `hear_first_${suffix}`, intention: "Ouvir quem tomou a iniciativa", label: `Perguntar a ${firstName} o que estava tentando provar`, outcomePreview: "A conversa dá +3 na direção principal e +6 EXP, mas não força reconciliação.", type: "NEUTRAL", scoreDelta: 3, scoreDeltaB: 0, expA: 6 },
+      { id: `hear_second_${suffix}`, intention: "Dar espaço ao outro lado", label: `Deixar ${secondName} contar como interpretou a situação`, outcomePreview: "O segundo mascote se sente ouvido: +1/+4 de relação e +3 de felicidade para ele.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 4, happinessB: 3 },
+    ]),
+    choose([
+      { id: `observe_${suffix}`, intention: "Confiar na personalidade deles", label: "Não interferir e observar a consequência", outcomePreview: "Sem custo. A relação muda pouco (−1/+1) e a cena permanece no diário como conflito não resolvido.", type: "NEUTRAL", scoreDelta: -1, scoreDeltaB: 1 },
+      { id: `pause_${suffix}`, intention: "Dar tempo antes de reagir", label: "Separá-los por enquanto e retomar o assunto depois", outcomePreview: "Sem custo. Evita uma escalada imediata, não altera a relação e registra a tensão para histórias futuras.", type: "NEUTRAL", scoreDelta: 0, scoreDeltaB: 0 },
+      { id: `accept_${suffix}`, intention: "Aceitar o desacordo", label: "Deixar claro que eles não precisam concordar", outcomePreview: "Sem custo. Cada direção ganha +1 por respeito, sem apagar a rivalidade.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 1 },
+    ]),
   ];
   return [
-    { id: "celebrate_bond", intention: "Reconhecer a aproximação", label: "Celebrar o momento com os dois", outcomePreview: "Fortalece a relação em +7/+5, concede felicidade +4/+3 e registra uma lembrança positiva.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 4, happinessB: 3 },
-    { id: "encourage_independence", intention: "Estimular sem forçar", label: local.repeat, outcomePreview: "Cria uma oportunidade futura e aproxima mais o mascote que tomou a iniciativa.", type: "POSITIVE", scoreDelta: 4, scoreDeltaB: 2 },
-    { id: "ask_meaning", intention: "Entender o que isso significou", label: `Conversar separadamente com ${firstName}`, outcomePreview: "Revela uma interpretação pessoal e pode transformar admiração em motivação.", type: "NEUTRAL", scoreDelta: 3, scoreDeltaB: 0, expA: 6 },
-    { id: "preserve_moment", intention: "Deixar acontecer naturalmente", label: "Guardar a memória sem interferir", outcomePreview: "Sem custo. O acontecimento entra no diário, mas a relação muda pouco.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 1 },
+    choose([
+      { id: `celebrate_${suffix}`, intention: "Reconhecer a aproximação", label: "Celebrar o momento com os dois", outcomePreview: "Fortalece a relação em +7/+5, concede felicidade +4/+3 e registra uma lembrança positiva.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 7, scoreDeltaB: 5, happinessA: 4, happinessB: 3 },
+      { id: `souvenir_${suffix}`, intention: "Transformar o encontro em lembrança", label: `Preparar uma recordação para ${firstName} e ${secondName}`, outcomePreview: "Custa um item local, concede +6 nas duas direções e registra uma memória compartilhada.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 6, scoreDeltaB: 6 },
+      { id: `repeat_paid_${suffix}`, intention: "Investir no próximo encontro", label: local.repeat, outcomePreview: "Custa um item local, aproxima em +5/+4 e deixa um convite narrativo para um novo encontro.", type: "POSITIVE", cost: { kind: "BOND_ITEM", quantity: 1, itemType: local.positiveItem, itemName: local.positiveName }, scoreDelta: 5, scoreDeltaB: 4 },
+    ]),
+    choose([
+      { id: `independence_${suffix}`, intention: "Estimular sem forçar", label: local.repeat, outcomePreview: "Sem custo. Cria uma oportunidade futura e aproxima em +4/+2, favorecendo quem tomou a iniciativa.", type: "POSITIVE", scoreDelta: 4, scoreDeltaB: 2 },
+      { id: `praise_second_${suffix}`, intention: "Reconhecer reciprocidade", label: `Elogiar a maneira como ${secondName} respondeu`, outcomePreview: "A resposta recebe reconhecimento: +2/+4 de relação e +5 EXP para o segundo mascote.", type: "POSITIVE", scoreDelta: 2, scoreDeltaB: 4, expB: 5 },
+      { id: `team_goal_${suffix}`, intention: "Criar um objetivo em comum", label: "Propor uma pequena missão para a dupla", outcomePreview: "Os dois ganham +3 de relação e +7 EXP; a parceria fica registrada para eventos futuros.", type: "POSITIVE", scoreDelta: 3, scoreDeltaB: 3, expA: 7, expB: 7 },
+    ]),
+    choose([
+      { id: `meaning_${suffix}`, intention: "Entender o que isso significou", label: `Conversar separadamente com ${firstName}`, outcomePreview: "Revela uma interpretação pessoal: +3 na direção principal e +6 EXP, sem decidir pelo outro mascote.", type: "NEUTRAL", scoreDelta: 3, scoreDeltaB: 0, expA: 6 },
+      { id: `second_meaning_${suffix}`, intention: "Conhecer o outro ponto de vista", label: `Perguntar a ${secondName} por que o momento foi importante`, outcomePreview: "A relação muda em +1/+3 e o segundo mascote recebe +2 de felicidade.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 3, happinessB: 2 },
+      { id: `name_bond_${suffix}`, intention: "Dar significado ao vínculo", label: "Perguntar aos dois se querem repetir essa experiência", outcomePreview: "Uma resposta cautelosa aproxima em +2/+2 e transforma o encontro em memória recorrente.", type: "NEUTRAL", scoreDelta: 2, scoreDeltaB: 2 },
+    ]),
+    choose([
+      { id: `preserve_${suffix}`, intention: "Deixar acontecer naturalmente", label: "Guardar a memória sem interferir", outcomePreview: "Sem custo. O acontecimento entra no diário e a relação muda apenas +1/+1.", type: "NEUTRAL", scoreDelta: 1, scoreDeltaB: 1 },
+      { id: `watch_next_${suffix}`, intention: "Observar antes de definir", label: "Esperar o próximo encontro antes de incentivar algo", outcomePreview: "Sem custo e sem mudança de relação. A memória será usada como contexto no próximo acontecimento.", type: "NEUTRAL", scoreDelta: 0, scoreDeltaB: 0 },
+      { id: `quiet_support_${suffix}`, intention: "Apoiar discretamente", label: "Não interromper, mas preparar o espaço para continuarem", outcomePreview: "Sem custo. Ambos recebem +2 de relação e o momento permanece espontâneo.", type: "POSITIVE", scoreDelta: 2, scoreDeltaB: 2 },
+    ]),
   ];
 }
 

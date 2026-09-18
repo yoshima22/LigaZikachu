@@ -4,8 +4,7 @@ import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondsV2SectionTabs, BondDirectoryV2, BondsTutorial, RefugeLocationsTabs } from "./bonds-v2-controls";
-import { ResolveBondOptionButton } from "./bond-actions";
+import { BondsV2SectionTabs, BondDirectoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs } from "./bonds-v2-controls";
 import { BOND_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
@@ -14,7 +13,7 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
-  const [mascots, publicRoutines, relations, memories, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
+  const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
@@ -43,16 +42,21 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
       },
     }),
-    prisma.mascotBondMemory.findMany({
-      where: { sourceType: "REFUGE" },
+    Promise.all((Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => prisma.mascotBondMemory.findMany({
+      where: { sourceType: "REFUGE", metadata: { path: ["location"], equals: location } },
       orderBy: { createdAt: "desc" },
-      take: 400,
-      include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
-    }),
+      // O limite é individual por região: uma Horta lotada não apaga o
+      // histórico visível de Descanso, Treino ou Pátio.
+      take: 250,
+      include: {
+        mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+        mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+      },
+    }))),
     prisma.mascotSocialEvent.findMany({
       where: { ownerId: playerId, status: "PENDING" },
       orderBy: [{ isImportant: "desc" }, { createdAt: "desc" }],
-      take: 8,
+      take: 20,
       include: { mascotA: { select: { pokemonId: true, nickname: true } }, mascotB: { select: { pokemonId: true, nickname: true } } },
     }),
     prisma.mascotSocialEvent.count({ where: { ownerId: playerId, createdAt: { gte: since } } }),
@@ -69,6 +73,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   const backgrounds = rawSettings.backgrounds && typeof rawSettings.backgrounds === "object" && !Array.isArray(rawSettings.backgrounds)
     ? rawSettings.backgrounds as Record<string, unknown>
     : {};
+  const recentMemories = memoriesByLocation.flat().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 30);
   const changedRelations = relations.filter((relation) => relation.updatedAt >= since).length;
   const activeCount = relations.filter((relation) => relation.isActive).length;
   const ownMascots = mascots.map((mascot) => ({
@@ -114,7 +119,22 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   }, {})).sort((a, b) => b.total - a.total).slice(0, 6);
   const strongestFriend = relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).sort((a, b) => b.relationshipScore - a.relationshipScore)[0];
   const strongestRival = relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).sort((a, b) => a.relationshipScore - b.relationshipScore)[0];
-  const refugeTabs = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => {
+  const importantMoments = pendingEvents.map((event) => {
+    const locationKey = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).find((location) => event.eventType.includes(`REFUGE_${location}`));
+    const nameA = mascotName(event.mascotA);
+    const nameB = event.mascotB ? mascotName(event.mascotB) : null;
+    return {
+      id: event.id,
+      title: event.title,
+      description: event.description,
+      context: locationKey ? `${REFUGE_LOCATIONS[locationKey].icon} ${REFUGE_LOCATIONS[locationKey].label}` : "Refúgio",
+      participants: nameB ? `${nameA} e ${nameB}` : nameA,
+      spriteA: getSpriteUrl(event.mascotA.pokemonId),
+      spriteB: event.mascotB ? getSpriteUrl(event.mascotB.pokemonId) : null,
+      options: normalizeBondOptions(event.optionsJson),
+    };
+  });
+  const refugeTabs = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location, locationIndex) => {
     const occupants = publicRoutines.filter((routine) => routine.locationType === location).map((routine) => ({
       id: routine.mascot.id,
       name: mascotName(routine.mascot),
@@ -127,12 +147,22 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       startedAt: routine.startedAt.toISOString(),
       moveAvailableAt: new Date(routine.updatedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString(),
     }));
-    const stories = memories.filter((memory) => {
+    const stories = memoriesByLocation[locationIndex].map((memory) => {
       const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
-      return metadata.location === location;
-    }).slice(0, 100).map((memory) => {
-      const metadata = memory.metadata && typeof memory.metadata === "object" && !Array.isArray(memory.metadata) ? memory.metadata as Record<string, unknown> : {};
-      return { id: memory.id, title: memory.title, description: memory.description, conflict: metadata.conflict === true, when: memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) };
+      const nameA = mascotName(memory.mascotA);
+      const nameB = memory.mascotB ? mascotName(memory.mascotB) : null;
+      const participants = nameB ? `${nameA} e ${nameB}` : nameA;
+      const owners = [...new Set([memory.mascotA.player.displayName, memory.mascotB?.player.displayName].filter((name): name is string => Boolean(name)))];
+      return {
+        id: memory.id,
+        title: memory.title,
+        description: memory.description,
+        conflict: metadata.conflict === true,
+        participants,
+        owners: owners.join(" · "),
+        scoreDelta: typeof metadata.scoreDelta === "number" ? metadata.scoreDelta : null,
+        when: memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
+      };
     });
     return { location, occupants, backgroundUrl: typeof backgrounds[location] === "string" ? backgrounds[location] as string : "", stories };
   });
@@ -169,7 +199,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     <section className="mb-5 rounded-3xl border border-violet-300/15 bg-violet-300/[.035] p-4"><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-violet-300">Recursos exclusivos e negociáveis</p><h2 className="text-lg font-black text-white">Sua bolsa de itens dos Laços</h2><p className="mt-1 text-xs text-slate-400">Produzidos pelos espaços públicos e consumidos nas decisões. Podem ser negociados no Bazar, mas não aparecem no Miauvadão ou em ofertas exclusivas.</p></div>{bondInventory.length === 0 ? <Empty text="Nenhum item de Laços ainda. As rotinas públicas podem produzir os primeiros recursos." /> : <div className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">{bondInventory.map(({ item, quantity }) => <article key={item.id} className="rounded-xl border border-white/10 bg-slate-950/60 p-3"><div className="flex items-start gap-2"><span className="text-xl">{getShopItemEmoji(item.type)}</span><div className="min-w-0 flex-1"><div className="flex items-center justify-between gap-2"><p className="truncate text-xs font-bold text-white">{item.name}</p><span className="rounded-full bg-violet-300/10 px-2 py-0.5 text-[10px] font-black text-violet-200">×{quantity}</span></div><p className="mt-1 text-[10px] leading-4 text-slate-400">{item.description}</p></div></div></article>)}</div>}</section>
     <section>
       <div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-amber-300">Escolhas que mudam histórias</p><h2 className="text-xl font-black text-white">Momentos importantes</h2><p className="mt-1 text-xs text-slate-500">Acontecimentos comuns entram no diário. Somente decisões de impacto pedem sua intervenção.</p></div>
-      {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <div className="grid gap-3 lg:grid-cols-2">{pendingEvents.map((event) => <article key={event.id} className="rounded-2xl border border-amber-300/15 bg-[linear-gradient(135deg,rgba(245,158,11,.07),rgba(15,23,42,.7))] p-4"><div className="flex items-center gap-3"><div className="flex -space-x-2"><img src={getSpriteUrl(event.mascotA.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />{event.mascotB && <img src={getSpriteUrl(event.mascotB.pokemonId)} alt="" className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain" />}</div><div><p className="text-[10px] uppercase tracking-wider text-amber-300">{event.sourceType} · {event.isImportant ? "momento decisivo" : "decisão social"}</p><h3 className="font-bold text-white">{event.title}</h3></div></div><p className="my-3 text-sm leading-6 text-slate-300">{event.description}</p><div className="grid gap-2">{normalizeBondOptions(event.optionsJson).map((option) => <ResolveBondOptionButton key={option.id} eventId={event.id} option={option} />)}</div></article>)}</div>}
+      {pendingEvents.length === 0 ? <Empty text="Nenhuma decisão importante aguarda resposta." /> : <ImportantMomentsList moments={importantMoments} />}
     </section>
       </>}
       social={<>
@@ -194,7 +224,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
 
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
       <div><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-fuchsia-300">Rede social dos mascotes</p><h2 className="text-xl font-black text-white">Laços e efeitos</h2><p className="mt-1 text-xs text-slate-500">Relações são direcionais: o que um mascote sente pode não ser correspondido.</p></div><BondDirectoryV2 relations={bondItems} /></div>
-      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias do Refúgio</h2><p className="text-xs text-slate-500">O diário explica por que cada relação mudou.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{memories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : memories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{memory.sourceType} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
+      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias recentes do Refúgio</h2><p className="text-xs text-slate-500">Resumo cronológico; o diário completo e filtrável fica dentro de cada região.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{recentMemories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : recentMemories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{memory.sourceType} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
     </section>
       </div>}
     />
