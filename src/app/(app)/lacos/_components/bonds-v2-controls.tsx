@@ -569,6 +569,12 @@ export function RefugeLocationScene({
     return `${Math.floor(hours / 24)}d ${hours % 24}h nesta área`;
   }
 
+  function formatCooldown(minutes: number) {
+    if (minutes < 60) return `${minutes} min`;
+    const hours = Math.floor(minutes / 60);
+    const rest = minutes % 60;
+    return rest > 0 ? `${hours}h ${rest}min` : `${hours}h`;
+  }
   function cooldownMinutes(iso: string | null) {
     if (!iso || now === null) return 0;
     return Math.max(0, Math.ceil((new Date(iso).getTime() - now) / 60_000));
@@ -803,14 +809,16 @@ export function RefugeLocationScene({
                   )}
                   <button
                     type="button"
-                    disabled={pending}
+                    disabled={pending || cooldownMinutes(selectedOccupant.moveAvailableAt) > 0}
                     onClick={() => {
                       remove(selectedOccupant.id);
                       setSelectedOccupant(null);
                     }}
-                    className="rounded-xl border border-rose-300/20 px-3 py-2 text-xs font-bold text-rose-200"
+                    className="rounded-xl border border-rose-300/20 px-3 py-2 text-xs font-bold text-rose-200 disabled:opacity-40"
                   >
-                    Retirar da área
+                    {cooldownMinutes(selectedOccupant.moveAvailableAt) > 0
+                      ? `Retirar em ${formatCooldown(cooldownMinutes(selectedOccupant.moveAvailableAt))}`
+                      : "Retirar da área"}
                   </button>
                 </>
               )}
@@ -822,6 +830,11 @@ export function RefugeLocationScene({
                 <X size={15} />
               </button>
             </div>
+            {selectedOccupant.own && cooldownMinutes(selectedOccupant.moveAvailableAt) > 0 && (
+              <p className="w-full rounded-lg border border-amber-300/20 bg-amber-300/[.08] px-3 py-2 text-[11px] font-semibold text-amber-200">
+                {selectedOccupant.name} ainda está se adaptando a esta área. A retirada (e a troca de espaço) libera em {formatCooldown(cooldownMinutes(selectedOccupant.moveAvailableAt))}.
+              </p>
+            )}
             {/* Fica fora da linha dos botões: dentro dela, a frase esticava a
                 coluna de ações e espremia a ficha do mascote à esquerda. */}
             {influenceFeedback && !selectedOccupant.own && (

@@ -6,7 +6,8 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { Sparkles, Image as ImageIcon, Target, Wallet, Plus, Trash2, Clock, Percent, X, Shield } from "lucide-react";
+import { Sparkles, Image as ImageIcon, Target, Wallet, Plus, Trash2, Clock, Percent, X, Shield, AlertTriangle } from "lucide-react";
+import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
   saveGachaBannerAction, deleteGachaBannerAction,
   saveGachaEntryAction, deleteGachaEntryAction,
@@ -80,6 +81,15 @@ const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> =
   { key: "BAZAR_GASTO_LC", label: "Gasto de LC no Bazar", metric: "LC" },
   { key: "OVOS_ABERTOS", label: "Aberturas de ovos", metric: "ovos" },
 ];
+
+/** Arte de uma entrada: imagem própria > sprite do mascote > ovo de Lab/Celestial. */
+function entryArt(entry: { imageUrl: string | null; kind: string; pokemonId?: number | null; rarity: string }, icons: GachaPanelProps["icons"]) {
+  if (entry.imageUrl) return entry.imageUrl;
+  if (entry.kind === "MASCOT" && entry.pokemonId) return getStaticSpriteUrl(entry.pokemonId);
+  if (entry.rarity === "CELESTIAL") return icons.celestialEgg;
+  if (entry.rarity === "LAB") return icons.labEgg;
+  return null;
+}
 
 const inputCls = "w-full rounded-xl border border-border bg-slate-900/70 px-3 py-2 text-xs text-slate-200 outline-none focus:border-cyan-300/60";
 
@@ -160,7 +170,7 @@ function Empty() {
 
 /* ─────────────────────────── 1. tela do jogador ─────────────────────────── */
 
-type PullResult = { label: string; rarity: string; kind: string; imageUrl: string | null; guaranteed: boolean };
+type PullResult = { label: string; rarity: string; kind: string; imageUrl: string | null; pokemonId?: number | null; guaranteed: boolean };
 
 function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: GachaPanelProps & { banner: GachaBannerDTO | null }) {
   const [pending, startTransition] = useTransition();
@@ -171,11 +181,17 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
   const rarities = [...new Set(banner.entries.map((e) => e.rarity))].sort(
     (a, b) => RARITIES.indexOf(a as never) - RARITIES.indexOf(b as never),
   );
-  // Só Lab e Celestial ganham arte na tela; o resto é citado por texto.
-  const featured = rarities.filter((r) => r === "LAB" || r === "CELESTIAL");
-  const textual = rarities.filter((r) => r !== "LAB" && r !== "CELESTIAL");
+  // Ganham arte na tela: mascotes, destaques de rate-up e os ovos Lab/Celestial.
+  // O resto é citado por texto (ícone de ovo comum é simples e repetido).
+  const highlights = banner.entries.filter(
+    (entry) => entryArt(entry, icons) !== null && (entry.kind === "MASCOT" || entry.rateUp || entry.rarity === "LAB" || entry.rarity === "CELESTIAL"),
+  );
+  const highlighted = new Set(highlights.map((entry) => entry.rarity));
+  const textual = rarities.filter((rarity) => !highlighted.has(rarity));
   const rateUps = banner.entries.filter((e) => e.rateUp);
   const endsAt = new Date(banner.endsAt);
+  const startsAt = new Date(banner.startsAt);
+  const isLive = banner.active && startsAt <= new Date() && endsAt > new Date();
 
   function doPull(currency: Currency, count: 1 | 10) {
     startTransition(async () => {
@@ -187,6 +203,12 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
 
   return (
     <div className="space-y-4">
+      {!isLive && (
+        <p className="flex items-center gap-2 rounded-2xl border border-amber-400/30 bg-amber-400/10 p-3 text-xs text-amber-200">
+          <AlertTriangle size={14} className="shrink-0" />
+          Banner fora do ar ({!banner.active ? "marcado como inativo" : "fora da janela de datas"}). Jogadores não conseguem abrir; como admin você ainda pode abrir para testar — o custo em moedas é cobrado normalmente.
+        </p>
+      )}
       <div className="relative overflow-hidden rounded-3xl border border-slate-700/60 bg-gradient-to-br from-[#0b1027] via-[#131a3d] to-[#07142b]">
         {banner.imageUrl && (
           /* eslint-disable-next-line @next/next/no-img-element */
@@ -221,13 +243,14 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
 
             <div className="rounded-2xl border border-slate-600/50 bg-slate-950/70 p-4">
               <p className="text-[10px] uppercase tracking-widest text-slate-400">Raridades possíveis neste banner</p>
-              {featured.length > 0 && (
+              {highlights.length > 0 && (
                 <div className="mt-3 flex flex-wrap justify-end gap-4">
-                  {featured.map((rarity) => (
-                    <div key={rarity} className="flex flex-col items-center gap-1">
+                  {highlights.map((entry) => (
+                    <div key={entry.id} className="flex w-20 flex-col items-center gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={rarity === "CELESTIAL" ? icons.celestialEgg : icons.labEgg} alt="" className="h-16 w-16 object-contain drop-shadow" />
-                      <span className="text-[9px] uppercase tracking-wider" style={{ color: RARITY_COLOR[rarity] }}>{RARITY_LABEL[rarity]}</span>
+                      <img src={entryArt(entry, icons)!} alt="" className="h-16 w-16 object-contain drop-shadow" />
+                      <span className="text-center text-[9px] leading-tight text-slate-200">{entry.label}</span>
+                      <span className="text-[9px] uppercase tracking-wider" style={{ color: RARITY_COLOR[entry.rarity] }}>{RARITY_LABEL[entry.rarity]}</span>
                     </div>
                   ))}
                 </div>
@@ -310,9 +333,9 @@ function PullAnimation({ pull, icons, onClose }: { pull: { currency: Currency; r
           {pull.results.map((result, index) => (
             <div key={index} className="flex h-32 w-24 flex-col items-center justify-center gap-1 rounded-xl border p-2"
               style={{ borderColor: RARITY_COLOR[result.rarity], background: `${RARITY_COLOR[result.rarity]}18`, animation: `gacha-reveal .45s ease-out ${1.4 + index * 0.12}s both` }}>
-              {(result.imageUrl || result.rarity === "CELESTIAL" || result.rarity === "LAB") && (
+              {entryArt(result, icons) && (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={result.imageUrl ?? (result.rarity === "CELESTIAL" ? icons.celestialEgg : icons.labEgg)} alt="" className="h-12 w-12 object-contain" />
+                <img src={entryArt(result, icons)!} alt="" className="h-12 w-12 object-contain" />
               )}
               <span className="text-[9px] leading-tight text-slate-200">{result.label}</span>
               <span className="text-[8px] uppercase" style={{ color: RARITY_COLOR[result.rarity] }}>{RARITY_LABEL[result.rarity]}</span>
@@ -620,7 +643,16 @@ function EntryRow({ entry, banner, shopItems, total, onSave, onDelete }: {
             {EGG_TYPES.map((type) => <option key={type} value={type}>{RARITY_LABEL[type]}</option>)}
           </select>
         ) : draft.kind === "MASCOT" ? (
-          <input type="number" value={draft.pokemonId ?? ""} onChange={(e) => set("pokemonId", Number(e.target.value))} className={inputCls} />
+          <div className="flex items-center gap-2">
+            <input type="number" value={draft.pokemonId ?? ""} onChange={(e) => set("pokemonId", Number(e.target.value))} className={inputCls} />
+            {draft.pokemonId ? (
+              <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-300">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={getStaticSpriteUrl(draft.pokemonId)} alt="" className="h-8 w-8 object-contain" />
+                {getPokemonName(draft.pokemonId)}
+              </span>
+            ) : <span className="shrink-0 text-[10px] text-amber-300">nº obrigatório</span>}
+          </div>
         ) : (
           <select value={draft.itemId ?? ""} onChange={(e) => set("itemId", e.target.value)} className={inputCls}>
             <option value="">selecione…</option>

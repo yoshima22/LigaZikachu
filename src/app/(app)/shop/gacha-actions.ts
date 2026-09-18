@@ -8,7 +8,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
-import { getSessionUser, requirePlatformAdmin } from "@/lib/auth/permissions";
+import { getSessionUser, isAdmin, requirePlatformAdmin } from "@/lib/auth/permissions";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import { changeGachaCurrency, currentWeekKey, rarityRank, rollPulls, RARITY_ORDER } from "@/lib/gacha";
 import { EGG_STAT_RANGES, EGG_SHINY_CHANCE, getPokemonName, PERSONALITIES } from "@/lib/mascot-data";
@@ -284,7 +284,7 @@ export async function grantGachaCurrencyAction(input: {
 
 /* ─────────────────────────── jogador: abrir banner ─────────────────────────── */
 
-type GrantedReward = { label: string; rarity: string; kind: string; imageUrl: string | null; guaranteed: boolean };
+type GrantedReward = { label: string; rarity: string; kind: string; imageUrl: string | null; pokemonId: number | null; guaranteed: boolean };
 
 export async function pullGachaBannerAction(bannerId: string, currency: GachaCurrency, count: 1 | 10) {
   const user = await getSessionUser();
@@ -300,7 +300,9 @@ export async function pullGachaBannerAction(bannerId: string, currency: GachaCur
   if (!banner) return { error: "Banner não encontrado." };
 
   const now = new Date();
-  if (!banner.active || banner.startsAt > now || banner.endsAt <= now) {
+  const live = banner.active && banner.startsAt <= now && banner.endsAt > now;
+  // Admin de plataforma abre banner fora do ar para testar animação e pool.
+  if (!live && !isAdmin(user.role)) {
     return { error: "Este banner não está ativo." };
   }
   if (banner.entries.length === 0) return { error: "Este banner ainda não tem conteúdo configurado." };
@@ -360,6 +362,7 @@ export async function pullGachaBannerAction(bannerId: string, currency: GachaCur
           rarity: entry.rarity,
           kind: entry.kind,
           imageUrl: entry.imageUrl,
+          pokemonId: entry.pokemonId,
           guaranteed: result.guaranteedBy !== null,
         });
       }
