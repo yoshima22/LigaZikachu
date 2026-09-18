@@ -1322,6 +1322,7 @@ function rollBuffItemType(durationKey: ExpeditionDuration): string {
   const leagueChance = durationKey === "6h" ? 0.18 : durationKey === "3h" ? 0.10 : 0.05;
   if (Math.random() < leagueChance) return randomFrom([...LEAGUE_SHOP_ITEM_TYPES]);
   const roll = Math.random() * 100;
+  if (roll < (durationKey === "6h" ? 12 : durationKey === "3h" ? 9 : 6)) return "ANTIDOTE";
   if (durationKey === "6h") {
     if (roll < 34) return "MASCOT_BUFF_EXP";   // 34% — Vitamina Elétrica
     if (roll < 62) return "MASCOT_BUFF_LUCK";  // 28% — Amuleto da Sorte

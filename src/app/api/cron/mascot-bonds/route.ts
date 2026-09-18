@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from "next/server";
 import {
   autoResolveExpiredBondEvents,
   ensureBondEventCadence,
+  processMascotDiseaseForPlayer,
 } from "@/lib/mascot-bonds";
 import { prisma } from "@/lib/prisma";
 import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/lib/mascot-bonds-v2";
@@ -58,6 +59,19 @@ export async function GET(req: NextRequest) {
   let failures = 0;
   let refugeMoments = 0;
   let importantRefugeMoments = 0;
+  let diseaseCases = 0;
+  let diseaseInfections = 0;
+
+  // Saúde é processada para todas as contas ativas com mascotes, mesmo sem
+  // sessão ou visita à página. O cron roda a cada quatro horas.
+  const diseasePlayers = await prisma.player.findMany({ where: { active: true, mascots: { some: {} }, user: { status: "ACTIVE" } }, select: { id: true }, take: 500 });
+  for (let index = 0; index < diseasePlayers.length; index += 10) {
+    const results = await Promise.allSettled(diseasePlayers.slice(index, index + 10).map((player) => processMascotDiseaseForPlayer(player.id)));
+    for (const result of results) {
+      if (result.status === "fulfilled") { diseaseCases += result.value.newCases; diseaseInfections += result.value.infections; }
+      else failures += 1;
+    }
+  }
 
   for (let index = 0; index < players.length; index += 5) {
     const batch = players.slice(index, index + 5);
@@ -143,5 +157,7 @@ export async function GET(req: NextRequest) {
     distancesCompleted: distancesCompleted.count,
     affectedMascots: new Set(pairIds).size,
     staleRelationsRemoved: staleRelationsRemoved.count,
+    diseaseCases,
+    diseaseInfections,
   });
 }

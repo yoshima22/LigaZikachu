@@ -20,6 +20,7 @@ interface MascotOption {
   hatchedFromEggType?: string | null; hatchedFromEggOrigin?: string | null;
   proteinDoses?: number;
   activeBuffTypes?: string[];
+  diseasedAt?: Date | string | null;
 }
 
 type RainbowFeatherSnapshot = {
@@ -60,6 +61,7 @@ const BUFF_EMOJI: Record<string, string> = {
   XP_SHARE:          "📡",
   XP_SHARE_TEAM:     "📡",
   RAINBOW_FEATHER:   "🌈",
+  ANTIDOTE:          "🧪",
 };
 
 // Onde cada buff de EXP se aplica
@@ -185,6 +187,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
   const isRainbowFeather = selectedBuffItem?.type === "RAINBOW_FEATHER";
   const isWeaknessPolicy = selectedBuffItem?.type === "WEAKNESS_POLICY";
+  const isAntidote = selectedBuffItem?.type === "ANTIDOTE";
   const isAdminLabFeather = selectedBuffItem?.metadata?.adminLabOriginOverride === true;
   const featherTier = selectedBuffItem?.metadata?.eggTier;
   const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
@@ -200,6 +203,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       : "COMMON";
   };
   const isEligible = (mascot: MascotOption) => {
+    if (isAntidote) return Boolean(mascot.diseasedAt);
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
       return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;

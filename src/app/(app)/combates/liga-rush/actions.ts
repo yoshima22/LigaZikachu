@@ -215,7 +215,7 @@ export async function getRushDataAction() {
     select: {
       id: true, pokemonId: true, nickname: true, level: true, preferredCombatRole: true,
       personality: true,
-      statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+      statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true,
       megaEvolvedAt: true, megaEvolvedFromPokemonId: true, primaryTypeOverride: true, secondaryTypeOverride: true,
     },
   }) : [];

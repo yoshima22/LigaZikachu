@@ -29,6 +29,7 @@ export const dynamic = "force-dynamic";
 
 const BUFF_TYPES_LIST = [
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
+  "ANTIDOTE",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","XP_SHARE_TEAM","RAINBOW_FEATHER",
   ...MEGA_STONE_SHOP_ITEM_TYPES,
 ] as const;
@@ -98,7 +99,7 @@ async function fetchMascotPageData(playerId: string) {
         arenaState: true, bazarListed: true,
         injuredAt: true, restingUntil: true,
         hatchedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true,
-        lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, socialCooldownUntil: true,
+        lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, diseasedAt: true, diseaseLastSpreadAt: true, socialCooldownUntil: true,
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
@@ -387,6 +388,7 @@ export default async function MascotesPage() {
     lastPlayedAt: m.lastPlayedAt,
     lastPettedAt: m.lastPettedAt,
     lastFedAt: m.lastFedAt,
+    diseasedAt: m.diseasedAt,
     socialCooldownUntil: m.socialCooldownUntil,
     evolutionLocked: m.evolutionLocked,
     expLocked: m.expLocked,
@@ -654,6 +656,7 @@ export default async function MascotesPage() {
     hatchedFromEggType: m.hatchedFromEggType,
     hatchedFromEggOrigin: m.hatchedFromEggOrigin,
     restingUntil: m.restingUntil,
+    diseasedAt: "diseasedAt" in m ? m.diseasedAt as Date | null : null,
   }])).values()]}
   proteinDoses={Object.fromEntries(proteinBoostedMascots.map(b => [b.mascotId, b._count.id]))}
   activeBuffsByMascot={Object.fromEntries([...buffsByMascotId.entries()].map(([id, buffs]) => [id, buffs.map(b => b.type)]))}

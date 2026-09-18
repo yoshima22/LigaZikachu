@@ -116,8 +116,11 @@ export function toLeagueMascot(m: {
   primaryTypeOverride?: string | null;
   secondaryTypeOverride?: string | null;
   personality?: string | null;
+  diseasedAt?: Date | string | null;
 }, slot: number, role?: string | null): LeagueMascot {
   const combatRole = normalizeCombatRole(role);
+  const disease = m.diseasedAt ? 0.6 : 1;
+  const effective = (value: number) => Math.max(1, Math.floor(value * disease));
   return {
     id: m.id,
     ownerId: m.playerId,
@@ -126,12 +129,12 @@ export function toLeagueMascot(m: {
     name: m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId),
     types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(m.pokemonId),
     level: m.level,
-    force: m.statForce,
-    agility: m.statAgility,
-    instinct: m.statInstinct,
-    vitality: m.statVitality,
-    charisma: m.statCharisma,
-    hp: Math.max(10, Math.round(55 + m.level * 6 + m.statVitality * 4)),
+    force: effective(m.statForce),
+    agility: effective(m.statAgility),
+    instinct: effective(m.statInstinct),
+    vitality: effective(m.statVitality),
+    charisma: effective(m.statCharisma),
+    hp: Math.max(10, Math.round((55 + m.level * 6 + m.statVitality * 4) * disease)),
     combatRole,
     slot,
   };

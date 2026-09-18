@@ -682,7 +682,7 @@ async function validatePresetMascots(playerId: string, mascotIds: unknown, roles
   const ids = mascotIds as string[];
   const owned = await prisma.mascot.findMany({
     where: { id: { in: ids }, playerId },
-    select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
+    select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true },
   });
   if (owned.length !== ids.length) return { error: "Algum mascote selecionado não pertence a você." as string };
   const map = new Map<string, PresetMascot>(owned.map((m) => [m.id, m]));
@@ -2068,7 +2068,7 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
           playerId: true,
           isFavorite: true,
           level: true,
-          statForce: true,
+          statForce: true, diseasedAt: true,
           statAgility: true,
           statVitality: true,
           statInstinct: true,

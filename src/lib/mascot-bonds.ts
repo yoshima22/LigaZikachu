@@ -352,6 +352,15 @@ export async function ensureBondEventCadence(
 }
 
 export async function ensureRunawayWarningsForPlayer(playerId: string) {
+  // O sistema de fuga foi aposentado. Avisos antigos são encerrados sem mover,
+  // deletar ou transferir mascotes entre contas.
+  await prisma.mascotSocialEvent.updateMany({
+    where: { ownerId: playerId, eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] }, status: "PENDING" },
+    data: { status: "RESOLVED", resolvedBy: "SYSTEM", resolvedOptionId: "runaway_system_retired", resolvedAt: new Date() },
+  });
+  return;
+  /* legacy preservado temporariamente para leitura de eventos históricos */
+  /* c8 ignore start */
   const player = await prisma.player.findUnique({
     where: { id: playerId },
     select: { notes: true },
@@ -776,6 +785,48 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
     if (result) resolved += 1;
   }
   return resolved;
+}
+
+/** Atualiza doença por negligência e contágio sem depender da página aberta. */
+export async function processMascotDiseaseForPlayer(playerId: string) {
+  const now = new Date();
+  await prisma.mascotSocialEvent.updateMany({ where: { ownerId: playerId, eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] }, status: "PENDING" }, data: { status: "RESOLVED", resolvedBy: "SYSTEM", resolvedOptionId: "runaway_system_retired", resolvedAt: now } });
+  const withoutCareBefore = new Date(now.getTime() - 48 * 60 * 60_000);
+  const spreadBefore = new Date(now.getTime() - 12 * 60 * 60_000);
+  const mascots = await prisma.mascot.findMany({
+    where: { playerId },
+    select: { id: true, pokemonId: true, nickname: true, isEquipped: true, lastFedAt: true, lastPettedAt: true, diseasedAt: true, diseaseLastSpreadAt: true },
+    orderBy: { hatchedAt: "asc" },
+  });
+  let newCases = 0;
+  let infections = 0;
+
+  for (const mascot of mascots) {
+    if (mascot.diseasedAt) continue;
+    const starvingBefore = new Date(now.getTime() - (mascot.isEquipped ? 24 : 120) * 60 * 60_000);
+    const starving = !mascot.lastFedAt || mascot.lastFedAt <= starvingBefore;
+    const withoutCare = !mascot.lastPettedAt || mascot.lastPettedAt <= withoutCareBefore;
+    if (!starving || !withoutCare) continue;
+    if (Math.random() >= 0.35) continue;
+    await prisma.mascot.update({ where: { id: mascot.id }, data: { diseasedAt: now, diseaseLastSpreadAt: now, mood: "TIRED" } });
+    newCases += 1;
+    await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: "Um mascote ficou doente", body: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou doente após muito tempo sem comida e carinho. Seus atributos estão 40% menores até receber um Antídoto.`, href: "/mascotes", entityId: mascot.id, eventKey: `disease:${mascot.id}:${now.toISOString().slice(0, 10)}` } }).catch(() => undefined);
+  }
+
+  const refreshed = await prisma.mascot.findMany({ where: { playerId }, select: { id: true, pokemonId: true, nickname: true, diseasedAt: true, diseaseLastSpreadAt: true } });
+  const healthy = refreshed.filter((mascot) => !mascot.diseasedAt);
+  for (const source of refreshed.filter((mascot) => mascot.diseasedAt && (!mascot.diseaseLastSpreadAt || mascot.diseaseLastSpreadAt <= spreadBefore))) {
+    if (!healthy.length) break;
+    const target = healthy.splice(Math.floor(Math.random() * healthy.length), 1)[0];
+    // Um doente tem 35% de chance de contagiar alguém a cada janela de 12h.
+    if (Math.random() < 0.35) {
+      await prisma.mascot.update({ where: { id: target.id }, data: { diseasedAt: now, diseaseLastSpreadAt: now, mood: "TIRED" } });
+      infections += 1;
+      await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE_SPREAD", title: "A doença se espalhou", body: `${target.nickname ?? getPokemonName(target.pokemonId)} foi contagiado por outro mascote da sua conta. Use Antídoto para interromper a transmissão.`, href: "/mascotes", entityId: target.id, eventKey: `disease-spread:${target.id}:${now.toISOString()}` } }).catch(() => undefined);
+    }
+    await prisma.mascot.update({ where: { id: source.id }, data: { diseaseLastSpreadAt: now } });
+  }
+  return { newCases, infections };
 }
 
 export type BondCombatLink = { mascotAId: string; mascotBId: string; kind: "COLLEAGUE" | "FRIEND" | "SUPER_FRIEND" | "RIVAL" | "ENEMY" | "NEMESIS"; label: string; damagePct: number; defensePct: number };

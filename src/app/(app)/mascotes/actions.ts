@@ -435,7 +435,7 @@ export async function searchOwnedMascotsForItemAction(query: string): Promise<{
       select: {
         id: true, pokemonId: true, nickname: true, level: true,
         isEquipped: true, isFavorite: true, arenaState: true, restingUntil: true,
-        hatchedFromEggType: true, hatchedFromEggOrigin: true,
+        hatchedFromEggType: true, hatchedFromEggOrigin: true, diseasedAt: true,
       },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }, { id: "asc" }],
       take: 40,
@@ -474,6 +474,7 @@ export async function searchOwnedMascotsForItemAction(query: string): Promise<{
         restingUntil: m.restingUntil,
         hatchedFromEggType: m.hatchedFromEggType,
         hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+        diseasedAt: m.diseasedAt,
         proteinDoses: dosesByMascot.get(m.id) ?? 0,
         activeBuffTypes: buffsByMascot.get(m.id) ?? [],
       })),
@@ -1339,7 +1340,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
     if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este item." };
 
-    const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"; hours: number; label: string }> = {
+    const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"|"ANTIDOTE"; hours: number; label: string }> = {
       // ⚡ Vitamina Elétrica: +25% EXP por 2h (percentual e duração config via ShopItem.metadata)
       MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — +25% EXP por 2h" },
       // Proteina Zika: +2 permanente em todos os 5 atributos, limitada a 3 mascotes por jogador.
@@ -1350,6 +1351,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte — loot raro dobrado por 6h" },
       // 💧 Água Sagrada: remove humor negativo (Bravo/Cansado/Carente) imediatamente
       MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada — remove humor negativo" },
+      ANTIDOTE:          { type: "ANTIDOTE", hours: 0, label: "Antídoto — cura a doença imediatamente" },
     };
 
     const config = BUFF_CONFIG[inventoryItem.item.type];
@@ -1388,7 +1390,10 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
         data: { quantity: { decrement: 1 } }
       });
 
-      if (config.type === "MOOD_RESET") {
+      if (config.type === "ANTIDOTE") {
+        if (!mascot.diseasedAt) throw new Error("Este mascote não está doente.");
+        await tx.mascot.update({ where: { id: mascotId }, data: { diseasedAt: null, diseaseLastSpreadAt: null, mood: "NEUTRAL" } });
+      } else if (config.type === "MOOD_RESET") {
         // Efeito imediato — remove humores negativos
         await tx.mascot.update({ where: { id: mascotId }, data: { mood: "NEUTRAL", happiness: Math.min(100, mascot.happiness + 20) } });
       } else if (config.type === "HAPPINESS") {
@@ -1406,7 +1411,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       // Salva buff com expiração (para EXP_BOOST e LUCK_BOOST)
       // EXP_BOOST substitui qualquer buff ativo do mesmo tipo (sem acúmulo)
       // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
-      if (config.hours > 0) {
+      if (config.hours > 0 && config.type !== "ANTIDOTE") {
         if (config.type === "EXP_BOOST") {
           // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas)
           await tx.mascotBuff.deleteMany({ where: { mascotId, type: "EXP_BOOST" } });

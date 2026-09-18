@@ -29,6 +29,18 @@ async function ensureWeeklyLeagueItems() {
   await invalidateShopCache();
 }
 
+async function ensureCoreMascotItems() {
+  const item = { type: "ANTIDOTE", name: "Antídoto", description: "Cura imediatamente um mascote doente. A doença reduz todos os atributos em 40% e pode se espalhar entre seus mascotes.", price: 300 };
+  const existing = await prisma.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true, name: true, description: true, price: true, active: true, inventoryEnabled: true } });
+  if (!existing) {
+    await prisma.shopItem.create({ data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+    await invalidateShopCache();
+  } else if (existing.name !== item.name || existing.description !== item.description || existing.price !== item.price || !existing.active || !existing.inventoryEnabled) {
+    await prisma.shopItem.update({ where: { id: existing.id }, data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+    await invalidateShopCache();
+  }
+}
+
 export default async function ShopPage() {
   const session = await getAppSession();
   if (!session?.user) return null;
@@ -37,6 +49,7 @@ export default async function ShopPage() {
   const staff = isStaff(session.user.role);
   const platformAdmin = isAdmin(session.user.role);
   await ensureWeeklyLeagueItems();
+  await ensureCoreMascotItems();
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },

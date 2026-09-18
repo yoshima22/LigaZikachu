@@ -55,6 +55,7 @@ export async function getMyDraftMascotsAction() {
       personality: true,
       preferredCombatRole: true,
       statForce: true,
+      diseasedAt: true,
       statAgility: true,
       statCharisma: true,
       statInstinct: true,
@@ -85,12 +86,13 @@ export async function getMyDraftMascotsAction() {
       statCharisma: mascot.statCharisma,
     }),
     isMega: Boolean(mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId),
+    diseased: Boolean(mascot.diseasedAt),
     stats: {
-      force: mascot.statForce,
-      agility: mascot.statAgility,
-      charisma: mascot.statCharisma,
-      instinct: mascot.statInstinct,
-      vitality: mascot.statVitality,
+      force: Math.max(1, Math.floor(mascot.statForce * (mascot.diseasedAt ? 0.6 : 1))),
+      agility: Math.max(1, Math.floor(mascot.statAgility * (mascot.diseasedAt ? 0.6 : 1))),
+      charisma: Math.max(1, Math.floor(mascot.statCharisma * (mascot.diseasedAt ? 0.6 : 1))),
+      instinct: Math.max(1, Math.floor(mascot.statInstinct * (mascot.diseasedAt ? 0.6 : 1))),
+      vitality: Math.max(1, Math.floor(mascot.statVitality * (mascot.diseasedAt ? 0.6 : 1))),
     },
   }));
 }
@@ -122,6 +124,7 @@ export async function saveRealRosterAction(input: {
         personality: true,
         preferredCombatRole: true,
         statForce: true,
+        diseasedAt: true,
         statAgility: true,
         statCharisma: true,
         statInstinct: true,
@@ -158,11 +161,11 @@ export async function saveRealRosterAction(input: {
             }),
         ),
         stats: {
-          force: mascot.statForce,
-          agility: mascot.statAgility,
-          charisma: mascot.statCharisma,
-          instinct: mascot.statInstinct,
-          vitality: mascot.statVitality,
+          force: Math.max(1, Math.floor(mascot.statForce * (mascot.diseasedAt ? 0.6 : 1))),
+          agility: Math.max(1, Math.floor(mascot.statAgility * (mascot.diseasedAt ? 0.6 : 1))),
+          charisma: Math.max(1, Math.floor(mascot.statCharisma * (mascot.diseasedAt ? 0.6 : 1))),
+          instinct: Math.max(1, Math.floor(mascot.statInstinct * (mascot.diseasedAt ? 0.6 : 1))),
+          vitality: Math.max(1, Math.floor(mascot.statVitality * (mascot.diseasedAt ? 0.6 : 1))),
         },
       };
     });

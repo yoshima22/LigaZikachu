@@ -83,6 +83,7 @@ interface MascotData {
   lastPlayedAt?: Date | null;  // presente após migração SQL
   lastPettedAt?: Date | null;  // presente após migração SQL
   lastFedAt: Date | null;
+  diseasedAt?: Date | null;
   socialCooldownUntil: Date | null;
   evolutionLocked: boolean;
   expLocked: boolean;
@@ -1204,6 +1205,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         </div>
 
         {/* ── Buffs ativos ── */}
+        {mascot.diseasedAt && <div className="rounded-xl border border-lime-400/30 bg-lime-400/[.08] px-3 py-2 text-xs text-lime-200"><strong>🤢 Doente · −40% em todos os atributos</strong><p className="mt-1 text-[10px] text-lime-100/70">Use um Antídoto para curar. A doença pode contagiar outros mascotes da sua conta.</p></div>}
         {mascot.activeBuffs.some(buff => buff.type !== "STAT_BOOST") && (
           <div className="flex flex-wrap gap-1.5">
             {mascot.activeBuffs.filter(buff => buff.type !== "STAT_BOOST").map((buff, i) => (
@@ -1226,7 +1228,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full bg-slate-500 transition-all" style={{ width: `${Math.min(100, Math.round((s.value / 250) * 100))}%` }} />
                 </div>
-                <span className="w-7 text-right text-[10px] font-bold text-slate-400 shrink-0">{s.value}</span>
+                <span className={`min-w-16 text-right text-[10px] font-bold shrink-0 ${mascot.diseasedAt ? "text-lime-300" : "text-slate-400"}`}>{mascot.diseasedAt ? <><s className="mr-1 text-slate-600">{s.value}</s>{Math.max(1, Math.floor(s.value * 0.6))} <small className="text-rose-300">(−{s.value - Math.max(1, Math.floor(s.value * 0.6))})</small></> : s.value}</span>
                 <Info size={9} className="text-slate-700 shrink-0" />
               </div>
             </Tip>

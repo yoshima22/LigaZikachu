@@ -1792,6 +1792,7 @@ enum ShopItemType {
   MASCOT_BUFF_HAPPY
   MASCOT_BUFF_LUCK
   MASCOT_BUFF_MOOD
+  ANTIDOTE
   LUCKY_EGG
   WEAKNESS_POLICY
   PICNIC_BASKET
@@ -2646,6 +2647,8 @@ model Mascot {
   lastPlayedAt              DateTime?
   lastPettedAt              DateTime?
   lastFedAt                 DateTime?
+  diseasedAt                DateTime?
+  diseaseLastSpreadAt       DateTime?
   bazarListed               Boolean                   @default(false)
   socialCooldownUntil       DateTime? // rival travou interações temporariamente
   susRestBonusMinutes       Int                       @default(0)
