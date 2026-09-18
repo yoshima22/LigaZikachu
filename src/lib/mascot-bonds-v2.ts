@@ -23,9 +23,9 @@ export function relationTierV2(score: number) {
 }
 
 export function relationEffectV2(score: number) {
-  if (score <= -80) return "Nêmesis — Acerto de Contas: +8% de dano contra este Nêmesis nos 3 primeiros confrontos diretos. Na mesma equipe, a sabotagem entre os dois reduz em 5% o dano causado e aumenta em 5% o dano recebido enquanto ambos estiverem aptos.";
-  if (score <= -50) return "Inimigo — Tenho Algo a Provar: +5% de dano apenas contra este Inimigo específico. Na mesma equipe, a hostilidade reduz em 3% o dano causado e aumenta em 3% o dano recebido enquanto ambos estiverem aptos.";
-  if (score <= -15) return "Rival — Competição: +3% de dano contra este Rival; na mesma equipe, ambos causam +2% de dano enquanto estiverem aptos. Não acumula com outro Laço.";
+  if (score <= -80) return "Nêmesis — Obsessão Competitiva: +8% de dano contra este Nêmesis nos 3 primeiros confrontos diretos. Na mesma equipe, ambos causam +7% de dano tentando superar o outro, mas recebem +4% de dano pela imprudência. Só funciona enquanto os dois estiverem aptos.";
+  if (score <= -50) return "Inimigo — Disputa Agressiva: +5% de dano apenas contra este Inimigo específico. Na mesma equipe, ambos causam +4% de dano, mas recebem +2% de dano por se recusarem a cooperar defensivamente. Só funciona enquanto os dois estiverem aptos.";
+  if (score <= -15) return "Rival — Competição Saudável: +3% de dano contra este Rival; na mesma equipe, ambos causam +2% de dano enquanto estiverem aptos, sem penalidade defensiva. Não acumula com outro Laço.";
   if (score <= 14) return "Sem efeito mecânico; novas experiências definem o rumo da relação.";
   if (score <= 39) return "Colega — Entrosamento: na mesma equipe, ambos causam +1% de dano enquanto estiverem aptos. É um benefício leve e não acumula com outro Laço.";
   if (score <= 79) return "Amigo — Sintonia: na mesma equipe, +2% de dano causado e −2% de dano recebido enquanto ambos estiverem aptos. Em lados opostos, o primeiro ataque direto causa −5% de dano por hesitação. Também: −3% no tempo de expedição e +5% de EXP em treino conjunto.";

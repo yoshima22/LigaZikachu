@@ -811,9 +811,9 @@ export async function getTeamBondCombatContext(mascotIds: string[]) {
         : score >= 15
           ? { delta: 0.01, defense: 0, kind: "COLLEAGUE" as const, label: "Entrosamento entre Colegas" }
           : score <= -80
-            ? { delta: -0.05, defense: -5, kind: "NEMESIS" as const, label: "Conflito entre Nêmesis" }
+            ? { delta: 0.07, defense: -4, kind: "NEMESIS" as const, label: "Obsessão Competitiva entre Nêmesis" }
             : score <= -50
-              ? { delta: -0.03, defense: -3, kind: "ENEMY" as const, label: "Hostilidade entre Inimigos" }
+              ? { delta: 0.04, defense: -2, kind: "ENEMY" as const, label: "Disputa entre Inimigos" }
               : score <= -15
                 ? { delta: 0.02, defense: 0, kind: "RIVAL" as const, label: "Competição entre Rivais" }
                 : null;

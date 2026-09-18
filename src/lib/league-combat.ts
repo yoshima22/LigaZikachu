@@ -584,10 +584,15 @@ export function runLeagueCombat(
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
-      const offensiveBond = bondLinks.find((link) => (link.mascotAId === actor.id || link.mascotBId === actor.id) && (hp.get(link.mascotAId === actor.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
-      const defensiveBond = bondLinks.find((link) => link.defensePct !== 0 && (link.mascotAId === target.id || link.mascotBId === target.id) && (hp.get(link.mascotAId === target.id ? link.mascotBId : link.mascotAId) ?? 0) > 0);
+      const strongestEligibleBond = (mascotId: string) => bondLinks
+        .filter((link) => (link.mascotAId === mascotId || link.mascotBId === mascotId) && (hp.get(link.mascotAId === mascotId ? link.mascotBId : link.mascotAId) ?? 0) > 0)
+        .sort((a, b) => (Math.abs(b.damagePct) + Math.abs(b.defensePct)) - (Math.abs(a.damagePct) + Math.abs(a.defensePct)))[0];
+      // Um único vínculo define o comportamento atual de cada mascote. Isso
+      // impede acumular amizade defensiva com rivalidade ofensiva na mesma ação.
+      const offensiveBond = strongestEligibleBond(actor.id);
+      const defensiveBond = strongestEligibleBond(target.id);
       if (offensiveBond) damage = Math.max(1, Math.round(damage * (1 + offensiveBond.damagePct / 100)));
-      if (defensiveBond) damage = Math.max(1, Math.round(damage * (1 - defensiveBond.defensePct / 100)));
+      if (defensiveBond?.defensePct) damage = Math.max(1, Math.round(damage * (1 - defensiveBond.defensePct / 100)));
       const opposingBond = opposingBondEffects.find((effect) => effect.attackerId === actor.id && effect.targetId === target.id);
       if (opposingBond) {
         const key = `${actor.id}:${target.id}`;
