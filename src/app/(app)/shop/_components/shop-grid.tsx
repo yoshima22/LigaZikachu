@@ -59,6 +59,7 @@ const mascotItemEmoji: Record<string, string> = {
   MASCOT_SWEET: "🍬",
   MASCOT_BUFF_EXP: "⚡",
   ANTIDOTE: "🧪",
+  FIRST_AID_KIT: "🩹",
   MASCOT_BUFF_STAT: "💊",
   MASCOT_BUFF_HAPPY: "🍯",
   MASCOT_BUFF_LUCK: "🍀",

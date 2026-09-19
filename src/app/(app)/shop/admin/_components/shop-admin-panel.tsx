@@ -20,7 +20,7 @@ const typeOpts = [
   "EGG_COMMON","EGG_RARE","EGG_SPECIAL","EGG_LAB","EGG_EVENT",
   "MASCOT_FOOD","MASCOT_SWEET",
   "MASCOT_BUFF_EXP","MASCOT_BUFF_STAT","MASCOT_BUFF_HAPPY","MASCOT_BUFF_LUCK","MASCOT_BUFF_MOOD",
-  "ANTIDOTE",
+  "ANTIDOTE","FIRST_AID_KIT",
   "LUCKY_EGG","WEAKNESS_POLICY","PICNIC_BASKET","VACATION_TICKET","XP_SHARE","XP_SHARE_TEAM","RAINBOW_FEATHER",
   ...LEAGUE_SHOP_ITEM_TYPES,
 ] as const;
@@ -37,6 +37,7 @@ const typeLabel: Record<string, string> = {
   MASCOT_SWEET: "Doce de Mascote",
   MASCOT_BUFF_EXP:   "⚡ Vitamina Elétrica (Buff EXP)",
   ANTIDOTE:          "🧪 Antídoto (cura doença)",
+  FIRST_AID_KIT:     "🩹 Kit de Primeiros Socorros (cura a conta toda)",
   MASCOT_BUFF_STAT:  "💊 Proteína Zika (Buff Stats)",
   MASCOT_BUFF_HAPPY: "🍯 Bala de Mel (Buff Felicidade)",
   MASCOT_BUFF_LUCK:  "🍀 Amuleto da Sorte (Buff Expedição)",
