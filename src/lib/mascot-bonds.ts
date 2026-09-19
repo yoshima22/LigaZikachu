@@ -884,10 +884,16 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
     await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: "Um mascote ficou doente", body: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou doente enquanto estava faminto e triste ou com raiva. Seus atributos estão 40% menores até receber um Antídoto.`, href: "/mascotes", entityId: mascot.id, eventKey: `disease:${mascot.id}:${now.toISOString().slice(0, 10)}` } }).catch(() => undefined);
   }
 
-  const refreshed = await prisma.mascot.findMany({ where: { playerId }, select: { id: true, pokemonId: true, nickname: true, diseasedAt: true, diseaseLastSpreadAt: true } });
-  const healthy = refreshed.filter((mascot) => !mascot.diseasedAt);
+  const refreshed = await prisma.mascot.findMany({ where: { playerId }, select: { id: true, pokemonId: true, nickname: true, diseasedAt: true, diseaseLastSpreadAt: true, lastFedAt: true } });
+  // Mascote alimentado nas últimas 24h resiste ao contágio: ficar doente "do nada"
+  // mesmo cuidando dele não é punição que o jogador consiga evitar.
+  const fedBefore = new Date(now.getTime() - 24 * 60 * 60_000);
+  const healthy = refreshed.filter((mascot) => !mascot.diseasedAt && (!mascot.lastFedAt || mascot.lastFedAt <= fedBefore));
+  // Teto por ciclo: antes, cada doente sorteava um alvo, então o surto crescia
+  // junto com o número de doentes e contaminava a conta inteira em poucos dias.
+  const maxInfectionsPerCycle = 2;
   for (const source of refreshed.filter((mascot) => mascot.diseasedAt && (!mascot.diseaseLastSpreadAt || mascot.diseaseLastSpreadAt <= spreadBefore))) {
-    if (!healthy.length) break;
+    if (!healthy.length || infections >= maxInfectionsPerCycle) break;
     const target = healthy.splice(Math.floor(Math.random() * healthy.length), 1)[0];
     // Um doente tem 35% de chance de contagiar alguém a cada janela de 12h.
     if (Math.random() < 0.35) {
