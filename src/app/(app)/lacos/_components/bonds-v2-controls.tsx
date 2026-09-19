@@ -1237,6 +1237,7 @@ export function ImportantMomentsList({
                     key={option.id}
                     eventId={moment.id}
                     option={option}
+                    disabled={Boolean(option.blockedReason)}
                   />
                 ))}
               </div>

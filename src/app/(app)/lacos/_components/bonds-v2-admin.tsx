@@ -2,7 +2,7 @@ import { Activity, Archive, Brain, HeartHandshake, LockKeyhole, Network, Sparkle
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
-import { normalizeBondOptions } from "@/lib/mascot-bonds";
+import { autoResolveExpiredBondEvents, bondOptionBlockedReason, getBondCostAvailability, normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondNotificationPreference, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
@@ -14,6 +14,9 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
   const bondsNotificationsEnabled = await getBondNotificationsEnabled(playerId);
+  // Momentos importantes vencidos somem ao abrir a página, sem esperar o cron.
+  await autoResolveExpiredBondEvents(playerId);
+  const costAvailability = await getBondCostAvailability(playerId);
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
   const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory, socialInfluences] = await Promise.all([
     prisma.mascot.findMany({
@@ -145,7 +148,10 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       participants: nameB ? `${nameA} e ${nameB}` : nameA,
       spriteA: getSpriteUrl(event.mascotA.pokemonId),
       spriteB: event.mascotB ? getSpriteUrl(event.mascotB.pokemonId) : null,
-      options: normalizeBondOptions(event.optionsJson),
+      options: normalizeBondOptions(event.optionsJson).map((option) => ({
+        ...option,
+        blockedReason: bondOptionBlockedReason(option, costAvailability) ?? undefined,
+      })),
     };
   });
   const refugeTabs = (Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location, locationIndex) => {

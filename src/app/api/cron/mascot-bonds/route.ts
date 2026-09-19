@@ -6,6 +6,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import {
   autoResolveExpiredBondEvents,
+  sweepExpiredBondEvents,
   ensureBondEventCadence,
   processMascotDiseaseForPlayer,
 } from "@/lib/mascot-bonds";
@@ -88,7 +89,8 @@ export async function GET(req: NextRequest) {
   });
 
   let eventsCreated = 0;
-  let eventsResolved = 0;
+  // Vencidos de qualquer jogador — inclusive quem está sem sessão ativa.
+  let eventsResolved = await sweepExpiredBondEvents();
   let failures = 0;
   let refugeMoments = 0;
   let importantRefugeMoments = 0;

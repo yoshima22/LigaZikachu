@@ -777,6 +777,49 @@ async function consumeBondCost(tx: Prisma.TransactionClient, playerId: string, c
   await tx.zikaCoinWallet.update({ where: { playerId }, data: { balance: { decrement: cost.quantity } } });
 }
 
+/**
+ * Quanto o jogador tem de cada recurso usado nas escolhas de Momentos importantes.
+ * Espelha o que consumeBondCost() cobra — as duas precisam andar juntas.
+ */
+export async function getBondCostAvailability(playerId: string) {
+  const [foods, bondItems, wallet] = await Promise.all([
+    prisma.mascotFoodItem.findMany({ where: { playerId }, select: { type: true, quantity: true } }),
+    prisma.playerInventory.findMany({
+      where: { playerId, item: { type: { startsWith: "BOND_" } as never } },
+      select: { quantity: true, item: { select: { type: true } } },
+    }),
+    prisma.zikaCoinWallet.findUnique({ where: { playerId }, select: { balance: true } }),
+  ]);
+  const byType = new Map<string, number>();
+  for (const row of bondItems) byType.set(String(row.item.type), (byType.get(String(row.item.type)) ?? 0) + row.quantity);
+  return {
+    FOOD: foods.find((food) => food.type === "FOOD")?.quantity ?? 0,
+    SWEET: foods.find((food) => food.type === "SWEET")?.quantity ?? 0,
+    COINS: wallet?.balance ?? 0,
+    bondItems: byType,
+  };
+}
+
+export type BondCostAvailability = Awaited<ReturnType<typeof getBondCostAvailability>>;
+
+/** Motivo pelo qual a opção não pode ser escolhida agora, ou null se pode. */
+export function bondOptionBlockedReason(option: BondOption, availability: BondCostAvailability): string | null {
+  const costs = option.costs ?? (option.cost ? [option.cost] : []);
+  for (const cost of costs) {
+    const have = cost.kind === "BOND_ITEM"
+      ? availability.bondItems.get(cost.itemType ?? "") ?? 0
+      : availability[cost.kind];
+    if (have < cost.quantity) {
+      const label = cost.kind === "FOOD" ? "Comida de Mascote"
+        : cost.kind === "SWEET" ? "Doce de Mascote"
+        : cost.kind === "COINS" ? "ZikaCoins"
+        : cost.itemName ?? "item de Laços";
+      return `Você tem ${have} de ${cost.quantity}x ${label}.`;
+    }
+  }
+  return null;
+}
+
 export async function autoResolveExpiredBondEvents(playerId: string) {
   const events = await prisma.mascotSocialEvent.findMany({
     where: { ownerId: playerId, status: "PENDING", expiresAt: { lte: new Date() } },
@@ -786,8 +829,31 @@ export async function autoResolveExpiredBondEvents(playerId: string) {
   let resolved = 0;
   for (const event of events) {
     const result = await applyBondOption(event.id, playerId, "AUTO", "AUTO").catch(() => null);
-    if (result) resolved += 1;
+    if (result) { resolved += 1; continue; }
+    // Sem opção automática possível (todas custam recurso, por exemplo) o evento
+    // ficava pendente para sempre. Vencido é vencido: encerra como EXPIRED.
+    const expired = await prisma.mascotSocialEvent.updateMany({
+      where: { id: event.id, status: "PENDING" },
+      data: { status: "EXPIRED", resolvedBy: "SYSTEM", resolvedAt: new Date() },
+    }).catch(() => null);
+    if (expired?.count) resolved += 1;
   }
+  return resolved;
+}
+
+/**
+ * Varre eventos vencidos de todos os jogadores. O cron só olhava quem tinha
+ * sessão ativa, então quem não logava acumulava Momentos importantes eternos.
+ */
+export async function sweepExpiredBondEvents(limit = 300) {
+  const events = await prisma.mascotSocialEvent.findMany({
+    where: { status: "PENDING", expiresAt: { lte: new Date() } },
+    select: { ownerId: true },
+    distinct: ["ownerId"],
+    take: limit,
+  });
+  let resolved = 0;
+  for (const event of events) resolved += await autoResolveExpiredBondEvents(event.ownerId);
   return resolved;
 }
 
