@@ -62,6 +62,7 @@ const BUFF_EMOJI: Record<string, string> = {
   XP_SHARE_TEAM:     "📡",
   RAINBOW_FEATHER:   "🌈",
   ANTIDOTE:          "🧪",
+  FIRST_AID_KIT:     "🩹",
 };
 
 // Onde cada buff de EXP se aplica
@@ -188,6 +189,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const isRainbowFeather = selectedBuffItem?.type === "RAINBOW_FEATHER";
   const isWeaknessPolicy = selectedBuffItem?.type === "WEAKNESS_POLICY";
   const isAntidote = selectedBuffItem?.type === "ANTIDOTE";
+  // Kit age na conta inteira: qualquer mascote serve como ponto de uso.
+  const isFirstAidKit = selectedBuffItem?.type === "FIRST_AID_KIT";
   const isAdminLabFeather = selectedBuffItem?.metadata?.adminLabOriginOverride === true;
   const featherTier = selectedBuffItem?.metadata?.eggTier;
   const tierRank: Record<string, number> = { COMMON: 0, RARE: 1, EVENT: 2, SPECIAL: 3, LAB: 4 };
@@ -203,6 +206,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       : "COMMON";
   };
   const isEligible = (mascot: MascotOption) => {
+    if (isFirstAidKit) return true;
     if (isAntidote) return Boolean(mascot.diseasedAt);
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());

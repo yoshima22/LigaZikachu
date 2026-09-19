@@ -1340,7 +1340,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
     if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
     if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este item." };
 
-    const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"|"ANTIDOTE"; hours: number; label: string }> = {
+    const BUFF_CONFIG: Record<string, { type: "EXP_BOOST"|"STAT_BOOST"|"HAPPINESS"|"LUCK_BOOST"|"MOOD_RESET"|"ANTIDOTE"|"FIRST_AID_KIT"; hours: number; label: string }> = {
       // ⚡ Vitamina Elétrica: +25% EXP por 2h (percentual e duração config via ShopItem.metadata)
       MASCOT_BUFF_EXP:   { type: "EXP_BOOST",  hours: 2, label: "Vitamina Elétrica — +25% EXP por 2h" },
       // Proteina Zika: +2 permanente em todos os 5 atributos, limitada a 3 mascotes por jogador.
@@ -1352,6 +1352,8 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       // 💧 Água Sagrada: remove humor negativo (Bravo/Cansado/Carente) imediatamente
       MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada — remove humor negativo" },
       ANTIDOTE:          { type: "ANTIDOTE", hours: 0, label: "Antídoto — cura a doença imediatamente" },
+      // Age na conta inteira: o mascote selecionado é só o ponto de uso.
+      FIRST_AID_KIT:     { type: "FIRST_AID_KIT", hours: 0, label: "Kit de Primeiros Socorros — cura a doença de todos os mascotes" },
     };
 
     const config = BUFF_CONFIG[inventoryItem.item.type];
@@ -1393,6 +1395,26 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       if (config.type === "ANTIDOTE") {
         if (!mascot.diseasedAt) throw new Error("Este mascote não está doente.");
         await tx.mascot.update({ where: { id: mascotId }, data: { diseasedAt: null, diseaseLastSpreadAt: null, mood: "NEUTRAL" } });
+      } else if (config.type === "FIRST_AID_KIT") {
+        const doentes = await tx.mascot.findMany({
+          where: { playerId: player.id, diseasedAt: { not: null } },
+          select: { id: true, isEquipped: true },
+        });
+        if (doentes.length === 0) throw new Error("Nenhum mascote seu está doente.");
+        // Curados voltam com fome: o relógio de alimentação recua até a faixa
+        // "faminto" (12h para mascote equipado, 60h para quem está no banco).
+        const agora = Date.now();
+        for (const curado of doentes) {
+          await tx.mascot.update({
+            where: { id: curado.id },
+            data: {
+              diseasedAt: null,
+              diseaseLastSpreadAt: null,
+              mood: "NEUTRAL",
+              lastFedAt: new Date(agora - (curado.isEquipped ? 13 : 65) * 60 * 60_000),
+            },
+          });
+        }
       } else if (config.type === "MOOD_RESET") {
         // Efeito imediato — remove humores negativos
         await tx.mascot.update({ where: { id: mascotId }, data: { mood: "NEUTRAL", happiness: Math.min(100, mascot.happiness + 20) } });
@@ -1411,7 +1433,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       // Salva buff com expiração (para EXP_BOOST e LUCK_BOOST)
       // EXP_BOOST substitui qualquer buff ativo do mesmo tipo (sem acúmulo)
       // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
-      if (config.hours > 0 && config.type !== "ANTIDOTE") {
+      if (config.hours > 0 && config.type !== "ANTIDOTE" && config.type !== "FIRST_AID_KIT") {
         if (config.type === "EXP_BOOST") {
           // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas)
           await tx.mascotBuff.deleteMany({ where: { mascotId, type: "EXP_BOOST" } });
@@ -1959,6 +1981,7 @@ export async function getBankMascotsPageAction(input?: {
           AND: [
             { OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }] },
             { OR: [{ restingUntil: null }, { restingUntil: { lte: now } }] },
+            { diseasedAt: null },
           ],
         });
         break;
@@ -1971,6 +1994,7 @@ export async function getBankMascotsPageAction(input?: {
             { arenaState: { not: "FREE" } },
             { restingUntil: { gt: now } },
             { buffs: { some: { expiresAt: { gt: now } } } },
+            { diseasedAt: { not: null } },
           ],
         });
         break;
@@ -1995,6 +2019,9 @@ export async function getBankMascotsPageAction(input?: {
       case "buff":
         and.push({ buffs: { some: { expiresAt: { gt: now } } } });
         break;
+      case "diseased":
+        and.push({ diseasedAt: { not: null } });
+        break;
     }
 
     const where: Prisma.MascotWhereInput = { AND: and };
@@ -2003,7 +2030,7 @@ export async function getBankMascotsPageAction(input?: {
       speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
       staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
       arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
-      hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true,
+      hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true, diseasedAt: true,
       lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
       ivRating: true, ivScore: true, performanceTag: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,

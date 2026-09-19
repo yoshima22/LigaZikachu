@@ -32,14 +32,19 @@ async function ensureWeeklyLeagueItems() {
 }
 
 async function ensureCoreMascotItems() {
-  const item = { type: "ANTIDOTE", name: "Antídoto", description: "Cura imediatamente um mascote doente. A doença reduz todos os atributos em 40% e pode se espalhar entre seus mascotes.", price: 300 };
-  const existing = await prisma.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true, name: true, description: true, price: true, active: true, inventoryEnabled: true } });
-  if (!existing) {
-    await prisma.shopItem.create({ data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
-    await invalidateShopCache();
-  } else if (existing.name !== item.name || existing.description !== item.description || existing.price !== item.price || !existing.active || !existing.inventoryEnabled) {
-    await prisma.shopItem.update({ where: { id: existing.id }, data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
-    await invalidateShopCache();
+  const items = [
+    { type: "ANTIDOTE", name: "Antídoto", description: "Cura imediatamente um mascote doente. A doença reduz todos os atributos em 40% e pode se espalhar entre seus mascotes.", price: 300 },
+    { type: "FIRST_AID_KIT", name: "Kit de Primeiros Socorros", description: "Cura a doença de todos os mascotes da conta de uma vez. Eles voltam saudáveis, porém com fome.", price: 3000 },
+  ];
+  for (const item of items) {
+    const existing = await prisma.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true, name: true, description: true, price: true, active: true, inventoryEnabled: true } });
+    if (!existing) {
+      await prisma.shopItem.create({ data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+      await invalidateShopCache();
+    } else if (existing.name !== item.name || existing.description !== item.description || existing.price !== item.price || !existing.active || !existing.inventoryEnabled) {
+      await prisma.shopItem.update({ where: { id: existing.id }, data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+      await invalidateShopCache();
+    }
   }
 }
 
