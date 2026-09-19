@@ -161,6 +161,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
                 🔬 {ivRating}
               </div>
             )}
+            {payload.diseased === true && (
+              <div className="absolute left-1.5 bottom-8 rounded-full border border-lime-400/50 bg-lime-500/20 px-2 py-0.5 text-[9px] font-black text-lime-200" title="Este mascote está doente: atributos 40% menores até receber um Antídoto.">
+                🤒 DOENTE
+              </div>
+            )}
             {isShiny && (
               <div className="absolute left-1.5 top-8 rounded-full border border-yellow-300/60 bg-gradient-to-r from-yellow-400/25 via-purple-400/20 to-cyan-400/20 px-2 py-0.5 text-[9px] font-black tracking-wide text-yellow-100 shadow-[0_0_14px_rgba(250,204,21,0.28)]">
                 ✨ SHINY

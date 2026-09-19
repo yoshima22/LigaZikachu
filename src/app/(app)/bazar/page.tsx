@@ -21,6 +21,7 @@ import type { MascotRarity } from "@/lib/mascot-data";
 import type { MiauvadaoFusionEggType, MiauvadaoFusionEgg } from "@/lib/miauvadao-egg-fusion";
 import { prisma } from "@/lib/prisma";
 import { PremiumCountdown } from "./_components/premium-countdown";
+import { withMascotHealth } from "@/lib/bazar-mascot-health";
 
 export const dynamic = "force-dynamic";
 
@@ -92,8 +93,12 @@ export default async function BazarPage({
   const blockedSlotSabotage = raidSabotages.find((s) => s.sabotageType === "BLOCK_BAZAR_SLOT");
   const shouldShowBazarAnomaly = Boolean(blockedSlotSabotage) || (bazarStepState.active && bazarStepState.unlocked && !bazarStepState.resolved);
 
-  const { listings, total, page, totalPages } = listingsResult;
-  const premiumListings = premiumResult.listings;
+  const { total, page, totalPages } = listingsResult;
+  // Saúde vem do banco na leitura: o payload do anúncio é um snapshot antigo.
+  const [listings, premiumListings] = await Promise.all([
+    withMascotHealth(listingsResult.listings),
+    withMascotHealth(premiumResult.listings),
+  ]);
   const visibleTotal = total + premiumResult.total;
   const nextPremiumVacancyAt = premiumAvailability.activeCount >= 6 ? premiumAvailability.nextVacancyAt : null;
 

@@ -667,6 +667,11 @@ export default function BazarListingPage(): React.JSX.Element {
                   image.src = isShiny ? getShinySprite(pokemonId, false) : getSpriteUrl(pokemonId);
                 }}
               />
+              {payload.diseased === true && (
+                <span className="rounded-full border border-lime-400/60 bg-lime-500/20 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-lime-200" title="Atributos 40% menores até receber um Antídoto.">
+                  🤒 Doente
+                </span>
+              )}
               {isShiny && (
                 <span className="rounded-full border border-amber-300/70 bg-amber-400/15 px-3 py-1 text-[10px] font-black uppercase tracking-widest text-amber-200 shadow-[0_0_16px_rgba(251,191,36,0.3)]">
                   ✨ SHINY

@@ -37,6 +37,7 @@ import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
 import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
 import { trackGachaObjective } from "@/lib/gacha";
+import { withMascotHealth } from "@/lib/bazar-mascot-health";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
@@ -629,7 +630,9 @@ export async function getListing(id: string) {
     }).catch(() => undefined);
     revalidateTag(`nav-${user!.id}`);
   }
-  return hydratedListing;
+  // Saúde atual do mascote (o payload é um snapshot da data do anúncio).
+  const [withHealth] = await withMascotHealth([hydratedListing]);
+  return withHealth;
 }
 
 export async function getRecentTransactions(take = 10) {
