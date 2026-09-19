@@ -860,6 +860,13 @@ export async function sweepExpiredBondEvents(limit = 300) {
 }
 
 /** Atualiza doença por negligência e contágio sem depender da página aberta. */
+/**
+ * Surto de 18-19/09/2026: o contágio crescia junto com o número de doentes e
+ * adoeceu contas inteiras. Todos foram curados e a doença fica suspensa até
+ * segunda 21/09/2026 12:00 (BRT). Passada a data, o cron volta ao normal.
+ */
+export const DISEASE_RESUMES_AT = new Date("2026-09-21T15:00:00.000Z");
+
 export async function processMascotDiseaseForPlayer(playerId: string) {
   const now = new Date();
   await prisma.mascotSocialEvent.updateMany({ where: { ownerId: playerId, eventType: { in: [RUNAWAY_WARNING_TYPE, RUNAWAY_RESCUE_TYPE] }, status: "PENDING" }, data: { status: "RESOLVED", resolvedBy: "SYSTEM", resolvedOptionId: "runaway_system_retired", resolvedAt: now } });
@@ -871,6 +878,7 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
   });
   let newCases = 0;
   let infections = 0;
+  if (now < DISEASE_RESUMES_AT) return { newCases, infections };
 
   for (const mascot of mascots) {
     if (mascot.diseasedAt) continue;
