@@ -6,6 +6,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { isStandbyActive } from "@/lib/account-standby";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { bondNotificationPreferenceId, preferenceEnabled } from "@/lib/bond-notification-preferences";
+import { BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 export type BondBehavior =
   | "FREE"
@@ -785,7 +786,8 @@ export async function getBondCostAvailability(playerId: string) {
   const [foods, bondItems, wallet] = await Promise.all([
     prisma.mascotFoodItem.findMany({ where: { playerId }, select: { type: true, quantity: true } }),
     prisma.playerInventory.findMany({
-      where: { playerId, item: { type: { startsWith: "BOND_" } as never } },
+      // Enum não aceita startsWith no Prisma — lista explícita dos itens de Laços.
+      where: { playerId, item: { type: { in: BOND_SHOP_ITEM_TYPES as never } } },
       select: { quantity: true, item: { select: { type: true } } },
     }),
     prisma.zikaCoinWallet.findUnique({ where: { playerId }, select: { balance: true } }),
