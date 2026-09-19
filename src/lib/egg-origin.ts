@@ -1,3 +1,11 @@
+export const CELESTIAL_EGG_IMAGE =
+  "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/Icons/IconeOrigem_Celestial.webp";
+
+/** Imagem do ovo por tipo. Só o Celestial tem arte própria hoje. */
+export function eggImageUrl(type?: string | null) {
+  return type === "CELESTIAL" ? CELESTIAL_EGG_IMAGE : "/mascot/egg-common.webp";
+}
+
 const EGG_TYPE_LABEL: Record<string, string> = {
   COMMON: "Ovo Comum",
   RARE: "Ovo Raro",

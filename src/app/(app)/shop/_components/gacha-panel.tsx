@@ -7,7 +7,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Sparkles, Image as ImageIcon, Target, Wallet, Plus, Trash2, Clock, Percent, X, Shield, AlertTriangle } from "lucide-react";
-import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getPokemonName, getStaticSpriteUrl, POKEMON_PT_NAMES } from "@/lib/mascot-data";
 import {
   saveGachaBannerAction, deleteGachaBannerAction,
   saveGachaEntryAction, deleteGachaEntryAction,
@@ -24,7 +24,7 @@ export type GachaEntryDTO = {
   weight: number; rateUp: boolean; imageUrl: string | null;
   eggType: string | null; pokemonId: number | null; itemId: string | null; quantity: number;
 };
-export type GachaPityDTO = { id: string; currency: Currency; everyPulls: number; rarity: string };
+export type GachaPityDTO = { id: string; currency: Currency; everyPulls: number; rarity: string; counter: number };
 export type GachaBannerDTO = {
   id: string; name: string; subtitle: string | null; flavor: string | null;
   imageUrl: string | null; mascotArtUrl: string | null;
@@ -81,6 +81,17 @@ const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> =
   { key: "BAZAR_GASTO_LC", label: "Gasto de LC no Bazar", metric: "LC" },
   { key: "OVOS_ABERTOS", label: "Aberturas de ovos", metric: "ovos" },
 ];
+
+const POKEMON_ID_BY_NAME = new Map(
+  Object.entries(POKEMON_PT_NAMES).map(([id, name]) => [name.toLowerCase(), Number(id)]),
+);
+const POKEMON_NAME_SET = new Set(Object.values(POKEMON_PT_NAMES));
+
+function resolvePokemonId(value: string) {
+  const trimmed = value.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  return POKEMON_ID_BY_NAME.get(trimmed.toLowerCase()) ?? null;
+}
 
 /** Arte de uma entrada: imagem própria > sprite do mascote > ovo de Lab/Celestial. */
 function entryArt(entry: { imageUrl: string | null; kind: string; pokemonId?: number | null; rarity: string }, icons: GachaPanelProps["icons"]) {
@@ -154,6 +165,10 @@ export function GachaPanel(props: GachaPanelProps) {
           </select>
         )}
       </div>
+
+      <datalist id="gacha-pokemon-list">
+        {Object.entries(POKEMON_PT_NAMES).map(([id, name]) => <option key={id} value={name} />)}
+      </datalist>
 
       {tab === "player" && <PlayerScreen {...props} banner={banner} />}
       {tab === "banner" && <BannerEditor banner={banner} onSelect={setBannerId} />}
@@ -277,8 +292,15 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
 
           <div className="mt-6 flex flex-wrap items-center gap-2 text-xs text-slate-300">
             {banner.pityRules.map((rule) => (
-              <span key={rule.id} className="flex items-center gap-1.5 rounded-xl border border-slate-600/60 bg-slate-950/70 px-3 py-1.5">
-                <Shield size={12} /> A cada {rule.everyPulls} de {rule.currency === "POKEBALL" ? "Pokébola" : "Ultra Bola"}: {RARITY_LABEL[rule.rarity]}+
+              <span key={rule.id} className="flex items-center gap-2 rounded-xl border border-slate-600/60 bg-slate-950/70 px-3 py-1.5">
+                <Shield size={12} />
+                <span>
+                  {RARITY_LABEL[rule.rarity]}+ garantido em {rule.everyPulls} de {rule.currency === "POKEBALL" ? "Pokébola" : "Ultra Bola"}
+                  <span className="ml-1 text-slate-400">({rule.counter}/{rule.everyPulls})</span>
+                </span>
+                <span className="h-1.5 w-16 overflow-hidden rounded-full bg-slate-800">
+                  <span className="block h-full rounded-full bg-cyan-400" style={{ width: `${Math.min(100, (rule.counter / rule.everyPulls) * 100)}%` }} />
+                </span>
               </span>
             ))}
             <span className="ml-auto flex items-center gap-1.5 rounded-xl border border-slate-600/60 bg-slate-950/70 px-3 py-1.5">
@@ -644,14 +666,31 @@ function EntryRow({ entry, banner, shopItems, total, onSave, onDelete }: {
           </select>
         ) : draft.kind === "MASCOT" ? (
           <div className="flex items-center gap-2">
-            <input type="number" value={draft.pokemonId ?? ""} onChange={(e) => set("pokemonId", Number(e.target.value))} className={inputCls} />
+            <input
+              list="gacha-pokemon-list"
+              defaultValue={draft.pokemonId ? getPokemonName(draft.pokemonId) : ""}
+              placeholder="nome ou nº"
+              onChange={(e) => {
+                const id = resolvePokemonId(e.target.value);
+                if (!id) return;
+                setDraft((current) => ({
+                  ...current,
+                  pokemonId: id,
+                  // Rótulo ainda no padrão? Acompanha o mascote escolhido.
+                  label: !current.label || current.label === "Novo item" || POKEMON_NAME_SET.has(current.label)
+                    ? getPokemonName(id)
+                    : current.label,
+                }));
+              }}
+              className={inputCls}
+            />
             {draft.pokemonId ? (
               <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-300">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={getStaticSpriteUrl(draft.pokemonId)} alt="" className="h-8 w-8 object-contain" />
-                {getPokemonName(draft.pokemonId)}
+                #{draft.pokemonId}
               </span>
-            ) : <span className="shrink-0 text-[10px] text-amber-300">nº obrigatório</span>}
+            ) : <span className="shrink-0 text-[10px] text-amber-300">escolha o mascote</span>}
           </div>
         ) : (
           <select value={draft.itemId ?? ""} onChange={(e) => set("itemId", e.target.value)} className={inputCls}>

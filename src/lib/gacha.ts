@@ -4,6 +4,7 @@
 
 import type { Prisma, GachaCurrency, GachaObjectiveSource } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { CELESTIAL_EGG_IMAGE } from "@/lib/egg-origin";
 
 type Tx = Prisma.TransactionClient;
 
@@ -11,7 +12,7 @@ const ICON_BASE = "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/pu
 
 export const POKEBALL_ICON = `${ICON_BASE}/Icone_Pokebola.webp`;
 export const ULTRABALL_ICON = `${ICON_BASE}/Icone_Ultrabola.webp`;
-export const CELESTIAL_EGG_ICON = `${ICON_BASE}/IconeOrigem_Celestial.webp`;
+export const CELESTIAL_EGG_ICON = CELESTIAL_EGG_IMAGE;
 export const LAB_EGG_ICON = `${ICON_BASE}/IconeOrigem_Lab.png`;
 
 export const CURRENCY_LABEL: Record<GachaCurrency, string> = {

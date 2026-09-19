@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Coins, Crown, Heart, MessageSquare, Clock, Gavel, Handshake } from "lucide-react";
 import { getMascotRarity, getShinySprite, getSpriteUrl, RARITY_COLOR, RARITY_LABEL } from "@/lib/mascot-data";
 import { getShopItemEmoji } from "@/lib/shop-config";
-import { getHatchedEggLabel } from "@/lib/egg-origin";
+import { getHatchedEggLabel, eggImageUrl } from "@/lib/egg-origin";
 import { PremiumCountdown } from "./premium-countdown";
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -179,7 +179,7 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
         ) : (payload.itemType as string)?.startsWith("EGG_") || ["COMMON","RARE","SPECIAL","EVENT","LAB","CELESTIAL"].includes(payload.itemType as string) ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
-            src="/mascot/egg-common.webp"
+            src={eggImageUrl(payload.itemType as string)}
             alt={(payload.displayName as string) ?? "Ovo"}
             className="h-20 object-contain"
           />

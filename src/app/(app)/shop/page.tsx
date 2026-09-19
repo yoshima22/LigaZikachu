@@ -45,7 +45,7 @@ async function ensureCoreMascotItems() {
 
 async function loadGachaData(playerId: string) {
   const weekKey = currentWeekKey();
-  const [banners, missions, packs, wallet, progress] = await Promise.all([
+  const [banners, missions, packs, wallet, progress, pityStates] = await Promise.all([
     prisma.gachaBanner.findMany({
       orderBy: [{ active: "desc" }, { startsAt: "desc" }],
       include: { entries: { orderBy: { weight: "desc" } }, pityRules: { orderBy: { everyPulls: "asc" } } },
@@ -54,6 +54,7 @@ async function loadGachaData(playerId: string) {
     prisma.gachaPack.findMany({ orderBy: [{ sortOrder: "asc" }, { priceLc: "asc" }] }),
     prisma.gachaWallet.findUnique({ where: { playerId } }),
     prisma.gachaMissionProgress.findMany({ where: { playerId, weekKey } }),
+    prisma.gachaPityState.findMany({ where: { playerId } }),
   ]);
   const progressByMission = new Map(progress.map((row) => [row.missionId, row]));
   return {
@@ -62,6 +63,11 @@ async function loadGachaData(playerId: string) {
       startsAt: banner.startsAt.toISOString(),
       endsAt: banner.endsAt.toISOString(),
       entries: banner.entries.map((entry) => ({ ...entry, eggType: entry.eggType ? String(entry.eggType) : null })),
+      // Contador atual de cada barra de garantia para este jogador.
+      pityRules: banner.pityRules.map((rule) => ({
+        ...rule,
+        counter: pityStates.find((state) => state.ruleId === rule.id)?.counter ?? 0,
+      })),
     })),
     missions: missions.map((mission) => ({
       ...mission,

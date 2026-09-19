@@ -15,6 +15,7 @@ import {
 } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { CELESTIAL_EGG_IMAGE, eggImageUrl } from "@/lib/egg-origin";
 
 interface IncubatorData {
   id: string;
@@ -76,6 +77,7 @@ function getEggLabel(type: string, origin?: string) {
 }
 // Imagem específica por raridade (coloque os arquivos em /public/mascot/)
 const EGG_IMAGE: Record<string, string> = {
+  CELESTIAL: CELESTIAL_EGG_IMAGE,
   COMMON:  "/mascot/egg-common.webp",
   RARE:    "/mascot/egg-common.webp",
   SPECIAL: "/mascot/egg-common.webp",
@@ -341,7 +343,7 @@ function LabChoiceReveal({ choices, onComplete }: { choices: LabChoice[]; onComp
 export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onHatched, eggImages = {}, eventRarityBonusPct = 0 }: Props) {
   // Resolve a imagem: usa a do shop se disponível, senão usa o arquivo local estático
   const resolveEggImg = (type: string) =>
-    eggImages[type] ?? EGG_IMAGE[type] ?? EGG_IMAGE.COMMON;
+    eggImages[type] ?? EGG_IMAGE[type] ?? eggImageUrl(type);
   const [pending, startTransition] = useTransition();
   const [showHatchAnimation, setShowHatchAnimation] = useState(true);
   const [animatedResult, setAnimatedResult] = useState<HatchResult | null>(null);
