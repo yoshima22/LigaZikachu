@@ -473,6 +473,18 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
         });
       }
 
+      // 5b. Doces raros
+      const rareSweetQty = rewardItems
+        .filter((item) => item.type === "RARE_SWEET")
+        .reduce((total, item) => total + Math.max(1, Math.floor(item.quantity ?? 1)), 0);
+      if (rareSweetQty > 0) {
+        await tx.mascotFoodItem.upsert({
+          where: { playerId_type: { playerId: player.id, type: "RARE_SWEET" } },
+          create: { playerId: player.id, type: "RARE_SWEET", quantity: rareSweetQty },
+          update: { quantity: { increment: rareSweetQty } },
+        });
+      }
+
       // 6. Itens da ZikaShop — permite repetir inclusive o mesmo item.
       for (const itemReward of rewardItems.filter((item) => item.type === "SHOP_ITEM" && item.shopItemName)) {
         const shopItem = await tx.shopItem.findFirst({

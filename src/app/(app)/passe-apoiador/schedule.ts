@@ -1,7 +1,7 @@
 // Calendário de recompensas do Passe Apoiador (sem "use server" — apenas dados)
 
 export type DayRewardItem = {
-  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
   coins?: number;
   ligaCash?: number;
   eggType?: string;
@@ -14,7 +14,7 @@ export type DayRewardItem = {
 export type DayReward = {
   day: number;
   label: string;
-  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
   coins?: number;
   ligaCash?: number;
   eggType?: string;
@@ -50,6 +50,9 @@ export function expandDayReward(reward: DayReward): DayRewardItem[] {
   }
   if (reward.foodType === "SWEET" || reward.type === "SWEET") {
     items.push({ type: "SWEET", quantity: reward.foodQty ?? 1 });
+  }
+  if (reward.foodType === "RARE_SWEET" || reward.type === "RARE_SWEET") {
+    items.push({ type: "RARE_SWEET", quantity: reward.foodQty ?? 1 });
   }
   if (reward.type === "STICKER_PACK" && reward.packName) {
     items.push({ type: "STICKER_PACK", packName: reward.packName });

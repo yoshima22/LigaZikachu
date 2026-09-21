@@ -20,7 +20,7 @@ import {
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
 
-type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
 
 type Slot =
   | { id: string; kind: "COINS"; amount: number }
@@ -28,6 +28,7 @@ type Slot =
   | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE" | "LAB"; qty: number }
   | { id: string; kind: "FOOD"; qty: number }
   | { id: string; kind: "SWEET"; qty: number }
+  | { id: string; kind: "RARE_SWEET"; qty: number }
   | { id: string; kind: "STICKER_PACK"; packName: string }
   | { id: string; kind: "SHOP_ITEM"; itemName: string }
   | { id: string; kind: "ZIKALOOT"; special: boolean };
@@ -38,6 +39,7 @@ const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string 
   EGG:         { label: "Ovo de Mascote",   emoji: "🥚", color: "border-teal-500/30 bg-teal-950/10" },
   FOOD:        { label: "Comida de Mascote",emoji: "🍖", color: "border-orange-500/30 bg-orange-950/10" },
   SWEET:       { label: "Doce de Mascote",  emoji: "🍬", color: "border-pink-500/30 bg-pink-950/10" },
+  RARE_SWEET:  { label: "Doce Raro",        emoji: "🍭", color: "border-fuchsia-500/30 bg-fuchsia-950/10" },
   STICKER_PACK:{ label: "Pacote Figurinha", emoji: "🎴", color: "border-blue-500/30 bg-blue-950/10" },
   SHOP_ITEM:   { label: "Item do Shop",     emoji: "📦", color: "border-purple-500/30 bg-purple-950/10" },
   ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "🎟️", color: "border-green-500/30 bg-green-950/10" },
@@ -57,6 +59,7 @@ function rewardToSlots(reward: DayReward): Slot[] {
         case "EGG": return { id: uid(), kind: "EGG", eggType: (item.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: item.quantity ?? 1 };
         case "FOOD": return { id: uid(), kind: "FOOD", qty: item.quantity ?? 1 };
         case "SWEET": return { id: uid(), kind: "SWEET", qty: item.quantity ?? 1 };
+        case "RARE_SWEET": return { id: uid(), kind: "RARE_SWEET", qty: item.quantity ?? 1 };
         case "STICKER_PACK": return { id: uid(), kind: "STICKER_PACK", packName: item.packName ?? "Pacote Comum" };
         case "SHOP_ITEM": return { id: uid(), kind: "SHOP_ITEM", itemName: item.shopItemName ?? "" };
         case "ZIKALOOT": return { id: uid(), kind: "ZIKALOOT", special: item.zikalootSpecial ?? false };
@@ -79,6 +82,8 @@ function rewardToSlots(reward: DayReward): Slot[] {
 
   if (reward.foodType === "SWEET" || reward.type === "SWEET")
     slots.push({ id: uid(), kind: "SWEET", qty: reward.foodQty ?? 1 });
+  if (reward.foodType === "RARE_SWEET" || reward.type === "RARE_SWEET")
+    slots.push({ id: uid(), kind: "RARE_SWEET", qty: reward.foodQty ?? 1 });
 
   if (reward.type === "STICKER_PACK" && reward.packName)
     slots.push({ id: uid(), kind: "STICKER_PACK", packName: reward.packName });
@@ -97,6 +102,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   const egg    = slots.find(s => s.kind === "EGG") as Extract<Slot, { kind: "EGG" }> | undefined;
   const food   = slots.find(s => s.kind === "FOOD") as Extract<Slot, { kind: "FOOD" }> | undefined;
   const sweet  = slots.find(s => s.kind === "SWEET") as Extract<Slot, { kind: "SWEET" }> | undefined;
+  const rareSweet = slots.find(s => s.kind === "RARE_SWEET") as Extract<Slot, { kind: "RARE_SWEET" }> | undefined;
   const pack   = slots.find(s => s.kind === "STICKER_PACK") as Extract<Slot, { kind: "STICKER_PACK" }> | undefined;
   const shop   = slots.find(s => s.kind === "SHOP_ITEM") as Extract<Slot, { kind: "SHOP_ITEM" }> | undefined;
   const loot   = slots.find(s => s.kind === "ZIKALOOT") as Extract<Slot, { kind: "ZIKALOOT" }> | undefined;
@@ -108,7 +114,8 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     shop  ? "SHOP_ITEM" :
     egg   ? "EGG" :
     food  ? "FOOD" :
-    sweet ? "SWEET" : "COINS";
+    sweet ? "SWEET" :
+    rareSweet ? "RARE_SWEET" : "COINS";
 
   const liga   = slots.find(s => s.kind === "LIGA_CASH") as Extract<Slot, { kind: "LIGA_CASH" }> | undefined;
 
@@ -119,6 +126,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
       case "EGG": return { type: "EGG", eggType: slot.eggType, quantity: slot.qty };
       case "FOOD": return { type: "FOOD", quantity: slot.qty };
       case "SWEET": return { type: "SWEET", quantity: slot.qty };
+      case "RARE_SWEET": return { type: "RARE_SWEET", quantity: slot.qty };
       case "STICKER_PACK": return { type: "STICKER_PACK", packName: slot.packName };
       case "SHOP_ITEM": return { type: "SHOP_ITEM", shopItemName: slot.itemName };
       case "ZIKALOOT": return { type: "ZIKALOOT", zikalootSpecial: slot.special };
@@ -996,6 +1004,7 @@ function DayEditor({ reward, onChange, onClose }: {
       EGG:          { id: uid(), kind: "EGG", eggType: "COMMON", qty: 1 },
       FOOD:         { id: uid(), kind: "FOOD", qty: 1 },
       SWEET:        { id: uid(), kind: "SWEET", qty: 1 },
+      RARE_SWEET:   { id: uid(), kind: "RARE_SWEET", qty: 1 },
       STICKER_PACK: { id: uid(), kind: "STICKER_PACK", packName: "Pacote Comum" },
       SHOP_ITEM:    { id: uid(), kind: "SHOP_ITEM", itemName: "" },
       ZIKALOOT:     { id: uid(), kind: "ZIKALOOT", special: false },
@@ -1170,7 +1179,7 @@ function SlotEditor({ slot, onUpdate, onRemove }: {
           </>
         )}
 
-        {(slot.kind === "FOOD" || slot.kind === "SWEET") && (
+        {(slot.kind === "FOOD" || slot.kind === "SWEET" || slot.kind === "RARE_SWEET") && (
           <div className="col-span-2 sm:col-span-3 space-y-1">
             <label className="text-[10px] text-slate-500 uppercase tracking-widest">Quantidade</label>
             <input type="number" min={1} max={20}
