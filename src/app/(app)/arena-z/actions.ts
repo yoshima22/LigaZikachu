@@ -257,6 +257,7 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
         body: `${result.playerTeamName} atacou sua equipe. ${outcome}`,
         url: "/arena-z",
         data: { source: "arena-z-defense", attackTeamId, defenseTeamId },
+        category: "ARENA",
       }).catch(() => undefined));
     }
     // Revalidação feita pelo cliente ao fechar o modal

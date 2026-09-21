@@ -296,6 +296,8 @@ model Player {
   arenaPveCoinsEarned         Int                            @default(0) // ZC PvE resgatados hoje
   susShieldDate               String                         @default("") // "YYYY-MM-DD" BRT — escudo SUS usado hoje
   mascotBondBehavior          String                         @default("FREE")
+  notificationSettings        Json?                          // preferências por categoria/canal + cooldown de push
+  lastPushAt                  DateTime?                      // usado pelo cooldown global de push
   mascotSpritePreference      String                         @default("ANIMATED")
   megaSpritePreference        String                         @default("ANIMATED")
   deliveryHomeLabel           String?

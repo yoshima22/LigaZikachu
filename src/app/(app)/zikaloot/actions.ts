@@ -263,7 +263,8 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
       await sendNotificationToUser(winningPick.player.userId, {
         title: "🏆 Você ganhou na ZikaLoot!",
         body: `Número ${drawnNumber} sorteado em "${loot.name}". Verifique sua Caixa de Presentes!`,
-        url: "/caixa-de-presentes"
+        url: "/caixa-de-presentes",
+        category: "OUTROS"
       });
 
       revalidatePath("/zikaloot");

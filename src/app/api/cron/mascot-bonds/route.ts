@@ -15,6 +15,7 @@ import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/l
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { filterBondNotificationRecipients } from "@/lib/bond-notification-preferences";
+import { filterInGameRecipients } from "@/lib/nav-notifications";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -46,8 +47,9 @@ export async function GET(req: NextRequest) {
     await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
     const players = await filterBondNotificationRecipients([relation.mascotA.playerId, relation.mascotB.playerId]);
     if (players.length) {
-      await prisma.playerNotification.createMany({ data: players.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
-      await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos" }).catch(() => undefined);
+      const charmInGame = await filterInGameRecipients(players, "MASCOTES");
+      if (charmInGame.length) await prisma.playerNotification.createMany({ data: charmInGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
+      await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos", category: "MASCOTES" }).catch(() => undefined);
     }
   }
   // Afastamentos têm peso e tempo. Ao fim do prazo, as duas direções da
@@ -67,8 +69,9 @@ export async function GET(req: NextRequest) {
     notifiedDistancePairs.add(key);
     const affected = await filterBondNotificationRecipients([relation.mascotA.playerId, relation.mascotB.playerId]);
     if (affected.length) {
-      await prisma.playerNotification.createMany({ data: affected.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
-      await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos" }).catch(() => undefined);
+      const distanceInGame = await filterInGameRecipients(affected, "MASCOTES");
+      if (distanceInGame.length) await prisma.playerNotification.createMany({ data: distanceInGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
+      await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos", category: "MASCOTES" }).catch(() => undefined);
     }
   }
   // Limpa dados do desenho anterior. Relação inativa não é reserva nem fila.
@@ -155,11 +158,12 @@ export async function GET(req: NextRequest) {
         if (result.importantEventId && result.affectedPlayerIds.length) {
           importantRefugeMoments += 1;
           const recipients = await filterBondNotificationRecipients(result.affectedPlayerIds);
+          const refugeInGame = await filterInGameRecipients(recipients, "MASCOTES");
           const notificationBody = (affectedPlayerId: string) => result.reward && result.rewardOwnerPlayerId !== affectedPlayerId
             ? `${result.storyDescription} ${result.rewardMascotName} encontrou um recurso para o próprio treinador. Você não tem item para resgatar neste acontecimento.`
             : result.description;
-          if (recipients.length) await prisma.playerNotification.createMany({
-            data: recipients.map((affectedPlayerId) => ({
+          if (refugeInGame.length) await prisma.playerNotification.createMany({
+            data: refugeInGame.map((affectedPlayerId) => ({
               playerId: affectedPlayerId,
               category: "BONDS",
               type: "IMPORTANT_REFUGE_MOMENT",
@@ -177,6 +181,7 @@ export async function GET(req: NextRequest) {
               body: notificationBody(recipient),
               url: "/lacos",
               data: { eventKey: `bonds:refuge:${result.importantEventId}` },
+              category: "MASCOTES",
             });
           }
         }

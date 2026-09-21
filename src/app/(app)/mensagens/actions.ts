@@ -170,6 +170,7 @@ export async function sendMessageAction(
       body: trimmed || (attachment?.type === "MASCOT" ? "Enviou um mascote." : "Enviou um item."),
       url: `/mensagens/${me.id}`,
       data: { source: "direct-message", senderId: me.id },
+      category: "MENSAGENS",
     }).catch(() => undefined));
   return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
 }

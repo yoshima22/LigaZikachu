@@ -237,7 +237,7 @@ export async function sendAdminPushNotification(input: { title: string; message:
     const body = input.message.trim().replace(/\s+/g, " ").slice(0, 240);
     const url = input.url?.trim().startsWith("/") ? input.url.trim().slice(0, 180) : "/dashboard";
     if (title.length < 2 || body.length < 3) return { error: "Preencha o título e a mensagem." };
-    const result = await sendNotificationToUsers(null, { title, body, url, data: { source: "admin" } });
+    const result = await sendNotificationToUsers(null, { title, body, url, data: { source: "admin" }, category: "ANUNCIOS" });
     if (!result.configured) return { error: "O Firebase não está configurado no servidor." };
     return result;
   } catch (error) {

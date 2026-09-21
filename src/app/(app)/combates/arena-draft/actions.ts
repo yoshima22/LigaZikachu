@@ -715,6 +715,7 @@ export async function createDraftChallengeAction(
       title: "Novo desafio na Arena Draft",
       body: `${player.displayName} quer enfrentar você. O convite expira em 10 minutos.`,
       url: "/combates/arena-draft",
+      category: "ARENA",
     }).catch(() => null);
     return {
       success: "Desafio enviado. Ele expira em 10 minutos.",

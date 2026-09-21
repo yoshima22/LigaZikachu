@@ -5,7 +5,9 @@ import { z } from "zod";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { hashPassword, verifyPassword } from "@/lib/auth/password";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { getStandbyUntilFromNotes, setStandbyUntilInNotes } from "@/lib/account-standby";
+import { parseNotificationSettings } from "@/lib/notification-preferences";
 import { retireArenaTeam } from "@/lib/arena-z";
 import { uploadAvatarToStorage } from "@/lib/avatar-storage";
 import { parseBirthDateInput } from "@/lib/birthday";
@@ -66,6 +68,20 @@ const standbySchema = z.object({
 });
 
 const SYNC_CANCELLABLE = ["OPEN", "COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] as const;
+
+export async function updateNotificationSettings(input: unknown): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Não autenticado." };
+  // parseNotificationSettings sanitiza e limita tudo (categorias válidas, cooldown 0–120),
+  // então qualquer objeto vindo do cliente é normalizado antes de salvar.
+  const settings = parseNotificationSettings(input);
+  await prisma.player.update({
+    where: { userId: user.id },
+    data: { notificationSettings: settings as unknown as Prisma.InputJsonValue },
+  });
+  revalidatePath("/perfil");
+  return { ok: true };
+}
 
 export async function setCasualModeAction(
   enabled: boolean,

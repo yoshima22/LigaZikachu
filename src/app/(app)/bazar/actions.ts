@@ -1367,8 +1367,8 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
       trackGachaObjective(player.id, currency === "LC" ? "BAZAR_GASTO_LC" : "BAZAR_GASTO_ZC", price),
     ]).then(() => undefined));
     after(() => Promise.allSettled([
-      sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
-      sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` , category: "BAZAR" }),
+      sendNotificationToPlayers([player.id], { title: `Compra concluída: ${listingDisplayName(listing)}`, body: `O item foi entregue por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}`, category: "BAZAR" }),
     ]).then(() => undefined));
     return {};
   } catch (err) {
@@ -2121,8 +2121,8 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     // Notifica o proponente que sua proposta foi aceita
     revalidateTag(`nav-${proposal.proposer.userId}`);
     after(() => Promise.allSettled([
-      sendNotificationToPlayers([proposal.proposerId], { title: `Proposta aceita: ${listingDisplayName(listing)}`, body: `${listing.player.displayName} aceitou sua proposta.`, url: `/bazar/${listing.id}` }),
-      sendNotificationToPlayers([listing.playerId], { title: `Troca concluída: ${listingDisplayName(listing)}`, body: `A proposta foi aceita e os conteúdos foram entregues.`, url: `/bazar/${listing.id}` }),
+      sendNotificationToPlayers([proposal.proposerId], { title: `Proposta aceita: ${listingDisplayName(listing)}`, body: `${listing.player.displayName} aceitou sua proposta.`, url: `/bazar/${listing.id}`, category: "BAZAR" }),
+      sendNotificationToPlayers([listing.playerId], { title: `Troca concluída: ${listingDisplayName(listing)}`, body: `A proposta foi aceita e os conteúdos foram entregues.`, url: `/bazar/${listing.id}`, category: "BAZAR" }),
     ]).then(() => undefined));
     return {};
   } catch (err) {
@@ -4099,6 +4099,7 @@ export async function placeBid(listingId: string, amount: number): Promise<{ err
         title: `Lance superado: ${desc}`,
         body: `Seu lance foi coberto por ${amount.toLocaleString("pt-BR")} ${cur}. O valor anterior foi devolvido.`,
         url: `/bazar/${listingId}`,
+        category: "BAZAR",
       }));
     }
 
@@ -4231,8 +4232,8 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     const wonName = listing.category === "MASCOT" ? fullMascotPayloadName(wonPayload) : String(wonPayload.displayName ?? "Item");
     await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ${currency}. O item foi transferido para você.`);
     after(() => Promise.allSettled([
-      sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ${currency} e o item já foi entregue.`, url: `/bazar/${listingId}` }),
-      sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` }),
+      sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ${currency} e o item já foi entregue.`, url: `/bazar/${listingId}`, category: "BAZAR" }),
+      sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}`, category: "BAZAR" }),
     ]).then(() => undefined));
 
     return { finalized: true };

@@ -690,7 +690,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
     return { option, resultJson, eventType: event.eventType, mascotAId: event.mascotAId, ownerId: event.ownerId, milestones };
   }).then(async (result) => {
     for (const milestone of result.milestones) {
-      await sendNotificationToPlayers([milestone.playerId], { title: `Laços: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier}. Abra Laços para ver os efeitos deste marco.`, url: "/lacos", data: { eventKey: `bonds:tier:${eventId}:${milestone.direction}:${milestone.threshold}` } }).catch(() => undefined);
+      await sendNotificationToPlayers([milestone.playerId], { title: `Laços: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier}. Abra Laços para ver os efeitos deste marco.`, url: "/lacos", data: { eventKey: `bonds:tier:${eventId}:${milestone.direction}:${milestone.threshold}` }, category: "MASCOTES" }).catch(() => undefined);
     }
     if (result.eventType === RUNAWAY_WARNING_TYPE && result.option.id === "let_run") {
       await createRunawayRescueEvent(result.mascotAId, result.ownerId).catch(() => null);

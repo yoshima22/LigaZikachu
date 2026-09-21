@@ -11,6 +11,7 @@ import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { Prisma } from "@prisma/client";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { bondNotificationPreferenceId, filterBondNotificationRecipients } from "@/lib/bond-notification-preferences";
+import { filterInGameRecipients } from "@/lib/nav-notifications";
 import {
   applyBondOption,
   autoResolveExpiredBondEvents,
@@ -195,8 +196,9 @@ const BOND_DISTANCE_DELAY_MS = 24 * 60 * 60_000;
 async function notifyBondDispute(playerIds: string[], title: string, body: string, eventKey: string) {
   const unique = await filterBondNotificationRecipients(playerIds);
   if (!unique.length) return;
-  await prisma.playerNotification.createMany({ data: unique.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_DISPUTE", title, body, href: "/lacos", entityId: eventKey, eventKey: `${eventKey}:${playerId}` })), skipDuplicates: true });
-  await sendNotificationToPlayers(unique, { title, body, url: "/lacos", data: { eventKey } }).catch(() => undefined);
+  const inGame = await filterInGameRecipients(unique, "MASCOTES");
+  if (inGame.length) await prisma.playerNotification.createMany({ data: inGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_DISPUTE", title, body, href: "/lacos", entityId: eventKey, eventKey: `${eventKey}:${playerId}` })), skipDuplicates: true });
+  await sendNotificationToPlayers(unique, { title, body, url: "/lacos", data: { eventKey }, category: "MASCOTES" }).catch(() => undefined);
 }
 
 export async function updateActiveBondV2Action(relationId: string, operation: "START_DISTANCE" | "CANCEL_DISTANCE") {

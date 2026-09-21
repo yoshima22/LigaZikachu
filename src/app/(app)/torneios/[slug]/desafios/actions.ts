@@ -194,7 +194,8 @@ export async function createChallenge(
       await sendNotificationToUser(challengedPlayer.userId, {
         title: "⚔️ Você foi desafiado!",
         body: `${player.displayName} te desafiou em ${tournament.name}. Verifique a aba de Desafios!`,
-        url: `/torneios/${tournament.slug}/desafios`
+        url: `/torneios/${tournament.slug}/desafios`,
+        category: "OUTROS"
       });
     }
 

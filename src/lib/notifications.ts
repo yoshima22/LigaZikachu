@@ -1,11 +1,38 @@
 import { prisma } from "@/lib/prisma";
+import { parseNotificationSettings, isWithinPushCooldown, type NotifCategory } from "@/lib/notification-preferences";
 
 export type NotificationPayload = {
   title: string;
   body: string;
   data?: Record<string, string>;
   url?: string;
+  /** Categoria para respeitar as preferências do jogador. Sem categoria = envia sempre. */
+  category?: NotifCategory;
 };
+
+// Filtra destinatários de push pelas preferências (categoria desligada ou dentro
+// do cooldown são pulados) e registra o último envio para o cooldown global.
+// Sem categoria, devolve a lista original (bypass — ex.: teste do admin).
+async function allowPushUserIds(userIds: string[] | null, category?: NotifCategory): Promise<string[] | null> {
+  if (!category) return userIds;
+  const players = await prisma.player.findMany({
+    where: userIds ? { userId: { in: [...new Set(userIds)] } } : undefined,
+    select: { id: true, userId: true, notificationSettings: true, lastPushAt: true },
+  }).catch(() => [] as { id: string; userId: string; notificationSettings: unknown; lastPushAt: Date | null }[]);
+  const now = Date.now();
+  const allowed: string[] = [];
+  const bumpIds: string[] = [];
+  for (const p of players) {
+    if (!parseNotificationSettings(p.notificationSettings).categories[category].push) continue;
+    if (isWithinPushCooldown(p.notificationSettings, p.lastPushAt, now)) continue;
+    allowed.push(p.userId);
+    bumpIds.push(p.id);
+  }
+  if (bumpIds.length) {
+    await prisma.player.updateMany({ where: { id: { in: bumpIds } }, data: { lastPushAt: new Date() } }).catch(() => undefined);
+  }
+  return allowed;
+}
 
 // ── FCM HTTP v1 ───────────────────────────────────────────────────────────────
 
@@ -147,6 +174,9 @@ export async function sendNotificationToUser(
     return { configured: false, tokenCount: 0, sent: 0, failed: 0 };
   }
 
+  const allowed = await allowPushUserIds([userId], payload.category);
+  if (allowed && allowed.length === 0) return { configured: true, tokenCount: 0, sent: 0, failed: 0 };
+
   let tokens: { token: string }[] = [];
   try {
     tokens = await prisma.userFcmToken.findMany({
@@ -179,8 +209,11 @@ export async function sendNotificationToUsers(
   const accessToken = await getAccessToken();
   if (!sa?.project_id || !accessToken) return { configured: false, users: 0, tokenCount: 0, sent: 0, failed: 0 };
 
+  const allowedUserIds = await allowPushUserIds(userIds, payload.category);
+  if (allowedUserIds && allowedUserIds.length === 0) return { configured: true, users: 0, tokenCount: 0, sent: 0, failed: 0 };
+
   const tokens = await prisma.userFcmToken.findMany({
-    where: userIds ? { userId: { in: [...new Set(userIds)] } } : undefined,
+    where: allowedUserIds ? { userId: { in: [...new Set(allowedUserIds)] } } : undefined,
     select: { token: true, userId: true },
   }).catch(() => [] as { token: string; userId: string }[]);
 

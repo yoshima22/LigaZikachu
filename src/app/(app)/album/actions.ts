@@ -222,7 +222,8 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
       await sendNotificationToUser(targetUser.userId, {
         title: "🎴 Figurinha recebida!",
         body: `${player.displayName} te enviou ${sticker.card.displayName}. Verifique sua Caixa de Presentes!`,
-        url: "/caixa-de-presentes"
+        url: "/caixa-de-presentes",
+        category: "OUTROS"
       });
     }
 

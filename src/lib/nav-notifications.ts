@@ -2,6 +2,7 @@ import "server-only";
 
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { dbCategoryToNotif, isInGameAllowed, type NotifCategory } from "@/lib/notification-preferences";
 
 export type NavAlert = {
   id: string;
@@ -38,11 +39,24 @@ export async function createPlayerNotification(
     eventKey?: string;
   },
 ) {
+  // Respeita a preferência in-game do jogador para esta categoria.
+  const player = await db.player.findUnique({ where: { id: input.playerId }, select: { notificationSettings: true } }).catch(() => null);
+  if (player && !isInGameAllowed(player.notificationSettings, dbCategoryToNotif(input.category))) return null;
   return db.playerNotification.upsert({
     where: { eventKey: input.eventKey ?? `notification:${crypto.randomUUID()}` },
     update: {},
     create: input,
   });
+}
+
+/** Remove destinatários que desligaram o canal in-game desta categoria. Para
+ * notificações criadas em lote (createMany) que não passam por createPlayerNotification. */
+export async function filterInGameRecipients(playerIds: string[], category: NotifCategory): Promise<string[]> {
+  const unique = [...new Set(playerIds)];
+  if (!unique.length) return [];
+  const players = await prisma.player.findMany({ where: { id: { in: unique } }, select: { id: true, notificationSettings: true } }).catch(() => []);
+  const blocked = new Set(players.filter((p) => !isInGameAllowed(p.notificationSettings, category)).map((p) => p.id));
+  return unique.filter((id) => !blocked.has(id));
 }
 
 export async function getNavNotificationSnapshot(playerId: string): Promise<NavNotificationSnapshot> {

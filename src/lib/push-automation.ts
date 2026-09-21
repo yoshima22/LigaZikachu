@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
 import { getPokemonName } from "@/lib/mascot-data";
+import type { NotifCategory } from "@/lib/notification-preferences";
 
 const TZ = "America/Sao_Paulo";
 const EXPEDITION_LABELS: Record<string, string> = {
@@ -26,9 +27,9 @@ async function claim(eventKey: string) {
   } catch { return false; }
 }
 
-async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string) {
+async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string, category: NotifCategory) {
   if (!userIds.length || !(await claim(eventKey))) return 0;
-  const result = await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey } });
+  const result = await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey }, category });
   return result.sent;
 }
 
@@ -48,10 +49,10 @@ export async function runPushAutomation(now = new Date()) {
     const mode = String(reward.mode ?? "STANDARD").toUpperCase();
     const name = mascotName(expedition.mascot);
     if (mode === "VACATION") {
-      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias com o Professor Carvalho e já pode ser recebido.`, "/mascotes");
+      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias com o Professor Carvalho e já pode ser recebido.`, "/mascotes", "MASCOTES");
     } else {
       const label = EXPEDITION_LABELS[mode] ?? "Padrão";
-      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição ${label}. As recompensas estão prontas.`, "/mascotes");
+      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição ${label}. As recompensas estão prontas.`, "/mascotes", "MASCOTES");
     }
   }
 
@@ -61,7 +62,7 @@ export async function runPushAutomation(now = new Date()) {
   });
   for (const vacation of vacations) {
     const name = mascotName(vacation.mascot);
-    sent += await sendOnce(`vacation-ready:${vacation.id}`, [vacation.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias e já pode ser recebido.`, "/mascotes");
+    sent += await sendOnce(`vacation-ready:${vacation.id}`, [vacation.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias e já pode ser recebido.`, "/mascotes", "MASCOTES");
   }
 
   if (["Mon", "Tue", "Wed", "Thu", "Fri"].includes(local.weekday)) {
@@ -74,9 +75,9 @@ export async function runPushAutomation(now = new Date()) {
         const counts = new Map<string, Set<number>>();
         for (const team of teams) (counts.get(team.playerId) ?? counts.set(team.playerId, new Set()).get(team.playerId)!).add(team.battleSlot);
         const missing = players.filter((player) => (counts.get(player.id)?.size ?? 0) < 3).map((player) => player.userId);
-        sent += await sendOnce(`weekly-team-warning:${weekly.id}:${local.date}`, missing, "Liga Semanal: equipe pendente", "Você ainda não salvou as três equipes de hoje. Às 20h o sistema usará o time herdado.", "/combates/liga-semanal");
+        sent += await sendOnce(`weekly-team-warning:${weekly.id}:${local.date}`, missing, "Liga Semanal: equipe pendente", "Você ainda não salvou as três equipes de hoje. Às 20h o sistema usará o time herdado.", "/combates/liga-semanal", "LIGA_SEMANAL");
       }
-      if (local.minute >= 20 * 60 && local.minute < 20 * 60 + 30) sent += await sendOnce(`weekly-start:${weekly.id}:${local.date}`, players.map((player) => player.userId), "Liga Semanal começou!", "Os combates de hoje começaram. Acompanhe os resultados e replays.", "/combates/liga-semanal");
+      if (local.minute >= 20 * 60 && local.minute < 20 * 60 + 30) sent += await sendOnce(`weekly-start:${weekly.id}:${local.date}`, players.map((player) => player.userId), "Liga Semanal começou!", "Os combates de hoje começaram. Acompanhe os resultados e replays.", "/combates/liga-semanal", "LIGA_SEMANAL");
     }
 
     const rush = await prisma.rushLeague.findFirst({ where: { status: { in: ["REGISTRATION", "ACTIVE"] }, weekStart: { lte: now }, weekEnd: { gte: now } }, orderBy: { weekStart: "desc" }, select: { id: true, participants: { select: { playerId: true } } } });
@@ -88,9 +89,9 @@ export async function runPushAutomation(now = new Date()) {
         const counts = new Map<string, Set<number>>();
         for (const team of teams) (counts.get(team.playerId) ?? counts.set(team.playerId, new Set()).get(team.playerId)!).add(team.battleSlot);
         const missing = players.filter((player) => (counts.get(player.id)?.size ?? 0) < 3).map((player) => player.userId);
-        sent += await sendOnce(`rush-team-warning:${rush.id}:${local.date}`, missing, "Liga Rush: equipe pendente", "A primeira luta é às 19h. Salve as equipes ou o sistema usará a escalação herdada/automática.", "/combates/liga-rush");
+        sent += await sendOnce(`rush-team-warning:${rush.id}:${local.date}`, missing, "Liga Rush: equipe pendente", "A primeira luta é às 19h. Salve as equipes ou o sistema usará a escalação herdada/automática.", "/combates/liga-rush", "LIGA_RUSH");
       }
-      if (local.minute >= 19 * 60 && local.minute < 19 * 60 + 30) sent += await sendOnce(`rush-start:${rush.id}:${local.date}`, players.map((player) => player.userId), "Liga Rush começou!", "Os combates das 19h, 19h10 e 19h20 começaram. Acompanhe a rodada.", "/combates/liga-rush");
+      if (local.minute >= 19 * 60 && local.minute < 19 * 60 + 30) sent += await sendOnce(`rush-start:${rush.id}:${local.date}`, players.map((player) => player.userId), "Liga Rush começou!", "Os combates das 19h, 19h10 e 19h20 começaram. Acompanhe a rodada.", "/combates/liga-rush", "LIGA_RUSH");
     }
   }
 
