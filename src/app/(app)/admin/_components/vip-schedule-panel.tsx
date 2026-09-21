@@ -231,7 +231,8 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
 
   // Form de criação de passe
   const [selectedPlayerId, setSelectedPlayerId] = useState("");
-  const [durationDays, setDurationDays] = useState(30);
+  const [durationDays, setDurationDays] = useState(30); // dias de prêmio (limitado ao calendário)
+  const [extraDays, setExtraDays] = useState(0); // dias extras só para resgate, sem prêmios
   const [startDay, setStartDay] = useState(1);
   const [passSizeInput, setPassSizeInput] = useState(allSchedules[0]?.schedule.length ?? 30);
   const [skipExistingPasses, setSkipExistingPasses] = useState(true);
@@ -450,7 +451,7 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
     startGrant(async () => {
       const result = await adminGrantVip({
         playerId: selectedPlayerId,
-        days: durationDays,
+        days: durationDays + extraDays,
         startDay: startDay > 1 ? startDay : undefined,
         passLabel: activeLabel,
       });
@@ -469,10 +470,10 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
     const mode = skipExistingPasses
       ? "Quem ja tiver este passe ativo sera ignorado."
       : "Isso pode criar um novo passe mesmo para quem ja tem um ativo.";
-    if (!confirm(`Conceder "${activeLabel}" de ${durationDays} dia(s) para todos os jogadores ativos?\n\n${mode}`)) return;
+    if (!confirm(`Conceder "${activeLabel}" de ${durationDays} dia(s) de prêmio${extraDays > 0 ? ` + ${extraDays} de resgate (total ${durationDays + extraDays})` : ""} para todos os jogadores ativos?\n\n${mode}`)) return;
     startGrantAll(async () => {
       const result = await adminGrantVipToAll({
-        days: durationDays,
+        days: durationDays + extraDays,
         startDay: startDay > 1 ? startDay : undefined,
         passLabel: activeLabel,
         skipExisting: skipExistingPasses,
@@ -764,14 +765,16 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
                     className="flex-1 min-w-48"
                   />
                   <div className="flex items-center gap-2">
-                    <label className="text-xs text-slate-400 whitespace-nowrap">Duração:</label>
-                    <input type="number" min={1} max={schedule.length + 30} value={durationDays}
-                      onChange={e => setDurationDays(Math.max(1, Math.min(schedule.length + 30, Number(e.target.value))))}
-                      className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
+                    <label className="text-xs text-slate-400 whitespace-nowrap">Dias de prêmio:</label>
+                    <input type="number" min={1} max={schedule.length} value={durationDays}
+                      onChange={e => setDurationDays(Math.max(1, Math.min(schedule.length, Number(e.target.value))))}
+                      className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
+                    <label className="text-xs text-slate-400 whitespace-nowrap">Dias extras:</label>
+                    <input type="number" min={0} max={30} value={extraDays}
+                      onChange={e => setExtraDays(Math.max(0, Math.min(30, Number(e.target.value))))}
+                      className="w-16 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
                     <span className="text-[10px] text-slate-600">
-                      {durationDays > schedule.length
-                        ? `${schedule.length} dias de prêmios + ${durationDays - schedule.length} de resgate`
-                        : `de ${schedule.length} dias`}
+                      total {durationDays + extraDays} dias{extraDays > 0 ? ` (${extraDays} só de resgate)` : ""}
                     </span>
                   </div>
                   <div className="flex items-center gap-2">
