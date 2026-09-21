@@ -765,10 +765,14 @@ export function VipSchedulePanel({ allSchedules, activeVips }: Props) {
                   />
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-slate-400 whitespace-nowrap">Duração:</label>
-                    <input type="number" min={1} max={schedule.length} value={durationDays}
-                      onChange={e => setDurationDays(Math.max(1, Math.min(schedule.length, Number(e.target.value))))}
+                    <input type="number" min={1} max={schedule.length + 30} value={durationDays}
+                      onChange={e => setDurationDays(Math.max(1, Math.min(schedule.length + 30, Number(e.target.value))))}
                       className="w-20 rounded-lg border border-border bg-slate-900 px-3 py-2 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50" />
-                    <span className="text-[10px] text-slate-600">de {schedule.length} dias</span>
+                    <span className="text-[10px] text-slate-600">
+                      {durationDays > schedule.length
+                        ? `${schedule.length} dias de prêmios + ${durationDays - schedule.length} de resgate`
+                        : `de ${schedule.length} dias`}
+                    </span>
                   </div>
                   <div className="flex items-center gap-2">
                     <label className="text-xs text-slate-400 whitespace-nowrap">Iniciar dia:</label>

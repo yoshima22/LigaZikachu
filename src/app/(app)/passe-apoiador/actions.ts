@@ -559,7 +559,9 @@ export async function adminGrantVip(opts: {
 
     const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
     const activeSchedule = await getActiveSchedule(passLabel);
-    const days = Math.max(1, Math.min(activeSchedule.length, Math.floor(opts.days)));
+    // Permite estender a duração além do calendário: os dias extras não têm
+    // prêmios, apenas mantêm o passe disponível para resgate (grace até +30).
+    const days = Math.max(1, Math.min(activeSchedule.length + 30, Math.floor(opts.days)));
     const startDay = Math.max(1, Math.min(activeSchedule.length, opts.startDay ?? 1));
 
     // Se startDay > 1, rewind startsAt para que "hoje" seja o dia startDay.
@@ -676,7 +678,9 @@ export async function adminGrantVipToAll(opts: {
     await requireAdmin();
     const passLabel = opts.passLabel?.trim() || "Passe Apoiador";
     const activeSchedule = await getActiveSchedule(passLabel);
-    const days = Math.max(1, Math.min(activeSchedule.length, Math.floor(opts.days)));
+    // Permite estender a duração além do calendário: os dias extras não têm
+    // prêmios, apenas mantêm o passe disponível para resgate (grace até +30).
+    const days = Math.max(1, Math.min(activeSchedule.length + 30, Math.floor(opts.days)));
     const startDay = Math.max(1, Math.min(activeSchedule.length, opts.startDay ?? 1));
     const skipExisting = opts.skipExisting ?? true;
 
