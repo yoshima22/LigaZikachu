@@ -27,7 +27,6 @@ import {
   claimRefugeRewardV2Action,
   contestBondDistanceV2Action,
   setMascotRoutineV2Action,
-  setBondNotificationsEnabledAction,
   setRefugeInfluenceV2Action,
   updateActiveBondV2Action,
   useBondDistanceItemV2Action,
@@ -41,35 +40,6 @@ import {
 import { getShopItemEmoji } from "@/lib/shop-config";
 import type { BondOption } from "@/lib/mascot-bonds";
 import { ResolveBondOptionButton } from "./bond-actions";
-
-export function BondNotificationPreference({ initialEnabled }: { initialEnabled: boolean }) {
-  const [enabled, setEnabled] = useState(initialEnabled);
-  const [pending, startTransition] = useTransition();
-  return (
-    <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300">
-      <input
-        type="checkbox"
-        checked={enabled}
-        disabled={pending}
-        onChange={(event) => {
-          const next = event.target.checked;
-          setEnabled(next);
-          startTransition(async () => {
-            const result = await setBondNotificationsEnabledAction(next);
-            if (result.error) {
-              setEnabled(!next);
-              toast.error(result.error);
-            } else {
-              toast.success(next ? "Notificações de Laços ativadas." : "Notificações de Laços desativadas.");
-            }
-          });
-        }}
-        className="h-4 w-4 accent-fuchsia-400"
-      />
-      Receber notificações de Laços no site e no celular
-    </label>
-  );
-}
 
 export function RoutineSelect({
   mascotId,

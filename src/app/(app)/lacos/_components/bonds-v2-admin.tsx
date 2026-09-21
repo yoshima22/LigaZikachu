@@ -4,16 +4,15 @@ import { getPokemonName, getSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-da
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { autoResolveExpiredBondEvents, bondOptionBlockedReason, getBondCostAvailability, normalizeBondOptions } from "@/lib/mascot-bonds";
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
-import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondNotificationPreference, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
+import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
-import { getBondNotificationsEnabled } from "@/lib/bond-notification-preferences";
+import Link from "next/link";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
 }
 
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
-  const bondsNotificationsEnabled = await getBondNotificationsEnabled(playerId);
   // Momentos importantes vencidos somem ao abrir a página, sem esperar o cron.
   await autoResolveExpiredBondEvents(playerId);
   const costAvailability = await getBondCostAvailability(playerId);
@@ -199,7 +198,9 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
         <div className="rounded-full border border-fuchsia-300/30 bg-fuchsia-300/10 px-3 py-1 text-[10px] font-bold uppercase tracking-[.18em] text-fuchsia-200"><LockKeyhole size={12} className="mr-1 inline" /> Alpha público</div>
         <div className="flex flex-col items-end gap-2">
           <BondsTutorial />
-          <BondNotificationPreference initialEnabled={bondsNotificationsEnabled} />
+          <Link href="/perfil" className="rounded-xl border border-white/10 bg-black/20 px-3 py-2 text-xs text-slate-300 hover:border-fuchsia-400/40">
+            Notificações de Laços agora ficam em Perfil → Notificações (Mascotes).
+          </Link>
         </div>
       </div>
       <p className="text-xs font-black uppercase tracking-[.25em] text-fuchsia-300">Laços 2.0 · vida social dos mascotes</p>

@@ -5,7 +5,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { isStandbyActive } from "@/lib/account-standby";
 import { sendNotificationToPlayers } from "@/lib/notifications";
-import { bondNotificationPreferenceId, preferenceEnabled } from "@/lib/bond-notification-preferences";
+import { isInGameAllowed } from "@/lib/notification-preferences";
 import { BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 
 export type BondBehavior =
@@ -559,8 +559,8 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
         if (rewardItem) {
           await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: milestone.playerId, itemId: rewardItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId: milestone.playerId, itemId: rewardItem.id, quantity: 1, source: "BONDS_MILESTONE" } });
         }
-        const preference = await tx.siteContent.findUnique({ where: { id: bondNotificationPreferenceId(milestone.playerId) }, select: { data: true } });
-        if (preferenceEnabled(preference?.data)) {
+        const prefPlayer = await tx.player.findUnique({ where: { id: milestone.playerId }, select: { notificationSettings: true } });
+        if (isInGameAllowed(prefPlayer?.notificationSettings, "MASCOTES")) {
           await tx.playerNotification.upsert({
             where: { eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
             update: {},

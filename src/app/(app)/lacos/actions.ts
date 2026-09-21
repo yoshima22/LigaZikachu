@@ -10,7 +10,6 @@ import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { Prisma } from "@prisma/client";
 import { sendNotificationToPlayers } from "@/lib/notifications";
-import { bondNotificationPreferenceId, filterBondNotificationRecipients } from "@/lib/bond-notification-preferences";
 import { filterInGameRecipients } from "@/lib/nav-notifications";
 import {
   applyBondOption,
@@ -110,21 +109,6 @@ export async function setMascotRoutineV2Action(mascotId: string, location: Refug
   }
 }
 
-export async function setBondNotificationsEnabledAction(enabled: boolean) {
-  try {
-    const playerId = await getPlayerId();
-    await prisma.siteContent.upsert({
-      where: { id: bondNotificationPreferenceId(playerId) },
-      create: { id: bondNotificationPreferenceId(playerId), data: { enabled: Boolean(enabled) } },
-      update: { data: { enabled: Boolean(enabled) } },
-    });
-    revalidatePath("/lacos");
-    return { ok: true };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Não foi possível atualizar as notificações de Laços." };
-  }
-}
-
 export async function simulateRefugeV2Action(location: RefugeLocation) {
   try {
     const playerId = await getAdminPlayerId();
@@ -194,7 +178,7 @@ export async function saveRefugeBackgroundV2Action(location: RefugeLocation, ima
 const BOND_DISTANCE_DELAY_MS = 24 * 60 * 60_000;
 
 async function notifyBondDispute(playerIds: string[], title: string, body: string, eventKey: string) {
-  const unique = await filterBondNotificationRecipients(playerIds);
+  const unique = [...new Set(playerIds)];
   if (!unique.length) return;
   const inGame = await filterInGameRecipients(unique, "MASCOTES");
   if (inGame.length) await prisma.playerNotification.createMany({ data: inGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_DISPUTE", title, body, href: "/lacos", entityId: eventKey, eventKey: `${eventKey}:${playerId}` })), skipDuplicates: true });
