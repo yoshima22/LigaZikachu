@@ -370,8 +370,8 @@ const POSITIONS = [
   "left-[18%] bottom-[43%] sm:left-[70%] sm:bottom-[18%]",
   "left-1/2 bottom-[43%] sm:left-[90%] sm:bottom-[18%]",
   "left-[82%] bottom-[43%] sm:left-[17%] sm:bottom-[42%]",
-  "left-[30%] bottom-[70%] sm:left-[39%] sm:bottom-[42%]",
-  "left-[70%] bottom-[70%] sm:left-[61%] sm:bottom-[42%]",
+  "left-[30%] bottom-[60%] sm:left-[39%] sm:bottom-[42%]",
+  "left-[70%] bottom-[60%] sm:left-[61%] sm:bottom-[42%]",
 ];
 
 export function RefugeLocationsTabs({

@@ -588,6 +588,8 @@ export async function getListing(id: string) {
       collectMascotIds(state.ownerItems);
     } catch { /* mensagens comuns não são JSON */ }
   }
+  // Pacotes de leilão guardam os mascotes em payload.bundleItems.
+  collectMascotIds((listing.payload as { bundleItems?: unknown } | null)?.bundleItems);
   const mascotDetails = mascotIds.size > 0
     ? await prisma.mascot.findMany({
         where: { id: { in: [...mascotIds] } },
@@ -595,6 +597,8 @@ export async function getListing(id: string) {
           id: true, level: true, personality: true,
           statForce: true, statAgility: true, statCharisma: true,
           statInstinct: true, statVitality: true,
+          // Doença e origem de ovo refletem o estado atual, não o snapshot do anúncio.
+          diseasedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true,
         },
       })
     : [];
@@ -607,8 +611,13 @@ export async function getListing(id: string) {
       return details ? { ...entry, ...details } : entry;
     });
   };
+  const hydratedPayload = listing.payload && typeof listing.payload === "object" && !Array.isArray(listing.payload)
+    && Array.isArray((listing.payload as { bundleItems?: unknown }).bundleItems)
+    ? { ...(listing.payload as Record<string, unknown>), bundleItems: enrichItems((listing.payload as { bundleItems?: unknown }).bundleItems) }
+    : listing.payload;
   const hydratedListing = {
     ...listing,
+    payload: hydratedPayload,
     proposals: listing.proposals.map((proposal) => {
       let message = proposal.message;
       try {
@@ -3951,7 +3960,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           premiumUntil,
         },
       });
-    });
+    }, { maxWait: 10_000, timeout: 20_000 }); // pacotes grandes reservam N mascotes em loop; 5s padrão estoura
 
     if (premium) {
       await publishDuePremiumBazarTicker().catch((error) => console.error("[Bazar Premium] Falha no chamariz inicial do leilão", error));

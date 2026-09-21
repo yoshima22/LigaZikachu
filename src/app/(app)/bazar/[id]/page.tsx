@@ -35,6 +35,9 @@ interface ProposalOfferedItem {
   escrowed_egg_ids?: string[];
   escrowed?: boolean;
   eggBonusPct?: number;
+  diseasedAt?: string | Date | null;
+  hatchedFromEggType?: string | null;
+  hatchedFromEggOrigin?: string | null;
 }
 
 interface ProposalItem {
@@ -123,10 +126,17 @@ const DETAIL_IV_STYLE: Record<string, string> = {
 
 // ── Componente principal ──────────────────────────────────────────────────────
 
+const PROPOSAL_ITEMS_PAGE_SIZE = 12;
+
 function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
+  const [page, setPage] = useState(0);
+  const totalPages = Math.max(1, Math.ceil(items.length / PROPOSAL_ITEMS_PAGE_SIZE));
+  const safePage = Math.min(page, totalPages - 1);
+  const pageItems = items.slice(safePage * PROPOSAL_ITEMS_PAGE_SIZE, safePage * PROPOSAL_ITEMS_PAGE_SIZE + PROPOSAL_ITEMS_PAGE_SIZE);
+
   return (
     <div className="space-y-2">
-      {items.map((item) => {
+      {pageItems.map((item) => {
         if (!item.mascotId) {
           return (
             <span key={`${item.type}-${item.displayName}`} className="mr-1.5 inline-flex rounded-full border border-border bg-slate-950/60 px-2 py-1 text-[10px] text-slate-300">
@@ -135,6 +145,7 @@ function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
           );
         }
 
+        const eggLabel = getHatchedEggLabel(item.hatchedFromEggType ?? null, item.hatchedFromEggOrigin ?? null);
         return (
           <div key={item.mascotId} className="rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/5 p-2.5">
             <div className="flex items-center gap-2.5">
@@ -147,6 +158,16 @@ function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
                 <p className="mt-0.5 text-[10px] text-slate-400">
                   Personalidade: <span className="font-semibold text-slate-200">{item.personality ? (PERSONALITY_LABEL[item.personality] ?? item.personality) : "Não informada"}</span>
                 </p>
+                <div className="mt-1 flex flex-wrap items-center gap-1">
+                  {item.diseasedAt ? (
+                    <span className="rounded-full border border-lime-400/50 bg-lime-500/20 px-1.5 py-0.5 text-[9px] font-black text-lime-200" title="Este mascote está doente: atributos 40% menores até receber um Antídoto.">🤒 Doente</span>
+                  ) : (
+                    <span className="rounded-full border border-emerald-400/40 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-300">Saudável</span>
+                  )}
+                  {eggLabel && (
+                    <span className="rounded-full border border-border bg-slate-950/60 px-1.5 py-0.5 text-[9px] text-slate-300">🥚 {eggLabel}</span>
+                  )}
+                </div>
               </div>
             </div>
             <div className="mt-2 grid grid-cols-5 gap-1">
@@ -163,6 +184,16 @@ function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
           </div>
         );
       })}
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <button type="button" onClick={() => setPage(Math.max(0, safePage - 1))} disabled={safePage === 0}
+            className="rounded-lg border border-border bg-slate-950/60 px-2.5 py-1 text-[10px] font-bold text-slate-300 disabled:opacity-40">‹ Anterior</button>
+          <span className="text-[10px] text-slate-400">Página {safePage + 1} de {totalPages} · {items.length} ativos</span>
+          <button type="button" onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))} disabled={safePage >= totalPages - 1}
+            className="rounded-lg border border-border bg-slate-950/60 px-2.5 py-1 text-[10px] font-bold text-slate-300 disabled:opacity-40">Próxima ›</button>
+        </div>
+      )}
     </div>
   );
 }

@@ -551,13 +551,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           </Link>
         ))}
       </nav>
-      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-white/10 bg-[linear-gradient(90deg,rgba(14,20,42,.92),rgba(30,27,55,.68))] px-4 py-3">
+      <div className="flex flex-col gap-2 rounded-2xl border border-white/10 bg-[linear-gradient(90deg,rgba(14,20,42,.92),rgba(30,27,55,.68))] px-4 py-3 sm:flex-row sm:flex-wrap sm:items-center sm:gap-x-4">
         <div className="min-w-0 flex-1">
           <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#FFCB05]">{TAB_CONTEXT[activeTab].eyebrow}</p>
           <p className="mt-0.5 text-sm font-black text-white">{TAB_CONTEXT[activeTab].title}</p>
           <p className="mt-1 max-w-3xl text-[11px] leading-5 text-slate-400">{TAB_CONTEXT[activeTab].description}</p>
         </div>
-        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500" aria-label="Fluxo sugerido da Arena">
+        <div className="flex flex-wrap items-center gap-1 text-[10px] font-bold text-slate-500" aria-label="Fluxo sugerido da Arena">
           <span className="rounded-lg bg-white/5 px-2 py-1">Montar</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Equipes</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Salas</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Histórico</span>
         </div>
       </div>

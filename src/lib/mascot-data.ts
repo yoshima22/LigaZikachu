@@ -2800,6 +2800,9 @@ export const LEGENDARY_POOL: number[] = [
   // Gen 6
   716, 717, 718, 719, 720, 721,
   // Gen 7
+  // 773 (Silvally) é lendário; a base 772 (Type: Null) não é. Só vira lendário ao evoluir.
+  // eliteInitialForms() filtra evolved IDs, então continua fora dos ovos.
+  773,
   785, 786, 787, 788, 789, 790, 791, 792, 800, 801, 802, 807, 808, 809,
   // Gen 8
   888, 889, 890, 891, 892, 893, 894, 895, 896, 897, 898, 905,

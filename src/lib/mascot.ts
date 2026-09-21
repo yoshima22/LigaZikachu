@@ -227,6 +227,10 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
         isShiny,
         hatchedFromEggType: incubator.egg.type,
         hatchedFromEggOrigin: incubator.egg.origin,
+        // Recém-nascido: felicidade alta e fome "Com fome" (HUNGRY), nunca STARVING,
+        // para não adoecer instantaneamente (doença exige STARVING + tristeza/raiva).
+        happiness: 90,
+        lastFedAt: new Date(Date.now() - 72 * 60 * 60 * 1000), // ~72h no banco = HUNGRY
         statForce:    randomInt(statMin, statMax),
         statAgility:  randomInt(statMin, statMax),
         statCharisma: randomInt(statMin, statMax),
