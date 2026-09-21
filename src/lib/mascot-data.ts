@@ -1336,6 +1336,32 @@ export function getStaticSpriteUrl(pokemonId: number): string {
   return `/sprites/pokemon/${spriteId}.png`;
 }
 
+// Vivillon (#666) tem 20 padrões de asa. O jogo mantém o pokemonId 666 (tipos,
+// stats e evolução iguais) e apenas sorteia um padrão ao evoluir, gravando
+// override de sprite e nome no mascote. Só existem sprites estáticos (.png).
+export const VIVILLON_PATTERNS: { slug: string; name: string }[] = [
+  { slug: "meadow", name: "Campina" }, { slug: "archipelago", name: "Arquipélago" },
+  { slug: "continental", name: "Continental" }, { slug: "elegant", name: "Elegante" },
+  { slug: "fancy", name: "Chique" }, { slug: "garden", name: "Jardim" },
+  { slug: "high-plains", name: "Planalto" }, { slug: "icy-snow", name: "Neve" },
+  { slug: "jungle", name: "Selva" }, { slug: "marine", name: "Marinho" },
+  { slug: "modern", name: "Moderno" }, { slug: "monsoon", name: "Monção" },
+  { slug: "ocean", name: "Oceano" }, { slug: "poke-ball", name: "Poké Bola" },
+  { slug: "polar", name: "Polar" }, { slug: "river", name: "Rio" },
+  { slug: "sandstorm", name: "Areia" }, { slug: "savanna", name: "Savana" },
+  { slug: "sun", name: "Sol" }, { slug: "tundra", name: "Tundra" },
+];
+
+export function vivillonSpriteUrl(slug: string): string {
+  return `/sprites/pokemon/666-${slug}.png`;
+}
+
+/** Sorteia um padrão de Vivillon com sprite e nome de espécie prontos. */
+export function randomVivillonForm(): { slug: string; name: string; spriteUrl: string; speciesName: string } {
+  const pattern = VIVILLON_PATTERNS[Math.floor(Math.random() * VIVILLON_PATTERNS.length)];
+  return { slug: pattern.slug, name: pattern.name, spriteUrl: vivillonSpriteUrl(pattern.slug), speciesName: `Vivillon ${pattern.name}` };
+}
+
 // Sprites shiny (variante cromática). Os GIFs shiny-animados NÃO são
 // auto-hospedados (raros — 1/500 — e pesados: ~57MB): buscamos direto do
 // repositório do GitHub. Como shinies são raríssimos, o volume é ínfimo e o

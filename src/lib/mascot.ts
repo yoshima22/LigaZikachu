@@ -16,6 +16,7 @@ import {
   getSpriteUrl, getPokemonName, getMascotRarity, mascotPrimaryType, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction, rollExpeditionEggRarity,
+  randomVivillonForm,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
@@ -750,6 +751,18 @@ export async function addExp(
     if (wasDefault) nicknameUpdate = { nickname: null }; // null = mostra nome novo do pokemonId
   }
 
+  // Vivillon (#666): ao evoluir, sorteia um dos 20 padrões de asa gravando
+  // override de sprite (só há PNG) e nome de espécie. pokemonId segue 666.
+  let vivillonUpdate: Record<string, string> = {};
+  if (evolved && newPokemonId === 666 && mascot.pokemonId !== 666) {
+    const form = randomVivillonForm();
+    vivillonUpdate = {
+      speciesNameOverride: form.speciesName,
+      staticSpriteUrlOverride: form.spriteUrl,
+      animatedSpriteUrlOverride: form.spriteUrl,
+    };
+  }
+
   // Bônus de stat por level up
   const statUpdates: Partial<Record<MascotStatKey, number>> = leveled
     ? growthStats
@@ -822,7 +835,7 @@ export async function addExp(
   await prisma.$transaction(async (tx) => {
     await tx.mascot.update({
       where: { id: mascotId },
-      data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate },
+      data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate, ...vivillonUpdate },
     });
     if (shouldRecordGrowth) {
       await tx.mascotStatGrowthEntry.create({
