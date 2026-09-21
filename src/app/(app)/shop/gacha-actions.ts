@@ -191,7 +191,7 @@ const missionSchema = z.object({
     "FIGURINHAS", "BAZAR_VENDA", "BAZAR_GASTO_ZC", "BAZAR_GASTO_LC", "OVOS_ABERTOS",
     "COMBATE_PVP", "COMBATE_KO", "LACOS", "ALBUM_COMPLETO", "LIGA_RUSH_VITORIA", "LIGA_SEMANAL_VITORIA",
     "BAZAR_COMPRA", "MIAUVADAO_COMPRA_SLOT", "MIAUVADAO_APOSTA", "MIAUVADAO_ACERTO",
-    "ZIKABET_ACERTO", "ZIKALOOT_NUMERO", "ARENA_DRAFT_PARTIDA",
+    "BAZAR_LEILAO_VENCIDO", "ALBUM_PACOTES_COMPRADOS", "ZIKABET_ACERTO", "ZIKALOOT_NUMERO", "ARENA_DRAFT_PARTIDA",
   ]),
   goal: z.number().int().min(1).max(1_000_000),
   reward: CURRENCY,
@@ -201,6 +201,8 @@ const missionSchema = z.object({
     opponentPlayerId: z.string().min(1).optional(),
     pokemonId: z.number().int().positive().optional(),
     pokemonType: z.string().min(1).max(32).optional(),
+    attackerPokemonId: z.number().int().positive().optional(),
+    attackerPokemonType: z.string().min(1).max(32).optional(),
     sellerPlayerId: z.string().min(1).optional(),
     bazarCategory: z.string().min(1).max(48).optional(),
     bazarListingType: z.string().min(1).max(48).optional(),
@@ -209,8 +211,10 @@ const missionSchema = z.object({
     requireWin: z.boolean().optional(),
     exactNumber: z.number().int().min(1).max(100_000).optional(),
     specialTicket: z.boolean().optional(),
+    albumGeneration: z.number().int().min(1).max(99).optional(),
   }).optional().nullable(),
   active: z.boolean(),
+  bannerIds: z.array(z.string().min(1)).max(100).optional(),
   sortOrder: z.number().int().min(0).max(999).default(0),
 });
 
@@ -218,7 +222,7 @@ export async function saveGachaMissionAction(input: z.infer<typeof missionSchema
   await requirePlatformAdmin();
   const parsed = missionSchema.safeParse(input);
   if (!parsed.success) return { error: "Missão inválida." };
-  const { id, ...data } = parsed.data;
+  const { id, bannerIds, ...data } = parsed.data;
   const values = {
     ...data,
     bannerId: data.bannerId || null,
@@ -227,8 +231,15 @@ export async function saveGachaMissionAction(input: z.infer<typeof missionSchema
       ? data.criteria as Prisma.InputJsonValue
       : Prisma.JsonNull,
   };
-  if (id) await prisma.gachaMission.update({ where: { id }, data: values });
-  else await prisma.gachaMission.create({ data: values });
+  const mission = id
+    ? await prisma.gachaMission.update({ where: { id }, data: values })
+    : await prisma.gachaMission.create({ data: values });
+  if (bannerIds) {
+    await prisma.$transaction([
+      prisma.gachaBannerMission.deleteMany({ where: { missionId: mission.id } }),
+      ...(bannerIds.length ? [prisma.gachaBannerMission.createMany({ data: [...new Set(bannerIds)].map((bannerId) => ({ bannerId, missionId: mission.id })), skipDuplicates: true })] : []),
+    ]);
+  }
   refresh();
   return { ok: true };
 }

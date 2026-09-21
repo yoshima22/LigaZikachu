@@ -202,6 +202,8 @@ export type GachaObjectiveEvent = {
   /** IDs de Pokémon que participaram do evento (dos dois lados quando aplicável). */
   pokemonIds?: number[];
   pokemonTypes?: string[];
+  attackerPokemonId?: number | null;
+  attackerPokemonTypes?: string[];
   sellerPlayerId?: string | null;
   bazarCategory?: string | null;
   bazarListingType?: string | null;
@@ -210,12 +212,15 @@ export type GachaObjectiveEvent = {
   won?: boolean | null;
   pickedNumber?: number | null;
   specialTicket?: boolean | null;
+  albumGeneration?: number | null;
 };
 
 export type GachaMissionCriteria = Partial<{
   opponentPlayerId: string;
   pokemonId: number;
   pokemonType: string;
+  attackerPokemonId: number;
+  attackerPokemonType: string;
   sellerPlayerId: string;
   bazarCategory: string;
   bazarListingType: string;
@@ -224,6 +229,7 @@ export type GachaMissionCriteria = Partial<{
   requireWin: boolean;
   exactNumber: number;
   specialTicket: boolean;
+  albumGeneration: number;
 }>;
 
 function readCriteria(value: Prisma.JsonValue | null): GachaMissionCriteria {
@@ -233,6 +239,8 @@ function readCriteria(value: Prisma.JsonValue | null): GachaMissionCriteria {
     opponentPlayerId: typeof raw.opponentPlayerId === "string" ? raw.opponentPlayerId : undefined,
     pokemonId: typeof raw.pokemonId === "number" ? raw.pokemonId : undefined,
     pokemonType: typeof raw.pokemonType === "string" ? raw.pokemonType.toUpperCase() : undefined,
+    attackerPokemonId: typeof raw.attackerPokemonId === "number" ? raw.attackerPokemonId : undefined,
+    attackerPokemonType: typeof raw.attackerPokemonType === "string" ? raw.attackerPokemonType.toUpperCase() : undefined,
     sellerPlayerId: typeof raw.sellerPlayerId === "string" ? raw.sellerPlayerId : undefined,
     bazarCategory: typeof raw.bazarCategory === "string" ? raw.bazarCategory : undefined,
     bazarListingType: typeof raw.bazarListingType === "string" ? raw.bazarListingType : undefined,
@@ -241,6 +249,7 @@ function readCriteria(value: Prisma.JsonValue | null): GachaMissionCriteria {
     requireWin: typeof raw.requireWin === "boolean" ? raw.requireWin : undefined,
     exactNumber: typeof raw.exactNumber === "number" ? raw.exactNumber : undefined,
     specialTicket: typeof raw.specialTicket === "boolean" ? raw.specialTicket : undefined,
+    albumGeneration: typeof raw.albumGeneration === "number" ? raw.albumGeneration : undefined,
   };
 }
 
@@ -248,6 +257,8 @@ function eventMatchesCriteria(criteria: GachaMissionCriteria, event: GachaObject
   if (criteria.opponentPlayerId && criteria.opponentPlayerId !== event.opponentPlayerId) return false;
   if (criteria.pokemonId && !event.pokemonIds?.includes(criteria.pokemonId)) return false;
   if (criteria.pokemonType && !event.pokemonTypes?.map((type) => type.toUpperCase()).includes(criteria.pokemonType)) return false;
+  if (criteria.attackerPokemonId && criteria.attackerPokemonId !== event.attackerPokemonId) return false;
+  if (criteria.attackerPokemonType && !event.attackerPokemonTypes?.map((type) => type.toUpperCase()).includes(criteria.attackerPokemonType)) return false;
   if (criteria.sellerPlayerId && criteria.sellerPlayerId !== event.sellerPlayerId) return false;
   if (criteria.bazarCategory && criteria.bazarCategory !== event.bazarCategory) return false;
   if (criteria.bazarListingType && criteria.bazarListingType !== event.bazarListingType) return false;
@@ -256,6 +267,7 @@ function eventMatchesCriteria(criteria: GachaMissionCriteria, event: GachaObject
   if (criteria.requireWin !== undefined && criteria.requireWin !== event.won) return false;
   if (criteria.exactNumber !== undefined && criteria.exactNumber !== event.pickedNumber) return false;
   if (criteria.specialTicket !== undefined && criteria.specialTicket !== event.specialTicket) return false;
+  if (criteria.albumGeneration !== undefined && criteria.albumGeneration !== event.albumGeneration) return false;
   return true;
 }
 

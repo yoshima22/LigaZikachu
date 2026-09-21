@@ -135,6 +135,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
 
     revalidatePath("/album");
     revalidatePath("/carteira");
+    void trackGachaObjective(player.id, "ALBUM_PACOTES_COMPRADOS", 1, { albumGeneration: pack.generation ?? null });
     // Só dispara no pacote que preenche a última figurinha de uma geração.
     const completedGenerations = new Set(drawn.map((card) => card.generation).filter((generation) => {
       const generationCards = allCards.filter((card) => card.generation === generation);
@@ -142,7 +143,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
         && generationCards.every((card) => ownedMap.has(card.id))
         && drawn.some((card) => card.generation === generation && !ownedBefore.has(card.id));
     }));
-    for (const _generation of completedGenerations) void trackGachaObjective(player.id, "ALBUM_COMPLETO");
+    for (const generation of completedGenerations) void trackGachaObjective(player.id, "ALBUM_COMPLETO", 1, { albumGeneration: generation });
     void onStickerPackOpened(player.id).catch(() => {});
     return { cards: resultCards, totalCoinsEarned };
   } catch (err) {

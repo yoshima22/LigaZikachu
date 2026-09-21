@@ -2443,7 +2443,7 @@ export async function fuseMiauvadaoEggsAction(eggIds: string[]): Promise<{
   }
 }
 
-export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus }> {
+export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string; purchaseStatus?: MiauvadaoPurchaseStatus; price?: number }> {
   try {
     if (offerIndex === 1) {
       const [sabotages, stepState] = await Promise.all([
@@ -2549,12 +2549,12 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
         metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency },
       });
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
-      return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes) };
+      return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes), price };
     }, { isolationLevel: "Serializable" });
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
-    after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: offerIndex }));
+    after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: offerIndex, amount: result.price }));
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao comprar." };
@@ -4244,6 +4244,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     const wonName = listing.category === "MASCOT" ? fullMascotPayloadName(wonPayload) : String(wonPayload.displayName ?? "Item");
     await _sendBazarSystemDM(winnerId, `Parabéns! Você venceu o leilão de "${wonName}" com ${winnerBid} ${currency}. O item foi transferido para você.`);
     after(() => Promise.allSettled([
+      trackGachaObjective(winnerId, "BAZAR_LEILAO_VENCIDO", 1, { amount: winnerBid, bazarCategory: String(listing.category), bazarListingType: "AUCTION" }),
       sendNotificationToPlayers([winnerId], { title: `Leilão vencido: ${wonName}`, body: `Você venceu com ${winnerBid.toLocaleString("pt-BR")} ${currency} e o item já foi entregue.`, url: `/bazar/${listingId}`, category: "BAZAR" }),
       sendNotificationToPlayers([listing.playerId], { title: `Leilão vendido: ${wonName}`, body: `${buyerName} venceu por ${winnerBid.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}`, category: "BAZAR" }),
     ]).then(() => undefined));

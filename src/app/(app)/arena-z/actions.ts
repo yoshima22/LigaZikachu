@@ -266,6 +266,8 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
           opponentPlayerId: defenseOwner.playerId,
           pokemonIds: [opponent.pokemonId],
           pokemonTypes: getPokemonTypes(opponent.pokemonId),
+          attackerPokemonId: opponent.attackerPokemonId,
+          attackerPokemonTypes: getPokemonTypes(opponent.attackerPokemonId),
         }))).then(() => undefined));
     }
     if (defenseOwner && defenseOwner.playerId !== playerId && !result.isTrainingBattle) {

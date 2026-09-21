@@ -4424,7 +4424,11 @@ export async function runPvpBattle(
     // consumida por objetivos como “consiga um KO contra mascote do tipo Água”.
     knockedOutOpponents: combat.log
       .filter((turn) => turn.action === "ATTACK" && turn.actorOwnerId === attackTeam.playerId && turn.targetOwnerId === defenseTeam.playerId && (turn.targetHpAfter ?? 1) <= 0)
-      .map((turn) => ({ id: turn.targetId, pokemonId: allMascots.get(turn.targetId)?.pokemonId ?? turn.targetPokemonId ?? 0 })),
+      .map((turn) => ({
+        id: turn.targetId,
+        pokemonId: allMascots.get(turn.targetId)?.pokemonId ?? turn.targetPokemonId ?? 0,
+        attackerPokemonId: allMascots.get(turn.actorId)?.pokemonId ?? turn.actorPokemonId ?? 0,
+      })),
     battleAnimation: combat.log
       .filter(
         (t) =>

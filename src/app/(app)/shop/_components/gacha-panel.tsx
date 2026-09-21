@@ -95,6 +95,8 @@ const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> =
   { key: "LIGA_RUSH_VITORIA", label: "Vitórias na Liga Rush", metric: "vitórias" },
   { key: "LIGA_SEMANAL_VITORIA", label: "Vitórias na Liga Semanal", metric: "vitórias" },
   { key: "BAZAR_COMPRA", label: "Compras de outros jogadores", metric: "compras" },
+  { key: "BAZAR_LEILAO_VENCIDO", label: "Leilões vencidos no Bazar", metric: "leilões" },
+  { key: "ALBUM_PACOTES_COMPRADOS", label: "Pacotes de álbum comprados", metric: "pacotes" },
   { key: "MIAUVADAO_COMPRA_SLOT", label: "Compras em slot do Miauvadão", metric: "compras" },
   { key: "MIAUVADAO_APOSTA", label: "Apostas no Miauvadão", metric: "apostas" },
   { key: "MIAUVADAO_ACERTO", label: "Acertos no Miauvadão", metric: "acertos" },
@@ -869,9 +871,10 @@ function MissionRow({ mission, banners, players, onSave, onDelete }: {
   }
   // Só os objetivos PvP carregam adversário e a espécie/tipo do alvo.
   const needsCombatFilters = ["COMBATE_PVP", "COMBATE_KO"].includes(draft.source);
-  const needsBazarFilters = ["BAZAR_COMPRA", "BAZAR_VENDA", "BAZAR_GASTO_ZC", "BAZAR_GASTO_LC"].includes(draft.source);
+  const needsBazarFilters = ["BAZAR_COMPRA", "BAZAR_VENDA", "BAZAR_LEILAO_VENCIDO"].includes(draft.source);
   const needsMiauvadaoFilters = draft.source.startsWith("MIAUVADAO_");
   const needsZikalootFilters = draft.source === "ZIKALOOT_NUMERO";
+  const needsAlbumGeneration = ["ALBUM_COMPLETO", "ALBUM_PACOTES_COMPRADOS"].includes(draft.source);
 
   return (
     <div className="grid items-end gap-2 rounded-xl border border-border/60 p-3 md:grid-cols-[1.4fr_1fr_.7fr_.8fr_.5fr_.9fr_auto]">
@@ -920,6 +923,7 @@ function MissionRow({ mission, banners, players, onSave, onDelete }: {
             <Field label="Adversário"><select value={String(criteria.opponentPlayerId ?? "")} onChange={(e) => setCriteria("opponentPlayerId", e.target.value || undefined)} className={inputCls}><option value="">qualquer jogador</option>{players.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></Field>
             <Field label="ID do mascote"><input type="number" value={String(criteria.pokemonId ?? "")} onChange={(e) => setCriteria("pokemonId", e.target.value ? Number(e.target.value) : undefined)} placeholder="ex.: 25" className={inputCls} /></Field>
             <Field label={draft.source === "COMBATE_KO" ? "Tipo do alvo derrotado" : "Tipo do mascote"}><select value={String(criteria.pokemonType ?? "")} onChange={(e) => setCriteria("pokemonType", e.target.value || undefined)} className={inputCls}><option value="">qualquer tipo</option>{POKEMON_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+            {draft.source === "COMBATE_KO" && <><Field label="ID de quem causa o KO"><input type="number" value={String(criteria.attackerPokemonId ?? "")} onChange={(e) => setCriteria("attackerPokemonId", e.target.value ? Number(e.target.value) : undefined)} placeholder="ex.: 6" className={inputCls} /></Field><Field label="Tipo de quem causa o KO"><select value={String(criteria.attackerPokemonType ?? "")} onChange={(e) => setCriteria("attackerPokemonType", e.target.value || undefined)} className={inputCls}><option value="">qualquer tipo</option>{POKEMON_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field></>}
           </>}
           {needsBazarFilters && <>
             <Field label="Vendedor"><select value={String(criteria.sellerPlayerId ?? "")} onChange={(e) => setCriteria("sellerPlayerId", e.target.value || undefined)} className={inputCls}><option value="">qualquer jogador</option>{players.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></Field>
@@ -928,6 +932,7 @@ function MissionRow({ mission, banners, players, onSave, onDelete }: {
           </>}
           {needsMiauvadaoFilters && <Field label="Slot (0 = primeiro)"><input type="number" value={String(criteria.miauvadaoSlot ?? "")} onChange={(e) => setCriteria("miauvadaoSlot", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field>}
           {needsZikalootFilters && <><Field label="Número exato"><input type="number" value={String(criteria.exactNumber ?? "")} onChange={(e) => setCriteria("exactNumber", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field><Field label="Ticket especial"><select value={criteria.specialTicket === undefined ? "" : String(criteria.specialTicket)} onChange={(e) => setCriteria("specialTicket", e.target.value === "" ? undefined : e.target.value === "true")} className={inputCls}><option value="">qualquer</option><option value="true">somente especial</option><option value="false">somente comum</option></select></Field></>}
+          {needsAlbumGeneration && <Field label="Geração do álbum"><input type="number" min="1" max="9" value={String(criteria.albumGeneration ?? "")} onChange={(e) => setCriteria("albumGeneration", e.target.value ? Number(e.target.value) : undefined)} placeholder="qualquer geração" className={inputCls} /></Field>}
           {["MIAUVADAO_APOSTA", "MIAUVADAO_ACERTO", "ZIKABET_ACERTO", "BAZAR_GASTO_ZC", "BAZAR_GASTO_LC"].includes(draft.source) && <Field label="Valor mínimo"><input type="number" value={String(criteria.minAmount ?? "")} onChange={(e) => setCriteria("minAmount", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field>}
         </div>
       </div>

@@ -4652,6 +4652,8 @@ enum GachaObjectiveSource {
   LIGA_RUSH_VITORIA
   LIGA_SEMANAL_VITORIA
   BAZAR_COMPRA
+  BAZAR_LEILAO_VENCIDO
+  ALBUM_PACOTES_COMPRADOS
   MIAUVADAO_COMPRA_SLOT
   MIAUVADAO_APOSTA
   MIAUVADAO_ACERTO
@@ -4717,6 +4719,7 @@ model GachaBanner {
   entries    GachaBannerEntry[]
   pityRules  GachaPityRule[]
   missions   GachaMission[]
+  missionLinks GachaBannerMission[]
   pulls      GachaPull[]
   pityStates GachaPityState[]
 
@@ -4809,9 +4812,25 @@ model GachaMission {
   updatedAt DateTime @updatedAt
 
   progress GachaMissionProgress[]
+  bannerLinks GachaBannerMission[]
 
   @@index([active, source])
   @@map("gacha_missions")
+}
+
+/// Uma missão pode concorrer em vários banners. A seleção semanal usa este
+/// catálogo e escolhe sete entradas de forma estável para cada banner.
+model GachaBannerMission {
+  id        String       @id @default(cuid())
+  bannerId  String
+  missionId String
+  banner    GachaBanner  @relation(fields: [bannerId], references: [id], onDelete: Cascade)
+  mission   GachaMission @relation(fields: [missionId], references: [id], onDelete: Cascade)
+  createdAt DateTime     @default(now())
+
+  @@unique([bannerId, missionId])
+  @@index([missionId])
+  @@map("gacha_banner_missions")
 }
 
 model GachaMissionProgress {
