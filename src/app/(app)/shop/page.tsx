@@ -286,7 +286,7 @@ export default async function ShopPage() {
             content: (
               <ShopGrid title="Pedras de Mega Evolução"
                 items={megaItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
-                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} searchable pageSize={12} />
             ),
           }] : []),
           {

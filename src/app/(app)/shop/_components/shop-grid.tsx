@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useTransition, useEffect, useCallback } from "react";
+import { useState, useTransition, useEffect, useCallback, useMemo } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { CheckCircle, Coins, Lock, ShoppingCart, ZoomIn, X } from "lucide-react";
+import { CheckCircle, Coins, Lock, Search, ShoppingCart, ZoomIn, X } from "lucide-react";
 import { purchaseItem } from "../actions";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
@@ -52,6 +52,10 @@ interface Props {
   ligaCashBalance: number;
   ligaCashEnabled: boolean;
   playerId: string | null;
+  /** Habilita campo de busca por nome. */
+  searchable?: boolean;
+  /** Habilita paginação com este tamanho de página. */
+  pageSize?: number;
 }
 
 const mascotItemEmoji: Record<string, string> = {
@@ -73,12 +77,28 @@ const mascotItemEmoji: Record<string, string> = {
   RAINBOW_FEATHER: "🌈",
 };
 
-export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, ligaCashBalance, ligaCashEnabled, playerId }: Props) {
+export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, ligaCashBalance, ligaCashEnabled, playerId, searchable = false, pageSize }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingId, setBuyingId]   = useState<string | null>(null);
   const [lightbox, setLightbox]   = useState<{ src: string; name: string; type: string; fallbackSrc?: string } | null>(null);
   const [quantities, setQuantities] = useState<Record<string, number>>({});
+  const [query, setQuery] = useState("");
+  const [page, setPage] = useState(0);
+
+  const filteredItems = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return items;
+    return items.filter((item) => {
+      const megaName = (item.metadata as Record<string, unknown> | null | undefined)?.megaPokemonName;
+      return [item.name, item.description, typeof megaName === "string" ? megaName : ""]
+        .some((field) => (field ?? "").toLowerCase().includes(q));
+    });
+  }, [items, query]);
+
+  const totalPages = pageSize ? Math.max(1, Math.ceil(filteredItems.length / pageSize)) : 1;
+  const safePage = Math.min(page, totalPages - 1);
+  const visibleItems = pageSize ? filteredItems.slice(safePage * pageSize, safePage * pageSize + pageSize) : filteredItems;
 
   // Fecha ao pressionar Esc
   const closeLightbox = useCallback(() => setLightbox(null), []);
@@ -187,9 +207,26 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, lig
     )}
 
     <div className="space-y-3">
-      <h2 className="font-semibold text-slate-200">{title}</h2>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h2 className="font-semibold text-slate-200">{title}</h2>
+        {searchable && (
+          <div className="relative w-full sm:w-64">
+            <Search size={14} className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
+            <input
+              type="text"
+              value={query}
+              onChange={(e) => { setQuery(e.target.value); setPage(0); }}
+              placeholder="Buscar pedra ou Pokémon…"
+              className="w-full rounded-lg border border-border bg-slate-950 py-2 pl-9 pr-3 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/60"
+            />
+          </div>
+        )}
+      </div>
+      {searchable && filteredItems.length === 0 ? (
+        <p className="py-8 text-center text-sm text-slate-500">Nenhum item encontrado para “{query}”.</p>
+      ) : (
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        {items.map((item, itemIndex) => {
+        {visibleItems.map((item, itemIndex) => {
           const owned = ownedIds.has(item.id);
           const isConsumable = isConsumableShopItemType(item.type);
           const quantity = isConsumable ? getQuantity(item.id) : 1;
@@ -367,6 +404,16 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, lig
           );
         })}
       </div>
+      )}
+      {pageSize && totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-1">
+          <button type="button" onClick={() => setPage(Math.max(0, safePage - 1))} disabled={safePage === 0}
+            className="rounded-lg border border-border bg-slate-950/60 px-3 py-1.5 text-xs font-bold text-slate-300 disabled:opacity-40">‹ Anterior</button>
+          <span className="text-xs text-slate-400">Página {safePage + 1} de {totalPages} · {filteredItems.length} itens</span>
+          <button type="button" onClick={() => setPage(Math.min(totalPages - 1, safePage + 1))} disabled={safePage >= totalPages - 1}
+            className="rounded-lg border border-border bg-slate-950/60 px-3 py-1.5 text-xs font-bold text-slate-300 disabled:opacity-40">Próxima ›</button>
+        </div>
+      )}
     </div>
     </>
   );
