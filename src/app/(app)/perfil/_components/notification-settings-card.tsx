@@ -54,13 +54,13 @@ export function NotificationSettingsCard({ initial }: { initial: unknown }) {
       </p>
 
       <div className="mt-4 overflow-hidden rounded-xl border border-white/10">
-        <div className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-white/10 bg-slate-900/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+        <div className="grid grid-cols-[1fr_3.5rem_3.5rem] items-center border-b border-white/10 bg-slate-900/70 px-3 py-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
           <span>Tipo</span>
-          <span className="flex items-center gap-1"><Monitor size={12} /> Jogo</span>
-          <span className="flex items-center gap-1"><Smartphone size={12} /> Celular</span>
+          <span className="flex items-center justify-center gap-1"><Monitor size={12} /> Jogo</span>
+          <span className="flex items-center justify-center gap-1"><Smartphone size={12} /> Celular</span>
         </div>
         {NOTIF_CATEGORIES.map(({ key, label, hint }) => (
-          <div key={key} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 border-b border-white/5 px-3 py-2.5 last:border-b-0">
+          <div key={key} className="grid grid-cols-[1fr_3.5rem_3.5rem] items-center border-b border-white/5 px-3 py-2.5 last:border-b-0">
             <div className="min-w-0">
               <p className="truncate text-xs font-semibold text-slate-200">{label}</p>
               <p className="truncate text-[10px] text-slate-500">{hint}</p>
@@ -70,14 +70,14 @@ export function NotificationSettingsCard({ initial }: { initial: unknown }) {
               aria-label={`${label} no jogo`}
               checked={settings.categories[key].inGame}
               onChange={(e) => setChannel(key, "inGame", e.target.checked)}
-              className="h-4 w-4 accent-[#FFCB05]"
+              className="mx-auto h-4 w-4 accent-[#FFCB05]"
             />
             <input
               type="checkbox"
               aria-label={`${label} no celular`}
               checked={settings.categories[key].push}
               onChange={(e) => setChannel(key, "push", e.target.checked)}
-              className="h-4 w-4 accent-[#FFCB05]"
+              className="mx-auto h-4 w-4 accent-[#FFCB05]"
             />
           </div>
         ))}
