@@ -344,11 +344,12 @@ export default async function AdminPage() {
       {isAdmin(currentUser.role) && <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
         <div className="flex items-center gap-2">
           <BookOpen size={16} className="text-[#FFCB05]" />
-          <h3 className="font-semibold text-slate-200">Formas alternativas — liga/desliga nas pools de ovo</h3>
+          <h3 className="font-semibold text-slate-200">Mascotes — liga/desliga nos drops de ovo</h3>
         </div>
         <p className="text-xs text-slate-500">
-          Marque para <strong className="text-slate-300">ligar</strong> a forma no drop da sua pool de ovo respectiva; desmarque para removê-la do sorteio.
-          As formas recém-adicionadas entram <strong className="text-slate-300">desligadas</strong>. As espécies que já estavam no jogo continuam normais.
+          Lista <strong className="text-slate-300">todos os mascotes</strong> (Pokédex 1–1025 + formas, megas e espécies custom). Marque para <strong className="text-slate-300">ligar</strong> no sorteio de ovos; desmarque para removê-lo do drop.
+          As formas recém-adicionadas entram <strong className="text-slate-300">desligadas</strong>; as espécies que já estavam no jogo continuam ligadas.
+          Desligar só tira o mascote de novos drops — <strong className="text-slate-300">nunca apaga</strong> mascotes que já têm dono.
         </p>
         <FormsPoolManager forms={managedForms} />
       </div>}

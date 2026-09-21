@@ -82,7 +82,7 @@ export function FormsPoolManager({ forms }: { forms: ManagedForm[] }) {
         <span className="text-xs text-slate-500">{enabledCount}/{forms.length} ligados</span>
       </div>
 
-      <p className="text-[11px] text-slate-500">As formas ficam agrupadas pela espécie base (Pokédex). No drop, ligar uma forma faz ela entrar na 2ª rolagem interna daquela espécie — a base sempre existe.</p>
+      <p className="text-[11px] text-slate-500">Agrupado pela espécie base (Pokédex). Ligar uma forma/mega a coloca na 2ª rolagem interna daquela espécie; desligar a espécie base a tira do sorteio de ovos. Desligar nunca apaga mascotes já existentes com dono.</p>
       <div className="space-y-3">
         {pagedGroups.map((g) => {
           const enabledInGroup = g.forms.filter((f) => state[f.id]).length;

@@ -1323,18 +1323,47 @@ export async function listManagedForms(): Promise<ManagedForm[]> {
   const { getPokemonName, getPokemonTypes, getStaticSpriteUrl, getTypeLabelPt } = await import("@/lib/mascot-data");
   const disabledRows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
   const disabled = new Set(disabledRows.map((r) => r.pokemonId));
-  return EXTRA_FORM_IDS.map((id) => {
+  // Espécies custom criadas no admin (megas custom, exclusivos etc.).
+  const definitions = await prisma.pokemonSpeciesDefinition.findMany({
+    select: { pokemonId: true, name: true, generation: true, primaryType: true, secondaryType: true, staticSpriteUrl: true },
+  });
+  const defById = new Map(definitions.map((d) => [d.pokemonId, d]));
+
+  const genFor = (id: number): number | null => {
+    const d = defById.get(id);
+    if (d) return d.generation ?? null;
+    if (EXTRA_FORM_GENERATION[id]) return EXTRA_FORM_GENERATION[id];
+    if (id <= 151) return 1; if (id <= 251) return 2; if (id <= 386) return 3;
+    if (id <= 493) return 4; if (id <= 649) return 5; if (id <= 721) return 6;
+    if (id <= 809) return 7; if (id <= 905) return 8; if (id <= 1025) return 9;
+    return null;
+  };
+  const nameFor = (id: number) => defById.get(id)?.name ?? getPokemonName(id);
+  const typesFor = (id: number): string[] => {
+    const d = defById.get(id);
+    if (d) return [d.primaryType, d.secondaryType].filter(Boolean).map((t) => getTypeLabelPt(t as string));
+    return getPokemonTypes(id).map(getTypeLabelPt);
+  };
+  const spriteFor = (id: number) => defById.get(id)?.staticSpriteUrl || getStaticSpriteUrl(id);
+
+  // Universo completo: toda a Pokédex nacional (1–1025) + formas/megas + custom.
+  const ids = new Set<number>();
+  for (let i = 1; i <= 1025; i++) ids.add(i);
+  for (const id of EXTRA_FORM_IDS) ids.add(id);
+  for (const d of definitions) ids.add(d.pokemonId);
+
+  return [...ids].sort((a, b) => a - b).map((id) => {
     const baseId = EXTRA_FORM_BASE_ALL[id] ?? id;
     return {
       id,
-      name: getPokemonName(id),
-      types: getPokemonTypes(id).map(getTypeLabelPt),
-      generation: EXTRA_FORM_GENERATION[id] ?? null,
-      spriteUrl: getStaticSpriteUrl(id),
+      name: nameFor(id),
+      types: typesFor(id),
+      generation: genFor(id),
+      spriteUrl: spriteFor(id),
       enabled: !disabled.has(id),
       baseId,
-      baseName: getPokemonName(baseId),
-      baseSpriteUrl: getStaticSpriteUrl(baseId),
+      baseName: nameFor(baseId),
+      baseSpriteUrl: spriteFor(baseId),
     };
   });
 }
