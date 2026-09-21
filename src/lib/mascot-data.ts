@@ -1336,31 +1336,22 @@ export function getStaticSpriteUrl(pokemonId: number): string {
   return `/sprites/pokemon/${spriteId}.png`;
 }
 
-// Vivillon (#666) tem 20 padrões de asa. O jogo mantém o pokemonId 666 (tipos,
-// stats e evolução iguais) e apenas sorteia um padrão ao evoluir, gravando
-// override de sprite e nome no mascote. Só existem sprites estáticos (.png).
-export const VIVILLON_PATTERNS: { slug: string; name: string }[] = [
-  { slug: "meadow", name: "Campina" }, { slug: "archipelago", name: "Arquipélago" },
-  { slug: "continental", name: "Continental" }, { slug: "elegant", name: "Elegante" },
-  { slug: "fancy", name: "Chique" }, { slug: "garden", name: "Jardim" },
-  { slug: "high-plains", name: "Planalto" }, { slug: "icy-snow", name: "Neve" },
-  { slug: "jungle", name: "Selva" }, { slug: "marine", name: "Marinho" },
-  { slug: "modern", name: "Moderno" }, { slug: "monsoon", name: "Monção" },
-  { slug: "ocean", name: "Oceano" }, { slug: "poke-ball", name: "Poké Bola" },
-  { slug: "polar", name: "Polar" }, { slug: "river", name: "Rio" },
-  { slug: "sandstorm", name: "Areia" }, { slug: "savanna", name: "Savana" },
-  { slug: "sun", name: "Sol" }, { slug: "tundra", name: "Tundra" },
+// Vivillon (#666): 20 padrões de asa como FORMAS próprias (IDs 666001–666020,
+// base 666), à moda dos Unown — cada uma liga/desliga no painel admin. A
+// evolução 665→666 sorteia entre as formas habilitadas. Só há sprite estático.
+export const VIVILLON_FORMS: { id: number; slug: string; name: string }[] = [
+  { id: 666001, slug: "meadow", name: "Campina" }, { id: 666002, slug: "archipelago", name: "Arquipélago" },
+  { id: 666003, slug: "continental", name: "Continental" }, { id: 666004, slug: "elegant", name: "Elegante" },
+  { id: 666005, slug: "fancy", name: "Chique" }, { id: 666006, slug: "garden", name: "Jardim" },
+  { id: 666007, slug: "high-plains", name: "Planalto" }, { id: 666008, slug: "icy-snow", name: "Neve" },
+  { id: 666009, slug: "jungle", name: "Selva" }, { id: 666010, slug: "marine", name: "Marinho" },
+  { id: 666011, slug: "modern", name: "Moderno" }, { id: 666012, slug: "monsoon", name: "Monção" },
+  { id: 666013, slug: "ocean", name: "Oceano" }, { id: 666014, slug: "poke-ball", name: "Poké Bola" },
+  { id: 666015, slug: "polar", name: "Polar" }, { id: 666016, slug: "river", name: "Rio" },
+  { id: 666017, slug: "sandstorm", name: "Areia" }, { id: 666018, slug: "savanna", name: "Savana" },
+  { id: 666019, slug: "sun", name: "Sol" }, { id: 666020, slug: "tundra", name: "Tundra" },
 ];
-
-export function vivillonSpriteUrl(slug: string): string {
-  return `/sprites/pokemon/666-${slug}.png`;
-}
-
-/** Sorteia um padrão de Vivillon com sprite e nome de espécie prontos. */
-export function randomVivillonForm(): { slug: string; name: string; spriteUrl: string; speciesName: string } {
-  const pattern = VIVILLON_PATTERNS[Math.floor(Math.random() * VIVILLON_PATTERNS.length)];
-  return { slug: pattern.slug, name: pattern.name, spriteUrl: vivillonSpriteUrl(pattern.slug), speciesName: `Vivillon ${pattern.name}` };
-}
+export const VIVILLON_FORM_IDS = VIVILLON_FORMS.map((f) => f.id);
 
 // Sprites shiny (variante cromática). Os GIFs shiny-animados NÃO são
 // auto-hospedados (raros — 1/500 — e pesados: ~57MB): buscamos direto do
@@ -2352,6 +2343,11 @@ export const POKEMON_ELEMENT: Record<number, string> = {
 // aplicada no sorteio via `excludedPokemonIds`. As já existentes não são tocadas.
 Object.assign(POKEMON_PT_NAMES, EXTRA_FORM_NAMES);
 Object.assign(POKEMON_ELEMENT, EXTRA_FORM_ELEMENTS);
+// Formas do Vivillon: nome/tipo vêm de EXTRA_FORM_* (mesclados acima); aqui só
+// o sprite estático nomeado (666-<padrão>.png), já que não há ID numérico.
+for (const form of VIVILLON_FORMS) {
+  EVENT_CUSTOM_SPRITES[form.id] = `/sprites/pokemon/666-${form.slug}.png`;
+}
 for (const [gen, ids] of Object.entries(EXTRA_FORM_POOL_BY_GEN)) {
   const key = `EGG_GEN${gen}`;
   (EGG_POOLS[key] ??= []).push(...ids);
