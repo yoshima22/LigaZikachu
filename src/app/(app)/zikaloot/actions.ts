@@ -11,6 +11,7 @@ import { onLootWon } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
 import type { PrizeConfig } from "@/lib/zikaloot-types";
 import { nextMidnightBR } from "@/lib/date-br";
+import { trackGachaObjective } from "@/lib/gacha";
 
 const createSchema = z.object({
   name: z.string().trim().min(2).max(100),
@@ -114,6 +115,10 @@ export async function pickLootNumber(
     });
 
     revalidatePath("/zikaloot");
+    void trackGachaObjective(player.id, "ZIKALOOT_NUMERO", 1, {
+      pickedNumber: number,
+      specialTicket: useSpecialTicket,
+    });
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro desconhecido" };

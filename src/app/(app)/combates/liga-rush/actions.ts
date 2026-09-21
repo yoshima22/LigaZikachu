@@ -13,6 +13,7 @@ import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { DEFAULT_RUSH_REWARDS, RUSH_LEVEL_OPTIONS, RUSH_REWARD_PLANS, RUSH_RULE_PRESETS, RUSH_TYPES, type RushRewardBundle } from "./constants";
 import { getOpposingBondCombatEffects, getTeamBondCombatContext } from "@/lib/mascot-bonds";
+import { trackGachaObjective } from "@/lib/gacha";
 
 const PATH = "/combates/liga-rush";
 // Horários padrão (BRT). Ajustáveis pelo admin em rush-settings.data.
@@ -704,7 +705,10 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
         }
         return true;
       });
-      if (applied) resolved++; else skipped++;
+      if (applied) {
+        resolved++;
+        if (winnerId) void trackGachaObjective(winnerId, "LIGA_RUSH_VITORIA", 1, { won: true });
+      } else skipped++;
     }
     revalidatePath(PATH);
     return { success: true, resolved, walkovers, skipped };

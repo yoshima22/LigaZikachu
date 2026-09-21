@@ -2788,6 +2788,8 @@ model MascotRelation {
   losses                    Int                @default(0)
   interactionCount          Int                @default(1) // sobe com eventos; determina tier
   lastInteractionAt         DateTime?
+  // Evita que presentes consecutivos da mesma amizade caiam sempre na mesma categoria.
+  lastAllyGiftKind          String?
   createdAt                 DateTime           @default(now())
   updatedAt                 DateTime           @updatedAt
   isActive                  Boolean            @default(true)
@@ -4630,6 +4632,7 @@ enum GachaRewardKind {
 }
 
 enum GachaObjectiveSource {
+  // Compatibilidade com missões já criadas.
   ARENA_Z
   LIGA_RUSH
   LIGA_SEMANAL
@@ -4640,6 +4643,21 @@ enum GachaObjectiveSource {
   BAZAR_GASTO_ZC
   BAZAR_GASTO_LC
   OVOS_ABERTOS
+  EXPEDICAO_CONCLUIDA
+  // Catálogo expandido de eventos. Critérios opcionais ficam em GachaMission.criteria.
+  COMBATE_PVP
+  COMBATE_KO
+  LACOS
+  ALBUM_COMPLETO
+  LIGA_RUSH_VITORIA
+  LIGA_SEMANAL_VITORIA
+  BAZAR_COMPRA
+  MIAUVADAO_COMPRA_SLOT
+  MIAUVADAO_APOSTA
+  MIAUVADAO_ACERTO
+  ZIKABET_ACERTO
+  ZIKALOOT_NUMERO
+  ARENA_DRAFT_PARTIDA
 }
 
 model GachaWallet {
@@ -4782,6 +4800,8 @@ model GachaMission {
   reward       GachaCurrency
   rewardAmount Int                  @default(1)
   rarityFilter String?
+  // Filtros declarativos do evento: jogador, mascote, tipo, slot, valor etc.
+  criteria     Json?
   active       Boolean              @default(true)
   sortOrder    Int                  @default(0)
 

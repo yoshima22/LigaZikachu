@@ -12,7 +12,7 @@ import {
   saveGachaBannerAction, deleteGachaBannerAction,
   saveGachaEntryAction, deleteGachaEntryAction,
   saveGachaPityAction, deleteGachaPityAction,
-  saveGachaMissionAction, deleteGachaMissionAction,
+  saveGachaMissionAction, deleteGachaMissionAction, generateGachaMissionSetAction,
   saveGachaPackAction, deleteGachaPackAction,
   pullGachaBannerAction, buyGachaPackAction, claimGachaMissionAction,
 } from "../gacha-actions";
@@ -36,6 +36,7 @@ export type GachaBannerDTO = {
 export type GachaMissionDTO = {
   id: string; bannerId: string | null; title: string; source: string; goal: number;
   reward: Currency; rewardAmount: number; rarityFilter: string | null; active: boolean; sortOrder: number;
+  criteria: Record<string, unknown> | null;
   progress: number; claimed: boolean;
 };
 export type GachaPackDTO = {
@@ -52,6 +53,7 @@ export type GachaPanelProps = {
   wallet: { pokeballs: number; ultraballs: number };
   ligaCash: number;
   shopItems: Array<{ id: string; name: string }>;
+  players: Array<{ id: string; name: string }>;
   icons: { pokeball: string; ultraball: string; celestialEgg: string; labEgg: string };
 };
 
@@ -68,6 +70,11 @@ const RARITY_COLOR: Record<string, string> = {
   SPECIAL: "#fbbf24", LAB: "#c084fc", CELESTIAL: "#5eead4",
 };
 const EGG_TYPES = ["COMMON", "RARE", "EVENT", "SPECIAL", "LAB", "CELESTIAL"];
+const POKEMON_TYPES = [
+  ["NORMAL", "Normal"], ["FIRE", "Fogo"], ["WATER", "Água"], ["ELECTRIC", "Elétrico"], ["GRASS", "Planta"], ["ICE", "Gelo"],
+  ["FIGHTING", "Lutador"], ["POISON", "Veneno"], ["GROUND", "Terra"], ["FLYING", "Voador"], ["PSYCHIC", "Psíquico"], ["BUG", "Inseto"],
+  ["ROCK", "Pedra"], ["GHOST", "Fantasma"], ["DRAGON", "Dragão"], ["DARK", "Sombrio"], ["STEEL", "Aço"], ["FAIRY", "Fada"],
+] as const;
 
 const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> = [
   { key: "ARENA_Z", label: "Arena-Z", metric: "vitórias" },
@@ -80,6 +87,20 @@ const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> =
   { key: "BAZAR_GASTO_ZC", label: "Gasto de ZC no Bazar", metric: "ZC" },
   { key: "BAZAR_GASTO_LC", label: "Gasto de LC no Bazar", metric: "LC" },
   { key: "OVOS_ABERTOS", label: "Aberturas de ovos", metric: "ovos" },
+  { key: "EXPEDICAO_CONCLUIDA", label: "Farm: expedições concluídas", metric: "expedições" },
+  { key: "COMBATE_PVP", label: "Combate contra jogador", metric: "combates" },
+  { key: "COMBATE_KO", label: "KO contra mascote em PvP", metric: "KOs" },
+  { key: "LACOS", label: "Atividades de Laços", metric: "atividades" },
+  { key: "ALBUM_COMPLETO", label: "Álbuns completados", metric: "álbuns" },
+  { key: "LIGA_RUSH_VITORIA", label: "Vitórias na Liga Rush", metric: "vitórias" },
+  { key: "LIGA_SEMANAL_VITORIA", label: "Vitórias na Liga Semanal", metric: "vitórias" },
+  { key: "BAZAR_COMPRA", label: "Compras de outros jogadores", metric: "compras" },
+  { key: "MIAUVADAO_COMPRA_SLOT", label: "Compras em slot do Miauvadão", metric: "compras" },
+  { key: "MIAUVADAO_APOSTA", label: "Apostas no Miauvadão", metric: "apostas" },
+  { key: "MIAUVADAO_ACERTO", label: "Acertos no Miauvadão", metric: "acertos" },
+  { key: "ZIKABET_ACERTO", label: "Acertos na ZikaBet", metric: "acertos" },
+  { key: "ZIKALOOT_NUMERO", label: "Números escolhidos na ZikaLoot", metric: "números" },
+  { key: "ARENA_DRAFT_PARTIDA", label: "Partidas na Arena Draft", metric: "partidas" },
 ];
 
 const POKEMON_ID_BY_NAME = new Map(
@@ -173,7 +194,7 @@ export function GachaPanel(props: GachaPanelProps) {
       {tab === "player" && <PlayerScreen {...props} banner={banner} />}
       {tab === "banner" && <BannerEditor banner={banner} onSelect={setBannerId} />}
       {tab === "pool" && (banner ? <PoolEditor banner={banner} shopItems={props.shopItems} icons={props.icons} /> : <Empty />)}
-      {tab === "missions" && <MissionEditor missions={props.missions} banners={props.banners} />}
+      {tab === "missions" && <MissionEditor missions={props.missions} banners={props.banners} players={props.players} />}
       {tab === "packs" && <PackEditor packs={props.packs} icons={props.icons} />}
     </div>
   );
@@ -777,7 +798,7 @@ function PityEditor({ banner, icons }: { banner: GachaBannerDTO; icons: GachaPan
 
 /* ─────────────────────────── 4. missões semanais ─────────────────────────── */
 
-function MissionEditor({ missions, banners }: { missions: GachaMissionDTO[]; banners: GachaBannerDTO[] }) {
+function MissionEditor({ missions, banners, players }: { missions: GachaMissionDTO[]; banners: GachaBannerDTO[]; players: GachaPanelProps["players"] }) {
   const [pending, startTransition] = useTransition();
 
   function save(mission: Partial<GachaMissionDTO> & { id?: string }) {
@@ -791,6 +812,7 @@ function MissionEditor({ missions, banners }: { missions: GachaMissionDTO[]; ban
         reward: (mission.reward ?? "POKEBALL") as never,
         rewardAmount: mission.rewardAmount ?? 1,
         rarityFilter: mission.rarityFilter ?? null,
+        criteria: mission.criteria ?? null,
         active: mission.active ?? true,
         sortOrder: mission.sortOrder ?? 0,
       });
@@ -805,13 +827,19 @@ function MissionEditor({ missions, banners }: { missions: GachaMissionDTO[]; ban
           <p className="text-sm font-bold text-slate-200">Missões semanais</p>
           <p className="text-xs text-slate-500">Reiniciam toda segunda 00:00 (BRT). O progresso é contado automaticamente quando o jogador cumpre o objetivo; a recompensa é resgatada por ele na tela do banner.</p>
         </div>
-        <button type="button" disabled={pending} onClick={() => save({ title: "Nova missão", goal: 1 })}
-          className="flex shrink-0 items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs text-slate-300"><Plus size={12} /> Nova missão</button>
+        <div className="flex shrink-0 flex-wrap gap-2">
+          <button type="button" disabled={pending} onClick={() => startTransition(async () => {
+            const result = await generateGachaMissionSetAction();
+            if (result.ok) toast.success(result.created ? `${result.created} missões automáticas criadas.` : "O conjunto automático já está disponível.");
+          })} className="flex items-center gap-1 rounded-xl border border-amber-300/40 bg-amber-300/10 px-3 py-1.5 text-xs font-bold text-amber-100"><Sparkles size={12} /> Gerar conjunto</button>
+          <button type="button" disabled={pending} onClick={() => save({ title: "Nova missão", goal: 1 })}
+            className="flex items-center gap-1 rounded-xl border border-border px-3 py-1.5 text-xs text-slate-300"><Plus size={12} /> Nova missão</button>
+        </div>
       </div>
 
       <div className="space-y-2">
         {missions.map((mission) => (
-          <MissionRow key={mission.id} mission={mission} banners={banners} onSave={save}
+          <MissionRow key={mission.id} mission={mission} banners={banners} players={players} onSave={save}
             onDelete={() => startTransition(async () => { await deleteGachaMissionAction(mission.id); })} />
         ))}
         {missions.length === 0 && <p className="text-xs text-slate-500">Nenhuma missão cadastrada.</p>}
@@ -820,8 +848,8 @@ function MissionEditor({ missions, banners }: { missions: GachaMissionDTO[]; ban
   );
 }
 
-function MissionRow({ mission, banners, onSave, onDelete }: {
-  mission: GachaMissionDTO; banners: GachaBannerDTO[];
+function MissionRow({ mission, banners, players, onSave, onDelete }: {
+  mission: GachaMissionDTO; banners: GachaBannerDTO[]; players: GachaPanelProps["players"];
   onSave: (mission: Partial<GachaMissionDTO> & { id?: string }) => void; onDelete: () => void;
 }) {
   const [draft, setDraft] = useState(mission);
@@ -831,6 +859,19 @@ function MissionRow({ mission, banners, onSave, onDelete }: {
   function set<K extends keyof GachaMissionDTO>(key: K, value: GachaMissionDTO[K]) {
     setDraft((current) => ({ ...current, [key]: value }));
   }
+  const criteria = draft.criteria ?? {};
+  function setCriteria(key: string, value: string | number | boolean | undefined) {
+    setDraft((current) => {
+      const next = { ...(current.criteria ?? {}) };
+      if (value === undefined || value === "") delete next[key]; else next[key] = value;
+      return { ...current, criteria: Object.keys(next).length ? next : null };
+    });
+  }
+  // Só os objetivos PvP carregam adversário e a espécie/tipo do alvo.
+  const needsCombatFilters = ["COMBATE_PVP", "COMBATE_KO"].includes(draft.source);
+  const needsBazarFilters = ["BAZAR_COMPRA", "BAZAR_VENDA", "BAZAR_GASTO_ZC", "BAZAR_GASTO_LC"].includes(draft.source);
+  const needsMiauvadaoFilters = draft.source.startsWith("MIAUVADAO_");
+  const needsZikalootFilters = draft.source === "ZIKALOOT_NUMERO";
 
   return (
     <div className="grid items-end gap-2 rounded-xl border border-border/60 p-3 md:grid-cols-[1.4fr_1fr_.7fr_.8fr_.5fr_.9fr_auto]">
@@ -872,6 +913,24 @@ function MissionRow({ mission, banners, onSave, onDelete }: {
           </Field>
         </div>
       )}
+      <div className="space-y-2 border-t border-border/50 pt-3 md:col-span-7">
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Filtros opcionais — deixe em branco para aceitar qualquer caso</p>
+        <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+          {needsCombatFilters && <>
+            <Field label="Adversário"><select value={String(criteria.opponentPlayerId ?? "")} onChange={(e) => setCriteria("opponentPlayerId", e.target.value || undefined)} className={inputCls}><option value="">qualquer jogador</option>{players.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></Field>
+            <Field label="ID do mascote"><input type="number" value={String(criteria.pokemonId ?? "")} onChange={(e) => setCriteria("pokemonId", e.target.value ? Number(e.target.value) : undefined)} placeholder="ex.: 25" className={inputCls} /></Field>
+            <Field label={draft.source === "COMBATE_KO" ? "Tipo do alvo derrotado" : "Tipo do mascote"}><select value={String(criteria.pokemonType ?? "")} onChange={(e) => setCriteria("pokemonType", e.target.value || undefined)} className={inputCls}><option value="">qualquer tipo</option>{POKEMON_TYPES.map(([value, label]) => <option key={value} value={value}>{label}</option>)}</select></Field>
+          </>}
+          {needsBazarFilters && <>
+            <Field label="Vendedor"><select value={String(criteria.sellerPlayerId ?? "")} onChange={(e) => setCriteria("sellerPlayerId", e.target.value || undefined)} className={inputCls}><option value="">qualquer jogador</option>{players.map((candidate) => <option key={candidate.id} value={candidate.id}>{candidate.name}</option>)}</select></Field>
+            <Field label="Categoria"><input value={String(criteria.bazarCategory ?? "")} onChange={(e) => setCriteria("bazarCategory", e.target.value)} placeholder="ex.: MASCOT" className={inputCls} /></Field>
+            <Field label="Tipo de anúncio"><input value={String(criteria.bazarListingType ?? "")} onChange={(e) => setCriteria("bazarListingType", e.target.value)} placeholder="ex.: DIRECT" className={inputCls} /></Field>
+          </>}
+          {needsMiauvadaoFilters && <Field label="Slot (0 = primeiro)"><input type="number" value={String(criteria.miauvadaoSlot ?? "")} onChange={(e) => setCriteria("miauvadaoSlot", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field>}
+          {needsZikalootFilters && <><Field label="Número exato"><input type="number" value={String(criteria.exactNumber ?? "")} onChange={(e) => setCriteria("exactNumber", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field><Field label="Ticket especial"><select value={criteria.specialTicket === undefined ? "" : String(criteria.specialTicket)} onChange={(e) => setCriteria("specialTicket", e.target.value === "" ? undefined : e.target.value === "true")} className={inputCls}><option value="">qualquer</option><option value="true">somente especial</option><option value="false">somente comum</option></select></Field></>}
+          {["MIAUVADAO_APOSTA", "MIAUVADAO_ACERTO", "ZIKABET_ACERTO", "BAZAR_GASTO_ZC", "BAZAR_GASTO_LC"].includes(draft.source) && <Field label="Valor mínimo"><input type="number" value={String(criteria.minAmount ?? "")} onChange={(e) => setCriteria("minAmount", e.target.value ? Number(e.target.value) : undefined)} className={inputCls} /></Field>}
+        </div>
+      </div>
     </div>
   );
 }

@@ -47,6 +47,33 @@ function randomInt(min: number, max: number): number {
   return Math.floor(Math.random() * (max - min + 1)) + min;
 }
 
+type AllyGiftKind = "ZIKA_COINS" | "FOOD" | "SWEET" | "ZIKALOOT_TICKET";
+
+const ALLY_GIFT_KINDS: AllyGiftKind[] = ["ZIKA_COINS", "FOOD", "SWEET", "ZIKALOOT_TICKET"];
+const ALLY_GIFT_WEIGHTS: Record<AllyGiftKind, number> = {
+  ZIKA_COINS: 0.45,
+  FOOD: 0.28,
+  SWEET: 0.22,
+  ZIKALOOT_TICKET: 0.05,
+};
+
+/**
+ * Sorteia a categoria de presente sem repetir a última desta amizade.
+ * A escolha continua aleatória, mas a próxima visita sempre alterna o tipo
+ * de recompensa que o aliado entrega.
+ */
+function rollAllyGiftKind(previous?: string | null, ticketWeight = ALLY_GIFT_WEIGHTS.ZIKALOOT_TICKET): AllyGiftKind {
+  const choices = ALLY_GIFT_KINDS.filter((kind) => kind !== previous);
+  const eligible = choices.length > 0 ? choices : ALLY_GIFT_KINDS;
+  const totalWeight = eligible.reduce((sum, kind) => sum + (kind === "ZIKALOOT_TICKET" ? ticketWeight : ALLY_GIFT_WEIGHTS[kind]), 0);
+  let roll = Math.random() * totalWeight;
+  for (const kind of eligible) {
+    roll -= kind === "ZIKALOOT_TICKET" ? ticketWeight : ALLY_GIFT_WEIGHTS[kind];
+    if (roll <= 0) return kind;
+  }
+  return eligible[eligible.length - 1];
+}
+
 function randomPersonality(): MascotPersonality {
   return randomFrom([...PERSONALITIES]) as MascotPersonality;
 }
@@ -1895,43 +1922,41 @@ export async function claimExpedition(
     for (const rel of friends) {
       const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
       const allyPlayerId = rel.mascotB.playerId;
-
-      // Presente para o dono do aliado: moedas ou comida dependendo do carisma
       const charisma = rel.mascotB.statCharisma;
-      if (charisma >= 15) {
-        // Alto carisma: envia comida ou doce como presente
-        const foodType = Math.random() < 0.4 ? "SWEET" : "FOOD";
-        await tx.playerGift.create({
-          data: {
-            playerId: allyPlayerId,
-            type: "CUSTOM",
-            title: `Presente de ${expeditorName}`,
-            description: `${expeditorName} voltou da expedição e trouxe algo para ${friendName}! 🤝`,
-            payload: {
-              rewardKind: "MASCOT_FOOD",
-              foodType,
-              quantity: 2,
-              rewardLabel: foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote",
-            }
-          }
+      const giftKind = rollAllyGiftKind(rel.lastAllyGiftKind);
+      let payload: Record<string, unknown>;
+      let description: string;
+
+      if (giftKind === "ZIKA_COINS") {
+        const bonusCoins = randomInt(30, 80 + Math.max(0, charisma - 10) * 2);
+        payload = { rewardKind: "ZIKA_COINS", amount: bonusCoins, rewardLabel: `${bonusCoins} ZikaCoins`, allyGiftKind: giftKind };
+        description = `${expeditorName} voltou da expedição e enviou ${bonusCoins} ZC para o dono de ${friendName}! 🤝`;
+      } else if (giftKind === "ZIKALOOT_TICKET") {
+        const ticket = await tx.shopItem.findFirst({
+          where: { type: "ZIKALOOT_TICKET", active: true },
+          select: { id: true },
         });
+        if (ticket) {
+          payload = { rewardKind: "ZIKALOOT_TICKET", special: false, rewardLabel: "Ticket ZikaLoot", allyGiftKind: giftKind };
+          description = `${expeditorName} voltou da expedição e deixou um Ticket ZikaLoot para ${friendName}! 🤝`;
+        } else {
+          payload = { rewardKind: "MASCOT_FOOD", foodType: "SWEET", quantity: charisma >= 15 ? 2 : 1, rewardLabel: "Doce de Mascote", allyGiftKind: "SWEET" };
+          description = `${expeditorName} voltou da expedição e trouxe um Doce de Mascote para ${friendName}! 🤝`;
+        }
       } else {
-        // Carisma normal: envia moedas
-        const bonusCoins = randomInt(30, 80);
-        await tx.playerGift.create({
-          data: {
-            playerId: allyPlayerId,
-            type: "CUSTOM",
-            title: `Presente de ${expeditorName}`,
-            description: `${expeditorName} voltou da expedição e enviou ${bonusCoins} ZC para o dono de ${friendName}! 🤝`,
-            payload: {
-              rewardKind: "ZIKA_COINS",
-              amount: bonusCoins,
-              rewardLabel: `${bonusCoins} ZikaCoins`,
-            }
-          }
-        });
+        const foodType = giftKind === "SWEET" ? "SWEET" : "FOOD";
+        const quantity = charisma >= 15 ? 2 : 1;
+        payload = { rewardKind: "MASCOT_FOOD", foodType, quantity, rewardLabel: foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote", allyGiftKind: giftKind };
+        description = `${expeditorName} voltou da expedição e trouxe ${quantity > 1 ? `${quantity}x ` : ""}${foodType === "SWEET" ? "Doce de Mascote" : "Comida de Mascote"} para ${friendName}! 🤝`;
       }
+
+      await tx.playerGift.create({
+        data: { playerId: allyPlayerId, type: "CUSTOM", title: `Presente de ${expeditorName}`, description, payload: payload as Prisma.InputJsonValue },
+      });
+      await tx.mascotRelation.update({
+        where: { id: rel.id },
+        data: { lastAllyGiftKind: (payload.allyGiftKind as string) ?? giftKind },
+      });
 
     }
     if (durationKey === "3h" || durationKey === "6h") {
@@ -2792,6 +2817,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 
     const eventRoll = Math.random();
     let allyEvent: string;
+    let allyGiftKind: AllyGiftKind | null = null;
 
     if (isBestFriend && eventRoll < 0.20 && rel.mascotB.restingUntil && new Date(rel.mascotB.restingUntil) > new Date()) {
       // Super Amigo: reduz repouso em 30-60 min
@@ -2892,10 +2918,8 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
 
     } else if (eventRoll < 0.88) {
       // 🎁 Presente de Amigo — pequena recompensa para B
-      const giftRoll = Math.random();
-      // Ticket ZikaLoot: Super Amigos têm 8% de chance, amigos comuns têm 3%
-      const ticketChance = isBestFriend ? 0.08 : 0.03;
-      if (giftRoll < ticketChance) {
+      allyGiftKind = rollAllyGiftKind(rel.lastAllyGiftKind, isBestFriend ? 0.08 : 0.03);
+      if (allyGiftKind === "ZIKALOOT_TICKET") {
         // 🎟️ Ticket ZikaLoot — presente especial de amizade
         const ticketItem = await prisma.shopItem.findFirst({
           where: { type: "ZIKALOOT_TICKET", active: true },
@@ -2911,6 +2935,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
           summary.events.push(`🎟️ ${aName} deu um Ticket ZikaLoot para ${bName}!`);
         } else {
           // Fallback: doce se o ticket não existir no shop
+          allyGiftKind = "SWEET";
           await prisma.mascotFoodItem.upsert({
             where: { playerId_type: { playerId: rel.mascotB.playerId, type: "SWEET" } },
             update: { quantity: { increment: 1 } },
@@ -2919,7 +2944,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
           allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + " (doce!)";
           summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
         }
-      } else if (giftRoll < ticketChance + 0.57) {
+      } else if (allyGiftKind === "ZIKA_COINS") {
         // ZikaCoins (3-10)
         const coins = randomInt(3, 10);
         await prisma.zikaCoinWallet.updateMany({
@@ -2928,7 +2953,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
         }).catch(() => {});
         allyEvent = pickText(SOCIAL_TEXTS.ally_gift, aName, bName) + ` (+${coins} ZC)`;
         summary.events.push(`🎁 ${aName} deu um presente para ${bName}`);
-      } else if (giftRoll < ticketChance + 0.87) {
+      } else if (allyGiftKind === "FOOD") {
         // 1 petisco (FOOD)
         await prisma.mascotFoodItem.upsert({
           where: { playerId_type: { playerId: rel.mascotB.playerId, type: "FOOD" } },
@@ -2964,7 +2989,7 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
     ]);
     await prisma.mascotRelation.update({
       where: { id: rel.id },
-      data: { interactionCount: { increment: 1 } }
+      data: { interactionCount: { increment: 1 }, ...(allyGiftKind ? { lastAllyGiftKind: allyGiftKind } : {}) }
     }).catch(() => {});
   }
 

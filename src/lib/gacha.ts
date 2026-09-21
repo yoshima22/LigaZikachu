@@ -196,23 +196,87 @@ export function currentWeekKey(reference = new Date()) {
  * modos de jogo quando o jogador cumpre algo (vitória, venda, ovo chocado...).
  * Nunca lança: uma missão quebrada não pode derrubar a ação principal do jogo.
  */
+export type GachaObjectiveEvent = {
+  rarity?: string | null;
+  opponentPlayerId?: string | null;
+  /** IDs de Pokémon que participaram do evento (dos dois lados quando aplicável). */
+  pokemonIds?: number[];
+  pokemonTypes?: string[];
+  sellerPlayerId?: string | null;
+  bazarCategory?: string | null;
+  bazarListingType?: string | null;
+  miauvadaoSlot?: number | null;
+  amount?: number | null;
+  won?: boolean | null;
+  pickedNumber?: number | null;
+  specialTicket?: boolean | null;
+};
+
+export type GachaMissionCriteria = Partial<{
+  opponentPlayerId: string;
+  pokemonId: number;
+  pokemonType: string;
+  sellerPlayerId: string;
+  bazarCategory: string;
+  bazarListingType: string;
+  miauvadaoSlot: number;
+  minAmount: number;
+  requireWin: boolean;
+  exactNumber: number;
+  specialTicket: boolean;
+}>;
+
+function readCriteria(value: Prisma.JsonValue | null): GachaMissionCriteria {
+  if (!value || Array.isArray(value) || typeof value !== "object") return {};
+  const raw = value as Record<string, unknown>;
+  return {
+    opponentPlayerId: typeof raw.opponentPlayerId === "string" ? raw.opponentPlayerId : undefined,
+    pokemonId: typeof raw.pokemonId === "number" ? raw.pokemonId : undefined,
+    pokemonType: typeof raw.pokemonType === "string" ? raw.pokemonType.toUpperCase() : undefined,
+    sellerPlayerId: typeof raw.sellerPlayerId === "string" ? raw.sellerPlayerId : undefined,
+    bazarCategory: typeof raw.bazarCategory === "string" ? raw.bazarCategory : undefined,
+    bazarListingType: typeof raw.bazarListingType === "string" ? raw.bazarListingType : undefined,
+    miauvadaoSlot: typeof raw.miauvadaoSlot === "number" ? raw.miauvadaoSlot : undefined,
+    minAmount: typeof raw.minAmount === "number" ? raw.minAmount : undefined,
+    requireWin: typeof raw.requireWin === "boolean" ? raw.requireWin : undefined,
+    exactNumber: typeof raw.exactNumber === "number" ? raw.exactNumber : undefined,
+    specialTicket: typeof raw.specialTicket === "boolean" ? raw.specialTicket : undefined,
+  };
+}
+
+function eventMatchesCriteria(criteria: GachaMissionCriteria, event: GachaObjectiveEvent) {
+  if (criteria.opponentPlayerId && criteria.opponentPlayerId !== event.opponentPlayerId) return false;
+  if (criteria.pokemonId && !event.pokemonIds?.includes(criteria.pokemonId)) return false;
+  if (criteria.pokemonType && !event.pokemonTypes?.map((type) => type.toUpperCase()).includes(criteria.pokemonType)) return false;
+  if (criteria.sellerPlayerId && criteria.sellerPlayerId !== event.sellerPlayerId) return false;
+  if (criteria.bazarCategory && criteria.bazarCategory !== event.bazarCategory) return false;
+  if (criteria.bazarListingType && criteria.bazarListingType !== event.bazarListingType) return false;
+  if (criteria.miauvadaoSlot !== undefined && criteria.miauvadaoSlot !== event.miauvadaoSlot) return false;
+  if (criteria.minAmount !== undefined && (event.amount ?? 0) < criteria.minAmount) return false;
+  if (criteria.requireWin !== undefined && criteria.requireWin !== event.won) return false;
+  if (criteria.exactNumber !== undefined && criteria.exactNumber !== event.pickedNumber) return false;
+  if (criteria.specialTicket !== undefined && criteria.specialTicket !== event.specialTicket) return false;
+  return true;
+}
+
 export async function trackGachaObjective(
   playerId: string,
   source: GachaObjectiveSource,
   amount = 1,
-  options?: { rarity?: string | null },
+  event: GachaObjectiveEvent = {},
 ) {
   if (amount <= 0) return;
   try {
     const missions = await prisma.gachaMission.findMany({
       where: { active: true, source },
-      select: { id: true, goal: true, rarityFilter: true },
+      select: { id: true, goal: true, rarityFilter: true, criteria: true },
     });
     if (missions.length === 0) return;
     const weekKey = currentWeekKey();
     for (const mission of missions) {
       // Missão com filtro de raridade só conta o que atinge aquele piso.
-      if (mission.rarityFilter && rarityRank(options?.rarity ?? "") < rarityRank(mission.rarityFilter)) continue;
+      if (mission.rarityFilter && rarityRank(event.rarity ?? "") < rarityRank(mission.rarityFilter)) continue;
+      if (!eventMatchesCriteria(readCriteria(mission.criteria), event)) continue;
       await prisma.gachaMissionProgress.upsert({
         where: { missionId_playerId_weekKey: { missionId: mission.id, playerId, weekKey } },
         create: { missionId: mission.id, playerId, weekKey, progress: Math.min(amount, mission.goal) },

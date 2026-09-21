@@ -1365,6 +1365,12 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
     after(() => Promise.allSettled([
       trackGachaObjective(listing.playerId, "BAZAR_VENDA"),
       trackGachaObjective(player.id, currency === "LC" ? "BAZAR_GASTO_LC" : "BAZAR_GASTO_ZC", price),
+      trackGachaObjective(player.id, "BAZAR_COMPRA", 1, {
+        sellerPlayerId: listing.playerId,
+        bazarCategory: String(listing.category),
+        bazarListingType: String(listing.listingType),
+        amount: price,
+      }),
     ]).then(() => undefined));
     after(() => Promise.allSettled([
       sendNotificationToPlayers([listing.playerId], { title: `Vendido: ${listingDisplayName(listing)}`, body: `${buyerName} comprou por ${price.toLocaleString("pt-BR")} ${currency}.`, url: `/bazar/${listingId}` , category: "BAZAR" }),
@@ -2548,6 +2554,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
+    after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: offerIndex }));
     return result;
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao comprar." };
@@ -2768,6 +2775,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
     }, { isolationLevel: "Serializable" });
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
+    after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: 3 }));
     return { sold: soldAfter };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao comprar." }; }
 }
@@ -3652,6 +3660,10 @@ export async function resolveShellGame(sessionId: string, guessedPos: number): P
     }
 
     revalidatePath("/bazar");
+    after(() => Promise.allSettled([
+      trackGachaObjective(player.id, "MIAUVADAO_APOSTA", 1, { amount: session.betAmount, won }),
+      ...(won ? [trackGachaObjective(player.id, "MIAUVADAO_ACERTO", 1, { amount: session.betAmount, won: true })] : []),
+    ]).then(() => undefined));
     return { won, actualPos: session.ballPos, prize, newBalance };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }

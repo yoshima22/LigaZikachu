@@ -8,6 +8,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { ZikaBetStatus, ZikaCoinTxType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { isInCurrentBetWeek, isTournamentBettingLocked, parseBetConfig, startOfBetWeek } from "@/lib/zikabet";
+import { trackGachaObjective } from "@/lib/gacha";
 const WEEKLY_LEAGUE_BET_CONFIG = {
   minBet: 10,
   maxBet: 500,
@@ -320,6 +321,12 @@ export async function settleWeeklyLeagueBets(weeklyMatchId: string): Promise<voi
     }
   });
 
+  for (const bet of bets) {
+    if (!match.isDraw && match.winnerId && bet.betOnPlayerId === match.winnerId) {
+      void trackGachaObjective(bet.playerId, "ZIKABET_ACERTO", 1, { amount: bet.amount, won: true });
+    }
+  }
+
   revalidatePath("/zikabet");
   revalidatePath("/zikabet/minhas-apostas");
   revalidatePath("/carteira");
@@ -451,6 +458,7 @@ export async function settleDayBets(weekId: string, adminId: string): Promise<vo
           adminId
         });
       });
+      void trackGachaObjective(bet.playerId, "ZIKABET_ACERTO", 1, { amount: bet.amount, won: true });
     } else {
       await prisma.zikaBet.update({
         where: { id: bet.id },

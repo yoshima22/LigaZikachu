@@ -9,6 +9,7 @@ import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { onStickerPackOpened, onGiftSent } from "@/lib/achievement-events";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { pickRarity, pickCardFromPool, DUPLICATE_COINS, DUPLICATE_COIN_REFUND_LIMIT, GENERATION_RANGES } from "@/lib/sticker-pack";
+import { trackGachaObjective } from "@/lib/gacha";
 
 export type PackOpenResult = {
   cards: {
@@ -47,7 +48,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
         active: true,
         ...(genFilter ? { nationalId: { gte: genFilter[0], lte: genFilter[1] } } : {})
       },
-      select: { id: true, nationalId: true, displayName: true, imageUrl: true, rarity: true }
+      select: { id: true, nationalId: true, displayName: true, imageUrl: true, rarity: true, generation: true }
     });
 
     if (allCards.length === 0)
@@ -67,6 +68,7 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
       select: { cardId: true, quantity: true }
     });
     const ownedMap = new Map(owned.map((o) => [o.cardId, o.quantity]));
+    const ownedBefore = new Set(ownedMap.keys());
 
     const drawn: typeof allCards[number][] = [];
     const drawnIds = new Set<string>();
@@ -133,6 +135,14 @@ export async function openStickerPack(packId: string): Promise<PackOpenResult> {
 
     revalidatePath("/album");
     revalidatePath("/carteira");
+    // Só dispara no pacote que preenche a última figurinha de uma geração.
+    const completedGenerations = new Set(drawn.map((card) => card.generation).filter((generation) => {
+      const generationCards = allCards.filter((card) => card.generation === generation);
+      return generationCards.length > 0
+        && generationCards.every((card) => ownedMap.has(card.id))
+        && drawn.some((card) => card.generation === generation && !ownedBefore.has(card.id));
+    }));
+    for (const _generation of completedGenerations) void trackGachaObjective(player.id, "ALBUM_COMPLETO");
     void onStickerPackOpened(player.id).catch(() => {});
     return { cards: resultCards, totalCoinsEarned };
   } catch (err) {

@@ -20,6 +20,7 @@ import { getWeeklyTeamEditWindow, WEEKLY_TEAM_LOCK_MESSAGE } from "./team-edit-w
 import { isMegaEvolvedMascot, type MegaCandidate } from "@/lib/battle-divisions";
 import { getBattleModeDivision } from "@/lib/battle-division-settings";
 import { getOpposingBondCombatEffects, getTeamBondCombatContext } from "@/lib/mascot-bonds";
+import { trackGachaObjective } from "@/lib/gacha";
 
 function createId() { return crypto.randomUUID(); }
 
@@ -1358,6 +1359,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       await prisma.weeklyMascotLeagueMatch.create({
         data: { id: createId(), leagueId, roundNumber, battleDate: today, battleSlot, scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId, ...matchData },
       });
+      if (winnerId) void trackGachaObjective(winnerId, "LIGA_SEMANAL_VITORIA", 1, { won: true });
     }
 
     await prisma.weeklyMascotLeagueBattleItem.updateMany({

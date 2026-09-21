@@ -17,6 +17,7 @@ import {
   createBondEventForPlayer,
   type BondBehavior,
 } from "@/lib/mascot-bonds";
+import { trackGachaObjective } from "@/lib/gacha";
 
 async function getPlayerId() {
   const session = await getAppSession();
@@ -341,6 +342,7 @@ export async function resolveBondEventAction(eventId: string, optionId: string) 
   try {
     const playerId = await getPlayerId();
     await applyBondOption(eventId, playerId, optionId);
+    void trackGachaObjective(playerId, "LACOS");
     revalidatePath("/lacos");
     revalidatePath("/mascotes");
     return { ok: true };

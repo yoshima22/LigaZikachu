@@ -31,6 +31,7 @@ import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { trackGachaObjective } from "@/lib/gacha";
 import type { Prisma } from "@prisma/client";
 
 function revalidate(playerId?: string) {
@@ -1094,6 +1095,7 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
     const result = await claimExpedition(player.id, expeditionId);
+    void trackGachaObjective(player.id, "EXPEDICAO_CONCLUIDA");
     revalidate(player.id);
     revalidatePath("/caixa-de-presentes");
     return { result };
@@ -1174,6 +1176,7 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
       };
       try {
         const claimed = await claimExpedition(player.id, expedition.id);
+        void trackGachaObjective(player.id, "EXPEDICAO_CONCLUIDA");
         entry.reward = claimed.reward;
         entry.expGained = claimed.expGained;
 

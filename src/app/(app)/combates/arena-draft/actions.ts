@@ -21,6 +21,7 @@ import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
+import { trackGachaObjective } from "@/lib/gacha";
 import {
   runArenaCombat,
   type ArenaCombatRuntime,
@@ -1188,6 +1189,7 @@ async function persistCombatSegment(
 export async function resolveArenaDraftBattleAction(matchId: string) {
   try {
     const player = await currentPlayer();
+    let finishedPlayers: string[] = [];
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
       const match = await tx.arenaDraftMatch.findUnique({
@@ -1243,8 +1245,10 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
         where: { id: match.id },
         data: { eventSequence: { increment: 1 } },
       });
-      await persistCombatSegment(tx, match, battle);
+      const finished = await persistCombatSegment(tx, match, battle);
+      if (finished && match.playerBId) finishedPlayers = [match.playerAId, match.playerBId];
     });
+    for (const playerId of finishedPlayers) void trackGachaObjective(playerId, "ARENA_DRAFT_PARTIDA");
     revalidatePath(`/combates/arena-draft/${matchId}`);
     revalidatePath("/combates/arena-draft");
     return { success: "Combate concluído e replay salvo." };
@@ -1263,6 +1267,7 @@ export async function submitArenaDraftStrategyAction(input: {
 }) {
   try {
     const player = await currentPlayer();
+    let finishedPlayers: string[] = [];
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${input.matchId}))`;
       const match = await tx.arenaDraftMatch.findUnique({
@@ -1366,8 +1371,10 @@ export async function submitArenaDraftStrategyAction(input: {
         activeB: battle.activeB,
       });
       battle.checkpoint += 1;
-      await persistCombatSegment(tx, match, battle);
+      const finished = await persistCombatSegment(tx, match, battle);
+      if (finished && match.playerBId) finishedPlayers = [match.playerAId, match.playerBId];
     });
+    for (const playerId of finishedPlayers) void trackGachaObjective(playerId, "ARENA_DRAFT_PARTIDA");
     revalidatePath(`/combates/arena-draft/${input.matchId}`);
     revalidatePath("/combates/arena-draft");
     return { success: "Estratégia confirmada em segredo." };
@@ -1384,6 +1391,7 @@ export async function submitArenaDraftStrategyAction(input: {
 export async function advanceArenaDraftTimeoutAction(matchId: string) {
   try {
     const player = await currentPlayer();
+    let finishedPlayers: string[] = [];
     await prisma.$transaction(async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${matchId}))`;
       const match = await tx.arenaDraftMatch.findUnique({
@@ -1499,8 +1507,10 @@ export async function advanceArenaDraftTimeoutAction(matchId: string) {
         activeB: battle.activeB,
       });
       battle.checkpoint += 1;
-      await persistCombatSegment(tx, match, battle);
+      const finished = await persistCombatSegment(tx, match, battle);
+      if (finished && match.playerBId) finishedPlayers = [match.playerAId, match.playerBId];
     });
+    for (const playerId of finishedPlayers) void trackGachaObjective(playerId, "ARENA_DRAFT_PARTIDA");
     revalidatePath(`/combates/arena-draft/${matchId}`);
     return { success: true };
   } catch {

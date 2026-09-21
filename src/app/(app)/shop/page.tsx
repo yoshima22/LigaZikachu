@@ -76,6 +76,9 @@ async function loadGachaData(playerId: string) {
     })),
     missions: missions.map((mission) => ({
       ...mission,
+      criteria: mission.criteria && typeof mission.criteria === "object" && !Array.isArray(mission.criteria)
+        ? mission.criteria as Record<string, unknown>
+        : null,
       progress: progressByMission.get(mission.id)?.progress ?? 0,
       claimed: Boolean(progressByMission.get(mission.id)?.claimedAt),
     })),
@@ -157,7 +160,17 @@ export default async function ShopPage() {
     && promotion.endsAt > now,
   ).sort((left, right) => right.discountPct - left.discountPct).slice(0, 1);
 
-  const gacha = platformAdmin && player ? await loadGachaData(player.id) : null;
+  const [gacha, gachaPlayers] = platformAdmin && player
+    ? await Promise.all([
+        loadGachaData(player.id),
+        prisma.player.findMany({
+          where: { user: { status: "ACTIVE" } },
+          select: { id: true, displayName: true, ptcglNick: true },
+          orderBy: { displayName: "asc" },
+          take: 1_000,
+        }),
+      ])
+    : [null, []] as const;
 
   const ownedIds = new Set(inventoryRows.map((r) => r.itemId));
   const countByItemId = new Map(inventoryRows.map((r) => [r.itemId, r.quantity]));
@@ -310,6 +323,7 @@ export default async function ShopPage() {
                 wallet={gacha.wallet}
                 ligaCash={ligaCashWallet?.balance ?? 0}
                 shopItems={items.map((item) => ({ id: item.id, name: item.name }))}
+                players={gachaPlayers.map((candidate) => ({ id: candidate.id, name: candidate.displayName ?? candidate.ptcglNick ?? candidate.id }))}
                 icons={{ pokeball: POKEBALL_ICON, ultraball: ULTRABALL_ICON, celestialEgg: CELESTIAL_EGG_ICON, labEgg: LAB_EGG_ICON }}
               />
             ),

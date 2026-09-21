@@ -31,6 +31,7 @@ import {
 import type { ArenaDifficulty } from "@/lib/arena-z";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { trackGachaObjective } from "@/lib/gacha";
+import { getPokemonTypes } from "@/lib/mascot-data";
 
 type ArenaStaleNotice = {
   attackerName?: string | null;
@@ -240,12 +241,33 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
     const playerId = await getCurrentPlayerId();
     const defenseOwner = await prisma.arenaTeam.findUnique({
       where: { id: defenseTeamId },
-      select: { playerId: true, player: { select: { userId: true } } },
+      select: {
+        playerId: true,
+        player: { select: { userId: true } },
+        members: { select: { mascot: { select: { pokemonId: true } } } },
+      },
     });
     const stale = await checkTeamStaleFromIncomingAttack(playerId, attackTeamId, attackTeamKnownUpdatedAt);
     if (stale) return { stale };
     const result = await runPvpBattle(playerId, attackTeamId, defenseTeamId);
-    if (result.result === "ATTACKER_WIN") after(() => trackGachaObjective(playerId, "ARENA_Z"));
+    if (result.result === "ATTACKER_WIN") after(() => Promise.allSettled([
+      trackGachaObjective(playerId, "ARENA_Z"),
+      ...(defenseOwner && !result.isTrainingBattle ? [trackGachaObjective(playerId, "COMBATE_PVP", 1, {
+        won: true,
+        opponentPlayerId: defenseOwner.playerId,
+        pokemonIds: defenseOwner.members.map((member) => member.mascot.pokemonId),
+        pokemonTypes: defenseOwner.members.flatMap((member) => getPokemonTypes(member.mascot.pokemonId)),
+      })] : []),
+    ]).then(() => undefined));
+    if (defenseOwner && !result.isTrainingBattle && result.knockedOutOpponents.length > 0) {
+      after(() => Promise.allSettled(result.knockedOutOpponents
+        .filter((opponent) => opponent.pokemonId > 0)
+        .map((opponent) => trackGachaObjective(playerId, "COMBATE_KO", 1, {
+          opponentPlayerId: defenseOwner.playerId,
+          pokemonIds: [opponent.pokemonId],
+          pokemonTypes: getPokemonTypes(opponent.pokemonId),
+        }))).then(() => undefined));
+    }
     if (defenseOwner && defenseOwner.playerId !== playerId && !result.isTrainingBattle) {
       const outcome = result.result === "DEFENDER_WIN"
         ? "Seu time venceu a defesa!"
