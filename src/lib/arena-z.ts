@@ -2150,6 +2150,7 @@ export async function createArenaTeam(
           playerId,
           arenaState: { in: ["FREE", "RESTING"] },
           arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+          OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }],
         },
         data: {
           arenaState: "ARENA",
@@ -2236,6 +2237,7 @@ export async function addMascotToArenaTeam(
           playerId,
           arenaState: { in: ["FREE", "RESTING"] },
           arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
+          OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }],
         },
         data: {
           arenaState: "ARENA",

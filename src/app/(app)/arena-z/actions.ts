@@ -157,6 +157,84 @@ export async function runBotBattleAction(teamId: string, difficulty: ArenaDiffic
   }
 }
 
+export type ArenaPveBatchTeamReport = {
+  teamId: string;
+  teamName: string;
+  order: number;
+  state: "COMPLETED" | "UNAVAILABLE" | "SKIPPED";
+  message: string;
+  won?: boolean;
+  botName?: string;
+  rounds?: number;
+  coinsAdded?: number;
+  expAdded?: number;
+  injuredMascots?: string[];
+  teamDefeated?: boolean;
+};
+
+/** Executa, em sequência, um PvE para cada equipe ativa normal do jogador. */
+export async function runArenaPveBatchAction(difficulty: ArenaDifficulty = "normal"): Promise<{ error?: string; reports?: ArenaPveBatchTeamReport[] }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const teams = await prisma.arenaTeam.findMany({
+      where: { playerId, status: "ACTIVE", isTraining: false },
+      orderBy: [{ createdAt: "asc" }, { id: "asc" }],
+      select: { id: true, name: true },
+      take: 3,
+    });
+    if (teams.length === 0) return { error: "Você não possui equipes normais ativas para o PvE." };
+
+    const reports: ArenaPveBatchTeamReport[] = [];
+    let stopMessage: string | null = null;
+
+    for (const [index, team] of teams.entries()) {
+      const order = index + 1;
+      if (stopMessage) {
+        reports.push({ teamId: team.id, teamName: team.name, order, state: "SKIPPED", message: stopMessage });
+        continue;
+      }
+
+      try {
+        await lockBotForTeam(playerId, team.id, difficulty);
+        const result = await runBotBattle(playerId, team.id, difficulty);
+        if (result.result === "ATTACKER_WIN") after(() => trackGachaObjective(playerId, "ARENA_Z"));
+        const teamDefeated = Boolean(result.teamDefeated);
+        reports.push({
+          teamId: team.id,
+          teamName: team.name,
+          order,
+          state: "COMPLETED",
+          message: teamDefeated
+            ? `Time ${order} foi derrotado por completo; a sequência foi encerrada.`
+            : result.won ? "Vitória: loot adicionado ao cofre desta equipe." : "Derrota: a equipe permanece na Arena.",
+          won: result.won,
+          botName: result.botName,
+          rounds: result.rounds,
+          coinsAdded: result.reward.coins,
+          expAdded: result.reward.exp,
+          injuredMascots: result.injuredMascots,
+          teamDefeated,
+        });
+        if (teamDefeated) {
+          stopMessage = `Não iniciado: o Time ${order} foi derrotado no PvE e encerrou esta sequência.`;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : "Não foi possível iniciar o combate PvE.";
+        reports.push({ teamId: team.id, teamName: team.name, order, state: "UNAVAILABLE", message });
+        if (message.includes("limite diário") || message.includes("limite diario")) {
+          stopMessage = `Não iniciado: o limite diário de PvE foi alcançado antes do Time ${order + 1}.`;
+        }
+      }
+    }
+
+    revalidateTag("arena-active-teams");
+    revalidatePath("/arena-z");
+    return { reports };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Não foi possível executar o PvE em sequência." };
+  }
+}
+
 export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: string, attackTeamKnownUpdatedAt?: string): Promise<{ error?: string; stale?: ArenaStaleNotice; result?: Awaited<ReturnType<typeof runPvpBattle>> }> {
   try {
     const playerId = await getCurrentPlayerId();

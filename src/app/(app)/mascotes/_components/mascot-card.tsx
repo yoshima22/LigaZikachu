@@ -315,6 +315,17 @@ function arenaStatus(mascot: MascotData) {
   return null;
 }
 
+function refugeStatus(mascot: MascotData) {
+  if (!mascot.refugeRoutine) return null;
+  const location = ({ GARDEN: "Horta", TRAINING: "Campo de Treino", REST: "Descanso", YARD: "Pátio" } as Record<string, string>)[mascot.refugeRoutine.locationType] ?? "área pública";
+  return {
+    locked: true,
+    tone: "border-fuchsia-400/30 bg-fuchsia-400/10 text-fuchsia-200",
+    label: "No Refúgio",
+    detail: `Está na ${location}. Retire-o da área pública para liberar outras atividades.`,
+  };
+}
+
 export interface ExpeditionRewardDisplay {
   emoji: string;
   title: string;
@@ -606,7 +617,8 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const happinessStatus = getHappinessStatus(localHappiness);
   const challengeStatus = getChallengeStatus(localMood);
   const arena = arenaStatus(mascot);
-  const arenaLocked = !!arena?.locked;
+  const refuge = refugeStatus(mascot);
+  const arenaLocked = !!arena?.locked || !!refuge?.locked;
 
   // Tick local — atualiza a cada segundo para que cooldowns reflitam imediatamente após a interação
   const [nowMs, setNowMs] = useState(() => Date.now());
@@ -998,16 +1010,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
       })()}
 
       {/* Status badges */}
-      {(mascot.bazarListed || mascot.arenaState !== "FREE" || mascot.refugeRoutine || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (
+      {(mascot.bazarListed || mascot.arenaState !== "FREE" || (mascot.socialCooldownUntil && new Date(mascot.socialCooldownUntil) > new Date())) && (
         <div className="flex flex-wrap gap-1.5 border-b border-border/40 px-4 py-2 bg-slate-900/30">
           {mascot.bazarListed && (
             <span className="flex items-center gap-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[9px] font-semibold text-[#FFCB05]">
               🛒 No Bazar
-            </span>
-          )}
-          {mascot.refugeRoutine && (
-            <span className="flex items-center gap-1 rounded-full border border-fuchsia-400/30 bg-fuchsia-400/10 px-2 py-0.5 text-[9px] font-semibold text-fuchsia-200">
-              🏡 Refúgio · {({ GARDEN: "Horta", TRAINING: "Campo de Treino", REST: "Descanso", YARD: "Pátio" } as Record<string, string>)[mascot.refugeRoutine.locationType] ?? "Área pública"}
             </span>
           )}
           {mascot.arenaState === "ARENA" && (
@@ -1156,10 +1163,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               </div>
             )}
 
-            {arena && (
-              <div className={`mt-1 rounded-lg border px-2 py-1 text-[10px] ${arena.tone}`}>
-                <p className="font-semibold">{arena.label}</p>
-                <p className="text-[9px] opacity-80">{arena.detail}</p>
+            {(arena ?? refuge) && (
+              <div className={`mt-1 rounded-lg border px-2 py-1 text-[10px] ${(arena ?? refuge)!.tone}`}>
+                <p className="font-semibold">{(arena ?? refuge)!.label}</p>
+                <p className="text-[9px] opacity-80">{(arena ?? refuge)!.detail}</p>
               </div>
             )}
 

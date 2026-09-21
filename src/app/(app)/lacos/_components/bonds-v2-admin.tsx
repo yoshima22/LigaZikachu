@@ -24,7 +24,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
       take: 60,
       select: {
-        id: true, pokemonId: true, nickname: true, level: true, personality: true, performanceTag: true,
+        id: true, pokemonId: true, nickname: true, level: true, personality: true, performanceTag: true, arenaState: true,
         routine: { select: { locationType: true, status: true, startedAt: true, updatedAt: true, nextEventAt: true, pendingRewardType: true } },
       },
     }),
@@ -97,6 +97,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     moveAvailableAt: mascot.routine ? new Date(mascot.routine.startedAt.getTime() + BONDS_V2_BALANCE.publicSpaces.moveCooldownMinutes * 60_000).toISOString() : null,
     nextActionAt: mascot.routine?.nextEventAt?.toISOString() ?? null,
     pendingReward: Boolean(mascot.routine?.pendingRewardType),
+    arenaState: mascot.arenaState,
   }));
   const bondItems = relations.map((relation) => ({
     id: relation.id,

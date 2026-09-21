@@ -240,6 +240,7 @@ export type SceneMascot = {
   moveAvailableAt: string | null;
   nextActionAt: string | null;
   pendingReward: boolean;
+  arenaState?: string;
   influenceDirection?: 1 | -1 | null;
 };
 export type SceneStory = {
@@ -363,18 +364,14 @@ export function BondsV2SectionTabs({
 }
 
 const POSITIONS = [
-  "left-[10%] bottom-[18%]",
-  "left-[30%] bottom-[18%]",
-  "left-[50%] bottom-[18%]",
-  "left-[70%] bottom-[18%]",
-  "left-[90%] bottom-[18%]",
-  "left-[17%] bottom-[42%]",
-  "left-[39%] bottom-[42%]",
-  "left-[61%] bottom-[42%]",
-  "left-[83%] bottom-[42%]",
-  "left-[25%] bottom-[66%]",
-  "left-[50%] bottom-[66%]",
-  "left-[75%] bottom-[66%]",
+  "left-[18%] bottom-[16%] sm:left-[10%] sm:bottom-[18%]",
+  "left-1/2 bottom-[16%] sm:left-[30%] sm:bottom-[18%]",
+  "left-[82%] bottom-[16%] sm:left-[50%] sm:bottom-[18%]",
+  "left-[18%] bottom-[43%] sm:left-[70%] sm:bottom-[18%]",
+  "left-1/2 bottom-[43%] sm:left-[90%] sm:bottom-[18%]",
+  "left-[82%] bottom-[43%] sm:left-[17%] sm:bottom-[42%]",
+  "left-[30%] bottom-[70%] sm:left-[39%] sm:bottom-[42%]",
+  "left-[70%] bottom-[70%] sm:left-[61%] sm:bottom-[42%]",
 ];
 
 export function RefugeLocationsTabs({
@@ -468,8 +465,9 @@ export function RefugeLocationScene({
     () =>
       ownMascots.filter(
         (mascot) =>
-          mascot.name.toLowerCase().includes(query.toLowerCase()) ||
-          mascot.personality.toLowerCase().includes(query.toLowerCase()),
+          mascot.arenaState === "FREE" &&
+          (mascot.name.toLowerCase().includes(query.toLowerCase()) ||
+            mascot.personality.toLowerCase().includes(query.toLowerCase())),
       ),
     [ownMascots, query],
   );

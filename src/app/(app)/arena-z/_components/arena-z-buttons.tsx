@@ -20,6 +20,7 @@ import {
   deleteAllArenaTeamsAction,
   retireArenaTeamAction,
   runBotBattleAction,
+  runArenaPveBatchAction,
   runOpportunisticAttackAction,
   runPvpBattleAction,
   useSusShieldAction,
@@ -68,6 +69,7 @@ export function PvpCooldownIndicator({ until }: { until: Date | null }) {
 }
 
 type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>>["result"]>;
+type ArenaPveBatchReport = NonNullable<Awaited<ReturnType<typeof runArenaPveBatchAction>>["reports"]>;
 type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["stale"]>;
 
 type AnimTurn = {
@@ -928,6 +930,102 @@ export function BotBattleButton({ teamId, teamName = "Sua equipe", teamUpdatedAt
             setStaleNotice(null);
           }}
         />
+      )}
+    </>
+  );
+}
+
+/** Um PvE por equipe, sempre em ordem de criação (Time 1 → Time 3). */
+export function BatchPveButton({ teamCount }: { teamCount: number }) {
+  const router = useRouter();
+  const [difficulty, setDifficulty] = useState<ArenaDifficulty>("normal");
+  const [pending, startTransition] = useTransition();
+  const [reports, setReports] = useState<ArenaPveBatchReport | null>(null);
+
+  const completed = reports?.filter((report) => report.state === "COMPLETED") ?? [];
+  const coins = completed.reduce((sum, report) => sum + (report.coinsAdded ?? 0), 0);
+  const exp = completed.reduce((sum, report) => sum + (report.expAdded ?? 0), 0);
+
+  return (
+    <>
+      <section className="rounded-2xl border border-[#FFCB05]/25 bg-[linear-gradient(135deg,rgba(255,203,5,.11),rgba(14,20,42,.86)_48%,rgba(2,6,23,.92))] p-4 shadow-xl shadow-black/10">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FFCB05]">Operação PvE</p>
+            <h3 className="mt-1 text-base font-black text-white">Combater com todas as equipes</h3>
+            <p className="mt-1 max-w-xl text-xs leading-5 text-slate-300">
+              Executa uma batalha por vez, do Time 1 ao {teamCount}. Se uma equipe for eliminada por completo, as seguintes não entram nesta rodada.
+            </p>
+          </div>
+          <div className="flex flex-col items-stretch gap-2 sm:items-end">
+            <div className="flex rounded-xl border border-white/10 bg-slate-950/70 p-1" role="group" aria-label="Dificuldade para todas as equipes">
+              {(["easy", "normal", "hard"] as ArenaDifficulty[]).map((item) => (
+                <button
+                  key={item}
+                  type="button"
+                  aria-pressed={difficulty === item}
+                  onClick={() => setDifficulty(item)}
+                  className={`min-h-10 rounded-lg px-3 text-[11px] font-bold transition ${difficulty === item ? `${DIFFICULTY_STYLES[item].border} ${DIFFICULTY_STYLES[item].bg} ${DIFFICULTY_STYLES[item].text} border` : "text-slate-400 hover:bg-white/5 hover:text-slate-100"}`}
+                >
+                  {DIFFICULTY_LABELS[item]}
+                </button>
+              ))}
+            </div>
+            <button
+              type="button"
+              disabled={pending || teamCount === 0}
+              onClick={() => startTransition(async () => {
+                const response = await runArenaPveBatchAction(difficulty);
+                if (response.error) { toast.error(response.error); return; }
+                setReports(response.reports ?? []);
+                router.refresh();
+              })}
+              className="min-h-11 rounded-xl bg-[#FFCB05] px-4 text-xs font-black text-slate-950 shadow-lg shadow-yellow-500/15 transition hover:bg-yellow-300 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {pending ? "Executando sequência…" : `⚔️ Iniciar PvE dos ${teamCount} times`}
+            </button>
+          </div>
+        </div>
+        <div className="mt-3 grid gap-2 text-[10px] text-slate-400 sm:grid-cols-3">
+          <p className="rounded-lg bg-black/20 px-2.5 py-2"><strong className="text-slate-200">1 combate</strong> por equipe disponível</p>
+          <p className="rounded-lg bg-black/20 px-2.5 py-2"><strong className="text-slate-200">Mesma dificuldade</strong> para toda a sequência</p>
+          <p className="rounded-lg bg-black/20 px-2.5 py-2"><strong className="text-slate-200">Parada segura</strong> ao perder um time por completo</p>
+        </div>
+      </section>
+
+      {reports && (
+        <div className="fixed inset-0 z-[70] flex items-end justify-center bg-black/80 p-0 sm:items-center sm:p-4" role="dialog" aria-modal="true" aria-labelledby="batch-pve-title">
+          <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-t-3xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl sm:rounded-3xl">
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-[.18em] text-[#FFCB05]">Relatório da operação PvE</p>
+                <h3 id="batch-pve-title" className="mt-1 text-xl font-black text-white">Sequência concluída</h3>
+                <p className="mt-1 text-xs text-slate-400">Dificuldade aplicada a todos: <span className="font-bold text-slate-200">{DIFFICULTY_LABELS[difficulty]}</span></p>
+              </div>
+              <button type="button" onClick={() => setReports(null)} className="min-h-11 min-w-11 rounded-xl border border-white/10 text-slate-300 hover:bg-white/5" aria-label="Fechar relatório"><X className="mx-auto" size={17} /></button>
+            </div>
+            <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-3">
+              <div className="rounded-xl border border-green-500/20 bg-green-500/10 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-green-300">Vitórias</p><p className="mt-1 text-lg font-black text-white">{completed.filter((report) => report.won).length}</p></div>
+              <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-[#FFCB05]">Cofres · ZC</p><p className="mt-1 text-lg font-black text-white">+{coins}</p></div>
+              <div className="col-span-2 rounded-xl border border-cyan-500/20 bg-cyan-500/10 p-3 sm:col-span-1"><p className="text-[10px] font-bold uppercase tracking-wider text-cyan-200">Cofres · EXP</p><p className="mt-1 text-lg font-black text-white">+{exp}</p></div>
+            </div>
+            <ol className="mt-4 space-y-2">
+              {reports.map((report) => {
+                const tone = report.state === "SKIPPED" ? "border-slate-700 bg-slate-900/40" : report.teamDefeated ? "border-red-500/40 bg-red-500/10" : report.won ? "border-green-500/30 bg-green-500/10" : report.state === "UNAVAILABLE" ? "border-orange-500/30 bg-orange-500/10" : "border-slate-700 bg-slate-900/60";
+                return <li key={report.teamId} className={`rounded-2xl border p-3 ${tone}`}>
+                  <div className="flex flex-wrap items-start justify-between gap-2">
+                    <div><p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Time {report.order}</p><p className="text-sm font-black text-white">{report.teamName}</p></div>
+                    <span className="rounded-full bg-black/20 px-2 py-1 text-[10px] font-bold text-slate-200">{report.state === "SKIPPED" ? "Não iniciado" : report.state === "UNAVAILABLE" ? "Indisponível" : report.won ? "Vitória" : "Derrota"}</span>
+                  </div>
+                  <p className="mt-2 text-xs leading-5 text-slate-300">{report.message}</p>
+                  {report.state === "COMPLETED" && <div className="mt-2 flex flex-wrap gap-2 text-[11px]"><span className="rounded-lg bg-black/20 px-2 py-1 text-[#FFCB05]">+{report.coinsAdded ?? 0} ZC no cofre</span><span className="rounded-lg bg-black/20 px-2 py-1 text-cyan-200">+{report.expAdded ?? 0} EXP no cofre</span>{report.botName && <span className="rounded-lg bg-black/20 px-2 py-1 text-slate-400">vs. {report.botName} · {report.rounds} turnos</span>}</div>}
+                  {!!report.injuredMascots?.length && <p className="mt-2 text-[11px] text-red-200">Feridos: {report.injuredMascots.join(", ")}</p>}
+                </li>;
+              })}
+            </ol>
+            <button type="button" onClick={() => setReports(null)} className="mt-5 min-h-11 w-full rounded-xl bg-[#FFCB05] text-sm font-black text-slate-950 hover:bg-yellow-300">Entendido</button>
+          </div>
+        </div>
       )}
     </>
   );

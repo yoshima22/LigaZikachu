@@ -77,6 +77,15 @@ export async function setMascotRoutineV2Action(mascotId: string, location: Refug
       if (playerInLocation >= BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayerInSameLocation) throw new Error(`Você pode manter até ${BONDS_V2_BALANCE.publicSpaces.maxMascotsPerPlayerInSameLocation} mascotes em ${REFUGE_LOCATIONS[location].label}.`);
       const previousLocation = mascot.routine?.status === "ACTIVE" ? mascot.routine.locationType as RefugeLocation : null;
       await prisma.$transaction(async (tx) => {
+        // Reconfirma dentro da transação: a Arena Z pode ter sido montada
+        // entre a leitura inicial e esta inclusão no Refúgio.
+        const availableMascot = await tx.mascot.findFirst({
+          where: { id: mascotId, playerId, arenaState: "FREE" },
+          select: { id: true },
+        });
+        if (!availableMascot) {
+          throw new Error("Este mascote entrou em outra atividade e não pode entrar no Refúgio.");
+        }
         await tx.mascotRoutine.upsert({
           where: { mascotId },
           update: { playerId, locationType: location, status: "ACTIVE", startedAt: new Date(), lastProcessedAt: new Date(), nextEventAt: new Date(Date.now() + (180 + Math.floor(Math.random() * 121)) * 60_000), accumulatedUnits: 0 },

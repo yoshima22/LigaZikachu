@@ -15,6 +15,7 @@ import {
 } from "@/lib/arena-z";
 import {
   AdminMascotStateButton, AdminArenaTeamManager, BotBattleButton, DeleteTeamButton,
+  BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
   RetireTeamButton, SusButton, SusShieldButton, ArenaHistoryReplayButton,
@@ -38,6 +39,15 @@ export const dynamic = "force-dynamic";
 const TABS = ["salas", "equipes", "montar", "sus", "historico", "guia"] as const;
 const SUS_PAGE_SIZE = 6;
 type Tab = typeof TABS[number];
+
+const TAB_CONTEXT: Record<Tab, { eyebrow: string; title: string; description: string }> = {
+  salas: { eyebrow: "Explorar e desafiar", title: "Escolha seu time, depois o alvo", description: "Cada confronto mostra primeiro qual equipe sua ataca e, em seguida, a equipe adversária. Composição não revelada continua marcada como ???." },
+  equipes: { eyebrow: "Preparar a operação", title: "Acompanhe seus cofres e a ordem de combate", description: "Times normais recebem uma ordem PvE estável. A operação em lote respeita cooldown, lesões, limite diário e a parada por derrota total." },
+  montar: { eyebrow: "Formar uma equipe", title: "Selecione apenas mascotes prontos", description: "Mascotes em expedição, Refúgio, Bazar, recuperação ou outra equipe ficam fora da escalação." },
+  sus: { eyebrow: "Recuperar e reorganizar", title: "Cuide dos feridos antes do próximo combate", description: "O Atendimento SUS mostra quem precisa se recuperar para voltar à formação da Arena." },
+  historico: { eyebrow: "Revisar decisões", title: "Leia o que aconteceu antes de agir", description: "Consulte as batalhas, o loot e os resultados para entender o desempenho de cada equipe." },
+  guia: { eyebrow: "Entender a Arena", title: "Regras, riscos e recompensas", description: "Use este guia como referência rápida para salas, PvE, PvP, cofres e recuperação." },
+};
 
 function stateLabel(state: string, restingUntil?: Date | null) {
   if (state === "INJURED") return "Ferido";
@@ -184,6 +194,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             bazarListed: true, happiness: true, preferredCombatRole: true,
             statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
             expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
+            routine: { select: { status: true } },
           },
           orderBy: [{ level: "desc" }],
         })
@@ -375,6 +386,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const availableMascots = mascots.filter(m =>
     (m.arenaState === "FREE" || (m.arenaState === "RESTING" && (!m.restingUntil || m.restingUntil <= now))) &&
     !m.bazarListed && m.expeditions.length === 0 &&
+    m.routine?.status !== "ACTIVE" &&
     (!m.restingUntil || m.restingUntil <= now) &&
     !mascotIdsInActiveTeams.has(m.id)
   );
@@ -383,6 +395,8 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const teamBlockReasons = new Map(activeTeams.map(t => [t.id, getTeamBlockedReason(t)]));
   const readyActiveTeams = activeTeams.filter(t => !teamBlockReasons.get(t.id));
   const readyOpponentTeams = opponentTeams.filter(t => !getTeamBlockedReason(t));
+  const pveTeams = activeTeams.filter((team) => !team.isTraining).sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
+  const pveTeamOrder = new Map(pveTeams.map((team, index) => [team.id, index + 1]));
 
   // Uma consulta agrupada substitui até duas consultas por equipe (BOT e PVP)
   // em cada abertura da Arena-Z. Isso preserva os mesmos cooldowns e elimina o
@@ -537,6 +551,16 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           </Link>
         ))}
       </nav>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-2xl border border-white/10 bg-[linear-gradient(90deg,rgba(14,20,42,.92),rgba(30,27,55,.68))] px-4 py-3">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] font-black uppercase tracking-[.18em] text-[#FFCB05]">{TAB_CONTEXT[activeTab].eyebrow}</p>
+          <p className="mt-0.5 text-sm font-black text-white">{TAB_CONTEXT[activeTab].title}</p>
+          <p className="mt-1 max-w-3xl text-[11px] leading-5 text-slate-400">{TAB_CONTEXT[activeTab].description}</p>
+        </div>
+        <div className="flex items-center gap-1 text-[10px] font-bold text-slate-500" aria-label="Fluxo sugerido da Arena">
+          <span className="rounded-lg bg-white/5 px-2 py-1">Montar</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Equipes</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Salas</span><span>→</span><span className="rounded-lg bg-white/5 px-2 py-1">Histórico</span>
+        </div>
+      </div>
 
       {/* ══ TAB: SALAS ══ */}
       {activeTab === "salas" && (() => {
@@ -637,6 +661,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                             <div className="grid gap-2 sm:grid-cols-2">
                               {myTeams.map(t => (
                                 <div key={t.id} className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-3">
+                                  <p className="mb-1 text-[9px] font-black uppercase tracking-[.16em] text-[#FFCB05]/75">Seu time · defensor nesta sala</p>
                                   <div className="flex items-start justify-between gap-2">
                                     <div className="min-w-0">
                                       <p className="truncate text-xs font-bold text-[#FFCB05]">{t.name}</p>
@@ -675,6 +700,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                 const isAttackable = opponents.some(o => o.id === t.id) && readyActiveTeams.length > 0;
                                 return (
                                   <div key={t.id} className={`rounded-xl border p-3 ${isAttackable ? "border-red-500/25 bg-red-500/5" : "border-slate-700/50 bg-slate-900/30"}`}>
+                                    <p className={`mb-1 text-[9px] font-black uppercase tracking-[.16em] ${isAttackable ? "text-red-300" : "text-slate-500"}`}>{isAttackable ? "Alvo disponível" : "Equipe observada"}</p>
                                     <div className="flex items-start justify-between gap-2">
                                       <div className="min-w-0">
                                         <p className="truncate text-xs font-semibold text-slate-200">{t.name}</p>
@@ -715,9 +741,10 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                               const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
                               return (
                                 <div key={attackTeam.id}>
-                                  <div className="flex flex-wrap items-center justify-between gap-1.5 mb-2">
+                                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
                                     <p className="text-[11px] font-semibold text-slate-300">
-                                      Atacando com: <span className="text-slate-100">{attackTeam.name}</span>
+                                      <span className="mr-1 text-[9px] font-black uppercase tracking-wider text-[#FFCB05]">Você ataca com</span>
+                                      <span className="text-slate-100">{attackTeam.name}</span>
                                     </p>
                                     <PvpCooldownIndicator until={pvpCooldownUntil} />
                                   </div>
@@ -726,6 +753,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                       const debuff = Math.round(getArenaDebuffPct(defenseTeam.enteredAt) * 100);
                                       return (
                                         <div key={defenseTeam.id} className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
+                                          <p className="mb-1 text-[9px] font-black uppercase tracking-[.16em] text-red-300">Alvo · {defenseTeam.roomLevel ? `sala Nv.${defenseTeam.roomLevel}` : "treino"}</p>
                                           <div className="flex items-start justify-between gap-2 mb-2">
                                             <div>
                                               <p className="text-[11px] font-bold text-slate-100">{defenseTeam.name}</p>
@@ -941,10 +969,14 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       {/* ══ TAB: MINHAS EQUIPES ══ */}
       {activeTab === "equipes" && (
         <div className="space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="font-semibold text-slate-200">Minhas Equipes ({activeTeams.length}/{ARENA_MAX_TEAMS})</h2>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h2 className="font-semibold text-slate-200">Minhas Equipes ({activeTeams.length}/{ARENA_MAX_TEAMS})</h2>
+              <p className="mt-1 text-[11px] text-slate-500">Os times normais recebem uma ordem clara para a operação PvE: Time 1 → Time 3.</p>
+            </div>
             {lastRetiredTeam?.retiredAt && <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />}
           </div>
+          {pveTeams.length > 0 && <BatchPveButton teamCount={pveTeams.length} />}
           {teams.length === 0 ? (
             <div className="rounded-2xl border border-dashed border-border p-8 text-center">
               <p className="text-sm text-slate-500">Nenhuma equipe ainda.</p>
@@ -967,6 +999,11 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                   <div>
                     <div className="flex flex-wrap items-center gap-2">
                       <p className="font-bold text-slate-100">{team.name}</p>
+                      {pveTeamOrder.get(team.id) && (
+                        <span className="rounded-full border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] font-black text-[#FFCB05]">
+                          Time {pveTeamOrder.get(team.id)} · ordem PvE
+                        </span>
+                      )}
                       <span className="rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-200 px-2 py-0.5 text-[10px] font-bold">
                         Sala Nv.{team.roomLevel}
                       </span>
@@ -1187,7 +1224,11 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 </div>
               )}
               <CreateTeamForm mascots={mascots.filter(m =>
-                !mascotIdsInActiveTeams.has(m.id) && !m.bazarListed && m.expeditions.length === 0 && m.arenaState !== "INJURED"
+                !mascotIdsInActiveTeams.has(m.id) &&
+                !m.bazarListed &&
+                m.expeditions.length === 0 &&
+                m.arenaState !== "INJURED" &&
+                m.routine?.status !== "ACTIVE"
               ).map(m => ({
                 id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
                 primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
