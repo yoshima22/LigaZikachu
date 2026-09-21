@@ -154,7 +154,12 @@ function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
                 <img src={getStaticSpriteUrl(item.pokemonId)} alt="" className="h-11 w-11 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
               )}
               <div className="min-w-0 flex-1">
-                <p className="truncate text-xs font-black text-[#FFCB05]">{item.displayName}</p>
+                <p className="flex items-center gap-1.5 text-xs font-black text-[#FFCB05]">
+                  <span className="truncate">{item.displayName}</span>
+                  {typeof item.level === "number" && (
+                    <span className="shrink-0 rounded-full border border-cyan-400/40 bg-cyan-500/10 px-1.5 py-0.5 text-[9px] font-bold text-cyan-300">Nv.{item.level}</span>
+                  )}
+                </p>
                 <p className="mt-0.5 text-[10px] text-slate-400">
                   Personalidade: <span className="font-semibold text-slate-200">{item.personality ? (PERSONALITY_LABEL[item.personality] ?? item.personality) : "Não informada"}</span>
                 </p>
