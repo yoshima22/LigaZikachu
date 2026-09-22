@@ -1,6 +1,7 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
-import { getPokemonName } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonElement, getTypeLabelPt, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
+import { buildRefugeStory, tierFromScore, type StoryActor } from "@/lib/bond-story-engine";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Cultivo, cuidado e cooperação", impact: "Cooperar aproxima (+4); Gulosos podem disputar recursos (-2). Seus ciclos produzirão exclusivamente materiais de Laços, negociáveis entre jogadores." },
@@ -42,34 +43,6 @@ function socialDelta(location: RefugeLocation, personality: MascotPersonality) {
   if (location === "GARDEN") return personality === "GLUTTON" ? -2 : 4;
   return personality === "PLAYFUL" || personality === "CURIOUS" ? 5 : 3;
 }
-
-const OPENINGS = [
-  "Sem chamar atenção dos treinadores,", "Durante uma pausa na rotina,", "Quando o movimento do local diminuiu,",
-  "Depois de observarem um ao outro por algum tempo,", "No meio de uma tarefa aparentemente comum,",
-  "Pouco antes de o clima do lugar mudar,", "Enquanto outros mascotes cuidavam da própria rotina,",
-  "Quando ninguém parecia estar prestando atenção,", "Entre uma atividade e outra,",
-];
-
-const REACTIONS: Record<RefugeLocation, string[]> = {
-  GARDEN: ["a divisão da colheita virou assunto", "um alimento desapareceu antes da hora", "uma tarefa difícil exigiu cooperação", "os dois discordaram sobre quem havia trabalhado mais", "uma cesta tombou e os dois reagiram de maneiras opostas", "a melhor fruta da colheita ficou sem dono", "um canteiro frágil obrigou os dois a coordenar cada passo"],
-  TRAINING: ["um desafio amistoso ficou sério", "uma provocação exigiu resposta", "a diferença de desempenho ficou evidente", "um pedido de revanche mudou o clima", "um golpe inesperado arrancou aplausos dos visitantes", "um dos dois recusou encerrar o treino empatado", "uma técnica difícil só funcionou quando passaram a observar um ao outro"],
-  REST: ["uma tentativa de consolo foi bem recebida", "uma brincadeira interrompeu o silêncio", "uma mágoa antiga voltou à conversa", "um deles percebeu que o outro precisava de companhia", "o lugar favorito para dormir já estava ocupado", "um ensinou ao outro como encontrar o canto mais silencioso", "a energia trazida do treino incomodou quem tentava cochilar"],
-  YARD: ["uma brincadeira improvisada reuniu curiosos", "uma disputa por atenção começou", "um encontro inesperado despertou admiração", "um comentário atravessado criou tensão", "um objeto perdido virou o centro de uma busca coletiva", "uma corrida sem regras terminou cercada de torcida", "os dois descobriram que estavam seguindo a mesma curiosidade"],
-};
-
-const POSITIVE_ENDINGS: Record<RefugeLocation, string[]> = {
-  GARDEN: ["No fim, dividiram a colheita sem precisar contar as partes.", "O canteiro ficou melhor — e a parceria também.", "Uma pequena porção foi deixada de lado como promessa para o próximo encontro."],
-  TRAINING: ["O respeito apareceu antes mesmo de o treino terminar.", "Os dois saíram planejando uma nova estratégia.", "A despedida teve o silêncio satisfeito de quem encontrou um bom parceiro."],
-  REST: ["O silêncio compartilhado acabou sendo mais importante que qualquer conversa.", "Quando levantaram, o lugar já parecia pertencer aos dois.", "A confiança cresceu sem que nenhum deles precisasse explicar por quê."],
-  YARD: ["A brincadeira terminou, mas o grupo formado ao redor deles não se desfez.", "Os dois combinaram um sinal secreto para o próximo encontro.", "Outros mascotes passaram a enxergá-los como uma dupla."],
-};
-
-const CONFLICT_ENDINGS: Record<RefugeLocation, string[]> = {
-  GARDEN: ["A última fruta permaneceu entre os dois, intocada.", "Cada um refez sua parte do trabalho sem olhar para o outro.", "A colheita terminou, mas a discussão continuou nos gestos."],
-  TRAINING: ["Nenhum deles aceitou chamar aquilo de empate.", "A revanche foi marcada antes de a poeira baixar.", "O público se dispersou sabendo que aquele placar ainda teria continuação."],
-  REST: ["Um deles mudou de canto; o outro fingiu não perceber.", "O descanso acabou cedo demais para os dois.", "O silêncio que restou não era confortável."],
-  YARD: ["A roda de curiosos se abriu para deixar os dois seguirem caminhos opostos.", "A brincadeira perdeu a graça, mas a provocação ficou.", "Os dois saíram dali guardando versões muito diferentes do que aconteceu."],
-};
 
 const LOCATION_ITEMS: Record<RefugeLocation, { common: string; uncommon: string }> = {
   GARDEN: { common: "BOND_SHARED_BERRY", uncommon: "BOND_CALMING_HERB" },
@@ -173,12 +146,50 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const conflictChance = Math.max(0.05, Math.min(0.8, (location === "TRAINING" ? 0.55 : 0.18) - suggestion * 0.08));
   const conflict = Boolean(second && (delta < 0 || Math.random() < conflictChance));
   const appliedDelta = conflict ? Math.min(-2, delta) : delta;
-  const descriptions: Record<RefugeLocation, string> = {
-    GARDEN: second ? `${pick(OPENINGS)} ${firstName} e ${secondName} cuidaram da Horta quando ${pick(REACTIONS.GARDEN)}. ${pick(conflict ? CONFLICT_ENDINGS.GARDEN : POSITIVE_ENDINGS.GARDEN)}` : `${firstName} cuidou da Horta e separou parte da produção.`,
-    TRAINING: second ? `${pick(OPENINGS)} ${firstName} treinou com ${secondName} e ${pick(REACTIONS.TRAINING)}. ${pick(conflict ? CONFLICT_ENDINGS.TRAINING : POSITIVE_ENDINGS.TRAINING)}` : `${firstName} treinou por conta própria e saiu mais determinado.`,
-    REST: second ? `${pick(OPENINGS)} ${firstName} dividiu o descanso com ${secondName} quando ${pick(REACTIONS.REST)}. ${pick(conflict ? CONFLICT_ENDINGS.REST : POSITIVE_ENDINGS.REST)}` : `${firstName} encontrou tempo para recuperar o ânimo.`,
-    YARD: second ? `${pick(OPENINGS)} ${firstName} encontrou ${secondName} no Pátio e ${pick(REACTIONS.YARD)}. ${pick(conflict ? CONFLICT_ENDINGS.YARD : POSITIVE_ENDINGS.YARD)}` : `${firstName} explorou o Pátio à procura de companhia.`,
+  // ── História modular do encontro (motor contextual) ──────────────────────
+  const singleFallback: Record<RefugeLocation, string> = {
+    GARDEN: `${firstName} cuidou da Horta e separou parte da produção.`,
+    TRAINING: `${firstName} treinou por conta própria e saiu mais determinado.`,
+    REST: `${firstName} encontrou tempo para recuperar o ânimo.`,
+    YARD: `${firstName} explorou o Pátio à procura de companhia.`,
   };
+  let storyText = singleFallback[location];
+  let storyPhraseIds: string[] = [];
+  let storyFamilies: string[] = [];
+  if (second) {
+    const [owners, currentRel, recentMemories] = await Promise.all([
+      tx.player.findMany({ where: { id: { in: [first.playerId, second.playerId] } }, select: { id: true, displayName: true } }),
+      tx.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } }, select: { relationshipScore: true, interactionCount: true, isActive: true } }),
+      tx.mascotBondMemory.findMany({
+        where: { OR: [{ mascotAId: first.id, mascotBId: second.id }, { mascotAId: second.id, mascotBId: first.id }], sourceType: "REFUGE" },
+        orderBy: { createdAt: "desc" }, take: 20, select: { metadata: true },
+      }),
+    ]);
+    const ownerName = (id: string) => owners.find((o) => o.id === id)?.displayName ?? "um treinador";
+    const actor = (m: { pokemonId: number; nickname: string | null; personality: MascotPersonality }, ownerId: string): StoryActor => {
+      const el = getPokemonElement(m.pokemonId);
+      return { name: m.nickname ?? getPokemonName(m.pokemonId), owner: ownerName(ownerId), element: el, elementLabel: getTypeLabelPt(el).toLowerCase(), personality: m.personality, personalityLabel: PERSONALITY_LABEL[m.personality] ?? m.personality };
+    };
+    const recentIds = new Set<string>();
+    const recentFamilies = new Set<string>();
+    recentMemories.forEach((mem, index) => {
+      const meta = (mem.metadata ?? {}) as { phraseIds?: string[]; families?: string[] };
+      (meta.phraseIds ?? []).forEach((id) => recentIds.add(id));
+      if (index < 8) (meta.families ?? []).forEach((f) => recentFamilies.add(f));
+    });
+    const scoreNow = currentRel?.isActive ? currentRel.relationshipScore : 0;
+    const story = buildRefugeStory({
+      location, conflict,
+      a: actor(first, first.playerId),
+      b: actor(second, second.playerId),
+      tier: tierFromScore(scoreNow),
+      encounterCount: currentRel?.interactionCount ?? 0,
+      recentIds, recentFamilies,
+    }, definition.label);
+    storyText = story.text;
+    storyPhraseIds = story.phraseIds;
+    storyFamilies = story.families;
+  }
 
   if (second) {
     const current = await tx.mascotRelation.findUnique({
@@ -204,9 +215,9 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       sourceType: "REFUGE",
       sourceId: location,
       title: `${definition.icon} ${definition.label}`,
-      description: descriptions[location],
+      description: storyText,
       intensity: Math.abs(delta) >= 5 ? 2 : 1,
-      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean) },
+      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean), phraseIds: storyPhraseIds, families: storyFamilies },
     },
   });
   let importantEventId: string | null = null;
@@ -220,7 +231,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
         mascotBId: second.id,
         eventType: conflict ? `REFUGE_${location}_CONFLICT` : `REFUGE_${location}_BOND`,
         title: conflict ? `Algo ficou mal resolvido em ${definition.label}` : `Um vínculo ganhou significado em ${definition.label}`,
-        description: descriptions[location],
+        description: storyText,
         optionsJson: buildImportantRefugeOptions(location, conflict, firstName, secondName) as unknown as Prisma.InputJsonValue,
         visibility: "INVOLVED_PLAYERS",
         affectedPlayerIds: [...new Set([playerId, second.playerId])] as Prisma.InputJsonValue,
@@ -259,8 +270,8 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   }
 
   return {
-    description: reward ? `${descriptions[location]} ${reward}` : descriptions[location],
-    storyDescription: descriptions[location],
+    description: reward ? `${storyText} ${reward}` : storyText,
+    storyDescription: storyText,
     delta: appliedDelta,
     participants: routines.length,
     importantEventId,
