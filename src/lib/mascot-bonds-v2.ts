@@ -1,7 +1,7 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName, getPokemonElement, getTypeLabelPt, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
-import { buildRefugeStory, tierFromScore, type StoryActor } from "@/lib/bond-story-engine";
+import { buildRefugeStory, tierFromScore, pairKey, stepArc, pickCallback, type StoryActor, type StoryContext, type PairStoryState, type PairArcState } from "@/lib/bond-story-engine";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Cultivo, cuidado e cooperação", impact: "Cooperar aproxima (+4); Gulosos podem disputar recursos (-2). Seus ciclos produzirão exclusivamente materiais de Laços, negociáveis entre jogadores." },
@@ -144,9 +144,8 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   const suggestion = influence?.direction === 1 ? 1 : influence?.direction === -1 ? -1 : 0;
   const delta = second ? socialDelta(location, first.personality) + suggestion : 0;
   const conflictChance = Math.max(0.05, Math.min(0.8, (location === "TRAINING" ? 0.55 : 0.18) - suggestion * 0.08));
-  const conflict = Boolean(second && (delta < 0 || Math.random() < conflictChance));
-  const appliedDelta = conflict ? Math.min(-2, delta) : delta;
-  // ── História modular do encontro (motor contextual) ──────────────────────
+  let conflict = Boolean(second && (delta < 0 || Math.random() < conflictChance));
+  // ── História modular do encontro (motor contextual + arcos) ───────────────
   const singleFallback: Record<RefugeLocation, string> = {
     GARDEN: `${firstName} cuidou da Horta e separou parte da produção.`,
     TRAINING: `${firstName} treinou por conta própria e saiu mais determinado.`,
@@ -156,14 +155,19 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   let storyText = singleFallback[location];
   let storyPhraseIds: string[] = [];
   let storyFamilies: string[] = [];
+  let storyArc: { arcId: string; beat: string } | null = null;
+  let arcResultado: "POSITIVE" | "CONFLICT" | null = null;
+  let pairStateUpdate: { pairKey: string; next: PairStoryState } | null = null;
   if (second) {
-    const [owners, currentRel, recentMemories] = await Promise.all([
+    const pk = pairKey(first.id, second.id);
+    const [owners, currentRel, recentMemories, savedState] = await Promise.all([
       tx.player.findMany({ where: { id: { in: [first.playerId, second.playerId] } }, select: { id: true, displayName: true } }),
       tx.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: first.id, mascotBId: second.id } }, select: { relationshipScore: true, interactionCount: true, isActive: true } }),
       tx.mascotBondMemory.findMany({
         where: { OR: [{ mascotAId: first.id, mascotBId: second.id }, { mascotAId: second.id, mascotBId: first.id }], sourceType: "REFUGE" },
         orderBy: { createdAt: "desc" }, take: 20, select: { metadata: true },
       }),
+      tx.mascotBondPairState.findUnique({ where: { pairKey: pk }, select: { arcsJson: true, tagsJson: true } }),
     ]);
     const ownerName = (id: string) => owners.find((o) => o.id === id)?.displayName ?? "um treinador";
     const actor = (m: { pokemonId: number; nickname: string | null; personality: MascotPersonality }, ownerId: string): StoryActor => {
@@ -178,18 +182,30 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       if (index < 8) (meta.families ?? []).forEach((f) => recentFamilies.add(f));
     });
     const scoreNow = currentRel?.isActive ? currentRel.relationshipScore : 0;
-    const story = buildRefugeStory({
+    const ctx: StoryContext = {
       location, conflict,
       a: actor(first, first.playerId),
       b: actor(second, second.playerId),
       tier: tierFromScore(scoreNow),
       encounterCount: currentRel?.interactionCount ?? 0,
       recentIds, recentFamilies,
-    }, definition.label);
-    storyText = story.text;
-    storyPhraseIds = story.phraseIds;
-    storyFamilies = story.families;
+    };
+    const state: PairStoryState = { arcs: (savedState?.arcsJson as PairArcState[] | null) ?? [], tags: (savedState?.tagsJson as string[] | null) ?? [] };
+    const arc = stepArc(state, location, ctx);
+    if (arc) {
+      if (arc.resultado !== "ANY") { arcResultado = arc.resultado; conflict = arc.resultado === "CONFLICT"; }
+      const callback = pickCallback(ctx, state.tags, definition.label);
+      storyText = callback ? `${callback} ${arc.text}` : arc.text;
+      storyArc = { arcId: arc.arcId, beat: arc.beat };
+      pairStateUpdate = { pairKey: pk, next: arc.newState };
+    } else {
+      const story = buildRefugeStory(ctx, definition.label);
+      storyText = story.text; storyPhraseIds = story.phraseIds; storyFamilies = story.families;
+    }
   }
+  const appliedDelta = arcResultado === "POSITIVE" ? Math.max(2, Math.abs(delta))
+    : arcResultado === "CONFLICT" ? Math.min(-2, -Math.abs(delta))
+    : conflict ? Math.min(-2, delta) : delta;
 
   if (second) {
     const current = await tx.mascotRelation.findUnique({
@@ -207,6 +223,15 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     }
   }
 
+  // Persiste o estado narrativo da dupla (arcos ativos + tags de payoff).
+  if (pairStateUpdate) {
+    await tx.mascotBondPairState.upsert({
+      where: { pairKey: pairStateUpdate.pairKey },
+      create: { pairKey: pairStateUpdate.pairKey, arcsJson: pairStateUpdate.next.arcs as unknown as Prisma.InputJsonValue, tagsJson: pairStateUpdate.next.tags as unknown as Prisma.InputJsonValue },
+      update: { arcsJson: pairStateUpdate.next.arcs as unknown as Prisma.InputJsonValue, tagsJson: pairStateUpdate.next.tags as unknown as Prisma.InputJsonValue },
+    });
+  }
+
   await tx.mascotBondMemory.create({
     data: {
       mascotAId: first.id,
@@ -217,7 +242,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       title: `${definition.icon} ${definition.label}`,
       description: storyText,
       intensity: Math.abs(delta) >= 5 ? 2 : 1,
-      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean), phraseIds: storyPhraseIds, families: storyFamilies },
+      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean), phraseIds: storyPhraseIds, families: storyFamilies, ...(storyArc ? { arcId: storyArc.arcId, arcBeat: storyArc.beat } : {}) },
     },
   });
   let importantEventId: string | null = null;

@@ -2899,6 +2899,17 @@ model MascotSocialDecisionLog {
   @@map("mascot_social_decision_logs")
 }
 
+// Estado narrativo persistente de uma dupla (arcos ativos + tags de payoff).
+// pairKey = ids dos dois mascotes ordenados e unidos por ":".
+model MascotBondPairState {
+  pairKey   String   @id
+  arcsJson  Json? // [{ arcId, beatIndex }]
+  tagsJson  Json? // ["PIADA_INTERNA_YARD", ...]
+  updatedAt DateTime @default(now()) @updatedAt
+
+  @@map("mascot_bond_pair_state")
+}
+
 model MascotBondMemory {
   id          String    @id @default(cuid())
   mascotAId   String
