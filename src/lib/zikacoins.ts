@@ -18,32 +18,44 @@ export async function creditCoins(
   tx: Prisma.TransactionClient,
   input: CoinTxInput
 ): Promise<void> {
-  const wallet = await tx.zikaCoinWallet.upsert({
+  // Garante a carteira sem gravar saldo (create só se não existir).
+  const created = await tx.zikaCoinWallet.upsert({
     where: { playerId: input.playerId },
     update: {},
     create: { playerId: input.playerId, balance: 0 }
   });
 
-  const newBalance = wallet.balance + input.amount;
-  if (newBalance < 0) throw new Error("Saldo insuficiente de ZikaCoins.");
-
   const isCredit = input.amount > 0;
 
-  await tx.zikaCoinWallet.update({
-    where: { playerId: input.playerId },
-    data: {
-      balance: newBalance,
-      totalEarned: isCredit ? { increment: input.amount } : undefined,
-      totalSpent: !isCredit ? { increment: -input.amount } : undefined
-    }
-  });
+  // IMPORTANTE: usar operações ATÔMICas (increment/decrement) em vez de ler o
+  // saldo e regravar um valor absoluto. O read-modify-write causava lost update
+  // quando dois créditos/reembolsos concorrentes batiam na mesma carteira (ex.:
+  // reembolso de leilão sobrescrito por resgate de presente no mesmo instante).
+  let walletAfter: { id: string; balance: number };
+  if (isCredit) {
+    walletAfter = await tx.zikaCoinWallet.update({
+      where: { playerId: input.playerId },
+      data: { balance: { increment: input.amount }, totalEarned: { increment: input.amount } },
+      select: { id: true, balance: true }
+    });
+  } else {
+    const need = -input.amount;
+    const res = await tx.zikaCoinWallet.updateMany({
+      where: { playerId: input.playerId, balance: { gte: need } },
+      data: { balance: { decrement: need }, totalSpent: { increment: need } }
+    });
+    if (res.count !== 1) throw new Error("Saldo insuficiente de ZikaCoins.");
+    walletAfter = { id: created.id, balance: (await tx.zikaCoinWallet.findUnique({ where: { playerId: input.playerId }, select: { balance: true } }))!.balance };
+  }
+  const newBalance = walletAfter.balance;
+  const balanceBefore = newBalance - input.amount;
 
   await tx.zikaCoinTransaction.create({
     data: {
-      walletId: wallet.id,
+      walletId: walletAfter.id,
       type: input.type,
       amount: input.amount,
-      balanceBefore: wallet.balance,
+      balanceBefore,
       balanceAfter: newBalance,
       description: input.description ?? null,
       tournamentId: input.tournamentId ?? null,
@@ -62,10 +74,10 @@ export async function creditCoins(
     summary: input.description ?? `${input.amount > 0 ? "Crédito" : "Débito"} de ${Math.abs(input.amount)} ZC`,
     source: input.type,
     entityType: input.matchId ? "match" : input.tournamentWeekId ? "tournamentWeek" : input.tournamentId ? "tournament" : "wallet",
-    entityId: input.matchId ?? input.tournamentWeekId ?? input.tournamentId ?? wallet.id,
+    entityId: input.matchId ?? input.tournamentWeekId ?? input.tournamentId ?? walletAfter.id,
     amount: input.amount,
     unit: "ZC",
-    before: { balance: wallet.balance },
+    before: { balance: balanceBefore },
     after: { balance: newBalance },
     metadata: { status: input.status ?? ZikaCoinTxStatus.COMPLETED },
   });
