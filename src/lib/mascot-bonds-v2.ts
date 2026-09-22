@@ -2,6 +2,7 @@ import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName, getPokemonElement, getTypeLabelPt, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
 import { buildRefugeStory, tierFromScore, pairKey, stepArc, pickCallback, type StoryActor, type StoryContext, type PairStoryState, type PairArcState } from "@/lib/bond-story-engine";
+import { runRefugeFight, fightNarrative } from "@/lib/bond-fight";
 
 export const REFUGE_LOCATIONS = {
   GARDEN: { label: "Horta", icon: "🌱", capacity: 48, accent: "emerald", purpose: "Cultivo, cuidado e cooperação", impact: "Cooperar aproxima (+4); Gulosos podem disputar recursos (-2). Seus ciclos produzirão exclusivamente materiais de Laços, negociáveis entre jogadores." },
@@ -158,6 +159,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   let storyArc: { arcId: string; beat: string } | null = null;
   let arcResultado: "POSITIVE" | "CONFLICT" | null = null;
   let pairStateUpdate: { pairKey: string; next: PairStoryState } | null = null;
+  let fightData: { winnerId: string | null; loserId: string | null; rounds: number; replay: unknown } | null = null;
   if (second) {
     const pk = pairKey(first.id, second.id);
     const [owners, currentRel, recentMemories, savedState] = await Promise.all([
@@ -202,8 +204,30 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       const story = buildRefugeStory(ctx, definition.label);
       storyText = story.text; storyPhraseIds = story.phraseIds; storyFamilies = story.families;
     }
+
+    // ── Briga: rivalidade hostil pode virar combate real (motor da Liga) ──────
+    // Puramente narrativo/relacional: NÃO altera HP, felicidade nem impõe repouso.
+    if (conflict && scoreNow <= -15) {
+      const fightChance = (location === "TRAINING" ? 0.35 : 0.15) + (scoreNow <= -80 ? 0.2 : scoreNow <= -50 ? 0.1 : 0);
+      if (Math.random() < fightChance) {
+        const stats = await tx.mascot.findMany({
+          where: { id: { in: [first.id, second.id] } },
+          select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true, personality: true, diseasedAt: true, preferredCombatRole: true },
+        });
+        const fa = stats.find((s) => s.id === first.id);
+        const fb = stats.find((s) => s.id === second.id);
+        if (fa && fb) {
+          const fight = runRefugeFight(fa, fb);
+          storyText = fightNarrative(fight, definition.label);
+          fightData = { winnerId: fight.winnerId, loserId: fight.loserId, rounds: fight.rounds, replay: fight.replay };
+          storyPhraseIds = []; storyFamilies = [];
+          arcResultado = "CONFLICT";
+        }
+      }
+    }
   }
-  const appliedDelta = arcResultado === "POSITIVE" ? Math.max(2, Math.abs(delta))
+  const appliedDelta = fightData ? Math.min(-6, -Math.abs(delta) - 4)
+    : arcResultado === "POSITIVE" ? Math.max(2, Math.abs(delta))
     : arcResultado === "CONFLICT" ? Math.min(-2, -Math.abs(delta))
     : conflict ? Math.min(-2, delta) : delta;
 
@@ -242,12 +266,12 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
       title: `${definition.icon} ${definition.label}`,
       description: storyText,
       intensity: Math.abs(delta) >= 5 ? 2 : 1,
-      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean), phraseIds: storyPhraseIds, families: storyFamilies, ...(storyArc ? { arcId: storyArc.arcId, arcBeat: storyArc.beat } : {}) },
+      metadata: { location, scoreDelta: appliedDelta, conflict, trainerInfluence: suggestion, personalities: [first.personality, second?.personality].filter(Boolean), phraseIds: storyPhraseIds, families: storyFamilies, ...(storyArc ? { arcId: storyArc.arcId, arcBeat: storyArc.beat } : {}), ...(fightData ? { fight: fightData } : {}) } as unknown as Prisma.InputJsonValue,
     },
   });
   let importantEventId: string | null = null;
   const groupEventBonus = friendCircleActive || (location === "TRAINING" && fightClubActive) ? 0.1 : 0;
-  const important = Boolean(second && (Math.abs(appliedDelta) >= 5 || Math.random() < 0.3 + groupEventBonus));
+  const important = Boolean(second && !fightData && (Math.abs(appliedDelta) >= 5 || Math.random() < 0.3 + groupEventBonus));
   if (second && important) {
     const event = await tx.mascotSocialEvent.create({
       data: {
