@@ -186,6 +186,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
         participants,
         owners: owners.join(" · "),
         scoreDelta: typeof metadata.scoreDelta === "number" ? metadata.scoreDelta : null,
+        fight: (metadata.fight && typeof metadata.fight === "object" ? metadata.fight : null) as null | { winnerId: string | null; loserId: string | null; rounds: number; replay: { log: unknown; lineupA: unknown; lineupB: unknown } },
         when: memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }),
       };
     });

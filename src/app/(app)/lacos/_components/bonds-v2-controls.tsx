@@ -40,6 +40,7 @@ import {
 import { getShopItemEmoji } from "@/lib/shop-config";
 import type { BondOption } from "@/lib/mascot-bonds";
 import { ResolveBondOptionButton } from "./bond-actions";
+import { LeagueBattleReplayModal } from "../../combates/liga-semanal/_components/league-battle-replay";
 
 export function RoutineSelect({
   mascotId,
@@ -213,6 +214,12 @@ export type SceneMascot = {
   arenaState?: string;
   influenceDirection?: 1 | -1 | null;
 };
+export type StoryFight = {
+  winnerId: string | null;
+  loserId: string | null;
+  rounds: number;
+  replay: { log: unknown; lineupA: unknown; lineupB: unknown };
+};
 export type SceneStory = {
   id: string;
   title: string;
@@ -221,6 +228,7 @@ export type SceneStory = {
   participants: string;
   owners: string;
   scoreDelta: number | null;
+  fight?: StoryFight | null;
   when: string;
 };
 export type RefugeLocationTab = {
@@ -421,6 +429,7 @@ export function RefugeLocationScene({
   const [ownerFilter, setOwnerFilter] = useState("ALL");
   const [occupantPage, setOccupantPage] = useState(1);
   const [storyQuery, setStoryQuery] = useState("");
+  const [replayFight, setReplayFight] = useState<StoryFight | null>(null);
   const [storyKind, setStoryKind] = useState<"ALL" | "SOCIAL" | "CONFLICT">(
     "ALL",
   );
@@ -586,6 +595,18 @@ export function RefugeLocationScene({
 
   return (
     <article className="overflow-visible rounded-3xl border border-white/10 bg-slate-950 shadow-2xl shadow-black/20">
+      {replayFight && (
+        <LeagueBattleReplayModal
+          playerAName={(replayFight.replay.lineupA as { name?: string }[] | undefined)?.[0]?.name ?? "Mascote"}
+          playerBName={(replayFight.replay.lineupB as { name?: string }[] | undefined)?.[0]?.name ?? "Mascote"}
+          winnerId={replayFight.winnerId}
+          isDraw={!replayFight.winnerId}
+          replay={(replayFight.replay.log ?? []) as never}
+          lineupA={(replayFight.replay.lineupA ?? []) as never}
+          lineupB={(replayFight.replay.lineupB ?? []) as never}
+          onFinish={() => setReplayFight(null)}
+        />
+      )}
       <div className="relative min-h-[620px] overflow-visible rounded-t-3xl bg-slate-900 sm:min-h-[680px]">
         {backgroundUrl ? (
           <div
@@ -1049,6 +1070,15 @@ export function RefugeLocationScene({
                   <p className="mt-2 text-[10px] leading-4 text-slate-300">
                     {story.description}
                   </p>
+                  {story.fight?.replay ? (
+                    <button
+                      type="button"
+                      onClick={() => setReplayFight(story.fight!)}
+                      className="mt-2 inline-flex items-center gap-1 rounded-lg border border-rose-400/40 bg-rose-500/10 px-2 py-1 text-[10px] font-black text-rose-200 hover:border-rose-300/60"
+                    >
+                      ⚔️ Ver briga ({story.fight.rounds} rodada{story.fight.rounds === 1 ? "" : "s"})
+                    </button>
+                  ) : null}
                 </article>
               ))}
             </div>
