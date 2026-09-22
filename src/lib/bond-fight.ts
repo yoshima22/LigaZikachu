@@ -17,19 +17,23 @@ export type RefugeFightResult = {
   rounds: number;
   aName: string;
   bName: string;
+  participants: { id: string; side: "A" | "B" }[];
   /** Snapshot para o replay gráfico (mesmo formato da Liga). */
   replay: { log: unknown; lineupA: unknown; lineupB: unknown; rounds: number };
 };
 
-export function runRefugeFight(a: FightMascotInput, b: FightMascotInput): RefugeFightResult {
-  const fa = toLeagueMascot(a, 1, a.preferredCombatRole ?? null);
-  const fb = toLeagueMascot(b, 1, b.preferredCombatRole ?? null);
-  const result = runLeagueCombat([fa], [fb]);
+export function runRefugeFight(a: FightMascotInput | FightMascotInput[], b: FightMascotInput | FightMascotInput[]): RefugeFightResult {
+  const teamA = Array.isArray(a) ? a : [a];
+  const teamB = Array.isArray(b) ? b : [b];
+  const fa = teamA.map((mascot, index) => toLeagueMascot(mascot, index + 1, mascot.preferredCombatRole ?? null));
+  const fb = teamB.map((mascot, index) => toLeagueMascot(mascot, index + 1, mascot.preferredCombatRole ?? null));
+  const result = runLeagueCombat(fa, fb);
   const winner = result.winner === "A" ? "A" : result.winner === "B" ? "B" : "DRAW";
-  const winnerId = winner === "A" ? a.id : winner === "B" ? b.id : null;
-  const loserId = winnerId ? (winnerId === a.id ? b.id : a.id) : null;
+  const winnerId = winner === "A" ? teamA[0]?.id ?? null : winner === "B" ? teamB[0]?.id ?? null : null;
+  const loserId = winner === "A" ? teamB[0]?.id ?? null : winner === "B" ? teamA[0]?.id ?? null : null;
   return {
-    winner, winnerId, loserId, rounds: result.rounds, aName: fa.name, bName: fb.name,
+    winner, winnerId, loserId, rounds: result.rounds, aName: fa.map((m) => m.name).join(" e "), bName: fb.map((m) => m.name).join(" e "),
+    participants: [...teamA.map((mascot) => ({ id: mascot.id, side: "A" as const })), ...teamB.map((mascot) => ({ id: mascot.id, side: "B" as const }))],
     replay: { log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, rounds: result.rounds },
   };
 }

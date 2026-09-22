@@ -159,7 +159,7 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
   let storyArc: { arcId: string; beat: string } | null = null;
   let arcResultado: "POSITIVE" | "CONFLICT" | null = null;
   let pairStateUpdate: { pairKey: string; next: PairStoryState } | null = null;
-  let fightData: { winnerId: string | null; loserId: string | null; rounds: number; replay: unknown } | null = null;
+  let fightData: { winnerId: string | null; loserId: string | null; rounds: number; replay: unknown; participants: { id: string; side: "A" | "B" }[] } | null = null;
   if (second) {
     const pk = pairKey(first.id, second.id);
     const [owners, currentRel, recentMemories, savedState] = await Promise.all([
@@ -210,20 +210,42 @@ export async function simulateRefugeMoment(tx: Prisma.TransactionClient, playerI
     if (conflict && scoreNow <= -15) {
       const fightChance = (location === "TRAINING" ? 0.35 : 0.15) + (scoreNow <= -80 ? 0.2 : scoreNow <= -50 ? 0.1 : 0);
       if (Math.random() < fightChance) {
+        const nearbyIds = locationMascots.map((entry) => entry.mascotId).filter((id) => id !== first.id && id !== second.id);
         const stats = await tx.mascot.findMany({
-          where: { id: { in: [first.id, second.id] } },
+          where: { id: { in: [first.id, second.id, ...nearbyIds] } },
           select: { id: true, playerId: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true, personality: true, diseasedAt: true, preferredCombatRole: true },
         });
         const fa = stats.find((s) => s.id === first.id);
         const fb = stats.find((s) => s.id === second.id);
         if (fa && fb) {
-          const fight = runRefugeFight(fa, fb);
+          // Participação especial: aliado de um lado e hostil ao outro entra 2x1;
+          // sem aliado, um rival próximo pode se intrometer contra o seu desafeto.
+          const relations = await tx.mascotRelation.findMany({ where: { isActive: true, OR: [{ mascotAId: { in: [first.id, second.id, ...nearbyIds] }, mascotBId: { in: [first.id, second.id, ...nearbyIds] } }, { mascotBId: { in: [first.id, second.id, ...nearbyIds] }, mascotAId: { in: [first.id, second.id, ...nearbyIds] } }] }, select: { mascotAId: true, mascotBId: true, relationshipScore: true } });
+          const scoreOf = (a: string, b: string) => relations.find((relation) => (relation.mascotAId === a && relation.mascotBId === b) || (relation.mascotAId === b && relation.mascotBId === a))?.relationshipScore ?? 0;
+          const third = stats.find((mascot) => mascot.id !== first.id && mascot.id !== second.id && ((scoreOf(mascot.id, first.id) >= 40 && scoreOf(mascot.id, second.id) <= -15) || (scoreOf(mascot.id, second.id) >= 40 && scoreOf(mascot.id, first.id) <= -15) || scoreOf(mascot.id, first.id) <= -15 || scoreOf(mascot.id, second.id) <= -15));
+          const alliedWithFirst = third && scoreOf(third.id, first.id) >= 40 && scoreOf(third.id, second.id) <= -15;
+          const alliedWithSecond = third && scoreOf(third.id, second.id) >= 40 && scoreOf(third.id, first.id) <= -15;
+          const intrudesAgainstFirst = Boolean(third && !alliedWithFirst && !alliedWithSecond && scoreOf(third.id, first.id) <= -15);
+          const fight = runRefugeFight(alliedWithFirst ? [fa, third!] : fa, alliedWithSecond || intrudesAgainstFirst ? [fb, third!] : fb);
           storyText = fightNarrative(fight, definition.label);
-          fightData = { winnerId: fight.winnerId, loserId: fight.loserId, rounds: fight.rounds, replay: fight.replay };
+          fightData = { winnerId: fight.winnerId, loserId: fight.loserId, rounds: fight.rounds, replay: fight.replay, participants: fight.participants };
           storyPhraseIds = []; storyFamilies = [];
           arcResultado = "CONFLICT";
         }
       }
+    }
+  }
+  // Uma briga multi também deixa marcas nas relações das duplas adicionais:
+  // aliados se aproximam; lados opostos acumulam rivalidade. Não há dano físico.
+  if (fightData) {
+    const participants = fightData.participants;
+    for (let index = 0; index < participants.length; index++) for (let other = index + 1; other < participants.length; other++) {
+      const a = participants[index], b = participants[other];
+      if ((a.id === first.id && b.id === second?.id) || (b.id === first.id && a.id === second?.id)) continue;
+      const delta = a.side === b.side ? 2 : -3;
+      const current = await tx.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: b.id } }, select: { relationshipScore: true } });
+      const next = clampScore((current?.relationshipScore ?? 0) + delta);
+      await tx.mascotRelation.upsert({ where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: b.id } }, update: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date(), isActive: true }, create: { mascotAId: a.id, mascotBId: b.id, relationshipScore: next, type: relationTypeFromScore(next), interactionCount: 1, lastInteractionAt: new Date() } });
     }
   }
   const appliedDelta = fightData ? Math.min(-6, -Math.abs(delta) - 4)

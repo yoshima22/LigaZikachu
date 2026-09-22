@@ -12,6 +12,44 @@ function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
 }
 
+type SocialGroup = {
+  leader: { name: string; owner: string; sprite: string };
+  members: Array<{ name: string; owner: string; sprite: string; score: number; effect: string }>;
+};
+
+function SocialGroupCard({ group, kind }: { group: SocialGroup; kind: "FRIEND" | "RIVAL" }) {
+  const friendly = kind === "FRIEND";
+  const surface = friendly ? "border-emerald-300/20 bg-emerald-300/[.035]" : "border-rose-300/20 bg-rose-300/[.035]";
+  const accent = friendly ? "text-emerald-300" : "text-rose-300";
+  return (
+    <article className={`rounded-2xl border p-4 ${surface}`}>
+      <div className="flex items-center gap-3">
+        <img src={group.leader.sprite} alt="" className="h-12 w-12 rounded-full border border-white/10 bg-slate-950 object-contain" />
+        <div className="min-w-0">
+          <p className={`text-[10px] font-black uppercase tracking-[.16em] ${accent}`}>{friendly ? "Ponto de encontro" : "Centro da disputa"}</p>
+          <p className="truncate font-bold text-white">{friendly ? "Círculo" : "Clube"} de {group.leader.name}</p>
+          <p className="text-[10px] text-slate-400">{group.leader.owner}</p>
+        </div>
+      </div>
+      <div className="mt-3 space-y-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2.5 text-xs text-slate-300">
+          <span className="font-semibold text-white">{group.leader.name}</span> é o mascote central do grupo.
+        </div>
+        {group.members.map((member) => (
+          <div key={`${member.name}-${member.owner}`} className="rounded-xl border border-white/10 bg-black/20 p-2.5">
+            <div className="flex items-center gap-2">
+              <img src={member.sprite} alt="" className="h-7 w-7 object-contain" />
+              <p className="min-w-0 flex-1 truncate text-xs font-semibold text-white">{member.name} <span className="font-normal text-slate-500">· {member.owner}</span></p>
+              <span className={`text-[10px] font-bold ${accent}`}>{member.score > 0 ? "+" : ""}{member.score}</span>
+            </div>
+            <p className="mt-1.5 text-[10px] leading-4 text-slate-400">{member.effect}</p>
+          </div>
+        ))}
+      </div>
+    </article>
+  );
+}
+
 export async function BondsV2Admin({ playerId }: { playerId: string }) {
   // Momentos importantes vencidos somem ao abrir a página, sem esperar o cron.
   await autoResolveExpiredBondEvents(playerId);
@@ -43,7 +81,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       select: {
         id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true, distanceStartedByPlayerId: true, promiseCharmResolvesAt: true, promiseShielded: true,
         mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
-        mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
+        mascotB: { select: { id: true, pokemonId: true, nickname: true, routine: { select: { status: true } }, player: { select: { displayName: true } } } },
       },
     }),
     Promise.all((Object.keys(REFUGE_LOCATIONS) as RefugeLocation[]).map((location) => prisma.mascotBondMemory.findMany({
@@ -51,7 +89,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: { createdAt: "desc" },
       // O limite é individual por região: uma Horta lotada não apaga o
       // histórico visível de Descanso, Treino ou Pátio.
-      take: 250,
+      // 9 relatos por página no cliente: preservamos exatamente as 50 páginas mais recentes.
+      take: 450,
       include: {
         mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
         mascotB: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
@@ -100,6 +139,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   }));
   const bondItems = relations.map((relation) => ({
     id: relation.id,
+    targetMascotId: relation.mascotB.id,
+    targetInRefuge: relation.mascotB.routine?.status === "ACTIVE",
     a: mascotName(relation.mascotA),
     b: mascotName(relation.mascotB),
     owner: relation.mascotB.player.displayName,
@@ -117,16 +158,16 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     charmResolvesAt: relation.promiseCharmResolvesAt?.toISOString() ?? null,
     shielded: relation.promiseShielded,
   }));
-  const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, { leader: string; sprite: string; members: Array<{ name: string; sprite: string; score: number }> }>>((groups, relation) => {
+  const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, SocialGroup>>((groups, relation) => {
     const key = mascotName(relation.mascotA);
-    groups[key] ??= { leader: key, sprite: getSpriteUrl(relation.mascotA.pokemonId), members: [] };
-    groups[key].members.push({ name: mascotName(relation.mascotB), sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore });
+    groups[key] ??= { leader: { name: key, owner: relation.mascotA.player.displayName, sprite: getSpriteUrl(relation.mascotA.pokemonId) }, members: [] };
+    groups[key].members.push({ name: mascotName(relation.mascotB), owner: relation.mascotB.player.displayName, sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore, effect: relationEffectV2(relation.relationshipScore) });
     return groups;
   }, {})).filter((group) => group.members.length >= 2).sort((a, b) => b.members.length - a.members.length).slice(0, 4);
-  const rivalClubs = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).reduce<Record<string, { leader: string; sprite: string; members: Array<{ name: string; sprite: string; score: number }> }>>((groups, relation) => {
+  const rivalClubs = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore <= -15).reduce<Record<string, SocialGroup>>((groups, relation) => {
     const key = mascotName(relation.mascotA);
-    groups[key] ??= { leader: key, sprite: getSpriteUrl(relation.mascotA.pokemonId), members: [] };
-    groups[key].members.push({ name: mascotName(relation.mascotB), sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore });
+    groups[key] ??= { leader: { name: key, owner: relation.mascotA.player.displayName, sprite: getSpriteUrl(relation.mascotA.pokemonId) }, members: [] };
+    groups[key].members.push({ name: mascotName(relation.mascotB), owner: relation.mascotB.player.displayName, sprite: getSpriteUrl(relation.mascotB.pokemonId), score: relation.relationshipScore, effect: relationEffectV2(relation.relationshipScore) });
     return groups;
   }, {})).filter((group) => group.members.length >= 2).sort((a, b) => b.members.length - a.members.length).slice(0, 4);
   const strongestFriend = relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).sort((a, b) => b.relationshipScore - a.relationshipScore)[0];
@@ -238,7 +279,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     <section className="rounded-3xl border border-cyan-300/15 bg-[radial-gradient(circle_at_top_left,rgba(34,211,238,.08),transparent_35%),rgba(2,6,23,.65)] p-5">
       <div className="mb-4"><p className="text-xs font-semibold uppercase tracking-wider text-cyan-300">Além das duplas</p><h2 className="text-xl font-semibold text-white">Mapa social e outros treinadores</h2><p className="mt-2 max-w-3xl text-sm leading-6 text-slate-300">Aqui você compara sua rede por treinador. Círculos de amizade e Clubes da Luta são explicados e filtrados diretamente em “Laços e efeitos”, onde seus benefícios também aparecem.</p></div>
       <div className="grid gap-5 lg:grid-cols-2">
-        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <article key={group.leader} className="rounded-2xl border border-fuchsia-300/15 bg-fuchsia-300/[.035] p-3"><div className="flex items-center gap-2"><img src={group.sprite} alt="" className="h-11 w-11 rounded-full bg-slate-900 object-contain" /><div><p className="text-xs font-black uppercase tracking-wider text-fuchsia-300">Ponto de encontro</p><p className="font-bold text-white">Círculo de {group.leader}</p></div></div><div className="mt-3 flex flex-wrap gap-1.5">{group.members.map((member) => <span key={member.name} className="flex items-center gap-1 rounded-full border border-white/10 bg-black/20 px-2 py-1 text-[10px] text-slate-300"><img src={member.sprite} alt="" className="h-5 w-5 object-contain" />{member.name} · +{member.score}</span>)}</div></article>)}</div>}</div>
+        <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Network size={15} className="text-fuchsia-300" /> Possíveis grupos de amigos</h3>{friendCircles.length === 0 ? <Empty text="Quando um mascote tiver dois ou mais Laços Ativos positivos, um grupo aparecerá aqui." /> : <div className="grid gap-2 sm:grid-cols-2">{friendCircles.map((group) => <SocialGroupCard key={group.leader.name} group={group} kind="FRIEND" />)}</div>}</div>
         <div><h3 className="mb-2 flex items-center gap-2 text-sm font-bold text-white"><Users size={15} className="text-cyan-300" /> Afinidade por treinador</h3><TrainerBondExplorer relations={bondItems} /></div>
       </div>
     </section>
@@ -255,8 +296,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     </section>
 
     <section className="grid gap-4 lg:grid-cols-2">
-      <div className="rounded-3xl border border-emerald-300/15 bg-emerald-300/[.035] p-5"><h2 className="text-lg font-semibold text-white">Círculos de amizade</h2><p className="mt-2 text-sm leading-6 text-slate-300">Quando um mascote possui pelo menos dois vínculos positivos presentes e o grupo se reúne no mesmo espaço, forma um círculo. Fora do Campo de Treino, o círculo acrescenta <strong className="text-emerald-200">10 pontos percentuais</strong> à chance de produzir um item comum de Laços e também favorece Momentos importantes coletivos.</p>{friendCircles.length === 0 ? <div className="mt-3"><Empty text="Nenhum círculo formado. São necessários dois amigos ou colegas ligados ao mesmo mascote." /></div> : <div className="mt-3 space-y-2">{friendCircles.map((group) => <div key={group.leader} className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-sm font-semibold text-white">Círculo de {group.leader}</p><p className="mt-1 text-xs text-slate-400">{group.members.map((member) => member.name).join(" · ")}</p></div>)}</div>}</div>
-      <div className="rounded-3xl border border-rose-300/15 bg-rose-300/[.035] p-5"><h2 className="text-lg font-semibold text-white">Clubes da Luta</h2><p className="mt-2 text-sm leading-6 text-slate-300">Quando um mascote mantém pelo menos duas rivalidades presentes e eles se encontram no Campo de Treino, nasce um Clube da Luta. O clube acrescenta <strong className="text-rose-200">10 pontos percentuais</strong> à chance de produzir um item comum de competição e favorece desafios e decisões coletivas.</p>{rivalClubs.length === 0 ? <div className="mt-3"><Empty text="Nenhum clube formado. São necessários dois Rivais, Inimigos ou Nêmesis ligados ao mesmo mascote." /></div> : <div className="mt-3 space-y-2">{rivalClubs.map((group) => <div key={group.leader} className="rounded-xl border border-white/10 bg-black/20 p-3"><p className="text-sm font-semibold text-white">Clube de {group.leader}</p><p className="mt-1 text-xs text-slate-400">{group.members.map((member) => member.name).join(" · ")}</p></div>)}</div>}</div>
+      <div className="rounded-3xl border border-emerald-300/15 bg-emerald-300/[.035] p-5"><h2 className="text-lg font-semibold text-white">Círculos de amizade</h2><p className="mt-2 text-sm leading-6 text-slate-300">Quando um mascote possui pelo menos dois vínculos positivos, forma um círculo. Fora do Campo de Treino, o círculo acrescenta <strong className="text-emerald-200">10 pontos percentuais</strong> à chance de produzir item comum e favorece Momentos importantes coletivos.</p>{friendCircles.length === 0 ? <div className="mt-3"><Empty text="Nenhum círculo formado. São necessários dois amigos ou colegas ligados ao mesmo mascote." /></div> : <div className="mt-3 space-y-3">{friendCircles.map((group) => <SocialGroupCard key={group.leader.name} group={group} kind="FRIEND" />)}</div>}</div>
+      <div className="rounded-3xl border border-rose-300/15 bg-rose-300/[.035] p-5"><h2 className="text-lg font-semibold text-white">Clubes da Luta</h2><p className="mt-2 text-sm leading-6 text-slate-300">Quando um mascote mantém duas rivalidades, nasce um Clube da Luta. No Campo de Treino, o clube acrescenta <strong className="text-rose-200">10 pontos percentuais</strong> à chance de item competitivo e favorece desafios coletivos.</p>{rivalClubs.length === 0 ? <div className="mt-3"><Empty text="Nenhum clube formado. São necessários dois Rivais, Inimigos ou Nêmesis ligados ao mesmo mascote." /></div> : <div className="mt-3 space-y-3">{rivalClubs.map((group) => <SocialGroupCard key={group.leader.name} group={group} kind="RIVAL" />)}</div>}</div>
     </section>
 
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">

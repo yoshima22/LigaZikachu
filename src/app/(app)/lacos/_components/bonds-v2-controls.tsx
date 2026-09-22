@@ -30,6 +30,7 @@ import {
   setRefugeInfluenceV2Action,
   updateActiveBondV2Action,
   useBondDistanceItemV2Action,
+  activateBondItemV2Action,
 } from "../actions";
 import {
   BONDS_V2_BALANCE,
@@ -196,6 +197,54 @@ export function BondV2Buttons({
   );
 }
 
+function BondItemActivator({ relationId }: { relationId: string }) {
+  const [item, setItem] = useState<
+    "BOND_SHARED_BERRY" | "BOND_CALMING_HERB" | "BOND_REVENGE_TOKEN" |
+    "BOND_TRAINING_RIBBON" | "BOND_SHARED_PILLOW" | "BOND_NIGHT_TEA"
+  >("BOND_SHARED_BERRY");
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+
+  const activateItem = () => startTransition(async () => {
+    const result = await activateBondItemV2Action(relationId, item);
+    if (result.error) toast.error(result.error);
+    else {
+      toast.success("Item ativado no vínculo.");
+      router.refresh();
+    }
+  });
+
+  return (
+    <div className="mt-2 flex gap-2">
+      <select value={item} onChange={(event) => setItem(event.target.value as typeof item)} className="min-w-0 flex-1 rounded-md border border-white/10 bg-slate-950 px-2 py-1 text-[10px] text-slate-300">
+        <option value="BOND_SHARED_BERRY">🫐 Frutinha da Partilha (+4 / +2)</option>
+        <option value="BOND_CALMING_HERB">🌿 Erva Apaziguadora (trégua)</option>
+        <option value="BOND_REVENGE_TOKEN">🪙 Ficha de Revanche (−4)</option>
+        <option value="BOND_TRAINING_RIBBON">🎗️ Faixa de Treino (+5)</option>
+        <option value="BOND_SHARED_PILLOW">🛏️ Almofada Compartilhada (+4)</option>
+        <option value="BOND_NIGHT_TEA">🍵 Chá de Boa-Noite (+2 / +2)</option>
+      </select>
+      <button disabled={pending} onClick={activateItem} className="rounded-md border border-fuchsia-400/35 px-2 text-[10px] text-fuchsia-200 disabled:opacity-40">
+        Usar item
+      </button>
+    </div>
+  );
+}
+
+function SocialInfluenceShortcut({ targetMascotId, available }: { targetMascotId: string; available: boolean }) {
+  const [pending, startTransition] = useTransition();
+  const router = useRouter();
+  const influence = (direction: 1 | -1) => startTransition(async () => {
+    const result = await setRefugeInfluenceV2Action(targetMascotId, direction);
+    if (result.error) toast.error(result.error);
+    else {
+      toast.success(direction === 1 ? "Você incentivou uma aproximação." : "Você incentivou uma competição saudável.");
+      router.refresh();
+    }
+  });
+  return <div className="mt-2 flex flex-wrap gap-1.5"><span className="self-center text-[9px] text-slate-500">{available ? "Influenciar encontro:" : "Influência disponível quando este mascote estiver no Refúgio."}</span>{available && <><button disabled={pending} onClick={() => influence(1)} className="rounded-md border border-emerald-300/25 px-2 py-1 text-[9px] text-emerald-200 disabled:opacity-40">Aproximar</button><button disabled={pending} onClick={() => influence(-1)} className="rounded-md border border-rose-300/25 px-2 py-1 text-[9px] text-rose-200 disabled:opacity-40">Competir</button></>}</div>;
+}
+
 export type SceneMascot = {
   id: string;
   name: string;
@@ -237,6 +286,50 @@ export type RefugeLocationTab = {
   backgroundUrl: string;
   stories: SceneStory[];
 };
+
+function BondStoryReport({ stories }: { stories: SceneStory[] }) {
+  const summary = useMemo(() => {
+    const social = stories.filter((story) => !story.conflict).length;
+    const conflicts = stories.filter((story) => story.conflict).length;
+    const scoreUp = stories.reduce((total, story) => total + Math.max(0, story.scoreDelta ?? 0), 0);
+    const scoreDown = Math.abs(stories.reduce((total, story) => total + Math.min(0, story.scoreDelta ?? 0), 0));
+    const fights = stories.filter((story) => Boolean(story.fight)).length;
+    const pairs = Object.entries(stories.reduce<Record<string, number>>((result, story) => {
+      result[story.participants] = (result[story.participants] ?? 0) + 1;
+      return result;
+    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    const trainers = Object.entries(stories.reduce<Record<string, number>>((result, story) => {
+      story.owners.split(" · ").filter(Boolean).forEach((owner) => { result[owner] = (result[owner] ?? 0) + 1; });
+      return result;
+    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3);
+    return { social, conflicts, scoreUp, scoreDown, fights, pairs, trainers };
+  }, [stories]);
+
+  return (
+    <section className="mb-4 rounded-2xl border border-violet-300/15 bg-violet-300/[.04] p-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-[10px] font-black uppercase tracking-[.16em] text-violet-300">Relatório da região</p>
+          <p className="mt-1 text-[10px] text-slate-400">Resumo das até 50 páginas mais recentes deste diário.</p>
+        </div>
+        <span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-slate-400">{stories.length} relatos analisados</span>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
+        {[
+          ["Momentos", summary.social, "text-emerald-300"],
+          ["Conflitos", summary.conflicts, "text-rose-300"],
+          ["Amizade", `+${summary.scoreUp}`, "text-cyan-300"],
+          ["Rivalidade", `−${summary.scoreDown}`, "text-amber-300"],
+          ["Brigas", summary.fights, "text-fuchsia-300"],
+        ].map(([label, value, tone]) => <div key={String(label)} className="rounded-xl border border-white/10 bg-black/20 p-2"><p className={`text-sm font-black ${tone}`}>{value}</p><p className="text-[9px] uppercase tracking-wider text-slate-500">{label}</p></div>)}
+      </div>
+      {(summary.pairs.length > 0 || summary.trainers.length > 0) && <div className="mt-3 grid gap-2 sm:grid-cols-2">
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2"><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Mascotes mais presentes</p>{summary.pairs.map(([name, total]) => <p key={name} className="mt-1 truncate text-[10px] text-slate-300"><span className="font-semibold text-white">{name}</span> · {total} relatos</p>)}</div>
+        <div className="rounded-xl border border-white/10 bg-black/20 p-2"><p className="text-[9px] font-black uppercase tracking-wider text-slate-500">Treinadores envolvidos</p>{summary.trainers.map(([name, total]) => <p key={name} className="mt-1 truncate text-[10px] text-slate-300"><span className="font-semibold text-white">{name}</span> · {total} participações</p>)}</div>
+      </div>}
+    </section>
+  );
+}
 
 export function BondsV2SectionTabs({
   refuge,
@@ -425,6 +518,7 @@ export function RefugeLocationScene({
   const definition = REFUGE_LOCATIONS[location];
   const router = useRouter();
   const [query, setQuery] = useState("");
+  const [mascotPage, setMascotPage] = useState(1);
   const [occupantQuery, setOccupantQuery] = useState("");
   const [ownerFilter, setOwnerFilter] = useState("ALL");
   const [occupantPage, setOccupantPage] = useState(1);
@@ -457,6 +551,13 @@ export function RefugeLocationScene({
       ),
     [occupants],
   );
+  const mascotsPerPage = 9;
+  const mascotPages = Math.max(1, Math.ceil(available.length / mascotsPerPage));
+  const safeMascotPage = Math.min(mascotPage, mascotPages);
+  const visibleAvailable = available.slice(
+    (safeMascotPage - 1) * mascotsPerPage,
+    safeMascotPage * mascotsPerPage,
+  );
   const filteredOccupants = useMemo(
     () =>
       occupants.filter((mascot) => {
@@ -479,9 +580,10 @@ export function RefugeLocationScene({
     (safeOccupantPage - 1) * occupantsPerPage,
     safeOccupantPage * occupantsPerPage,
   );
+  const retainedStories = useMemo(() => stories.slice(0, 450), [stories]);
   const filteredStories = useMemo(
     () =>
-      stories.filter((story) => {
+      retainedStories.filter((story) => {
         const normalizedQuery = storyQuery.trim().toLocaleLowerCase("pt-BR");
         const matchesQuery =
           !normalizedQuery ||
@@ -493,7 +595,7 @@ export function RefugeLocationScene({
           (storyKind === "CONFLICT" ? story.conflict : !story.conflict);
         return matchesQuery && matchesKind;
       }),
-    [stories, storyKind, storyQuery],
+    [retainedStories, storyKind, storyQuery],
   );
   const storiesPerPage = 9;
   const storyPages = Math.max(
@@ -916,13 +1018,16 @@ export function RefugeLocationScene({
             />
             <input
               value={query}
-              onChange={(event) => setQuery(event.target.value)}
+              onChange={(event) => {
+                setQuery(event.target.value);
+                setMascotPage(1);
+              }}
               placeholder="Pesquisar por nome ou personalidade..."
               className="w-full rounded-xl border border-white/10 bg-slate-900 py-2 pl-9 pr-3 text-xs text-white outline-none focus:border-cyan-300/40"
             />
           </div>
-          <div className="mt-2 grid max-h-72 gap-2 overflow-y-auto pr-1 sm:grid-cols-2 xl:grid-cols-3">
-            {available.map((mascot) => {
+          <div className="mt-2 grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleAvailable.map((mascot) => {
               const here = mascot.location === location;
               const elsewhere = mascot.location && !here;
               const cooldown = cooldownMinutes(mascot.moveAvailableAt);
@@ -984,6 +1089,21 @@ export function RefugeLocationScene({
               );
             })}
           </div>
+          {available.length === 0 ? (
+            <p className="mt-2 rounded-xl border border-dashed border-white/10 p-3 text-center text-[10px] text-slate-500">
+              Nenhum mascote livre encontrado. Mascotes ocupados em Arena, Expedição ou Bazar não entram nesta lista.
+            </p>
+          ) : mascotPages > 1 ? (
+            <div className="mt-3 flex items-center justify-center gap-3">
+              <button type="button" disabled={safeMascotPage <= 1} onClick={() => setMascotPage(safeMascotPage - 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25" aria-label="Página anterior de mascotes">
+                <ChevronLeft size={14} />
+              </button>
+              <span className="text-[10px] text-slate-500">Mascotes {(safeMascotPage - 1) * mascotsPerPage + 1}–{Math.min(available.length, safeMascotPage * mascotsPerPage)} de {available.length}</span>
+              <button type="button" disabled={safeMascotPage >= mascotPages} onClick={() => setMascotPage(safeMascotPage + 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25" aria-label="Próxima página de mascotes">
+                <ChevronRight size={14} />
+              </button>
+            </div>
+          ) : null}
         </div>
       </div>
       <div className="border-t border-white/10 bg-[#050914] p-4">
@@ -998,9 +1118,10 @@ export function RefugeLocationScene({
             </p>
           </div>
           <span className="rounded-full bg-white/5 px-2 py-1 text-[9px] text-slate-500">
-            {stories.length} relatos preservados nesta área
+            {retainedStories.length} relatos preservados nesta área
           </span>
         </div>
+        <BondStoryReport stories={retainedStories} />
         <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_220px]">
           <div className="relative">
             <Search
@@ -1030,7 +1151,7 @@ export function RefugeLocationScene({
             <option value="CONFLICT">Conflitos</option>
           </select>
         </div>
-        {stories.length === 0 ? (
+        {retainedStories.length === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-xs text-slate-500">
             Ainda não há histórias registradas neste local.
           </p>
@@ -1774,6 +1895,8 @@ export function BondsTutorial() {
 
 export type BondItem = {
   id: string;
+  targetMascotId: string;
+  targetInRefuge: boolean;
   a: string;
   b: string;
   owner: string;
@@ -2006,6 +2129,7 @@ export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
                   charmResolvesAt={relation.charmResolvesAt}
                   shielded={relation.shielded}
                 />
+                <BondItemActivator relationId={relation.id} />
               </article>
             );
           })
@@ -2224,28 +2348,37 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
             {profile.relations.map((relation) => (
               <article
                 key={relation.id}
-                className="flex items-center gap-2 rounded-xl border border-white/10 bg-white/[.025] p-2"
+                className="rounded-xl border border-white/10 bg-white/[.025] p-2"
               >
-                <img
-                  src={relation.spriteA}
-                  alt=""
-                  className="h-9 w-9 rounded-full bg-slate-900 object-contain"
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-xs text-white">
-                    {relation.a} <span className="text-slate-500">com</span>{" "}
-                    {relation.b}
-                  </p>
-                  <p className="text-[10px] text-slate-400">
-                    {relation.tier} · {relation.score > 0 ? "+" : ""}
-                    {relation.score} · {relation.interactions} interações
-                  </p>
+                <div className="flex items-center gap-2">
+                  <img
+                    src={relation.spriteA}
+                    alt=""
+                    className="h-9 w-9 rounded-full bg-slate-900 object-contain"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-xs text-white">
+                      {relation.a} <span className="text-slate-500">com</span>{" "}
+                      {relation.b}
+                    </p>
+                    <p className="text-[10px] text-slate-400">
+                      {relation.tier} · {relation.score > 0 ? "+" : ""}
+                      {relation.score} · {relation.interactions} interações
+                    </p>
+                  </div>
+                  <img
+                    src={relation.spriteB}
+                    alt=""
+                    className="h-9 w-9 rounded-full bg-slate-900 object-contain"
+                  />
                 </div>
-                <img
-                  src={relation.spriteB}
-                  alt=""
-                  className="h-9 w-9 rounded-full bg-slate-900 object-contain"
-                />
+                <p className="mt-2 text-[10px] leading-4 text-slate-400">{relation.effect}</p>
+                <div className="mt-2 border-t border-white/10 pt-2">
+                  <p className="mb-1 text-[9px] uppercase tracking-wider text-slate-500">Ações para este vínculo</p>
+                  <BondItemActivator relationId={relation.id} />
+                  <SocialInfluenceShortcut targetMascotId={relation.targetMascotId} available={relation.targetInRefuge} />
+                  <div className="mt-2"><BondV2Buttons relationId={relation.id} active={relation.active} transitionAt={relation.transitionAt} startedByMe={relation.startedByMe} charmResolvesAt={relation.charmResolvesAt} shielded={relation.shielded} /></div>
+                </div>
               </article>
             ))}
           </div>

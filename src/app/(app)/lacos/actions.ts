@@ -16,6 +16,7 @@ import {
   autoResolveExpiredBondEvents,
   createBondEventForPlayer,
   type BondBehavior,
+  clampScore, relationTypeFromScore,
 } from "@/lib/mascot-bonds";
 import { trackGachaObjective } from "@/lib/gacha";
 
@@ -243,6 +244,52 @@ async function consumeBondInventoryItem(playerId: string, type: "BOND_PROMISE_CH
   if (!inventory?.quantity) throw new Error(type === "BOND_PROMISE_CHARM" ? "Você não possui um Amuleto de Promessa." : "Você não possui um Escudo do Desapego.");
   if (inventory.quantity === 1) await prisma.playerInventory.delete({ where: { id: inventory.id } });
   else await prisma.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
+}
+
+const DIRECT_BOND_ITEMS = ["BOND_SHARED_BERRY", "BOND_CALMING_HERB", "BOND_REVENGE_TOKEN", "BOND_TRAINING_RIBBON", "BOND_SHARED_PILLOW", "BOND_NIGHT_TEA"] as const;
+type DirectBondItem = (typeof DIRECT_BOND_ITEMS)[number];
+
+const DIRECT_BOND_ITEM_EFFECTS: Record<DirectBondItem, { delta: number; reciprocalDelta?: number; title: string }> = {
+  BOND_SHARED_BERRY: { delta: 4, reciprocalDelta: 2, title: "Partilha" },
+  BOND_CALMING_HERB: { delta: 0, title: "Trégua" },
+  BOND_REVENGE_TOKEN: { delta: -4, title: "Rivalidade controlada" },
+  BOND_TRAINING_RIBBON: { delta: 5, title: "Parceria de treino" },
+  BOND_SHARED_PILLOW: { delta: 4, title: "Cuidado compartilhado" },
+  BOND_NIGHT_TEA: { delta: 2, reciprocalDelta: 2, title: "Reconciliação noturna" },
+};
+
+/** Consome um item de Laços para construir uma relação de propósito. Máx. 3/dia por dupla. */
+export async function activateBondItemV2Action(relationId: string, itemType: DirectBondItem) {
+  try {
+    const playerId = await getPlayerId();
+    if (!DIRECT_BOND_ITEMS.includes(itemType)) throw new Error("Este item não pode ser ativado diretamente.");
+    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId }, isActive: true }, select: { mascotAId: true, mascotBId: true, relationshipScore: true } });
+    if (!relation) throw new Error("Laço não encontrado.");
+    const since = new Date(); since.setHours(0, 0, 0, 0);
+    const usedToday = await prisma.mascotBondMemory.count({ where: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, sourceType: "BOND_ITEM", createdAt: { gte: since } } });
+    if (usedToday >= 3) throw new Error("Esta dupla já usou o limite de 3 itens hoje.");
+    const inventory = await prisma.playerInventory.findFirst({ where: { playerId, item: { type: itemType } }, select: { id: true, quantity: true } });
+    if (!inventory?.quantity) throw new Error("Você não possui este item de Laços.");
+    const effect = DIRECT_BOND_ITEM_EFFECTS[itemType];
+    // A erva alivia a tensão sem jamais converter diretamente uma rivalidade em amizade.
+    const delta = itemType === "BOND_CALMING_HERB"
+      ? relation.relationshipScore < 0 ? Math.min(5, -1 - relation.relationshipScore) : 0
+      : effect.delta;
+    const next = clampScore(relation.relationshipScore + delta);
+    await prisma.$transaction(async (tx) => {
+      if (inventory.quantity === 1) await tx.playerInventory.delete({ where: { id: inventory.id } }); else await tx.playerInventory.update({ where: { id: inventory.id }, data: { quantity: { decrement: 1 } } });
+      await tx.mascotRelation.update({ where: { id: relationId }, data: { relationshipScore: next, type: relationTypeFromScore(next), interactionCount: { increment: 1 }, lastInteractionAt: new Date() } });
+      if (effect.reciprocalDelta) {
+        const reciprocal = await tx.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId } }, select: { id: true, relationshipScore: true } });
+        if (reciprocal) {
+          const reciprocalScore = clampScore(reciprocal.relationshipScore + effect.reciprocalDelta);
+          await tx.mascotRelation.update({ where: { id: reciprocal.id }, data: { relationshipScore: reciprocalScore, type: relationTypeFromScore(reciprocalScore), interactionCount: { increment: 1 }, lastInteractionAt: new Date() } });
+        }
+      }
+      await tx.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "ITEM_ATIVADO", sourceType: "BOND_ITEM", sourceId: itemType, title: effect.title, description: `${BOND_ITEM_CATALOG.find((item) => item.type === itemType)?.name ?? itemType} foi usado neste vínculo${delta ? ` (${delta > 0 ? "+" : ""}${delta})` : " para registrar uma trégua"}.`, intensity: 1, metadata: { itemType, scoreDelta: delta, reciprocalScoreDelta: effect.reciprocalDelta ?? 0 } as Prisma.InputJsonValue } });
+    });
+    revalidatePath("/lacos"); return { ok: true, score: next };
+  } catch (error) { return { error: error instanceof Error ? error.message : "Não foi possível ativar o item." }; }
 }
 
 export async function useBondDistanceItemV2Action(relationId: string, item: "CHARM" | "SHIELD") {
