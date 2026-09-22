@@ -32,7 +32,9 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { trackGachaObjective } from "@/lib/gacha";
-import type { Prisma } from "@prisma/client";
+import { Prisma } from "@prisma/client";
+import { after } from "next/server";
+import { processMascotExpGrantBatch } from "@/lib/mascot-exp-grants";
 
 function revalidate(playerId?: string) {
   revalidatePath("/mascotes");
@@ -1126,6 +1128,7 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
   error?: string;
   results: ExpeditionRoutineResult[];
 }> {
+  const startedAt = Date.now();
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado.", results: [] };
@@ -1196,8 +1199,10 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
 
     revalidate(player.id);
     revalidatePath("/caixa-de-presentes");
+    console.info("[mascot-routine] completed", { playerId: player.id, expeditions: regular.length, restarted: results.filter((result) => result.restarted).length, durationMs: Date.now() - startedAt });
     return { results };
   } catch (error) {
+    console.error("[mascot-routine] failed", { durationMs: Date.now() - startedAt, error });
     return {
       error: error instanceof Error ? error.message : "Erro ao processar as expedições.",
       results: [],
@@ -2247,8 +2252,9 @@ export async function feedAllAction(
   minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL",
   foodType: "FOOD" | "SWEET" | "RARE_SWEET" = "FOOD",
 ): Promise<{
-  error?: string; fed: number; skipped: number; noFood: boolean;
+  error?: string; fed: number; skipped: number; noFood: boolean; expPending?: number;
 }> {
+  const startedAt = Date.now();
   try {
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado.", fed: 0, skipped: 0, noFood: false };
@@ -2286,42 +2292,49 @@ export async function feedAllAction(
 
     // Alimenta em batch
     const now = new Date();
-    await prisma.$transaction([
-      prisma.mascotFoodItem.update({
-        where: { playerId_type: { playerId: player.id, type: foodType } },
+    const batchId = crypto.randomUUID();
+    const expJobIds = toFeed.map(() => crypto.randomUUID());
+    const transactionStartedAt = Date.now();
+    await prisma.$transaction(async (tx) => {
+      const reserved = await tx.mascotFoodItem.updateMany({
+        where: { playerId: player.id, type: foodType, quantity: { gte: toFeed.length } },
         data: { quantity: { decrement: toFeed.length } },
-      }),
-      ...toFeed.map(m =>
-        prisma.mascot.update({
-          where: { id: m.id },
-          data: {
-            happiness: Math.min(100, m.happiness + (foodType === "FOOD" ? 20 : 35)),
-            mood: "HAPPY",
-            lastFedAt: now,
-          },
-        })
-      ),
-    ]);
+      });
+      if (reserved.count !== 1) throw new Error("O estoque mudou durante a alimentação. Atualize a página e tente novamente.");
+      const rows = Prisma.join(toFeed.map((m) => Prisma.sql`(${m.id}, ${Math.min(100, m.happiness + (foodType === "FOOD" ? 20 : 35))}, ${m.lastFedAt}::timestamp(3))`));
+      const updated = await tx.$executeRaw`
+        UPDATE "mascots" AS mascot
+        SET "happiness" = batch."happiness",
+            "mood" = 'HAPPY'::"MascotMood",
+            "lastFedAt" = ${now},
+            "updatedAt" = ${now}
+        FROM (VALUES ${rows}) AS batch("id", "happiness", "lastFedAt")
+        WHERE mascot."id" = batch."id"
+          AND mascot."playerId" = ${player.id}
+          AND mascot."lastFedAt" IS NOT DISTINCT FROM batch."lastFedAt"
+      `;
+      if (updated !== toFeed.length) throw new Error("Um mascote foi alimentado em outra ação. Atualize a página e tente novamente.");
+      await tx.mascotInteractionJob.createMany({
+        data: toFeed.map((m, index) => ({
+          id: expJobIds[index], playerId: player.id,
+          idempotencyKey: `feed-exp:${batchId}:${m.id}`,
+          interactionType: "EXP_GRANT", scope: "SELECTION",
+          targetMascotIds: [m.id],
+          resultJson: { mascotId: m.id, amount: Math.round(feedBaseExp(foodType, m.personality)), source: `FEED_${foodType}_BULK` },
+        })),
+      });
+    });
+    const transactionMs = Date.now() - transactionStartedAt;
+    after(async () => {
+      await processMascotExpGrantBatch(expJobIds);
+      for (const m of toFeed) await clearRunawayWarningIfRecovered(player.id, m.id).catch(() => {});
+    });
 
-    // A transação acima só concede felicidade. O EXP vem aqui, com a mesma
-    // fórmula do botão individual (feedBaseExp), para que o mesmo item valha o
-    // mesmo EXP não importa por onde o jogador alimente.
-    // ponytail: um addExp por mascote — addExp resolve level up e evolução, que
-    // não dá para fazer em batch. "Alimentar todos" é uma ação deliberada e
-    // pontual; se virar gargalo, o caminho é um addExpMany em lote.
-    for (const m of toFeed) {
-      const gained = Math.round(feedBaseExp(foodType, m.personality));
-      await addExp(m.id, gained, { source: `FEED_${foodType}_BULK` }).catch(() => null);
-    }
-
-    // Clear runaway warnings fora da transaction (não-crítico)
-    for (const m of toFeed) {
-      await clearRunawayWarningIfRecovered(player.id, m.id).catch(() => {});
-    }
-
-    revalidate(player.id);
-    return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false };
+    revalidateTag(`player-mascots-${player.id}`);
+    console.info("[feed-all] accepted", { playerId: player.id, mascots: toFeed.length, transactionMs, durationMs: Date.now() - startedAt });
+    return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false, expPending: toFeed.length };
   } catch (err) {
+    console.error("[feed-all] failed", { durationMs: Date.now() - startedAt, error: err });
     return { error: err instanceof Error ? err.message : "Erro.", fed: 0, skipped: 0, noFood: false };
   }
 }

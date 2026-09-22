@@ -145,6 +145,7 @@ export async function processPendingMascotInteractionJobs(limit = 5) {
   const staleBefore = new Date(Date.now() - STALE_LOCK_MS);
   const jobs = await prisma.mascotInteractionJob.findMany({
     where: {
+      interactionType: { not: "EXP_GRANT" },
       attempts: { lt: MAX_ATTEMPTS },
       OR: [
         { status: "PENDING" },

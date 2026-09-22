@@ -134,15 +134,16 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
       try {
         const res = await feedAllAction(minHunger, feedType);
         if (res.error) { toast.error(res.error); return; }
-        const feedLabel = feedType === "SWEET" ? "doces" : "comida";
+        const feedLabel = feedType === "SWEET" ? "doces" : feedType === "RARE_SWEET" ? "doces raros" : "comida";
         if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); return; }
         if (res.fed === 0) {
           toast.info("Todos os mascotes já estão satisfeitos.");
         } else {
           const msg = res.skipped > 0
-            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} já estava${res.skipped !== 1 ? "m" : ""} satisfeito${res.skipped !== 1 ? "s" : ""}.`
+            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} ${pluralMascot(res.skipped)} não precisou ou não pôde receber alimento.`
             : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
           toast.success(msg);
+          if (res.expPending) toast.info(`A experiência de ${res.expPending} ${pluralMascot(res.expPending)} está sendo aplicada. Você pode continuar jogando.`);
           router.refresh();
         }
       } catch (err) {

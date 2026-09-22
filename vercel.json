@@ -57,6 +57,10 @@
       "schedule": "*/2 * * * *"
     },
     {
+      "path": "/api/cron/mascot-exp-grants",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/birthday-ticker",
       "schedule": "0 */3 * * *"
     },

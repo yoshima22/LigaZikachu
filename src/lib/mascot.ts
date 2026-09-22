@@ -664,7 +664,9 @@ export function computeChaoticRerollProgression(
   return { progression: scaled, final };
 }
 
-export async function addExp(
+class MascotExpConflictError extends Error {}
+
+async function addExpOnce(
   mascotId: string,
   amount: number,
   options: {
@@ -674,6 +676,7 @@ export async function addExp(
     source?: string;
     sourceEntityType?: string;
     sourceEntityId?: string;
+    grantJobId?: string;
   } = {}
 ): Promise<LevelUpResult> {
   const mascot = options.mascotSnapshot ?? await prisma.mascot.findUnique({ where: { id: mascotId } });
@@ -836,10 +839,18 @@ export async function addExp(
   };
 
   await prisma.$transaction(async (tx) => {
-    await tx.mascot.update({
-      where: { id: mascotId },
+    const updated = await tx.mascot.updateMany({
+      where: { id: mascotId, level: mascot.level, exp: mascot.exp, pokemonId: mascot.pokemonId },
       data: { level, exp, pokemonId, ...finalStatUpdates, ...nicknameUpdate },
     });
+    if (updated.count !== 1) throw new MascotExpConflictError("EXP alterada por outra ação.");
+    if (options.grantJobId) {
+      const completed = await tx.mascotInteractionJob.updateMany({
+        where: { id: options.grantJobId, status: "PROCESSING" },
+        data: { status: "COMPLETED", completedAt: new Date(), lockedAt: null },
+      });
+      if (completed.count !== 1) throw new MascotExpConflictError("Concessão de EXP já processada.");
+    }
     if (shouldRecordGrowth) {
       await tx.mascotStatGrowthEntry.create({
         data: {
@@ -1012,6 +1023,22 @@ export async function addExp(
   }
 
   return { leveled, newLevel: level, evolved, newPokemonId };
+}
+
+/** Recalcula o progresso com a versão mais recente quando duas recompensas chegam juntas. */
+export async function addExp(
+  mascotId: string,
+  amount: number,
+  options: Parameters<typeof addExpOnce>[2] = {},
+): Promise<LevelUpResult> {
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      return await addExpOnce(mascotId, amount, attempt === 0 ? options : { ...options, mascotSnapshot: undefined });
+    } catch (error) {
+      if (!(error instanceof MascotExpConflictError) || attempt === 2) throw error;
+    }
+  }
+  throw new Error("Não foi possível aplicar a experiência.");
 }
 
 /** Dá EXP a todos os mascotes equipados de um jogador */
@@ -1785,7 +1812,10 @@ export async function claimExpedition(
   // Busca aliados ANTES de rolar recompensa (influenciam as chances)
   const friends = await prisma.mascotRelation.findMany({
     where: { mascotAId: expedition.mascotId, type: "FRIEND" },
-    include: { mascotB: { select: { id: true, statCharisma: true, nickname: true, pokemonId: true, playerId: true } } }
+    select: {
+      id: true, interactionCount: true, lastAllyGiftKind: true,
+      mascotB: { select: { id: true, statCharisma: true, nickname: true, pokemonId: true, playerId: true } },
+    },
   });
   const allyCount = friends.length;
   const expeditorName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
@@ -1895,11 +1925,30 @@ export async function claimExpedition(
     storedRewardJson.megaStoneDropChance = getMegaStoneExpeditionChance(expedition.mascot.statInstinct) / 100;
   }
 
+  const expGrants: Array<{ id: string; playerId: string; key: string; mascotId: string; amount: number; source: string; ignoreExpBoost?: boolean }> = [];
+  if (expeditionExp > 0) expGrants.push({ id: crypto.randomUUID(), playerId, key: `expedition-exp:${expeditionId}:main`, mascotId: expedition.mascotId, amount: expeditionExp, source: `EXPEDITION_${mode}`, ignoreExpBoost: true });
+  if (mode !== "ITEMS") for (const rel of friends) expGrants.push({ id: crypto.randomUUID(), playerId: rel.mascotB.playerId, key: `expedition-exp:${expeditionId}:ally:${rel.mascotB.id}`, mascotId: rel.mascotB.id, amount: Math.round(EXP_REWARDS.EXPEDITION * 0.3), source: "EXPEDITION_ALLY" });
+  if (mode === "TRAINING" && expeditionExp > 0) {
+    const share = await prisma.mascotBuff.findFirst({ where: { type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] }, mascot: { playerId }, expiresAt: { gt: new Date("2090-01-01") } }, select: { type: true, mascotId: true } }).catch(() => null);
+    if (share?.type === "XP_SHARE" && share.mascotId !== expedition.mascotId) {
+      expGrants.push({ id: crypto.randomUUID(), playerId, key: `expedition-exp:${expeditionId}:share:${share.mascotId}`, mascotId: share.mascotId, amount: Math.floor(expeditionExp / 2), source: "EXPEDITION_XP_SHARE" });
+    } else if (share?.type === "XP_SHARE_TEAM") {
+      const favorites = await prisma.mascot.findMany({ where: { playerId, isFavorite: true, id: { not: expedition.mascotId } }, select: { id: true }, take: 10 });
+      for (const favorite of favorites) expGrants.push({ id: crypto.randomUUID(), playerId, key: `expedition-exp:${expeditionId}:share:${favorite.id}`, mascotId: favorite.id, amount: Math.floor(expeditionExp * 0.1), source: "EXPEDITION_XP_SHARE_TEAM" });
+    }
+  }
+
   await prisma.$transaction(async (tx) => {
-    await tx.mascotExpedition.update({
-      where: { id: expeditionId },
+    const claimed = await tx.mascotExpedition.updateMany({
+      where: { id: expeditionId, status: "ACTIVE", finishAt: { lte: new Date() } },
       data: { status: "CLAIMED", rewardJson: storedRewardJson as Prisma.InputJsonObject }
     });
+    if (claimed.count !== 1) throw new Error("Expedição já coletada ou ainda não concluída.");
+    if (expGrants.length) await tx.mascotInteractionJob.createMany({ data: expGrants.filter((grant) => grant.amount > 0).map((grant) => ({
+      id: grant.id, playerId: grant.playerId, idempotencyKey: grant.key,
+      interactionType: "EXP_GRANT", scope: "SELECTION", targetMascotIds: [grant.mascotId],
+      resultJson: { mascotId: grant.mascotId, amount: grant.amount, source: grant.source, ignoreBenchPenalty: true, ignoreExpBoost: grant.ignoreExpBoost ?? false, sourceEntityType: "mascotExpedition", sourceEntityId: expeditionId },
+    })) });
 
     if (mode === "TRAINING") {
       const bonuses: string[] = [];
@@ -2005,23 +2054,11 @@ export async function claimExpedition(
 
   for (const rel of friends) {
     const friendName = rel.mascotB.nickname ?? getPokemonName(rel.mascotB.pokemonId);
-    if (mode !== "ITEMS") {
-      await addExp(rel.mascotB.id, Math.round(EXP_REWARDS.EXPEDITION * 0.3), { ignoreBenchPenalty: true }).catch(() => {});
-    }
     await logEvent(rel.mascotB.id, "ALLY", `Apoiou ${expeditorName} em expedicao de ${dur.label} e ganhou recompensa!`).catch(() => {});
     await logEvent(expedition.mascotId, "ALLY", `${friendName} apoiou e turbinou a expedicao! (+${Math.round(allyExpBonus * 100 - 100)}% EXP)`).catch(() => {});
   }
 
   if (expeditionExp > 0) {
-    // ignoreBenchPenalty: expedição é esforço do mascote, não interação presencial
-    // ignoreExpBoost: buffs já incluídos no cálculo de expeditionExp acima (para log correto)
-    await addExp(expedition.mascotId, expeditionExp, {
-      ignoreBenchPenalty: true,
-      ignoreExpBoost: true,
-      source: `EXPEDITION_${mode}`,
-      sourceEntityType: "mascotExpedition",
-      sourceEntityId: expeditionId,
-    }).catch(() => {});
     if (mode === "STANDARD") {
       await logEvent(
         expedition.mascotId,
@@ -2041,34 +2078,6 @@ export async function claimExpedition(
   // Ovo da Sorte: consome o buff após uso (1x por dia)
   if (luckyEggBuff) {
     await prisma.mascotBuff.delete({ where: { id: luckyEggBuff.id } }).catch(() => {});
-  }
-
-  // Compartilhadores: individual (50%) ou geral (10% aos outros favoritos).
-  if (mode === "TRAINING" && expeditionExp > 0) {
-    const equippedShare = await prisma.mascotBuff.findFirst({
-      where: {
-        type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] },
-        mascot: { playerId },
-        expiresAt: { gt: new Date("2090-01-01") },
-      },
-      select: { type: true, mascotId: true },
-    }).catch(() => null);
-    if (equippedShare?.type === "XP_SHARE" && equippedShare.mascotId !== expedition.mascotId) {
-      const sharedExp = Math.floor(expeditionExp / 2);
-      await addExp(equippedShare.mascotId, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
-      await logEvent(equippedShare.mascotId, "📡", `Recebeu ${sharedExp} EXP via Compartilhador de XP!`).catch(() => {});
-    } else if (equippedShare?.type === "XP_SHARE_TEAM") {
-      const sharedExp = Math.floor(expeditionExp * 0.1);
-      const favorites = await prisma.mascot.findMany({
-        where: { playerId, isFavorite: true, id: { not: expedition.mascotId } },
-        select: { id: true },
-        take: 10,
-      });
-      for (const favorite of favorites) {
-        await addExp(favorite.id, sharedExp, { ignoreBenchPenalty: true }).catch(() => {});
-        await logEvent(favorite.id, "📡", `Recebeu ${sharedExp} EXP via Compartilhador Geral!`).catch(() => {});
-      }
-    }
   }
 
   return {
@@ -3154,10 +3163,23 @@ export async function claimVacation(playerId: string, expeditionId: string) {
   const gotEgg = eggType !== null;
   const eggLabel = eggType === "RARE" ? "Ovo Raro" : "Ovo Comum";
 
+  const expJobId = crypto.randomUUID();
   await prisma.$transaction(async (tx) => {
-    await tx.mascotExpedition.update({
-      where: { id: expeditionId },
+    const claim = await tx.mascotExpedition.updateMany({
+      where: { id: expeditionId, status: "ACTIVE" },
       data: { status: "CLAIMED", rewardJson: { type: "VACATION", expBonus, gotEgg, eggType } }
+    });
+    if (claim.count !== 1) throw new Error("Férias já coletadas.");
+    await tx.mascotInteractionJob.create({
+      data: {
+        id: expJobId,
+        playerId,
+        interactionType: "EXP_GRANT",
+        scope: "SELECTION",
+        status: "PENDING",
+        idempotencyKey: `expedition-exp:${expeditionId}:vacation`,
+        resultJson: { mascotId: expedition.mascotId, amount: expBonus, source: "VACATION", ignoreBenchPenalty: true },
+      },
     });
     await tx.mascot.update({
       where: { id: expedition.mascotId },
@@ -3181,7 +3203,6 @@ export async function claimVacation(playerId: string, expeditionId: string) {
     });
   });
 
-  await addExp(expedition.mascotId, expBonus, { ignoreBenchPenalty: true });
   return { expBonus, gotEgg, eggType };
 }
 
