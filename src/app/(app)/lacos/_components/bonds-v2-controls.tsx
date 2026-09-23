@@ -87,6 +87,7 @@ export function BondV2Buttons({
   startedByMe,
   charmResolvesAt,
   shielded,
+  distanceCooldownUntil,
 }: {
   relationId: string;
   active: boolean;
@@ -94,6 +95,7 @@ export function BondV2Buttons({
   startedByMe: boolean;
   charmResolvesAt: string | null;
   shielded: boolean;
+  distanceCooldownUntil: string | null;
 }) {
   const [pending, startTransition] = useTransition();
   const router = useRouter();
@@ -101,6 +103,7 @@ export function BondV2Buttons({
     active &&
     transitionAt !== null &&
     new Date(transitionAt).getTime() > Date.now();
+  const coolingDown = !!distanceCooldownUntil && new Date(distanceCooldownUntil).getTime() > Date.now();
   function run(operation: "START_DISTANCE" | "CANCEL_DISTANCE") {
     startTransition(async () => {
       const result = await updateActiveBondV2Action(relationId, operation);
@@ -140,11 +143,11 @@ export function BondV2Buttons({
     <div className="flex flex-wrap gap-1.5">
       {!distancing && (
         <button
-          disabled={pending || !active}
+          disabled={pending || !active || coolingDown}
           onClick={() => run("START_DISTANCE")}
           className="rounded-md border border-white/10 px-3 py-1.5 text-xs text-slate-300 hover:bg-white/5 disabled:opacity-50"
         >
-          {pending ? "Processando..." : "Iniciar afastamento"}
+          {pending ? "Processando..." : coolingDown ? `Recarga até ${new Date(distanceCooldownUntil!).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}` : "Iniciar afastamento"}
         </button>
       )}
       {distancing && startedByMe && !charmResolvesAt && (
@@ -1598,7 +1601,7 @@ export function BondsTutorial() {
               ],
               [
                 "6. Afastamento definitivo",
-                "O afastamento leva 24 horas e pode ser cancelado durante o prazo. Ao concluir, a relação dos dois lados é removida por completo; somente as memórias históricas permanecem.",
+                "O afastamento leva 24 horas e pode ser cancelado durante o prazo. Se uma contestação vencer ou o Amuleto de Promessa preservar o vínculo, o mascote que tentou se afastar só poderá iniciar outro afastamento após 48 horas, mesmo com outro alvo. Cancelar o próprio afastamento não aciona essa recarga. Ao concluir, a relação dos dois lados é removida por completo; somente as memórias históricas permanecem.",
               ],
             ].map(([title, text]) => (
               <div
@@ -1738,6 +1741,9 @@ export function BondsTutorial() {
             <p>
               <strong className="text-white">5.</strong> Ao terminar o prazo
               normal, o vínculo some dos dois lados, mas as memórias permanecem.
+            </p>
+            <p>
+              <strong className="text-white">6.</strong> Se o afastamento falhar por contestação bem-sucedida ou Amuleto de Promessa concluído, o mascote iniciador espera 48 horas para tentar outro afastamento, inclusive com um mascote diferente. Desistir por conta própria não inicia a recarga.
             </p>
           </div>
         </div>
@@ -1913,6 +1919,7 @@ export type BondItem = {
   startedByMe: boolean;
   charmResolvesAt: string | null;
   shielded: boolean;
+  distanceCooldownUntil: string | null;
 };
 
 export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
@@ -1967,7 +1974,7 @@ export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
           <InfoPill
             icon={<Clock3 size={16} />}
             title="24 horas para encerrar"
-            text="Iniciar afastamento abre um prazo de 24 horas. Você ainda pode desistir durante esse período."
+            text="Iniciar afastamento abre um prazo de 24 horas. Você ainda pode desistir. Se uma contestação ou Amuleto impedir a separação, o mascote iniciador terá 48 horas de recarga para qualquer novo afastamento."
           />
           <InfoPill
             icon={<HeartHandshake size={16} />}
@@ -2126,6 +2133,7 @@ export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
                   active={relation.active}
                   transitionAt={relation.transitionAt}
                   startedByMe={relation.startedByMe}
+                  distanceCooldownUntil={relation.distanceCooldownUntil}
                   charmResolvesAt={relation.charmResolvesAt}
                   shielded={relation.shielded}
                 />
@@ -2377,7 +2385,7 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
                   <p className="mb-1 text-[9px] uppercase tracking-wider text-slate-500">Ações para este vínculo</p>
                   <BondItemActivator relationId={relation.id} />
                   <SocialInfluenceShortcut targetMascotId={relation.targetMascotId} available={relation.targetInRefuge} />
-                  <div className="mt-2"><BondV2Buttons relationId={relation.id} active={relation.active} transitionAt={relation.transitionAt} startedByMe={relation.startedByMe} charmResolvesAt={relation.charmResolvesAt} shielded={relation.shielded} /></div>
+                  <div className="mt-2"><BondV2Buttons relationId={relation.id} active={relation.active} transitionAt={relation.transitionAt} startedByMe={relation.startedByMe} charmResolvesAt={relation.charmResolvesAt} shielded={relation.shielded} distanceCooldownUntil={relation.distanceCooldownUntil} /></div>
                 </div>
               </article>
             ))}

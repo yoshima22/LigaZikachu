@@ -19,6 +19,7 @@ import {
   clampScore, relationTypeFromScore,
 } from "@/lib/mascot-bonds";
 import { trackGachaObjective } from "@/lib/gacha";
+import { failedDistanceCooldownUntil, failedDistanceMemoryData } from "@/lib/bond-distance-cooldown";
 
 async function getPlayerId() {
   const session = await getAppSession();
@@ -205,6 +206,8 @@ export async function updateActiveBondV2Action(relationId: string, operation: "S
     if (operation === "START_DISTANCE") {
       if (!relation.isActive) throw new Error("Este vínculo já está distante.");
       if (relation.dormantAt && relation.dormantAt > now) throw new Error("O afastamento já está em andamento.");
+      const cooldownUntil = await failedDistanceCooldownUntil(relation.mascotAId, now);
+      if (cooldownUntil) throw new Error(`Após um afastamento falhado, este mascote precisa aguardar 48 horas. Disponível em ${cooldownUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.`);
       const deadline = new Date(now.getTime() + BOND_DISTANCE_DELAY_MS);
       await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: deadline, distanceStartedAt: now, distanceStartedByPlayerId: playerId, distanceRemainingMs: BOND_DISTANCE_DELAY_MS, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [], isProtected: false } });
       await prisma.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "AFASTAMENTO_INICIADO", sourceType: "BOND_MANAGEMENT", sourceId: relation.id, title: "Precisando de espaço", description: `${nameA} decidiu se afastar de ${nameB}. Durante as próximas 24 horas, uma nova interação ainda pode mudar esse rumo.`, intensity: 2 } });
@@ -226,13 +229,21 @@ export async function updateActiveBondV2Action(relationId: string, operation: "S
 export async function contestBondDistanceV2Action(relationId: string) {
   try {
     const playerId = await getPlayerId();
-    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId }, isActive: true }, select: { mascotAId: true, mascotBId: true, dormantAt: true, distanceStartedByPlayerId: true, distanceContestants: true } });
-    if (!relation?.dormantAt || relation.distanceStartedByPlayerId === playerId) throw new Error("Este afastamento não foi iniciado pelo outro treinador.");
+    const relation = await prisma.mascotRelation.findFirst({ where: { id: relationId, mascotA: { playerId }, isActive: true }, select: { id: true, mascotAId: true, mascotBId: true, dormantAt: true, distanceStartedByPlayerId: true, distanceContestants: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
+    if (!relation?.dormantAt || !relation.distanceStartedByPlayerId || relation.distanceStartedByPlayerId === playerId) throw new Error("Este afastamento não foi iniciado pelo outro treinador.");
     const attempted = Array.isArray(relation.distanceContestants) ? relation.distanceContestants.map(String) : [];
     if (attempted.includes(playerId)) throw new Error("Você já contestou este afastamento.");
     const won = Math.random() < 0.5;
     const pair = { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] };
-    await prisma.mascotRelation.updateMany({ where: pair, data: won ? { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } : { distanceContestants: [...attempted, playerId] } });
+    await prisma.$transaction(async (tx) => {
+      const changed = await tx.mascotRelation.updateMany({ where: { ...pair, dormantAt: { gt: new Date() }, distanceStartedByPlayerId: relation.distanceStartedByPlayerId }, data: won ? { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } : { distanceContestants: [...attempted, playerId] } });
+      if (!changed.count) throw new Error("Este afastamento já foi resolvido.");
+      if (won) {
+        const initiatorMascotId = relation.mascotA.playerId === relation.distanceStartedByPlayerId ? relation.mascotAId : relation.mascotBId;
+        const otherMascotId = initiatorMascotId === relation.mascotAId ? relation.mascotBId : relation.mascotAId;
+        await tx.mascotBondMemory.create({ data: failedDistanceMemoryData(initiatorMascotId, otherMascotId, relation.id, "CONTEST") });
+      }
+    });
     await notifyBondDispute([playerId, relation.distanceStartedByPlayerId!], won ? "Contestação bem-sucedida" : "Contestação não convenceu", won ? "A chance de 50% funcionou e o afastamento foi cancelado." : "O afastamento continua contando. O Amuleto de Promessa ainda pode ser usado.", `bond-contest:${relationId}:${Date.now()}`);
     revalidatePath("/lacos");
     return { ok: true, won };

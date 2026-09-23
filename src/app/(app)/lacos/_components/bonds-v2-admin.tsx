@@ -7,6 +7,7 @@ import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, TrainerBondExplorer } from "./bonds-v2-controls";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import Link from "next/link";
+import { FAILED_DISTANCE_COOLDOWN_MS, FAILED_DISTANCE_MEMORY_TYPE } from "@/lib/bond-distance-cooldown";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
@@ -55,7 +56,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
   await autoResolveExpiredBondEvents(playerId);
   const costAvailability = await getBondCostAvailability(playerId);
   const since = new Date(Date.now() - 7 * 24 * 60 * 60_000);
-  const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory, socialInfluences] = await Promise.all([
+  const [mascots, publicRoutines, relations, memoriesByLocation, pendingEvents, recentEvents, settings, bondInventory, socialInfluences, failedDistances] = await Promise.all([
     prisma.mascot.findMany({
       where: { playerId, player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } },
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
@@ -79,7 +80,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
       take: 100,
       select: {
-        id: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true, distanceStartedByPlayerId: true, promiseCharmResolvesAt: true, promiseShielded: true,
+        id: true, mascotAId: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true, distanceStartedByPlayerId: true, promiseCharmResolvesAt: true, promiseShielded: true,
         mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },
         mascotB: { select: { id: true, pokemonId: true, nickname: true, routine: { select: { status: true } }, player: { select: { displayName: true } } } },
       },
@@ -109,6 +110,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     // Assim que a migração termina, a consulta volta a preencher a bolsa.
     prisma.shopItem.findMany({ where: { type: { in: [...BOND_SHOP_ITEM_TYPES] as never[] } }, orderBy: { sortOrder: "asc" }, select: { id: true, type: true, name: true, description: true, rarity: true, ownerships: { where: { playerId }, select: { quantity: true }, take: 1 } } }).catch(() => []),
     prisma.mascotSocialInfluence.findMany({ where: { observerPlayerId: playerId }, select: { targetMascotId: true, direction: true } }),
+    prisma.mascotBondMemory.findMany({ where: { mascotA: { playerId }, memoryType: FAILED_DISTANCE_MEMORY_TYPE, createdAt: { gt: new Date(Date.now() - FAILED_DISTANCE_COOLDOWN_MS) } }, orderBy: { createdAt: "desc" }, take: 120, select: { mascotAId: true, createdAt: true } }),
   ]);
 
   const rawSettings = settings?.data && typeof settings.data === "object" && !Array.isArray(settings.data)
@@ -137,6 +139,8 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     pendingReward: Boolean(mascot.routine?.pendingRewardType),
     arenaState: mascot.arenaState,
   }));
+  const distanceCooldownByMascot = new Map<string, string>();
+  for (const failure of failedDistances) if (!distanceCooldownByMascot.has(failure.mascotAId)) distanceCooldownByMascot.set(failure.mascotAId, new Date(failure.createdAt.getTime() + FAILED_DISTANCE_COOLDOWN_MS).toISOString());
   const bondItems = relations.map((relation) => ({
     id: relation.id,
     targetMascotId: relation.mascotB.id,
@@ -157,6 +161,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     startedByMe: relation.distanceStartedByPlayerId === playerId,
     charmResolvesAt: relation.promiseCharmResolvesAt?.toISOString() ?? null,
     shielded: relation.promiseShielded,
+    distanceCooldownUntil: distanceCooldownByMascot.get(relation.mascotAId) ?? null,
   }));
   const friendCircles = Object.values(relations.filter((relation) => relation.isActive && relation.relationshipScore >= 15).reduce<Record<string, SocialGroup>>((groups, relation) => {
     const key = mascotName(relation.mascotA);

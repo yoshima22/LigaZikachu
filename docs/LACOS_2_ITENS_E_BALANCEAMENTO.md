@@ -10,6 +10,13 @@ Este documento define a primeira proposta de economia exclusiva do modo Laços. 
 - Retirar o mascote não apaga a recarga. Isso impede retirar e recolocar para contornar o tempo.
 - O ciclo automático do Refúgio acontece a cada 4 horas, usando o cron já existente.
 
+## Afastamento de vínculos
+
+- Um afastamento iniciado dura **24 horas** até a remoção do vínculo, salvo contestação ou defesa bem-sucedida.
+- Se a **contestação de 50% vencer** ou o **Amuleto de Promessa completar 6 horas sem Escudo**, o afastamento falha. O **mascote que iniciou** entra em recarga de **48 horas**, contadas do momento da falha.
+- A recarga é **por mascote**, não por dupla: durante esse período, ele não pode iniciar outro afastamento nem contra outro mascote. O outro mascote da relação não fica bloqueado por essa falha.
+- Se o próprio treinador desistir e cancelar o afastamento antes do desfecho, isso não conta como falha e não inicia a recarga.
+
 ## Recursos produzidos por área
 
 ### Horta — cooperação, partilha e reconciliação

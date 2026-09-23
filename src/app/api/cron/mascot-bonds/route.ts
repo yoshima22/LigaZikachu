@@ -15,6 +15,7 @@ import { REFUGE_LOCATIONS, simulateRefugeMoment, type RefugeLocation } from "@/l
 import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { filterInGameRecipients } from "@/lib/nav-notifications";
+import { failedDistanceMemoryData } from "@/lib/bond-distance-cooldown";
 
 export const runtime = "nodejs";
 export const maxDuration = 60;
@@ -41,9 +42,19 @@ export async function GET(req: NextRequest) {
   if (adminRelations.length) await prisma.mascotRelation.deleteMany({ where: { id: { in: adminRelations.map((relation) => relation.id) } } });
   // Um Amuleto ativo pausa o prazo normal. Se sobreviver às 6 horas sem
   // Escudo, preserva o vínculo e encerra toda a disputa.
-  const resolvedCharms = await prisma.mascotRelation.findMany({ where: { isActive: true, promiseCharmResolvesAt: { lte: now } }, select: { mascotAId: true, mascotBId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
+  const resolvedCharms = await prisma.mascotRelation.findMany({ where: { isActive: true, promiseCharmResolvesAt: { lte: now } }, select: { id: true, mascotAId: true, mascotBId: true, distanceStartedByPlayerId: true, mascotA: { select: { playerId: true } }, mascotB: { select: { playerId: true } } } });
   for (const relation of resolvedCharms) {
-    await prisma.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }] }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
+    const resolved = await prisma.$transaction(async (tx) => {
+      const changed = await tx.mascotRelation.updateMany({ where: { OR: [{ mascotAId: relation.mascotAId, mascotBId: relation.mascotBId }, { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId }], promiseCharmResolvesAt: { lte: now } }, data: { dormantAt: null, distanceStartedAt: null, distanceStartedByPlayerId: null, distanceRemainingMs: null, promiseCharmStartedAt: null, promiseCharmResolvesAt: null, promiseCharmByPlayerId: null, promiseShielded: false, distanceContestants: [] } });
+      if (!changed.count) return false;
+      if (relation.distanceStartedByPlayerId) {
+        const initiatorMascotId = relation.mascotA.playerId === relation.distanceStartedByPlayerId ? relation.mascotAId : relation.mascotBId;
+        const otherMascotId = initiatorMascotId === relation.mascotAId ? relation.mascotBId : relation.mascotAId;
+        await tx.mascotBondMemory.create({ data: failedDistanceMemoryData(initiatorMascotId, otherMascotId, relation.id, "CHARM", now) });
+      }
+      return true;
+    });
+    if (!resolved) continue;
     const players = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
     if (players.length) {
       const charmInGame = await filterInGameRecipients(players, "MASCOTES");
