@@ -33,16 +33,19 @@ export const CASH_PRODUCTS = [
   { code:"LC_1900", type:"LIGA_COINS", label:"Reserva de Treinador", base:1700, bonus:200, cents:1999 },
   { code:"LC_3900", type:"LIGA_COINS", label:"Cofre de Ginásio", base:3450, bonus:450, cents:3499 },
   { code:"LC_8900", type:"LIGA_COINS", label:"Tesouro da Liga", base:7700, bonus:1200, cents:6999 },
-  { code:"DEBUG_LC_100", type:"LIGA_COINS", label:"Teste administrativo", base:100, bonus:0, cents:100, adminOnly:true },
+  { code:"DEBUG_LC_100", type:"LIGA_COINS", label:"Teste administrativo · R$ 1 no Pix", base:100, bonus:0, cents:100, adminOnly:true },
 ] as const;
+
+export const cardPriceCents = (pixPriceCents: number) => Math.ceil(pixPriceCents * 1.05);
 
 export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:string) {
   let broadcastKind: "LIGA_COINS" | "SUPPORTER_PASS" | null = null;
   let broadcastPlayerId: string | null = null;
   const result = await prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM liga_cash_orders WHERE id = ${orderId} FOR UPDATE`;
     const order = await tx.ligaCashOrder.findUnique({ where:{ id:orderId } });
     if (!order || order.providerPaymentId !== providerPaymentId) throw new Error("Pedido incompatível.");
-    if (order.fulfilledAt) return order;
+    if (order.status === "PAID" || order.fulfilledAt) return order;
     broadcastKind = order.productType === "SUPPORTER_PASS" ? "SUPPORTER_PASS" : "LIGA_COINS";
     broadcastPlayerId = order.playerId;
     if (order.productType === "LIGA_COINS") {
@@ -60,11 +63,11 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
             type: "CUSTOM",
             title: order.giftTitle || "Um presente de LigaCash",
             description: order.giftMessage,
-            payload: { rewardKind: "LIGA_CASH", amount, rewardLabel: `${amount.toLocaleString("pt-BR")} LC`, ligaCashReason: "PIX_GIFT", purchasedLigaCash: true, senderPlayerId: order.playerId, senderName: sender?.displayName ?? "Um jogador", orderId: order.id },
+            payload: { rewardKind: "LIGA_CASH", amount, rewardLabel: `${amount.toLocaleString("pt-BR")} LC`, ligaCashReason: order.provider === "MERCADO_PAGO_CARD" ? "CARD_GIFT" : "PIX_GIFT", purchasedLigaCash: true, senderPlayerId: order.playerId, senderName: sender?.displayName ?? "Um jogador", orderId: order.id },
           },
         });
       } else {
-        await changeLigaCash(tx,{playerId:order.playerId,amount,reason:"PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
+        await changeLigaCash(tx,{playerId:order.playerId,amount,reason:order.provider === "MERCADO_PAGO_CARD" ? "CARD_PURCHASE" : "PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
       }
     }
     let fulfilledAt=order.productType === "LIGA_COINS" ? new Date() : null;
@@ -104,6 +107,7 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
 // negativo, virando dívida), nunca sobre terceiros que receberam LC no Bazar.
 export async function refundLigaCashOrder(orderId:string, providerPaymentId:string, kind:"REFUND"|"CHARGEBACK"="REFUND") {
   return prisma.$transaction(async tx => {
+    await tx.$queryRaw`SELECT id FROM liga_cash_orders WHERE id = ${orderId} FOR UPDATE`;
     const order=await tx.ligaCashOrder.findUnique({where:{id:orderId}});
     if(!order||order.providerPaymentId!==providerPaymentId)throw new Error("Pedido incompatível.");
     if(order.status==="REFUNDED")return order;
@@ -118,6 +122,15 @@ export async function refundLigaCashOrder(orderId:string, providerPaymentId:stri
       } else {
         await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
       }
+    }
+    if(order.status==="PAID"&&order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey&&order.paidAt){
+      const label=order.passScheduleKey==="singleton"?"Passe Apoiador":order.passScheduleKey;
+      // O modelo legado não registra o ID do pedido no passe; limitar a busca
+      // ao passe ativado na mesma janela da confirmação evita revogar um passe
+      // anterior ou uma concessão administrativa independente.
+      const windowMs=5*60_000;
+      const pass=await tx.supporterPass.findFirst({where:{playerId:order.playerId,passLabel:label,active:true,revokedAt:null,startsAt:{gte:new Date(order.paidAt.getTime()-windowMs),lte:new Date(order.paidAt.getTime()+windowMs)}},orderBy:{startsAt:"desc"},select:{id:true}});
+      if(pass)await tx.supporterPass.update({where:{id:pass.id},data:{active:false,revokedAt:new Date(),revokeReason:kind==="CHARGEBACK"?"Pagamento contestado":"Pagamento estornado"}});
     }
     return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
   });
