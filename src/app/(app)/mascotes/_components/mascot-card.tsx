@@ -765,7 +765,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const spriteUrl = mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || (imgFailed
     ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
     : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny }));
-  const hasIllustratedSprite = getMascotImageRendering(mascot.pokemonId, spriteUrl) === "auto";
+  const hasIllustratedSprite = getMascotImageRendering(mascot.pokemonId) === "auto";
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },

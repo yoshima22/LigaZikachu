@@ -1,4 +1,4 @@
-import { getMegaStoneForMegaPokemon, MEGA_FORM_IDS } from "@/lib/mega-evolution";
+import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { EXTRA_FORM_NAMES, EXTRA_FORM_ELEMENTS, EXTRA_FORM_POOL_BY_GEN } from "@/lib/extra-forms-data";
 
 /**
@@ -1326,7 +1326,6 @@ export function getSpriteUrl(pokemonId: number, animated = false): string {
   if (animated && (spriteId <= MAX_ANIMATED_ID || ANIMATED_MEGA_SPRITE_IDS.has(spriteId))) {
     return `/sprites/pokemon/versions/generation-v/black-white/animated/${spriteId}.gif`;
   }
-  if (MEGA_FORM_IDS.has(spriteId)) return `/sprites/pokemon/other/home/${spriteId}.webp`;
   return `/sprites/pokemon/${spriteId}.png`;
 }
 
@@ -1334,7 +1333,6 @@ export function getSpriteUrl(pokemonId: number, animated = false): string {
 export function getStaticSpriteUrl(pokemonId: number): string {
   if (EVENT_CUSTOM_SPRITES[pokemonId]) return EVENT_CUSTOM_SPRITES[pokemonId];
   const spriteId = SPRITE_ID_OVERRIDES[pokemonId] ?? pokemonId;
-  if (MEGA_FORM_IDS.has(spriteId)) return `/sprites/pokemon/other/home/${spriteId}.webp`;
   return `/sprites/pokemon/${spriteId}.png`;
 }
 
@@ -1364,7 +1362,6 @@ export function getShinySprite(pokemonId: number, animated = false): string {
   if (animated && spriteId <= MAX_ANIMATED_ID) {
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${spriteId}.gif`;
   }
-  if (MEGA_FORM_IDS.has(spriteId)) return `/sprites/pokemon/other/home/shiny/${spriteId}.webp`;
   return `/sprites/pokemon/shiny/${spriteId}.png`;
 }
 

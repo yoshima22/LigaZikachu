@@ -1,4 +1,5 @@
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { getShinySprite, getSpriteUrl } from "@/lib/mascot-data";
 
 export type SpritePreference = "ANIMATED" | "STATIC";
@@ -8,9 +9,11 @@ export type PlayerSpritePreferences = {
   megaSpritePreference?: string | null;
 };
 
-// Os PNGs HOME são renders 3D; os GIFs antigos de Mega continuam em pixel art.
-export function getMascotImageRendering(pokemonId: number, spriteUrl?: string): "auto" | "pixelated" {
-  return (pokemonId >= 210001 && pokemonId <= 210008) || (MEGA_FORM_IDS.has(pokemonId) && !spriteUrl?.endsWith(".gif"))
+// As formas Mega novas usam PNGs ilustrados, não sprites em pixel art.
+const ILLUSTRATED_MEGA_IDS = new Set([10301, 10302, ...CUSTOM_MEGA_POKEMON_IDS]);
+
+export function getMascotImageRendering(pokemonId: number): "auto" | "pixelated" {
+  return (pokemonId >= 210001 && pokemonId <= 210008) || ILLUSTRATED_MEGA_IDS.has(pokemonId)
     ? "auto"
     : "pixelated";
 }

@@ -394,9 +394,6 @@ a {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 
-/* Renders do Pokémon HOME não são pixel art, inclusive nas miniaturas antigas. */
-img[src*="/sprites/pokemon/other/home/"] { image-rendering: auto !important; }
-
 @media (max-width: 639px) {
   .card-poke:hover {
     transform: none;
