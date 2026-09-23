@@ -617,7 +617,7 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
       },
       orderBy: { name: "asc" },
     });
-    const customSpecies = speciesDefinitions.filter((species) => species.custom && species.eggEligible);
+    const customSpecies = speciesDefinitions.filter((species) => species.custom && species.eggEligible && !disabledIds.has(species.pokemonId));
     const speciesOverrides = new Map(speciesDefinitions.map((species) => [species.pokemonId, species]));
 
     const drops: IncubatorDropPreview["drops"] = [];

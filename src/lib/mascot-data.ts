@@ -666,8 +666,8 @@ const EXTRA_EVOLVED: ReadonlySet<number> = new Set<number>([
   // Evoluções regionais/especiais mantidas fora dos ovos sem forçar a linha base
   902,  // Basculegion (Basculin-White-Striped)
   980,  // Clodsire (Wooper-Paldea)
-  // Phione não evolui para Manaphy nos jogos principais, apesar da cadeia da PokéAPI
-  490,
+  // Phione não evolui para Manaphy; ambos são formas iniciais distintas.
+  // Manaphy deve permanecer elegível à categoria mítica dos ovos da geração 4.
   // Linhas lendarias/miticas com pre-evolucao propria; ovos devem usar a forma inicial.
   790,  // Cosmoem (Cosmog -> Cosmoem)
   791,  // Solgaleo (Cosmoem -> Solgaleo)
