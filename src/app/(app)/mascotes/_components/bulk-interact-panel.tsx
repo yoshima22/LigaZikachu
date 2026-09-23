@@ -132,7 +132,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const handleFeedAll = () => {
     startFeedAll(async () => {
       try {
-        const res = await feedAllAction(minHunger, feedType, scope);
+        const res = await feedAllAction(minHunger, feedType, "ALL");
         if (res.error) { toast.error(res.error); return; }
         const feedLabel = feedType === "SWEET" ? "doces" : feedType === "RARE_SWEET" ? "doces raros" : "comida";
         if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); return; }
@@ -263,8 +263,9 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             className="flex min-h-[38px] items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
-            {isFavoriteTeam ? "Alimentar Favoritos" : "Alimentar Todos"} com {FEED_LABEL[feedType]}
+            Alimentar Todos com {FEED_LABEL[feedType]}
           </button>
+          <p className="text-[10px] text-slate-500">A alimentação vale para todos os seus mascotes disponíveis, inclusive os que estão no banco.</p>
         </div>
       </div>
     </div>

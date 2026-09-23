@@ -326,6 +326,7 @@ async function applyGiftReward(
         reason,
         referenceType: "PlayerGift",
         referenceId: gift.id,
+        purchasedDelta: payload.purchasedLigaCash === true ? amount : 0,
         metadata: { title: gift.title },
       });
     }

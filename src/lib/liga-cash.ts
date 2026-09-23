@@ -1,4 +1,5 @@
 import { createHmac, timingSafeEqual } from "crypto";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {changeLigaCash} from "@/lib/liga-cash-wallet";
 import { publishLeagueTicker } from "@/lib/league-ticker";
@@ -46,7 +47,25 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     broadcastPlayerId = order.playerId;
     if (order.productType === "LIGA_COINS") {
       const amount = order.ligaCoins + order.bonusLigaCoins;
-      await changeLigaCash(tx,{playerId:order.playerId,amount,reason:"PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
+      if (order.giftRecipientPlayerId) {
+        const [sender, recipient] = await Promise.all([
+          tx.player.findUnique({ where: { id: order.playerId }, select: { displayName: true } }),
+          tx.player.findUnique({ where: { id: order.giftRecipientPlayerId }, select: { id: true } }),
+        ]);
+        if (!recipient) throw new Error("Destinatário do presente não encontrado.");
+        await tx.playerGift.create({
+          data: {
+            id: order.id,
+            playerId: recipient.id,
+            type: "CUSTOM",
+            title: order.giftTitle || "Um presente de LigaCash",
+            description: order.giftMessage,
+            payload: { rewardKind: "LIGA_CASH", amount, rewardLabel: `${amount.toLocaleString("pt-BR")} LC`, ligaCashReason: "PIX_GIFT", purchasedLigaCash: true, senderPlayerId: order.playerId, senderName: sender?.displayName ?? "Um jogador", orderId: order.id },
+          },
+        });
+      } else {
+        await changeLigaCash(tx,{playerId:order.playerId,amount,reason:"PIX_PURCHASE",referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:amount,metadata:{productCode:order.productCode,base:order.ligaCoins,bonus:order.bonusLigaCoins}});
+      }
     }
     let fulfilledAt=order.productType === "LIGA_COINS" ? new Date() : null;
     if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
@@ -61,6 +80,12 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     }
     return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
+
+  if (result.giftRecipientPlayerId) {
+    const recipient = await prisma.player.findUnique({ where: { id: result.giftRecipientPlayerId }, select: { userId: true } });
+    if (recipient) revalidateTag(`nav-${recipient.userId}`);
+    revalidatePath("/caixa-de-presentes");
+  }
 
   // Fora da transação: agradecimento do Professor Enguiça como notificação padrão
   // da Liga (ticker no topo), rápida e para todos. Sem push no celular.
@@ -84,7 +109,15 @@ export async function refundLigaCashOrder(orderId:string, providerPaymentId:stri
     if(order.status==="REFUNDED")return order;
     if(order.status==="PAID"&&order.productType==="LIGA_COINS"&&order.fulfilledAt){
       const amount=order.ligaCoins+order.bonusLigaCoins;
-      await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
+      if (order.giftRecipientPlayerId) {
+        const expired = await tx.playerGift.updateMany({ where: { id: order.id, status: "UNCLAIMED" }, data: { status: "EXPIRED" } });
+        const gift = expired.count === 0 ? await tx.playerGift.findUnique({ where: { id: order.id }, select: { status: true } }) : null;
+        if (gift?.status === "CLAIMED") {
+          await changeLigaCash(tx,{playerId:order.giftRecipientPlayerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
+        }
+      } else {
+        await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
+      }
     }
     return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
   });

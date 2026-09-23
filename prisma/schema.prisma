@@ -3574,6 +3574,9 @@ model EconomySettings {
 model LigaCashOrder {
   id                String              @id @default(cuid())
   playerId          String
+  giftRecipientPlayerId String?
+  giftTitle         String?
+  giftMessage       String?              @db.Text
   productType       LigaCashProductType
   productCode       String
   productLabel      String

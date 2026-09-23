@@ -1,7 +1,7 @@
 "use server";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { isAdmin } from "@/lib/auth/permissions";
-import { revalidatePath, revalidateTag } from "next/cache";
+import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { CASH_PRODUCTS, professorEnguicaThankYou } from "@/lib/liga-cash";
@@ -9,66 +9,9 @@ import { changeLigaCash } from "@/lib/liga-cash-wallet";
 
 const ligaCashGiftSchema = z.object({
   recipientPlayerId: z.string().min(1),
-  amount: z.number().int().positive().max(1_000_000_000),
   title: z.string().trim().min(1).max(80),
   content: z.string().trim().min(1).max(350),
 });
-
-export async function sendLigaCashGift(input: z.infer<typeof ligaCashGiftSchema>): Promise<{ error?: string; ok?: true }> {
-  const parsed = ligaCashGiftSchema.safeParse(input);
-  if (!parsed.success) return { error: "Confira o valor, o título (até 80 caracteres) e a mensagem (até 350 caracteres)." };
-  const user = await getSessionUser();
-  if (!user) return { error: "Faça login novamente." };
-  const sender = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true, displayName: true } });
-  if (!sender) return { error: "Jogador não encontrado." };
-  const { recipientPlayerId, amount, title, content } = parsed.data;
-  if (recipientPlayerId === sender.id) return { error: "Escolha outro jogador para presentear." };
-  const recipient = await prisma.player.findFirst({
-    where: { id: recipientPlayerId, user: { status: "ACTIVE" } },
-    select: { id: true, userId: true },
-  });
-  if (!recipient) return { error: "Destinatário não encontrado ou inativo." };
-
-  try {
-    await prisma.$transaction(async (tx) => {
-      const debited = await tx.ligaCoinWallet.updateMany({
-        where: { playerId: sender.id, balance: { gte: amount } },
-        data: { balance: { decrement: amount } },
-      });
-      if (debited.count !== 1) throw new Error("Saldo insuficiente de LigaCash.");
-      const wallet = await tx.ligaCoinWallet.findUniqueOrThrow({ where: { playerId: sender.id }, select: { balance: true } });
-      const gift = await tx.playerGift.create({
-        data: {
-          playerId: recipient.id,
-          type: "CUSTOM",
-          title,
-          description: content,
-          payload: {
-            rewardKind: "LIGA_CASH",
-            amount,
-            rewardLabel: `${amount.toLocaleString("pt-BR")} LC`,
-            ligaCashReason: "PLAYER_GIFT",
-            senderPlayerId: sender.id,
-            senderName: sender.displayName,
-          },
-        },
-      });
-      await tx.ligaCashLedger.create({
-        data: { playerId: sender.id, amount: -amount, balanceAfter: wallet.balance, reason: "PLAYER_GIFT_SENT", referenceType: "PlayerGift", referenceId: gift.id, actorUserId: user.id, metadata: { recipientPlayerId: recipient.id, title } },
-      });
-      await tx.auditLog.create({
-        data: { actorUserId: user.id, entityType: "PlayerGift", entityId: gift.id, action: "ligacash.gift_sent", after: { senderPlayerId: sender.id, recipientPlayerId: recipient.id, amount, title } },
-      });
-    });
-    revalidatePath("/mercado/ligacoins");
-    revalidatePath("/carteira");
-    revalidatePath("/caixa-de-presentes");
-    revalidateTag(`nav-${recipient.userId}`);
-    return { ok: true };
-  } catch (error) {
-    return { error: error instanceof Error ? error.message : "Não foi possível enviar o presente." };
-  }
-}
 
 /**
  * DEBUG (admin): simula uma compra bem-sucedida. Credita realisticamente o valor
@@ -111,9 +54,11 @@ export async function debugSimulateLigaCashPurchase(code: string): Promise<{ err
   return { creditedLc, title: msg.title, body: msg.body, note };
 }
 
-export async function createLigaCashPayment(code:string,cpf:string,payerEmail:string){
+export async function createLigaCashPayment(code:string,cpf:string,payerEmail:string,gift?:z.infer<typeof ligaCashGiftSchema>){
   const user=await getSessionUser(); if(!user) return {error:"Faça login novamente."};
   const player=await prisma.player.findUnique({where:{userId:user.id},select:{id:true}}); if(!player) return {error:"Jogador não encontrado."};
+  const parsedGift=gift?ligaCashGiftSchema.safeParse(gift):null;
+  if(parsedGift&&!parsedGift.success)return{error:"Informe um jogador, título (até 80 caracteres) e mensagem (até 350 caracteres)."};
   let product:{code:string;type:"LIGA_COINS"|"SUPPORTER_PASS";label:string;base:number;bonus:number;cents:number;adminOnly?:boolean}|undefined=CASH_PRODUCTS.find(p=>p.code===code);
   let passScheduleKey:string|null=null;let passOfferSlot:string|null=null;
   if(code==="PASS_CURRENT"||code==="PASS_NEXT"){
@@ -123,6 +68,13 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
     passScheduleKey=config?.id??null;product={code,type:"SUPPORTER_PASS",label:config?.displayTitle?.trim()||(code==="PASS_CURRENT"?"Passe atual":"Passe do mês seguinte"),base:0,bonus:0,cents:2000};
   }
   if(!product) return {error:"Pacote inválido."};
+  let giftRecipient:{id:string;displayName:string}|null=null;
+  if(parsedGift?.success){
+    if(product.type!=="LIGA_COINS")return{error:"Somente pacotes de LigaCash podem ser presenteados."};
+    if(parsedGift.data.recipientPlayerId===player.id)return{error:"Escolha outro jogador para presentear."};
+    giftRecipient=await prisma.player.findFirst({where:{id:parsedGift.data.recipientPlayerId,user:{status:"ACTIVE"}},select:{id:true,displayName:true}});
+    if(!giftRecipient)return{error:"Destinatário não encontrado ou inativo."};
+  }
   // Impede comprar de novo um passe que o jogador já possui (ou já garantiu).
   if(passOfferSlot==="CURRENT"&&passScheduleKey){
     const label=passScheduleKey==="singleton"?"Passe Apoiador":passScheduleKey;
@@ -144,7 +96,7 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
   const pendingCount=await prisma.ligaCashOrder.count({where:{playerId:player.id,status:"PENDING",expiresAt:{gt:now}}});
   if(pendingCount>=3)return {error:"Você já possui 3 pedidos em aberto. Pague, cancele ou aguarde a expiração."};
   const expiresAt=new Date(Date.now()+30*60_000);
-  const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus,amountCents:product.cents,expiresAt,passScheduleKey,passOfferSlot}});
+  const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:giftRecipient?`${product.label} — presente para ${giftRecipient.displayName}`:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus,amountCents:product.cents,expiresAt,passScheduleKey,passOfferSlot,giftRecipientPlayerId:giftRecipient?.id,giftTitle:parsedGift?.success?parsedGift.data.title:null,giftMessage:parsedGift?.success?parsedGift.data.content:null}});
   const response=await fetch("https://api.mercadopago.com/v1/payments",{method:"POST",headers:{Authorization:`Bearer ${token}`,"Content-Type":"application/json","X-Idempotency-Key":order.id},body:JSON.stringify({transaction_amount:product.cents/100,description:`Liga Zikachu - ${product.label}`,payment_method_id:"pix",date_of_expiration:expiresAt.toISOString(),payer:{email,identification:{type:"CPF",number:document}},external_reference:order.id,notification_url:`${base}/api/payments/mercado-pago`})});
   const payment=await response.json();
   if(!response.ok){const causes=Array.isArray(payment?.cause)?payment.cause.map((item:unknown)=>{if(typeof item!=="object"||item===null)return"unknown";const cause=item as{code?:unknown;description?:unknown};return`${String(cause.code??"unknown")}${cause.description?`: ${String(cause.description)}`:""}`}):[];const providerMessage=typeof payment?.message==="string"?payment.message:typeof payment?.error==="string"?payment.error:null;await prisma.$transaction([prisma.ligaCashOrder.update({where:{id:order.id},data:{status:"CANCELLED"}}),prisma.auditLog.create({data:{actorUserId:user.id,entityType:"LigaCashOrder",entityId:order.id,action:"ligacoins.payment_rejected",metadata:{httpStatus:response.status,providerMessage,causes}}})]);console.error("[LigaCoins] Mercado Pago recusou a criação",{orderId:order.id,httpStatus:response.status,providerMessage,causes});const detail=[providerMessage,...causes].filter(Boolean).join(" · ");return {error:detail?`Mercado Pago (${response.status}): ${detail}`:`O Mercado Pago recusou a cobrança (HTTP ${response.status}).`};}
