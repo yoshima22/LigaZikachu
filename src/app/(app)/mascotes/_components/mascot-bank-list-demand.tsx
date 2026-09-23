@@ -341,6 +341,7 @@ function BankRow({
   }, [fetchFull, fullData, open]);
 
   const name = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
+  const spriteUrl = mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny });
   const types = mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId);
   const originIcon = mascotOriginIcon(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin);
   const hungry = ["HUNGRY", "STARVING"].includes(getHungerStatus(mascot.lastFedAt, false));
@@ -366,10 +367,10 @@ function BankRow({
           <button type="button" onClick={handleExpand} className="flex min-w-0 flex-1 items-center gap-3 text-left">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
+              src={spriteUrl}
               alt=""
               className={`${mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008 ? "h-12 w-12" : "h-9 w-9"} shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-              style={{ imageRendering: getMascotImageRendering(mascot.pokemonId) }}
+              style={{ imageRendering: getMascotImageRendering(mascot.pokemonId, spriteUrl) }}
               loading="lazy"
             />
             <span className="min-w-0 flex-1 space-y-0.5">

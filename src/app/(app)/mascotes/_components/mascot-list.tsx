@@ -95,10 +95,11 @@ const EXPEDITION_MODE_LABELS: Record<string, string> = {
 
 
 function MiniMascot({ mascot, spritePreferences }: { mascot: MascotData; spritePreferences?: PlayerSpritePreferences | null }) {
+  const spriteUrl = getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny });
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/50 p-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: getMascotImageRendering(mascot.pokemonId) }} />
+      <img src={spriteUrl} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: getMascotImageRendering(mascot.pokemonId, spriteUrl) }} />
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-slate-200">{mascot.nickname ?? getPokemonName(mascot.pokemonId)}</span>
         <span className="text-[10px] text-slate-500">
@@ -131,6 +132,7 @@ function ExpeditionProgressCard({
   const { expired, remaining } = useTimerExpiry(expedition.finishAt);
   const ready = expired;
   const mascotName = expedition.mascot.nickname ?? getPokemonName(expedition.mascot.pokemonId);
+  const expeditionSpriteUrl = getPreferredSpriteUrl(expedition.mascot.pokemonId, spritePreferences, { shiny: expedition.mascot.isShiny });
 
   // Progresso real: quanto do tempo total (startedAt → finishAt) já passou.
   // No início a barra fica vazia e vai enchendo até 100% ao concluir.
@@ -177,7 +179,7 @@ function ExpeditionProgressCard({
       <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getPreferredSpriteUrl(expedition.mascot.pokemonId, spritePreferences, { shiny: expedition.mascot.isShiny })} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: getMascotImageRendering(expedition.mascot.pokemonId) }} />
+          <img src={expeditionSpriteUrl} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: getMascotImageRendering(expedition.mascot.pokemonId, expeditionSpriteUrl) }} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
             <p className="text-[10px] uppercase tracking-widest text-blue-300">

@@ -280,7 +280,7 @@ export function EditProfileForm({ player }: EditProfileFormProps) {
 
         <SpritePreferenceToggle
           label="Mega evolucoes"
-          description="Controle separado para as formas mega, que podem ter sprites mais pesados."
+          description="Fixo mostra o render 3D do Pokémon HOME; Animado mantém o GIF onde existe. Megas sem GIF usam o render fixo."
           value={megaSpritePreference}
           onChange={setMegaSpritePreference}
         />
