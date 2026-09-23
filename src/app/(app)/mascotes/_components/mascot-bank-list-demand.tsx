@@ -7,7 +7,7 @@ import { SweetKindMenu, type SweetKind } from "./sweet-kind-menu";
 import { getHungerStatus, getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { mascotOriginIcon, HUNGER_ICON_URL } from "@/lib/mascot-origin-icons";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
-import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
+import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { getBankMascotsPageAction, getMascotDetailAction } from "../actions";
 import {
   MascotCard,
@@ -369,7 +369,7 @@ function BankRow({
               src={mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })}
               alt=""
               className={`${mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008 ? "h-12 w-12" : "h-9 w-9"} shrink-0 object-contain ${mascot.isShiny ? "drop-shadow-[0_0_4px_rgba(250,204,21,0.6)]" : "opacity-80"}`}
-              style={{ imageRendering: mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008 ? "auto" : "pixelated" }}
+              style={{ imageRendering: getMascotImageRendering(mascot.pokemonId) }}
               loading="lazy"
             />
             <span className="min-w-0 flex-1 space-y-0.5">

@@ -3,6 +3,7 @@
 import { useMemo, useState, useTransition } from "react";
 import type { ManagedForm } from "../actions";
 import { setEggPokemonEnabled } from "../actions";
+import { getMascotImageRendering } from "@/lib/sprite-preferences";
 
 const PAGE = 25;
 
@@ -90,7 +91,7 @@ export function FormsPoolManager({ forms }: { forms: ManagedForm[] }) {
           return (
             <div key={g.baseId} className="overflow-hidden rounded-xl border border-border">
               <div className="flex items-center gap-3 border-b border-border bg-slate-900/60 p-2">
-                <img src={g.baseSpriteUrl} alt="" className="h-9 w-9 object-contain [image-rendering:pixelated]" />
+                <img src={g.baseSpriteUrl} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: getMascotImageRendering(g.baseId) }} />
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-sm font-bold text-white">{g.baseName} <span className="text-[10px] font-mono text-slate-500">#{g.baseId}</span></p>
                   <p className="text-[10px] text-slate-500">{g.forms.length} forma(s) · {enabledInGroup} ligada(s)</p>
@@ -107,7 +108,7 @@ export function FormsPoolManager({ forms }: { forms: ManagedForm[] }) {
                 <tbody className="divide-y divide-border">
                   {g.forms.map((f) => (
                     <tr key={f.id} className="hover:bg-slate-900/40">
-                      <td className="p-2 w-12"><img src={f.spriteUrl} alt="" className="h-8 w-8 object-contain [image-rendering:pixelated]" /></td>
+                      <td className="p-2 w-12"><img src={f.spriteUrl} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: getMascotImageRendering(f.id) }} /></td>
                       <td className="p-2 tabular-nums text-slate-500 w-16">{f.id}</td>
                       <td className="p-2 font-medium text-slate-200">{f.name}</td>
                       <td className="hidden p-2 text-slate-400 sm:table-cell">{f.types.join(" / ")}</td>

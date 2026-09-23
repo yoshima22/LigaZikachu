@@ -12,7 +12,7 @@ import {
   HUNGER_LABEL, HAPPINESS_LABEL, CHALLENGE_LABEL,
   HUNGER_COLOR, HAPPINESS_COLOR, CHALLENGE_COLOR,
 } from "@/lib/mascot-data";
-import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
+import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { mascotOriginIcon } from "@/lib/mascot-origin-icons";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
@@ -765,7 +765,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const spriteUrl = mascot.animatedSpriteUrlOverride || mascot.staticSpriteUrlOverride || (imgFailed
     ? (mascot.isShiny ? getShinySprite(mascot.pokemonId) : getStaticSpriteUrl(mascot.pokemonId))
     : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny }));
-  const hasIllustratedSprite = mascot.pokemonId >= 210001 && mascot.pokemonId <= 210008;
+  const hasIllustratedSprite = getMascotImageRendering(mascot.pokemonId) === "auto";
 
   const STATS = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
@@ -1635,7 +1635,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       group === "FRIEND" ? "border-green-500/20 bg-green-500/5" : group === "RIVAL" ? "border-red-500/20 bg-red-500/5" : "border-slate-500/20 bg-slate-500/5"
                     }`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                      <img src={getSpriteUrl(rel.mascotB.pokemonId)} alt="" className="h-7 w-7 object-contain shrink-0" style={{ imageRendering: getMascotImageRendering(rel.mascotB.pokemonId) }} />
                       <div className="min-w-0 flex-1">
                         <p className="font-semibold text-slate-200 truncate">
                           {name_}

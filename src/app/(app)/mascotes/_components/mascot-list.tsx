@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { LoaderCircle, MapPin, Search, Sparkles, Star, X } from "lucide-react";
 import { getPokemonElement, mascotTypes, getPokemonName } from "@/lib/mascot-data";
-import { getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
+import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import {
   claimExpeditionAction,
   collectCareAndRepeatExpeditionsAction,
@@ -98,7 +98,7 @@ function MiniMascot({ mascot, spritePreferences }: { mascot: MascotData; spriteP
   return (
     <div className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/50 p-2">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+      <img src={getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny })} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: getMascotImageRendering(mascot.pokemonId) }} />
       <span className="min-w-0">
         <span className="block truncate text-xs font-semibold text-slate-200">{mascot.nickname ?? getPokemonName(mascot.pokemonId)}</span>
         <span className="text-[10px] text-slate-500">
@@ -177,7 +177,7 @@ function ExpeditionProgressCard({
       <div className="rounded-xl border border-border/70 bg-slate-950/70 p-3">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={getPreferredSpriteUrl(expedition.mascot.pokemonId, spritePreferences, { shiny: expedition.mascot.isShiny })} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+          <img src={getPreferredSpriteUrl(expedition.mascot.pokemonId, spritePreferences, { shiny: expedition.mascot.isShiny })} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: getMascotImageRendering(expedition.mascot.pokemonId) }} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-sm font-bold text-slate-100">{mascotName}</p>
             <p className="text-[10px] uppercase tracking-widest text-blue-300">
