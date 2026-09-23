@@ -2251,8 +2251,9 @@ function hungerMinHours(status: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED",
 export async function feedAllAction(
   minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL",
   foodType: "FOOD" | "SWEET" | "RARE_SWEET" = "FOOD",
+  scope: "ALL" | "FAVORITES" = "ALL",
 ): Promise<{
-  error?: string; fed: number; skipped: number; noFood: boolean; expPending?: number;
+  error?: string; fed: number; skipped: number; noFood: boolean; noEligible?: boolean; expPending?: number;
 }> {
   const startedAt = Date.now();
   try {
@@ -2260,6 +2261,9 @@ export async function feedAllAction(
     if (!user) return { error: "Não autenticado.", fed: 0, skipped: 0, noFood: false };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado.", fed: 0, skipped: 0, noFood: false };
+    if (!["STARVING", "HUNGRY", "NEUTRAL", "SATISFIED"].includes(minHunger) || !["FOOD", "SWEET", "RARE_SWEET"].includes(foodType) || !["ALL", "FAVORITES"].includes(scope)) {
+      return { error: "Opções de alimentação inválidas.", fed: 0, skipped: 0, noFood: false };
+    }
 
     // Verifica estoque de comida/doce
     const food = await prisma.mascotFoodItem.findUnique({
@@ -2273,6 +2277,7 @@ export async function feedAllAction(
     const allMascots = await prisma.mascot.findMany({
       where: {
         playerId: player.id,
+        ...(scope === "FAVORITES" ? { isFavorite: true } : {}),
         arenaState: { notIn: ["INJURED", "ARENA"] },
       },
       select: { id: true, happiness: true, lastFedAt: true, isEquipped: true, personality: true },
@@ -2287,7 +2292,7 @@ export async function feedAllAction(
 
     const toFeed = mascots.slice(0, food.quantity); // não alimenta mais do que tem no estoque
     if (toFeed.length === 0) {
-      return { fed: 0, skipped: mascots.length, noFood: false };
+      return { fed: 0, skipped: 0, noFood: false, noEligible: true };
     }
 
     // Alimenta em batch
@@ -2306,8 +2311,7 @@ export async function feedAllAction(
         UPDATE "mascots" AS mascot
         SET "happiness" = batch."happiness",
             "mood" = 'HAPPY'::"MascotMood",
-            "lastFedAt" = ${now},
-            "updatedAt" = ${now}
+            "lastFedAt" = ${now}
         FROM (VALUES ${rows}) AS batch("id", "happiness", "lastFedAt")
         WHERE mascot."id" = batch."id"
           AND mascot."playerId" = ${player.id}
@@ -2325,10 +2329,15 @@ export async function feedAllAction(
       });
     });
     const transactionMs = Date.now() - transactionStartedAt;
-    after(async () => {
-      await processMascotExpGrantBatch(expJobIds);
-      for (const m of toFeed) await clearRunawayWarningIfRecovered(player.id, m.id).catch(() => {});
-    });
+    try {
+      after(async () => {
+        await processMascotExpGrantBatch(expJobIds);
+        for (const m of toFeed) await clearRunawayWarningIfRecovered(player.id, m.id).catch(() => {});
+      });
+    } catch (error) {
+      // O cron de EXP retoma os jobs gravados na mesma transação da alimentação.
+      console.warn("[feed-all] processamento imediato indisponível; cron retomará", { playerId: player.id, error });
+    }
 
     revalidateTag(`player-mascots-${player.id}`);
     console.info("[feed-all] accepted", { playerId: player.id, mascots: toFeed.length, transactionMs, durationMs: Date.now() - startedAt });

@@ -372,12 +372,13 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
 
     let autoSold: { itemName: string; coins: number } | undefined;
     await prisma.$transaction(async (tx) => {
-      const result = await applyGiftReward(tx, player.id, gift);
-      if (result.autoSold) autoSold = result.autoSold;
-      await tx.playerGift.update({
-        where: { id: giftId },
+      const claimed = await tx.playerGift.updateMany({
+        where: { id: giftId, playerId: player.id, status: GiftStatus.UNCLAIMED },
         data: { status: GiftStatus.CLAIMED, claimedAt: now },
       });
+      if (claimed.count !== 1) throw new Error("Presente já resgatado ou indisponível.");
+      const result = await applyGiftReward(tx, player.id, gift);
+      if (result.autoSold) autoSold = result.autoSold;
       await tx.auditLog.create({
         data: {
           actorUserId: user.id,
@@ -446,19 +447,20 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
     // Processa cada presente individualmente para que um erro não bloqueie todos os outros
     for (const gift of gifts) {
       try {
-        await prisma.$transaction(async (tx) => {
+        const wasClaimed = await prisma.$transaction(async (tx) => {
           const current = await tx.playerGift.findFirst({
             where: { id: gift.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
             select: { id: true, type: true, title: true, payload: true }
           });
-          if (!current) return;
+          if (!current) return false;
 
-          const result = await applyGiftReward(tx, player.id, current);
-          if (result.autoSold) autoSolds.push(result.autoSold);
-          await tx.playerGift.update({
-            where: { id: current.id },
+          const claimed = await tx.playerGift.updateMany({
+            where: { id: current.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
             data: { status: GiftStatus.CLAIMED, claimedAt: now },
           });
+          if (claimed.count !== 1) return false;
+          const result = await applyGiftReward(tx, player.id, current);
+          if (result.autoSold) autoSolds.push(result.autoSold);
           await tx.auditLog.create({
             data: {
               actorUserId: user.id,
@@ -484,8 +486,9 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
             after: { status: GiftStatus.CLAIMED, claimedAt: now.toISOString() },
             metadata: current.payload === null ? undefined : current.payload as Prisma.InputJsonValue,
           });
+          return true;
         });
-        claimedIds.push(gift.id);
+        if (wasClaimed) claimedIds.push(gift.id);
       } catch (err) {
         // Loga o erro mas continua com os demais presentes
         console.error(`[claimAllGifts] Erro ao resgatar presente ${gift.id}:`, err);

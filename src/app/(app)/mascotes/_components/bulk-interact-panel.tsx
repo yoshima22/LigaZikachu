@@ -132,15 +132,15 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const handleFeedAll = () => {
     startFeedAll(async () => {
       try {
-        const res = await feedAllAction(minHunger, feedType);
+        const res = await feedAllAction(minHunger, feedType, scope);
         if (res.error) { toast.error(res.error); return; }
         const feedLabel = feedType === "SWEET" ? "doces" : feedType === "RARE_SWEET" ? "doces raros" : "comida";
         if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); return; }
-        if (res.fed === 0) {
-          toast.info("Todos os mascotes já estão satisfeitos.");
+        if (res.noEligible || res.fed === 0) {
+          toast.info(`Nenhum mascote disponível está em “${HUNGER_OPTIONS.find((option) => option.value === minHunger)?.label} ou pior”. Mascotes no banco demoram mais para sentir fome.`);
         } else {
           const msg = res.skipped > 0
-            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. ${res.skipped} ${pluralMascot(res.skipped)} não precisou ou não pôde receber alimento.`
+            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. Faltou estoque para mais ${res.skipped} ${pluralMascot(res.skipped)} que atendiam ao filtro.`
             : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
           toast.success(msg);
           if (res.expPending) toast.info(`A experiência de ${res.expPending} ${pluralMascot(res.expPending)} está sendo aplicada. Você pode continuar jogando.`);
@@ -263,7 +263,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             className="flex min-h-[38px] items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
-            Alimentar Todos com {FEED_LABEL[feedType]}
+            {isFavoriteTeam ? "Alimentar Favoritos" : "Alimentar Todos"} com {FEED_LABEL[feedType]}
           </button>
         </div>
       </div>

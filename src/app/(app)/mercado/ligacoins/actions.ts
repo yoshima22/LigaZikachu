@@ -1,10 +1,74 @@
 "use server";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { isAdmin } from "@/lib/auth/permissions";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { CASH_PRODUCTS, professorEnguicaThankYou } from "@/lib/liga-cash";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
+
+const ligaCashGiftSchema = z.object({
+  recipientPlayerId: z.string().min(1),
+  amount: z.number().int().positive().max(1_000_000_000),
+  title: z.string().trim().min(1).max(80),
+  content: z.string().trim().min(1).max(350),
+});
+
+export async function sendLigaCashGift(input: z.infer<typeof ligaCashGiftSchema>): Promise<{ error?: string; ok?: true }> {
+  const parsed = ligaCashGiftSchema.safeParse(input);
+  if (!parsed.success) return { error: "Confira o valor, o título (até 80 caracteres) e a mensagem (até 350 caracteres)." };
+  const user = await getSessionUser();
+  if (!user) return { error: "Faça login novamente." };
+  const sender = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true, displayName: true } });
+  if (!sender) return { error: "Jogador não encontrado." };
+  const { recipientPlayerId, amount, title, content } = parsed.data;
+  if (recipientPlayerId === sender.id) return { error: "Escolha outro jogador para presentear." };
+  const recipient = await prisma.player.findFirst({
+    where: { id: recipientPlayerId, user: { status: "ACTIVE" } },
+    select: { id: true, userId: true },
+  });
+  if (!recipient) return { error: "Destinatário não encontrado ou inativo." };
+
+  try {
+    await prisma.$transaction(async (tx) => {
+      const debited = await tx.ligaCoinWallet.updateMany({
+        where: { playerId: sender.id, balance: { gte: amount } },
+        data: { balance: { decrement: amount } },
+      });
+      if (debited.count !== 1) throw new Error("Saldo insuficiente de LigaCash.");
+      const wallet = await tx.ligaCoinWallet.findUniqueOrThrow({ where: { playerId: sender.id }, select: { balance: true } });
+      const gift = await tx.playerGift.create({
+        data: {
+          playerId: recipient.id,
+          type: "CUSTOM",
+          title,
+          description: content,
+          payload: {
+            rewardKind: "LIGA_CASH",
+            amount,
+            rewardLabel: `${amount.toLocaleString("pt-BR")} LC`,
+            ligaCashReason: "PLAYER_GIFT",
+            senderPlayerId: sender.id,
+            senderName: sender.displayName,
+          },
+        },
+      });
+      await tx.ligaCashLedger.create({
+        data: { playerId: sender.id, amount: -amount, balanceAfter: wallet.balance, reason: "PLAYER_GIFT_SENT", referenceType: "PlayerGift", referenceId: gift.id, actorUserId: user.id, metadata: { recipientPlayerId: recipient.id, title } },
+      });
+      await tx.auditLog.create({
+        data: { actorUserId: user.id, entityType: "PlayerGift", entityId: gift.id, action: "ligacash.gift_sent", after: { senderPlayerId: sender.id, recipientPlayerId: recipient.id, amount, title } },
+      });
+    });
+    revalidatePath("/mercado/ligacoins");
+    revalidatePath("/carteira");
+    revalidatePath("/caixa-de-presentes");
+    revalidateTag(`nav-${recipient.userId}`);
+    return { ok: true };
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível enviar o presente." };
+  }
+}
 
 /**
  * DEBUG (admin): simula uma compra bem-sucedida. Credita realisticamente o valor

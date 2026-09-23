@@ -25,6 +25,8 @@ const giftTypeLabels: Record<GiftType, string> = {
 };
 
 interface BoosterPayload {
+  rewardKind?: string;
+  senderName?: string;
   code?: string;
   boosterCodeId?: string;
   distributionId?: string | null;
@@ -114,6 +116,7 @@ export default async function GiftBoxPage() {
           {gifts.map((gift) => {
             const status = giftStatusMap[gift.status];
             const payload = getBoosterPayload(gift.payload);
+            const playerCashGift = payload.rewardKind === "LIGA_CASH" && Boolean(payload.senderName);
             const registeredRewardName = payload.buffType
               ? buffNameByType.get(payload.buffType as ShopItemType)
               : null;
@@ -127,14 +130,17 @@ export default async function GiftBoxPage() {
               <Card key={gift.id} className="flex flex-col gap-4">
                 <div className="flex items-start justify-between gap-3">
                   <div>
-                    <p className="text-xs uppercase tracking-widest text-slate-500">{giftTypeLabels[gift.type]}</p>
+                    <p className="text-xs uppercase tracking-widest text-slate-500">{playerCashGift ? `LigaCash de ${payload.senderName}` : giftTypeLabels[gift.type]}</p>
                     <h2 className="mt-1 text-base font-semibold text-white">{title}</h2>
                   </div>
                   <StatusBadge variant={status.variant} label={status.label} />
                 </div>
 
                 {gift.description && gift.description !== rewardDetail && (
-                  <p className="text-sm text-slate-300">{gift.description}</p>
+                  <div className={playerCashGift ? "rounded-xl border border-cyan-300/20 bg-cyan-300/5 p-3" : ""}>
+                    {playerCashGift && <p className="mb-1 text-[10px] font-bold uppercase tracking-widest text-cyan-200">Mensagem de {payload.senderName}</p>}
+                    <p className="whitespace-pre-wrap break-words text-sm text-slate-300">{gift.description}</p>
+                  </div>
                 )}
 
                 {rewardDetail && (
