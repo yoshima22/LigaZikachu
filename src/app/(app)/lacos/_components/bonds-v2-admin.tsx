@@ -8,6 +8,7 @@ import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, Im
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import Link from "next/link";
 import { FAILED_DISTANCE_COOLDOWN_MS, FAILED_DISTANCE_MEMORY_TYPE } from "@/lib/bond-distance-cooldown";
+import { RefugeRecentHistory } from "./refuge-recent-history";
 
 function mascotName(mascot: { pokemonId: number; nickname: string | null }) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
@@ -120,6 +121,15 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     ? rawSettings.backgrounds as Record<string, unknown>
     : {};
   const recentMemories = memoriesByLocation.flat().sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()).slice(0, 30);
+  const recentHistoryEntries = recentMemories.map((memory) => ({
+    id: memory.id,
+    category: ({ REFUGE: "Refúgio", REFUGE_REWARD: "Recompensa do Refúgio", BOND_MANAGEMENT: "Gestão de vínculo", SOCIAL: "Interação social", COMBAT: "Combate", TRAINING: "Treino", EXPEDITION: "Expedição" } as Record<string, string>)[memory.sourceType] ?? "Acontecimento",
+    intensity: memory.intensity,
+    title: memory.title,
+    description: memory.description,
+    participants: `${mascotName(memory.mascotA)}${memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""}`,
+    when: memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" }),
+  }));
   const changedRelations = relations.filter((relation) => relation.updatedAt >= since).length;
   const activeCount = relations.filter((relation) => relation.isActive).length;
   const ownMascots = mascots.map((mascot) => ({
@@ -307,7 +317,7 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
 
     <section className="grid gap-6 xl:grid-cols-[1.15fr_.85fr]">
       <div><div className="mb-3"><p className="text-[10px] font-bold uppercase tracking-[.2em] text-fuchsia-300">Rede social dos mascotes</p><h2 className="text-xl font-black text-white">Laços e efeitos</h2><p className="mt-1 text-xs text-slate-500">Relações são direcionais: o que um mascote sente pode não ser correspondido.</p></div><BondDirectoryV2 relations={bondItems} /></div>
-      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias recentes do Refúgio</h2><p className="text-xs text-slate-500">Resumo cronológico; o diário completo e filtrável fica dentro de cada região.</p></div></div><div className="relative space-y-3 border-l border-fuchsia-400/20 pl-4">{recentMemories.length === 0 ? <Empty text="Simule um momento no Refúgio para iniciar o diário." /> : recentMemories.map((memory) => <article key={memory.id} className="relative rounded-xl border border-white/10 bg-slate-950/70 p-3 before:absolute before:-left-[21px] before:top-5 before:h-2 before:w-2 before:rounded-full before:bg-fuchsia-400"><p className="text-[10px] uppercase tracking-wider text-fuchsia-300">{({ REFUGE: "Refúgio", REFUGE_REWARD: "Recompensa do Refúgio", BOND_MANAGEMENT: "Gestão de vínculo", SOCIAL: "Interação social", COMBAT: "Combate", TRAINING: "Treino", EXPEDITION: "Expedição" } as Record<string, string>)[memory.sourceType] ?? "Acontecimento"} · intensidade {memory.intensity}</p><h3 className="mt-1 text-sm font-bold text-white">{memory.title}</h3><p className="mt-1 text-xs leading-5 text-slate-400">{memory.description}</p><div className="mt-2 rounded-lg bg-white/[.025] px-2 py-1.5 text-[10px] text-slate-500">{mascotName(memory.mascotA)}{memory.mascotB ? ` com ${mascotName(memory.mascotB)}` : ""} · {memory.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</div></article>)}</div></div>
+      <div><div className="mb-3 flex items-center gap-2"><Archive size={16} className="text-amber-300" /><div><h2 className="font-bold text-white">Histórias recentes do Refúgio</h2><p className="text-xs text-slate-500">Resumo cronológico; o diário completo e filtrável fica dentro de cada região.</p></div></div><RefugeRecentHistory entries={recentHistoryEntries} /></div>
     </section>
       </div>}
     />
