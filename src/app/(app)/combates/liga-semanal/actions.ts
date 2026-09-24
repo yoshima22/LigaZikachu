@@ -894,7 +894,7 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
         await tx.weeklyMascotLeagueDailyTeam.upsert({
           where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slotA } },
           create: { id: createId(), leagueId, playerId: player!.id, battleDate, battleSlot: slotA, mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
-          update: { mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, updatedAt: new Date() },
+          update: { mascotIdsJson: teamB.mascotIdsJson as any, rolesJson: teamB.rolesJson as any, source: "MANUAL", updatedAt: new Date() },
         });
       } else {
         await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate, battleSlot: slotA } });
@@ -905,7 +905,7 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
         await tx.weeklyMascotLeagueDailyTeam.upsert({
           where: { leagueId_playerId_battleDate_battleSlot: { leagueId, playerId: player!.id, battleDate, battleSlot: slotB } },
           create: { id: createId(), leagueId, playerId: player!.id, battleDate, battleSlot: slotB, mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, lockedAt: new Date(), updatedAt: new Date() },
-          update: { mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, updatedAt: new Date() },
+          update: { mascotIdsJson: teamA.mascotIdsJson as any, rolesJson: teamA.rolesJson as any, source: "MANUAL", updatedAt: new Date() },
         });
       } else {
         await tx.weeklyMascotLeagueDailyTeam.deleteMany({ where: { leagueId, playerId: player!.id, battleDate, battleSlot: slotB } });
@@ -1030,7 +1030,7 @@ export async function swapTeamMascotPositionsAction(
           lockedAt: new Date(),
           updatedAt: new Date(),
         },
-        update: { mascotIdsJson: sourceIds, rolesJson: sourceRoles, lockedAt: new Date(), updatedAt: new Date() },
+        update: { mascotIdsJson: sourceIds, rolesJson: sourceRoles, source: "MANUAL", lockedAt: new Date(), updatedAt: new Date() },
       });
 
       if (toSlot !== fromSlot) {
@@ -1047,7 +1047,7 @@ export async function swapTeamMascotPositionsAction(
             lockedAt: new Date(),
             updatedAt: new Date(),
           },
-          update: { mascotIdsJson: targetIds, rolesJson: targetRoles, lockedAt: new Date(), updatedAt: new Date() },
+          update: { mascotIdsJson: targetIds, rolesJson: targetRoles, source: "MANUAL", lockedAt: new Date(), updatedAt: new Date() },
         });
       }
     });

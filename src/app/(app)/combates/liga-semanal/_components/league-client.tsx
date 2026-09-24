@@ -1163,7 +1163,10 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
         const nextSlot = slot < 3 ? slot + 1 : null;
         const team = data.myTeams.find((t: any) => t.battleSlot === slot);
         const mascotIds = team ? (team.mascotIdsJson as string[] ?? []) : [];
-        const isCleared = team?.source === "CLEARED" || (team && mascotIds.length === 0);
+        // "Limpo" = slot sem mascotes. Um slot com mascotes é um time real mesmo
+        // que o `source` tenha ficado como CLEARED (estado inconsistente antigo);
+        // o combate já usa o time quando há mascotes (checa mascotIdsJson, não o source).
+        const isCleared = !!team && mascotIds.length === 0;
         const hasTeam = team && mascotIds.length > 0;
         const teamRoles = team?.rolesJson as Record<string, string> | undefined;
         // Aviso: em divisão Limitada, megas além do 2º ficam inválidos (serão
