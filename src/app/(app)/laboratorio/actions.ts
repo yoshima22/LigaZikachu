@@ -14,6 +14,7 @@ import { calculateLabDust } from "./dust";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
 
 // A primeira análise desbloqueia simulações gratuitas permanentes para o mascote.
 const ANALYSIS_COST = 100;
@@ -103,17 +104,6 @@ async function getOrCreateMonthlyUsage(playerId: string) {
   });
 }
 
-async function getWeeklyLeagueLockedMascotIds(playerId: string) {
-  const teams = await prisma.weeklyMascotLeagueDailyTeam.findMany({
-    where: {
-      playerId,
-      league: { status: { in: ["REGISTRATION", "ACTIVE"] } },
-    },
-    select: { mascotIdsJson: true },
-  });
-  return new Set(teams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []));
-}
-
 // ── Page data ─────────────────────────────────────────────────────────────────
 export async function getLabDataAction() {
   const me = await requirePlayer();
@@ -143,7 +133,7 @@ export async function getLabDataAction() {
 
   const [wallet, weeklyLeagueLockedIds] = await Promise.all([
     getOrCreateWallet(me.id),
-    getWeeklyLeagueLockedMascotIds(me.id),
+    getWeeklyLeagueLockedMascotIds(prisma, me.id),
   ]);
 
   const mascotList = mascots.map((m) => {
@@ -328,7 +318,7 @@ export async function recycleMascotAction(mascotId: string) {
   if (mascot.arenaState && mascot.arenaState !== "FREE") {
     return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
   }
-  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(me.id);
+  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(prisma, me.id);
   if (weeklyLeagueLockedIds.has(mascot.id)) {
     return { ok: false as const, error: "Mascote esta escalado na Liga Semanal. Remova ou altere o time antes de reciclar." };
   }
@@ -381,7 +371,7 @@ export async function recycleMascotsAction(mascotIds: string[]) {
   if (blocked?.bazarListed) return { ok: false as const, error: "Retire mascotes do Bazar antes de reciclar." };
   if (blocked) return { ok: false as const, error: "Mascote esta em batalha ou descansando." };
 
-  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(me.id);
+  const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(prisma, me.id);
   if (mascots.some((mascot) => weeklyLeagueLockedIds.has(mascot.id))) {
     return { ok: false as const, error: "Um dos mascotes esta escalado na Liga Semanal. Remova ou altere o time antes de reciclar." };
   }
