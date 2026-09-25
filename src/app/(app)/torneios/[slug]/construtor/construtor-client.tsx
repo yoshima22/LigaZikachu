@@ -2,12 +2,16 @@
 
 import { useEffect, useState, useTransition, useCallback } from "react";
 import { toast } from "sonner";
-import { Check, Clock, Swords } from "lucide-react";
-import { getConstrutorStateAction, pickOpponentDeckAction, type ConstrutorMatchView } from "./actions";
+import { Check, Clock, Swords, Lock } from "lucide-react";
+import { getConstrutorStateAction, pickOpponentDeckAction, saveConstrutorDecksAction, type ConstrutorMatchView } from "./actions";
 
-export function ConstrutorClient({ weekId, slug, weekNumber }: { weekId: string; slug: string; weekNumber: number }) {
+type DeckForm = { slot: number; name: string; deckList: string; archetype: string };
+const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "" }));
+
+export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: string; weekNumber: number }) {
   const [loading, setLoading] = useState(true);
-  const [myDecks, setMyDecks] = useState<{ deckNumber: number; name: string; archetype: string | null }[]>([]);
+  const [decks, setDecks] = useState<DeckForm[]>(emptyDecks());
+  const [decksLocked, setDecksLocked] = useState(false);
   const [matches, setMatches] = useState<ConstrutorMatchView[]>([]);
   const [pending, start] = useTransition();
 
@@ -15,15 +19,34 @@ export function ConstrutorClient({ weekId, slug, weekNumber }: { weekId: string;
     setLoading(true);
     getConstrutorStateAction(weekId).then((res) => {
       if (res.error) { toast.error(res.error); return; }
-      setMyDecks(res.myDecks ?? []);
+      if (res.myDecks && res.myDecks.length > 0) {
+        setDecks(emptyDecks().map((d) => {
+          const found = res.myDecks!.find((x) => x.slot === d.slot);
+          return found ? { slot: d.slot, name: found.name, deckList: found.deckList, archetype: found.archetype ?? "" } : d;
+        }));
+      }
+      setDecksLocked(Boolean(res.decksLocked));
       setMatches(res.matches ?? []);
     }).finally(() => setLoading(false));
   }, [weekId]);
 
   useEffect(() => { load(); }, [load]);
 
-  const pick = (matchId: string, deckSubmissionId: string) => start(async () => {
-    const res = await pickOpponentDeckAction({ matchId, deckSubmissionId });
+  const setDeck = (slot: number, patch: Partial<DeckForm>) =>
+    setDecks((prev) => prev.map((d) => (d.slot === slot ? { ...d, ...patch } : d)));
+
+  const saveDecks = () => start(async () => {
+    const res = await saveConstrutorDecksAction({
+      tournamentWeekId: weekId,
+      decks: decks.map((d) => ({ slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype || null })),
+    });
+    if (res.error) { toast.error(res.error); return; }
+    toast.success("3 decks registrados!");
+    load();
+  });
+
+  const pick = (matchId: string, deckId: string) => start(async () => {
+    const res = await pickOpponentDeckAction({ matchId, deckId });
     if (res.error) { toast.error(res.error); return; }
     toast.success("Deck do adversário escolhido!");
     load();
@@ -31,26 +54,35 @@ export function ConstrutorClient({ weekId, slug, weekNumber }: { weekId: string;
 
   if (loading) return <div className="rounded-2xl border border-border bg-slate-950/60 p-6 text-center text-sm text-slate-500">Carregando…</div>;
 
-  const registered = myDecks.length >= 3;
-
   return (
     <div className="space-y-5">
-      {/* Seus decks (registrados na janela padrão da semana) */}
+      {/* Registro dos 3 decks */}
       <div className="rounded-2xl border border-border bg-slate-950/60 p-4">
-        <div className="mb-2 flex items-center justify-between gap-2">
+        <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-white">Seus 3 decks</h3>
-          <a href={`/torneios/${slug}/semanas/${weekNumber}`} className="text-[11px] font-bold text-[#FFCB05] hover:underline">Registrar/editar na janela da semana →</a>
+          {decksLocked && <span className="flex items-center gap-1 text-[11px] font-bold text-amber-300"><Lock size={11} /> Em jogo — bloqueado</span>}
         </div>
-        {registered ? (
-          <div className="flex flex-wrap gap-2">
-            {myDecks.map((d) => (
-              <span key={d.deckNumber} className="rounded-lg border border-white/10 bg-slate-900/60 px-2.5 py-1 text-[11px] text-slate-200">
-                <span className="font-black text-[#FFCB05]">Deck {d.deckNumber}:</span> {d.name}{d.archetype ? ` · ${d.archetype}` : ""}
-              </span>
-            ))}
-          </div>
-        ) : (
-          <p className="text-[11px] text-amber-300">Você ainda não registrou os 3 decks. Use a janela normal da semana (botão acima) — o modo Construtor pede exatamente 3 decks.</p>
+        <div className="space-y-3">
+          {decks.map((d) => (
+            <div key={d.slot} className="rounded-xl border border-white/10 bg-slate-900/50 p-3">
+              <p className="mb-2 text-[11px] font-black uppercase tracking-wide text-[#FFCB05]">Deck {d.slot}</p>
+              <div className="grid gap-2 sm:grid-cols-2">
+                <input value={d.name} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { name: e.target.value })}
+                  placeholder="Nome do deck" className="rounded-lg border border-white/10 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50" />
+                <input value={d.archetype} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { archetype: e.target.value })}
+                  placeholder="Arquétipo (opcional)" className="rounded-lg border border-white/10 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50" />
+              </div>
+              <textarea value={d.deckList} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { deckList: e.target.value })}
+                placeholder="Lista do deck" rows={3}
+                className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50" />
+            </div>
+          ))}
+        </div>
+        {!decksLocked && (
+          <button onClick={saveDecks} disabled={pending}
+            className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-black text-slate-900 hover:brightness-95 disabled:opacity-50">
+            Salvar os 3 decks
+          </button>
         )}
       </div>
 
@@ -87,7 +119,7 @@ export function ConstrutorClient({ weekId, slug, weekNumber }: { weekId: string;
                       {m.opponentDeckOptions.map((o) => (
                         <button key={o.id} disabled={pending || !m.iCanPick} onClick={() => pick(m.matchId, o.id)}
                           className="rounded-lg border border-rose-400/40 bg-rose-500/10 px-3 py-1.5 text-[11px] font-bold text-rose-200 hover:border-rose-300/60 disabled:opacity-40">
-                          Deck {o.deckNumber}: {o.name}{o.archetype ? ` · ${o.archetype}` : ""}
+                          Deck {o.slot}: {o.name}{o.archetype ? ` · ${o.archetype}` : ""}
                         </button>
                       ))}
                     </div>
