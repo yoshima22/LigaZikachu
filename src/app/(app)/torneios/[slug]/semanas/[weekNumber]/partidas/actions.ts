@@ -708,6 +708,9 @@ export async function chooseMatchDeck(input: z.infer<typeof deckChoiceSchema>) {
     include: { tournamentWeek: { include: { tournament: true } } },
   });
   if (!match?.tournamentWeek) throw new Error("Partida nao encontrada");
+  if (match.tournamentWeek.mode === "CONSTRUTOR_MISTERIOSO") {
+    throw new Error("Semana no modo Construtor: registre 3 decks e deixe o adversário escolher. O envio de deck por partida está desativado.");
+  }
   if (isDeckRegistrationLocked(match.tournamentWeek)) {
     throw new Error("O bloqueio de decks já aconteceu. Não é mais possível trocar o deck desta partida.");
   }

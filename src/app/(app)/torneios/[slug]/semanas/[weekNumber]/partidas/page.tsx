@@ -15,6 +15,7 @@ import { EnguicaContractPanel } from "./_components/enguica-contract-panel";
 import { getSpecConfig } from "@/lib/spec/config";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { AdminDeckManager } from "./_components/admin-deck-manager";
+import { ConstrutorClient } from "../../../construtor/construtor-client";
 
 interface Props {
   params: Promise<{ slug: string; weekNumber: string }>;
@@ -255,6 +256,7 @@ export default async function PartidasPage({ params }: Props) {
     week
   }));
   const weekOpen = canSendDecks;
+  const isConstrutor = week.mode === "CONSTRUTOR_MISTERIOSO";
 
   return (
     <div className="space-y-6">
@@ -366,7 +368,7 @@ export default async function PartidasPage({ params }: Props) {
                   match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${globalIdx}` }}
                   currentPlayerId={player.id}
                   isAdmin={isAdmin}
-                  deckSelectionLocked={!canSendDecks}
+                  deckSelectionLocked={!canSendDecks || isConstrutor}
                   showDeckIntent={showDeckIntent}
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
@@ -377,8 +379,13 @@ export default async function PartidasPage({ params }: Props) {
             })}
           </div>
 
-          {/* Envio de deck por partida */}
-          {(weekOpen || myMatches.some(m =>
+          {/* Modo Construtor: registro de 3 decks + escolha do adversário, dentro da semana */}
+          {isConstrutor && (
+            <ConstrutorClient weekId={week.id} slug={slug} weekNumber={weekNum} />
+          )}
+
+          {/* Envio de deck por partida (modelo padrão — não usado no modo Construtor) */}
+          {!isConstrutor && (weekOpen || myMatches.some(m =>
             (m.playerAId === player.id && m.playerADeckSubmissionId) ||
             (m.playerBId === player.id && m.playerBDeckSubmissionId)
           )) && (
@@ -459,7 +466,7 @@ export default async function PartidasPage({ params }: Props) {
               match={{ ...match, roundLabel: match.roundLabel ?? `Partida ${num}` }}
               currentPlayerId={player?.id}
               isAdmin={isAdmin}
-              deckSelectionLocked={!canSendDecks}
+              deckSelectionLocked={!canSendDecks || isConstrutor}
               showDeckIntent={showDeckIntent}
               tournamentFormat={tournament.format}
               canReportResult={canReportAnyInPersonMatch}
