@@ -1637,27 +1637,32 @@ export async function getRoomsData(viewerPlayerId?: string) {
 export async function getTopArenaPlayers() {
   const teams = await getActiveArenaTeams();
 
+  // Tempo na arena = tempo de parede desde a PRIMEIRA entrada do jogador, não a
+  // soma por equipe (3 times por 1h = 1h na arena, não 3h).
   const playerStats = new Map<
     string,
-    { displayName: string; teamCount: number; totalHours: number }
+    { displayName: string; teamCount: number; firstEnteredMs: number }
   >();
   for (const t of teams) {
-    const hours = (Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000;
+    const enteredMs = new Date(t.enteredAt).getTime();
     const prev = playerStats.get(t.player.id);
     if (prev) {
       prev.teamCount++;
-      prev.totalHours += hours;
+      prev.firstEnteredMs = Math.min(prev.firstEnteredMs, enteredMs);
     } else {
       playerStats.set(t.player.id, {
         displayName: t.player.displayName,
         teamCount: 1,
-        totalHours: hours,
+        firstEnteredMs: enteredMs,
       });
     }
   }
 
   return [...playerStats.entries()]
-    .map(([id, s]) => ({ id, ...s, score: s.teamCount * 100 + s.totalHours }))
+    .map(([id, s]) => {
+      const totalHours = (Date.now() - s.firstEnteredMs) / 3_600_000;
+      return { id, displayName: s.displayName, teamCount: s.teamCount, totalHours, score: s.teamCount * 100 + totalHours };
+    })
     .sort((a, b) => b.score - a.score)
     .slice(0, 2);
 }
