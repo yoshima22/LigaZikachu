@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
+import { computePickAvailability } from "./rules";
 
 // Modo Construtor (Semana 6): cada jogador registra 3 decks; o adversário de
 // cada partida escolhe qual deck o jogador usará. O deck usado no Jogo 1 sai da
@@ -36,25 +37,6 @@ async function orderedMatchesForPlayer(tournamentWeekId: string, playerId: strin
     select: { id: true, playerAId: true, playerBId: true, roundLabel: true, scheduledAt: true },
   });
   return matches;
-}
-
-/**
- * Núcleo da regra (puro/testável): dada a ordem das partidas do alvo, os decks
- * já escolhidos por partida e o deck atual, resolve espera/uso/disponibilidade.
- */
-export function computePickAvailability(
-  orderedMatchIds: string[],
-  currentMatchId: string,
-  pickByMatch: Map<string, string>,
-  deckIds: string[],
-): { gameIndex: number; waiting: boolean; usedDeckIds: string[]; availableDeckIds: string[]; currentPick: string | null } {
-  const gameIndex = orderedMatchIds.indexOf(currentMatchId);
-  const previous = gameIndex > 0 ? orderedMatchIds.slice(0, gameIndex) : [];
-  // Espera: todo jogo anterior do alvo precisa já ter deck escolhido.
-  const waiting = previous.some((id) => !pickByMatch.has(id));
-  const usedDeckIds = previous.map((id) => pickByMatch.get(id)).filter((id): id is string => Boolean(id));
-  const availableDeckIds = deckIds.filter((id) => !usedDeckIds.includes(id));
-  return { gameIndex, waiting, usedDeckIds, availableDeckIds, currentPick: pickByMatch.get(currentMatchId) ?? null };
 }
 
 /** Estado de escolha do deck do `targetId` para a partida `matchId`. */

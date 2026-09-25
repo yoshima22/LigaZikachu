@@ -6,7 +6,7 @@ import type { WeekMode } from "@/components/ui/poke/week-mode-badge";
 import { TrainerAvatar } from "@/components/ui/poke/trainer-avatar";
 import { Button } from "@/components/ui/button";
 import Link from "next/link";
-import { Award, CalendarDays, ChevronRight, Crown, Megaphone, Settings, Swords, Trophy, Users } from "lucide-react";
+import { Award, CalendarDays, ChevronRight, Crown, Hammer, Megaphone, Settings, Swords, Trophy, Users } from "lucide-react";
 import type { RegistrationStatus } from "@prisma/client";
 import { RegisterButton } from "./_components/register-button";
 import { TournamentNarrativePanel } from "./_components/tournament-narrative-panel";
@@ -191,6 +191,12 @@ export default async function TorneioDetailPage({
               <Link href={`/torneios/${slug}/desafios`}>
                 <Swords size={14} className="mr-1" />
                 Desafios
+              </Link>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <Link href={`/torneios/${slug}/construtor`}>
+                <Hammer size={14} className="mr-1" />
+                Construtor
               </Link>
             </Button>
             <RegisterButton
