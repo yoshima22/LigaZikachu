@@ -372,10 +372,26 @@ function normalizeMascotSearch(value: string) {
     .replace(/[^a-z0-9]+/g, "");
 }
 
-function findPokemonIdsByType(type: string) {
+/**
+ * IDs de espécie cujo tipo EFETIVO inclui `type`, respeitando as correções de
+ * tipo feitas pelo admin (PokemonSpeciesDefinition tem prioridade sobre a tabela
+ * estática). Usado como fallback só para mascotes sem override próprio.
+ */
+async function findPokemonIdsByType(type: string) {
   const normalized = type.trim().toLowerCase();
   if (!normalized) return [];
-  return POKEMON_ID_POOL.filter((id) => getPokemonTypes(id).includes(normalized));
+  const defs = await prisma.pokemonSpeciesDefinition.findMany({
+    select: { pokemonId: true, primaryType: true, secondaryType: true },
+  });
+  const overridden = new Map(defs.map((d) => [d.pokemonId, [d.primaryType, d.secondaryType].filter(Boolean) as string[]]));
+  const ids = new Set<number>();
+  for (const id of POKEMON_ID_POOL) {
+    const types = overridden.get(id) ?? getPokemonTypes(id);
+    if (types.includes(normalized)) ids.add(id);
+  }
+  // Espécies customizadas (id >= 200000) não estão no POKEMON_ID_POOL.
+  for (const [id, types] of overridden) if (types.includes(normalized)) ids.add(id);
+  return [...ids];
 }
 
 /**
@@ -1975,8 +1991,17 @@ export async function getBankMascotsPageAction(input?: {
     }
 
     if (type) {
-      const pokemonIds = findPokemonIdsByType(type);
-      and.push(pokemonIds.length > 0 ? { pokemonId: { in: pokemonIds } } : { id: "__no_match__" });
+      // Respeita a correção de tipo por mascote (override) e a da espécie.
+      // Mascote com override próprio casa pelo override; sem override, cai no
+      // tipo efetivo da espécie (def do admin > tabela estática).
+      const pokemonIds = await findPokemonIdsByType(type);
+      and.push({
+        OR: [
+          { primaryTypeOverride: type },
+          { secondaryTypeOverride: type },
+          { AND: [{ primaryTypeOverride: null }, { pokemonId: { in: pokemonIds.length > 0 ? pokemonIds : [-1] } }] },
+        ],
+      });
     }
 
     switch (ocup) {

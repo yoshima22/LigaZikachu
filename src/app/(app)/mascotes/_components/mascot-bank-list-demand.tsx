@@ -5,6 +5,7 @@ import { Candy, ChevronDown, ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRi
 import { toast } from "sonner";
 import { SweetKindMenu, type SweetKind } from "./sweet-kind-menu";
 import { getHungerStatus, getMascotRarity, getPokemonName, getPokemonTypes, MOOD_EMOJI, PERSONALITY_LABEL, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
+import { TypeBadges } from "@/components/mascot/type-badges";
 import { mascotOriginIcon, HUNGER_ICON_URL } from "@/lib/mascot-origin-icons";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
@@ -49,26 +50,6 @@ const TYPE_LABELS: Record<string, string> = {
   ground: "Terra", rock: "Pedra", flying: "Voador", bug: "Inseto", ice: "Gelo",
 };
 
-const TYPE_COLORS: Record<string, string> = {
-  normal: "bg-slate-500/25 text-slate-300 border-slate-500/30",
-  fire: "bg-orange-500/20 text-orange-300 border-orange-500/30",
-  water: "bg-blue-500/20 text-blue-300 border-blue-500/30",
-  grass: "bg-green-500/20 text-green-300 border-green-500/30",
-  electric: "bg-yellow-400/20 text-yellow-300 border-yellow-400/30",
-  psychic: "bg-pink-500/20 text-pink-300 border-pink-500/30",
-  fighting: "bg-red-600/20 text-red-300 border-red-600/30",
-  dark: "bg-slate-700/40 text-slate-400 border-slate-600/30",
-  steel: "bg-slate-400/20 text-slate-300 border-slate-400/30",
-  dragon: "bg-indigo-500/20 text-indigo-300 border-indigo-500/30",
-  fairy: "bg-pink-400/20 text-pink-200 border-pink-400/30",
-  ghost: "bg-purple-600/20 text-purple-300 border-purple-600/30",
-  poison: "bg-purple-500/20 text-purple-300 border-purple-500/30",
-  ground: "bg-amber-600/20 text-amber-300 border-amber-600/30",
-  rock: "bg-stone-500/20 text-stone-300 border-stone-500/30",
-  flying: "bg-sky-500/20 text-sky-300 border-sky-500/30",
-  bug: "bg-lime-500/20 text-lime-300 border-lime-500/30",
-  ice: "bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
-};
 
 const BANK_TYPE_OPTIONS = [
   "normal", "fire", "water", "grass", "electric", "psychic", "fighting",
@@ -403,11 +384,7 @@ function BankRow({
               </span>
               <span className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[10px] text-slate-500">Nv.{mascot.level}</span>
-                {types.map((type) => (
-                  <span key={type} className={`rounded border px-1.5 py-px text-[9px] font-bold ${TYPE_COLORS[type] ?? "bg-slate-500/20 text-slate-400 border-slate-500/20"}`}>
-                    {TYPE_LABELS[type] ?? type}
-                  </span>
-                ))}
+                <TypeBadges types={types} />
                 <span className="text-[10px] text-slate-600">{MOOD_EMOJI[localMood] ?? "-"} {localMood}</span>
               </span>
             </span>
