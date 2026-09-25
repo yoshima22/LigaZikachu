@@ -12,6 +12,7 @@ import {
 } from "@/lib/decks";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
+import { ConstrutorClient } from "../../construtor/construtor-client";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
 import { applyTournamentWeekBonus, setTournamentWeekTeam, updateTournamentWeekSettings } from "../../../actions";
 import { NarrativePanel } from "./_components/narrative-panel";
@@ -754,23 +755,13 @@ export default async function WeekDetailPage({
         </div>
 
         {week.mode === "CONSTRUTOR_MISTERIOSO" ? (
-          <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 space-y-3">
-            <div className="flex items-start gap-3">
-              <span className="text-xl">🔨</span>
-              <div>
-                <p className="text-sm font-semibold text-[#FFCB05]">Modo Construtor — registre 3 decks</p>
-                <p className="text-xs text-slate-400 mt-0.5">
-                  Nesta semana você registra 3 decks e o adversário escolhe qual você usa em cada partida. O registro é feito na página do Construtor.
-                </p>
-              </div>
-            </div>
-            <Link
-              href={`/torneios/${tournament.slug}/construtor`}
-              className="inline-flex items-center gap-2 rounded-lg bg-[#FFCB05] px-4 py-2 text-xs font-semibold text-[#1A1A2E] hover:bg-[#FFD700] transition-colors"
-            >
-              Ir para o Construtor →
-            </Link>
-          </div>
+          !player && !admin ? (
+            <p className="text-sm text-slate-500">
+              Entre com uma conta de jogador para registrar seus 3 decks.
+            </p>
+          ) : (
+            <ConstrutorClient weekId={week.id} slug={tournament.slug} weekNumber={weekNum} />
+          )
         ) : !player && !admin ? (
           <p className="text-sm text-slate-500">
             Entre com uma conta de jogador para se inscrever e enviar decklist.
