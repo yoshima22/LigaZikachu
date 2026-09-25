@@ -776,6 +776,38 @@ model TournamentWeek {
   @@map("tournament_weeks")
 }
 
+// ── Modo Construtor (Semana 6): 3 decks por jogador; o adversário escolhe qual
+// deck o jogador usa em cada partida; deck já usado sai da escolha seguinte. ──
+model ConstrutorDeck {
+  id               String   @id @default(cuid())
+  tournamentWeekId String
+  playerId         String
+  slot             Int // 1..3
+  name             String
+  deckList         String   @db.Text
+  archetype        String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  @@unique([tournamentWeekId, playerId, slot])
+  @@index([tournamentWeekId, playerId])
+  @@map("construtor_decks")
+}
+
+// Escolha, pelo adversário, do deck que o jogador-alvo usará numa partida.
+model ConstrutorPick {
+  id             String   @id @default(cuid())
+  matchId        String
+  targetPlayerId String // dono do deck escolhido (quem vai jogar com ele)
+  pickerPlayerId String // adversário que escolheu
+  deckId         String // ConstrutorDeck.id escolhido
+  createdAt      DateTime @default(now())
+
+  @@unique([matchId, targetPlayerId])
+  @@index([targetPlayerId])
+  @@map("construtor_picks")
+}
+
 // Inscrição de jogador em torneio
 model TournamentRegistration {
   id           String             @id @default(cuid())
