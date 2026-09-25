@@ -883,7 +883,11 @@ function runArenaCombatInternal(
   let round = previous?.round ?? 1;
   let guard: { team: "A" | "D"; reduction: number } | null =
     previous?.guard ?? null;
-  const maxTurns = options.maxTurns ?? 80;
+  // Alto o bastante para o combate resolver por nocaute (curas são limitadas e o
+  // dano é sempre >=1, então sempre termina antes disso). O desempate por HP só
+  // entra no caso patológico de bater neste teto. Antes era 80 e cortava lutas
+  // no meio, encerrando o replay antes do fim real.
+  const maxTurns = options.maxTurns ?? 1000;
   const segmentEnd = Math.min(options.stopAtTurn ?? maxTurns, maxTurns);
 
   while (
