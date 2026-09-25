@@ -69,9 +69,9 @@ export function ConstrutorClient({ weekId, slug, weekNumber }: { weekId: string;
                 </div>
 
                 <div className="mt-2 rounded-lg border border-cyan-400/20 bg-cyan-500/5 px-2.5 py-1.5 text-[11px]">
-                  {m.myDeckChosen
+                  {m.bothVoted && m.myDeckChosen
                     ? <span className="text-cyan-200"><Check size={11} className="mr-1 inline" /> Você joga com: <strong>{m.myDeckChosen.name}</strong> (escolhido por {m.opponentName})</span>
-                    : <span className="text-slate-400"><Clock size={11} className="mr-1 inline" /> Aguardando {m.opponentName} escolher o seu deck.</span>}
+                    : <span className="text-slate-400"><Clock size={11} className="mr-1 inline" /> 🔒 As escolhas só aparecem quando os dois votarem.{m.iVoted ? " Você já votou — aguardando o adversário." : ""}</span>}
                 </div>
 
                 <div className="mt-2">

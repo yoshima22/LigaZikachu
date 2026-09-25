@@ -55,14 +55,21 @@ async function decksOf(tournamentWeekId: string, playerId: string) {
   });
 }
 
+function bothVoted(m: LiteMatch): boolean {
+  return Boolean(m.playerADeckSubmissionId && m.playerBDeckSubmissionId);
+}
+
 /** Contexto de escolha do deck do `targetId` para a partida `matchId`. */
 async function pickContext(tournamentWeekId: string, matchId: string, targetId: string) {
   const ordered = await orderedMatchesForPlayer(tournamentWeekId, targetId);
-  const pickByMatch = new Map<string, string>();
-  for (const m of ordered) { const d = chosenDeckFor(m, targetId); if (d) pickByMatch.set(m.id, d); }
+  // Só partidas ANTERIORES já totalmente reveladas (ambos votaram) contam para a
+  // espera e a exclusão — assim a escolha do jogo anterior não vaza cedo demais.
+  const resolvedDeckByMatch = new Map<string, string>();
+  for (const m of ordered) { const d = chosenDeckFor(m, targetId); if (d && bothVoted(m)) resolvedDeckByMatch.set(m.id, d); }
   const decks = await decksOf(tournamentWeekId, targetId);
-  const avail = computePickAvailability(ordered.map((m) => m.id), matchId, pickByMatch, decks.map((d) => d.id));
-  return { ordered, decks, availableDecks: decks.filter((d) => avail.availableDeckIds.includes(d.id)), waiting: avail.waiting, currentPick: avail.currentPick };
+  const avail = computePickAvailability(ordered.map((m) => m.id), matchId, resolvedDeckByMatch, decks.map((d) => d.id));
+  const current = ordered.find((m) => m.id === matchId) ?? null;
+  return { ordered, decks, availableDecks: decks.filter((d) => avail.availableDeckIds.includes(d.id)), waiting: avail.waiting, currentPick: current ? chosenDeckFor(current, targetId) : null };
 }
 
 // ── Escolha do deck do adversário ─────────────────────────────────────────────
@@ -105,7 +112,9 @@ export type ConstrutorMatchView = {
   roundLabel: string | null;
   scheduledAt: string | null;
   opponentName: string;
-  myDeckChosen: { id: string; name: string } | null; // deck que EU vou jogar (escolhido pelo adversário)
+  myDeckChosen: { id: string; name: string } | null; // deck que EU vou jogar — só revelado após ambos votarem
+  bothVoted: boolean; // ambos os jogadores já escolheram o deck do outro nesta partida
+  iVoted: boolean;    // eu já escolhi o deck do adversário
   opponentHasRegistered: boolean;
   opponentDeckOptions: { id: string; deckNumber: number; name: string; archetype: string | null }[];
   iCanPick: boolean;
@@ -131,14 +140,19 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
     const matches: ConstrutorMatchView[] = [];
     for (const m of myMatches) {
       const opponentId = m.playerAId === me.id ? m.playerBId! : m.playerAId;
-      const myChosen = chosenDeckFor(m, me.id);
+      const myChosen = chosenDeckFor(m, me.id);            // deck que o adversário escolheu pra mim
+      const iChose = chosenDeckFor(m, opponentId);         // deck que eu escolhi pro adversário
+      const revealed = bothVoted(m);
       const ctx = await pickContext(week.id, m.id, opponentId); // contexto para EU escolher o deck do adversário
       matches.push({
         matchId: m.id,
         roundLabel: m.roundLabel,
         scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
         opponentName: nameOf(opponentId),
-        myDeckChosen: myChosen ? { id: myChosen, name: myDeckById.get(myChosen) ?? "Deck" } : null,
+        // Só revela o deck que vou usar depois que AMBOS votaram.
+        myDeckChosen: revealed && myChosen ? { id: myChosen, name: myDeckById.get(myChosen) ?? "Deck" } : null,
+        bothVoted: revealed,
+        iVoted: Boolean(iChose),
         opponentHasRegistered: ctx.decks.length >= 3,
         opponentDeckOptions: ctx.availableDecks.map((d) => ({ id: d.id, deckNumber: d.deckNumber, name: d.deckName, archetype: d.archetype })),
         iCanPick: ctx.decks.length >= 3 && !ctx.waiting && !ctx.currentPick,
