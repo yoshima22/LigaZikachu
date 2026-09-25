@@ -43,7 +43,7 @@ export default async function TournamentConstrutorPage({ params }: { params: Pro
         weeks.map((w) => (
           <div key={w.id} className="space-y-2">
             {weeks.length > 1 && <h2 className="text-sm font-bold text-slate-200">{w.label ?? `Semana ${w.weekNumber}`}</h2>}
-            <ConstrutorClient weekId={w.id} />
+            <ConstrutorClient weekId={w.id} slug={slug} weekNumber={w.weekNumber} />
           </div>
         ))
       )}
