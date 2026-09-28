@@ -397,6 +397,54 @@ export function getSyncWindowState(
   };
 }
 
+/**
+ * Corte usado para nao misturar duplas/salas de um evento anterior com o evento
+ * atual: qualquer dupla criada antes da abertura da inscricao vigente pertence
+ * a um evento ja encerrado (mesmo que o admin ainda nao tenha rodado a limpeza).
+ */
+export function getCurrentEventTeamsCutoff(config: { registrationOpensAt?: Date | string | null }) {
+  return config.registrationOpensAt ? new Date(config.registrationOpensAt) : null;
+}
+
+export function buildSyncRoomRanking(room: {
+  teams: { id: string; playerA: { displayName: string }; playerB: { displayName: string } | null }[];
+  scores: { teamId: string; wins: number; damageDone: number; damageTaken: number; finalPosition: number | null }[];
+}) {
+  const teamMap = new Map<string, { name: string; wins: number; damageDone: number; damageTaken: number; finalPosition: number | null }>();
+  for (const score of room.scores) {
+    const team = room.teams.find((t) => t.id === score.teamId);
+    if (!team) continue;
+    const name = `${team.playerA.displayName}${team.playerB ? ` + ${team.playerB.displayName}` : ""}`;
+    const existing = teamMap.get(score.teamId);
+    if (!existing || score.wins > existing.wins) {
+      teamMap.set(score.teamId, {
+        name,
+        wins: score.wins,
+        damageDone: score.damageDone,
+        damageTaken: score.damageTaken,
+        finalPosition: score.finalPosition,
+      });
+    }
+  }
+  return [...teamMap.values()].sort((a, b) => {
+    if (a.finalPosition !== null && b.finalPosition !== null) return a.finalPosition - b.finalPosition;
+    if (a.finalPosition !== null) return -1;
+    if (b.finalPosition !== null) return 1;
+    if (b.wins !== a.wins) return b.wins - a.wins;
+    if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
+    return a.damageTaken - b.damageTaken;
+  });
+}
+
+export const SYNC_ROOM_STATUS_LABELS: Record<string, string> = {
+  READY: "Aguardando início",
+  ROUND_1: "Rodada 1",
+  ROUND_2: "Rodada 2",
+  ROUND_3: "Rodada 3",
+  TIEBREAK: "Desempate",
+  FINISHED: "Finalizado",
+};
+
 async function assertPlayerCanUseTicket(tx: Prisma.TransactionClient, playerId: string, ticketId: string) {
   const ticket = await tx.syncTicket.findUnique({
     where: { id: ticketId },

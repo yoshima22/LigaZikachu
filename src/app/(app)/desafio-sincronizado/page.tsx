@@ -4,7 +4,8 @@ import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
-import { ensureSyncChallengeItems, getSideImage, getSideLabel, getSyncWindowState } from "@/lib/sync-challenge";
+import Link from "next/link";
+import { buildSyncRoomRanking, ensureSyncChallengeItems, getCurrentEventTeamsCutoff, getSideImage, getSideLabel, getSyncWindowState, SYNC_ROOM_STATUS_LABELS } from "@/lib/sync-challenge";
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { adminSeedModifiersAction } from "./seed-modifiers-action";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
@@ -20,6 +21,8 @@ import { getSyncRewardsConfig } from "@/lib/sync-event-rewards";
 import {
   leaveTeamAction,
   confirmTeamAction,
+  bulkDiscardSyncTicketsAction,
+  bulkTransferSyncTicketsAction,
   cancelSyncTeamAdminAction,
   cancelMyOpenSyncTeamAction,
   combineSyncTicketsAction,
@@ -99,7 +102,14 @@ export default async function DesafioSincronizadoPage() {
     })
     .filter((p) => p.missingLeft || p.missingRight);
 
-  const [halves, tickets, entries, config, openTeams] = await Promise.all([
+  const config = await prisma.syncChallengeConfig.upsert({
+    where: { id: "singleton" },
+    update: {},
+    create: { id: "singleton" },
+  });
+  const currentEventCutoff = getCurrentEventTeamsCutoff(config);
+
+  const [halves, tickets, openTeams] = await Promise.all([
     prisma.syncTicketHalf.findMany({
       where: { ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
       include: { generatedByPlayer: { select: { id: true, displayName: true, ptcglNick: true } } },
@@ -116,19 +126,11 @@ export default async function DesafioSincronizadoPage() {
       orderBy: { createdAt: "desc" },
       take: 20,
     }),
-    prisma.syncChallengeEntry.findMany({
-      where: { playerId: player.id },
-      orderBy: { createdAt: "desc" },
-      take: 6,
-      select: { id: true, status: true, bansJson: true, consumedAt: true },
-    }),
-    prisma.syncChallengeConfig.upsert({
-      where: { id: "singleton" },
-      update: {},
-      create: { id: "singleton" },
-    }),
     prisma.syncEventTeam.findMany({
-      where: { status: { in: ["OPEN", "COMPLETE"] } },
+      where: {
+        status: { in: ["OPEN", "COMPLETE"] },
+        ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
+      },
       include: {
         playerA: { select: { id: true, displayName: true } },
         playerB: { select: { id: true, displayName: true } },
@@ -145,6 +147,7 @@ export default async function DesafioSincronizadoPage() {
     where: {
       status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
       OR: [{ playerAId: player.id }, { playerBId: player.id }],
+      ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
     },
     include: {
       playerA: { select: { id: true, displayName: true } },
@@ -231,7 +234,10 @@ export default async function DesafioSincronizadoPage() {
   }[] = [];
   try {
     const lineupTeams = await prisma.syncEventTeam.findMany({
-      where: { status: { in: ["LINEUP_PENDING", "LINEUP_READY"] } },
+      where: {
+        status: { in: ["LINEUP_PENDING", "LINEUP_READY"] },
+        ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
+      },
       select: {
         id: true,
         lineupStatusA: true,
@@ -639,6 +645,12 @@ export default async function DesafioSincronizadoPage() {
         </section>
       )}
 
+      <div className="flex justify-end">
+        <Link href="/desafio-sincronizado/historico" className="text-xs font-semibold text-[#FFCB05] hover:underline">
+          Ver eventos anteriores →
+        </Link>
+      </div>
+
       {/* ── Ranking público de hoje ───────────────────────────────── */}
       {todayRooms.length > 0 && (
         <section className="rounded-2xl border border-border bg-card p-5 space-y-5">
@@ -648,46 +660,14 @@ export default async function DesafioSincronizadoPage() {
           </div>
           <div className="space-y-6">
             {todayRooms.map((room) => {
-              // Agrupa scores por dupla — pega o melhor de cada
-              const teamMap = new Map<string, { name: string; wins: number; damageDone: number; damageTaken: number; finalPosition: number | null }>();
-              for (const score of room.scores) {
-                const team = room.teams.find((t) => t.id === score.teamId);
-                if (!team) continue;
-                const name = `${team.playerA.displayName}${team.playerB ? ` + ${team.playerB.displayName}` : ""}`;
-                const existing = teamMap.get(score.teamId);
-                if (!existing || score.wins > existing.wins) {
-                  teamMap.set(score.teamId, {
-                    name,
-                    wins: score.wins,
-                    damageDone: score.damageDone,
-                    damageTaken: score.damageTaken,
-                    finalPosition: score.finalPosition,
-                  });
-                }
-              }
-              const ranking = [...teamMap.values()].sort((a, b) => {
-                if (a.finalPosition !== null && b.finalPosition !== null) return a.finalPosition - b.finalPosition;
-                if (a.finalPosition !== null) return -1;
-                if (b.finalPosition !== null) return 1;
-                if (b.wins !== a.wins) return b.wins - a.wins;
-                if (b.damageDone !== a.damageDone) return b.damageDone - a.damageDone;
-                return a.damageTaken - b.damageTaken;
-              });
+              const ranking = buildSyncRoomRanking(room);
               const medals = ["🥇", "🥈", "🥉", "4️⃣"];
-              const statusLabels: Record<string, string> = {
-                READY: "Aguardando início",
-                ROUND_1: "Rodada 1",
-                ROUND_2: "Rodada 2",
-                ROUND_3: "Rodada 3",
-                TIEBREAK: "Desempate",
-                FINISHED: "Finalizado",
-              };
               return (
                 <div key={room.id}>
                   <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-sm font-semibold text-slate-200">Sala {room.roomIndex}</h3>
                     <span className="rounded-full border border-slate-700 bg-slate-900 px-2 py-0.5 text-xs text-slate-400">
-                      {statusLabels[room.status] ?? room.status}
+                      {SYNC_ROOM_STATUS_LABELS[room.status] ?? room.status}
                     </span>
                   </div>
                   {ranking.length === 0 ? (
@@ -802,49 +782,61 @@ export default async function DesafioSincronizadoPage() {
         {tickets.length === 0 ? (
           <p className="text-sm text-slate-500">Nenhum ticket completo montado ainda.</p>
         ) : (
-          <div className="grid gap-3 md:grid-cols-2">
-            {tickets.map((ticket) => (
-              <div key={ticket.id} className="rounded-xl border border-[#FFCB05]/20 bg-slate-950/60 p-4">
-                <div className="flex gap-3">
-                  <Image src="/events/desafio-sincronizado/ticket-completo-agua-fogo.webp" alt="Ticket completo" width={88} height={120} className="h-28 w-20 object-contain" />
-                  <div className="min-w-0 flex-1">
-                    <p className="font-semibold text-[#FFCB05]">Ticket completo</p>
-                    <p className="mt-1 text-xs text-slate-400">Status: {ticket.status}</p>
-                    <p className="mt-2 text-xs text-red-200">
-                      Bans da sala: {ticket.bannedUserA.displayName} e {ticket.bannedUserB.displayName}
-                    </p>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Metades: {ticket.leftHalf.generatedByPlayer.displayName} + {ticket.rightHalf.generatedByPlayer.displayName}
-                    </p>
+          <form action={async (formData) => { "use server"; await bulkDiscardSyncTicketsAction(formData); }} className="space-y-3">
+            <div className="grid gap-3 md:grid-cols-2">
+              {tickets.map((ticket) => (
+                <div key={ticket.id} className="rounded-xl border border-[#FFCB05]/20 bg-slate-950/60 p-4">
+                  <div className="flex gap-3">
+                    {ticket.status === "AVAILABLE" && (
+                      <input type="checkbox" name="ticketIds" value={ticket.id} className="mt-1 h-4 w-4 shrink-0 accent-[#FFCB05]" />
+                    )}
+                    <Image src="/events/desafio-sincronizado/ticket-completo-agua-fogo.webp" alt="Ticket completo" width={88} height={120} className="h-28 w-20 object-contain" />
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-[#FFCB05]">Ticket completo</p>
+                      <p className="mt-1 text-xs text-slate-400">Status: {ticket.status}</p>
+                      <p className="mt-2 text-xs text-red-200">
+                        Bans da sala: {ticket.bannedUserA.displayName} e {ticket.bannedUserB.displayName}
+                      </p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        Metades: {ticket.leftHalf.generatedByPlayer.displayName} + {ticket.rightHalf.generatedByPlayer.displayName}
+                      </p>
+                    </div>
                   </div>
+                  {ticket.status === "AVAILABLE" ? (
+                    <p className="mt-3 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-3 py-2 text-xs text-[#FFCB05]">
+                      Disponivel para criar ou entrar em uma dupla na secao Janelas e duplas.
+                    </p>
+                  ) : (
+                    <p className="mt-3 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
+                      Ticket ja reservado por uma dupla ativa.
+                    </p>
+                  )}
                 </div>
-                {ticket.status === "AVAILABLE" ? (
-                  <p className="mt-3 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/10 px-3 py-2 text-xs text-[#FFCB05]">
-                    Disponivel para criar ou entrar em uma dupla na secao Janelas e duplas.
-                  </p>
-                ) : (
-                  <p className="mt-3 rounded-lg border border-slate-700 bg-slate-900 px-3 py-2 text-xs text-slate-400">
-                    Ticket ja reservado por uma dupla ativa.
-                  </p>
-                )}
-              </div>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <section className="rounded-2xl border border-border bg-card p-5">
-        <h2 className="font-semibold text-slate-100">Entradas consumidas antigas</h2>
-        <p className="mt-1 text-xs text-slate-500">Mantido apenas para compatibilidade com registros criados antes da regra completa do PDF.</p>
-        <div className="mt-4 space-y-2">
-          {entries.length === 0 ? (
-            <p className="text-sm text-slate-500">Nenhuma entrada antiga.</p>
-          ) : entries.map((entry) => (
-            <div key={entry.id} className="rounded-xl border border-border bg-slate-950/60 p-3 text-xs text-slate-400">
-              {new Date(entry.consumedAt).toLocaleString("pt-BR")} - {entry.status}
+              ))}
             </div>
-          ))}
-        </div>
+
+            {availableTickets.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 rounded-xl border border-border bg-slate-950/40 p-3">
+                <span className="text-xs text-slate-400">Selecione tickets disponiveis acima para agir em massa:</span>
+                <button type="submit" className="rounded-lg border border-red-400/40 bg-red-500/10 px-3 py-1.5 text-xs font-bold text-red-200 hover:bg-red-500/20">
+                  Excluir selecionados
+                </button>
+                <select name="targetPlayerId" className="rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-100">
+                  {allActivePlayers.filter((p) => p.id !== player.id).map((p) => (
+                    <option key={p.id} value={p.id}>{p.displayName}</option>
+                  ))}
+                </select>
+                <button
+                  type="submit"
+                  formAction={async (formData) => { "use server"; await bulkTransferSyncTicketsAction(formData); }}
+                  className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-3 py-1.5 text-xs font-bold text-cyan-100 hover:bg-cyan-500/20"
+                >
+                  Enviar selecionados
+                </button>
+              </div>
+            )}
+          </form>
+        )}
       </section>
 
       {admin && (

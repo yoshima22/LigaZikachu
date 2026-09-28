@@ -109,6 +109,60 @@ export async function combineSyncTicketsAction(formData: FormData): Promise<{ er
   }
 }
 
+// ── Tickets completos em massa (excluir / enviar) ───────────────────────────
+
+function parseTicketIds(formData: FormData) {
+  const ids = formData.getAll("ticketIds").map(String).filter(Boolean);
+  if (ids.length === 0) throw new Error("Selecione ao menos um ticket.");
+  return ids;
+}
+
+export async function bulkDiscardSyncTicketsAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const ticketIds = parseTicketIds(formData);
+    const result = await prisma.syncTicket.updateMany({
+      where: { id: { in: ticketIds }, ownerId: player.id, status: "AVAILABLE" },
+      data: { status: "CANCELLED" },
+    });
+    if (result.count === 0) return { error: "Nenhum ticket disponível foi excluído. Tickets reservados em uma dupla não podem ser excluídos." };
+    revalidatePath("/desafio-sincronizado");
+    return { success: `${result.count} ticket(s) excluído(s).` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao excluir tickets." };
+  }
+}
+
+export async function bulkTransferSyncTicketsAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const ticketIds = parseTicketIds(formData);
+    const targetPlayerId = z.string().min(1).parse(formData.get("targetPlayerId"));
+    if (targetPlayerId === player.id) return { error: "Escolha outro jogador." };
+    const target = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { id: true, displayName: true } });
+    if (!target) return { error: "Jogador de destino não encontrado." };
+    const result = await prisma.syncTicket.updateMany({
+      where: { id: { in: ticketIds }, ownerId: player.id, status: "AVAILABLE" },
+      data: { ownerId: targetPlayerId },
+    });
+    if (result.count === 0) return { error: "Nenhum ticket disponível foi enviado. Tickets reservados em uma dupla não podem ser enviados." };
+    await prisma.playerGift.create({
+      data: {
+        playerId: targetPlayerId,
+        type: "CUSTOM",
+        title: "Ticket completo recebido",
+        description: `Voce recebeu ${result.count} ticket(s) completo(s) de ${player.displayName}.`,
+        payload: { rewardKind: "SYNC_TICKET_COMPLETE_BULK", fromPlayerId: player.id, count: result.count },
+      },
+    });
+    revalidatePath("/desafio-sincronizado");
+    revalidatePath("/caixa-de-presentes");
+    return { success: `${result.count} ticket(s) enviado(s) para ${target.displayName}.` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao enviar tickets." };
+  }
+}
+
 export async function createOpenSyncTeamAction(formData: FormData): Promise<{ error?: string; success?: string }> {
   try {
     const { user, player } = await requireCurrentPlayer();
