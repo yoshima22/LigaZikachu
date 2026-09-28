@@ -117,10 +117,12 @@ async function _getRanking(tab: RankTab): Promise<{ ranking: RankEntry[]; diary:
 
   // ── Nível ─────────────────────────────────────────────────────────────────
   if (tab === "level") {
+    // Sem `take` na query: muitos mascotes empatam no nível máximo (100, exp 0),
+    // e um corte no banco antes do tiebreak por status totais descartaria os
+    // melhores empatados só por ordem de id, deixando mascotes de fora do ranking.
     const mascots = await prisma.mascot.findMany({
       where: PLAYER_FILTER, select: MASCOT_SELECT,
       orderBy: [{ level: "desc" }, { exp: "desc" }, { id: "asc" }],
-      take: 200,
     });
     return {
       ranking: mascots
