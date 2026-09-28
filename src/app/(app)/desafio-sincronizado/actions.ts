@@ -109,6 +109,60 @@ export async function combineSyncTicketsAction(formData: FormData): Promise<{ er
   }
 }
 
+// ── Metades em massa (excluir / enviar) ─────────────────────────────────────
+
+function parseHalfIds(formData: FormData) {
+  const ids = formData.getAll("halfIds").map(String).filter(Boolean);
+  if (ids.length === 0) throw new Error("Selecione ao menos uma metade.");
+  return ids;
+}
+
+export async function bulkDiscardSyncTicketHalvesAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const halfIds = parseHalfIds(formData);
+    const result = await prisma.syncTicketHalf.updateMany({
+      where: { id: { in: halfIds }, ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
+      data: { status: "EXPIRED" },
+    });
+    if (result.count === 0) return { error: "Nenhuma metade foi descartada." };
+    revalidatePath("/desafio-sincronizado");
+    return { success: `${result.count} metade(s) descartada(s).` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao descartar metades." };
+  }
+}
+
+export async function bulkTransferSyncTicketHalvesAction(formData: FormData): Promise<{ error?: string; success?: string }> {
+  try {
+    const { player } = await requireCurrentPlayer();
+    const halfIds = parseHalfIds(formData);
+    const targetPlayerId = z.string().min(1).parse(formData.get("targetPlayerId"));
+    if (targetPlayerId === player.id) return { error: "Escolha outro jogador." };
+    const target = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { id: true, displayName: true } });
+    if (!target) return { error: "Jogador de destino não encontrado." };
+    const result = await prisma.syncTicketHalf.updateMany({
+      where: { id: { in: halfIds }, ownerId: player.id, status: { in: ["AVAILABLE", "SENT"] } },
+      data: { ownerId: targetPlayerId, status: "SENT", sentAt: new Date() },
+    });
+    if (result.count === 0) return { error: "Nenhuma metade foi enviada." };
+    await prisma.playerGift.create({
+      data: {
+        playerId: targetPlayerId,
+        type: "CUSTOM",
+        title: "Metades de ticket recebidas",
+        description: `Voce recebeu ${result.count} metade(s) de ${player.displayName}.`,
+        payload: { rewardKind: "SYNC_TICKET_HALF_BULK", fromPlayerId: player.id, count: result.count },
+      },
+    });
+    revalidatePath("/desafio-sincronizado");
+    revalidatePath("/caixa-de-presentes");
+    return { success: `${result.count} metade(s) enviada(s) para ${target.displayName}.` };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao enviar metades." };
+  }
+}
+
 // ── Tickets completos em massa (excluir / enviar) ───────────────────────────
 
 function parseTicketIds(formData: FormData) {

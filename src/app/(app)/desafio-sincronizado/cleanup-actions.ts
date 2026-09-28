@@ -46,7 +46,20 @@ export async function adminClearPreviousSyncEventsAction(): Promise<SyncCleanupR
       where: { roomId: null, createdAt: { lt: preserveTeamsFrom } },
       select: { id: true },
     });
+    const roomTeams = await prisma.syncEventTeam.findMany({
+      where: { id: { in: roomTeamIds } },
+      select: { id: true, ticketAId: true, ticketBId: true },
+    });
+    const detachedTeams = await prisma.syncEventTeam.findMany({
+      where: { id: { in: oldDetachedTeams.map((team) => team.id) } },
+      select: { id: true, ticketAId: true, ticketBId: true },
+    });
     const teamIds = [...new Set([...roomTeamIds, ...oldDetachedTeams.map((team) => team.id)])];
+    // Tickets presos a essas duplas ficariam orfaos (RESERVED para sempre) se
+    // a dupla for apagada sem liberar o ticket — o ticket volta pra fila.
+    const orphanedTicketIds = [...roomTeams, ...detachedTeams]
+      .flatMap((team) => [team.ticketAId, team.ticketBId])
+      .filter((id): id is string => Boolean(id));
 
     const [lineups, selections, matches, scores] = await Promise.all([
       teamIds.length ? prisma.syncEventLineup.count({ where: { teamId: { in: teamIds } } }) : 0,
@@ -67,6 +80,12 @@ export async function adminClearPreviousSyncEventsAction(): Promise<SyncCleanupR
         await tx.syncEventTeam.deleteMany({ where: { id: { in: teamIds } } });
       }
       if (roomIds.length) await tx.syncEventRoom.deleteMany({ where: { id: { in: roomIds } } });
+      if (orphanedTicketIds.length) {
+        await tx.syncTicket.updateMany({
+          where: { id: { in: orphanedTicketIds }, status: "RESERVED" },
+          data: { status: "CONSUMED", consumedAt: new Date() },
+        });
+      }
     });
 
     revalidatePath("/desafio-sincronizado");

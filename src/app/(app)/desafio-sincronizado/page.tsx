@@ -199,6 +199,7 @@ export default async function DesafioSincronizadoPage() {
     where: {
       status: { not: "CANCELLED" },
       teams: { some: { OR: [{ playerAId: player.id }, { playerBId: player.id }] } },
+      ...(currentEventCutoff ? { formedAt: { gte: currentEventCutoff } } : {}),
     },
     orderBy: { formedAt: "desc" },
     include: {

@@ -1,11 +1,17 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Image from "next/image";
 import { Send, Trash2, ArrowLeftRight } from "lucide-react";
 import { toast } from "sonner";
-import { transferSyncTicketHalfAction, discardSyncTicketHalfAction, swapSyncTicketHalfSideAction } from "../actions";
+import {
+  transferSyncTicketHalfAction,
+  discardSyncTicketHalfAction,
+  swapSyncTicketHalfSideAction,
+  bulkDiscardSyncTicketHalvesAction,
+  bulkTransferSyncTicketHalvesAction,
+} from "../actions";
 import { PlayerSearchInput } from "@/components/player-search-input";
 
 type HalfData = {
@@ -32,9 +38,48 @@ export function HalvesSection({
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [page, setPage] = useState(0);
+  const [hideMine, setHideMine] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [bulkTarget, setBulkTarget] = useState("");
 
-  const totalPages = Math.max(1, Math.ceil(halves.length / ITEMS_PER_PAGE));
-  const paginated = halves.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+  const visible = useMemo(
+    () => (hideMine ? halves.filter((h) => h.generatedByPlayerId !== myPlayerId) : halves),
+    [halves, hideMine, myPlayerId],
+  );
+  const totalPages = Math.max(1, Math.ceil(visible.length / ITEMS_PER_PAGE));
+  const paginated = visible.slice(page * ITEMS_PER_PAGE, (page + 1) * ITEMS_PER_PAGE);
+
+  const toggleSelected = (id: string) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const bulkDiscard = () => {
+    if (selected.size === 0) return;
+    if (!confirm(`Descartar ${selected.size} metade(s) permanentemente?`)) return;
+    const formData = new FormData();
+    selected.forEach((id) => formData.append("halfIds", id));
+    startTransition(async () => {
+      const res = await bulkDiscardSyncTicketHalvesAction(formData);
+      if (res.error) toast.error(res.error);
+      else { toast.success(res.success ?? "Descartadas!"); setSelected(new Set()); router.refresh(); }
+    });
+  };
+
+  const bulkTransfer = () => {
+    if (selected.size === 0 || !bulkTarget) return;
+    const formData = new FormData();
+    selected.forEach((id) => formData.append("halfIds", id));
+    formData.append("targetPlayerId", bulkTarget);
+    startTransition(async () => {
+      const res = await bulkTransferSyncTicketHalvesAction(formData);
+      if (res.error) toast.error(res.error);
+      else { toast.success(res.success ?? "Enviadas!"); setSelected(new Set()); setBulkTarget(""); router.refresh(); }
+    });
+  };
 
   const transfer = (formData: FormData) => {
     startTransition(async () => {
@@ -67,9 +112,37 @@ export function HalvesSection({
         Metades não podem ser vendidas. Elas só circulam por presente/envio direto. A origem sempre fica gravada.
       </p>
 
-      {halves.length === 0 ? (
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <label className="flex items-center gap-2 text-xs text-slate-400">
+          <input
+            type="checkbox"
+            checked={hideMine}
+            onChange={(e) => { setHideMine(e.target.checked); setPage(0); setSelected(new Set()); }}
+            className="h-4 w-4 accent-[#FFCB05]"
+          />
+          Ocultar metades geradas por mim
+        </label>
+        {selected.size > 0 && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg border border-border bg-slate-950/60 px-2 py-1.5">
+            <span className="text-xs text-slate-400">{selected.size} selecionada(s)</span>
+            <button onClick={bulkDiscard} disabled={pending}
+              className="inline-flex items-center gap-1 rounded-lg border border-red-400/40 bg-red-500/10 px-2.5 py-1 text-xs font-bold text-red-200 disabled:opacity-40">
+              <Trash2 size={12} /> Excluir
+            </button>
+            <PlayerSearchInput value={bulkTarget} onChange={(id) => setBulkTarget(id)} excludeIds={[myPlayerId]} className="w-40" />
+            <button onClick={bulkTransfer} disabled={pending || !bulkTarget}
+              className="inline-flex items-center gap-1 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1 text-xs font-bold text-cyan-100 disabled:opacity-40">
+              <Send size={12} /> Enviar
+            </button>
+          </div>
+        )}
+      </div>
+
+      {visible.length === 0 ? (
         <p className="rounded-xl border border-dashed border-border p-8 text-center text-sm text-slate-500">
-          Você ainda não possui metades. Elas podem cair em Arena, expedições, reciclagem e vitórias TCG validadas.
+          {halves.length === 0
+            ? "Você ainda não possui metades. Elas podem cair em Arena, expedições, reciclagem e vitórias TCG validadas."
+            : "Nenhuma metade para mostrar com esse filtro."}
         </p>
       ) : (
         <>
@@ -79,6 +152,12 @@ export function HalvesSection({
               return (
                 <div key={half.id} className="rounded-xl border border-border bg-slate-950/60 p-3">
                   <div className="flex gap-3">
+                    <input
+                      type="checkbox"
+                      checked={selected.has(half.id)}
+                      onChange={() => toggleSelected(half.id)}
+                      className="mt-1 h-4 w-4 shrink-0 accent-[#FFCB05]"
+                    />
                     <Image src={getSideImage(half.side)} alt={getSideLabel(half.side)} width={72} height={96} className="h-24 w-16 object-contain" />
                     <div className="min-w-0 flex-1">
                       <p className="font-semibold text-slate-100">{getSideLabel(half.side)}</p>

@@ -401,9 +401,17 @@ export function getSyncWindowState(
  * Corte usado para nao misturar duplas/salas de um evento anterior com o evento
  * atual: qualquer dupla criada antes da abertura da inscricao vigente pertence
  * a um evento ja encerrado (mesmo que o admin ainda nao tenha rodado a limpeza).
+ *
+ * So aplica o corte se a inscricao configurada ja abriu: se registrationOpensAt
+ * aponta para o PROXIMO evento (data futura), o corte ficaria no futuro e
+ * esconderia as duplas do evento em andamento — nesse caso a limpeza manual do
+ * admin (adminClearPreviousSyncEventsAction) e quem deve remover o evento antigo.
  */
 export function getCurrentEventTeamsCutoff(config: { registrationOpensAt?: Date | string | null }) {
-  return config.registrationOpensAt ? new Date(config.registrationOpensAt) : null;
+  if (!config.registrationOpensAt) return null;
+  const opensAt = new Date(config.registrationOpensAt);
+  if (opensAt > new Date()) return null;
+  return opensAt;
 }
 
 export function buildSyncRoomRanking(room: {
