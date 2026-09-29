@@ -1,7 +1,7 @@
 // Calendário de recompensas do Passe Apoiador (sem "use server" — apenas dados)
 
 export type DayRewardItem = {
-  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT" | "STONE_CHOICE";
   coins?: number;
   ligaCash?: number;
   eggType?: string;
@@ -14,7 +14,7 @@ export type DayRewardItem = {
 export type DayReward = {
   day: number;
   label: string;
-  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+  type: "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT" | "STONE_CHOICE";
   coins?: number;
   ligaCash?: number;
   eggType?: string;

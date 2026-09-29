@@ -21,7 +21,7 @@ const EMPTY = { id: undefined as string | undefined, code: "", description: "", 
 const rewardKey = (r: Reward) => `${r.kind}:${r.itemId ?? r.itemType ?? r.eggType ?? ""}`;
 const selectCls = "h-10 rounded-xl border border-border bg-slate-900/70 px-2 text-sm text-slate-100";
 
-export function RedeemCodesAdmin({ items, itemTypes, eggTypes, codes }: { items: Item[]; itemTypes: Option[]; eggTypes: Option[]; codes: Code[] }) {
+export function RedeemCodesAdmin({ items, itemTypes, eggTypes, foodTypes, codes }: { items: Item[]; itemTypes: Option[]; eggTypes: Option[]; foodTypes: Option[]; codes: Code[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(EMPTY);
@@ -30,6 +30,7 @@ export function RedeemCodesAdmin({ items, itemTypes, eggTypes, codes }: { items:
   const [qty, setQty] = useState(1);
   const [eggType, setEggType] = useState(eggTypes[0]?.value ?? "");
   const [itemType, setItemType] = useState(itemTypes[0]?.value ?? "");
+  const [foodType, setFoodType] = useState(foodTypes[foodTypes.length - 1]?.value ?? "");
 
   const categories = useMemo(() => ["Todos", ...Array.from(new Set(items.map((i) => i.category)))], [items]);
   const matches = useMemo(() => {
@@ -136,6 +137,16 @@ export function RedeemCodesAdmin({ items, itemTypes, eggTypes, codes }: { items:
                 {eggTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
               </select>
               <Button type="button" variant="outline" onClick={() => addReward({ kind: "EGG", eggType, label: eggTypes.find((t) => t.value === eggType)?.label ?? eggType })}>Adicionar ovo</Button>
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-300">Comida do mascote (inclui Doce Raro do laboratório)</p>
+            <div className="flex gap-2">
+              <select value={foodType} onChange={(e) => setFoodType(e.target.value)} className={`${selectCls} flex-1`}>
+                {foodTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <Button type="button" variant="outline" onClick={() => addReward({ kind: "FOOD", itemType: foodType, label: foodTypes.find((t) => t.value === foodType)?.label ?? foodType })}>Adicionar comida</Button>
             </div>
           </div>
 

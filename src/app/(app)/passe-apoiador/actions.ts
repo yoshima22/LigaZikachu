@@ -9,6 +9,7 @@ import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import { ZikaCoinTxType } from "@prisma/client";
 import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
 import { expandDayReward, type DayReward } from "./schedule";
+import { findActiveMegaStone, listActiveMegaStones } from "@/lib/redeem-codes";
 export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
 
@@ -368,9 +369,12 @@ export type ClaimResult = {
     totalCoinsEarned: number;
   };
   error?: string;
+  /** O dia tem "pedra à escolha": o cliente deve reenviar o resgate com stoneItemId. */
+  needsStoneChoice?: boolean;
+  stoneOptions?: { id: string; name: string; imageUrl: string | null }[];
 };
 
-export async function claimPassDay(passId: string, dayNumber: number): Promise<ClaimResult> {
+export async function claimPassDay(passId: string, dayNumber: number, stoneItemId?: string): Promise<ClaimResult> {
   try {
     const user = await getSessionUser();
     if (!user) return { ok: false, error: "Não autenticado." };
@@ -397,6 +401,25 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
     if (!reward) return { ok: false, error: "Recompensa não configurada." };
     const rewardItems = expandDayReward(reward);
     if (rewardItems.length === 0) return { ok: false, error: "Este dia não possui recompensas configuradas." };
+
+    // Pedra à escolha: só vale entre as pedras ligadas (ativas) na ZikaShop.
+    const stoneQty = rewardItems
+      .filter((item) => item.type === "STONE_CHOICE")
+      .reduce((total, item) => total + Math.max(1, Math.min(10, Math.floor(item.quantity ?? 1))), 0);
+    let chosenStoneId: string | null = null;
+    if (stoneQty > 0) {
+      chosenStoneId = stoneItemId ? (await findActiveMegaStone(prisma, stoneItemId))?.id ?? null : null;
+      if (!chosenStoneId) {
+        const options = await listActiveMegaStones(prisma);
+        if (options.length === 0) return { ok: false, error: "Nenhuma pedra de evolução está disponível no momento." };
+        return {
+          ok: false,
+          error: "Escolha a pedra de evolução que deseja receber.",
+          needsStoneChoice: true,
+          stoneOptions: options.map(({ id, name, imageUrl }) => ({ id, name, imageUrl })),
+        };
+      }
+    }
 
     let stickerResult: ClaimResult["stickerResult"] | undefined;
 
@@ -512,6 +535,15 @@ export async function claimPassDay(passId: string, dayNumber: number): Promise<C
             });
           }
         }
+      }
+
+      // 6b. Pedra de evolução escolhida pelo jogador.
+      if (chosenStoneId) {
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId: player.id, itemId: chosenStoneId } },
+          update: { quantity: { increment: stoneQty } },
+          create: { playerId: player.id, itemId: chosenStoneId, quantity: stoneQty, source: "VIP_PASS" },
+        });
       }
 
       // 7. ZikaLoot — uma entrega para cada slot configurado.

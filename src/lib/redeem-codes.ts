@@ -61,6 +61,29 @@ export async function grantShopItemTx(
 /** Tipos de item "Pedra de Mega" (o jogador escolhe uma delas num prêmio MEGA_CHOICE). */
 export const MEGA_STONE_TYPES = Object.values(ShopItemType).filter((t) => t.startsWith("MEGA_STONE_"));
 
+/** Comidas do mascote (mascotFoodItem) — o Doce Raro vem do laboratório e não é um ShopItem. */
+export const FOOD_TYPE_LABELS: Record<string, string> = {
+  FOOD: "Comida de Mascote", SWEET: "Doce de Mascote", RARE_SWEET: "Doce Raro",
+};
+
+type ShopDb =Pick<Prisma.TransactionClient, "shopItem">;
+
+/** Pedras de Mega disponíveis para escolha: só as ligadas (ativas) na ZikaShop/painel admin. */
+export function listActiveMegaStones(db: ShopDb) {
+  return db.shopItem.findMany({
+    where: { type: { in: MEGA_STONE_TYPES }, active: true },
+    select: { id: true, name: true, type: true, imageUrl: true },
+    orderBy: { name: "asc" },
+  });
+}
+
+export function findActiveMegaStone(db: ShopDb, id: string) {
+  return db.shopItem.findFirst({
+    where: { id, type: { in: MEGA_STONE_TYPES }, active: true },
+    select: { id: true, name: true, type: true, imageUrl: true },
+  });
+}
+
 const EGG_TYPE_LABELS: Record<string, string> = {
   COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "Ovo de Laboratório", EVENT: "Ovo de Evento",
   CELESTIAL: "Ovo Celestial", EGG_GEN6PLUS: "Ovo Geração 6+",

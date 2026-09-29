@@ -40,13 +40,20 @@ export function PassPageClient({ status, schedule }: Props) {
   const hasMultiplePasses = status.allActivePasses.length > 1;
   const selectedPassId    = status.pass?.id ?? null;
 
-  const handleClaim = (day: number) => {
+  const [stonePick, setStonePick] = useState<{ day: number; options: NonNullable<ClaimResult["stoneOptions"]> } | null>(null);
+  const [stoneSearch, setStoneSearch] = useState("");
+
+  const handleClaim = (day: number, stoneItemId?: string) => {
     if (!status.pass) return;
     start(async () => {
-      const result = await claimPassDay(status.pass!.id, day);
+      const result = await claimPassDay(status.pass!.id, day, stoneItemId);
       if (result.ok) {
+        setStonePick(null);
         setClaimResult(result);
         toast.success(`Dia ${day} resgatado! 🎉`);
+      } else if (result.needsStoneChoice && result.stoneOptions) {
+        setStoneSearch("");
+        setStonePick({ day, options: result.stoneOptions });
       } else {
         toast.error(result.error ?? "Erro ao resgatar.");
       }
@@ -91,6 +98,39 @@ export function PassPageClient({ status, schedule }: Props) {
     <div className="space-y-6 pb-12">
       {showCelebration && <VipCelebration onDone={celebDone} />}
       {claimResult && <RewardClaimModal result={claimResult} onClose={() => setClaimResult(null)} />}
+      {stonePick && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4" onClick={() => setStonePick(null)}>
+          <div className="w-full max-w-md space-y-3 rounded-2xl border border-border bg-slate-900 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <p className="text-sm font-bold text-white">Dia {stonePick.day}: escolha sua pedra de evolução</p>
+            <input
+              value={stoneSearch}
+              onChange={(e) => setStoneSearch(e.target.value)}
+              placeholder="Buscar pedra..."
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-200 focus:outline-none"
+            />
+            <div className="grid max-h-72 gap-1 overflow-y-auto sm:grid-cols-2">
+              {stonePick.options
+                .filter((s) => s.name.toLowerCase().includes(stoneSearch.trim().toLowerCase()))
+                .map((s) => (
+                  <button
+                    key={s.id}
+                    type="button"
+                    disabled={pending}
+                    onClick={() => { if (confirm(`Receber ${s.name}? Essa escolha não pode ser desfeita.`)) handleClaim(stonePick.day, s.id); }}
+                    className="flex items-center gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-xs text-slate-200 hover:bg-white/5 disabled:opacity-50"
+                  >
+                    {s.imageUrl && (
+                      // eslint-disable-next-line @next/next/no-img-element
+                      <img src={s.imageUrl} alt="" className="h-8 w-8 shrink-0 object-contain" />
+                    )}
+                    <span className="truncate">{s.name}</span>
+                  </button>
+                ))}
+            </div>
+            <Button variant="outline" size="sm" onClick={() => setStonePick(null)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
 
       {/* Seletor de passes — só aparece quando há mais de um ativo */}
       {hasMultiplePasses && (

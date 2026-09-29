@@ -6,7 +6,7 @@ import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { parseBrtLocal } from "@/lib/brt";
 import { prisma } from "@/lib/prisma";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
-import { normalizeRedeemCode } from "@/lib/redeem-codes";
+import { FOOD_TYPE_LABELS, normalizeRedeemCode } from "@/lib/redeem-codes";
 
 export type SaveRedeemCodeInput = {
   id?: string;
@@ -20,7 +20,7 @@ export type SaveRedeemCodeInput = {
 };
 
 export type RewardInput = {
-  kind: "ITEM" | "ITEM_TYPE" | "EGG" | "MEGA_CHOICE";
+  kind: "ITEM" | "ITEM_TYPE" | "EGG" | "MEGA_CHOICE" | "FOOD";
   itemId?: string;
   itemType?: string;
   eggType?: string;
@@ -49,6 +49,9 @@ export async function saveRedeemCode(input: SaveRedeemCodeInput): Promise<{ erro
       } else if (r.kind === "ITEM_TYPE") {
         if (!r.itemType || !Object.values(ShopItemType).includes(r.itemType as ShopItemType)) return { error: "Tipo de item inválido." };
         if (r.itemType === ShopItemType.RAINBOW_FEATHER) return { error: "Pena Arco-Íris não pode ser prêmio por tipo." };
+        rewards.push({ ...base, itemType: r.itemType });
+      } else if (r.kind === "FOOD") {
+        if (!r.itemType || !FOOD_TYPE_LABELS[r.itemType]) return { error: "Tipo de comida inválido." };
         rewards.push({ ...base, itemType: r.itemType });
       } else if (r.kind === "EGG") {
         if (!r.eggType || !Object.values(EggType).includes(r.eggType as EggType)) return { error: "Tipo de ovo inválido." };

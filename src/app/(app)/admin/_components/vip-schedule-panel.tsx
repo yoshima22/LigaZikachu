@@ -20,7 +20,7 @@ import {
 
 // ── Tipos de slot ─────────────────────────────────────────────────────────────
 
-type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT";
+type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" | "STICKER_PACK" | "SHOP_ITEM" | "ZIKALOOT" | "STONE_CHOICE";
 
 type Slot =
   | { id: string; kind: "COINS"; amount: number }
@@ -31,7 +31,8 @@ type Slot =
   | { id: string; kind: "RARE_SWEET"; qty: number }
   | { id: string; kind: "STICKER_PACK"; packName: string }
   | { id: string; kind: "SHOP_ITEM"; itemName: string }
-  | { id: string; kind: "ZIKALOOT"; special: boolean };
+  | { id: string; kind: "ZIKALOOT"; special: boolean }
+  | { id: string; kind: "STONE_CHOICE"; qty: number };
 
 const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string }> = {
   COINS:       { label: "ZikaCoins",        emoji: "🪙", color: "border-yellow-500/30 bg-yellow-950/10" },
@@ -43,6 +44,7 @@ const SLOT_META: Record<SlotKind, { label: string; emoji: string; color: string 
   STICKER_PACK:{ label: "Pacote Figurinha", emoji: "🎴", color: "border-blue-500/30 bg-blue-950/10" },
   SHOP_ITEM:   { label: "Item do Shop",     emoji: "📦", color: "border-purple-500/30 bg-purple-950/10" },
   ZIKALOOT:    { label: "Ticket ZikaLoot",  emoji: "🎟️", color: "border-green-500/30 bg-green-950/10" },
+  STONE_CHOICE:{ label: "Pedra de Evolução (à escolha)", emoji: "💎", color: "border-indigo-500/30 bg-indigo-950/10" },
 };
 
 let _slotCounter = 0;
@@ -63,6 +65,7 @@ function rewardToSlots(reward: DayReward): Slot[] {
         case "STICKER_PACK": return { id: uid(), kind: "STICKER_PACK", packName: item.packName ?? "Pacote Comum" };
         case "SHOP_ITEM": return { id: uid(), kind: "SHOP_ITEM", itemName: item.shopItemName ?? "" };
         case "ZIKALOOT": return { id: uid(), kind: "ZIKALOOT", special: item.zikalootSpecial ?? false };
+        case "STONE_CHOICE": return { id: uid(), kind: "STONE_CHOICE", qty: item.quantity ?? 1 };
       }
     });
   }
@@ -106,6 +109,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
   const pack   = slots.find(s => s.kind === "STICKER_PACK") as Extract<Slot, { kind: "STICKER_PACK" }> | undefined;
   const shop   = slots.find(s => s.kind === "SHOP_ITEM") as Extract<Slot, { kind: "SHOP_ITEM" }> | undefined;
   const loot   = slots.find(s => s.kind === "ZIKALOOT") as Extract<Slot, { kind: "ZIKALOOT" }> | undefined;
+  const stone  = slots.find(s => s.kind === "STONE_CHOICE");
 
   // Tipo primário por prioridade
   const type: DayReward["type"] =
@@ -115,7 +119,8 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     egg   ? "EGG" :
     food  ? "FOOD" :
     sweet ? "SWEET" :
-    rareSweet ? "RARE_SWEET" : "COINS";
+    rareSweet ? "RARE_SWEET" :
+    stone ? "STONE_CHOICE" : "COINS";
 
   const liga   = slots.find(s => s.kind === "LIGA_CASH") as Extract<Slot, { kind: "LIGA_CASH" }> | undefined;
 
@@ -130,6 +135,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
       case "STICKER_PACK": return { type: "STICKER_PACK", packName: slot.packName };
       case "SHOP_ITEM": return { type: "SHOP_ITEM", shopItemName: slot.itemName };
       case "ZIKALOOT": return { type: "ZIKALOOT", zikalootSpecial: slot.special };
+      case "STONE_CHOICE": return { type: "STONE_CHOICE", quantity: slot.qty };
     }
   });
 
@@ -1008,6 +1014,7 @@ function DayEditor({ reward, onChange, onClose }: {
       STICKER_PACK: { id: uid(), kind: "STICKER_PACK", packName: "Pacote Comum" },
       SHOP_ITEM:    { id: uid(), kind: "SHOP_ITEM", itemName: "" },
       ZIKALOOT:     { id: uid(), kind: "ZIKALOOT", special: false },
+      STONE_CHOICE: { id: uid(), kind: "STONE_CHOICE", qty: 1 },
     };
     const next = { ...state, slots: [...state.slots, defaults[kind]] };
     setState(next);
@@ -1179,7 +1186,7 @@ function SlotEditor({ slot, onUpdate, onRemove }: {
           </>
         )}
 
-        {(slot.kind === "FOOD" || slot.kind === "SWEET" || slot.kind === "RARE_SWEET") && (
+        {(slot.kind === "FOOD" || slot.kind === "SWEET" || slot.kind === "RARE_SWEET" || slot.kind === "STONE_CHOICE") && (
           <div className="col-span-2 sm:col-span-3 space-y-1">
             <label className="text-[10px] text-slate-500 uppercase tracking-widest">Quantidade</label>
             <input type="number" min={1} max={20}

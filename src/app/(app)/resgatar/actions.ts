@@ -1,10 +1,10 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ShopItemType, type EggType } from "@prisma/client";
+import { ShopItemType, type EggType, type FoodType } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { MEGA_STONE_TYPES, eggTypeLabel, grantShopItemTx, itemTypeLabel, normalizeRedeemCode } from "@/lib/redeem-codes";
+import { FOOD_TYPE_LABELS, eggTypeLabel, findActiveMegaStone, grantShopItemTx, itemTypeLabel, listActiveMegaStones, normalizeRedeemCode } from "@/lib/redeem-codes";
 import { recordPlayerActivity } from "@/lib/player-activity";
 
 export type StoneOption = { id: string; name: string; imageUrl: string | null };
@@ -47,12 +47,12 @@ export async function redeemCodeAction(raw: string, stoneItemId?: string): Promi
 
       // Prêmio "escolha uma pedra": pede a escolha antes de consumir o código.
       const choiceReward = entry.rewards.find((r) => r.kind === "MEGA_CHOICE");
-      const stoneWhere = { type: { in: MEGA_STONE_TYPES }, active: true };
       let chosen: { id: string; name: string; type: ShopItemType } | null = null;
       if (choiceReward) {
-        if (stoneItemId) chosen = await tx.shopItem.findFirst({ where: { ...stoneWhere, id: stoneItemId }, select: { id: true, name: true, type: true } });
+        if (stoneItemId) chosen = await findActiveMegaStone(tx, stoneItemId);
         if (!chosen) {
-          const options = await tx.shopItem.findMany({ where: stoneWhere, select: { id: true, name: true, imageUrl: true }, orderBy: { name: "asc" } });
+          const options = await listActiveMegaStones(tx);
+          if (options.length === 0) throw new RedeemError("Nenhuma pedra de Mega está disponível no momento.");
           return { needsChoice: true as const, options, quantity: choiceReward.quantity };
         }
       }
@@ -64,6 +64,15 @@ export async function redeemCodeAction(raw: string, stoneItemId?: string): Promi
             data: Array.from({ length: r.quantity }, () => ({ playerId: player.id, type: r.eggType as EggType, origin: `Código de resgate: ${entry.code}` })),
           });
           labels.push(`${eggTypeLabel(r.eggType)} x${r.quantity}`);
+          continue;
+        }
+        if (r.kind === "FOOD" && r.itemType && FOOD_TYPE_LABELS[r.itemType]) {
+          await tx.mascotFoodItem.upsert({
+            where: { playerId_type: { playerId: player.id, type: r.itemType as FoodType } },
+            update: { quantity: { increment: r.quantity } },
+            create: { playerId: player.id, type: r.itemType as FoodType, quantity: r.quantity },
+          });
+          labels.push(`${FOOD_TYPE_LABELS[r.itemType]} x${r.quantity}`);
           continue;
         }
         let item: { id: string; name: string; type: ShopItemType } | null = null;
