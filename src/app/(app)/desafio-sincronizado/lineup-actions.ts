@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { normalizeCombatRole, defaultCombatRoleFor } from "@/lib/combat-roles";
-import { getSyncWindowState } from "@/lib/sync-challenge";
+import { getCurrentEventTeamsCutoff, getSyncWindowState } from "@/lib/sync-challenge";
 import type { Role } from "@prisma/client";
 import { validateBattleDivision } from "@/lib/battle-divisions";
 
@@ -20,12 +20,28 @@ async function requirePlayer() {
   return { user, player };
 }
 
+/**
+ * Duplas de eventos anteriores continuam em LINEUP_PENDING/LINEUP_READY até o
+ * admin rodar a limpeza. Sem este corte, o jogador caía na dupla antiga (já
+ * travada/cheia) e seus mascotes apareciam como "em outra escalação ativa".
+ */
+async function currentEventCutoff() {
+  const config = await prisma.syncChallengeConfig.findUnique({
+    where: { id: "singleton" },
+    select: { registrationOpensAt: true },
+  });
+  return config ? getCurrentEventTeamsCutoff(config) : null;
+}
+
 async function getActiveTeamForPlayer(playerId: string) {
+  const cutoff = await currentEventCutoff();
   return prisma.syncEventTeam.findFirst({
     where: {
       status: { in: ["LINEUP_PENDING", "LINEUP_READY"] },
       OR: [{ playerAId: playerId }, { playerBId: playerId }],
+      ...(cutoff ? { createdAt: { gte: cutoff } } : {}),
     },
+    orderBy: { createdAt: "desc" },
     include: { lineups: true },
   });
 }
@@ -70,8 +86,12 @@ export async function addLineupMascotAction(
     if (mascot.playerId !== player.id) return { error: "Este mascote não pertence a você." };
 
     // Verifica se já está em outra escalação ativa
+    const cutoff = await currentEventCutoff();
     const alreadyInLineup = await prisma.syncEventLineup.findFirst({
-      where: { mascotId, team: { status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] } } },
+      where: {
+        mascotId,
+        team: { status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] }, ...(cutoff ? { createdAt: { gte: cutoff } } : {}) },
+      },
     });
     if (alreadyInLineup) return { error: "Este mascote já está em outra escalação ativa." };
 
