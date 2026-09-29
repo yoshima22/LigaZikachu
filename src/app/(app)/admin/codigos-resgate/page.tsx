@@ -4,7 +4,8 @@ import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { formatBrtLocalInput } from "@/lib/brt";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
-import { redeemItemCategory } from "@/lib/redeem-codes";
+import { EggType, ShopItemType } from "@prisma/client";
+import { eggTypeLabel, itemTypeLabel, redeemItemCategory } from "@/lib/redeem-codes";
 import { RedeemCodesAdmin } from "./redeem-codes-admin";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +15,7 @@ export default async function CodigosResgatePage() {
   const [codes, items] = await Promise.all([
     prisma.redeemCode.findMany({
       orderBy: { createdAt: "desc" },
-      include: { rewards: { include: { item: { select: { name: true } } } }, _count: { select: { redemptions: true } } },
+      include: { rewards: { orderBy: { id: "asc" }, include: { item: { select: { name: true } } } }, _count: { select: { redemptions: true } } },
     }),
     prisma.shopItem.findMany({
       where: { id: { not: ADMIN_LAB_RAINBOW_FEATHER_ID } },
@@ -30,6 +31,8 @@ export default async function CodigosResgatePage() {
       </Link>
       <h1 className="text-xl font-bold text-white">Códigos de resgate</h1>
       <RedeemCodesAdmin
+        itemTypes={Object.values(ShopItemType).filter((t) => t !== "RAINBOW_FEATHER").map((t) => ({ value: t, label: itemTypeLabel(t), category: redeemItemCategory(t) }))}
+        eggTypes={Object.values(EggType).map((t) => ({ value: t, label: eggTypeLabel(t) }))}
         items={items.map((i) => ({ ...i, category: redeemItemCategory(i.type) }))}
         codes={codes.map((c) => ({
           id: c.id,
@@ -40,7 +43,18 @@ export default async function CodigosResgatePage() {
           expired: !!c.expiresAt && c.expiresAt.getTime() <= Date.now(),
           maxUses: c.maxUses,
           uses: c._count.redemptions,
-          rewards: c.rewards.map((r) => ({ itemId: r.itemId, name: r.item.name, quantity: r.quantity })),
+          rewards: c.rewards.map((r) => ({
+            kind: r.kind as "ITEM" | "ITEM_TYPE" | "EGG" | "MEGA_CHOICE",
+            itemId: r.itemId ?? undefined,
+            itemType: r.itemType ?? undefined,
+            eggType: r.eggType ?? undefined,
+            quantity: r.quantity,
+            label:
+              r.kind === "EGG" ? eggTypeLabel(r.eggType ?? "")
+              : r.kind === "ITEM_TYPE" ? `Tipo: ${itemTypeLabel(r.itemType ?? "")}`
+              : r.kind === "MEGA_CHOICE" ? "Pedra de Mega à escolha do jogador"
+              : r.item?.name ?? "Item removido",
+          })),
         }))}
       />
     </div>

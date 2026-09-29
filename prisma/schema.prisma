@@ -4930,10 +4930,14 @@ model RedeemCode {
 model RedeemCodeReward {
   id       String     @id @default(cuid())
   codeId   String
-  itemId   String
+  // ITEM (itemId) | ITEM_TYPE (itemType, resolvido no resgate) | EGG (eggType) | MEGA_CHOICE (jogador escolhe a pedra)
+  kind     String     @default("ITEM")
+  itemId   String?
+  itemType String?
+  eggType  EggType?
   quantity Int        @default(1)
   code     RedeemCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
-  item     ShopItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  item     ShopItem?  @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
   @@unique([codeId, itemId])
   @@map("redeem_code_rewards")
@@ -4944,6 +4948,8 @@ model RedeemCodeRedemption {
   codeId     String
   playerId   String
   redeemedAt DateTime   @default(now())
+  // Rótulos do que foi recebido (histórico do jogador)
+  rewardsJson Json?
   code       RedeemCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
   player     Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
 

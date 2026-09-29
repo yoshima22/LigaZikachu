@@ -1,4 +1,4 @@
-import { EggType, FoodType, SyncTicketSide, type Prisma, type ShopItem } from "@prisma/client";
+import { EggType, FoodType, ShopItemType, SyncTicketSide, type Prisma, type ShopItem } from "@prisma/client";
 import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
 
 export function normalizeRedeemCode(code: string) {
@@ -56,4 +56,20 @@ export async function grantShopItemTx(
       create: { playerId, itemId: item.id, quantity, equipped: false, source },
     });
   }
+}
+
+/** Tipos de item "Pedra de Mega" (o jogador escolhe uma delas num prêmio MEGA_CHOICE). */
+export const MEGA_STONE_TYPES = Object.values(ShopItemType).filter((t) => t.startsWith("MEGA_STONE_"));
+
+const EGG_TYPE_LABELS: Record<string, string> = {
+  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "Ovo de Laboratório", EVENT: "Ovo de Evento",
+  CELESTIAL: "Ovo Celestial", EGG_GEN6PLUS: "Ovo Geração 6+",
+};
+export function eggTypeLabel(type: string) {
+  return EGG_TYPE_LABELS[type] ?? `Ovo Geração ${type.replace("EGG_GEN", "")}`;
+}
+
+/** Nome legível de um ShopItemType (ex.: LEAGUE_CAPTAIN_BAND -> "League Captain Band"). */
+export function itemTypeLabel(type: string) {
+  return type.toLowerCase().split("_").map((w) => w.charAt(0).toUpperCase() + w.slice(1)).join(" ");
 }

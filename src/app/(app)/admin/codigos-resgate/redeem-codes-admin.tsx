@@ -7,49 +7,63 @@ import { Pencil, Plus, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
-import { deleteRedeemCode, saveRedeemCode } from "./actions";
+import { deleteRedeemCode, saveRedeemCode, type RewardInput } from "./actions";
 
 type Item = { id: string; name: string; type: string; category: string };
-type Reward = { itemId: string; name: string; quantity: number };
+type Option = { value: string; label: string; category?: string };
+type Reward = RewardInput & { label: string };
 type Code = {
   id: string; code: string; description: string; active: boolean; expiresAt: string; expired: boolean;
   maxUses: number | null; uses: number; rewards: Reward[];
 };
 
 const EMPTY = { id: undefined as string | undefined, code: "", description: "", expiresAt: "", maxUses: "", active: true, rewards: [] as Reward[] };
+const rewardKey = (r: Reward) => `${r.kind}:${r.itemId ?? r.itemType ?? r.eggType ?? ""}`;
+const selectCls = "h-10 rounded-xl border border-border bg-slate-900/70 px-2 text-sm text-slate-100";
 
-export function RedeemCodesAdmin({ items, codes }: { items: Item[]; codes: Code[] }) {
+export function RedeemCodesAdmin({ items, itemTypes, eggTypes, codes }: { items: Item[]; itemTypes: Option[]; eggTypes: Option[]; codes: Code[] }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [form, setForm] = useState(EMPTY);
   const [category, setCategory] = useState("Todos");
   const [search, setSearch] = useState("");
   const [qty, setQty] = useState(1);
+  const [eggType, setEggType] = useState(eggTypes[0]?.value ?? "");
+  const [itemType, setItemType] = useState(itemTypes[0]?.value ?? "");
 
   const categories = useMemo(() => ["Todos", ...Array.from(new Set(items.map((i) => i.category)))], [items]);
   const matches = useMemo(() => {
     const q = search.trim().toLowerCase();
     return items
       .filter((i) => (category === "Todos" || i.category === category) && (!q || i.name.toLowerCase().includes(q) || i.type.toLowerCase().includes(q)))
-      .slice(0, 40);
+      .slice(0, 100);
   }, [items, category, search]);
+  const typeOptions = useMemo(
+    () => itemTypes.filter((t) => category === "Todos" || t.category === category),
+    [itemTypes, category],
+  );
 
-  function addReward(item: Item) {
+  const effectiveType = typeOptions.some((t) => t.value === itemType) ? itemType : (typeOptions[0]?.value ?? "");
+
+  function addReward(reward: Omit<Reward, "quantity">) {
     setForm((f) => {
-      const existing = f.rewards.find((r) => r.itemId === item.id);
+      const key = rewardKey(reward as Reward);
+      const existing = f.rewards.find((r) => rewardKey(r) === key);
       const rewards = existing
-        ? f.rewards.map((r) => (r.itemId === item.id ? { ...r, quantity: r.quantity + qty } : r))
-        : [...f.rewards, { itemId: item.id, name: item.name, quantity: qty }];
+        ? f.rewards.map((r) => (rewardKey(r) === key ? { ...r, quantity: Math.min(99, r.quantity + qty) } : r))
+        : [...f.rewards, { ...reward, quantity: qty }];
       return { ...f, rewards };
     });
   }
+
+  const toInput = ({ kind, itemId, itemType, eggType, quantity }: Reward): RewardInput => ({ kind, itemId, itemType, eggType, quantity });
 
   function save() {
     startTransition(async () => {
       const res = await saveRedeemCode({
         id: form.id, code: form.code, description: form.description, expiresAt: form.expiresAt,
         maxUses: form.maxUses ? Number(form.maxUses) : null, active: form.active,
-        rewards: form.rewards.map(({ itemId, quantity }) => ({ itemId, quantity })),
+        rewards: form.rewards.map(toInput),
       });
       if (res.error) return void toast.error(res.error);
       toast.success(form.id ? "Código atualizado." : "Código criado.");
@@ -60,7 +74,7 @@ export function RedeemCodesAdmin({ items, codes }: { items: Item[]; codes: Code[
 
   function toggle(c: Code) {
     startTransition(async () => {
-      const res = await saveRedeemCode({ ...c, expiresAt: c.expiresAt, active: !c.active, rewards: c.rewards });
+      const res = await saveRedeemCode({ ...c, active: !c.active, rewards: c.rewards.map(toInput) });
       if (res.error) toast.error(res.error);
       else router.refresh();
     });
@@ -74,6 +88,8 @@ export function RedeemCodesAdmin({ items, codes }: { items: Item[]; codes: Code[
       else router.refresh();
     });
   }
+
+  const hasMegaChoice = form.rewards.some((r) => r.kind === "MEGA_CHOICE");
 
   return (
     <div className="space-y-6">
@@ -97,30 +113,66 @@ export function RedeemCodesAdmin({ items, codes }: { items: Item[]; codes: Code[
           <input type="checkbox" checked={form.active} onChange={(e) => setForm({ ...form, active: e.target.checked })} /> Ativo
         </label>
 
-        <div className="space-y-2 rounded-xl border border-border p-3">
+        <div className="space-y-3 rounded-xl border border-border p-3">
           <p className="text-xs font-semibold uppercase text-slate-400">Prêmios ({form.rewards.length})</p>
           <div className="flex flex-wrap gap-2">
             {form.rewards.map((r) => (
-              <span key={r.itemId} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-xs text-primary">
-                {r.name} x{r.quantity}
-                <button type="button" onClick={() => setForm({ ...form, rewards: form.rewards.filter((x) => x.itemId !== r.itemId) })}><X size={12} /></button>
+              <span key={rewardKey(r)} className="inline-flex items-center gap-1 rounded-full bg-primary/15 px-2 py-1 text-xs text-primary">
+                {r.label} x{r.quantity}
+                <button type="button" onClick={() => setForm({ ...form, rewards: form.rewards.filter((x) => rewardKey(x) !== rewardKey(r)) })}><X size={12} /></button>
               </span>
             ))}
           </div>
-          <div className="flex flex-wrap gap-2">
-            <select value={category} onChange={(e) => setCategory(e.target.value)} className="h-10 rounded-xl border border-border bg-slate-900/70 px-2 text-sm text-slate-100">
-              {categories.map((c) => <option key={c}>{c}</option>)}
-            </select>
-            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item..." className="min-w-40 flex-1" />
+
+          <label className="flex items-center gap-2 text-xs text-slate-400">
+            Quantidade ao adicionar
             <Input type="number" min={1} max={99} value={qty} onChange={(e) => setQty(Math.max(1, Number(e.target.value) || 1))} className="w-20" />
+          </label>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-300">Ovo direto (qualquer tipo, mesmo sem item cadastrado)</p>
+            <div className="flex gap-2">
+              <select value={eggType} onChange={(e) => setEggType(e.target.value)} className={`${selectCls} flex-1`}>
+                {eggTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <Button type="button" variant="outline" onClick={() => addReward({ kind: "EGG", eggType, label: eggTypes.find((t) => t.value === eggType)?.label ?? eggType })}>Adicionar ovo</Button>
+            </div>
           </div>
-          <div className="grid max-h-64 gap-1 overflow-y-auto sm:grid-cols-2">
-            {matches.map((i) => (
-              <button key={i.id} type="button" onClick={() => addReward(i)} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-xs text-slate-200 hover:bg-white/5">
-                <span className="truncate">{i.name}</span><Plus size={14} className="shrink-0 text-primary" />
-              </button>
-            ))}
-            {matches.length === 0 && <p className="text-xs text-slate-500">Nenhum item encontrado.</p>}
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-300">Pedra de Mega à escolha do jogador</p>
+            <Button type="button" variant="outline" disabled={hasMegaChoice} onClick={() => addReward({ kind: "MEGA_CHOICE", label: "Pedra de Mega à escolha do jogador" })}>
+              {hasMegaChoice ? "Já adicionada" : "Adicionar escolha de pedra"}
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-300">Item específico</p>
+            <div className="flex flex-wrap gap-2">
+              <select value={category} onChange={(e) => setCategory(e.target.value)} className={selectCls}>
+                {categories.map((c) => <option key={c}>{c}</option>)}
+              </select>
+              <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar item..." className="min-w-40 flex-1" />
+            </div>
+            <div className="grid max-h-64 gap-1 overflow-y-auto sm:grid-cols-2">
+              {matches.map((i) => (
+                <button key={i.id} type="button" onClick={() => addReward({ kind: "ITEM", itemId: i.id, label: i.name })} className="flex items-center justify-between gap-2 rounded-lg border border-border px-2 py-1.5 text-left text-xs text-slate-200 hover:bg-white/5">
+                  <span className="truncate">{i.name}</span><Plus size={14} className="shrink-0 text-primary" />
+                </button>
+              ))}
+              {matches.length === 0 && <p className="text-xs text-slate-500">Nenhum item encontrado.</p>}
+            </div>
+          </div>
+
+          <div className="space-y-2">
+            <p className="text-xs font-semibold text-slate-300">Por tipo de item (itens de eventos futuros)</p>
+            <p className="text-[11px] text-slate-500">Entrega o primeiro item ativo desse tipo no momento do resgate — não precisa atualizar o código quando o item novo for cadastrado. Usa o filtro de categoria acima.</p>
+            <div className="flex gap-2">
+              <select value={effectiveType} onChange={(e) => setItemType(e.target.value)} className={`${selectCls} min-w-0 flex-1`}>
+                {typeOptions.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+              </select>
+              <Button type="button" variant="outline" disabled={!effectiveType} onClick={() => addReward({ kind: "ITEM_TYPE", itemType: effectiveType, label: `Tipo: ${itemTypes.find((t) => t.value === effectiveType)?.label ?? effectiveType}` })}>Adicionar tipo</Button>
+            </div>
           </div>
         </div>
 
@@ -147,7 +199,7 @@ export function RedeemCodesAdmin({ items, codes }: { items: Item[]; codes: Code[
               </div>
             </div>
             {c.description && <p className="text-xs text-slate-400">{c.description}</p>}
-            <p className="text-sm text-slate-200">{c.rewards.map((r) => `${r.name} x${r.quantity}`).join(" · ")}</p>
+            <p className="text-sm text-slate-200">{c.rewards.map((r) => `${r.label} x${r.quantity}`).join(" · ")}</p>
           </Card>
         ))}
       </div>
