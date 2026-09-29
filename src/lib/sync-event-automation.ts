@@ -5,13 +5,15 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { loadModEffect, runSyncBattle, type ModEffect, type SyntheticSyncMascot } from "@/lib/sync-battle";
 import { materializeRoundModifier } from "@/lib/sync-round-modifiers";
 import { finalizeSyncEventRoomRewards } from "@/lib/sync-event-rewards";
+import { currentEventTeamsWhere } from "@/lib/sync-challenge";
 import { applySyncRoundRewardModifier } from "@/lib/sync-modifier-rewards";
 
 const SELECTION_WINDOW_MS = 10 * 60 * 1000;
 
 export async function autoLockCompleteSyncLineups(now = new Date()) {
+  const config = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" }, select: { registrationOpensAt: true } });
   const pendingTeams = await prisma.syncEventTeam.findMany({
-    where: { status: "LINEUP_PENDING", roomId: null, playerBId: { not: null } },
+    where: { status: "LINEUP_PENDING", roomId: null, playerBId: { not: null }, ...currentEventTeamsWhere(config) },
     select: {
       id: true,
       playerAId: true,
@@ -284,7 +286,7 @@ export async function formSyncArenaForTodayIfDue(now = new Date()) {
   const { autoLocked } = await autoLockCompleteSyncLineups(now);
 
   const readyTeams = await prisma.syncEventTeam.findMany({
-    where: { status: "LINEUP_READY", roomId: null },
+    where: { status: "LINEUP_READY", roomId: null, ...currentEventTeamsWhere(config) },
     select: { id: true, playerAId: true, playerBId: true, lineups: { select: { playerId: true } } },
     orderBy: { lineupReadyAt: "asc" },
   });

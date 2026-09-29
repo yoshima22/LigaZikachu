@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
-import { buildSyncRoomRanking, ensureSyncChallengeItems, getCurrentEventTeamsCutoff, getSideImage, getSideLabel, getSyncWindowState, SYNC_ROOM_STATUS_LABELS } from "@/lib/sync-challenge";
+import { buildSyncRoomRanking, currentEventTeamsWhere, ensureSyncChallengeItems, getCurrentEventTeamsCutoff, getSideImage, getSideLabel, getSyncWindowState, SYNC_ROOM_STATUS_LABELS } from "@/lib/sync-challenge";
 import { AdminTicketPanel } from "./_components/admin-ticket-panel";
 import { adminSeedModifiersAction } from "./seed-modifiers-action";
 import { SyncLineupPanel } from "./_components/sync-lineup-panel";
@@ -49,7 +49,12 @@ export default async function DesafioSincronizadoPage() {
   }
 
   const admin = isAdmin(session.user.role);
-  await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
+  // Só recria/normaliza os itens de ticket quando faltam: fazer isso (várias
+  // escritas em transação) a cada renderização deixava a página lenta.
+  const activeTicketItems = await prisma.shopItem.count({
+    where: { type: { in: ["SYNC_TICKET_FIRE_LEFT", "SYNC_TICKET_WATER_RIGHT", "SYNC_TICKET_COMPLETE"] }, active: true },
+  });
+  if (activeTicketItems < 3) await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
   // Jogadores sem ticket completo disponível — para exibir publicamente
   const playersWithAvailableTicket = await prisma.syncTicket.findMany({
@@ -129,7 +134,7 @@ export default async function DesafioSincronizadoPage() {
     prisma.syncEventTeam.findMany({
       where: {
         status: { in: ["OPEN", "COMPLETE"] },
-        ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
+        ...currentEventTeamsWhere(config),
       },
       include: {
         playerA: { select: { id: true, displayName: true } },
@@ -147,7 +152,7 @@ export default async function DesafioSincronizadoPage() {
     where: {
       status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] },
       OR: [{ playerAId: player.id }, { playerBId: player.id }],
-      ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
+      ...currentEventTeamsWhere(config),
     },
     include: {
       playerA: { select: { id: true, displayName: true } },
@@ -237,7 +242,7 @@ export default async function DesafioSincronizadoPage() {
     const lineupTeams = await prisma.syncEventTeam.findMany({
       where: {
         status: { in: ["LINEUP_PENDING", "LINEUP_READY"] },
-        ...(currentEventCutoff ? { createdAt: { gte: currentEventCutoff } } : {}),
+        ...currentEventTeamsWhere(config),
       },
       select: {
         id: true,

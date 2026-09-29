@@ -10,6 +10,7 @@ import { toBrtDateString } from "@/lib/date-utils";
 import {
   combineSyncTicketHalves,
   createOpenSyncTeam,
+  currentEventTeamsWhere,
   grantValidSyncTicketForPlayer,
   grantSyncTicketHalf,
   joinOpenSyncTeam,
@@ -375,8 +376,9 @@ export async function cancelSyncTeamAdminAction(formData: FormData): Promise<{ e
 export async function confirmTeamAction(): Promise<{ error?: string }> {
   try {
     const { player } = await requireCurrentPlayer();
+    const eventConfig = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" }, select: { registrationOpensAt: true } });
     const team = await prisma.syncEventTeam.findFirst({
-      where: { status: "COMPLETE", OR: [{ playerAId: player.id }, { playerBId: player.id }] },
+      where: { status: "COMPLETE", OR: [{ playerAId: player.id }, { playerBId: player.id }], ...currentEventTeamsWhere(eventConfig) },
       select: { id: true, playerAId: true, playerBId: true, confirmedA: true, confirmedB: true },
     });
     if (!team) return { error: "Você não está em uma dupla aguardando confirmação." };
@@ -407,11 +409,13 @@ export async function confirmTeamAction(): Promise<{ error?: string }> {
 export async function leaveTeamAction(): Promise<{ error?: string }> {
   try {
     const { player } = await requireCurrentPlayer();
+    const eventConfig = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" }, select: { registrationOpensAt: true } });
     await prisma.$transaction(async (tx) => {
       const team = await tx.syncEventTeam.findFirst({
         where: {
           status: "COMPLETE",
           OR: [{ playerAId: player.id }, { playerBId: player.id }],
+          ...currentEventTeamsWhere(eventConfig),
         },
         select: { id: true, playerAId: true, playerBId: true, ticketAId: true, ticketBId: true, confirmedA: true, confirmedB: true },
       });

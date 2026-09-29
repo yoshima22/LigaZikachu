@@ -1,5 +1,6 @@
 import { Prisma, ShopItemRarity, SyncTicketSide } from "@prisma/client";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { toBrtDateString } from "@/lib/date-utils";
 
 export const SYNC_TICKET_TYPES = {
   fireLeft: "SYNC_TICKET_FIRE_LEFT",
@@ -414,6 +415,28 @@ export function getCurrentEventTeamsCutoff(config: { registrationOpensAt?: Date 
   return opensAt;
 }
 
+/**
+ * Filtro Prisma das duplas do evento ATUAL. Duplas de eventos passados nunca
+ * devem ser consideradas: ficam de fora as criadas antes da abertura vigente e
+ * as ligadas a salas já finalizadas, canceladas ou de dias anteriores.
+ * Use com spread no `where` (não use junto com outro `AND` no mesmo nível).
+ */
+export function currentEventTeamsWhere(
+  config: { registrationOpensAt?: Date | string | null } | null | undefined,
+  now = new Date(),
+): Prisma.SyncEventTeamWhereInput {
+  const cutoff = config ? getCurrentEventTeamsCutoff(config) : null;
+  return {
+    ...(cutoff ? { createdAt: { gte: cutoff } } : {}),
+    AND: [{
+      OR: [
+        { roomId: null },
+        { room: { status: { notIn: ["FINISHED", "CANCELLED"] }, date: { gte: toBrtDateString(now) } } },
+      ],
+    }],
+  };
+}
+
 export function buildSyncRoomRanking(room: {
   teams: { id: string; playerA: { displayName: string }; playerB: { displayName: string } | null }[];
   scores: { teamId: string; wins: number; damageDone: number; damageTaken: number; finalPosition: number | null }[];
@@ -463,10 +486,12 @@ async function assertPlayerCanUseTicket(tx: Prisma.TransactionClient, playerId: 
   if (ticket.bannedUserAId === playerId || ticket.bannedUserBId === playerId) {
     throw new Error("Voce esta banido pela origem deste ticket.");
   }
+  const eventConfig = await tx.syncChallengeConfig.findUnique({ where: { id: "singleton" }, select: { registrationOpensAt: true } });
   const activeTeam = await tx.syncEventTeam.findFirst({
     where: {
       status: { in: ["OPEN", "COMPLETE"] },
       OR: [{ playerAId: playerId }, { playerBId: playerId }],
+      ...currentEventTeamsWhere(eventConfig),
     },
     select: { id: true },
   });

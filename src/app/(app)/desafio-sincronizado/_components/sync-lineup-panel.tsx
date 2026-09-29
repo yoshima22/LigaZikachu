@@ -1,7 +1,6 @@
 "use client";
 
 import { useState, useTransition } from "react";
-import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Lock, Search, Unlock, X, CheckCircle2, Clock } from "lucide-react";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
@@ -52,7 +51,6 @@ export function SyncLineupPanel({
   myLocked, partnerLocked,
   myMascots, isAdmin, partnerPlayerId,
 }: Props) {
-  const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
 
@@ -76,8 +74,9 @@ export function SyncLineupPanel({
   const act = (fn: () => Promise<{ error?: string }>) => {
     startTransition(async () => {
       const r = await fn();
+      // A action já chama revalidatePath: o Next devolve a página atualizada na
+      // mesma resposta. Um router.refresh() aqui renderizava a página inteira 2x.
       if (r.error) toast.error(r.error);
-      else router.refresh();
     });
   };
 

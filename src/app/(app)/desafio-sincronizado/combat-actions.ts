@@ -1,6 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { currentEventTeamsWhere } from "@/lib/sync-challenge";
 import { EggType, ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin } from "@/lib/auth/permissions";
@@ -309,8 +310,9 @@ export async function adminFormRoomsAction(): Promise<{ error?: string; formed?:
     if (existingRooms > 0) return { error: `Salas para ${date} ja foram formadas.` };
 
     // Busca duplas com lineup completo.
+    const eventConfig = await prisma.syncChallengeConfig.findUnique({ where: { id: "singleton" }, select: { registrationOpensAt: true } });
     const readyTeams = await prisma.syncEventTeam.findMany({
-      where: { status: "LINEUP_READY", roomId: null },
+      where: { status: "LINEUP_READY", roomId: null, ...currentEventTeamsWhere(eventConfig) },
       orderBy: { lineupReadyAt: "asc" },
       select: { id: true, playerAId: true, playerBId: true },
     });

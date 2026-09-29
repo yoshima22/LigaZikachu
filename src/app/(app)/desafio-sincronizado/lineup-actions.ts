@@ -6,7 +6,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { normalizeCombatRole, defaultCombatRoleFor } from "@/lib/combat-roles";
-import { getCurrentEventTeamsCutoff, getSyncWindowState } from "@/lib/sync-challenge";
+import { currentEventTeamsWhere, getSyncWindowState } from "@/lib/sync-challenge";
 import type { Role } from "@prisma/client";
 import { validateBattleDivision } from "@/lib/battle-divisions";
 
@@ -20,38 +20,34 @@ async function requirePlayer() {
   return { user, player };
 }
 
-/**
- * Duplas de eventos anteriores continuam em LINEUP_PENDING/LINEUP_READY até o
- * admin rodar a limpeza. Sem este corte, o jogador caía na dupla antiga (já
- * travada/cheia) e seus mascotes apareciam como "em outra escalação ativa".
- */
-async function currentEventCutoff() {
-  const config = await prisma.syncChallengeConfig.findUnique({
+const getLineupConfig = () =>
+  prisma.syncChallengeConfig.findUnique({
     where: { id: "singleton" },
-    select: { registrationOpensAt: true },
+    select: { registrationOpensAt: true, registrationClosesAt: true },
   });
-  return config ? getCurrentEventTeamsCutoff(config) : null;
+type LineupConfig = Awaited<ReturnType<typeof getLineupConfig>>;
+
+/** Sessão + configuração em paralelo (evita idas e voltas ao banco em sequência). */
+async function loadContext() {
+  const [session, config] = await Promise.all([requirePlayer(), getLineupConfig()]);
+  return { ...session, config };
 }
 
-async function getActiveTeamForPlayer(playerId: string) {
-  const cutoff = await currentEventCutoff();
+/** Só duplas do evento atual: eventos passados nunca entram na escalação. */
+function getActiveTeamForPlayer(playerId: string, config: LineupConfig) {
   return prisma.syncEventTeam.findFirst({
     where: {
       status: { in: ["LINEUP_PENDING", "LINEUP_READY"] },
       OR: [{ playerAId: playerId }, { playerBId: playerId }],
-      ...(cutoff ? { createdAt: { gte: cutoff } } : {}),
+      ...currentEventTeamsWhere(config),
     },
     orderBy: { createdAt: "desc" },
     include: { lineups: true },
   });
 }
 
-async function assertLineupWindowOpen(role: Role): Promise<string | null> {
+function assertLineupWindowOpen(role: Role, config: LineupConfig): string | null {
   if (isAdmin(role)) return null;
-  const config = await prisma.syncChallengeConfig.findUnique({
-    where: { id: "singleton" },
-    select: { registrationOpensAt: true, registrationClosesAt: true },
-  });
   const state = getSyncWindowState(config ?? undefined);
   return state.isOpen ? null : `O prazo para montar e travar a equipe encerrou às 17:50 BRT. ${state.label}`;
 }
@@ -60,11 +56,11 @@ export async function addLineupMascotAction(
   mascotId: string,
 ): Promise<{ error?: string }> {
   try {
-    const { user, player } = await requirePlayer();
-    const windowError = await assertLineupWindowOpen(user.role);
+    const { user, player, config } = await loadContext();
+    const windowError = assertLineupWindowOpen(user.role, config);
     if (windowError) return { error: windowError };
 
-    const team = await getActiveTeamForPlayer(player.id);
+    const team = await getActiveTeamForPlayer(player.id, config);
     if (!team) return { error: "Você não está em uma dupla ativa." };
 
     const myStatus = team.playerAId === player.id ? team.lineupStatusA : team.lineupStatusB;
@@ -73,40 +69,35 @@ export async function addLineupMascotAction(
     const myLineup = team.lineups.filter((l) => l.playerId === player.id);
     if (myLineup.length >= LINEUP_SLOTS) return { error: `Você já tem ${LINEUP_SLOTS} mascotes na escalação.` };
 
-    // Valida dono e disponibilidade do mascote
-    const mascot = await prisma.mascot.findUnique({
-      where: { id: mascotId },
-      select: {
-        id: true, playerId: true, nickname: true, pokemonId: true, preferredCombatRole: true,
-        megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
-        statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
-      },
-    });
+    // Dono do mascote + "já escalado em outra dupla do evento atual" em paralelo.
+    const [mascot, alreadyInLineup] = await Promise.all([
+      prisma.mascot.findUnique({
+        where: { id: mascotId },
+        select: {
+          id: true, playerId: true, nickname: true, pokemonId: true, preferredCombatRole: true,
+          megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
+          statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+        },
+      }),
+      prisma.syncEventLineup.findFirst({
+        where: {
+          mascotId,
+          team: { status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] }, ...currentEventTeamsWhere(config) },
+        },
+        select: { id: true },
+      }),
+    ]);
     if (!mascot) return { error: "Mascote não encontrado." };
     if (mascot.playerId !== player.id) return { error: "Este mascote não pertence a você." };
-
-    // Verifica se já está em outra escalação ativa
-    const cutoff = await currentEventCutoff();
-    const alreadyInLineup = await prisma.syncEventLineup.findFirst({
-      where: {
-        mascotId,
-        team: { status: { in: ["COMPLETE", "LINEUP_PENDING", "LINEUP_READY"] }, ...(cutoff ? { createdAt: { gte: cutoff } } : {}) },
-      },
-    });
     if (alreadyInLineup) return { error: "Este mascote já está em outra escalação ativa." };
 
-    const nextSlot = myLineup.length + 1;
+    // Primeiro slot livre (não depende de a lista estar compactada).
+    const usedSlots = new Set(myLineup.map((l) => l.slot));
+    let nextSlot = 1;
+    while (usedSlots.has(nextSlot)) nextSlot++;
     await prisma.syncEventLineup.create({
       data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: defaultCombatRoleFor(mascot) },
     });
-
-    // Atualiza status da dupla para LINEUP_PENDING se ainda estava COMPLETE
-    if (team.status === "COMPLETE") {
-      await prisma.syncEventTeam.update({
-        where: { id: team.id },
-        data: { status: "LINEUP_PENDING" },
-      });
-    }
 
     revalidatePath("/desafio-sincronizado");
     return {};
@@ -120,14 +111,14 @@ export async function setLineupCombatRoleAction(
   combatRole: string,
 ): Promise<{ error?: string }> {
   try {
-    const { user, player } = await requirePlayer();
-    const windowError = await assertLineupWindowOpen(user.role);
+    const { user, player, config } = await loadContext();
+    const windowError = assertLineupWindowOpen(user.role, config);
     if (windowError) return { error: windowError };
-    const team = await getActiveTeamForPlayer(player.id);
-    if (!team) return { error: "VocÃª nÃ£o estÃ¡ em uma dupla ativa." };
+    const team = await getActiveTeamForPlayer(player.id, config);
+    if (!team) return { error: "Você não está em uma dupla ativa." };
 
     const entry = team.lineups.find((l) => l.playerId === player.id && l.mascotId === mascotId);
-    if (!entry) return { error: "Mascote nÃ£o estÃ¡ na sua escalaÃ§Ã£o." };
+    if (!entry) return { error: "Mascote não está na sua escalação." };
 
     await prisma.syncEventLineup.update({
       where: { id: entry.id },
@@ -145,11 +136,11 @@ export async function removeLineupMascotAction(
   mascotId: string,
 ): Promise<{ error?: string }> {
   try {
-    const { user, player } = await requirePlayer();
-    const windowError = await assertLineupWindowOpen(user.role);
+    const { user, player, config } = await loadContext();
+    const windowError = assertLineupWindowOpen(user.role, config);
     if (windowError) return { error: windowError };
 
-    const team = await getActiveTeamForPlayer(player.id);
+    const team = await getActiveTeamForPlayer(player.id, config);
     if (!team) return { error: "Você não está em uma dupla ativa." };
 
     const myStatus = team.playerAId === player.id ? team.lineupStatusA : team.lineupStatusB;
@@ -159,18 +150,16 @@ export async function removeLineupMascotAction(
     if (!entry) return { error: "Mascote não está na sua escalação." };
 
     // Remove e recompacta slots
-    await prisma.syncEventLineup.delete({ where: { id: entry.id } });
     const remaining = team.lineups
       .filter((l) => l.playerId === player.id && l.mascotId !== mascotId)
       .sort((a, b) => a.slot - b.slot);
-    for (let i = 0; i < remaining.length; i++) {
-      if (remaining[i].slot !== i + 1) {
-        await prisma.syncEventLineup.update({
-          where: { id: remaining[i].id },
-          data: { slot: i + 1 },
-        });
-      }
-    }
+    await prisma.$transaction([
+      prisma.syncEventLineup.delete({ where: { id: entry.id } }),
+      ...remaining
+        .map((l, i) => ({ l, slot: i + 1 }))
+        .filter(({ l, slot }) => l.slot !== slot)
+        .map(({ l, slot }) => prisma.syncEventLineup.update({ where: { id: l.id }, data: { slot } })),
+    ]);
 
     revalidatePath("/desafio-sincronizado");
     return {};
@@ -181,11 +170,11 @@ export async function removeLineupMascotAction(
 
 export async function lockLineupAction(): Promise<{ error?: string }> {
   try {
-    const { user, player } = await requirePlayer();
-    const windowError = await assertLineupWindowOpen(user.role);
+    const { user, player, config } = await loadContext();
+    const windowError = assertLineupWindowOpen(user.role, config);
     if (windowError) return { error: windowError };
 
-    const team = await getActiveTeamForPlayer(player.id);
+    const team = await getActiveTeamForPlayer(player.id, config);
     if (!team) return { error: "Você não está em uma dupla ativa." };
 
     const isA = team.playerAId === player.id;
@@ -230,9 +219,9 @@ export async function lockLineupAction(): Promise<{ error?: string }> {
 
 export async function unlockLineupAction(): Promise<{ error?: string }> {
   try {
-    const { user, player } = await requirePlayer();
+    const { user, player, config } = await loadContext();
 
-    const team = await getActiveTeamForPlayer(player.id);
+    const team = await getActiveTeamForPlayer(player.id, config);
     if (!team) return { error: "Você não está em uma dupla ativa." };
 
     // Apenas admin pode destravar

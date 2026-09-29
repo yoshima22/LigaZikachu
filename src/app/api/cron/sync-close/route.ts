@@ -9,6 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { toBrtDateString } from "@/lib/date-utils";
 import { autoLockCompleteSyncLineups } from "@/lib/sync-event-automation";
+import { currentEventTeamsWhere } from "@/lib/sync-challenge";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -50,7 +51,7 @@ export async function GET(req: NextRequest) {
 
     // Busca duplas com lineups travados (LINEUP_READY) e sem sala atribuída
     const readyTeams = await prisma.syncEventTeam.findMany({
-      where: { status: "LINEUP_READY", roomId: null },
+      where: { status: "LINEUP_READY", roomId: null, ...currentEventTeamsWhere(config) },
       select: { id: true, playerAId: true, playerBId: true, lineups: { select: { playerId: true } } },
       orderBy: { lineupReadyAt: "asc" },
     });
