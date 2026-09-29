@@ -5,7 +5,7 @@
 
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
-import { ZikaCoinTxType } from "@prisma/client";
+import { ZikaCoinTxType, type Prisma } from "@prisma/client";
 import { pickRarity, pickCardFromPool, DUPLICATE_COINS } from "@/lib/sticker-pack";
 
 export type PackOpenResult = {
@@ -17,16 +17,17 @@ export type PackOpenResult = {
 
 const EMPTY: PackOpenResult = { cards: [], totalCoinsEarned: 0, packName: "" };
 
-export async function openStickerPackByName(playerId: string, packName: string): Promise<PackOpenResult> {
+export async function openStickerPackByName(playerId: string, packName: string, transaction?: Prisma.TransactionClient): Promise<PackOpenResult> {
+  const db = transaction ?? prisma;
   // Busca o pack ativo pelo nome (match parcial)
-  const pack = await prisma.stickerPack.findFirst({
+  const pack = await db.stickerPack.findFirst({
     where: { active: true, name: { contains: packName } },
     orderBy: { name: "asc" },
   });
   if (!pack) return { ...EMPTY, packName, error: `Pack "${packName}" não encontrado.` };
 
   const genFilter = pack.generation ? getGenRange(`GEN${pack.generation}`) : null;
-  const allCards = await prisma.pokemonCard.findMany({
+  const allCards = await db.pokemonCard.findMany({
     where: {
       active: true,
       ...(genFilter ? { nationalId: { gte: genFilter[0], lte: genFilter[1] } } : {}),
@@ -42,7 +43,7 @@ export async function openStickerPackByName(playerId: string, packName: string):
     byRarity.set(card.rarity, list);
   }
 
-  const owned = await prisma.playerSticker.findMany({ where: { playerId }, select: { cardId: true, quantity: true } });
+  const owned = await db.playerSticker.findMany({ where: { playerId }, select: { cardId: true, quantity: true } });
   const ownedMap = new Map(owned.map(o => [o.cardId, o.quantity]));
 
   const drawn: typeof allCards[number][] = [];
@@ -57,7 +58,7 @@ export async function openStickerPackByName(playerId: string, packName: string):
   let totalCoinsEarned = 0;
   const resultCards: PackOpenResult["cards"] = [];
 
-  await prisma.$transaction(async (tx) => {
+  const grant = async (tx: Prisma.TransactionClient) => {
     for (const card of drawn) {
       const isDuplicate = ownedMap.has(card.id);
       const coinsEarned = isDuplicate ? (DUPLICATE_COINS[card.rarity as keyof typeof DUPLICATE_COINS] ?? 5) : 0;
@@ -78,7 +79,9 @@ export async function openStickerPackByName(playerId: string, packName: string):
 
       resultCards.push({ nationalId: card.nationalId, displayName: card.displayName, imageUrl: card.imageUrl ?? null, rarity: card.rarity, isDuplicate, coinsEarned });
     }
-  });
+  };
+  if (transaction) await grant(transaction);
+  else await prisma.$transaction(grant);
 
   return { cards: resultCards, totalCoinsEarned, packName: pack.name };
 }

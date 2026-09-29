@@ -14,7 +14,7 @@ export type ExpGrantPayload = {
   sourceEntityId?: string;
 };
 
-export async function processMascotExpGrant(jobId: string): Promise<boolean> {
+export async function processMascotExpGrant(jobId: string, invalidateCache = true): Promise<boolean> {
   const now = new Date();
   const claimed = await prisma.mascotInteractionJob.updateMany({
     where: {
@@ -54,7 +54,7 @@ export async function processMascotExpGrant(jobId: string): Promise<boolean> {
       where: { id: job.id, status: "PROCESSING" },
       data: { status: "COMPLETED", completedAt: new Date(), lockedAt: null },
     });
-    revalidateTag(`player-mascots-${job.playerId}`);
+    if (invalidateCache) revalidateTag(`player-mascots-${job.playerId}`);
     return true;
   } catch (error) {
     // Se o commit da EXP ocorreu, uma falha posterior no log não deve repetir a concessão.
@@ -83,20 +83,38 @@ export async function processPendingMascotExpGrants(limit = 20) {
         { status: "PROCESSING", lockedAt: { lt: new Date(Date.now() - STALE_LOCK_MS) } },
       ],
     },
-    select: { id: true },
+    select: { id: true, playerId: true },
     orderBy: { createdAt: "asc" },
     take: limit,
   });
   let processed = 0;
-  for (const job of jobs) {
-    if (Date.now() >= deadline) break;
-    if (await processMascotExpGrant(job.id)) processed += 1;
+  const affected = new Set<string>();
+  try {
+    for (const job of jobs) {
+      if (Date.now() >= deadline) break;
+      affected.add(job.playerId);
+      if (await processMascotExpGrant(job.id, false)) processed += 1;
+    }
+  } finally {
+    for (const playerId of affected) revalidateTag(`player-mascots-${playerId}`);
   }
   return { found: jobs.length, processed };
 }
 
 export async function processMascotExpGrantBatch(jobIds: string[]) {
-  for (let index = 0; index < jobIds.length; index += 2) {
-    await Promise.allSettled(jobIds.slice(index, index + 2).map((id) => processMascotExpGrant(id)));
+  const jobs = await prisma.mascotInteractionJob.findMany({
+    where: { id: { in: jobIds }, interactionType: "EXP_GRANT" }, select: { id: true, playerId: true },
+  });
+  const deadline = Date.now() + 40_000;
+  const affected = new Set<string>();
+  try {
+    for (let index = 0; index < jobs.length; index += 2) {
+      if (Date.now() >= deadline) break; // Remaining jobs are durable and picked up by cron.
+      const batch = jobs.slice(index, index + 2);
+      for (const job of batch) affected.add(job.playerId);
+      await Promise.allSettled(batch.map((job) => processMascotExpGrant(job.id, false)));
+    }
+  } finally {
+    for (const playerId of affected) revalidateTag(`player-mascots-${playerId}`);
   }
 }

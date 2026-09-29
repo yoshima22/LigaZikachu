@@ -2273,12 +2273,16 @@ function hungerMinHours(status: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED",
   return 2 * m; // SATISFIED
 }
 
+// Mantem a escrita SQL, a criacao dos jobs de EXP e a revalidacao pequenas mesmo
+// para contas que acumularam centenas de mascotes.
+const FEED_ALL_BATCH_SIZE = 100;
+
 export async function feedAllAction(
   minHunger: "STARVING" | "HUNGRY" | "NEUTRAL" | "SATISFIED" = "NEUTRAL",
   foodType: "FOOD" | "SWEET" | "RARE_SWEET" = "FOOD",
   scope: "ALL" | "FAVORITES" = "ALL",
 ): Promise<{
-  error?: string; fed: number; skipped: number; noFood: boolean; noEligible?: boolean; expPending?: number;
+  error?: string; fed: number; skipped: number; noFood: boolean; noEligible?: boolean; expPending?: number; fedIds?: string[]; remainingEligible?: number; fedAt?: string; inventoryRemaining?: number; fedMascots?: { id: string; happiness: number }[];
 }> {
   const startedAt = Date.now();
   try {
@@ -2298,24 +2302,25 @@ export async function feedAllAction(
       return { fed: 0, skipped: 0, noFood: true };
     }
 
-    // Busca todos os mascotes que não estão feridos/na arena
-    const allMascots = await prisma.mascot.findMany({
-      where: {
-        playerId: player.id,
-        ...(scope === "FAVORITES" ? { isFavorite: true } : {}),
-        arenaState: { notIn: ["INJURED", "ARENA"] },
-      },
-      select: { id: true, happiness: true, lastFedAt: true, isEquipped: true, personality: true },
-      orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
-    });
-
-    // Filtra em memória respeitando multiplicador de banco por mascote
-    const mascots = allMascots.filter(m => {
-      const hours = m.lastFedAt ? (Date.now() - new Date(m.lastFedAt).getTime()) / 3_600_000 : 999;
-      return hours >= hungerMinHours(minHunger, m.isEquipped);
-    });
-
-    const toFeed = mascots.slice(0, food.quantity); // não alimenta mais do que tem no estoque
+    const eligibility: Prisma.MascotWhereInput = {
+      playerId: player.id,
+      ...(scope === "FAVORITES" ? { isFavorite: true } : {}),
+      arenaState: { notIn: ["INJURED", "ARENA"] },
+      OR: [
+        { lastFedAt: null },
+        { isEquipped: true, lastFedAt: { lte: new Date(Date.now() - hungerMinHours(minHunger, true) * 3_600_000) } },
+        { isEquipped: false, lastFedAt: { lte: new Date(Date.now() - hungerMinHours(minHunger, false) * 3_600_000) } },
+      ],
+    };
+    const [eligibleCount, toFeed] = await Promise.all([
+      prisma.mascot.count({ where: eligibility }),
+      prisma.mascot.findMany({
+        where: eligibility,
+        take: Math.min(food.quantity, FEED_ALL_BATCH_SIZE),
+        select: { id: true, lastFedAt: true, personality: true },
+        orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { level: "desc" }],
+      }),
+    ]);
     if (toFeed.length === 0) {
       return { fed: 0, skipped: 0, noFood: false, noEligible: true };
     }
@@ -2325,24 +2330,31 @@ export async function feedAllAction(
     const batchId = crypto.randomUUID();
     const expJobIds = toFeed.map(() => crypto.randomUUID());
     const transactionStartedAt = Date.now();
+    let inventoryRemaining = 0;
+    let fedMascots: { id: string; happiness: number }[] = [];
     await prisma.$transaction(async (tx) => {
       const reserved = await tx.mascotFoodItem.updateMany({
         where: { playerId: player.id, type: foodType, quantity: { gte: toFeed.length } },
         data: { quantity: { decrement: toFeed.length } },
       });
       if (reserved.count !== 1) throw new Error("O estoque mudou durante a alimentação. Atualize a página e tente novamente.");
-      const rows = Prisma.join(toFeed.map((m) => Prisma.sql`(${m.id}, ${Math.min(100, m.happiness + (foodType === "FOOD" ? 20 : 35))}, ${m.lastFedAt}::timestamp(3))`));
-      const updated = await tx.$executeRaw`
+      inventoryRemaining = (await tx.mascotFoodItem.findUniqueOrThrow({
+        where: { playerId_type: { playerId: player.id, type: foodType } }, select: { quantity: true },
+      })).quantity;
+      const rows = Prisma.join(toFeed.map((m) => Prisma.sql`(${m.id}, ${m.lastFedAt}::timestamp(3))`));
+      fedMascots = await tx.$queryRaw<{ id: string; happiness: number }[]>`
         UPDATE "mascots" AS mascot
-        SET "happiness" = batch."happiness",
+        SET "happiness" = LEAST(100, mascot."happiness" + ${foodType === "FOOD" ? 20 : 35}),
             "mood" = 'HAPPY'::"MascotMood",
             "lastFedAt" = ${now}
-        FROM (VALUES ${rows}) AS batch("id", "happiness", "lastFedAt")
+        FROM (VALUES ${rows}) AS batch("id", "lastFedAt")
         WHERE mascot."id" = batch."id"
           AND mascot."playerId" = ${player.id}
+          AND mascot."arenaState" NOT IN ('INJURED', 'ARENA')
           AND mascot."lastFedAt" IS NOT DISTINCT FROM batch."lastFedAt"
+        RETURNING mascot."id", mascot."happiness"
       `;
-      if (updated !== toFeed.length) throw new Error("Um mascote foi alimentado em outra ação. Atualize a página e tente novamente.");
+      if (fedMascots.length !== toFeed.length) throw new Error("Um mascote foi alimentado em outra ação. Atualize a página e tente novamente.");
       await tx.mascotInteractionJob.createMany({
         data: toFeed.map((m, index) => ({
           id: expJobIds[index], playerId: player.id,
@@ -2366,7 +2378,19 @@ export async function feedAllAction(
 
     revalidateTag(`player-mascots-${player.id}`);
     console.info("[feed-all] accepted", { playerId: player.id, mascots: toFeed.length, transactionMs, durationMs: Date.now() - startedAt });
-    return { fed: toFeed.length, skipped: mascots.length - toFeed.length, noFood: false, expPending: toFeed.length };
+    // Os ids permitem que a interface reflita a alimentacao imediatamente,
+    // inclusive quando o refresh do RSC ainda estiver servindo um snapshot em cache.
+    return {
+      fed: toFeed.length,
+      skipped: eligibleCount - toFeed.length,
+      noFood: false,
+      expPending: toFeed.length,
+      fedIds: toFeed.map((mascot) => mascot.id),
+      remainingEligible: eligibleCount - toFeed.length,
+      fedAt: now.toISOString(),
+      inventoryRemaining,
+      fedMascots,
+    };
   } catch (err) {
     console.error("[feed-all] failed", { durationMs: Date.now() - startedAt, error: err });
     return { error: err instanceof Error ? err.message : "Erro.", fed: 0, skipped: 0, noFood: false };

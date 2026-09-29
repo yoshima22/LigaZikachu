@@ -296,19 +296,25 @@ function BankRow({
   const [fullData, setFullData] = useState<FullMascotData | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [localMood, setLocalMood] = useState(mascot.mood);
+  useEffect(() => {
+    setLocalMood(mascot.mood);
+    setFullData(current => current ? { ...current, mood: mascot.mood, lastFedAt: mascot.lastFedAt } : current);
+  }, [mascot.mood, mascot.lastFedAt]);
   const [localLastPlayedAt, setLocalLastPlayedAt] = useState<Date | null>(mascot.lastPlayedAt ?? null);
   const [localLastPettedAt, setLocalLastPettedAt] = useState<Date | null>(mascot.lastPettedAt ?? null);
 
   const fetchFull = useCallback(() => {
-    startLoading(() => {
-      void (async () => {
+    startLoading(async () => {
+      try {
         const res = await getMascotDetailAction(mascot.id);
         if (res.error || !res.data) {
           setLoadError(res.error ?? "Erro ao carregar.");
           return;
         }
         setFullData(res.data);
-      })();
+      } catch {
+        setLoadError("Não foi possível carregar o mascote. Tente novamente.");
+      }
     });
   }, [mascot.id]);
 
@@ -538,6 +544,20 @@ export function MascotBankList({
   spritePreferences?: PlayerSpritePreferences | null;
 }) {
   const [rows, setRows] = useState<BankMascot[]>(mascots);
+  const confirmedFeeds = useRef(new Map<string, number>());
+  useEffect(() => {
+    const onFed = (event: Event) => {
+      const detail = (event as CustomEvent<{ mascotIds: string[]; fedAt: number; happinessGain: number }>).detail;
+      if (!detail?.mascotIds) return;
+      const ids = new Set(detail.mascotIds);
+      for (const id of ids) confirmedFeeds.current.set(id, detail.fedAt);
+      setRows(current => current.map(m => ids.has(m.id) ? {
+        ...m, lastFedAt: new Date(detail.fedAt), mood: "HAPPY",
+      } : m));
+    };
+    window.addEventListener("mascots-fed", onFed);
+    return () => window.removeEventListener("mascots-fed", onFed);
+  }, []);
   const [knownTotal, setKnownTotal] = useState(totalCount ?? mascots.length);
   // Estoque de comida/doce reativo: desabilita os botões quando a última unidade acaba.
   const [foodAvailable, setFoodAvailable] = useState(hasFood);
@@ -572,15 +592,14 @@ export function MascotBankList({
   const [pageInput, setPageInput] = useState("");
   const [loadError, setLoadError] = useState<string | null>(null);
   const [loadingPage, startPageLoad] = useTransition();
-  const didInitialLoad = useRef(false);
   const requestSequence = useRef(0);
 
   const loadPage = useCallback((nextPage: number) => {
     const safeNextPage = Math.max(1, nextPage);
     const requestId = ++requestSequence.current;
     setLoadError(null);
-    startPageLoad(() => {
-      void (async () => {
+    startPageLoad(async () => {
+      try {
         const res = await getBankMascotsPageAction({
           page: safeNextPage,
           search,
@@ -599,26 +618,29 @@ export function MascotBankList({
           setLoadError(res.error ?? "Erro ao carregar banco de mascotes.");
           return;
         }
-        setRows(res.data.mascots);
+        setRows(res.data.mascots.map(mascot => {
+          const confirmed = confirmedFeeds.current.get(mascot.id);
+          if (confirmed && (!mascot.lastFedAt || new Date(mascot.lastFedAt).getTime() < confirmed)) {
+            return { ...mascot, lastFedAt: new Date(confirmed), mood: "HAPPY" };
+          }
+          confirmedFeeds.current.delete(mascot.id);
+          return mascot;
+        }));
         setKnownTotal(res.data.total);
         setPage(res.data.page);
         setPageInput("");
         if (res.data.originTypes) setOriginTypes(res.data.originTypes);
         setHasUnknownOrigin(Boolean(res.data.hasUnknownOrigin));
-      })();
+      } catch {
+        if (requestId === requestSequence.current) setLoadError("Não foi possível carregar o banco. Tente novamente.");
+      }
     });
   }, [ocup, search, typeFilter, rankFilter, perfFilter, rarityFilter, personalityFilter, originFilter, sortMode]);
 
-  useEffect(() => {
-    if (didInitialLoad.current) return;
-    didInitialLoad.current = true;
-    if ((totalCount ?? mascots.length) > 0) loadPage(1);
-  }, [loadPage, mascots.length, totalCount]);
 
   // Pesquisa enquanto o nome e digitado. O pequeno atraso evita uma chamada
   // por tecla e elimina a necessidade de lembrar de pressionar Enter.
   useEffect(() => {
-    if (!didInitialLoad.current) return;
     const timer = window.setTimeout(() => loadPage(1), 350);
     return () => window.clearTimeout(timer);
   }, [search, loadPage]);

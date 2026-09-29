@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useEffect } from "react";
+import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Heart, Swords, Utensils, Candy, Edit2, Check, X, MapPin, Info, Star, ChevronLeft, ChevronRight, Lock, Unlock } from "lucide-react";
@@ -544,6 +544,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [localExp, setLocalExp]             = useState(mascot.exp);
   const [localLevel, setLocalLevel]         = useState(mascot.level);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
+  const confirmedFeedRef = useRef<number | null>(null);
   const [localIsFavorite, setLocalIsFavorite] = useState(mascot.isFavorite);
 
   // Sincroniza com novas props quando servidor atualiza
@@ -551,7 +552,27 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   useEffect(() => { setLocalMood(mascot.mood); },           [mascot.mood]);
   useEffect(() => { setLocalExp(mascot.exp); },             [mascot.exp]);
   useEffect(() => { setLocalLevel(mascot.level); },         [mascot.level]);
-  useEffect(() => { setLocalLastFed(mascot.lastFedAt); },   [mascot.lastFedAt]);
+  useEffect(() => {
+    const serverTime = mascot.lastFedAt ? new Date(mascot.lastFedAt).getTime() : 0;
+    if (confirmedFeedRef.current !== null && serverTime < confirmedFeedRef.current) return;
+    confirmedFeedRef.current = null;
+    setLocalLastFed(mascot.lastFedAt);
+  }, [mascot.lastFedAt]);
+  useEffect(() => {
+    const reflectBulkFeed = (event: Event) => {
+      const detail = (event as CustomEvent<{ mascotIds?: unknown; fedAt?: unknown; mascots?: { id: string; happiness: number }[] }>).detail;
+      if (!Array.isArray(detail?.mascotIds) || !detail.mascotIds.includes(mascot.id)) return;
+      const fedAt = typeof detail.fedAt === "number" ? detail.fedAt : Date.now();
+      const serverTime = mascot.lastFedAt ? new Date(mascot.lastFedAt).getTime() : 0;
+      confirmedFeedRef.current = serverTime < fedAt ? fedAt : null;
+      setLocalLastFed(new Date(fedAt));
+      setLocalMood("HAPPY");
+      const updated = detail.mascots?.find(m => m.id === mascot.id);
+      if (updated) setLocalHappiness(updated.happiness);
+    };
+    window.addEventListener("mascots-fed", reflectBulkFeed);
+    return () => window.removeEventListener("mascots-fed", reflectBulkFeed);
+  }, [mascot.id, mascot.lastFedAt]);
   useEffect(() => { setLocalIsFavorite(mascot.isFavorite); }, [mascot.isFavorite]);
   useEffect(() => { setHasFood(mascot.hasFood); },           [mascot.hasFood]);
   useEffect(() => { setHasSweet(mascot.hasSweet); },         [mascot.hasSweet]);

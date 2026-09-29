@@ -18,7 +18,12 @@ const claimGiftSchema = z.object({
 
 const claimAllGiftsSchema = z.object({
   playerId: z.string().min(1),
+  deferRefresh: z.boolean().optional(),
 });
+
+// Uma requisicao nunca deve ficar presa processando uma caixa ilimitada. Cada
+// presente continua atomicamente protegido; a interface pode pedir o proximo lote.
+const GIFT_CLAIM_BATCH_SIZE = 25;
 
 type ClaimableGift = {
   id: string;
@@ -47,13 +52,13 @@ async function applyGiftReward(
 ): Promise<{ autoSold?: { itemName: string; coins: number } }> {
   const payload = getPayloadRecord(gift.payload);
 
-  if (gift.type === "STICKER" && payload) {
-    const cardId = typeof payload.cardId === "string" ? payload.cardId : null;
+  if (gift.type === "STICKER") {
+    const cardId = typeof payload?.cardId === "string" ? payload.cardId : null;
+    if (!cardId) throw new Error("A figurinha deste presente não está configurada. O presente foi mantido na caixa.");
     if (cardId) {
       const card = await tx.pokemonCard.findUnique({ where: { id: cardId }, select: { id: true } });
       if (!card) {
-        console.error(`[claimGift] STICKER gift ${gift.id}: cardId "${cardId}" não encontrado em PokemonCard. Presente resgatado sem figurinha.`);
-        return {};
+        throw new Error("A figurinha deste presente está indisponível. O presente foi mantido na caixa.");
       }
       await tx.playerSticker.upsert({
         where: { playerId_cardId: { playerId, cardId } },
@@ -70,8 +75,10 @@ async function applyGiftReward(
 
   if (rewardKind === "STICKER_PACK") {
     const packName = typeof payload.packName === "string" ? payload.packName : null;
+    if (!packName) throw new Error("O pacote deste presente não está configurado. O presente foi mantido na caixa.");
     if (packName) {
-      await openStickerPackByName(playerId, packName);
+      const opened = await openStickerPackByName(playerId, packName, tx);
+      if (opened.error) throw new Error(opened.error);
     }
     return {};
   }
@@ -426,7 +433,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
     });
     if (!player) return { error: "Jogador nao encontrado" };
 
-    const { playerId } = claimAllGiftsSchema.parse(input);
+    const { playerId, deferRefresh } = claimAllGiftsSchema.parse(input);
     if (playerId !== player.id) return { error: "Sem permissao" };
 
     const gifts = await prisma.playerGift.findMany({
@@ -434,20 +441,26 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
         playerId: player.id,
         status: GiftStatus.UNCLAIMED,
       },
-      select: { id: true, status: true, type: true, title: true, payload: true }
+      select: { id: true, status: true, type: true, title: true, payload: true },
+      take: GIFT_CLAIM_BATCH_SIZE,
+      orderBy: { createdAt: "asc" },
     });
 
     if (gifts.length === 0) {
-      return { success: true, claimed: 0 };
+      return { success: true, claimed: 0, remaining: 0, failed: 0 };
     }
 
     const now = new Date();
     const claimedIds: string[] = [];
     const autoSolds: { itemName: string; coins: number }[] = [];
+    let failed = 0;
+    const startedAt = Date.now();
 
     // Processa cada presente individualmente para que um erro não bloqueie todos os outros
     for (const gift of gifts) {
+      if (Date.now() - startedAt > 8000) break;
       try {
+        let autoSold: { itemName: string; coins: number } | undefined;
         const wasClaimed = await prisma.$transaction(async (tx) => {
           const current = await tx.playerGift.findFirst({
             where: { id: gift.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
@@ -461,7 +474,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
           });
           if (claimed.count !== 1) return false;
           const result = await applyGiftReward(tx, player.id, current);
-          if (result.autoSold) autoSolds.push(result.autoSold);
+          autoSold = result.autoSold;
           await tx.auditLog.create({
             data: {
               actorUserId: user.id,
@@ -489,15 +502,33 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
           });
           return true;
         });
-        if (wasClaimed) claimedIds.push(gift.id);
+        if (wasClaimed) {
+          claimedIds.push(gift.id);
+          if (autoSold) autoSolds.push(autoSold);
+        }
       } catch (err) {
         // Loga o erro mas continua com os demais presentes
         console.error(`[claimAllGifts] Erro ao resgatar presente ${gift.id}:`, err);
+        failed += 1;
       }
     }
 
-    revalidateGiftTargets(user.id);
-    return { success: true, claimed: claimedIds.length, autoSolds: autoSolds.length > 0 ? autoSolds : undefined };
+    const remaining = await prisma.playerGift.count({
+      where: { playerId: player.id, status: GiftStatus.UNCLAIMED },
+    });
+    if (!deferRefresh || remaining === 0) revalidateGiftTargets(user.id, player.id);
+    else {
+      revalidateTag(`nav-${user.id}`);
+      revalidateTag(`player-mascots-${player.id}`);
+    }
+    console.info("[gift-claim-batch]", { durationMs: Date.now() - startedAt, claimed: claimedIds.length, failed, remaining });
+    return {
+      success: true,
+      claimed: claimedIds.length,
+      remaining,
+      failed,
+      autoSolds: autoSolds.length > 0 ? autoSolds : undefined,
+    };
   } catch (err) {
     console.error("[claimAllGifts] Erro geral:", err);
     return { error: err instanceof Error ? err.message : "Erro ao resgatar presentes." };

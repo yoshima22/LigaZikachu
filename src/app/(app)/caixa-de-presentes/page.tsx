@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import Link from "next/link";
 import { Gift, Ticket } from "lucide-react";
 import { GiftStatus, GiftType, type ShopItemType } from "@prisma/client";
 import { getAppSession } from "@/lib/session";
@@ -54,7 +55,7 @@ function getBoosterPayload(payload: unknown): BoosterPayload {
   return payload as BoosterPayload;
 }
 
-export default async function GiftBoxPage() {
+export default async function GiftBoxPage({ searchParams }: { searchParams: Promise<{ page?: string }> }) {
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
 
@@ -71,12 +72,20 @@ export default async function GiftBoxPage() {
     );
   }
 
+  const params = await searchParams;
+  const pageSize = 24;
+  const unclaimedCount = await prisma.playerGift.count({ where: { playerId: player.id, status: GiftStatus.UNCLAIMED } });
+  const pages = Math.max(1, Math.ceil(unclaimedCount / pageSize));
+  const requested = Number(params.page ?? 1);
+  const page = Number.isSafeInteger(requested) ? Math.min(pages, Math.max(1, requested)) : 1;
   const gifts = await prisma.playerGift.findMany({
     where: {
       playerId: player.id,
       status: GiftStatus.UNCLAIMED
     },
-    orderBy: { createdAt: "desc" }
+    orderBy: [{ createdAt: "desc" }, { id: "desc" }],
+    take: pageSize,
+    skip: (page - 1) * pageSize,
   });
   const buffTypes = [...new Set(
     gifts
@@ -90,7 +99,6 @@ export default async function GiftBoxPage() {
       })
     : [];
   const buffNameByType = new Map(buffItems.map((item) => [item.type, item.name]));
-  const unclaimedCount = gifts.length;
 
   return (
     <div className="space-y-6">
@@ -107,6 +115,11 @@ export default async function GiftBoxPage() {
         )}
       </div>
 
+      {pages > 1 && <nav className="flex items-center gap-4 text-sm" aria-label="Páginas de presentes">
+        {page > 1 && <Link prefetch={false} href={`/caixa-de-presentes?page=${page - 1}`}>Anterior</Link>}
+        <span>Página {page} de {pages} · {unclaimedCount} presentes</span>
+        {page < pages && <Link prefetch={false} href={`/caixa-de-presentes?page=${page + 1}`}>Próxima</Link>}
+      </nav>}
       {gifts.length === 0 ? (
         <Card>
           <EmptyState message="Nenhum presente pendente. Presentes recebidos aparecem em suas areas correspondentes." icon={<Gift size={28} />} />

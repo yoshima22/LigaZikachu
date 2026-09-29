@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useTransition, useRef } from "react";
+import { useRouter } from "next/navigation";
 import { PackageOpen } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { claimGift, claimAllGifts } from "../actions";
 
@@ -80,6 +82,7 @@ export function GiftClaimButton({ giftId }: { giftId: string }) {
   const handleClaim = () => {
     startTransition(async () => {
       const result = await claimGift({ giftId });
+      if (result.error) { toast.error(result.error); return; }
       if (result.autoSold) setAutoSold(result.autoSold);
     });
   };
@@ -95,13 +98,42 @@ export function GiftClaimButton({ giftId }: { giftId: string }) {
 }
 
 export function ClaimAllGiftsButton({ playerId, count }: { playerId: string; count: number }) {
+  const router = useRouter();
+  const running = useRef(false);
   const [isPending, startTransition] = useTransition();
   const [autoSolds, setAutoSolds] = useState<AutoSoldInfo[] | null>(null);
+  const [remaining, setRemaining] = useState<number | null>(null);
+  const displayedCount = remaining ?? count;
 
   const handleClaimAll = () => {
+    if (running.current) return;
+    running.current = true;
     startTransition(async () => {
-      const result = await claimAllGifts({ playerId });
-      if (result.autoSolds && result.autoSolds.length > 0) setAutoSolds(result.autoSolds);
+      const sold: AutoSoldInfo[] = [];
+      let received = 0;
+      try {
+        // One bounded request at a time; each committed gift survives interruption.
+        while (true) {
+          const result = await claimAllGifts({ playerId, deferRefresh: true });
+          if (result.error) { toast.error(result.error); break; }
+          received += result.claimed ?? 0;
+          sold.push(...(result.autoSolds ?? []));
+          setRemaining(result.remaining ?? 0);
+          if (result.failed) {
+            toast.warning("Alguns presentes não puderam ser recebidos e continuam na caixa. Tente novamente mais tarde.");
+            break;
+          }
+          if (!result.remaining || !result.claimed) break;
+          await new Promise(resolve => setTimeout(resolve, 300));
+        }
+        if (received) toast.success(`${received} presentes recebidos.`);
+      } catch {
+        toast.error("A conexão foi interrompida. Os presentes já recebidos estão salvos; tente novamente para continuar.");
+      } finally {
+        if (sold.length) setAutoSolds(sold);
+        running.current = false;
+        router.refresh();
+      }
     });
   };
 
@@ -116,7 +148,7 @@ export function ClaimAllGiftsButton({ playerId, count }: { playerId: string; cou
         className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]"
       >
         <PackageOpen size={16} className="mr-2" />
-        {isPending ? "Recebendo..." : `Receber todos (${count})`}
+        {isPending ? `Recebendo... (${displayedCount} restantes)` : `Receber todos (${displayedCount})`}
       </Button>
     </>
   );

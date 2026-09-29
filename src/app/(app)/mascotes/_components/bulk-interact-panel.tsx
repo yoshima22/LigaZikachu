@@ -37,6 +37,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   const [pendingPlay, startPlay] = useTransition();
   const [pendingPet, startPet] = useTransition();
   const [pendingFeedAll, startFeedAll] = useTransition();
+  const [fedProgress, setFedProgress] = useState(0);
   const [minHunger, setMinHunger] = useState<HungerLevel>("HUNGRY");
   const [feedType, setFeedType] = useState<FeedType>("FOOD");
   const isFavoriteTeam = scope === "FAVORITES";
@@ -130,24 +131,41 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
   };
 
   const handleFeedAll = () => {
+    setFedProgress(0);
     startFeedAll(async () => {
+      let totalFed = 0;
       try {
-        const res = await feedAllAction(minHunger, feedType, "ALL");
-        if (res.error) { toast.error(res.error); return; }
-        const feedLabel = feedType === "SWEET" ? "doces" : feedType === "RARE_SWEET" ? "doces raros" : "comida";
-        if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); return; }
-        if (res.noEligible || res.fed === 0) {
-          toast.info(`Nenhum mascote disponível está em “${HUNGER_OPTIONS.find((option) => option.value === minHunger)?.label} ou pior”. Mascotes no banco demoram mais para sentir fome.`);
-        } else {
-          const msg = res.skipped > 0
-            ? `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}. Faltou estoque para mais ${res.skipped} ${pluralMascot(res.skipped)} que atendiam ao filtro.`
-            : `${res.fed} ${pluralMascot(res.fed)} alimentado${res.fed !== 1 ? "s" : ""}!`;
-          toast.success(msg);
-          if (res.expPending) toast.info(`A experiência de ${res.expPending} ${pluralMascot(res.expPending)} está sendo aplicada. Você pode continuar jogando.`);
-          router.refresh();
+        while (mountedRef.current) {
+          const res = await feedAllAction(minHunger, feedType, "ALL");
+          if (res.error) { toast.error(res.error); break; }
+          const feedLabel = feedType === "SWEET" ? "doces" : feedType === "RARE_SWEET" ? "doces raros" : "comida";
+          if (res.noFood) { toast.warning(`Sem ${feedLabel} no estoque para alimentar os mascotes.`); break; }
+          if (res.noEligible || res.fed === 0) {
+            if (!totalFed) toast.info(`Nenhum mascote disponível está em “${HUNGER_OPTIONS.find((option) => option.value === minHunger)?.label} ou pior”. Mascotes no banco demoram mais para sentir fome.`);
+            break;
+          }
+          totalFed += res.fed;
+          setFedProgress(totalFed);
+          if (res.fedIds?.length) {
+            window.dispatchEvent(new CustomEvent("mascots-fed", {
+              detail: { mascotIds: res.fedIds, fedAt: new Date(res.fedAt!).getTime(), mascots: res.fedMascots },
+            }));
+          }
+          if (typeof res.inventoryRemaining === "number") window.dispatchEvent(new CustomEvent("mascot-food-inventory", {
+            detail: { type: `FEED_${feedType}`, remaining: res.inventoryRemaining },
+          }));
+          if (!res.remainingEligible) break;
+          if (!res.inventoryRemaining) {
+            toast.warning(`Sem ${feedLabel} para os ${res.remainingEligible} mascotes restantes.`);
+            break;
+          }
+          await new Promise(resolve => setTimeout(resolve, 300));
         }
       } catch (err) {
         toast.error(`Erro ao alimentar: ${String(err).slice(0, 150)}`);
+      } finally {
+        if (totalFed) toast.success(`${totalFed} ${pluralMascot(totalFed)} alimentado${totalFed === 1 ? "" : "s"}. A experiência está sendo aplicada.`);
+        router.refresh();
       }
     });
   };
@@ -263,7 +281,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
             className="flex min-h-[38px] items-center justify-center gap-2 rounded-xl border border-green-400/30 bg-green-400/10 px-4 py-2.5 text-xs font-bold text-green-400 hover:bg-green-400/20 disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {pendingFeedAll ? <Loader2 size={14} className="animate-spin" /> : <Utensils size={14} />}
-            Alimentar Todos com {FEED_LABEL[feedType]}
+            {pendingFeedAll ? `Alimentando... (${fedProgress} concluídos)` : `Alimentar Todos com ${FEED_LABEL[feedType]}`}
           </button>
           <p className="text-[10px] text-slate-500">A alimentação vale para todos os seus mascotes disponíveis, inclusive os que estão no banco.</p>
         </div>
