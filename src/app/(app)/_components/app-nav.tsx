@@ -233,6 +233,7 @@ const adminLinks = [
   { href: "/admin", label: "Painel Admin", icon: ShieldCheck, adminOnly: true },
   { href: "/admin/mascotes", label: "Admin de Mascotes", icon: Dna, adminOnly: true },
   { href: "/admin/logs", label: "Logs e Auditoria", icon: ScrollText, adminOnly: true },
+  { href: "/admin/codigos-resgate", label: "Códigos de Resgate", icon: Gift, adminOnly: true },
 ];
 
 type NavLink = {
