@@ -214,6 +214,9 @@ function weightsWithBonus(profile: Record<EggPokemonTier, number>, bonusPct: num
   };
 }
 
+/** Nº de pseudo-lendárias para o qual o peso do perfil foi calibrado. */
+const PSEUDO_REFERENCE_COUNT = 2;
+
 const BONUS_CATEGORIES: EggRollCategory[] = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PARADOX"];
 
 function categoryForPokemon(pokemonId: number): EggRollCategory {
@@ -243,9 +246,14 @@ export function getEggCategoryWeightsForGeneration(
     category,
     candidatesForGeneration(generation).filter((id) => categoryForPokemon(id) === category).length,
   ])) as Record<EggRollCategory, number>;
+  // A massa pseudo-lendária é calibrada para PSEUDO_REFERENCE_COUNT espécies
+  // (Geração 3: Bagon + Beldum). Gerações com menos espécies recebem massa
+  // proporcional, senão a espécie sozinha levaria a categoria inteira.
+  const pseudoMass = profile.PSEUDO_LEGENDARY
+    * Math.min(counts.PSEUDO_LEGENDARY, PSEUDO_REFERENCE_COUNT) / PSEUDO_REFERENCE_COUNT;
   const result: Record<EggRollCategory, number> = {
-    COMMON: Math.max(0, profile.COMMON - bonus),
-    PSEUDO_LEGENDARY: profile.PSEUDO_LEGENDARY,
+    COMMON: Math.max(0, profile.COMMON - bonus) + (profile.PSEUDO_LEGENDARY - pseudoMass),
+    PSEUDO_LEGENDARY: pseudoMass,
     PARADOX: profile.PARADOX,
     LEGENDARY: 0,
     MYTHICAL: 0,
