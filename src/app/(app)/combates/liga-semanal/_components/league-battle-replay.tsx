@@ -1,5 +1,6 @@
 "use client";
 
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { EffectChips } from "@/components/replay-effect-chips";
@@ -187,6 +188,7 @@ function FighterRow({ f, isActor, isTarget, action }: { f: Fighter; isActor: boo
   const isAttack = action === "ATTACK";
   const isHeal = action === "HEAL";
   return (
+    <MascotInfoTrigger pokemonId={f.pokemonId} displayName={f.name} level={f.level}>
     <div className={`flex items-center gap-2.5 rounded-lg px-2.5 py-1.5 transition-all duration-300 ${
       isActor ? "bg-blue-500/10 ring-1 ring-blue-500/40" :
       isTarget && isAttack ? "bg-red-500/10 ring-1 ring-red-500/40" :
@@ -216,6 +218,7 @@ function FighterRow({ f, isActor, isTarget, action }: { f: Fighter; isActor: boo
         <HpBar hp={f.hp} maxHp={f.maxHp} />
       </div>
     </div>
+    </MascotInfoTrigger>
   );
 }
 

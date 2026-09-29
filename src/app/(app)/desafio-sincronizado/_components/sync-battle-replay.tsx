@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useRef } from "react";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import {
   LeagueBattleReplayModal,
   type ReplayLineupFighter,
@@ -142,6 +143,7 @@ function FighterPanel({
   const shakeAnim = `syncShake${isA ? "A" : "B"}`;
 
   return (
+    <MascotInfoTrigger pokemonId={pokemonId} displayName={name}>
     <div className={`flex flex-col items-center gap-1.5 rounded-xl border p-2 transition-all duration-300 ${
       phase === "result"
         ? isWinner
@@ -181,6 +183,7 @@ function FighterPanel({
         {revealed ? score : "???"}
       </span>
     </div>
+    </MascotInfoTrigger>
   );
 }
 

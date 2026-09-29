@@ -5,6 +5,7 @@ import {
   getPokemonName,
   getPokemonTypes,
   getSpriteUrl,
+  TYPE_LABELS_PT,
 } from "@/lib/mascot-data";
 import type { ArenaDraftPet } from "@/lib/arena-draft";
 import { ArenaDraftReplay } from "./replay-client";
@@ -72,9 +73,10 @@ export default async function ReplayPage({
   const map = (pets: ArenaDraftPet[], side: "A" | "B") =>
     pets.map((p) => ({
       id: p.id,
+      speciesId: p.speciesId,
       name: getPokemonName(p.speciesId),
       sprite: getSpriteUrl(p.speciesId),
-      types: getPokemonTypes(p.speciesId),
+      types: getPokemonTypes(p.speciesId).map((type) => TYPE_LABELS_PT[type] ?? type),
       isMega: p.isMega,
       personality: p.personality,
       posture: p.posture,

@@ -1067,7 +1067,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
           <div className="flex flex-wrap gap-1.5">
             <button onClick={() => { setTypeFilter(null); setPage(0); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold transition-colors ${!typeFilter ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>Todos</button>
             {ALL_TYPES.map(t => (
-              <button key={t} onClick={() => { setTypeFilter(typeFilter === t ? null : t); setPage(0); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${typeFilter === t ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>{t}</button>
+              <button key={t} onClick={() => { setTypeFilter(typeFilter === t ? null : t); setPage(0); }} className={`rounded-full px-2.5 py-1 text-[11px] font-semibold capitalize transition-colors ${typeFilter === t ? "bg-yellow-500/20 text-yellow-300" : "bg-slate-800 text-slate-500 hover:text-slate-300"}`}>{SCOUTING_TYPE_LABELS[t] ?? t}</button>
             ))}
           </div>
         </div>
@@ -1089,7 +1089,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   <p className="text-[11px] text-slate-400">Nv.{m.level}</p>
                   <div className="flex gap-1 mt-1">
                     {types.map(t => (
-                      <span key={t} className={`rounded-full px-2 py-0.5 text-[9px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>
+                      <span key={t} className={`rounded-full px-2 py-0.5 text-[9px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{SCOUTING_TYPE_LABELS[t] ?? t}</span>
                     ))}
                   </div>
                   <div className="mt-1.5 grid grid-cols-5 gap-0.5 text-[10px] font-semibold">
@@ -1272,7 +1272,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                       ) : (
                         <>
                           <div className="flex flex-wrap justify-center gap-0.5">
-                            {types.map(t => <span key={t} className={`rounded-full px-1.5 py-px text-[9px] sm:text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{t}</span>)}
+                            {types.map(t => <span key={t} className={`rounded-full px-1.5 py-px text-[9px] sm:text-[6px] font-bold text-white capitalize ${TYPE_COLORS[t] ?? "bg-slate-600"}`}>{SCOUTING_TYPE_LABELS[t] ?? t}</span>)}
                           </div>
                           <p className={`text-[11px] sm:text-[7px] font-semibold ${teamRoles?.[id] ? "text-yellow-400" : "text-slate-500"}`}>{getCombatRoleLabel(role)}</p>
                         </>

@@ -1,7 +1,9 @@
 "use client";
 import { useMemo, useState } from "react";
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 type Pet = {
   id: string;
+  speciesId: number;
   name: string;
   sprite: string;
   types: string[];
@@ -195,8 +197,8 @@ function Team({ title, pets }: { title: string; pets: Pet[] }) {
       <h2 className="font-black text-white">Equipe de {title}</h2>
       <div className="mt-3 grid gap-2 sm:grid-cols-2">
         {pets.map((p) => (
+          <MascotInfoTrigger key={p.id} pokemonId={p.speciesId} displayName={p.name}>
           <article
-            key={p.id}
             className={`rounded-2xl border p-3 ${p.banned ? "border-rose-400/20 opacity-45" : "border-white/10"}`}
           >
             <div className="flex gap-3">
@@ -235,6 +237,7 @@ function Team({ title, pets }: { title: string; pets: Pet[] }) {
               </p>
             )}
           </article>
+          </MascotInfoTrigger>
         ))}
       </div>
     </section>

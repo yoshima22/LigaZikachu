@@ -1,4 +1,5 @@
 "use client";
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -998,8 +999,8 @@ function AnimatedBattle({
         const beingHealed = isTarget && current?.action === "HEAL";
         const dead = value <= 0;
         return (
+          <MascotInfoTrigger key={pet.id} pokemonId={pet.speciesId} displayName={pet.name}>
           <div
-            key={pet.id}
             className={`relative w-[4.75rem] rounded-xl border p-1.5 transition ${dead ? "border-white/10 opacity-40 grayscale" : isTarget ? "border-rose-400/70 bg-rose-500/10" : isActor ? "border-cyan-300/70 bg-cyan-300/10 ring-1 ring-cyan-300/40" : "border-white/10 bg-slate-950/60"}`}
           >
             {isTarget && (
@@ -1046,6 +1047,7 @@ function AnimatedBattle({
               {value}/{pet.maxHp}
             </span>
           </div>
+          </MascotInfoTrigger>
         );
       })}
     </div>

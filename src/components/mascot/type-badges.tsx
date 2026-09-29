@@ -26,12 +26,12 @@ const fallbackChip = "bg-slate-500/20 text-slate-400 border-slate-500/20";
 const label = (t: string) => TYPE_LABELS[t] ?? t;
 
 /** Tipos contra os quais `type` é super-eficaz (bônus ofensivo no combate). */
-const strongAgainst = (type: string) => TYPE_ADVANTAGE[type] ?? [];
+export const strongAgainst = (type: string) => TYPE_ADVANTAGE[type] ?? [];
 /** Tipos que são super-eficazes contra `type` (bônus recebido = vulnerabilidade). */
-const weakAgainst = (type: string) =>
+export const weakAgainst = (type: string) =>
   Object.entries(TYPE_ADVANTAGE).filter(([, targets]) => targets.includes(type)).map(([atk]) => atk);
 
-function TypeChip({ type, size = "sm" }: { type: string; size?: "sm" | "md" }) {
+export function TypeChip({ type, size = "sm" }: { type: string; size?: "sm" | "md" }) {
   const cls = size === "md" ? "px-2.5 py-1 text-xs" : "px-1.5 py-0.5 text-[10px]";
   return (
     <span className={`inline-block rounded border font-bold ${cls} ${TYPE_COLORS[type] ?? fallbackChip}`}>

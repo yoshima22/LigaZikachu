@@ -7,6 +7,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles, Pause, Play } from "lucide-react";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import {
   adminRepairArenaAction,
   adminSetMascotStateAction,
@@ -136,6 +137,7 @@ function MascotPanel({
 }) {
   const dead = currentHp <= 0;
   return (
+    <MascotInfoTrigger pokemonId={mascot.pokemonId} displayName={mascot.name} level={mascot.level} className="min-w-0">
     <div className={`min-w-0 rounded-xl border p-1.5 sm:p-2 transition-all duration-200 ${
       dead
         ? "border-slate-800 bg-slate-950/40 opacity-30 grayscale"
@@ -168,6 +170,7 @@ function MascotPanel({
         <HpBar current={currentHp} max={mascot.maxHp} playbackRate={playbackRate} />
       </div>
     </div>
+    </MascotInfoTrigger>
   );
 }
 
