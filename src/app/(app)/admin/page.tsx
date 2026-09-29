@@ -42,6 +42,7 @@ import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
 import { listManagedForms } from "./actions";
 import { FormsPoolManager } from "./_components/forms-pool-manager";
 import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
+import { AdminTabs } from "./_components/admin-tabs";
 import { LigaCashPanel } from "./_components/liga-cash-panel";
 
 const adminCards = [
@@ -185,13 +186,9 @@ export default async function AdminPage() {
         .map(o => ({ id: o.id, playerName: paidPassNames.get(o.playerId) ?? "Jogador removido", paidAt: o.paidAt?.toISOString() ?? null, manual: o.provider === "ADMIN_MANUAL" }))
     : [];
 
-  return (
-    <div className="space-y-8">
-      <LigaCashPanel
-        orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null, offerSlot:order.passOfferSlot, passLabel:order.productLabel }))}
-        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.storeActivationRetroactive, activationLocal: nextPassConfig.storeActivationAt ? nextPassConfig.storeActivationAt.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : null } : null}
-        nextReservations={nextReservations}
-      />
+  const tabs = [
+    { id: "geral", label: "Visão geral", content: (
+      <>
       <div className="rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div>
@@ -308,29 +305,30 @@ export default async function AdminPage() {
         )}
       </Card>
 
+      </>
+    ) },
+    { id: "jogadores", label: "Jogadores e contas", content: (
+      <>
       <UserAccountPanel />
-      <TimedGameBonusPanel initialEvents={timedGameBonusEvents} />
-      <AdminCommunicationPanel initialNotice={globalNotice.message} initialAck={{ title: ackNotice.title, content: ackNotice.content, buttonText: ackNotice.buttonText, active: ackNotice.active, version: ackNotice.version }} initialPatchNotes={patchNotes.notes} initialServerCostGoal={serverCostGoal} />
       {isAdmin(currentUser.role) && <GamemasterPanel initialGamemasters={gamemasters} />}
       <RunawayRevertPanel />
-      <div className="rounded-2xl border border-border bg-slate-900/40 p-4 space-y-4">
-        <div>
-          <h2 className="mb-2 text-sm font-semibold text-slate-200">🎂 Aniversário</h2>
-          <p className="mb-3 text-xs text-slate-500">Teste a roleta de presentes de aniversário (apenas simulação — nada é entregue).</p>
-          <BirthdayRouletteDebug />
-        </div>
-        <div className="border-t border-border/60 pt-3">
-          <h2 className="mb-2 text-sm font-semibold text-slate-200">👋 Boas-vindas</h2>
-          <p className="mb-3 text-xs text-slate-500">Visualize a tela de boas-vindas que aparece no primeiro login do jogador.</p>
-          <WelcomeScreenPreview />
-        </div>
-      </div>
-      <CombatTestPanel />
-      <MascotSocialPanel />
-      <AdminExpeditionPanel />
-      <AdminMascotPanel />
+      </>
+    ) },
+    { id: "comunicacao", label: "Comunicação", content: (
+      <>
+      <AdminCommunicationPanel initialNotice={globalNotice.message} initialAck={{ title: ackNotice.title, content: ackNotice.content, buttonText: ackNotice.buttonText, active: ackNotice.active, version: ackNotice.version }} initialPatchNotes={patchNotes.notes} initialServerCostGoal={serverCostGoal} />
       <BulkSendPanel items={allShopItems} />
       <DeckReminderPanel />
+      </>
+    ) },
+    { id: "economia", label: "Economia e passes", content: (
+      <>
+      <LigaCashPanel
+        orders={paidPassOrders.map(order => ({ id: order.id, playerName: paidPassNames.get(order.playerId) ?? "Jogador removido", paidAt: order.paidAt?.toISOString() ?? null, offerSlot:order.passOfferSlot, passLabel:order.productLabel }))}
+        nextPass={nextPassConfig ? { label: nextPassConfig.displayTitle?.trim() || "Passe do mês seguinte", retroactive: nextPassConfig.storeActivationRetroactive, activationLocal: nextPassConfig.storeActivationAt ? nextPassConfig.storeActivationAt.toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" }) : null } : null}
+        nextReservations={nextReservations}
+      />
+      <TimedGameBonusPanel initialEvents={timedGameBonusEvents} />
       <VipSchedulePanel
         allSchedules={allSchedules}
         activeVips={(vipsResult.passes ?? []).map(p => ({
@@ -344,8 +342,13 @@ export default async function AdminPage() {
           allowRetroactiveClaims: p.allowRetroactiveClaims,
         }))}
       />
-      <MigrateImagesPanel />
-
+      </>
+    ) },
+    { id: "mascotes", label: "Mascotes", content: (
+      <>
+      <MascotSocialPanel />
+      <AdminExpeditionPanel />
+      <AdminMascotPanel />
       {/* ── Formas de Pokémon: pools de ovo + visualizador ── */}
       {isAdmin(currentUser.role) && <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
         <div className="flex items-center gap-2">
@@ -370,7 +373,32 @@ export default async function AdminPage() {
         <MascotSpriteViewer />
       </div>
 
+      </>
+    ) },
+    { id: "testes", label: "Testes e simulações", content: (
+      <>
+      <CombatTestPanel />
+      <div className="rounded-2xl border border-border bg-slate-900/40 p-4 space-y-4">
+        <div>
+          <h2 className="mb-2 text-sm font-semibold text-slate-200">🎂 Aniversário</h2>
+          <p className="mb-3 text-xs text-slate-500">Teste a roleta de presentes de aniversário (apenas simulação — nada é entregue).</p>
+          <BirthdayRouletteDebug />
+        </div>
+        <div className="border-t border-border/60 pt-3">
+          <h2 className="mb-2 text-sm font-semibold text-slate-200">👋 Boas-vindas</h2>
+          <p className="mb-3 text-xs text-slate-500">Visualize a tela de boas-vindas que aparece no primeiro login do jogador.</p>
+          <WelcomeScreenPreview />
+        </div>
+      </div>
+      </>
+    ) },
+    { id: "sistema", label: "Sistema", content: (
+      <>
+      <MigrateImagesPanel />
       <GlobalResetPanel />
-    </div>
-  );
+      </>
+    ) },
+  ];
+
+  return <AdminTabs tabs={tabs} />;
 }
