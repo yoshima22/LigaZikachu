@@ -1,0 +1,59 @@
+import { EggType, FoodType, SyncTicketSide, type Prisma, type ShopItem } from "@prisma/client";
+import { grantSyncTicketHalf, grantValidSyncTicketForPlayer, SYNC_TICKET_TYPES } from "@/lib/sync-challenge";
+
+export function normalizeRedeemCode(code: string) {
+  return code.trim().toUpperCase().replace(/\s+/g, "");
+}
+
+/** Categoria exibida no painel admin para filtrar os ShopItems na hora de montar o prêmio. */
+export function redeemItemCategory(type: string) {
+  if (type.startsWith("EGG_")) return "Ovos";
+  if (type.startsWith("MEGA_STONE_")) return "Pedras de evolução";
+  if (type.startsWith("LEAGUE_")) return "Itens de Liga Semanal";
+  if (type.startsWith("BOND_")) return "Itens de Laços";
+  return "Outros itens";
+}
+
+const EGG_BY_ITEM_TYPE: Record<string, EggType> = {
+  EGG_COMMON: EggType.COMMON, EGG_RARE: EggType.RARE, EGG_SPECIAL: EggType.SPECIAL, EGG_LAB: EggType.LAB,
+  EGG_EVENT: EggType.EVENT, EGG_GEN1: EggType.EGG_GEN1, EGG_GEN2: EggType.EGG_GEN2, EGG_GEN3: EggType.EGG_GEN3,
+  EGG_GEN4: EggType.EGG_GEN4, EGG_GEN5: EggType.EGG_GEN5, EGG_GEN6: EggType.EGG_GEN6, EGG_GEN7: EggType.EGG_GEN7,
+  EGG_GEN8: EggType.EGG_GEN8, EGG_GEN9: EggType.EGG_GEN9, EGG_GEN6PLUS: EggType.EGG_GEN6PLUS,
+};
+const FOOD_BY_ITEM_TYPE: Record<string, FoodType> = {
+  MASCOT_FOOD: FoodType.FOOD, MASCOT_SWEET: FoodType.SWEET, MASCOT_RARE_SWEET: FoodType.RARE_SWEET,
+};
+
+/** Entrega um ShopItem ao jogador na transação (ovo, comida, ticket sync ou inventário). */
+export async function grantShopItemTx(
+  tx: Prisma.TransactionClient,
+  playerId: string,
+  item: Pick<ShopItem, "id" | "name" | "type">,
+  quantity: number,
+  source: string,
+) {
+  const eggType = EGG_BY_ITEM_TYPE[item.type];
+  const foodType = FOOD_BY_ITEM_TYPE[item.type];
+  if (eggType) {
+    await tx.mascotEgg.createMany({
+      data: Array.from({ length: quantity }, () => ({ playerId, type: eggType, origin: `Código de resgate: ${item.name}` })),
+    });
+  } else if (foodType) {
+    await tx.mascotFoodItem.upsert({
+      where: { playerId_type: { playerId, type: foodType } },
+      update: { quantity: { increment: quantity } },
+      create: { playerId, type: foodType, quantity },
+    });
+  } else if (item.type === SYNC_TICKET_TYPES.fireLeft || item.type === SYNC_TICKET_TYPES.waterRight) {
+    const side = item.type === SYNC_TICKET_TYPES.fireLeft ? SyncTicketSide.LEFT : SyncTicketSide.RIGHT;
+    for (let i = 0; i < quantity; i++) await grantSyncTicketHalf(tx, playerId, "redeem-code", side, playerId);
+  } else if (item.type === SYNC_TICKET_TYPES.complete) {
+    for (let i = 0; i < quantity; i++) await grantValidSyncTicketForPlayer(tx, playerId);
+  } else {
+    await tx.playerInventory.upsert({
+      where: { playerId_itemId: { playerId, itemId: item.id } },
+      update: { quantity: { increment: quantity } },
+      create: { playerId, itemId: item.id, quantity, equipped: false, source },
+    });
+  }
+}

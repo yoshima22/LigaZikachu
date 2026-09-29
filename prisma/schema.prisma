@@ -262,6 +262,7 @@ model Player {
   badgeProgress               BadgeProgress[]
   wallet                      ZikaCoinWallet?
   inventory                   PlayerInventory[]
+  redeemCodeRedemptions       RedeemCodeRedemption[]
   betsPlaced                  ZikaBet[]                      @relation("ZkBetByPlayer")
   betsOn                      ZikaBet[]                      @relation("ZkBetOnPlayer")
   weeklyLeagueBetsPlaced      WeeklyMascotLeagueBet[]        @relation("WeeklyLeagueBetByPlayer")
@@ -2163,6 +2164,7 @@ model ShopItem {
   updatedAt                 DateTime             @updatedAt
   createdBy                 User?                @relation("ShopItemCreatedBy", fields: [createdById], references: [id], onDelete: Restrict)
   ownerships                PlayerInventory[]
+  redeemRewards             RedeemCodeReward[]
   wishlistEntries           PlayerItemWishlist[]
   syncChallengeConsumptions SyncChallengeEntry[]
   promotions                ShopPromotion[]
@@ -4907,4 +4909,45 @@ model GachaPack {
   updatedAt DateTime @updatedAt
 
   @@map("gacha_packs")
+}
+
+// ── Códigos de resgate (prêmios = qualquer ShopItem: ovos, pedras, itens de liga...) ──
+model RedeemCode {
+  id          String                 @id @default(cuid())
+  code        String                 @unique
+  description String?
+  active      Boolean                @default(true)
+  expiresAt   DateTime?
+  maxUses     Int?
+  createdById String
+  createdAt   DateTime               @default(now())
+  rewards     RedeemCodeReward[]
+  redemptions RedeemCodeRedemption[]
+
+  @@map("redeem_codes")
+}
+
+model RedeemCodeReward {
+  id       String     @id @default(cuid())
+  codeId   String
+  itemId   String
+  quantity Int        @default(1)
+  code     RedeemCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  item     ShopItem   @relation(fields: [itemId], references: [id], onDelete: Cascade)
+
+  @@unique([codeId, itemId])
+  @@map("redeem_code_rewards")
+}
+
+model RedeemCodeRedemption {
+  id         String     @id @default(cuid())
+  codeId     String
+  playerId   String
+  redeemedAt DateTime   @default(now())
+  code       RedeemCode @relation(fields: [codeId], references: [id], onDelete: Cascade)
+  player     Player     @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([codeId, playerId])
+  @@index([playerId])
+  @@map("redeem_code_redemptions")
 }

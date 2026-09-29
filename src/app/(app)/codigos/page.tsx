@@ -191,7 +191,7 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
     return (
       <div className="space-y-6">
         <div>
-          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Meus codigos</h1>
+          <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Meus códigos TCG</h1>
           <p className="mt-1 text-sm text-slate-400">
             Codigos recebidos da Caixa de Presentes ficam aqui para consulta e ativacao.
           </p>
@@ -320,7 +320,7 @@ export default async function CodesPage({ searchParams }: CodesPageProps) {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Codigos de booster</h1>
+        <h1 className="font-pixel text-base text-[#FFCB05] leading-snug">Códigos TCG (booster)</h1>
         <p className="mt-1 text-sm text-slate-400">Estoque, atribuicoes e historico de codigos da liga.</p>
       </div>
 

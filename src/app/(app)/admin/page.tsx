@@ -71,9 +71,15 @@ const adminCards = [
   },
   {
     href: "/codigos",
-    title: "Banco de codigos",
+    title: "Códigos TCG",
     description: "Importar, enviar, revogar e revisar codigos de booster.",
     icon: Package
+  },
+  {
+    href: "/admin/codigos-resgate",
+    title: "Códigos de resgate",
+    description: "Criar códigos que dão ovos, itens, pedras e itens de liga, com data de expiração.",
+    icon: Gift
   },
   {
     href: "/caixa-de-presentes",

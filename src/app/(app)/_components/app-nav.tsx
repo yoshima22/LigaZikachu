@@ -165,6 +165,7 @@ const colecaoLinks = [
   { href: "/manual", label: "Manual", icon: BookOpen, adminOnly: false },
   { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false },
+  { href: "/resgatar", label: "Resgatar código", icon: Gift, adminOnly: false },
 ];
 
 const mercadoLinks = [
@@ -217,7 +218,7 @@ function buildProfileLinks(playerId?: string) {
       icon: Gift,
       adminOnly: false,
     },
-    { href: "/codigos", label: "Codigos", icon: Package, adminOnly: false },
+    { href: "/codigos", label: "Códigos TCG", icon: Package, adminOnly: false },
     {
       href: "/passe-apoiador",
       label: "Passe Apoiador",
