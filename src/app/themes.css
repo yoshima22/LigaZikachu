@@ -1,0 +1,82 @@
+/* Theme changes are presentation-only. Semantic game/status colors stay intact. */
+:root {
+  --theme-accent: #ffcb05;
+  --theme-line: #ffcb0540;
+  --theme-panel: #101827;
+  --theme-text: #f8fafc;
+  --theme-muted: #bac6d8;
+}
+html[data-theme="tecnologico"] {
+  --theme-accent: #a78bfa;
+  --theme-line: #8b5cf666;
+  --theme-panel: #101332;
+  --theme-backdrop: radial-gradient(ellipse at 0 40%, #7c3aed30, transparent 45%), repeating-linear-gradient(135deg, transparent 0 170px, #6366f11a 171px 174px, transparent 175px 250px), linear-gradient(135deg, #080b26, #101641 65%, #08304a);
+  --theme-header: linear-gradient(110deg, #120d29, #0b1536);
+}
+html[data-theme="competitivo"] {
+  --theme-accent: #f87171;
+  --theme-line: #ef444466;
+  --theme-panel: #1d141b;
+  --theme-backdrop: radial-gradient(ellipse at 100% 15%, #ef444428, transparent 45%), repeating-linear-gradient(135deg, transparent 0 190px, #ef444428 191px 198px, transparent 199px 270px), linear-gradient(135deg, #140c10, #171821);
+  --theme-header: linear-gradient(110deg, #211016, #10121c);
+}
+html[data-theme="claro"] {
+  --theme-line: #607da366;
+  --theme-panel: #142137;
+  --theme-backdrop: radial-gradient(ellipse at 10% 10%, #ffffff, transparent 65%), repeating-linear-gradient(135deg, transparent 0 210px, #3b82f126 211px 226px, transparent 227px 300px, #ffcb0533 301px 306px), linear-gradient(120deg, #eaf2ff, #f8fafc);
+  /* Dark content islands preserve contrast in existing specialized game UI. */
+  --theme-header: linear-gradient(110deg, #17263c, #223858);
+}
+html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] {
+  background: var(--theme-backdrop);
+}
+html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-header {
+  background: var(--theme-header);
+  border-color: var(--theme-line);
+}
+html[data-theme="claro"] .site-shell[data-theme-access="admin"] > main {
+  /* Also protect standalone headings and widgets that don't use Card yet. */
+  background: #0f172aeb;
+  border-inline: 1px solid #607da344;
+}
+html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-card {
+  border-color: var(--theme-line);
+  /* Retain caller-provided backgrounds (rewards, warnings, events). */
+  box-shadow: 0 12px 32px #02061724;
+}
+html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-card[class~="bg-slate-950/70"] {
+  background-color: var(--theme-panel);
+}
+.theme-settings {
+  padding: clamp(18px, 3vw, 28px);
+  border: 1px solid var(--theme-line);
+  border-radius: 20px;
+  background: var(--theme-panel);
+  color: var(--theme-text);
+}
+.theme-settings-eyebrow { color: var(--theme-accent); font-size: 10px; font-weight: 800; text-transform: uppercase; letter-spacing: .18em; }
+.theme-settings h2 { margin-top: 6px; font-size: clamp(20px, 3vw, 26px); font-weight: 800; letter-spacing: -.035em; }
+.theme-settings-description { margin-top: 8px; color: var(--theme-muted); font-size: 13px; line-height: 1.6; }
+.theme-options { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; margin-top: 22px; min-width: 0; }
+.theme-option { position: relative; display: flex; flex-direction: column; padding: 8px; border: 1px solid #475569; border-radius: 14px; cursor: pointer; background: #090f20; color: #f8fafc; }
+.theme-option:hover { border-color: var(--preview-accent); }
+.theme-option[data-selected="true"] { border-color: var(--preview-accent); box-shadow: 0 0 0 1px var(--preview-accent); }
+.theme-option:focus-within { outline: 3px solid var(--theme-accent); outline-offset: 4px; }
+.theme-option input { position: absolute; opacity: 0; width: 1px; height: 1px; }
+.theme-preview { display: flex; flex-direction: column; gap: 9px; padding: 14px; height: 130px; border-radius: 8px; overflow: hidden; background: repeating-linear-gradient(135deg, transparent 0 40px, #94a3b81a 41px 44px, transparent 45px 65px), var(--preview-background); }
+.theme-preview-nav { display: flex; align-items: center; gap: 5px; font-size: 8px; font-weight: 900; color: var(--preview-accent); background: #101827; padding: 5px; border-radius: 4px; }
+.theme-preview-nav > span { width: 12px; height: 12px; border: 3px solid var(--preview-accent); border-radius: 50%; }
+.theme-preview-panel { display: flex; flex-direction: column; gap: 6px; padding: 10px; border: 1px solid var(--preview-accent); border-radius: 6px; background: #0f172a; }
+.theme-preview-panel > span { height: 3px; width: 65%; background: #64748b; border-radius: 2px; }
+.theme-preview-panel > span:first-child { background: #e2e8f0; width: 80%; height: 4px; }
+.theme-preview-panel > span:last-child { width: 35%; background: var(--preview-accent); }
+.theme-preview-tabs { display: flex; gap: 4px; }
+.theme-preview-tabs i { height: 7px; width: 30%; border-radius: 3px; background: #334155; }
+.theme-preview-tabs i:first-child { background: var(--preview-accent); }
+.theme-option-heading { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 4px; margin: 12px 4px 6px; font-size: 13px; font-weight: 700; }
+.theme-option-heading > span { font-size: 10px; color: var(--preview-accent); }
+.theme-option-description { margin: 0 4px 8px; font-size: 11px; line-height: 1.6; color: #bac6d8; }
+.theme-settings-note, .theme-settings-status { margin-top: 16px; font-size: 11px; line-height: 1.6; color: var(--theme-muted); }
+.theme-settings-status { min-height: 18px; margin-top: 4px; color: var(--theme-accent); }
+@media (max-width: 1023px) { .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 379px) { .theme-options { grid-template-columns: minmax(0, 1fr); } }

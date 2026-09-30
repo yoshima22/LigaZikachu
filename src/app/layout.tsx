@@ -2,6 +2,8 @@ import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { Inter, Press_Start_2P } from "next/font/google";
 import "./globals.css";
+import "./themes.css";
+import { THEME_INIT_SCRIPT } from "@/lib/site-theme";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -29,7 +31,8 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="pt-BR" className={`${inter.variable} ${pressStart.variable}`}>
+    <html lang="pt-BR" suppressHydrationWarning className={`${inter.variable} ${pressStart.variable}`}>
+      <head><script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} /></head>
       <body>{children}</body>
     </html>
   );

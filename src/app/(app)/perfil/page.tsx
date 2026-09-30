@@ -11,6 +11,7 @@ import { Card } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { StatusBadge } from "@/components/ui/status-badge";
 import { EditProfileForm } from "./_components/edit-profile-form";
+import { SiteThemeSettings } from "@/components/site-theme-settings";
 import { InviteCodeCard } from "./_components/invite-code-card";
 import { BirthdayCard } from "./_components/birthday-card";
 import { NotificationSettingsCard } from "./_components/notification-settings-card";
@@ -512,6 +513,7 @@ export default async function PerfilPage() {
         <EditProfileForm player={{ ...player, standbyUntil: getStandbyUntilFromNotes(player.notes), casualMode: player.casualMode }} />
       </Card>
 
+      {adminUser && <SiteThemeSettings />}
       <NotificationSettingsCard initial={player.notificationSettings} />
 
       <InviteCodeCard
