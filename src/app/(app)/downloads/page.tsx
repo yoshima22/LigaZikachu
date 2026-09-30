@@ -15,7 +15,7 @@ import { AndroidUpdateButton } from "@/components/android-update";
 import androidRelease from "../../../../public/downloads/android-update.json";
 
 const APK_PATH = androidRelease.apkUrl;
-const TRANSMITTER_PATH = "/downloads/LigaZikachuTransmissor-0.5.0-win-x64.zip";
+const TRANSMITTER_PATH = "/downloads/LigaZikachuTransmissor-0.5.6-win-x64.zip";
 
 export default function DownloadsPage() {
   return (

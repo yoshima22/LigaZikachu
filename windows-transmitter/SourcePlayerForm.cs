@@ -32,7 +32,7 @@ internal sealed class SourcePlayerForm : Form
         Controls.Add(_browser); Controls.Add(tools); tools.Dock = DockStyle.Top;
         Shown += async (_, _) =>
         {
-            await _browser.EnsureCoreWebView2Async();
+            await _browser.EnsureCoreWebView2Async(await BrowserProfile.GetAsync());
             _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
             _browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             _browser.CoreWebView2.NewWindowRequested += (_, e) => { e.Handled = true; _browser.CoreWebView2.Navigate(e.Uri); };
@@ -127,7 +127,7 @@ internal sealed class DesktopLaunchForm : Form
         Controls.Add(_browser);
         Shown += async (_, _) =>
         {
-            await _browser.EnsureCoreWebView2Async();
+            await _browser.EnsureCoreWebView2Async(await BrowserProfile.GetAsync());
             _browser.CoreWebView2.Settings.AreDevToolsEnabled = false;
             _browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false;
             _browser.CoreWebView2.DocumentTitleChanged += (_, _) => TryOpenStudio();

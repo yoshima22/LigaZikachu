@@ -18,7 +18,7 @@ internal sealed class BroadcastStudioForm : Form
         Text = "Zika TV — Central da transmissão"; Width = 1240; Height = 820; MinimumSize = new Size(980, 680); StartPosition = FormStartPosition.CenterScreen; BackColor = Color.FromArgb(3, 7, 24);
         var browser = new WebView2 { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.FromArgb(3, 7, 24) };
         Controls.Add(browser);
-        Shown += async (_, _) => { await browser.EnsureCoreWebView2Async(); browser.CoreWebView2.Settings.AreDevToolsEnabled = false; browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false; browser.Source = new Uri($"{_server}/windows-transmitter#streamId={Uri.EscapeDataString(_streamId)}&token={Uri.EscapeDataString(_token)}"); };
+        Shown += async (_, _) => { await browser.EnsureCoreWebView2Async(await BrowserProfile.GetAsync()); browser.CoreWebView2.Settings.AreDevToolsEnabled = false; browser.CoreWebView2.Settings.AreDefaultContextMenusEnabled = false; browser.Source = new Uri($"{_server}/windows-transmitter#streamId={Uri.EscapeDataString(_streamId)}&token={Uri.EscapeDataString(_token)}"); };
         FormClosing += OnClosing;
     }
 
