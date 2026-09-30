@@ -16,6 +16,7 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
   const [loading, setLoading] = useState(true);
   const [decks, setDecks] = useState<DeckForm[]>(emptyDecks());
   const [decksLocked, setDecksLocked] = useState(false);
+  const [intentLocked, setIntentLocked] = useState(false);
   const [matches, setMatches] = useState<ConstrutorMatchView[]>([]);
   const [gymBadges, setGymBadges] = useState<{ id: string; name: string }[]>([]);
   const [missionEnabled, setMissionEnabled] = useState(false);
@@ -38,6 +39,7 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
       setMissionEnabled(Boolean(res.missionEnabled));
       setMascotOptions(res.mascotOptions ?? []);
       setDecksLocked(Boolean(res.decksLocked));
+      setIntentLocked(Boolean(res.intentLocked));
       setMatches(res.matches ?? []);
     }).finally(() => setLoading(false));
   }, [weekId]);
@@ -57,7 +59,7 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
     });
     if (res.error) { setSaved(null); toast.error(res.error); return; }
     setSaved(res);
-    toast.success("Decks salvos! Você já aparece como \"Enviado\" na lista de todos.");
+    toast.success(decksLocked ? "Insígnia e missão atualizadas!" : "Decks salvos! Você já aparece como \"Enviado\" na lista de todos.");
     load();
     router.refresh(); // atualiza a lista pública "Envio de decks" da página
   });
@@ -79,7 +81,7 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
       <div className="rounded-2xl border border-border bg-slate-950/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
           <h3 className="text-sm font-bold text-white">Seus 3 decks</h3>
-          {decksLocked && <span className="flex items-center gap-1 text-[11px] font-bold text-amber-300"><Lock size={11} /> Em jogo — bloqueado</span>}
+          {decksLocked && <span className="flex items-center gap-1 text-[11px] font-bold text-amber-300"><Lock size={11} /> {intentLocked ? "Tudo bloqueado" : "Decks travados — só insígnia e missão"}</span>}
         </div>
         <div className="space-y-3">
           {decks.map((d) => (
@@ -107,7 +109,7 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
                       </span>
                     )}
                   </span>
-                  <select value={d.gymBadgeId} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { gymBadgeId: e.target.value })} className={selectCls}>
+                  <select value={d.gymBadgeId} disabled={intentLocked} onChange={(e) => setDeck(d.slot, { gymBadgeId: e.target.value })} className={selectCls}>
                     <option value="">Não usar este deck em uma Jornada</option>
                     {gymBadges.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
                   </select>
@@ -116,17 +118,17 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
 
               {missionEnabled && (
                 <div className="mt-2">
-                  <MascotMissionPicker mascots={mascotOptions} value={d.mascotId} deckList={d.deckList} disabled={decksLocked}
+                  <MascotMissionPicker mascots={mascotOptions} value={d.mascotId} deckList={d.deckList} disabled={intentLocked}
                     onChange={(id) => setDeck(d.slot, { mascotId: id })} />
                 </div>
               )}
             </div>
           ))}
         </div>
-        {!decksLocked && (
+        {!(decksLocked && intentLocked) && (
           <button onClick={saveDecks} disabled={pending}
             className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-black text-slate-900 hover:brightness-95 disabled:opacity-50">
-            Salvar os 3 decks
+            {decksLocked ? "Salvar insígnia e missão" : "Salvar os 3 decks"}
           </button>
         )}
 
@@ -165,6 +167,11 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
                     ? <span className="text-cyan-200"><Check size={11} className="mr-1 inline" /> Você joga com: <strong>{m.myDeckChosen.name}</strong> (escolhido por {m.opponentName})</span>
                     : <span className="text-slate-400"><Clock size={11} className="mr-1 inline" /> 🔒 As escolhas só aparecem quando os dois votarem.{m.iVoted ? " Você já votou — aguardando o adversário." : ""}</span>}
                 </div>
+                {!m.bothVoted && m.opponentHasRegistered && (
+                  <p className="mt-1 text-[10px] text-slate-400">
+                    Votos: você {m.iVoted ? "✓ já escolheu o deck de" : "✗ falta escolher o deck de"} {m.opponentName} · {m.opponentName} {m.opponentVoted ? "✓ já escolheu o seu" : "✗ falta escolher o seu"}
+                  </p>
+                )}
 
                 <div className="mt-2">
                   <p className="mb-1 text-[10px] font-bold uppercase tracking-wide text-slate-500">Escolha o deck de {m.opponentName}</p>

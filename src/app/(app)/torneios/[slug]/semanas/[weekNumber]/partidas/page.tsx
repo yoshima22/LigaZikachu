@@ -137,11 +137,19 @@ export default async function PartidasPage({ params }: Props) {
   const linkedDeckSubmissionIds = new Set(
     matches.flatMap((match) => [match.playerADeckSubmissionId, match.playerBDeckSubmissionId].filter(Boolean) as string[])
   );
+  const isConstrutor = week.mode === "CONSTRUTOR_MISTERIOSO";
+  // Modo Construtor: o deck só é vinculado à partida quando os DOIS votaram, e daí
+  // em diante o adversário daquela partida pode ver o deck jogado (antes do prazo).
+  const myLinkedSubmissionIds = new Set(
+    matches
+      .filter((m) => player && (m.playerAId === player.id || m.playerBId === player.id))
+      .flatMap((m) => [m.playerADeckSubmissionId, m.playerBDeckSubmissionId].filter(Boolean) as string[])
+  );
   const seenDeckKeys = new Set<string>();
   for (const submission of week.deckSubmissions) {
     if (!user) continue;
 
-    const canView = canViewTournamentWeekDecklist({
+    const canView = (isConstrutor && myLinkedSubmissionIds.has(submission.id)) || canViewTournamentWeekDecklist({
       viewerRole: user.role,
       isOwner: submission.playerId === player?.id,
       registrationStatus: registration?.status ?? null,
@@ -256,7 +264,6 @@ export default async function PartidasPage({ params }: Props) {
     week
   }));
   const weekOpen = canSendDecks;
-  const isConstrutor = week.mode === "CONSTRUTOR_MISTERIOSO";
 
   return (
     <div className="space-y-6">
@@ -369,7 +376,7 @@ export default async function PartidasPage({ params }: Props) {
                   currentPlayerId={player.id}
                   isAdmin={isAdmin}
                   deckSelectionLocked={!canSendDecks || isConstrutor}
-                  showDeckIntent={showDeckIntent}
+                  showDeckIntent={showDeckIntent || isConstrutor}
                   tournamentFormat={tournament.format}
                   canReportResult={canReportAnyInPersonMatch}
                   enguicaContract={enguicaContract}

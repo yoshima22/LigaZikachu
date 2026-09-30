@@ -7,6 +7,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { Prisma } from "@prisma/client";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
 import { computePickAvailability } from "./rules";
+import { isDeckRegistrationLocked } from "@/lib/decks";
 
 // Modo Construtor (Semana 6): cada jogador registra 3 decks (nesta página).
 // O adversário de cada partida escolhe qual dos 3 decks o jogador usará. O deck
@@ -26,7 +27,7 @@ async function requireConstrutorWeek(tournamentWeekId: string) {
   const week = await prisma.tournamentWeek.findUnique({
     where: { id: tournamentWeekId },
     select: {
-      id: true, mode: true, weekNumber: true, deckLockAt: true, lockAt: true, endDate: true,
+      id: true, mode: true, status: true, weekNumber: true, deckLockAt: true, lockAt: true, endDate: true,
       tournament: { select: { id: true, slug: true, seasonId: true, mascotMissionEnabled: true, badges: { select: { id: true, name: true } } } },
     },
   });
@@ -115,11 +116,16 @@ export async function saveConstrutorDecksAction(input: {
   try {
     const me = await viewer();
     const week = await requireConstrutorWeek(input.tournamentWeekId);
-    const myMatches = await orderedMatchesForPlayer(week.id, me.id);
-    const picked = await prisma.construtorPick.count({ where: { targetPlayerId: me.id, matchId: { in: myMatches.map((m) => m.id) } } });
-    if (picked > 0) return { error: "Seus decks já entraram em jogo (um adversário já escolheu). Não é possível alterá-los agora." };
+    // Decks já salvos ficam travados (nome/lista/arquétipo). Só insígnia e missão
+    // de mascote seguem editáveis, até o prazo de envio da semana.
+    const previous = await prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, select: { slot: true, name: true, archetype: true, deckList: true, gymBadgeId: true } });
+    const decksSaved = previous.length >= 3;
+    if (decksSaved && isDeckRegistrationLocked(week)) return { error: "O prazo de envio acabou. Insígnia e missão não podem mais ser alteradas." };
 
-    const slots = input.decks.filter((d) => [1, 2, 3].includes(d.slot));
+    const slots = input.decks.filter((d) => [1, 2, 3].includes(d.slot)).map((d) => {
+      const prev = decksSaved ? previous.find((x) => x.slot === d.slot) : null;
+      return prev ? { ...d, name: prev.name, deckList: prev.deckList, archetype: prev.archetype } : d;
+    });
     if (slots.length !== 3) return { error: "Registre exatamente 3 decks." };
     for (const d of slots) {
       if (!d.name?.trim() || d.name.trim().length < 2) return { error: `Dê um nome ao deck ${d.slot}.` };
@@ -155,8 +161,8 @@ export async function saveConstrutorDecksAction(input: {
     }
 
     // Se a lista ou a insígnia mudou, a validação da organização deixa de valer.
-    const previous = await prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, select: { slot: true, deckList: true, gymBadgeId: true } });
-    await prisma.$transaction(slots.map((d) => {
+    const syncSubmissions: Prisma.PrismaPromise<unknown>[] = [];
+    await prisma.$transaction([...slots.map((d) => {
       const before = previous.find((x) => x.slot === d.slot);
       const extra = extras.get(d.slot)!;
       const changed = !before || before.deckList !== d.deckList.trim().slice(0, 5000) || before.gymBadgeId !== extra.gymBadgeId;
@@ -167,12 +173,30 @@ export async function saveConstrutorDecksAction(input: {
         ...extra,
         ...(changed ? { gymBadgeValid: null, gymBadgeValidation: Prisma.JsonNull } : {}),
       };
+      // Decks já vinculados a partidas reveladas (DeckSubmission) acompanham a nova intenção.
+      if (decksSaved) {
+        syncSubmissions.push(prisma.deckSubmission.updateMany({
+          where: { tournamentWeekId: week.id, playerId: me.id, deckName: data.name, deckList: data.deckList },
+          data: {
+            gymBadgeId: extra.gymBadgeId,
+            mascotMissionMascotId: extra.mascotMissionMascotId,
+            mascotMissionPokemonId: extra.mascotMissionPokemonId,
+            mascotMissionMascotName: extra.mascotMissionMascotName,
+            mascotMissionValid: extra.mascotMissionValid,
+            mascotMissionValidation: extra.mascotMissionValidation,
+            ...(changed ? {
+              gymBadgeValid: null,
+              gymBadgeValidation: extra.gymBadgeId ? { status: "PENDING_ADMIN_REVIEW", message: "Jornada declarada. A organizacao ainda precisa validar o deck monotipo." } : Prisma.JsonNull,
+            } : {}),
+          },
+        }));
+      }
       return prisma.construtorDeck.upsert({
         where: { tournamentWeekId_playerId_slot: { tournamentWeekId: week.id, playerId: me.id, slot: d.slot } },
         create: { tournamentWeekId: week.id, playerId: me.id, slot: d.slot, ...data },
         update: data,
       });
-    }));
+    }), ...syncSubmissions]);
     revalidatePath(`/torneios/${week.tournament.slug}/construtor`);
     // Atualiza a lista pública "Envio de decks" da página do dia.
     revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
@@ -289,6 +313,8 @@ export type ConstrutorMatchView = {
   myDeckChosen: { name: string } | null; // só revelado após ambos votarem
   bothVoted: boolean;
   iVoted: boolean;
+  /** O adversário já escolheu o MEU deck neste jogo (o conteúdo segue oculto até ambos votarem). */
+  opponentVoted: boolean;
   opponentHasRegistered: boolean;
   opponentDeckOptions: { id: string; slot: number; name: string; archetype: string | null }[];
   iCanPick: boolean;
@@ -306,6 +332,7 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
   missionEnabled?: boolean;
   mascotOptions?: { id: string; pokemonId: number; nickname: string | null; level: number }[];
   decksLocked?: boolean;
+  intentLocked?: boolean;
   matches?: ConstrutorMatchView[];
 }> {
   try {
@@ -325,8 +352,9 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
           take: 500,
         }))
       : [];
-    const myPicksAsTarget = await prisma.construtorPick.count({ where: { targetPlayerId: me.id, matchId: { in: myMatches.map((m) => m.id) } } });
-    const decksLocked = myPicksAsTarget > 0;
+    // Decks salvos não mudam mais; insígnia/missão seguem editáveis até o prazo.
+    const decksLocked = myDecksFull.length >= 3;
+    const intentLocked = isDeckRegistrationLocked(week);
 
     const opponentIds = [...new Set(myMatches.map((m) => (m.playerAId === me.id ? m.playerBId : m.playerAId)).filter((id): id is string => Boolean(id)))];
     const players = await prisma.player.findMany({ where: { id: { in: [me.id, ...opponentIds] } }, select: { id: true, displayName: true } });
@@ -343,6 +371,20 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
       const oppMatches = await orderedMatchesForPlayer(week.id, opponentId);
       const oppPicks = await picksByMatch(oppMatches.map((x) => x.id));
       const ctx = await pickContext(week.id, m.id, opponentId, oppPicks);
+      // Jogo anterior do adversário ainda não revelado: diz QUEM falta votar em QUEM.
+      let waitReason: string | null = null;
+      if (ctx.waiting) {
+        const blockIdx = oppMatches.findIndex((x) => x.id !== m.id && !matchBothVoted(x, oppPicks));
+        const blocking = oppMatches[blockIdx];
+        const ids = [blocking.playerAId, blocking.playerBId].filter((id): id is string => Boolean(id));
+        const names = new Map((await prisma.player.findMany({ where: { id: { in: ids } }, select: { id: true, displayName: true } })).map((p) => [p.id, p.displayName]));
+        const label = (id: string) => (id === me.id ? "Você" : names.get(id) ?? "Jogador");
+        const missing = ids.filter((t) => !oppPicks.get(blocking.id)?.has(t)).map((t) => {
+          const voter = t === blocking.playerAId ? blocking.playerBId! : blocking.playerAId;
+          return `${label(voter)} ainda não escolheu o deck de ${label(t)}`;
+        });
+        waitReason = `Aguardando o Jogo ${blockIdx + 1} de ${nameOf(opponentId)} ser revelado${missing.length ? ` — falta: ${missing.join("; ")}` : ""}.`;
+      }
       // Partidas reveladas antes do vínculo existir (ou que falharam) são reparadas aqui (idempotente).
       if (revealed) await linkRevealedMatchDecks(m.id, week).catch(() => undefined);
       matches.push({
@@ -353,17 +395,18 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
         myDeckChosen: revealed && myChosenDeckId ? { name: myDeckNameById.get(myChosenDeckId) ?? "Deck" } : null,
         bothVoted: revealed,
         iVoted: Boolean(iChoseForOpp),
+        opponentVoted: Boolean(myChosenDeckId),
         opponentHasRegistered: ctx.decks.length >= 3,
         opponentDeckOptions: ctx.availableDecks.map((d) => ({ id: d.id, slot: d.slot, name: d.name, archetype: d.archetype })),
         iCanPick: ctx.decks.length >= 3 && !ctx.waiting && !ctx.currentPick,
         opponentChosenByMe: ctx.currentPick,
-        waitReason: ctx.waiting ? "Aguardando o jogo anterior do adversário ser revelado." : null,
+        waitReason,
       });
     }
 
     return {
       myDecks: myDecksFull.map((d) => ({ slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype, gymBadgeId: d.gymBadgeId, mascotMissionMascotId: d.mascotMissionMascotId, mascotMissionMascotName: d.mascotMissionMascotName, mascotMissionValid: d.mascotMissionValid, gymBadgeValid: d.gymBadgeValid })),
-      gymBadges: week.tournament.badges, missionEnabled, mascotOptions, decksLocked, matches,
+      gymBadges: week.tournament.badges, missionEnabled, mascotOptions, decksLocked, intentLocked, matches,
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao carregar." };
