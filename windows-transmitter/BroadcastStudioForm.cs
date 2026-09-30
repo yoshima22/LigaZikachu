@@ -27,7 +27,11 @@ internal sealed class BroadcastStudioForm : Form
         if (_closing) return;
         _closing = true;
         await _http.PostAsJsonAsync(_server + "/api/spec/windows-transmitter/session", new { streamId = _streamId, token = _token, action = "end" }).catchSilently();
-        _pairingForm.Show();
+        // Ao encerrar o aplicativo pelo X, o Windows pode ter destruído a
+        // janela de origem antes desta central receber o FormClosing.
+        // Nesse caso, a sessão é encerrada normalmente, sem tentar reexibir
+        // um Form já descartado.
+        if (!_pairingForm.IsDisposed && _pairingForm.IsHandleCreated) _pairingForm.Show();
     }
 }
 

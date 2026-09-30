@@ -24,7 +24,22 @@ internal sealed class TransmitterForm : Form
 
     private Control SetupTabs()
     {
-        return new SourcePlayerPanel();
+        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Bg };
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        var nav = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(8, 7, 8, 9), BackColor = Color.FromArgb(5, 11, 31) };
+        nav.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); nav.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
+        var content = new Panel { Dock = DockStyle.Fill, BackColor = Bg };
+        var manualContent = Setup(); var playerContent = new SourcePlayerPanel();
+        var manual = ModeButton("◉  TRANSMISSÃO MANUAL", "Parear uma janela com a Zika TV");
+        var player = ModeButton("▷  PLAYER DE FONTE", "Janela limpa para compartilhar");
+        void Select(Control selected, Control page)
+        {
+            content.Controls.Clear(); content.Controls.Add(page); page.BringToFront();
+            foreach (Button button in nav.Controls) { button.BackColor = button == selected ? Color.FromArgb(35, 24, 77) : Color.FromArgb(9, 17, 42); button.ForeColor = button == selected ? Color.White : Muted; }
+        }
+        manual.Click += (_, _) => Select(manual, manualContent);
+        player.Click += (_, _) => Select(player, playerContent);
+        nav.Controls.Add(manual, 0, 0); nav.Controls.Add(player, 1, 0); root.Controls.Add(nav, 0, 0); root.Controls.Add(content, 0, 1); Select(manual, manualContent); return root;
     }
 
     private static Button ModeButton(string title, string subtitle) => new() { Text = title + Environment.NewLine + subtitle, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderSize = 1, BorderColor = Color.FromArgb(51, 65, 95) }, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(18, 0, 4, 0), Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(5, 2, 5, 2) };
