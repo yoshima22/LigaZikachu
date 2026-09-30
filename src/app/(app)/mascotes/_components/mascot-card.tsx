@@ -1289,7 +1289,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 if (r.result?.reward) {
                   const display = rewardToDisplay(r.result.reward as { type: string; eggType?: string; foodType?: string; quantity?: number; amount?: number; shopItemType?: string });
                   if (r.result.mode === "STANDARD" && r.result.expGained > 0) {
-                    display.description += ` +${r.result.expGained.toLocaleString("pt-BR")} EXP em processamento; aparecerá no mascote em breve.`;
+                    display.description += ` +${r.result.expGained.toLocaleString("pt-BR")} EXP aplicados ao mascote.`;
                   }
                   if (r.result.orderClue) display.orderClue = r.result.orderClue;
                   setExpeditionReward(display);

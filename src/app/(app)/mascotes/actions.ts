@@ -1106,6 +1106,15 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   }
 }
 
+/** A EXP da expedição entra numa fila (EXP_GRANT); aplica agora para o card já vir atualizado. */
+async function applyExpeditionExpNow(expeditionId: string) {
+  const jobs = await prisma.mascotInteractionJob.findMany({
+    where: { interactionType: "EXP_GRANT", status: "PENDING", idempotencyKey: { startsWith: `expedition-exp:${expeditionId}:` } },
+    select: { id: true },
+  });
+  await processMascotExpGrantBatch(jobs.map((j) => j.id)).catch((e) => console.warn("[expedition] EXP imediata falhou; cron retomará", e));
+}
+
 export async function claimExpeditionAction(expeditionId: string): Promise<{ error?: string; result?: Awaited<ReturnType<typeof claimExpedition>> }> {
   try {
     const user = await getSessionUser();
@@ -1114,6 +1123,7 @@ export async function claimExpeditionAction(expeditionId: string): Promise<{ err
     if (!player) return { error: "Perfil não encontrado." };
     const result = await claimExpedition(player.id, expeditionId);
     void trackGachaObjective(player.id, "EXPEDICAO_CONCLUIDA");
+    await applyExpeditionExpNow(expeditionId);
     revalidate(player.id);
     revalidatePath("/caixa-de-presentes");
     return { result };
@@ -1196,6 +1206,7 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
       try {
         const claimed = await claimExpedition(player.id, expedition.id);
         void trackGachaObjective(player.id, "EXPEDICAO_CONCLUIDA");
+        await applyExpeditionExpNow(expedition.id);
         entry.reward = claimed.reward;
         entry.expGained = claimed.expGained;
 
