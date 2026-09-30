@@ -1,19 +1,26 @@
 "use client";
 
 import { useEffect, useState, useTransition, useCallback } from "react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Check, Clock, Swords, Lock } from "lucide-react";
-import { getConstrutorStateAction, pickOpponentDeckAction, saveConstrutorDecksAction, type ConstrutorMatchView } from "./actions";
+import { Award, Check, CheckCircle2, Clock, PawPrint, Swords, Lock } from "lucide-react";
+import { getConstrutorStateAction, pickOpponentDeckAction, saveConstrutorDecksAction, type ConstrutorMatchView, type SaveConstrutorDecksResult } from "./actions";
 
-type DeckForm = { slot: number; name: string; deckList: string; archetype: string };
-const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "" }));
+type DeckForm = { slot: number; name: string; deckList: string; archetype: string; gymBadgeId: string; mascotId: string; mascotFilter: string };
+const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "", gymBadgeId: "", mascotId: "", mascotFilter: "" }));
+const selectCls = "w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50";
 
 export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: string; weekNumber: number }) {
   const [loading, setLoading] = useState(true);
   const [decks, setDecks] = useState<DeckForm[]>(emptyDecks());
   const [decksLocked, setDecksLocked] = useState(false);
   const [matches, setMatches] = useState<ConstrutorMatchView[]>([]);
+  const [gymBadges, setGymBadges] = useState<{ id: string; name: string }[]>([]);
+  const [missionEnabled, setMissionEnabled] = useState(false);
+  const [mascotOptions, setMascotOptions] = useState<{ id: string; label: string }[]>([]);
+  const [saved, setSaved] = useState<SaveConstrutorDecksResult | null>(null);
   const [pending, start] = useTransition();
+  const router = useRouter();
 
   const load = useCallback(() => {
     setLoading(true);
@@ -22,9 +29,12 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
       if (res.myDecks && res.myDecks.length > 0) {
         setDecks(emptyDecks().map((d) => {
           const found = res.myDecks!.find((x) => x.slot === d.slot);
-          return found ? { slot: d.slot, name: found.name, deckList: found.deckList, archetype: found.archetype ?? "" } : d;
+          return found ? { ...d, name: found.name, deckList: found.deckList, archetype: found.archetype ?? "", gymBadgeId: found.gymBadgeId ?? "", mascotId: found.mascotMissionMascotId ?? "" } : d;
         }));
       }
+      setGymBadges(res.gymBadges ?? []);
+      setMissionEnabled(Boolean(res.missionEnabled));
+      setMascotOptions(res.mascotOptions ?? []);
       setDecksLocked(Boolean(res.decksLocked));
       setMatches(res.matches ?? []);
     }).finally(() => setLoading(false));
@@ -38,11 +48,16 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
   const saveDecks = () => start(async () => {
     const res = await saveConstrutorDecksAction({
       tournamentWeekId: weekId,
-      decks: decks.map((d) => ({ slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype || null })),
+      decks: decks.map((d) => ({
+        slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype || null,
+        gymBadgeId: d.gymBadgeId || null, mascotMissionMascotId: d.mascotId || null,
+      })),
     });
-    if (res.error) { toast.error(res.error); return; }
-    toast.success("3 decks registrados!");
+    if (res.error) { setSaved(null); toast.error(res.error); return; }
+    setSaved(res);
+    toast.success("Decks salvos! Você já aparece como \"Enviado\" na lista de todos.");
     load();
+    router.refresh(); // atualiza a lista pública "Envio de decks" da página
   });
 
   const pick = (matchId: string, deckId: string) => start(async () => {
@@ -75,6 +90,32 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
               <textarea value={d.deckList} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { deckList: e.target.value })}
                 placeholder="Lista do deck" rows={3}
                 className="mt-2 w-full rounded-lg border border-white/10 bg-slate-950/60 px-2.5 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50" />
+
+              {gymBadges.length > 0 && (
+                <label className="mt-2 block space-y-1 rounded-lg border border-amber-400/20 bg-amber-500/5 p-2 text-[10px] text-slate-400">
+                  <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300"><Award size={11} /> Jornada de Ginásio (opcional)</span>
+                  <select value={d.gymBadgeId} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { gymBadgeId: e.target.value })} className={selectCls}>
+                    <option value="">Não usar este deck em uma Jornada</option>
+                    {gymBadges.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                  </select>
+                </label>
+              )}
+
+              {missionEnabled && (
+                <div className="mt-2 space-y-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-2 text-[10px] text-slate-400">
+                  <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-emerald-300"><PawPrint size={11} /> Missão de Mascote (opcional)</span>
+                  <input value={d.mascotFilter} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { mascotFilter: e.target.value })}
+                    placeholder="Filtrar mascote por nome ou espécie..." className={selectCls} />
+                  <select value={d.mascotId} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { mascotId: e.target.value })} className={selectCls}>
+                    <option value="">Sem missão neste deck</option>
+                    {mascotOptions
+                      .filter((m) => m.id === d.mascotId || !d.mascotFilter.trim() || m.label.toLocaleLowerCase("pt-BR").includes(d.mascotFilter.trim().toLocaleLowerCase("pt-BR")))
+                      .slice(0, 60)
+                      .map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
+                  </select>
+                  <span className="block leading-4 text-slate-500">A validação acontece ao salvar; a EXP só é entregue quando o deck for jogado e o dia encerrado.</span>
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -83,6 +124,21 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
             className="mt-3 w-full rounded-lg bg-[#FFCB05] px-3 py-2 text-xs font-black text-slate-900 hover:brightness-95 disabled:opacity-50">
             Salvar os 3 decks
           </button>
+        )}
+
+        {saved?.ok && (
+          <div role="status" className="mt-3 space-y-1 rounded-xl border border-emerald-500/30 bg-emerald-500/10 p-3 text-xs text-emerald-200">
+            <p className="flex items-center gap-1.5 font-bold">
+              <CheckCircle2 size={14} /> Seus 3 decks foram salvos
+              {saved.savedAt ? ` às ${new Date(saved.savedAt).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}` : ""}!
+            </p>
+            <p className="text-emerald-300/80">Você já aparece como “✓ Enviado” na lista “Envio de decks” — o conteúdo continua secreto até o fechamento.</p>
+            {saved.missions?.map((m) => (
+              <p key={m.slot} className={m.valid ? "text-emerald-200" : "text-amber-300"}>
+                Deck {m.slot} · Missão de {m.mascotName}: {m.valid ? "válida ✓" : "a lista não contém a carta necessária ✗"}
+              </p>
+            ))}
+          </div>
         )}
       </div>
 

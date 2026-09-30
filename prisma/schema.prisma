@@ -787,6 +787,13 @@ model ConstrutorDeck {
   name             String
   deckList         String   @db.Text
   archetype        String?
+  // Jornada de Ginásio e Missão de Mascote declaradas para este deck (opcionais)
+  gymBadgeId              String?
+  mascotMissionMascotId   String?
+  mascotMissionPokemonId  Int?
+  mascotMissionMascotName String?
+  mascotMissionValid      Boolean?
+  mascotMissionValidation Json?
   createdAt        DateTime @default(now())
   updatedAt        DateTime @updatedAt
 
