@@ -314,7 +314,7 @@ export default async function AppLayout({
 
           <div className="mx-auto flex max-w-[1536px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
             {/* Logo - Pokemon style */}
-            <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3 md:ml-4">
+            <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3 md:ml-4 lg:ml-24">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="site-brand-logo" src={SITE_LOGO_URL} alt="Liga Zikachu — início" width={600} height={200} fetchPriority="high" />
             </Link>
