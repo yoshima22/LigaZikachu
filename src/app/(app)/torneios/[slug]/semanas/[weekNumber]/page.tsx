@@ -11,6 +11,8 @@ import {
   getDeckVisibilityState
 } from "@/lib/decks";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
+import { DeckSendStatusPanel } from "@/components/deck-send-status";
+import { loadDeckSendStatus } from "@/lib/deck-send-status";
 import { DeckSubmissionForm } from "./_components/deck-submission-form";
 import { ConstrutorClient } from "../../construtor/construtor-client";
 import { CopyDeckButton } from "@/components/ui/copy-deck-button";
@@ -102,30 +104,8 @@ export default async function WeekDetailPage({
   const topDoDiaRanking = await computeTournamentWeekTopOfDay(week.id);
   const deckVisibility = getDeckVisibilityState(week);
 
-  // ── Quem já enviou deck (público; só o status, nunca o conteúdo da lista) ────
-  // Decks iguais (legado: mesma lista em várias submissions) contam uma vez só.
-  const decksSentByPlayer = new Map<string, Set<string>>();
-  for (const sub of week.deckSubmissions) {
-    if (sub.status === "REJECTED") continue;
-    const set = decksSentByPlayer.get(sub.playerId) ?? new Set<string>();
-    set.add(sub.deckList.trim());
-    decksSentByPlayer.set(sub.playerId, set);
-  }
-  const registeredForStatus = await prisma.tournamentRegistration.findMany({
-    where: { tournamentId: tournament.id, status: { in: ["APPROVED", "PENDING"] } },
-    select: { player: { select: { id: true, displayName: true } } },
-  });
-  const deckStatusRows = new Map<string, { id: string; name: string; sent: number }>();
-  for (const r of registeredForStatus) {
-    deckStatusRows.set(r.player.id, { id: r.player.id, name: r.player.displayName, sent: decksSentByPlayer.get(r.player.id)?.size ?? 0 });
-  }
-  for (const sub of week.deckSubmissions) {
-    if (!deckStatusRows.has(sub.playerId)) {
-      deckStatusRows.set(sub.playerId, { id: sub.playerId, name: sub.player.displayName, sent: decksSentByPlayer.get(sub.playerId)?.size ?? 0 });
-    }
-  }
-  const deckStatusList = [...deckStatusRows.values()].sort((a, b) => Number(b.sent > 0) - Number(a.sent > 0) || a.name.localeCompare(b.name, "pt-BR"));
-  const deckSentCount = deckStatusList.filter((row) => row.sent > 0).length;
+  // Quem já enviou deck (público; só o status, nunca o conteúdo).
+  const deckSendStatus = await loadDeckSendStatus(week, tournament.id);
 
   // Sempre exibe no fuso do Brasil (BRT = UTC-3 / America/Sao_Paulo)
   const fmt = (d: Date | null | undefined) =>
@@ -836,34 +816,7 @@ export default async function WeekDetailPage({
           </p>
         ) : null}
 
-        {week.mode !== "CONSTRUTOR_MISTERIOSO" && deckStatusList.length > 0 && (
-          <div className="mt-5 rounded-xl border border-border bg-slate-900/40 p-4">
-            <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-              <h3 className="text-sm font-semibold text-slate-200">Envio de decks</h3>
-              <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2.5 py-0.5 text-xs font-semibold text-emerald-300">
-                {deckSentCount} de {deckStatusList.length} já enviaram
-              </span>
-            </div>
-            <p className="mb-3 text-[11px] text-slate-500">
-              Mostra apenas quem já enviou e salvou o deck. A lista só é revelada após o fechamento.
-            </p>
-            <div className="grid gap-1.5 sm:grid-cols-2 lg:grid-cols-3">
-              {deckStatusList.map((row) => (
-                <div
-                  key={row.id}
-                  className={`flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5 text-xs ${
-                    row.sent > 0 ? "border-emerald-500/25 bg-emerald-500/10 text-slate-200" : "border-border bg-slate-950/40 text-slate-500"
-                  }`}
-                >
-                  <span className="truncate font-medium">{row.name}</span>
-                  <span className={`shrink-0 font-semibold ${row.sent > 0 ? "text-emerald-400" : "text-slate-600"}`}>
-                    {row.sent > 0 ? `✓ Enviado${row.sent > 1 ? ` (${row.sent})` : ""}` : "Pendente"}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
+        <DeckSendStatusPanel {...deckSendStatus} />
 
         <div className="mt-5 space-y-3">
           {visibleDecks.length === 0 ? (
