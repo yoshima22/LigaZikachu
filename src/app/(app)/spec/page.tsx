@@ -29,7 +29,7 @@ export default async function SpecPage() {
       <header className="rounded-2xl border border-[#FFCB05]/25 bg-gradient-to-r from-[#1a1a2e] via-slate-950 to-purple-950/20 p-5">
         <div className="flex items-start justify-between gap-3">
           <div>
-            <h1 className="text-2xl font-black text-white">📺 Zika TV</h1>
+            <h1 className="text-2xl font-black text-white">{/* eslint-disable-next-line @next/next/no-img-element */}<img src="/images/zika-tv-logo.webp" alt="Zika TV" width={800} height={267} className="h-16 w-auto sm:h-20" /></h1>
             <p className="mt-1 text-sm text-slate-400">Assista às partidas dos torneios da Liga ao vivo. As transmissões partem dos próprios participantes.</p>
           </div>
           <SpecRefreshButton />
