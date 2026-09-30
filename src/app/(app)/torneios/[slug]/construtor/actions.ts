@@ -8,6 +8,7 @@ import { Prisma } from "@prisma/client";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
 import { computePickAvailability } from "./rules";
 import { isDeckRegistrationLocked } from "@/lib/decks";
+import { sendNotificationToPlayers } from "@/lib/notifications";
 
 // Modo Construtor (Semana 6): cada jogador registra 3 decks (nesta página).
 // O adversário de cada partida escolhe qual dos 3 decks o jogador usará. O deck
@@ -304,13 +305,121 @@ async function linkRevealedMatchDecks(matchId: string, week: ConstrutorWeek) {
   }
 }
 
+// ── Pedido de alteração das escolhas ──────────────────────────────────────────
+// Um jogador pede para refazer as escolhas de uma partida já revelada. Todos os
+// afetados (a partida e os jogos seguintes dos dois que dependiam dela) precisam aceitar.
+async function revertScope(weekId: string, match: { id: string; playerAId: string; playerBId: string }) {
+  const deletes = [{ matchId: match.id, targetId: match.playerAId }, { matchId: match.id, targetId: match.playerBId }];
+  const involved = new Set([match.playerAId, match.playerBId]);
+  for (const pid of [match.playerAId, match.playerBId]) {
+    const ordered = await orderedMatchesForPlayer(weekId, pid);
+    const later = ordered.slice(ordered.findIndex((x) => x.id === match.id) + 1);
+    const picks = await picksByMatch(later.map((x) => x.id));
+    for (const lm of later) {
+      if (!picks.get(lm.id)?.has(pid)) continue;
+      deletes.push({ matchId: lm.id, targetId: pid });
+      involved.add(lm.playerAId);
+      if (lm.playerBId) involved.add(lm.playerBId);
+    }
+  }
+  return { deletes, involved: [...involved] };
+}
+
+async function notifyPlayers(playerIds: string[], kind: string, reqId: string, title: string, body: string, href: string) {
+  if (playerIds.length === 0) return;
+  await prisma.playerNotification.createMany({
+    data: playerIds.map((playerId) => ({ playerId, category: "TORNEIO", type: kind, title, body, href, entityId: reqId, eventKey: `construtor-change:${reqId}:${kind}:${playerId}` })),
+    skipDuplicates: true,
+  }).catch((e) => console.error("[construtor] notificação in-game falhou", e));
+  await sendNotificationToPlayers(playerIds, { title, body, url: href, category: "LIGA_SEMANAL" }).catch(() => undefined);
+}
+
+export async function requestChoiceChangeAction(input: { matchId: string }): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const me = await viewer();
+    const match = await prisma.match.findUnique({ where: { id: input.matchId }, select: { id: true, tournamentWeekId: true, playerAId: true, playerBId: true, isBye: true } });
+    if (!match?.tournamentWeekId || match.isBye || !match.playerBId) return { error: "Partida não encontrada." };
+    const week = await requireConstrutorWeek(match.tournamentWeekId);
+    if (me.id !== match.playerAId && me.id !== match.playerBId) return { error: "Você não participa desta partida." };
+    const both = { id: match.id, playerAId: match.playerAId, playerBId: match.playerBId };
+    const picks = await picksByMatch([match.id]);
+    if (!matchBothVoted({ ...both, roundLabel: null, scheduledAt: null }, picks)) return { error: "As escolhas desta partida ainda não foram reveladas." };
+    if (await prisma.construtorChangeRequest.count({ where: { matchId: match.id, status: "PENDING" } })) return { error: "Já existe um pedido de alteração em aberto para esta partida." };
+
+    const { deletes, involved } = await revertScope(week.id, both);
+    const played = await prisma.match.count({ where: { id: { in: [...new Set(deletes.map((d) => d.matchId))] }, OR: [{ status: { not: "PENDING_CONFIRMATION" } }, { winnerPlayerId: { not: null } }] } });
+    if (played > 0) return { error: "Uma das partidas afetadas já tem resultado. Fale com a organização." };
+
+    const others = involved.filter((id) => id !== me.id);
+    const req = await prisma.construtorChangeRequest.create({ data: { tournamentWeekId: week.id, matchId: match.id, requesterId: me.id, playerIds: others } });
+    const href = `/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`;
+    await notifyPlayers(others, "CHANGE_REQUESTED", req.id, "Pedido para refazer escolhas de deck", `${me.displayName} pediu para refazer as escolhas de deck de uma partida. Abra as partidas para aceitar ou recusar.`, href);
+    revalidatePath(href);
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao solicitar alteração." };
+  }
+}
+
+export async function respondChoiceChangeAction(input: { requestId: string; accept: boolean }): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const me = await viewer();
+    const req = await prisma.construtorChangeRequest.findUnique({ where: { id: input.requestId } });
+    if (!req || req.status !== "PENDING") return { error: "Pedido não está mais em aberto." };
+    if (!req.playerIds.includes(me.id)) return { error: "Você não precisa responder a este pedido." };
+    if (req.acceptedIds.includes(me.id)) return { ok: true };
+    const week = await requireConstrutorWeek(req.tournamentWeekId);
+    const href = `/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`;
+    const everyone = [req.requesterId, ...req.playerIds];
+
+    if (!input.accept) {
+      await prisma.construtorChangeRequest.update({ where: { id: req.id }, data: { status: "DECLINED", resolvedAt: new Date() } });
+      await notifyPlayers(everyone.filter((id) => id !== me.id), "CHANGE_DECLINED", req.id, "Pedido de alteração recusado", `${me.displayName} recusou refazer as escolhas de deck. Elas foram mantidas.`, href);
+      revalidatePath(href);
+      return { ok: true };
+    }
+
+    const applied = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"choice-change:" + req.matchId}))`;
+      const fresh = await tx.construtorChangeRequest.findUnique({ where: { id: req.id } });
+      if (!fresh || fresh.status !== "PENDING") return false;
+      const acceptedIds = [...new Set([...fresh.acceptedIds, me.id])];
+      if (!fresh.playerIds.every((id) => acceptedIds.includes(id))) {
+        await tx.construtorChangeRequest.update({ where: { id: req.id }, data: { acceptedIds } });
+        return false;
+      }
+      const match = await tx.match.findUnique({ where: { id: req.matchId }, select: { id: true, playerAId: true, playerBId: true } });
+      if (!match?.playerBId) return false;
+      const { deletes } = await revertScope(week.id, { id: match.id, playerAId: match.playerAId, playerBId: match.playerBId });
+      const matches = await tx.match.findMany({ where: { id: { in: [...new Set(deletes.map((d) => d.matchId))] } }, select: { id: true, playerAId: true, status: true, winnerPlayerId: true } });
+      if (matches.some((m) => m.status !== "PENDING_CONFIRMATION" || m.winnerPlayerId)) throw new Error("Uma das partidas afetadas já tem resultado. Fale com a organização.");
+      for (const d of deletes) {
+        await tx.construtorPick.deleteMany({ where: { matchId: d.matchId, targetPlayerId: d.targetId } });
+        const isA = matches.find((m) => m.id === d.matchId)?.playerAId === d.targetId;
+        await tx.match.update({ where: { id: d.matchId }, data: isA ? { playerADeckSubmissionId: null } : { playerBDeckSubmissionId: null } });
+      }
+      await tx.construtorChangeRequest.update({ where: { id: req.id }, data: { acceptedIds, status: "ACCEPTED", resolvedAt: new Date() } });
+      return true;
+    });
+    if (applied) await notifyPlayers(everyone, "CHANGE_APPLIED", req.id, "Escolhas de deck reabertas", "Todos aceitaram: as escolhas foram desfeitas e podem ser refeitas nas partidas.", href);
+    revalidatePath(href);
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao responder pedido." };
+  }
+}
+
 // ── Estado para a UI ──────────────────────────────────────────────────────────
 export type ConstrutorMatchView = {
   matchId: string;
   roundLabel: string | null;
   scheduledAt: string | null;
   opponentName: string;
-  myDeckChosen: { name: string } | null; // só revelado após ambos votarem
+  myDeckChosen: { name: string; deckList: string } | null; // só revelado após ambos votarem
+  /** Deck que EU escolhi para o adversário (conteúdo), só após ambos votarem. */
+  opponentDeckPlayed: { name: string; deckList: string } | null;
+  changeRequest: { id: string; requesterName: string; iRequested: boolean; awaitingMe: boolean; waitingNames: string[] } | null;
+  canRequestChange: boolean;
   bothVoted: boolean;
   iVoted: boolean;
   /** O adversário já escolheu o MEU deck neste jogo (o conteúdo segue oculto até ambos votarem). */
@@ -359,7 +468,10 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
     const opponentIds = [...new Set(myMatches.map((m) => (m.playerAId === me.id ? m.playerBId : m.playerAId)).filter((id): id is string => Boolean(id)))];
     const players = await prisma.player.findMany({ where: { id: { in: [me.id, ...opponentIds] } }, select: { id: true, displayName: true } });
     const nameOf = (id: string) => players.find((p) => p.id === id)?.displayName ?? "Adversário";
-    const myDeckNameById = new Map(myDecksFull.map((d) => [d.id, d.name]));
+    const myDeckById = new Map(myDecksFull.map((d) => [d.id, d]));
+    const openRequests = await prisma.construtorChangeRequest.findMany({ where: { matchId: { in: myMatches.map((m) => m.id) }, status: "PENDING" } });
+    const reqPlayerIds = [...new Set(openRequests.flatMap((r) => [r.requesterId, ...r.playerIds]))];
+    const reqNames = new Map((await prisma.player.findMany({ where: { id: { in: reqPlayerIds } }, select: { id: true, displayName: true } })).map((p) => [p.id, p.displayName]));
     const myMatchPicks = await picksByMatch(myMatches.map((m) => m.id));
 
     const matches: ConstrutorMatchView[] = [];
@@ -392,7 +504,18 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
         roundLabel: m.roundLabel,
         scheduledAt: m.scheduledAt ? m.scheduledAt.toISOString() : null,
         opponentName: nameOf(opponentId),
-        myDeckChosen: revealed && myChosenDeckId ? { name: myDeckNameById.get(myChosenDeckId) ?? "Deck" } : null,
+        myDeckChosen: revealed && myChosenDeckId ? { name: myDeckById.get(myChosenDeckId)?.name ?? "Deck", deckList: myDeckById.get(myChosenDeckId)?.deckList ?? "" } : null,
+        opponentDeckPlayed: revealed && iChoseForOpp ? (await prisma.construtorDeck.findUnique({ where: { id: iChoseForOpp }, select: { name: true, deckList: true } })) : null,
+        changeRequest: (() => {
+          const r = openRequests.find((x) => x.matchId === m.id);
+          if (!r) return null;
+          return {
+            id: r.id, requesterName: reqNames.get(r.requesterId) ?? "Jogador", iRequested: r.requesterId === me.id,
+            awaitingMe: r.playerIds.includes(me.id) && !r.acceptedIds.includes(me.id),
+            waitingNames: r.playerIds.filter((id) => !r.acceptedIds.includes(id)).map((id) => (id === me.id ? "Você" : reqNames.get(id) ?? "Jogador")),
+          };
+        })(),
+        canRequestChange: revealed && !openRequests.some((x) => x.matchId === m.id),
         bothVoted: revealed,
         iVoted: Boolean(iChoseForOpp),
         opponentVoted: Boolean(myChosenDeckId),

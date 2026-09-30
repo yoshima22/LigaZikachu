@@ -818,6 +818,23 @@ model ConstrutorPick {
   @@map("construtor_picks")
 }
 
+// Pedido para refazer as escolhas de uma partida já revelada. Só vale se todos os
+// jogadores afetados aceitarem; aí as escolhas (e as seguintes que dependiam delas) são apagadas.
+model ConstrutorChangeRequest {
+  id               String    @id @default(cuid())
+  tournamentWeekId String
+  matchId          String
+  requesterId      String
+  playerIds        String[] // afetados (exceto quem pediu)
+  acceptedIds      String[]
+  status           String    @default("PENDING") // PENDING | ACCEPTED | DECLINED
+  createdAt        DateTime  @default(now())
+  resolvedAt       DateTime?
+
+  @@index([matchId, status])
+  @@map("construtor_change_requests")
+}
+
 // Inscrição de jogador em torneio
 model TournamentRegistration {
   id           String             @id @default(cuid())

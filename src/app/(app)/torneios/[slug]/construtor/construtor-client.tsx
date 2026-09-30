@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { Award, Check, CheckCircle2, Clock, Swords, Lock } from "lucide-react";
 import { MascotMissionPicker, type RawMissionMascot } from "@/components/tcg/mascot-mission-picker";
 import { ConstrutorAdminPanel } from "./construtor-admin-panel";
-import { getConstrutorStateAction, pickOpponentDeckAction, saveConstrutorDecksAction, type ConstrutorMatchView, type SaveConstrutorDecksResult } from "./actions";
+import { getConstrutorStateAction, pickOpponentDeckAction, requestChoiceChangeAction, respondChoiceChangeAction, saveConstrutorDecksAction, type ConstrutorMatchView, type SaveConstrutorDecksResult } from "./actions";
 
 type DeckForm = { slot: number; name: string; deckList: string; archetype: string; gymBadgeId: string; mascotId: string; gymBadgeValid: boolean | null };
 const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "", gymBadgeId: "", mascotId: "", gymBadgeValid: null }));
@@ -69,6 +69,23 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
     if (res.error) { toast.error(res.error); return; }
     toast.success("Deck do adversário escolhido!");
     load();
+  });
+
+  const requestChange = (matchId: string) => {
+    if (!window.confirm("Solicitar alteração? Todos os jogadores afetados serão avisados e, se TODOS aceitarem, as escolhas deles serão desfeitas para refazer.")) return;
+    start(async () => {
+      const res = await requestChoiceChangeAction({ matchId });
+      if (res.error) { toast.error(res.error); return; }
+      toast.success("Pedido enviado. Os jogadores envolvidos foram notificados.");
+      load();
+    });
+  };
+  const respond = (requestId: string, accept: boolean) => start(async () => {
+    const res = await respondChoiceChangeAction({ requestId, accept });
+    if (res.error) { toast.error(res.error); return; }
+    toast.success(accept ? "Você aceitou o pedido." : "Pedido recusado.");
+    load();
+    router.refresh();
   });
 
   if (loading) return <div className="rounded-2xl border border-border bg-slate-950/60 p-6 text-center text-sm text-slate-500">Carregando…</div>;
@@ -167,6 +184,29 @@ export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; 
                     ? <span className="text-cyan-200"><Check size={11} className="mr-1 inline" /> Você joga com: <strong>{m.myDeckChosen.name}</strong> (escolhido por {m.opponentName})</span>
                     : <span className="text-slate-400"><Clock size={11} className="mr-1 inline" /> 🔒 As escolhas só aparecem quando os dois votarem.{m.iVoted ? " Você já votou — aguardando o adversário." : ""}</span>}
                 </div>
+                {m.bothVoted && (
+                  <div className="mt-2 space-y-2">
+                    {[{ label: "Seu deck", deck: m.myDeckChosen }, { label: `Deck de ${m.opponentName}`, deck: m.opponentDeckPlayed }].map((x) => x.deck && (
+                      <details key={x.label} className="rounded-lg border border-white/10 bg-slate-950/60 px-2.5 py-1.5">
+                        <summary className="cursor-pointer text-[11px] font-bold text-slate-200">{x.label}: {x.deck.name}</summary>
+                        <pre className="mt-2 max-h-64 overflow-auto whitespace-pre-wrap rounded bg-slate-950 p-2 font-mono text-[11px] text-slate-300">{x.deck.deckList}</pre>
+                      </details>
+                    ))}
+                    {m.changeRequest ? (
+                      <div className="rounded-lg border border-amber-400/30 bg-amber-500/10 p-2 text-[11px] text-amber-200">
+                        <p>{m.changeRequest.iRequested ? "Você pediu" : `${m.changeRequest.requesterName} pediu`} para refazer as escolhas. Aguardando: {m.changeRequest.waitingNames.join(", ") || "—"}.</p>
+                        {m.changeRequest.awaitingMe && (
+                          <div className="mt-1.5 flex gap-2">
+                            <button disabled={pending} onClick={() => respond(m.changeRequest!.id, true)} className="rounded-lg bg-emerald-500/80 px-3 py-1 font-bold text-slate-900 disabled:opacity-50">Aceitar</button>
+                            <button disabled={pending} onClick={() => respond(m.changeRequest!.id, false)} className="rounded-lg border border-white/20 px-3 py-1 font-bold text-slate-200 disabled:opacity-50">Recusar</button>
+                          </div>
+                        )}
+                      </div>
+                    ) : m.canRequestChange && (
+                      <button disabled={pending} onClick={() => requestChange(m.matchId)} className="rounded-lg border border-amber-400/40 px-3 py-1 text-[11px] font-bold text-amber-200 hover:bg-amber-500/10 disabled:opacity-50">Solicitar alteração na escolha</button>
+                    )}
+                  </div>
+                )}
                 {!m.bothVoted && m.opponentHasRegistered && (
                   <p className="mt-1 text-[10px] text-slate-400">
                     Votos: você {m.iVoted ? "✓ já escolheu o deck de" : "✗ falta escolher o deck de"} {m.opponentName} · {m.opponentName} {m.opponentVoted ? "✓ já escolheu o seu" : "✗ falta escolher o seu"}
