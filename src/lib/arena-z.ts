@@ -2161,11 +2161,13 @@ export async function createArenaTeam(
           arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
           OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }],
         },
+        // Não mexe em isEquipped/isFavorite: o mascote equipado (ou favorito)
+        // continua com o status ao entrar na equipe. Antes ele era desequipado,
+        // perdia 50% de EXP (regra do banco) e bagunçava a ordem dos favoritos.
         data: {
           arenaState: "ARENA",
           restingUntil: null,
           injuredAt: null,
-          isEquipped: false,
         },
       });
       if (lockedMascots.count !== mascots.length) {
@@ -2248,11 +2250,11 @@ export async function addMascotToArenaTeam(
           arenaTeamMembers: { none: { team: { status: "ACTIVE" } } },
           OR: [{ routine: null }, { routine: { status: { not: "ACTIVE" } } }],
         },
+        // Mantém isEquipped/isFavorite (ver createArenaTeam).
         data: {
           arenaState: "ARENA",
           restingUntil: null,
           injuredAt: null,
-          isEquipped: false,
         },
       });
       if (locked.count !== 1)
