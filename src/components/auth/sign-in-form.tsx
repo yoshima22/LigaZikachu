@@ -42,7 +42,14 @@ export function SignInForm({
       if (payload.sessionToken) {
         try { localStorage.setItem("lz_session_backup", payload.sessionToken); } catch {}
       }
-      window.location.assign("/dashboard");
+      // Mantém o destino quando o login foi aberto por uma tela específica,
+      // como o transmissor Windows. Nunca aceita redirecionamento externo.
+      const query = new URLSearchParams(window.location.search);
+      const requestedDestination = query.get("callbackUrl") ?? query.get("returnTo");
+      const destination = requestedDestination?.startsWith("/") && !requestedDestination.startsWith("//")
+        ? requestedDestination
+        : "/dashboard";
+      window.location.assign(destination);
     } catch (error) {
       console.error("[LoginForm] manual login failed", error);
       setState({ error: "Erro interno. Tente novamente em alguns instantes." });

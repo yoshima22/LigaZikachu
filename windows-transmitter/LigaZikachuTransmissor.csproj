@@ -8,9 +8,13 @@
     <AssemblyName>LigaZikachuTransmissor</AssemblyName>
     <RootNamespace>LigaZikachu.Transmissor</RootNamespace>
     <Version>0.5.0</Version>
+    <ApplicationIcon>Assets\zika-tv.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.3405.78" />
     <Reference Remove="Microsoft.Web.WebView2.Wpf" />
+    <EmbeddedResource Include="Assets\zika-tv-logo.png" />
+    <!-- Pastas de distribuição podem conter arquivos .cs de terceiros; nunca são fonte do transmissor. -->
+    <Compile Remove="single-file-*\**\*.cs;release-*\**\*.cs;publish-test\**\*.cs" />
   </ItemGroup>
 </Project>

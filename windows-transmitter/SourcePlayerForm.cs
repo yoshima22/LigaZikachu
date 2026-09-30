@@ -89,13 +89,14 @@ internal sealed class SourcePlayerPanel : Panel
     public SourcePlayerPanel()
     {
         Dock = DockStyle.Fill; BackColor = Color.FromArgb(10, 16, 39); Padding = new Padding(32);
-        var layout = new TableLayoutPanel { Dock = DockStyle.Top, Height = 210, ColumnCount = 1, RowCount = 5 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 45)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        layout.Controls.Add(new Label { Text = "Abrir fonte de vídeo", Dock = DockStyle.Fill, ForeColor = Color.White, Font = new Font("Segoe UI", 20, FontStyle.Bold) }, 0, 0);
-        layout.Controls.Add(new Label { Text = "Use somente fontes para as quais você tem autorização de reprodução.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(196, 181, 253), Font = new Font("Segoe UI", 9, FontStyle.Bold) }, 0, 1);
+        var layout = new TableLayoutPanel { Dock = DockStyle.Top, Height = 285, ColumnCount = 1, RowCount = 6 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 88)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 20)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(BrandAssets.LogoBox(330, 82), 0, 0);
+        layout.Controls.Add(new Label { Text = "Abrir fonte de vídeo", Dock = DockStyle.Fill, ForeColor = Color.White, Font = new Font("Segoe UI", 20, FontStyle.Bold) }, 0, 1);
+        layout.Controls.Add(new Label { Text = "Use somente fontes para as quais você tem autorização de reprodução.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(196, 181, 253), Font = new Font("Segoe UI", 9, FontStyle.Bold) }, 0, 2);
         var row = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2 }; row.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100)); row.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 145)); row.Controls.Add(_url, 0, 0);
         var open = new Button { Text = "ABRIR PLAYER", Dock = DockStyle.Fill, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, Font = new Font("Segoe UI", 9, FontStyle.Bold) }; open.Click += (_, _) => Open(); row.Controls.Add(open, 1, 0);
-        layout.Controls.Add(row, 0, 2); layout.Controls.Add(_message, 0, 4); Controls.Add(layout);
+        layout.Controls.Add(row, 0, 3); layout.Controls.Add(_message, 0, 5); Controls.Add(layout);
         _url.KeyDown += (_, e) => { if (e.KeyCode == Keys.Enter) { Open(); e.SuppressKeyPress = true; } };
     }
 
@@ -143,7 +144,7 @@ internal sealed class DesktopLaunchForm : Form
         {
             var encoded = title["ZIKA_LAUNCH:".Length..];
             var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(encoded));
-            var launch = JsonSerializer.Deserialize<Launch>(json);
+            var launch = JsonSerializer.Deserialize<Launch>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (string.IsNullOrWhiteSpace(launch?.StreamId) || string.IsNullOrWhiteSpace(launch.Token)) throw new InvalidOperationException();
             _openedStudio = true;
             var studio = new BroadcastStudioForm(_server, launch.StreamId, launch.Token, _sourcePlayer);
@@ -164,14 +165,14 @@ internal sealed class LiveTitleDialog : Form
 
     public LiveTitleDialog(string suggestedTitle)
     {
-        Text = "Nova transmissão na Zika TV"; Width = 490; Height = 210; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; BackColor = Color.FromArgb(10, 16, 39); Padding = new Padding(22);
+        Text = "Nova transmissão na Zika TV"; Width = 490; Height = 260; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; BackColor = Color.FromArgb(10, 16, 39); Padding = new Padding(22);
         _title.Text = suggestedTitle;
         var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
-        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 40)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 30)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 52));
         layout.Controls.Add(new Label { Text = "Qual é o nome desta live?", Dock = DockStyle.Fill, ForeColor = Color.White, Font = new Font("Segoe UI", 14, FontStyle.Bold) }, 0, 0);
         layout.Controls.Add(new Label { Text = "Você entrará na conta da Liga apenas se ainda não houver uma sessão salva.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(148, 163, 184), Font = new Font("Segoe UI", 8.5f) }, 0, 1);
         layout.Controls.Add(_title, 0, 2);
-        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 14, 0, 0) };
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 10, 0, 0) };
         var create = new Button { Text = "CRIAR E TRANSMITIR", Width = 170, Height = 34, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, DialogResult = DialogResult.OK, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
         var cancel = new Button { Text = "Cancelar", Width = 90, Height = 34, BackColor = Color.FromArgb(30, 41, 69), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, DialogResult = DialogResult.Cancel };
         buttons.Controls.Add(create); buttons.Controls.Add(cancel); layout.Controls.Add(buttons, 0, 3); Controls.Add(layout); AcceptButton = create; CancelButton = cancel;
