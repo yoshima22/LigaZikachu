@@ -305,6 +305,38 @@ async function linkRevealedMatchDecks(matchId: string, week: ConstrutorWeek) {
   }
 }
 
+// ── Sorteio automático após o prazo ───────────────────────────────────────────
+// Passado o prazo da semana, quem ainda não foi "escolhido" por ninguém recebe um
+// deck aleatório dentre os disponíveis (respeitando os já usados em jogos anteriores).
+// Resolvido no acesso e idempotente (createMany + skipDuplicates sobre a chave única).
+async function autoPickMissing(week: ConstrutorWeek) {
+  if (week.status === "CLOSED" || !isDeckRegistrationLocked(week)) return;
+  const matches = await prisma.match.findMany({ where: { tournamentWeekId: week.id, isBye: false }, select: { playerAId: true, playerBId: true } });
+  // Quem está numa refação de escolhas (pedido aberto/aceito) refaz manualmente: não sorteia.
+  const reqs = await prisma.construtorChangeRequest.findMany({ where: { tournamentWeekId: week.id, status: { in: ["PENDING", "ACCEPTED"] } }, select: { requesterId: true, playerIds: true } });
+  const redoing = new Set(reqs.flatMap((r) => [r.requesterId, ...r.playerIds]));
+  const touched = new Set<string>();
+  for (const pid of new Set(matches.flatMap((m) => [m.playerAId, m.playerBId]).filter((id): id is string => Boolean(id)))) {
+    if (redoing.has(pid)) continue;
+    const [ordered, decks] = await Promise.all([orderedMatchesForPlayer(week.id, pid), decksOf(week.id, pid)]);
+    if (decks.length < 3) continue;
+    const picks = await picksByMatch(ordered.map((m) => m.id));
+    const used: string[] = [];
+    for (const m of ordered) {
+      const current = picks.get(m.id)?.get(pid);
+      if (current) { used.push(current); continue; }
+      const opponentId = m.playerAId === pid ? m.playerBId : m.playerAId;
+      const free = decks.filter((d) => !used.includes(d.id));
+      if (!opponentId || free.length === 0) continue;
+      const chosen = free[Math.floor(Math.random() * free.length)];
+      await prisma.construtorPick.createMany({ data: [{ matchId: m.id, targetPlayerId: pid, pickerPlayerId: opponentId, deckId: chosen.id }], skipDuplicates: true });
+      used.push(chosen.id);
+      touched.add(m.id);
+    }
+  }
+  for (const id of touched) await linkRevealedMatchDecks(id, week).catch((e) => console.error("[construtor] vínculo pós-sorteio falhou", e));
+}
+
 // ── Pedido de alteração das escolhas ──────────────────────────────────────────
 // Um jogador pede para refazer as escolhas de uma partida já revelada. Todos os
 // afetados (a partida e os jogos seguintes dos dois que dependiam dela) precisam aceitar.
@@ -447,6 +479,7 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
   try {
     const me = await viewer();
     const week = await requireConstrutorWeek(tournamentWeekId);
+    await autoPickMissing(week);
 
     const [myDecksFull, myMatches] = await Promise.all([
       prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, orderBy: { slot: "asc" }, select: { id: true, slot: true, name: true, deckList: true, archetype: true, gymBadgeId: true, mascotMissionMascotId: true, mascotMissionMascotName: true, mascotMissionValid: true, gymBadgeValid: true } }),
