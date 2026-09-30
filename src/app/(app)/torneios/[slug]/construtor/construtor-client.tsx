@@ -3,21 +3,23 @@
 import { useEffect, useState, useTransition, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { Award, Check, CheckCircle2, Clock, PawPrint, Swords, Lock } from "lucide-react";
+import { Award, Check, CheckCircle2, Clock, Swords, Lock } from "lucide-react";
+import { MascotMissionPicker, type RawMissionMascot } from "@/components/tcg/mascot-mission-picker";
+import { ConstrutorAdminPanel } from "./construtor-admin-panel";
 import { getConstrutorStateAction, pickOpponentDeckAction, saveConstrutorDecksAction, type ConstrutorMatchView, type SaveConstrutorDecksResult } from "./actions";
 
-type DeckForm = { slot: number; name: string; deckList: string; archetype: string; gymBadgeId: string; mascotId: string; mascotFilter: string };
-const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "", gymBadgeId: "", mascotId: "", mascotFilter: "" }));
+type DeckForm = { slot: number; name: string; deckList: string; archetype: string; gymBadgeId: string; mascotId: string; gymBadgeValid: boolean | null };
+const emptyDecks = (): DeckForm[] => [1, 2, 3].map((slot) => ({ slot, name: "", deckList: "", archetype: "", gymBadgeId: "", mascotId: "", gymBadgeValid: null }));
 const selectCls = "w-full rounded-lg border border-white/10 bg-slate-950 px-2 py-1.5 text-xs text-slate-100 outline-none focus:border-[#FFCB05]/50 disabled:opacity-50";
 
-export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: string; weekNumber: number }) {
+export function ConstrutorClient({ weekId, isAdmin = false }: { weekId: string; slug: string; weekNumber: number; isAdmin?: boolean }) {
   const [loading, setLoading] = useState(true);
   const [decks, setDecks] = useState<DeckForm[]>(emptyDecks());
   const [decksLocked, setDecksLocked] = useState(false);
   const [matches, setMatches] = useState<ConstrutorMatchView[]>([]);
   const [gymBadges, setGymBadges] = useState<{ id: string; name: string }[]>([]);
   const [missionEnabled, setMissionEnabled] = useState(false);
-  const [mascotOptions, setMascotOptions] = useState<{ id: string; label: string }[]>([]);
+  const [mascotOptions, setMascotOptions] = useState<RawMissionMascot[]>([]);
   const [saved, setSaved] = useState<SaveConstrutorDecksResult | null>(null);
   const [pending, start] = useTransition();
   const router = useRouter();
@@ -29,7 +31,7 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
       if (res.myDecks && res.myDecks.length > 0) {
         setDecks(emptyDecks().map((d) => {
           const found = res.myDecks!.find((x) => x.slot === d.slot);
-          return found ? { ...d, name: found.name, deckList: found.deckList, archetype: found.archetype ?? "", gymBadgeId: found.gymBadgeId ?? "", mascotId: found.mascotMissionMascotId ?? "" } : d;
+          return found ? { ...d, name: found.name, deckList: found.deckList, archetype: found.archetype ?? "", gymBadgeId: found.gymBadgeId ?? "", mascotId: found.mascotMissionMascotId ?? "", gymBadgeValid: found.gymBadgeValid } : d;
         }));
       }
       setGymBadges(res.gymBadges ?? []);
@@ -71,6 +73,8 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
 
   return (
     <div className="space-y-5">
+      {isAdmin && <ConstrutorAdminPanel weekId={weekId} />}
+
       {/* Registro dos 3 decks */}
       <div className="rounded-2xl border border-border bg-slate-950/60 p-4">
         <div className="mb-3 flex items-center justify-between gap-2">
@@ -93,7 +97,16 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
 
               {gymBadges.length > 0 && (
                 <label className="mt-2 block space-y-1 rounded-lg border border-amber-400/20 bg-amber-500/5 p-2 text-[10px] text-slate-400">
-                  <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300"><Award size={11} /> Jornada de Ginásio (opcional)</span>
+                  <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-amber-300"><Award size={11} /> Jornada de Ginásio (opcional)
+                    {d.gymBadgeId && (
+                      <span className={`ml-auto rounded-full border px-2 py-0.5 text-[9px] normal-case ${
+                        d.gymBadgeValid === true ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-300"
+                          : d.gymBadgeValid === false ? "border-red-400/30 bg-red-500/10 text-red-300"
+                            : "border-amber-400/30 bg-amber-500/10 text-amber-300"}`}>
+                        {d.gymBadgeValid === true ? "validada pela organização" : d.gymBadgeValid === false ? "recusada pela organização" : "em revisão"}
+                      </span>
+                    )}
+                  </span>
                   <select value={d.gymBadgeId} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { gymBadgeId: e.target.value })} className={selectCls}>
                     <option value="">Não usar este deck em uma Jornada</option>
                     {gymBadges.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
@@ -102,18 +115,9 @@ export function ConstrutorClient({ weekId, slug }: { weekId: string; slug: strin
               )}
 
               {missionEnabled && (
-                <div className="mt-2 space-y-1 rounded-lg border border-emerald-400/20 bg-emerald-500/5 p-2 text-[10px] text-slate-400">
-                  <span className="flex items-center gap-1 font-semibold uppercase tracking-wide text-emerald-300"><PawPrint size={11} /> Missão de Mascote (opcional)</span>
-                  <input value={d.mascotFilter} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { mascotFilter: e.target.value })}
-                    placeholder="Filtrar mascote por nome ou espécie..." className={selectCls} />
-                  <select value={d.mascotId} disabled={decksLocked} onChange={(e) => setDeck(d.slot, { mascotId: e.target.value })} className={selectCls}>
-                    <option value="">Sem missão neste deck</option>
-                    {mascotOptions
-                      .filter((m) => m.id === d.mascotId || !d.mascotFilter.trim() || m.label.toLocaleLowerCase("pt-BR").includes(d.mascotFilter.trim().toLocaleLowerCase("pt-BR")))
-                      .slice(0, 60)
-                      .map((m) => <option key={m.id} value={m.id}>{m.label}</option>)}
-                  </select>
-                  <span className="block leading-4 text-slate-500">A validação acontece ao salvar; a EXP só é entregue quando o deck for jogado e o dia encerrado.</span>
+                <div className="mt-2">
+                  <MascotMissionPicker mascots={mascotOptions} value={d.mascotId} deckList={d.deckList} disabled={decksLocked}
+                    onChange={(id) => setDeck(d.slot, { mascotId: id })} />
                 </div>
               )}
             </div>

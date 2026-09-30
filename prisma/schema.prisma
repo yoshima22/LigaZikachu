@@ -789,6 +789,8 @@ model ConstrutorDeck {
   archetype        String?
   // Jornada de Ginásio e Missão de Mascote declaradas para este deck (opcionais)
   gymBadgeId              String?
+  gymBadgeValid           Boolean?
+  gymBadgeValidation      Json?
   mascotMissionMascotId   String?
   mascotMissionPokemonId  Int?
   mascotMissionMascotName String?

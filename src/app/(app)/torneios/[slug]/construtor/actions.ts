@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { getSessionUser } from "@/lib/auth/permissions";
+import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { Prisma } from "@prisma/client";
 import { buildMascotMissionOption, validateMascotMissionSubmission } from "@/lib/tcg-mascot-mission";
@@ -38,10 +38,18 @@ async function requireConstrutorWeek(tournamentWeekId: string) {
 type LiteMatch = { id: string; playerAId: string; playerBId: string | null; roundLabel: string | null; scheduledAt: Date | null };
 
 async function orderedMatchesForPlayer(tournamentWeekId: string, playerId: string): Promise<LiteMatch[]> {
-  return prisma.match.findMany({
+  const matches = await prisma.match.findMany({
     where: { tournamentWeekId, isBye: false, OR: [{ playerAId: playerId }, { playerBId: playerId }] },
-    orderBy: [{ scheduledAt: "asc" }, { roundLabel: "asc" }, { id: "asc" }],
     select: { id: true, playerAId: true, playerBId: true, roundLabel: true, scheduledAt: true },
+  });
+  // Ordena em JS: rótulos como "Jogo 10" vs "Jogo 2" precisam de ordem NUMÉRICA
+  // (no banco viraria texto e o "Jogo 10" viria antes do "Jogo 2"). Como todos os
+  // jogos do dia costumam ter o mesmo horário, o rótulo é o critério que decide.
+  return matches.sort((a, b) => {
+    const ta = a.scheduledAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    const tb = b.scheduledAt?.getTime() ?? Number.MAX_SAFE_INTEGER;
+    if (ta !== tb) return ta - tb;
+    return (a.roundLabel ?? "").localeCompare(b.roundLabel ?? "", "pt-BR", { numeric: true }) || a.id.localeCompare(b.id);
   });
 }
 
@@ -146,12 +154,18 @@ export async function saveConstrutorDecksAction(input: {
       });
     }
 
+    // Se a lista ou a insígnia mudou, a validação da organização deixa de valer.
+    const previous = await prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, select: { slot: true, deckList: true, gymBadgeId: true } });
     await prisma.$transaction(slots.map((d) => {
+      const before = previous.find((x) => x.slot === d.slot);
+      const extra = extras.get(d.slot)!;
+      const changed = !before || before.deckList !== d.deckList.trim().slice(0, 5000) || before.gymBadgeId !== extra.gymBadgeId;
       const data = {
         name: d.name.trim().slice(0, 80),
         deckList: d.deckList.trim().slice(0, 5000),
         archetype: d.archetype?.trim()?.slice(0, 60) || null,
-        ...extras.get(d.slot)!,
+        ...extra,
+        ...(changed ? { gymBadgeValid: null, gymBadgeValidation: Prisma.JsonNull } : {}),
       };
       return prisma.construtorDeck.upsert({
         where: { tournamentWeekId_playerId_slot: { tournamentWeekId: week.id, playerId: me.id, slot: d.slot } },
@@ -184,6 +198,7 @@ export async function pickOpponentDeckAction(input: { matchId: string; deckId: s
     const ctx = await pickContext(week.id, match.id, targetId, picks);
     if (ctx.decks.length < 3) return { error: "O adversário ainda não registrou os 3 decks." };
     if (ctx.waiting) return { error: "Aguarde: o jogo anterior deste jogador ainda não foi totalmente revelado." };
+    if (ctx.currentPick) return { error: "Você já escolheu o deck do adversário neste jogo. A escolha não pode ser alterada." };
     const chosen = ctx.availableDecks.find((d) => d.id === input.deckId);
     if (!chosen) return { error: "Deck indisponível (já foi usado em outro jogo ou não existe)." };
 
@@ -197,7 +212,7 @@ export async function pickOpponentDeckAction(input: { matchId: string; deckId: s
     });
     // Se os dois já votaram, os decks jogados viram DeckSubmission da partida:
     // é assim que revisão de insígnia e EXP da missão funcionam como no envio normal.
-    await linkRevealedMatchDecks(match.id, week);
+    try { await linkRevealedMatchDecks(match.id, week); } catch (e) { console.error("[construtor] falha ao vincular decks revelados", e); }
     revalidatePath(`/torneios/${week.tournament.slug}/construtor`);
     revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
     return { ok: true };
@@ -252,10 +267,10 @@ async function linkRevealedMatchDecks(matchId: string, week: ConstrutorWeek) {
           mascotMissionValid: deck.mascotMissionValid,
           mascotMissionValidation: deck.mascotMissionValidation ?? Prisma.JsonNull,
           gymBadgeId: deck.gymBadgeId,
-          gymBadgeValid: null,
-          gymBadgeValidation: deck.gymBadgeId
-            ? { status: "PENDING_ADMIN_REVIEW", message: "Jornada declarada. A organizacao ainda precisa validar o deck monotipo." }
-            : Prisma.JsonNull,
+          gymBadgeValid: deck.gymBadgeId ? deck.gymBadgeValid : null,
+          gymBadgeValidation: !deck.gymBadgeId
+            ? Prisma.JsonNull
+            : deck.gymBadgeValidation ?? { status: "PENDING_ADMIN_REVIEW", message: "Jornada declarada. A organizacao ainda precisa validar o deck monotipo." },
         },
         select: { id: true },
       });
@@ -285,11 +300,11 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
   error?: string;
   myDecks?: {
     slot: number; name: string; deckList: string; archetype: string | null;
-    gymBadgeId: string | null; mascotMissionMascotId: string | null; mascotMissionMascotName: string | null; mascotMissionValid: boolean | null;
+    gymBadgeId: string | null; mascotMissionMascotId: string | null; mascotMissionMascotName: string | null; mascotMissionValid: boolean | null; gymBadgeValid: boolean | null;
   }[];
   gymBadges?: { id: string; name: string }[];
   missionEnabled?: boolean;
-  mascotOptions?: { id: string; label: string }[];
+  mascotOptions?: { id: string; pokemonId: number; nickname: string | null; level: number }[];
   decksLocked?: boolean;
   matches?: ConstrutorMatchView[];
 }> {
@@ -298,7 +313,7 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
     const week = await requireConstrutorWeek(tournamentWeekId);
 
     const [myDecksFull, myMatches] = await Promise.all([
-      prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, orderBy: { slot: "asc" }, select: { id: true, slot: true, name: true, deckList: true, archetype: true, gymBadgeId: true, mascotMissionMascotId: true, mascotMissionMascotName: true, mascotMissionValid: true } }),
+      prisma.construtorDeck.findMany({ where: { tournamentWeekId: week.id, playerId: me.id }, orderBy: { slot: "asc" }, select: { id: true, slot: true, name: true, deckList: true, archetype: true, gymBadgeId: true, mascotMissionMascotId: true, mascotMissionMascotName: true, mascotMissionValid: true, gymBadgeValid: true } }),
       orderedMatchesForPlayer(week.id, me.id),
     ]);
     const missionEnabled = week.tournament.mascotMissionEnabled;
@@ -308,7 +323,7 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
           select: { id: true, pokemonId: true, nickname: true, level: true },
           orderBy: [{ isFavorite: "desc" }, { level: "desc" }, { hatchedAt: "desc" }],
           take: 500,
-        })).map((m) => { const o = buildMascotMissionOption(m); return { id: o.id, label: `${o.displayName} (${o.speciesName}) · Nv.${o.level}` }; })
+        }))
       : [];
     const myPicksAsTarget = await prisma.construtorPick.count({ where: { targetPlayerId: me.id, matchId: { in: myMatches.map((m) => m.id) } } });
     const decksLocked = myPicksAsTarget > 0;
@@ -328,6 +343,8 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
       const oppMatches = await orderedMatchesForPlayer(week.id, opponentId);
       const oppPicks = await picksByMatch(oppMatches.map((x) => x.id));
       const ctx = await pickContext(week.id, m.id, opponentId, oppPicks);
+      // Partidas reveladas antes do vínculo existir (ou que falharam) são reparadas aqui (idempotente).
+      if (revealed) await linkRevealedMatchDecks(m.id, week).catch(() => undefined);
       matches.push({
         matchId: m.id,
         roundLabel: m.roundLabel,
@@ -345,10 +362,78 @@ export async function getConstrutorStateAction(tournamentWeekId: string): Promis
     }
 
     return {
-      myDecks: myDecksFull.map((d) => ({ slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype, gymBadgeId: d.gymBadgeId, mascotMissionMascotId: d.mascotMissionMascotId, mascotMissionMascotName: d.mascotMissionMascotName, mascotMissionValid: d.mascotMissionValid })),
+      myDecks: myDecksFull.map((d) => ({ slot: d.slot, name: d.name, deckList: d.deckList, archetype: d.archetype, gymBadgeId: d.gymBadgeId, mascotMissionMascotId: d.mascotMissionMascotId, mascotMissionMascotName: d.mascotMissionMascotName, mascotMissionValid: d.mascotMissionValid, gymBadgeValid: d.gymBadgeValid })),
       gymBadges: week.tournament.badges, missionEnabled, mascotOptions, decksLocked, matches,
     };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao carregar." };
+  }
+}
+
+// ── Admin: validar decks de Jornada de Ginásio ────────────────────────────────
+export type AdminConstrutorGymDeck = {
+  deckId: string; playerName: string; slot: number; deckName: string; deckList: string;
+  badgeName: string; valid: boolean | null; notes: string | null;
+};
+
+export async function adminListConstrutorGymDecksAction(tournamentWeekId: string): Promise<{ error?: string; decks?: AdminConstrutorGymDeck[] }> {
+  try {
+    await requireAdmin();
+    const week = await requireConstrutorWeek(tournamentWeekId);
+    const decks = await prisma.construtorDeck.findMany({
+      where: { tournamentWeekId: week.id, gymBadgeId: { not: null } },
+      orderBy: [{ playerId: "asc" }, { slot: "asc" }],
+      select: { id: true, playerId: true, slot: true, name: true, deckList: true, gymBadgeId: true, gymBadgeValid: true, gymBadgeValidation: true },
+    });
+    const players = await prisma.player.findMany({ where: { id: { in: [...new Set(decks.map((d) => d.playerId))] } }, select: { id: true, displayName: true } });
+    const badgeName = new Map(week.tournament.badges.map((b) => [b.id, b.name]));
+    return {
+      decks: decks
+        .map((d) => ({
+          deckId: d.id,
+          playerName: players.find((p) => p.id === d.playerId)?.displayName ?? "Jogador",
+          slot: d.slot, deckName: d.name, deckList: d.deckList,
+          badgeName: badgeName.get(d.gymBadgeId!) ?? "Insígnia",
+          valid: d.gymBadgeValid,
+          notes: d.gymBadgeValidation && typeof d.gymBadgeValidation === "object" && !Array.isArray(d.gymBadgeValidation)
+            ? ((d.gymBadgeValidation as Record<string, unknown>).notes as string | null | undefined) ?? null : null,
+        }))
+        .sort((a, b) => a.playerName.localeCompare(b.playerName, "pt-BR") || a.slot - b.slot),
+    };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao listar decks." };
+  }
+}
+
+export async function adminValidateConstrutorGymDeckAction(input: { deckId: string; valid: boolean; notes?: string }): Promise<{ ok?: boolean; error?: string }> {
+  try {
+    const admin = await requireAdmin();
+    const deck = await prisma.construtorDeck.findUnique({ where: { id: input.deckId } });
+    if (!deck?.gymBadgeId) return { error: "Este deck não declarou uma Jornada de Ginásio." };
+    const week = await requireConstrutorWeek(deck.tournamentWeekId);
+    const badge = week.tournament.badges.find((b) => b.id === deck.gymBadgeId);
+    const validation = {
+      status: input.valid ? "VALID" : "INVALID",
+      badgeName: badge?.name ?? null,
+      reviewedById: admin.id,
+      reviewedAt: new Date().toISOString(),
+      notes: input.notes?.trim() || null,
+    };
+    await prisma.$transaction([
+      prisma.construtorDeck.update({ where: { id: deck.id }, data: { gymBadgeValid: input.valid, gymBadgeValidation: validation } }),
+      // Envios já gerados a partir deste deck (partidas reveladas) recebem a mesma revisão.
+      prisma.deckSubmission.updateMany({
+        where: { tournamentWeekId: deck.tournamentWeekId, playerId: deck.playerId, deckName: deck.name, deckList: deck.deckList, gymBadgeId: deck.gymBadgeId },
+        data: { gymBadgeValid: input.valid, gymBadgeValidation: validation },
+      }),
+      prisma.auditLog.create({
+        data: { actorUserId: admin.id, entityType: "construtorDeck", entityId: deck.id, action: "gym_deck.validated", after: { gymBadgeId: deck.gymBadgeId, valid: input.valid, notes: input.notes?.trim() || null } },
+      }),
+    ]);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}`);
+    revalidatePath(`/torneios/${week.tournament.slug}/semanas/${week.weekNumber}/partidas`);
+    return { ok: true };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao validar deck." };
   }
 }

@@ -765,7 +765,7 @@ export default async function WeekDetailPage({
               Entre com uma conta de jogador para registrar seus 3 decks.
             </p>
           ) : (
-            <ConstrutorClient weekId={week.id} slug={tournament.slug} weekNumber={weekNum} />
+            <ConstrutorClient weekId={week.id} slug={tournament.slug} weekNumber={weekNum} isAdmin={admin} />
           )
         ) : !player && !admin ? (
           <p className="text-sm text-slate-500">
