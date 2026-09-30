@@ -15,7 +15,7 @@ import { AndroidUpdateButton } from "@/components/android-update";
 import androidRelease from "../../../../public/downloads/android-update.json";
 
 const APK_PATH = androidRelease.apkUrl;
-const TRANSMITTER_PATH = "https://github.com/yoshima22/LigaZikachu/releases/download/transmitter-latest/LigaZikachuTransmissorCompleto.zip";
+const TRANSMITTER_PATH = "/downloads/LigaZikachuTransmissor-0.5.0-win-x64.zip";
 
 export default function DownloadsPage() {
   return (
@@ -134,12 +134,12 @@ export default function DownloadsPage() {
           <div>
             <span className="text-[10px] font-black uppercase tracking-[0.22em] text-violet-300">Ferramenta portátil para transmissões</span>
             <h2 className="mt-1 text-2xl font-black text-white">Transmissor Windows da Liga</h2>
-            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">Pacote portátil com dois modos: transmissão P2P para a Zika TV e hospedagem do Discord Screen. No segundo modo, este computador mantém o servidor da Activity acessível dentro do canal de voz do Discord. O módulo, Node e Cloudflare Tunnel já acompanham o download.</p>
-            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-slate-300"><span className="rounded-full border border-white/10 px-2.5 py-1">ZIP portátil completo</span><span className="rounded-full border border-white/10 px-2.5 py-1">Zika TV P2P</span><span className="rounded-full border border-white/10 px-2.5 py-1">Discord Activity Host</span><span className="rounded-full border border-white/10 px-2.5 py-1">Windows 10/11 64 bits</span></div>
+            <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">Player portátil da Zika TV: entre com sua conta da Liga, abra uma fonte autorizada numa janela limpa e inicie a transmissão sem precisar manter um navegador externo aberto. Na primeira abertura, ele cria um atalho na sua Área de Trabalho.</p>
+            <div className="mt-3 flex flex-wrap gap-2 text-[10px] font-bold text-slate-300"><span className="rounded-full border border-white/10 px-2.5 py-1">ZIP portátil completo</span><span className="rounded-full border border-white/10 px-2.5 py-1">Player de fonte</span><span className="rounded-full border border-white/10 px-2.5 py-1">Login da Liga</span><span className="rounded-full border border-white/10 px-2.5 py-1">Windows 10/11 64 bits</span></div>
           </div>
           <a href={TRANSMITTER_PATH} className="inline-flex items-center justify-center gap-2 rounded-xl bg-violet-500 px-5 py-3.5 text-sm font-black text-white shadow-lg shadow-violet-950/40 transition hover:-translate-y-0.5 hover:bg-violet-400"><Download size={20} /> Baixar transmissor</a>
         </div>
-        <p className="relative mt-4 border-t border-white/10 pt-3 text-[11px] text-emerald-200/80">Extraia o ZIP antes de abrir o executável. A transmissão comum continua P2P; hospedar o Discord inicia separadamente o servidor usado pela Activity e exige as credenciais da aplicação apenas na primeira configuração.</p>
+        <p className="relative mt-4 border-t border-white/10 pt-3 text-[11px] text-emerald-200/80">Extraia o ZIP antes de abrir o executável. O programa pede o login normal da Liga somente dentro da sua própria janela e cria as lives diretamente pela Zika TV.</p>
       </section>
 
       <section className="grid gap-3 rounded-3xl border border-white/10 bg-slate-950/60 p-5 sm:grid-cols-2 lg:grid-cols-4">

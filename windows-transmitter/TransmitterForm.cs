@@ -13,7 +13,6 @@ internal sealed class TransmitterForm : Form
     private readonly Label _status = L("", 9, Muted, 485, 60);
     private readonly Button _pair = Button("CONECTAR À ZIKA TV", 235, Violet, Color.White);
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
-    private readonly DiscordScreenHostManager _discordHost = new();
 
     public TransmitterForm()
     {
@@ -25,21 +24,7 @@ internal sealed class TransmitterForm : Form
 
     private Control SetupTabs()
     {
-        var root = new TableLayoutPanel { Dock = DockStyle.Fill, RowCount = 2, ColumnCount = 1, BackColor = Bg };
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 70)); root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        var nav = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(8, 7, 8, 9), BackColor = Color.FromArgb(5, 11, 31) };
-        nav.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50)); nav.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 50));
-        var content = new Panel { Dock = DockStyle.Fill, BackColor = Bg };
-        var zikaContent = Setup(); var discordContent = new DiscordScreenHostPanel(_discordHost);
-        var zika = ModeButton("◉  TRANSMITIR NA ZIKA TV", "Pareamento P2P pelo site");
-        var discord = ModeButton("◈  HOSPEDAR DISCORD", "Servidor da Activity no canal de voz");
-        void Select(Control selected, Control page)
-        {
-            content.Controls.Clear(); content.Controls.Add(page); page.BringToFront();
-            foreach (Button button in nav.Controls) { button.BackColor = button == selected ? Color.FromArgb(35, 24, 77) : Color.FromArgb(9, 17, 42); button.ForeColor = button == selected ? Color.White : Muted; }
-        }
-        zika.Click += (_, _) => Select(zika, zikaContent); discord.Click += (_, _) => Select(discord, discordContent);
-        nav.Controls.Add(zika, 0, 0); nav.Controls.Add(discord, 1, 0); root.Controls.Add(nav, 0, 0); root.Controls.Add(content, 0, 1); Select(zika, zikaContent); return root;
+        return new SourcePlayerPanel();
     }
 
     private static Button ModeButton(string title, string subtitle) => new() { Text = title + Environment.NewLine + subtitle, Dock = DockStyle.Fill, FlatStyle = FlatStyle.Flat, FlatAppearance = { BorderSize = 1, BorderColor = Color.FromArgb(51, 65, 95) }, TextAlign = ContentAlignment.MiddleLeft, Padding = new Padding(18, 0, 4, 0), Font = new Font("Segoe UI", 9, FontStyle.Bold), Cursor = Cursors.Hand, Margin = new Padding(5, 2, 5, 2) };
@@ -93,7 +78,7 @@ internal sealed class TransmitterForm : Form
     }
 
     private void SetStatus(string text, Color color) { _status.Text = text; _status.ForeColor = color; }
-    protected override void OnFormClosed(FormClosedEventArgs e) { _discordHost.Dispose(); _http.Dispose(); base.OnFormClosed(e); }
+    protected override void OnFormClosed(FormClosedEventArgs e) { _http.Dispose(); base.OnFormClosed(e); }
     private static string? JsonError(string json) { try { return JsonDocument.Parse(json).RootElement.GetProperty("error").GetString(); } catch { return null; } }
     private static Panel Panel(Color color) => new() { Dock = DockStyle.Fill, Margin = new Padding(8), Padding = new Padding(25), BackColor = color };
     private static FlowLayoutPanel Stack(Control p) { var s = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.TopDown, WrapContents = false, AutoScroll = false }; p.Controls.Add(s); return s; }
