@@ -27,7 +27,7 @@ internal sealed class SourcePlayerForm : Form
         tools.Items.Add(source); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_focus); tools.Items.Add(_fullscreen); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_broadcast); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_status);
         _focus.CheckedChanged += async (_, _) => await SetFocusAsync(_focus.Checked);
         _fullscreen.Click += (_, _) => ToggleFullscreen();
-        _broadcast.Click += (_, _) => new DesktopLaunchForm("https://liga-zikachu.vercel.app", $"Fonte: {new Uri(url).Host}", this).Show();
+        _broadcast.Click += (_, _) => StartBroadcast(url);
         _browser.NavigationCompleted += async (_, _) => { _focus.Enabled = _fullscreen.Enabled = _ready; _status.Text = _ready ? "Pronto para compartilhar esta janela" : "Aguardando player…"; if (_focus.Checked) await SetFocusAsync(true); };
         Controls.Add(_browser); Controls.Add(tools); tools.Dock = DockStyle.Top;
         Shown += async (_, _) =>
@@ -65,6 +65,13 @@ internal sealed class SourcePlayerForm : Form
     {
         FormBorderStyle = FormBorderStyle == FormBorderStyle.None ? FormBorderStyle.Sizable : FormBorderStyle.None;
         WindowState = WindowState == FormWindowState.Maximized ? FormWindowState.Normal : FormWindowState.Maximized;
+    }
+
+    private void StartBroadcast(string url)
+    {
+        using var dialog = new LiveTitleDialog($"Fonte: {new Uri(url).Host}");
+        if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        new DesktopLaunchForm("https://liga-zikachu.vercel.app", dialog.Title, this).Show();
     }
 
     private sealed class PlayerToolStripRenderer : ToolStripProfessionalRenderer
@@ -147,4 +154,27 @@ internal sealed class DesktopLaunchForm : Form
     }
 
     private sealed record Launch(string? StreamId, string? Token);
+}
+
+/// <summary>O título é uma decisão do usuário no app, antes da única tela web necessária (login).</summary>
+internal sealed class LiveTitleDialog : Form
+{
+    private readonly TextBox _title = new() { Dock = DockStyle.Fill, BackColor = Color.FromArgb(6, 11, 29), ForeColor = Color.White, BorderStyle = BorderStyle.FixedSingle, MaxLength = 80 };
+    public string Title => _title.Text.Trim();
+
+    public LiveTitleDialog(string suggestedTitle)
+    {
+        Text = "Nova transmissão na Zika TV"; Width = 490; Height = 210; StartPosition = FormStartPosition.CenterParent; FormBorderStyle = FormBorderStyle.FixedDialog; MaximizeBox = false; MinimizeBox = false; BackColor = Color.FromArgb(10, 16, 39); Padding = new Padding(22);
+        _title.Text = suggestedTitle;
+        var layout = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 1, RowCount = 4 };
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 36)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 25)); layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 34)); layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.Controls.Add(new Label { Text = "Qual é o nome desta live?", Dock = DockStyle.Fill, ForeColor = Color.White, Font = new Font("Segoe UI", 14, FontStyle.Bold) }, 0, 0);
+        layout.Controls.Add(new Label { Text = "Você entrará na conta da Liga apenas se ainda não houver uma sessão salva.", Dock = DockStyle.Fill, ForeColor = Color.FromArgb(148, 163, 184), Font = new Font("Segoe UI", 8.5f) }, 0, 1);
+        layout.Controls.Add(_title, 0, 2);
+        var buttons = new FlowLayoutPanel { Dock = DockStyle.Fill, FlowDirection = FlowDirection.RightToLeft, Padding = new Padding(0, 14, 0, 0) };
+        var create = new Button { Text = "CRIAR E TRANSMITIR", Width = 170, Height = 34, BackColor = Color.FromArgb(124, 58, 237), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, DialogResult = DialogResult.OK, Font = new Font("Segoe UI", 8.5f, FontStyle.Bold) };
+        var cancel = new Button { Text = "Cancelar", Width = 90, Height = 34, BackColor = Color.FromArgb(30, 41, 69), ForeColor = Color.White, FlatStyle = FlatStyle.Flat, DialogResult = DialogResult.Cancel };
+        buttons.Controls.Add(create); buttons.Controls.Add(cancel); layout.Controls.Add(buttons, 0, 3); Controls.Add(layout); AcceptButton = create; CancelButton = cancel;
+        create.Click += (_, _) => { if (Title.Length < 3) { DialogResult = DialogResult.None; MessageBox.Show(this, "Digite um título com pelo menos 3 caracteres.", "Título da live", MessageBoxButtons.OK, MessageBoxIcon.Information); } };
+    }
 }
