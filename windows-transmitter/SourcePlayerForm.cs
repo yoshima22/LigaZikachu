@@ -12,24 +12,28 @@ namespace LigaZikachu.Transmissor;
 internal sealed class SourcePlayerForm : Form
 {
     private readonly WebView2 _browser = new() { Dock = DockStyle.Fill, DefaultBackgroundColor = Color.Black };
+    private readonly ToolStrip _tools;
     private readonly ToolStripButton _focus = new("Modo de foco") { CheckOnClick = true, Enabled = false };
     private readonly ToolStripButton _fullscreen = new("Tela cheia") { Enabled = false };
     private readonly ToolStripButton _broadcast = new("Transmitir na Zika TV");
     private readonly ToolStripLabel _status = new("Carregando player…");
     private bool _ready;
+    private bool _broadcastPresentation;
 
     public SourcePlayerForm(string url)
     {
         Text = "Zika TV — Player de fonte";
         Width = 1280; Height = 760; MinimumSize = new Size(720, 460); StartPosition = FormStartPosition.CenterScreen; BackColor = Color.Black;
-        var tools = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, BackColor = Color.FromArgb(10, 16, 39), ForeColor = Color.White, Renderer = new PlayerToolStripRenderer() };
+        _tools = new ToolStrip { GripStyle = ToolStripGripStyle.Hidden, BackColor = Color.FromArgb(10, 16, 39), ForeColor = Color.White, Renderer = new PlayerToolStripRenderer() };
         var source = new ToolStripLabel(new Uri(url).Host) { ForeColor = Color.FromArgb(203, 213, 225) };
-        tools.Items.Add(source); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_focus); tools.Items.Add(_fullscreen); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_broadcast); tools.Items.Add(new ToolStripSeparator()); tools.Items.Add(_status);
+        _tools.Items.Add(source); _tools.Items.Add(new ToolStripSeparator()); _tools.Items.Add(_focus); _tools.Items.Add(_fullscreen); _tools.Items.Add(new ToolStripSeparator()); _tools.Items.Add(_broadcast); _tools.Items.Add(new ToolStripSeparator()); _tools.Items.Add(_status);
         _focus.CheckedChanged += async (_, _) => await SetFocusAsync(_focus.Checked);
         _fullscreen.Click += (_, _) => ToggleFullscreen();
         _broadcast.Click += (_, _) => StartBroadcast(url);
         _browser.NavigationCompleted += async (_, _) => { _focus.Enabled = _fullscreen.Enabled = _ready; _status.Text = _ready ? "Pronto para compartilhar esta janela" : "Aguardando player…"; if (_focus.Checked) await SetFocusAsync(true); };
-        Controls.Add(_browser); Controls.Add(tools); tools.Dock = DockStyle.Top;
+        Controls.Add(_browser); Controls.Add(_tools); _tools.Dock = DockStyle.Top;
+        Resize += (_, _) => KeepBroadcastWindowVisible();
+        KeyPreview = true; KeyDown += (_, e) => { if (e.KeyCode == Keys.F11) { RestoreBroadcastPresentation(); e.Handled = true; } };
         Shown += async (_, _) =>
         {
             await _browser.EnsureCoreWebView2Async(await BrowserProfile.GetAsync());
@@ -71,7 +75,34 @@ internal sealed class SourcePlayerForm : Form
     {
         using var dialog = new LiveTitleDialog($"Fonte: {new Uri(url).Host}");
         if (dialog.ShowDialog(this) != DialogResult.OK) return;
+        BeginBroadcastPresentation();
         new DesktopLaunchForm("https://liga-zikachu.vercel.app", dialog.Title, this).Show();
+    }
+
+    private void BeginBroadcastPresentation()
+    {
+        if (_broadcastPresentation) return;
+        _broadcastPresentation = true;
+        _tools.Visible = false;
+        FormBorderStyle = FormBorderStyle.None;
+        WindowState = FormWindowState.Maximized;
+        _status.Text = "Modo de transmissão ativo · F11 restaura os controles";
+    }
+
+    private void KeepBroadcastWindowVisible()
+    {
+        if (!_broadcastPresentation || WindowState != FormWindowState.Minimized || IsDisposed) return;
+        BeginInvoke(() => { if (!IsDisposed) WindowState = FormWindowState.Maximized; });
+    }
+
+    private void RestoreBroadcastPresentation()
+    {
+        if (!_broadcastPresentation) return;
+        _broadcastPresentation = false;
+        FormBorderStyle = FormBorderStyle.Sizable;
+        WindowState = FormWindowState.Normal;
+        _tools.Visible = true;
+        _status.Text = "Controles restaurados";
     }
 
     private sealed class PlayerToolStripRenderer : ToolStripProfessionalRenderer

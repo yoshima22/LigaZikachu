@@ -67,7 +67,7 @@ export function WindowsTransmitterStudio() {
     setError(""); setState("requesting");
     try {
       const fps = Number(settings?.fps.match(/\d+/)?.[0] ?? 30); const height = Number(settings?.resolution.match(/\d+/)?.[0] ?? 720); const width = Math.round(height * 16 / 9);
-      const next = await navigator.mediaDevices.getDisplayMedia({ video: { width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: fps, max: fps } }, audio: true, systemAudio: "exclude", windowAudio: "window", surfaceSwitching: "include" } as DisplayMediaStreamOptions);
+      const next = await navigator.mediaDevices.getDisplayMedia({ video: { width: { ideal: width }, height: { ideal: height }, frameRate: { ideal: fps, max: fps }, cursor: "never" }, audio: true, systemAudio: "exclude", windowAudio: "window", surfaceSwitching: "include" } as DisplayMediaStreamOptions);
       const previous = mediaRef.current; mediaRef.current = next; if (videoRef.current) videoRef.current.srcObject = next;
       setAudio(next.getAudioTracks().some((track) => track.enabled));
       if (replace) for (const pc of peersRef.current.values()) for (const sender of pc.getSenders()) await sender.replaceTrack(next.getTracks().find((track) => track.kind === sender.track?.kind) ?? null);
