@@ -19,6 +19,7 @@ function load(path) {
   vm.runInNewContext(code, { module, exports: module.exports, require: name => modules[name] ?? require(name), window, document, localStorage: window.localStorage }, { filename: path });
   return module.exports;
 }
+modules['./site-theme-assets'] = load('src/lib/site-theme-assets.ts');
 const themes = load('src/lib/site-theme.ts');
 modules['@/lib/site-theme'] = themes;
 const { SiteThemeSettings } = load('src/components/site-theme-settings.tsx');
@@ -35,13 +36,23 @@ try {
   const css = readFileSync('src/app/themes.css', 'utf8');
   const themedSelectors = [...css.matchAll(/(html\[data-theme[^{}]+)\{/g)].map(match => match[1].trim()).filter(selector => selector.includes('.site-'));
   assert.equal(themedSelectors.length, 5);
+  const artSelectors = css.split('\n').map(line => line.trim()).filter(line => line.startsWith('html:is(')).map(line => line.replace(/\s*\{$/, '').replace('::before', ''));
+  assert.ok(artSelectors.length >= 4);
+  for (const selector of artSelectors) assert.ok(selector.includes('[data-theme-access="admin"]'));
   const fixture = document.createElement('div');
-  fixture.innerHTML = '<div class="site-shell"><header class="site-header"></header><main><div class="site-card bg-slate-950/70"></div></main></div>';
+  fixture.innerHTML = '<div class="site-shell"><header class="site-header"><span class="site-brand-themed"></span><span class="site-brand-original"></span></header><main><div class="site-card bg-slate-950/70"></div></main></div>';
   document.body.append(fixture);
   document.documentElement.dataset.theme = 'claro';
   for (const selector of themedSelectors) assert.equal(document.querySelector(selector), null);
   fixture.firstChild.dataset.themeAccess = 'admin';
   for (const selector of themedSelectors) assert.ok(document.querySelector(selector));
+  for (const art of ['alakazam', 'mewtwo', 'sudowoodo']) {
+    document.documentElement.dataset.theme = art;
+    delete fixture.firstChild.dataset.themeAccess;
+    for (const selector of artSelectors) assert.equal(document.querySelector(selector), null);
+    fixture.firstChild.dataset.themeAccess = 'admin';
+    for (const selector of artSelectors) assert.ok(document.querySelector(selector));
+  }
   fixture.remove();
   console.log('PASS: non-admin CSS isolation, saved-theme account switch and server selector gate');
   for (const value of [null, 'invalid', 'tecnologico', 'claro', 'competitivo', 'padrao']) {
@@ -53,7 +64,11 @@ try {
   root = createRoot(document.getElementById('root'));
   await act(async () => root.render(React.createElement(SiteThemeSettings)));
   assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
+  const next = () => [...document.querySelectorAll('.theme-pagination button')].find(button => button.textContent === 'Próxima');
+  assert.equal(document.querySelector('[value="alakazam"]'), null);
+  assert.equal(document.querySelectorAll('[style*="thumbnail"]').length, 0);
   for (const { id } of themes.SITE_THEMES) {
+    if (!document.querySelector(`input[value="${id}"]`)) await act(async () => next().click());
     await act(async () => document.querySelector(`input[value="${id}"]`).click());
     assert.equal(document.documentElement.dataset.theme, id);
     assert.equal(document.querySelector('input:checked').value, id);
@@ -61,7 +76,14 @@ try {
     if (id !== 'padrao') assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), id);
   }
   boot(window.localStorage);
-  assert.equal(document.documentElement.dataset.theme, 'competitivo');
+  assert.equal(document.documentElement.dataset.theme, 'sudowoodo');
+  assert.equal(document.querySelectorAll('input[type="radio"]').length, 3);
+  assert.equal(next().disabled, true);
+  await act(async () => document.querySelector('button.theme-reset').click());
+  assert.equal(document.querySelector('input:checked').value, 'padrao');
+  assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
+  assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), 'padrao');
+  console.log('PASS: seven themes, pagination boundaries, no hidden thumbnails, restore from last page');
   await act(async () => window.dispatchEvent(new window.StorageEvent('storage', { key: themes.THEME_STORAGE_KEY, newValue: 'claro' })));
   assert.equal(document.querySelector('input:checked').value, 'claro');
   const original = dom.window.Storage.prototype.setItem;
@@ -70,9 +92,17 @@ try {
   assert.equal(document.documentElement.dataset.theme, 'tecnologico');
   assert.match(document.querySelector('[role="status"]').textContent, /bloqueou/);
   dom.window.Storage.prototype.setItem = original;
+  await act(async () => document.querySelector('button.theme-reset').click());
+  assert.equal(document.documentElement.dataset.theme, 'padrao');
+  assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), 'padrao');
+  assert.equal(document.querySelector('input:checked').value, 'padrao');
+  for (const selector of themedSelectors) assert.equal(document.querySelector(selector), null);
+  boot(window.localStorage);
+  assert.equal(document.documentElement.dataset.theme, 'padrao');
+  console.log('PASS: explicit restore button resets and persists original appearance');
   await act(async () => window.dispatchEvent(new window.StorageEvent('storage', { key: null })));
   assert.equal(document.querySelector('input:checked').value, 'padrao');
-  console.log('PASS: boot whitelist, blocked storage, four choices, immediate application, persistence, cross-tab updates and storage reset');
+  console.log('PASS: boot whitelist, blocked storage, immediate application, persistence, cross-tab updates and storage reset');
 } finally {
   if (root) await act(async () => root.unmount());
   dom.window.close();

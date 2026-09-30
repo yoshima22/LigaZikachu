@@ -13,7 +13,8 @@ import {
 import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
 import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
 import { Button } from "@/components/ui/button";
-import { Download, Megaphone, Zap } from "lucide-react";
+import { Download, Megaphone } from "lucide-react";
+import { SITE_LOGO_URL } from "@/lib/site-theme-assets";
 import { Toaster } from "sonner";
 import { AppNav } from "./_components/app-nav";
 import { FcmTokenRegistrar } from "@/components/fcm-token-registrar";
@@ -314,18 +315,8 @@ export default async function AppLayout({
           <div className="mx-auto flex max-w-[1536px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
             {/* Logo - Pokemon style */}
             <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3 md:ml-4">
-              <div className="relative flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-[#FFD700] shadow-[0_0_20px_#FFCB05]/40 transition-all duration-300 group-hover:shadow-[0_0_30px_#FFCB05]/60 sm:h-10 sm:w-10">
-                <Zap className="h-5 w-5 text-[#1A1A2E]" strokeWidth={2.5} />
-                <div className="absolute -top-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-red-500 border-2 border-[#1A1A2E]"></div>
-              </div>
-              <div className="flex min-w-0 flex-col">
-                <span className="font-pixel text-[11px] leading-tight text-[#FFCB05] drop-shadow-[0_0_8px_#FFCB05]/30 sm:text-sm">
-                  Liga Zikachu
-                </span>
-                <span className="hidden text-[9px] uppercase tracking-widest text-slate-500 sm:block">
-                  Live Championship
-                </span>
-              </div>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img className="site-brand-logo" src={SITE_LOGO_URL} alt="Liga Zikachu — início" width={600} height={200} fetchPriority="high" />
             </Link>
 
             <AppNav

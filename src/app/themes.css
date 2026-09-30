@@ -78,5 +78,66 @@ html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin
 .theme-option-description { margin: 0 4px 8px; font-size: 11px; line-height: 1.6; color: #bac6d8; }
 .theme-settings-note, .theme-settings-status { margin-top: 16px; font-size: 11px; line-height: 1.6; color: var(--theme-muted); }
 .theme-settings-status { min-height: 18px; margin-top: 4px; color: var(--theme-accent); }
+.theme-reset { display: inline-flex; align-items: center; min-height: 44px; margin-top: 16px; padding: 10px 16px; border: 1px solid var(--theme-accent); border-radius: 10px; background: transparent; color: var(--theme-text); font-size: 13px; font-weight: 700; }
+.theme-reset:hover { background: #ffffff12; }
+.theme-reset:focus-visible { outline: 3px solid var(--theme-accent); outline-offset: 4px; }
+.site-brand-logo { display: block; width: 174px; height: auto; flex-shrink: 0; }
+@media (max-width: 639px) { .site-brand-logo { width: 124px; } }
+.theme-pagination { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-top: 18px; font-size: 12px; }
+.theme-pagination button { min-height: 44px; padding: 8px 14px; border: 1px solid var(--theme-line); border-radius: 10px; background: transparent; color: var(--theme-text); }
+.theme-pagination button:disabled { opacity: .4; cursor: not-allowed; }
+.theme-pagination button:focus-visible { outline: 2px solid var(--theme-accent); outline-offset: 3px; }
 @media (max-width: 1023px) { .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 379px) { .theme-options { grid-template-columns: minmax(0, 1fr); } }
+
+/* Only the active illustrated theme references a full-size image. Thumbnails
+   are separate assets and only rendered on the visible selector page. */
+html[data-theme="alakazam"] {
+  --theme-accent: #d8b4fe;
+  --theme-line: #c084fc70;
+  --theme-panel: #161025ed;
+  --theme-header: linear-gradient(110deg, #241236f5, #10132aee);
+  --theme-backdrop: #100c20;
+  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/alakazam-desktop-efeedface58d.webp");
+}
+html[data-theme="mewtwo"] {
+  --theme-accent: #e9a5ff;
+  --theme-line: #d8b4fe70;
+  --theme-panel: #150e29ed;
+  --theme-header: linear-gradient(110deg, #28113df5, #121127ee);
+  --theme-backdrop: #120b22;
+  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/mewtwo-desktop-f92bc6a85a11.webp");
+}
+html[data-theme="sudowoodo"] {
+  --theme-accent: #fdba74;
+  --theme-line: #fb923c70;
+  --theme-panel: #24180fed;
+  --theme-header: linear-gradient(110deg, #302014f5, #1a1e1aee);
+  --theme-backdrop: #21160e;
+  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/sudowoodo-desktop-bb8b200f3e9d.webp");
+}
+html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"]::before {
+  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
+  background-image: linear-gradient(90deg, #070a1412, #070a1460), var(--theme-scene);
+  background-size: cover; background-position: left center; background-repeat: no-repeat;
+}
+html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
+  position: relative; z-index: 1; background: #080d1cce; min-height: calc(100vh - 90px);
+  border-inline: 1px solid var(--theme-line);
+}
+@media (min-width: 1536px) {
+  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
+    margin-left: 28vw; margin-right: 2vw; width: 70vw;
+  }
+}
+@media (max-width: 767px) {
+  html[data-theme="alakazam"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/alakazam-mobile-bbfb5252eeb0.webp"); }
+  html[data-theme="mewtwo"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/mewtwo-mobile-ee851f590a82.webp"); }
+  html[data-theme="sudowoodo"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/sudowoodo-mobile-873e0d959a69.webp"); }
+  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"]::before {
+    background-size: auto 300px; background-position: left 60px;
+  }
+  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
+    margin-top: 150px; border-radius: 20px 20px 0 0;
+  }
+}
