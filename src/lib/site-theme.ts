@@ -1,4 +1,3 @@
-import { THEME_ART } from "./site-theme-assets";
 export const THEME_STORAGE_KEY = "liga-zikachu:site-theme";
 export const THEMES_PER_PAGE = 4;
 export const SITE_THEMES = [
@@ -6,9 +5,12 @@ export const SITE_THEMES = [
   { id: "tecnologico", name: "Tecnológico", description: "Violeta, azul e linhas digitais para uma atmosfera futurista.", accent: "#a78bfa", background: "#080b26" },
   { id: "claro", name: "Claro", description: "Fundo claro e detalhes dourados, com painéis escuros de alto contraste.", accent: "#ffcb05", background: "#eaf2ff" },
   { id: "competitivo", name: "Competitivo", description: "Vermelho e grafite para entrar no clima da competição.", accent: "#f87171", background: "#140c10" },
-  { id: "alakazam", name: "Alakazam · Santuário", description: "Energia psíquica e templos sob a luz da lua.", accent: "#d8b4fe", background: "#161025", thumbnail: THEME_ART.alakazam.thumbnail },
-  { id: "mewtwo", name: "Mewtwo · Eclipse", description: "Um mundo lendário entre ruínas e céus violetas.", accent: "#e9a5ff", background: "#150e29", thumbnail: THEME_ART.mewtwo.thumbnail },
-  { id: "sudowoodo", name: "Sudowoodo · Outono", description: "Folhas douradas, cachoeiras e um pôr do sol acolhedor.", accent: "#fdba74", background: "#24180f", thumbnail: THEME_ART.sudowoodo.thumbnail },
+  { id: "aurora", name: "Aurora", description: "Luzes violeta e turquesa em um céu noturno suave.", accent: "#a78bfa", background: "#11143a" },
+  { id: "oceano", name: "Oceano", description: "Azuis profundos e reflexos aquáticos para uma navegação tranquila.", accent: "#38bdf8", background: "#071d32" },
+  { id: "esmeralda", name: "Esmeralda", description: "Verdes vivos e névoa de floresta com contraste confortável.", accent: "#4ade80", background: "#09241c" },
+  { id: "por-do-sol", name: "Pôr do Sol", description: "Coral, âmbar e azul de fim de tarde, sem pesar na tela.", accent: "#fb923c", background: "#2a1421" },
+  { id: "rubi", name: "Rubi", description: "Vermelho intenso, grafite e reflexos discretos de competição.", accent: "#fb7185", background: "#240d16" },
+  { id: "monocromatico", name: "Monocromático", description: "Preto, branco e prata com foco máximo no conteúdo do jogo.", accent: "#e5e7eb", background: "#101114" },
 ] as const;
 export type SiteTheme = (typeof SITE_THEMES)[number]["id"];
 export function normalizeSiteTheme(value: unknown): SiteTheme {

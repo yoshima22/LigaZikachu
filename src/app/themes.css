@@ -90,54 +90,19 @@ html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin
 @media (max-width: 1023px) { .theme-options { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 379px) { .theme-options { grid-template-columns: minmax(0, 1fr); } }
 
-/* Only the active illustrated theme references a full-size image. Thumbnails
-   are separate assets and only rendered on the visible selector page. */
-html[data-theme="alakazam"] {
-  --theme-accent: #d8b4fe;
-  --theme-line: #c084fc70;
-  --theme-panel: #161025ed;
-  --theme-header: linear-gradient(110deg, #241236f5, #10132aee);
-  --theme-backdrop: #100c20;
-  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/alakazam-desktop-efeedface58d.webp");
-}
-html[data-theme="mewtwo"] {
-  --theme-accent: #e9a5ff;
-  --theme-line: #d8b4fe70;
-  --theme-panel: #150e29ed;
-  --theme-header: linear-gradient(110deg, #28113df5, #121127ee);
-  --theme-backdrop: #120b22;
-  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/mewtwo-desktop-f92bc6a85a11.webp");
-}
-html[data-theme="sudowoodo"] {
-  --theme-accent: #fdba74;
-  --theme-line: #fb923c70;
-  --theme-panel: #24180fed;
-  --theme-header: linear-gradient(110deg, #302014f5, #1a1e1aee);
-  --theme-backdrop: #21160e;
-  --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/sudowoodo-desktop-bb8b200f3e9d.webp");
-}
-html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"]::before {
-  content: ""; position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image: linear-gradient(90deg, #070a1412, #070a1460), var(--theme-scene);
-  background-size: cover; background-position: left center; background-repeat: no-repeat;
-}
-html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
-  position: relative; z-index: 1; background: #080d1cce; min-height: calc(100vh - 90px);
-  border-inline: 1px solid var(--theme-line);
-}
-@media (min-width: 1536px) {
-  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
-    margin-left: 28vw; margin-right: 2vw; width: 70vw;
-  }
-}
+/* CSS-only variants: zero image requests, with the same token contract as the base themes. */
+html[data-theme="aurora"] { --theme-accent:#a78bfa; --theme-line:#a78bfa70; --theme-panel:#11143af2; --theme-header:linear-gradient(110deg,#24135a,#0d3154); --theme-backdrop:radial-gradient(circle at 14% 8%,#c084fc48,transparent 24%),radial-gradient(circle at 84% 12%,#22d3ee36,transparent 25%),linear-gradient(135deg,#101335,#0a2841); }
+html[data-theme="oceano"] { --theme-accent:#38bdf8; --theme-line:#38bdf870; --theme-panel:#071d32f2; --theme-header:linear-gradient(110deg,#082a46,#07304d); --theme-backdrop:radial-gradient(ellipse at 50% -10%,#38bdf845,transparent 45%),repeating-radial-gradient(ellipse at 40% 0,#ffffff09 0 1px,transparent 2px 14px),linear-gradient(180deg,#063755,#071827); }
+html[data-theme="esmeralda"] { --theme-accent:#4ade80; --theme-line:#4ade8070; --theme-panel:#09241cf2; --theme-header:linear-gradient(110deg,#103c2b,#08241e); --theme-backdrop:radial-gradient(circle at 15% 12%,#4ade8038,transparent 28%),radial-gradient(circle at 82% 88%,#0ea5e930,transparent 30%),repeating-linear-gradient(125deg,transparent 0 44px,#4ade800b 45px 47px),linear-gradient(135deg,#06271d,#0a1722); }
+html[data-theme="por-do-sol"] { --theme-accent:#fb923c; --theme-line:#fb923c70; --theme-panel:#2a1421f2; --theme-header:linear-gradient(110deg,#542232,#27172b); --theme-backdrop:radial-gradient(circle at 78% 16%,#fbbf24a6 0 3%,#fb923c45 4%,transparent 23%),linear-gradient(155deg,#56283c,#201a3b 52%,#0c2035); }
+html[data-theme="rubi"] { --theme-accent:#fb7185; --theme-line:#fb718570; --theme-panel:#240d16f2; --theme-header:linear-gradient(110deg,#4c1327,#1a111d); --theme-backdrop:radial-gradient(circle at 15% 30%,#fb71853d,transparent 25%),repeating-linear-gradient(135deg,transparent 0 80px,#fb71851a 81px 84px,transparent 85px 150px),linear-gradient(135deg,#240914,#121320); }
+html[data-theme="monocromatico"] { --theme-accent:#e5e7eb; --theme-line:#e5e7eb5c; --theme-panel:#101114f2; --theme-header:linear-gradient(110deg,#25272c,#111216); --theme-backdrop:repeating-linear-gradient(135deg,#17181c 0 1px,transparent 1px 18px),radial-gradient(circle at 75% 12%,#ffffff22,transparent 24%),linear-gradient(135deg,#0d0e11,#24262b); }
+html:is([data-theme="aurora"],[data-theme="oceano"],[data-theme="esmeralda"],[data-theme="por-do-sol"],[data-theme="rubi"],[data-theme="monocromatico"]) .site-shell[data-theme-access="admin"] > main { position:relative; z-index:1; }
 @media (max-width: 767px) {
-  html[data-theme="alakazam"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/alakazam-mobile-bbfb5252eeb0.webp"); }
-  html[data-theme="mewtwo"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/mewtwo-mobile-ee851f590a82.webp"); }
-  html[data-theme="sudowoodo"] { --theme-scene: url("https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/site-themes/sudowoodo-mobile-873e0d959a69.webp"); }
-  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"]::before {
-    background-size: auto 300px; background-position: left 60px;
-  }
-  html:is([data-theme="alakazam"], [data-theme="mewtwo"], [data-theme="sudowoodo"]) .site-shell[data-theme-access="admin"] > main {
-    margin-top: 150px; border-radius: 20px 20px 0 0;
-  }
+  html[data-theme="aurora"] { --theme-backdrop:radial-gradient(circle at 50% 0,#c084fc42,transparent 32%),linear-gradient(160deg,#101335,#0a2841); }
+  html[data-theme="oceano"] { --theme-backdrop:radial-gradient(ellipse at 50% 0,#38bdf84a,transparent 44%),linear-gradient(180deg,#063755,#071827); }
+  html[data-theme="esmeralda"] { --theme-backdrop:radial-gradient(circle at 50% 0,#4ade803d,transparent 34%),linear-gradient(160deg,#06271d,#0a1722); }
+  html[data-theme="por-do-sol"] { --theme-backdrop:radial-gradient(circle at 76% 7%,#fbbf2499 0 4%,transparent 28%),linear-gradient(160deg,#56283c,#0c2035); }
+  html[data-theme="rubi"] { --theme-backdrop:radial-gradient(circle at 50% 0,#fb718536,transparent 32%),linear-gradient(160deg,#240914,#121320); }
+  html[data-theme="monocromatico"] { --theme-backdrop:radial-gradient(circle at 50% 0,#ffffff18,transparent 28%),linear-gradient(160deg,#0d0e11,#24262b); }
 }

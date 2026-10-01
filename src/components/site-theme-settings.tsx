@@ -52,7 +52,7 @@ export function SiteThemeSettings() {
         {SITE_THEMES.slice(page * THEMES_PER_PAGE, (page + 1) * THEMES_PER_PAGE).map((theme) => (
           <label key={theme.id} className="theme-option" data-selected={selected === theme.id} style={{ "--preview-accent": theme.accent, "--preview-background": theme.background } as CSSProperties}>
             <input type="radio" name="site-theme" value={theme.id} checked={selected === theme.id} onChange={() => choose(theme.id)} />
-            <span className="theme-preview" aria-hidden="true" style={"thumbnail" in theme ? { backgroundImage: `linear-gradient(0deg, #080b2680, transparent), url("${theme.thumbnail}")`, backgroundSize: "cover", backgroundPosition: "center" } : undefined}>
+            <span className="theme-preview" aria-hidden="true">
               <span className="theme-preview-nav"><span /> LIGA ZIKACHU</span>
               <span className="theme-preview-panel"><span /> <span /><span /></span>
               <span className="theme-preview-tabs"><i /><i /><i /></span>

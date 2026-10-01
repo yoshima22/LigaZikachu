@@ -36,9 +36,6 @@ try {
   const css = readFileSync('src/app/themes.css', 'utf8');
   const themedSelectors = [...css.matchAll(/(html\[data-theme[^{}]+)\{/g)].map(match => match[1].trim()).filter(selector => selector.includes('.site-'));
   assert.equal(themedSelectors.length, 5);
-  const artSelectors = css.split('\n').map(line => line.trim()).filter(line => line.startsWith('html:is(')).map(line => line.replace(/\s*\{$/, '').replace('::before', ''));
-  assert.ok(artSelectors.length >= 4);
-  for (const selector of artSelectors) assert.ok(selector.includes('[data-theme-access="admin"]'));
   const fixture = document.createElement('div');
   fixture.innerHTML = '<div class="site-shell"><header class="site-header"><span class="site-brand-themed"></span><span class="site-brand-original"></span></header><main><div class="site-card bg-slate-950/70"></div></main></div>';
   document.body.append(fixture);
@@ -46,13 +43,6 @@ try {
   for (const selector of themedSelectors) assert.equal(document.querySelector(selector), null);
   fixture.firstChild.dataset.themeAccess = 'admin';
   for (const selector of themedSelectors) assert.ok(document.querySelector(selector));
-  for (const art of ['alakazam', 'mewtwo', 'sudowoodo']) {
-    document.documentElement.dataset.theme = art;
-    delete fixture.firstChild.dataset.themeAccess;
-    for (const selector of artSelectors) assert.equal(document.querySelector(selector), null);
-    fixture.firstChild.dataset.themeAccess = 'admin';
-    for (const selector of artSelectors) assert.ok(document.querySelector(selector));
-  }
   fixture.remove();
   console.log('PASS: non-admin CSS isolation, saved-theme account switch and server selector gate');
   for (const value of [null, 'invalid', 'tecnologico', 'claro', 'competitivo', 'padrao']) {
@@ -65,8 +55,10 @@ try {
   await act(async () => root.render(React.createElement(SiteThemeSettings)));
   assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
   const next = () => [...document.querySelectorAll('.theme-pagination button')].find(button => button.textContent === 'Próxima');
-  assert.equal(document.querySelector('[value="alakazam"]'), null);
-  assert.equal(document.querySelectorAll('[style*="thumbnail"]').length, 0);
+  assert.equal(themes.SITE_THEMES.length, 10);
+  assert.deepEqual(Array.from(themes.SITE_THEMES, theme => theme.id), ['padrao', 'tecnologico', 'claro', 'competitivo', 'aurora', 'oceano', 'esmeralda', 'por-do-sol', 'rubi', 'monocromatico']);
+  assert.equal(document.querySelector('[value="aurora"]'), null);
+  assert.equal(document.querySelectorAll('[style*="url("]').length, 0);
   for (const { id } of themes.SITE_THEMES) {
     if (!document.querySelector(`input[value="${id}"]`)) await act(async () => next().click());
     await act(async () => document.querySelector(`input[value="${id}"]`).click());
@@ -76,14 +68,14 @@ try {
     if (id !== 'padrao') assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), id);
   }
   boot(window.localStorage);
-  assert.equal(document.documentElement.dataset.theme, 'sudowoodo');
-  assert.equal(document.querySelectorAll('input[type="radio"]').length, 3);
+  assert.equal(document.documentElement.dataset.theme, 'monocromatico');
+  assert.equal(document.querySelectorAll('input[type="radio"]').length, 2);
   assert.equal(next().disabled, true);
   await act(async () => document.querySelector('button.theme-reset').click());
   assert.equal(document.querySelector('input:checked').value, 'padrao');
   assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
   assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), 'padrao');
-  console.log('PASS: seven themes, pagination boundaries, no hidden thumbnails, restore from last page');
+  console.log('PASS: ten CSS-only themes, pagination boundaries, no remote art, restore from last page');
   await act(async () => window.dispatchEvent(new window.StorageEvent('storage', { key: themes.THEME_STORAGE_KEY, newValue: 'claro' })));
   assert.equal(document.querySelector('input:checked').value, 'claro');
   const original = dom.window.Storage.prototype.setItem;
