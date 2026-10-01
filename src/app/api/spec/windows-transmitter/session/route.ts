@@ -2,6 +2,9 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { enrichSpecStreams } from "@/lib/spec/data";
+import { publishLeagueTicker } from "@/lib/league-ticker";
+import { specLiveTickerMessage } from "@/lib/spec/announce";
 
 export const runtime = "nodejs";
 export const dynamic = "force-dynamic";
@@ -14,6 +17,8 @@ type RequestBody = {
   toUserId?: string;
   kind?: "OFFER" | "BYE";
   payload?: unknown;
+  resolution?: string;
+  fps?: string;
 };
 
 function equalHash(a: string, b: string) {
@@ -31,7 +36,7 @@ export async function POST(request: Request) {
   const connection = await prisma.specSignal.findFirst({
     where: { streamId, kind: "WIN_CONNECTED" },
     orderBy: { seq: "desc" },
-    select: { fromUserId: true, payload: true },
+    select: { id: true, fromUserId: true, payload: true },
   });
   const connectionPayload = connection?.payload as { tokenHash?: string; resolution?: string; fps?: string; quality?: string; processName?: string } | null;
   const suppliedHash = createHash("sha256").update(token).digest("hex");
@@ -41,7 +46,7 @@ export async function POST(request: Request) {
 
   const stream = await prisma.specStream.findUnique({
     where: { id: streamId },
-    select: { id: true, title: true, status: true, broadcasterUserId: true },
+    select: { id: true, title: true, status: true, broadcasterUserId: true, matchId: true, tournamentId: true },
   });
   if (!stream || stream.broadcasterUserId !== connection.fromUserId) return NextResponse.json({ error: "Live não encontrada." }, { status: 404 });
 
@@ -56,8 +61,30 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "live") {
+    if ((body.resolution !== undefined && !["360p", "480p", "720p", "1080p"].includes(body.resolution)) ||
+        (body.fps !== undefined && !["30 fps", "60 fps"].includes(body.fps))) {
+      return NextResponse.json({ error: "Qualidade de transmissão inválida." }, { status: 400 });
+    }
     if (!['PREPARING', 'LIVE'].includes(stream.status)) return NextResponse.json({ error: "Esta live já foi encerrada." }, { status: 409 });
-    await prisma.specStream.update({ where: { id: streamId }, data: { provider: "p2p-mesh", status: "LIVE", startedAt: new Date(), lastSeenAt: new Date() } });
+    // Conditional transition: retries must neither resurrect an ended live nor reset its start time.
+    const started = await prisma.specStream.updateMany({ where: { id: streamId, status: "PREPARING" }, data: { provider: "p2p-mesh", status: "LIVE", startedAt: new Date(), lastSeenAt: new Date() } });
+    if (!started.count) {
+      const active = await prisma.specStream.updateMany({ where: { id: streamId, status: "LIVE" }, data: { lastSeenAt: new Date() } });
+      if (!active.count) return NextResponse.json({ error: "Esta live já foi encerrada." }, { status: 409 });
+    }
+    if (body.resolution || body.fps) {
+      await prisma.specSignal.update({ where: { id: connection.id }, data: { payload: { ...connectionPayload, resolution: body.resolution ?? connectionPayload.resolution ?? "720p", fps: body.fps ?? connectionPayload.fps ?? "30 fps" } } });
+    }
+    if (started.count) {
+      try {
+        const [view] = await enrichSpecStreams([stream]);
+        await publishLeagueTicker({
+          type: "spec_live",
+          message: specLiveTickerMessage({ isCombat: Boolean(stream.matchId || stream.tournamentId), label: view?.matchLabel ?? stream.title ?? "Transmissão da Zika TV" }),
+          href: `/spec/${stream.id}`, eventKey: `spec-live-${stream.id}`, priority: 5, ttlHours: 3,
+        });
+      } catch (error) { console.error("[WindowsTransmitter] Falha no anúncio da live", error); }
+    }
     return NextResponse.json({ ok: true });
   }
 

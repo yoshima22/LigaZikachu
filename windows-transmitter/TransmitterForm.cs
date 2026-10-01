@@ -7,19 +7,28 @@ namespace LigaZikachu.Transmissor;
 internal sealed class TransmitterForm : Form
 {
     private static readonly Color Bg = Color.FromArgb(3, 7, 24), Card = Color.FromArgb(10, 16, 39), Muted = Color.FromArgb(148, 163, 184), Yellow = Color.FromArgb(255, 203, 5), Violet = Color.FromArgb(124, 58, 237), Cyan = Color.FromArgb(34, 211, 238);
-    private readonly ComboBox _processes = Combo(430), _resolution = Combo(145, ["540p", "720p", "1080p"]), _fps = Combo(145, ["12 fps", "24 fps", "30 fps"]), _quality = Combo(185, ["Nitidez", "Fluidez"]);
+    private readonly ComboBox _processes = Combo(430), _resolution = Combo(145, ["360p", "480p", "540p", "720p", "1080p"]), _fps = Combo(145, ["30 fps", "60 fps"]), _quality = Combo(185, ["Nitidez", "Fluidez"]);
     private readonly TextBox _code = new() { Width = 235, CharacterCasing = CharacterCasing.Upper, MaxLength = 11, Font = new Font("Consolas", 17, FontStyle.Bold), BackColor = Color.FromArgb(6, 11, 29), ForeColor = Yellow, BorderStyle = BorderStyle.FixedSingle };
     private readonly TextBox _server = new() { Width = 430, Text = "https://liga-zikachu.vercel.app", BackColor = Color.FromArgb(6, 11, 29), ForeColor = Muted, BorderStyle = BorderStyle.FixedSingle };
     private readonly Label _status = L("", 9, Muted, 485, 60);
     private readonly Button _pair = Button("CONECTAR À ZIKA TV", 235, Violet, Color.White);
     private readonly HttpClient _http = new() { Timeout = TimeSpan.FromSeconds(20) };
+    private bool _closing;
 
     public TransmitterForm()
     {
         Text = "Liga Zikachu — Transmissor Windows"; Width = 1180; Height = 780; MinimumSize = new Size(1080, 720); StartPosition = FormStartPosition.CenterScreen; BackColor = Bg; ForeColor = Color.White; Font = new Font("Segoe UI", 10); DoubleBuffered = true;
-        _resolution.SelectedIndex = 1; _fps.SelectedIndex = 2; _quality.SelectedIndex = 0; _pair.Click += async (_, _) => await PairAsync();
+        _resolution.SelectedIndex = 3; _fps.SelectedIndex = 0; _quality.SelectedIndex = 0; _pair.Click += async (_, _) => await PairAsync();
         var root = new TableLayoutPanel { Dock = DockStyle.Fill, ColumnCount = 2, Padding = new Padding(22), BackColor = Bg };
         root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 38)); root.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 62)); root.Controls.Add(Intro(), 0, 0); root.Controls.Add(SetupTabs(), 1, 0); Controls.Add(root); LoadProcesses();
+        FormClosing += async (_, e) =>
+        {
+            if (_closing) return;
+            _closing = true; e.Cancel = true; Enabled = false;
+            var players = Application.OpenForms.OfType<SourcePlayerForm>().ToArray();
+            try { await Task.WhenAll(players.Select(player => player.ShutdownNativeAsync())); }
+            finally { foreach (var player in players) if (!player.IsDisposed) player.Close(); BeginInvoke(Close); }
+        };
     }
 
     private Control SetupTabs()
