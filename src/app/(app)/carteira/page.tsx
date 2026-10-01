@@ -29,7 +29,7 @@ const txTypeLabels: Record<string, string> = {
 export default async function CarteiraPage({
   searchParams,
 }: {
-  searchParams?: Promise<{ playerId?: string }>;
+  searchParams?: Promise<{ playerId?: string; lp?: string }>;
 }) {
   const session = await getAppSession();
   if (!session?.user) return null;
@@ -70,7 +70,16 @@ export default async function CarteiraPage({
   const reportPlayer = selectedPlayer ?? currentPlayer;
   const wallet = await getOrCreateWallet(reportPlayer.id);
   const ligaWallet = await prisma.ligaCoinWallet.findUnique({where:{playerId:reportPlayer.id}});
-  const ligaCashLedger=await prisma.ligaCashLedger.findMany({where:{playerId:reportPlayer.id},orderBy:{createdAt:"desc"},take:100});
+  const LC_PAGE=20;
+  const lcPage=Math.max(1,Number.parseInt(params?.lp??"1",10)||1);
+  const [ligaCashLedger,lcTotal,passOrders]=await Promise.all([
+    prisma.ligaCashLedger.findMany({where:{playerId:reportPlayer.id},orderBy:{createdAt:"desc"},skip:(lcPage-1)*LC_PAGE,take:LC_PAGE}),
+    prisma.ligaCashLedger.count({where:{playerId:reportPlayer.id}}),
+    // Passe comprado por Pix/cartão não gera lançamento no ledger de LC; vem do pedido.
+    prisma.ligaCashOrder.findMany({where:{playerId:reportPlayer.id,productType:"SUPPORTER_PASS",status:{in:["PAID","REFUNDED"]}},orderBy:{createdAt:"desc"},take:20}),
+  ]);
+  const lcPages=Math.max(1,Math.ceil(lcTotal/LC_PAGE));
+  const lcHref=(n:number)=>`/carteira?${new URLSearchParams({...(reportPlayer.id!==currentPlayer.id?{playerId:reportPlayer.id}:{}),lp:String(n)})}`;
 
   const transactions = await prisma.zikaCoinTransaction.findMany({
     where: { walletId: wallet.id },
@@ -135,7 +144,7 @@ export default async function CarteiraPage({
       )}
       {admin && <Card><p className="mb-1 font-semibold text-cyan-200">Ajuste manual de LigaCash</p><p className="mb-3 text-xs text-slate-500">Saldo atual de {reportPlayer.displayName}: {ligaWallet?.balance??0} LC. O motivo é obrigatório; somente administradores podem remover saldo.</p><AdjustLigaCoinsForm players={adminPlayers}/></Card>}
 
-      <Card><h2 className="font-semibold text-cyan-200">LigaCash</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Saldo</p><p className="text-2xl font-black text-cyan-200">{(ligaWallet?.balance??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Comprada por Pix</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.purchased??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Gasta</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.spent??0).toLocaleString("pt-BR")} LC</p></div></div><div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">{ligaCashLedger.map(entry=><div key={entry.id} className="flex items-center justify-between gap-3 bg-slate-950/40 px-4 py-3 text-xs"><div><p className="font-semibold text-slate-200">{entry.reason.replaceAll("_"," ")}</p><p className="text-[10px] text-slate-500">{entry.createdAt.toLocaleString("pt-BR")}</p></div><div className="text-right"><p className={entry.amount>=0?"font-bold text-emerald-300":"font-bold text-red-300"}>{entry.amount>0?"+":""}{entry.amount.toLocaleString("pt-BR")} LC</p><p className="text-[10px] text-slate-500">saldo {entry.balanceAfter.toLocaleString("pt-BR")}</p></div></div>)}{!ligaCashLedger.length&&<p className="p-4 text-xs text-slate-500">Nenhuma movimentação de LigaCash registrada ainda.</p>}</div></Card>
+      <Card><h2 className="font-semibold text-cyan-200">LigaCash</h2><div className="mt-3 grid gap-3 sm:grid-cols-3"><div><p className="text-xs text-slate-500">Saldo</p><p className="text-2xl font-black text-cyan-200">{(ligaWallet?.balance??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Comprada por Pix</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.purchased??0).toLocaleString("pt-BR")} LC</p></div><div><p className="text-xs text-slate-500">Gasta</p><p className="text-lg font-bold text-slate-200">{(ligaWallet?.spent??0).toLocaleString("pt-BR")} LC</p></div></div><div className="mt-4 divide-y divide-border overflow-hidden rounded-xl border border-border">{ligaCashLedger.map(entry=><div key={entry.id} className="flex items-center justify-between gap-3 bg-slate-950/40 px-4 py-3 text-xs"><div><p className="font-semibold text-slate-200">{entry.reason.replaceAll("_"," ")}</p><p className="text-[10px] text-slate-500">{entry.createdAt.toLocaleString("pt-BR")}</p></div><div className="text-right"><p className={entry.amount>=0?"font-bold text-emerald-300":"font-bold text-red-300"}>{entry.amount>0?"+":""}{entry.amount.toLocaleString("pt-BR")} LC</p><p className="text-[10px] text-slate-500">saldo {entry.balanceAfter.toLocaleString("pt-BR")}</p></div></div>)}{!ligaCashLedger.length&&<p className="p-4 text-xs text-slate-500">Nenhuma movimentação de LigaCash registrada ainda.</p>}</div>{lcPages>1&&<div className="mt-3 flex items-center justify-between text-xs text-slate-400">{lcPage>1?<Link href={lcHref(lcPage-1)} className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200">← Anteriores</Link>:<span/>}<span>Página {lcPage} de {lcPages}</span>{lcPage<lcPages?<Link href={lcHref(lcPage+1)} className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200">Próximas →</Link>:<span/>}</div>}{passOrders.length>0&&<div className="mt-5"><h3 className="text-sm font-semibold text-slate-200">Compras de Passe Apoiador</h3><div className="mt-2 divide-y divide-border overflow-hidden rounded-xl border border-border">{passOrders.map(o=><div key={o.id} className="flex items-center justify-between gap-3 bg-slate-950/40 px-4 py-3 text-xs"><div><p className="font-semibold text-slate-200">{o.productLabel}</p><p className="text-[10px] text-slate-500">{(o.paidAt??o.createdAt).toLocaleString("pt-BR")} · {o.provider==="ADMIN_MANUAL"?"Cortesia":"Mercado Pago"}</p></div><div className="text-right"><p className="font-bold text-slate-200">{o.amountCents?`R$ ${(o.amountCents/100).toLocaleString("pt-BR",{minimumFractionDigits:2})}`:"—"}</p><p className={`text-[10px] ${o.status==="REFUNDED"?"text-red-300":o.fulfilledAt?"text-emerald-300":"text-amber-300"}`}>{o.status==="REFUNDED"?"estornado":o.fulfilledAt?"passe entregue":"aguardando ativação"}</p></div></div>)}</div></div>}</Card>
 
       <div className="grid gap-4 sm:grid-cols-3">
         <div className="col-span-1 rounded-2xl border border-[#FFCB05]/30 bg-gradient-to-br from-[#1A1A2E] to-[#201d38] p-6 sm:col-span-1">
