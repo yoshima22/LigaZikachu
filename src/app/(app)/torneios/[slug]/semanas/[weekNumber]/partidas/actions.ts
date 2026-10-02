@@ -1,5 +1,7 @@
 "use server";
 
+import { buildTeamWarBracket } from "@/lib/team-war-bracket";
+import { PARTICIPATION_RATE } from "@/lib/team-war-scoring";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
@@ -325,6 +327,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
     ? bonusRule.fixedMatchups as Array<Record<string, unknown>>
     : [];
 
+  let teamWarRule: Record<string, unknown> | null = null;
   if (fixedMatchups.length > 0) {
     const registrationIds = new Set(registrations.map((registration) => registration.playerId));
     const ranking = await computeTournamentRanking(tournamentId);
@@ -386,26 +389,27 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
         }
       }
     }
-  } else if (week.mode === "GUERRA_DE_TIMES" && n >= 6) {
-    // Semana 7: Guerra de Times
-    // Time A: posicoes 1,3,5,7; Time B: 2,4,6,8
-    const teamA = players.filter((_, i) => i % 2 === 0);
-    const teamB = players.filter((_, i) => i % 2 === 1);
-
-    for (let round = 1; round <= maxRounds; round++) {
-      const shuffledA = shuffleArray(teamA);
-      const shuffledB = shuffleArray(teamB);
-      const pairCount = Math.min(shuffledA.length, shuffledB.length);
-      for (let i = 0; i < pairCount; i++) {
-        matches.push({
-          playerAId: shuffledA[i].id,
-          playerBId: shuffledB[i].id,
-          roundLabel: `Rodada ${round} — Guerra de Times`,
-          tournamentWeekId: week.id,
-          createdById: admin.id,
-        });
-      }
-    }
+  } else if (week.mode === "GUERRA_DE_TIMES" && n >= 4) {
+    // Guerra de Times: equipes por posição (ímpares x pares), 2 jogos por jogador.
+    // Nº par: só jogos entre equipes. Nº ímpar: 1 jogo interno da equipe maior (ver team-war-bracket).
+    const registrationIds = new Set(registrations.map((registration) => registration.playerId));
+    const ranking = (await computeTournamentRanking(tournamentId)).filter((entry) => registrationIds.has(entry.playerId));
+    const { teams, games } = buildTeamWarBracket(ranking.map((entry) => entry.playerId));
+    games.forEach((game, index) => {
+      matches.push({
+        playerAId: game.a,
+        playerBId: game.b,
+        roundLabel: `Jogo ${index + 1}${game.internal ? " — Interno" : ""}`,
+        tournamentWeekId: week.id,
+        createdById: admin.id,
+      });
+    });
+    const nameById = new Map(registrations.map((registration) => [registration.playerId, registration.player.displayName]));
+    teamWarRule = {
+      teamScoring: PARTICIPATION_RATE,
+      winnerTeamBonus: Number(bonusRule?.winnerTeamBonus ?? 2),
+      teamAssignments: teams.flatMap((team) => team.playerIds.map((playerId) => ({ playerId, playerName: nameById.get(playerId) ?? "", teamName: team.name }))),
+    };
   } else {
     // Grafo regular: todos recebem exatamente a quantidade configurada,
     // sem BYE persistido e sem repetir o mesmo confronto.
@@ -470,6 +474,7 @@ export async function generateMatchups(input: z.infer<typeof generateMatchupsSch
   await prisma.tournamentWeek.update({
     where: { id: week.id },
     data: {
+      ...(teamWarRule ? { bonusRule: { ...(bonusRule ?? {}), ...teamWarRule } as Prisma.InputJsonObject } : {}),
       status: "OPEN",
       ...(contract ? {
         enguicaContractKey: contract.key,
