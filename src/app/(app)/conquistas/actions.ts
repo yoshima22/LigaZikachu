@@ -5,29 +5,20 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireAdmin, getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { AchievementType, AchievementRarity, AchievementCategory, AchievementScope, AchievementEventType, Prisma } from "@prisma/client";
+import { AchievementEventType, Prisma } from "@prisma/client";
+import {
+  createAchievementSchema,
+  updateAchievementSchema,
+  type CreateAchievementInput,
+  type UpdateAchievementInput,
+} from "./achievement-validation";
 
 // ── Criar/editar conquista ────────────────────────────────────────────────────
 
-const achievementSchema = z.object({
-  key: z.string().trim().min(2).max(80).regex(/^[a-z0-9_]+$/, "Use apenas letras minúsculas, números e _"),
-  name: z.string().trim().min(2).max(120),
-  description: z.string().trim().max(500).optional(),
-  iconUrl: z.string().url().optional().or(z.literal("")),
-  type: z.nativeEnum(AchievementType),
-  rarity: z.nativeEnum(AchievementRarity),
-  category: z.nativeEnum(AchievementCategory),
-  scope: z.nativeEnum(AchievementScope),
-  isSecret: z.boolean().default(false),
-  isRepeatable: z.boolean().default(false),
-  suggestedPoints: z.number().int().min(0).max(100).optional(),
-  seasonId: z.string().optional(),
-});
-
-export async function createAchievement(raw: z.infer<typeof achievementSchema>): Promise<{ id?: string; error?: string }> {
+export async function createAchievement(raw: CreateAchievementInput): Promise<{ id?: string; error?: string }> {
   try {
     const actor = await requireAdmin();
-    const data = achievementSchema.parse(raw);
+    const data = createAchievementSchema.parse(raw);
 
     const existing = await prisma.achievement.findFirst({
       where: {
@@ -70,11 +61,11 @@ export async function toggleAchievement(id: string, active: boolean): Promise<{ 
 
 export async function updateAchievement(
   id: string,
-  raw: z.infer<typeof achievementSchema>
+  raw: UpdateAchievementInput
 ): Promise<{ error?: string }> {
   try {
     await requireAdmin();
-    const data = achievementSchema.parse(raw);
+    const data = updateAchievementSchema.parse(raw);
     await prisma.achievement.update({
       where: { id },
       data: {

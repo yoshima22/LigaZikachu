@@ -186,7 +186,7 @@ export function AchievementsAdminPanel({ achievements, players, seasons }: Props
     startTransition(async () => {
       try {
         const result = await updateAchievement(editingId, {
-          key: editForm.key, name: editForm.name,
+          name: editForm.name,
           description: editForm.description || undefined,
           type: editForm.type as "MANUAL" | "AUTOMATIC",
           rarity: editForm.rarity as "COMMON"|"UNCOMMON"|"RARE"|"EPIC"|"LEGENDARY"|"SECRET",
