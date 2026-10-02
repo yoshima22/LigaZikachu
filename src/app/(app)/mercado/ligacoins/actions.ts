@@ -74,6 +74,8 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
     passOfferSlot=code==="PASS_CURRENT"?"CURRENT":"NEXT";
     const config=await prisma.passScheduleConfig.findFirst({where:passOfferSlot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},select:{id:true,displayTitle:true}});
     if(code==="PASS_CURRENT"&&!config)return{error:"O passe atual ainda não foi definido pelo administrador."};
+    // Página aberta antes da virada do passe: sem "próximo" marcado o pedido ficaria órfão (sem calendário).
+    if(code==="PASS_NEXT"&&!config)return{error:"O passe à venda mudou. Recarregue a página e escolha novamente; nenhuma cobrança foi feita."};
     passScheduleKey=config?.id??null;product={code,type:"SUPPORTER_PASS",label:config?.displayTitle?.trim()||(code==="PASS_CURRENT"?"Passe atual":"Passe do mês seguinte"),base:0,bonus:0,cents:2000};
   }
   if(!product) return {error:"Pacote inválido."};
