@@ -27,24 +27,24 @@ html[data-theme="claro"] {
   /* Dark content islands preserve contrast in existing specialized game UI. */
   --theme-header: linear-gradient(110deg, #17263c, #223858);
 }
-html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] {
+html[data-theme]:not([data-theme="padrao"]) .site-shell {
   background: var(--theme-backdrop);
 }
-html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-header {
+html[data-theme]:not([data-theme="padrao"]) .site-shell .site-header {
   background: var(--theme-header);
   border-color: var(--theme-line);
 }
-html[data-theme="claro"] .site-shell[data-theme-access="admin"] > main {
+html[data-theme="claro"] .site-shell > main {
   /* Also protect standalone headings and widgets that don't use Card yet. */
   background: #0f172aeb;
   border-inline: 1px solid #607da344;
 }
-html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-card {
+html[data-theme]:not([data-theme="padrao"]) .site-shell .site-card {
   border-color: var(--theme-line);
   /* Retain caller-provided backgrounds (rewards, warnings, events). */
   box-shadow: 0 12px 32px #02061724;
 }
-html[data-theme]:not([data-theme="padrao"]) .site-shell[data-theme-access="admin"] .site-card[class~="bg-slate-950/70"] {
+html[data-theme]:not([data-theme="padrao"]) .site-shell .site-card[class~="bg-slate-950/70"] {
   background-color: var(--theme-panel);
 }
 .theme-settings {
@@ -97,7 +97,7 @@ html[data-theme="esmeralda"] { --theme-accent:#4ade80; --theme-line:#4ade8070; -
 html[data-theme="por-do-sol"] { --theme-accent:#fb923c; --theme-line:#fb923c70; --theme-panel:#2a1421f2; --theme-header:linear-gradient(110deg,#542232,#27172b); --theme-backdrop:radial-gradient(circle at 78% 16%,#fbbf24a6 0 3%,#fb923c45 4%,transparent 23%),linear-gradient(155deg,#56283c,#201a3b 52%,#0c2035); }
 html[data-theme="rubi"] { --theme-accent:#fb7185; --theme-line:#fb718570; --theme-panel:#240d16f2; --theme-header:linear-gradient(110deg,#4c1327,#1a111d); --theme-backdrop:radial-gradient(circle at 15% 30%,#fb71853d,transparent 25%),repeating-linear-gradient(135deg,transparent 0 80px,#fb71851a 81px 84px,transparent 85px 150px),linear-gradient(135deg,#240914,#121320); }
 html[data-theme="monocromatico"] { --theme-accent:#e5e7eb; --theme-line:#e5e7eb5c; --theme-panel:#101114f2; --theme-header:linear-gradient(110deg,#25272c,#111216); --theme-backdrop:repeating-linear-gradient(135deg,#17181c 0 1px,transparent 1px 18px),radial-gradient(circle at 75% 12%,#ffffff22,transparent 24%),linear-gradient(135deg,#0d0e11,#24262b); }
-html:is([data-theme="aurora"],[data-theme="oceano"],[data-theme="esmeralda"],[data-theme="por-do-sol"],[data-theme="rubi"],[data-theme="monocromatico"]) .site-shell[data-theme-access="admin"] > main { position:relative; z-index:1; }
+html:is([data-theme="aurora"],[data-theme="oceano"],[data-theme="esmeralda"],[data-theme="por-do-sol"],[data-theme="rubi"],[data-theme="monocromatico"]) .site-shell > main { position:relative; z-index:1; }
 @media (max-width: 767px) {
   html[data-theme="aurora"] { --theme-backdrop:radial-gradient(circle at 50% 0,#c084fc42,transparent 32%),linear-gradient(160deg,#101335,#0a2841); }
   html[data-theme="oceano"] { --theme-backdrop:radial-gradient(ellipse at 50% 0,#38bdf84a,transparent 44%),linear-gradient(180deg,#063755,#071827); }

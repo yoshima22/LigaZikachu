@@ -30,9 +30,9 @@ try {
   // an admin previously saved a theme on the same browser.
   const layout = readFileSync('src/app/(app)/layout.tsx', 'utf8');
   const profile = readFileSync('src/app/(app)/perfil/page.tsx', 'utf8');
-  assert.match(layout, /const isPlatformAdmin = isAdmin\(user.role\)/);
-  assert.match(layout, /data-theme-access=\{isPlatformAdmin \? "admin" : undefined\}/);
-  assert.match(profile, /\{adminUser && <SiteThemeSettings \/>\}/);
+  assert.doesNotMatch(layout, /data-theme-access/);
+  assert.match(profile, /<SiteThemeSettings \/>/);
+  assert.doesNotMatch(profile, /adminUser && <SiteThemeSettings/);
   const css = readFileSync('src/app/themes.css', 'utf8');
   const themedSelectors = [...css.matchAll(/(html\[data-theme[^{}]+)\{/g)].map(match => match[1].trim()).filter(selector => selector.includes('.site-'));
   assert.equal(themedSelectors.length, 5);
@@ -40,11 +40,9 @@ try {
   fixture.innerHTML = '<div class="site-shell"><header class="site-header"><span class="site-brand-themed"></span><span class="site-brand-original"></span></header><main><div class="site-card bg-slate-950/70"></div></main></div>';
   document.body.append(fixture);
   document.documentElement.dataset.theme = 'claro';
-  for (const selector of themedSelectors) assert.equal(document.querySelector(selector), null);
-  fixture.firstChild.dataset.themeAccess = 'admin';
   for (const selector of themedSelectors) assert.ok(document.querySelector(selector));
   fixture.remove();
-  console.log('PASS: non-admin CSS isolation, saved-theme account switch and server selector gate');
+  console.log('PASS: theme CSS applies to every account');
   for (const value of [null, 'invalid', 'tecnologico', 'claro', 'competitivo', 'padrao']) {
     boot({ getItem: () => value });
     assert.equal(document.documentElement.dataset.theme, themes.normalizeSiteTheme(value));

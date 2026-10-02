@@ -513,7 +513,7 @@ export default async function PerfilPage() {
         <EditProfileForm player={{ ...player, standbyUntil: getStandbyUntilFromNotes(player.notes), casualMode: player.casualMode }} />
       </Card>
 
-      {adminUser && <SiteThemeSettings />}
+      <SiteThemeSettings />
       <NotificationSettingsCard initial={player.notificationSettings} />
 
       <InviteCodeCard

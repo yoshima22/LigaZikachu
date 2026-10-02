@@ -40,7 +40,7 @@ export function SiteThemeSettings() {
 
   return (
     <section className="theme-settings" aria-labelledby="site-theme-title">
-      <p className="theme-settings-eyebrow">Configurações • Aparência • Teste admin</p>
+      <p className="theme-settings-eyebrow">Configurações • Aparência</p>
       <h2 id="site-theme-title">Seu jogo, seu estilo</h2>
       <p className="theme-settings-description">Escolha o tema do site. A mudança aparece na hora e não altera seus dados de jogo.</p>
       <button type="button" className="theme-reset" onClick={() => choose("padrao")}>

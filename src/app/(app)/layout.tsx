@@ -306,7 +306,7 @@ export default async function AppLayout({
           onSeen={markOrderRewardSeenAction}
         />
       )}
-      <div data-theme-access={isPlatformAdmin ? "admin" : undefined} className="site-shell min-h-screen w-full max-w-full overflow-x-clip bg-[#0f0f1a]">
+      <div className="site-shell min-h-screen w-full max-w-full overflow-x-clip bg-[#0f0f1a]">
         {/* Header Pokemon Style */}
         <header className="site-header sticky top-0 z-40 border-b border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#1e1e3a] to-[#1A1A2E] pt-[env(safe-area-inset-top)] backdrop-blur-md">
           {/* Top bar with glow effect */}
