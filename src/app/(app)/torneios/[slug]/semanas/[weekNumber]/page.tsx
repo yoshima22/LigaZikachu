@@ -1,3 +1,4 @@
+import { isParticipationRateWeek } from "@/lib/team-war-scoring";
 import { prisma } from "@/lib/prisma";
 import { notFound } from "next/navigation";
 import { WeekModeBadge } from "@/components/ui/poke/week-mode-badge";
@@ -220,6 +221,7 @@ export default async function WeekDetailPage({
     bonusRule && Array.isArray(bonusRule.teamAssignments)
       ? (bonusRule.teamAssignments as Array<Record<string, unknown>>)
       : [];
+  const participationRateWeek = isParticipationRateWeek(week.mode, bonusRule);
   const teamAssignmentsByPlayer = new Map(
     teamAssignments
       .map((assignment) => [
@@ -290,14 +292,17 @@ export default async function WeekDetailPage({
       winRate: stats.matchesPlayed > 0 ? stats.wins / stats.matchesPlayed : 0,
       averagePrizes: stats.matchesPlayed > 0 ? stats.defendedPrizes / stats.matchesPlayed : 0
     }))
-    .sort((a, b) => b.averageScore - a.averageScore || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes || a.teamName.localeCompare(b.teamName, "pt-BR"));
+    .sort((a, b) => participationRateWeek
+      ? b.winRate - a.winRate || b.averagePrizes - a.averagePrizes || a.teamName.localeCompare(b.teamName, "pt-BR")
+      : b.averageScore - a.averageScore || b.wins - a.wins || b.defendedPrizes - a.defendedPrizes || a.teamName.localeCompare(b.teamName, "pt-BR"));
 
   const championTeam = teamStats[0] && teamStats[0].matchesPlayed > 0 ? teamStats[0] : null;
   const championIsTied = Boolean(
-    championTeam && teamStats[1] &&
-      teamStats[1].averageScore === championTeam.averageScore &&
-      teamStats[1].wins === championTeam.wins &&
-      teamStats[1].defendedPrizes === championTeam.defendedPrizes
+    championTeam && teamStats[1] && (participationRateWeek
+      ? Math.abs(teamStats[1].winRate - championTeam.winRate) < 1e-9 && Math.abs(teamStats[1].averagePrizes - championTeam.averagePrizes) < 1e-9
+      : teamStats[1].averageScore === championTeam.averageScore &&
+        teamStats[1].wins === championTeam.wins &&
+        teamStats[1].defendedPrizes === championTeam.defendedPrizes)
   );
 
   const statusConfig: Record<string, { label: string; cls: string }> = {

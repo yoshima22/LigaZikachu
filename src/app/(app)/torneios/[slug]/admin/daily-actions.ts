@@ -7,6 +7,7 @@ import { requireAdmin } from "@/lib/auth/permissions";
 import { addExp } from "@/lib/mascot";
 import { prisma } from "@/lib/prisma";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { isParticipationRateWeek, resolveTeamWar } from "@/lib/team-war-scoring";
 import {
   finalizePayload,
   parseTournamentRewardConfig,
@@ -562,6 +563,32 @@ export async function closeTournamentWeek(raw: z.infer<typeof closeWeekRewardsSc
     });
     return created;
   });
+
+  // Guerra de Times com equipes desiguais (opt-in por semana): +bônus por integrante da equipe vencedora
+  // (ou de todas, em empate total). Não altera nenhum outro modo de jogo.
+  if (isParticipationRateWeek(week.mode, week.bonusRule)) {
+    const rule = week.bonusRule as Record<string, unknown>;
+    const assignments = (Array.isArray(rule.teamAssignments) ? rule.teamAssignments : []) as Array<Record<string, unknown>>;
+    const current = Array.isArray(rule.manualBonuses) ? (rule.manualBonuses as Array<Record<string, unknown>>) : [];
+    const perTeam = Number(rule.winnerTeamBonus ?? 0);
+    if (assignments.length > 0 && perTeam > 0 && !current.some((b) => b.source === "TEAM_WAR_AUTO")) {
+      const result = resolveTeamWar(
+        assignments.map((a) => ({ playerId: String(a.playerId), teamName: String(a.teamName) })),
+        stats,
+      );
+      const names = new Map(assignments.map((a) => [String(a.playerId), String(a.playerName ?? "")]));
+      const reason = result.tied ? "Guerra de Times: empate, bônus para as duas equipes" : `Guerra de Times: equipe vencedora (${result.winners[0]?.teamName})`;
+      const awarded = result.winners.flatMap((team) => team.playerIds).map((playerId) => ({
+        playerId, playerName: names.get(playerId) ?? "", points: perTeam, reason, source: "TEAM_WAR_AUTO", awardedById: admin.id, awardedAt: new Date().toISOString(),
+      }));
+      if (awarded.length > 0) {
+        await prisma.$transaction([
+          prisma.tournamentWeek.update({ where: { id: week.id }, data: { bonusRule: { ...rule, manualBonuses: [...current, ...awarded] } as Prisma.InputJsonObject } }),
+          prisma.auditLog.create({ data: { actorUserId: admin.id, entityType: "tournamentWeek", entityId: week.id, action: "tournament_week.team_war_bonus_applied", after: { tied: result.tied, winners: result.winners.map((t) => t.teamName), perTeam, players: awarded.length } } }),
+        ]);
+      }
+    }
+  }
 
   let mascotMissionExp = 0;
   for (const match of week.matches) {
