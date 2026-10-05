@@ -3,6 +3,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import {changeLigaCash} from "@/lib/liga-cash-wallet";
 import { publishLeagueTicker } from "@/lib/league-ticker";
+import { sendNotificationToUser } from "@/lib/notifications";
 import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
 
 // ── Professor Enguiça: agradecimento público por apoiar a Liga ─────────────────
@@ -94,6 +95,18 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     const recipient = await prisma.player.findUnique({ where: { id: result.giftRecipientPlayerId }, select: { userId: true } });
     if (recipient) revalidateTag(`nav-${recipient.userId}`);
     revalidatePath("/caixa-de-presentes");
+    // Avisa o destinatário (sino + push, conforme as preferências). O eventKey único evita
+    // duplicar quando o webhook do Mercado Pago repete a confirmação.
+    if (recipient && result.fulfilledAt) {
+      try {
+        const sender = await prisma.player.findUnique({ where: { id: result.playerId }, select: { displayName: true } });
+        const what = result.productType === "SUPPORTER_PASS" ? "um Passe Apoiador" : `${(result.ligaCoins + result.bonusLigaCoins).toLocaleString("pt-BR")} LigaCash`;
+        const title = "🎁 Você recebeu um presente!";
+        const body = `${sender?.displayName ?? "Um jogador"} te enviou ${what}. Abra para ver a mensagem e resgatar.`;
+        const created = await prisma.playerNotification.create({ data: { playerId: result.giftRecipientPlayerId, category: "GIFT", type: "GIFT_RECEIVED", title, body, href: "/caixa-de-presentes", entityId: result.id, eventKey: `gift-received:${result.id}` } }).catch(() => null);
+        if (created) await sendNotificationToUser(recipient.userId, { title, body, url: "/caixa-de-presentes", category: "OUTROS" });
+      } catch (e) { console.error("[LigaCash] falha ao avisar presente", e); }
+    }
   }
 
   // Fora da transação: agradecimento do Professor Enguiça como notificação padrão
