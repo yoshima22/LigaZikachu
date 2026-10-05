@@ -13,6 +13,7 @@ import {
 import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
 import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
 import { GiftPopupModal } from "./_components/gift-popup-modal";
+import { HeaderMinimizeToggle } from "./_components/header-minimize-toggle";
 import { getGiftPopup } from "@/lib/gift-popup";
 import { Button } from "@/components/ui/button";
 import { Download, Megaphone } from "lucide-react";
@@ -317,9 +318,9 @@ export default async function AppLayout({
           {/* Top bar with glow effect */}
           <div className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-60"></div>
 
-          <div className="mx-auto flex max-w-[1536px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
+          <div className="hdr-row mx-auto flex max-w-[1536px] items-center justify-between gap-2 px-3 py-2.5 sm:gap-3 sm:px-6 sm:py-3">
             {/* Logo - Pokemon style */}
-            <Link href="/dashboard" className="group flex min-w-0 items-center gap-2 sm:gap-3 md:ml-4 lg:ml-24">
+            <Link href="/dashboard" className="hdr-logo group flex min-w-0 items-center gap-2 sm:gap-3 md:ml-4 lg:ml-24">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img className="site-brand-logo" src={SITE_LOGO_URL} alt="Liga Zikachu — início" width={600} height={200} fetchPriority="high" />
             </Link>
@@ -341,10 +342,10 @@ export default async function AppLayout({
             <div className="flex shrink-0 items-center gap-1 sm:gap-2">
               <Link
                 href={player ? `/jogadores/${player.id}` : "/perfil"}
-                className="hidden min-w-0 max-w-[9.5rem] items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex xl:max-w-[11.5rem]"
+                className="hdr-user hidden min-w-0 max-w-[9.5rem] items-center gap-1.5 transition-opacity hover:opacity-80 sm:flex xl:max-w-[11.5rem]"
               >
                 {/* Texto à esquerda */}
-                <div className="min-w-0 flex-1 text-right">
+                <div className="hdr-userinfo min-w-0 flex-1 text-right">
                   <p
                     className="truncate text-xs font-medium leading-tight text-slate-200"
                     title={user.name ?? user.email ?? undefined}
@@ -352,14 +353,14 @@ export default async function AppLayout({
                     {user.name ?? user.email}
                   </p>
                   {wallet != null && (
-                    <span className="mt-0.5 flex flex-col items-end gap-0.5 text-[10px] font-semibold leading-tight whitespace-nowrap">
+                    <span className="hdr-wallet mt-0.5 flex flex-col items-end gap-0.5 text-[10px] font-semibold leading-tight whitespace-nowrap">
                       <span className="text-[#FFCB05]">🪙 {wallet.balance.toLocaleString("pt-BR")} ZC</span>
                       <span className="text-cyan-300">◉ {ligaWallet?.balance.toLocaleString("pt-BR") ?? "0"} LC</span>
                     </span>
                   )}
                   {player?.ptcglNick && (
                     <span
-                      className="block truncate text-[10px] leading-tight text-slate-500"
+                      className="hdr-nick block truncate text-[10px] leading-tight text-slate-500"
                       title={`@${player.ptcglNick}`}
                     >
                       @{player.ptcglNick}
@@ -367,7 +368,7 @@ export default async function AppLayout({
                   )}
                 </div>
                 {/* Avatar à direita */}
-                <div className="h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
+                <div className="hdr-avatar h-8 w-8 shrink-0 overflow-hidden rounded-xl border border-border bg-slate-800">
                   {player?.avatarUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
                     <img
@@ -397,7 +398,7 @@ export default async function AppLayout({
                 prefetch={false}
                 aria-label="Download"
                 title="Download"
-                className="relative flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
+                className="hdr-download relative flex h-8 shrink-0 items-center justify-center gap-1 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 text-[9px] font-bold leading-none text-[#FFCB05] transition-colors hover:bg-[#FFCB05] hover:text-slate-950 sm:text-[10px]"
               >
                 <Download size={13} className="shrink-0" />
                 <span className="hidden whitespace-nowrap lg:inline">Download</span>
@@ -406,7 +407,8 @@ export default async function AppLayout({
             </div>
           </div>
 
-          <div className="mx-auto max-w-[1536px]">
+          <div className="mx-auto flex max-w-[1536px] items-start">
+            <div className="min-w-0 flex-1">
             <AppNav
               admin={admin}
               platformAdmin={platformAdmin}
@@ -419,6 +421,8 @@ export default async function AppLayout({
               livePvpVisible={livePvpVisible}
               zikaTvLive={zikaTvLive}
             />
+            </div>
+            <HeaderMinimizeToggle />
           </div>
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">

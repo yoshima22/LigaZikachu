@@ -400,6 +400,18 @@ a {
   }
 }
 
-/* Menu do topo largo demais (ex.: com o menu Admin): usa o menu compacto. Definido por app-nav.tsx. */
-html[data-nav-compact] .app-nav-desktop { display: none !important; }
-html[data-nav-compact] .app-nav-mobile { display: block !important; }
+/* Cabeçalho minimizado (só PC, ≥1024px): barra mais baixa, sem logo/foto/@nick/Download e dados do jogador em uma linha. */
+@media (min-width: 1024px) {
+  html[data-header-min] .hdr-logo,
+  html[data-header-min] .hdr-avatar,
+  html[data-header-min] .hdr-nick,
+  html[data-header-min] .hdr-download { display: none !important; }
+  html[data-header-min] .hdr-row { padding-block: 0.25rem !important; }
+  html[data-header-min] .hdr-user { max-width: none !important; }
+  html[data-header-min] .hdr-userinfo { display: flex; align-items: center; gap: 0.6rem; white-space: nowrap; }
+  html[data-header-min] .hdr-wallet { flex-direction: row !important; align-items: center !important; gap: 0.6rem !important; margin-top: 0 !important; }
+  html[data-header-min] .app-nav-grid { padding-bottom: 0.25rem !important; }
+  html[data-header-min] .hdr-toggle { height: 1.75rem !important; }
+  html[data-header-min] .app-nav-grid button,
+  html[data-header-min] .app-nav-grid a > button { height: 1.75rem !important; }
+}

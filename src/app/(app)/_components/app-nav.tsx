@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -278,28 +278,6 @@ export function AppNav({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
-  const desktopNavRef = useRef<HTMLElement>(null);
-
-  // Menu largo (ex.: contas com o menu Admin): se os itens não cabem ao lado da logo e do usuário,
-  // o cabeçalho passa sozinho para o menu compacto (grade) em vez de sobrepor o card do jogador.
-  // O estado vai em <html data-nav-compact> porque o menu desktop e o compacto são instâncias separadas.
-  useLayoutEffect(() => {
-    if (variant !== "desktop") return;
-    const nav = desktopNavRef.current;
-    if (!nav) return;
-    const root = document.documentElement;
-    const check = () => {
-      root.removeAttribute("data-nav-compact");
-      if (window.innerWidth < 1536) return;
-      if (nav.scrollWidth > nav.clientWidth + 1) root.setAttribute("data-nav-compact", "1");
-    };
-    check();
-    window.addEventListener("resize", check);
-    const observer = typeof ResizeObserver !== "undefined" && nav.parentElement?.parentElement ? new ResizeObserver(check) : null;
-    if (observer && nav.parentElement?.parentElement) observer.observe(nav.parentElement.parentElement);
-    void document.fonts?.ready.then(check);
-    return () => { window.removeEventListener("resize", check); observer?.disconnect(); root.removeAttribute("data-nav-compact"); };
-  }, [variant, admin, notifications.messageCount, notifications.bazarCount, notifications.bondsCount, giftCount, zikaTvLive, unreadNews]);
   const refreshInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Date.now());
   const refreshTimerRef = useRef<number | null>(null);
@@ -454,7 +432,7 @@ export function AppNav({
       className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}
     >
       {variant === "desktop" && (
-        <nav ref={desktopNavRef} className="app-nav-desktop hidden items-center gap-1 min-[1536px]:flex">
+        <nav className="hidden items-center gap-1">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -560,7 +538,7 @@ export function AppNav({
       )}
 
       {variant === "mobile" && (
-        <div className="app-nav-mobile px-3 pb-2.5 min-[1536px]:hidden">
+        <div className="app-nav-grid min-w-0 flex-1 px-3 pb-2.5">
           <div className={`grid grid-cols-4 gap-1.5 md:gap-2 ${admin ? "md:grid-cols-9" : "md:grid-cols-8"}`}>
             {mainLinks
               .filter((link) => !link.adminOnly || admin)
