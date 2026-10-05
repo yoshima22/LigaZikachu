@@ -11,6 +11,7 @@ import { UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
 import { grantSyncTicketShopItem } from "@/lib/sync-challenge";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -318,6 +319,26 @@ async function applyGiftReward(
         amount,
         description: `Presente: ${gift.title}`
       });
+    }
+  }
+
+  if (rewardKind === "SUPPORTER_PASS") {
+    const key = typeof payload.passScheduleKey === "string" ? payload.passScheduleKey : "";
+    const cfg = key ? await tx.passScheduleConfig.findUnique({ where: { id: key } }) : null;
+    if (!cfg || !Array.isArray(cfg.schedule)) throw new Error("O calendário deste passe está indisponível. O presente foi mantido na caixa.");
+    const label = key === "singleton" ? "Passe Apoiador" : key;
+    const now = new Date();
+    const owned = await tx.supporterPass.findFirst({ where: { playerId, passLabel: label, active: true, revokedAt: null, expiresAt: { gt: now } }, select: { id: true } });
+    if (owned) throw new Error("Você já possui este passe. O presente foi mantido na caixa.");
+    if (payload.passSlot === "NEXT" && cfg.isNextStorePass) {
+      // Passe do mês seguinte ainda não ativado: entra na lista de distribuição (reserva paga).
+      const reserved = await tx.ligaCashOrder.findFirst({ where: { playerId, giftRecipientPlayerId: null, productType: "SUPPORTER_PASS", passOfferSlot: "NEXT", passScheduleKey: key, status: { in: ["PAID", "PENDING"] } }, select: { id: true } });
+      if (reserved) throw new Error("Você já garantiu este passe. O presente foi mantido na caixa.");
+      await tx.ligaCashOrder.create({ data: { id: `gift-res-${gift.id}`, playerId, productType: "SUPPORTER_PASS", productCode: "PASS_NEXT", productLabel: typeof payload.rewardLabel === "string" ? payload.rewardLabel : label, amountCents: 0, status: "PAID", paidAt: now, provider: "GIFT", passOfferSlot: "NEXT", passScheduleKey: key } });
+    } else {
+      const title = await tx.shopItem.findFirst({ where: { name: "Pilar da Comunidade", type: "TITLE" }, select: { id: true } });
+      if (title) await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: title.id } }, create: { playerId, itemId: title.id, quantity: 1, source: "VIP_PASS" }, update: {} });
+      await tx.supporterPass.create({ data: { playerId, passLabel: label, startsAt: now, expiresAt: new Date(now.getTime() + (cfg.schedule.length + PAID_PASS_GRACE_DAYS) * 86_400_000), allowRetroactiveClaims: true, titleItemId: title?.id } });
     }
   }
 

@@ -81,20 +81,26 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
   if(!product) return {error:"Pacote inválido."};
   let giftRecipient:{id:string;displayName:string}|null=null;
   if(parsedGift?.success){
-    if(product.type!=="LIGA_COINS")return{error:"Somente pacotes de LigaCash podem ser presenteados."};
     if(parsedGift.data.recipientPlayerId===player.id)return{error:"Escolha outro jogador para presentear."};
     giftRecipient=await prisma.player.findFirst({where:{id:parsedGift.data.recipientPlayerId,user:{status:"ACTIVE"}},select:{id:true,displayName:true}});
     if(!giftRecipient)return{error:"Destinatário não encontrado ou inativo."};
   }
   // Impede comprar de novo um passe que o jogador já possui (ou já garantiu).
+  // Em presente, quem importa é o destinatário (e um presente do mesmo passe já a caminho conta como "possui").
+  const passTargetId=giftRecipient?.id??player.id;
+  const who=giftRecipient?"Este jogador":"Você";
+  if(passOfferSlot&&passScheduleKey){
+    const alreadyGifted=await prisma.ligaCashOrder.findFirst({where:{giftRecipientPlayerId:passTargetId,productType:"SUPPORTER_PASS",passScheduleKey,status:{in:["PAID","PENDING"]}},select:{id:true}});
+    if(alreadyGifted)return{error:`${who} já ${giftRecipient?"tem":"tem um presente com"} este passe${giftRecipient?" a caminho":""}.`};
+  }
   if(passOfferSlot==="CURRENT"&&passScheduleKey){
     const label=passScheduleKey==="singleton"?"Passe Apoiador":passScheduleKey;
-    const has=await prisma.supporterPass.findFirst({where:{playerId:player.id,passLabel:label,active:true,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
-    if(has)return{error:"Você já possui este passe."};
+    const has=await prisma.supporterPass.findFirst({where:{playerId:passTargetId,passLabel:label,active:true,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
+    if(has)return{error:giftRecipient?"Este jogador já possui este passe.":"Você já possui este passe."};
   }
   if(passOfferSlot==="NEXT"&&passScheduleKey){
-    const has=await prisma.ligaCashOrder.findFirst({where:{playerId:player.id,productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",passScheduleKey,status:{in:["PAID","PENDING"]}},select:{id:true}});
-    if(has)return{error:"Você já garantiu este passe."};
+    const has=await prisma.ligaCashOrder.findFirst({where:{playerId:passTargetId,giftRecipientPlayerId:null,productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",passScheduleKey,status:{in:["PAID","PENDING"]}},select:{id:true}});
+    if(has)return{error:giftRecipient?"Este jogador já garantiu este passe.":"Você já garantiu este passe."};
   }
   const document=cpf.replace(/\D/g,"");if(document.length!==11)return{error:"Informe um CPF válido para o pagamento."};
   const email=payerEmail.trim().toLowerCase();if(!/^\S+@\S+\.\S+$/.test(email))return{error:"Informe o e-mail do pagador."};

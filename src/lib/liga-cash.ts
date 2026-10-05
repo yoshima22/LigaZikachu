@@ -71,7 +71,13 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
       }
     }
     let fulfilledAt=order.productType === "LIGA_COINS" ? new Date() : null;
-    if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
+    if(order.productType==="SUPPORTER_PASS"&&order.giftRecipientPlayerId&&order.passScheduleKey&&order.passOfferSlot){
+      // Presente de passe: vai para a Caixa de presentes do destinatário; o passe é concedido ao resgatar.
+      const [sender,recipient]=await Promise.all([tx.player.findUnique({where:{id:order.playerId},select:{displayName:true}}),tx.player.findUnique({where:{id:order.giftRecipientPlayerId},select:{id:true}})]);
+      if(!recipient)throw new Error("Destinatário do presente não encontrado.");
+      await tx.playerGift.create({data:{id:order.id,playerId:recipient.id,type:"CUSTOM",title:order.giftTitle||"Um presente de Passe Apoiador",description:order.giftMessage,payload:{rewardKind:"SUPPORTER_PASS",rewardLabel:order.productLabel,passSlot:order.passOfferSlot,passScheduleKey:order.passScheduleKey,senderPlayerId:order.playerId,senderName:sender?.displayName??"Um jogador",orderId:order.id}}});
+      fulfilledAt=new Date();
+    } else if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
       const config=await tx.passScheduleConfig.findUnique({where:{id:order.passScheduleKey}});
       if(config&&Array.isArray(config.schedule)){
         const days=Math.max(1,config.schedule.length);const now=new Date();const label=config.id==="singleton"?"Passe Apoiador":config.id;
@@ -123,7 +129,16 @@ export async function refundLigaCashOrder(orderId:string, providerPaymentId:stri
         await changeLigaCash(tx,{playerId:order.playerId,amount:-amount,reason:kind,referenceType:"LigaCashOrder",referenceId:order.id,purchasedDelta:-amount,allowDebt:true});
       }
     }
-    if(order.status==="PAID"&&order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey&&order.paidAt){
+    if(order.status==="PAID"&&order.productType==="SUPPORTER_PASS"&&order.giftRecipientPlayerId&&order.passScheduleKey){
+      // Presente de passe: se ainda não foi resgatado, expira; se já foi, desfaz o que o resgate concedeu.
+      const expired=await tx.playerGift.updateMany({where:{id:order.id,status:"UNCLAIMED"},data:{status:"EXPIRED"}});
+      if(expired.count===0){
+        const label=order.passScheduleKey==="singleton"?"Passe Apoiador":order.passScheduleKey;
+        await tx.ligaCashOrder.updateMany({where:{id:`gift-res-${order.id}`,fulfilledAt:null},data:{status:"CANCELLED"}});
+        const pass=await tx.supporterPass.findFirst({where:{playerId:order.giftRecipientPlayerId,passLabel:label,active:true,revokedAt:null},orderBy:{startsAt:"desc"},select:{id:true}});
+        if(pass)await tx.supporterPass.update({where:{id:pass.id},data:{active:false,revokedAt:new Date(),revokeReason:kind==="CHARGEBACK"?"Pagamento contestado":"Pagamento estornado"}});
+      }
+    } else if(order.status==="PAID"&&order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey&&order.paidAt){
       const label=order.passScheduleKey==="singleton"?"Passe Apoiador":order.passScheduleKey;
       // O modelo legado não registra o ID do pedido no passe; limitar a busca
       // ao passe ativado na mesma janela da confirmação evita revogar um passe
