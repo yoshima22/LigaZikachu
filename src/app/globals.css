@@ -415,3 +415,27 @@ a {
   html[data-header-min] .app-nav-grid button,
   html[data-header-min] .app-nav-grid a > button { height: 1.75rem !important; }
 }
+
+/* Cabeçalho: modo antigo (padrão) = menu em uma linha a partir de 1536px, com grade abaixo disso e quando não cabe.
+   Modo "padrão"/duas linhas (data-header-layout="stacked"): sempre a grade abaixo da logo. */
+html[data-nav-compact] .app-nav-desktop { display: none !important; }
+html[data-nav-compact] .app-nav-grid { display: block !important; }
+@media (min-width: 1536px) {
+  html[data-header-layout="stacked"] .app-nav-desktop { display: none !important; }
+  html[data-header-layout="stacked"] .app-nav-grid { display: block !important; }
+}
+/* Botão de minimizar: no modo antigo fica na linha do topo; no modo duas linhas, ao lado da grade. */
+.hdr-toggle-top, .hdr-toggle-grid { display: none; }
+@media (min-width: 1024px) {
+  html:not([data-header-layout="stacked"]) .hdr-toggle-top { display: flex; }
+  html[data-header-layout="stacked"] .hdr-toggle-grid { display: flex; }
+  /* No modo antigo, a grade (quando visível) não precisa do botão: ele já está no topo. */
+}
+
+/* Modo antigo com menu largo (ex.: Admin): primeiro aperta o espaçamento para não sobrepor o card do jogador. */
+html[data-nav-tight] .hdr-logo { margin-left: 0 !important; }
+html[data-nav-tight] .app-nav-desktop { gap: 0 !important; }
+html[data-nav-tight] .app-nav-desktop button,
+html[data-nav-tight] .app-nav-desktop a button { padding-inline: 0.5rem !important; }
+html[data-nav-tight] .app-nav-desktop svg { margin-right: 0.25rem !important; }
+html[data-nav-tight] .hdr-user { max-width: 9rem !important; }

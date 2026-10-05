@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import {
   BarChart3,
@@ -278,6 +278,36 @@ export function AppNav({
   const [notifications, setNotifications] = useState(initialNotifications);
   const [, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
+  const desktopNavRef = useRef<HTMLElement>(null);
+
+  // Modo antigo (menu em uma linha): se os itens não cabem ao lado da logo e do usuário (ex.: contas com
+  // o menu Admin), passa sozinho para a grade compacta em vez de sobrepor o card do jogador.
+  // O estado vai em <html data-nav-compact> porque o menu em linha e a grade são instâncias separadas.
+  useLayoutEffect(() => {
+    if (variant !== "desktop") return;
+    const nav = desktopNavRef.current;
+    if (!nav) return;
+    const root = document.documentElement;
+    const overflows = () => nav.scrollWidth > nav.clientWidth + 1;
+    const check = () => {
+      root.removeAttribute("data-nav-compact");
+      root.removeAttribute("data-nav-tight");
+      if (window.innerWidth < 1536 || root.dataset.headerLayout === "stacked") return;
+      if (!overflows()) return;
+      // 1º aperta o espaçamento (margem da logo, intervalos e margens internas dos botões); 2º, se ainda não couber, usa a grade.
+      root.setAttribute("data-nav-tight", "1");
+      if (overflows()) root.setAttribute("data-nav-compact", "1");
+    };
+    check();
+    window.addEventListener("resize", check);
+    const container = nav.parentElement?.parentElement;
+    const observer = container && typeof ResizeObserver !== "undefined" ? new ResizeObserver(check) : null;
+    if (observer && container) observer.observe(container);
+    const mutation = new MutationObserver(check);
+    mutation.observe(root, { attributes: true, attributeFilter: ["data-header-layout"] });
+    void document.fonts?.ready.then(check);
+    return () => { window.removeEventListener("resize", check); observer?.disconnect(); mutation.disconnect(); root.removeAttribute("data-nav-compact"); root.removeAttribute("data-nav-tight"); };
+  }, [variant, admin, notifications.messageCount, notifications.bazarCount, notifications.bondsCount, giftCount, zikaTvLive, unreadNews]);
   const refreshInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Date.now());
   const refreshTimerRef = useRef<number | null>(null);
@@ -432,7 +462,7 @@ export function AppNav({
       className={variant === "desktop" ? "relative ml-auto min-w-0" : "relative min-w-0"}
     >
       {variant === "desktop" && (
-        <nav className="hidden items-center gap-1">
+        <nav ref={desktopNavRef} className="app-nav-desktop hidden items-center gap-1 min-[1536px]:flex">
           {mainLinks
             .filter((link) => !link.adminOnly || admin)
             .map(({ href, label, icon: Icon, tutorialId }) => (
@@ -538,7 +568,7 @@ export function AppNav({
       )}
 
       {variant === "mobile" && (
-        <div className="app-nav-grid min-w-0 flex-1 px-3 pb-2.5">
+        <div className="app-nav-grid min-w-0 flex-1 px-3 pb-2.5 min-[1536px]:hidden">
           <div className={`grid grid-cols-4 gap-1.5 md:gap-2 ${admin ? "md:grid-cols-9" : "md:grid-cols-8"}`}>
             {mainLinks
               .filter((link) => !link.adminOnly || admin)

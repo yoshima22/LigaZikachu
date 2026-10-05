@@ -51,7 +51,7 @@ try {
   assert.equal(document.documentElement.dataset.theme, 'padrao');
   root = createRoot(document.getElementById('root'));
   await act(async () => root.render(React.createElement(SiteThemeSettings)));
-  assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
+  assert.equal(document.querySelectorAll('input[name="site-theme"]').length, 4);
   const next = () => [...document.querySelectorAll('.theme-pagination button')].find(button => button.textContent === 'Próxima');
   assert.equal(themes.SITE_THEMES.length, 10);
   assert.deepEqual(Array.from(themes.SITE_THEMES, theme => theme.id), ['padrao', 'tecnologico', 'claro', 'competitivo', 'aurora', 'oceano', 'esmeralda', 'por-do-sol', 'rubi', 'monocromatico']);
@@ -67,11 +67,11 @@ try {
   }
   boot(window.localStorage);
   assert.equal(document.documentElement.dataset.theme, 'monocromatico');
-  assert.equal(document.querySelectorAll('input[type="radio"]').length, 2);
+  assert.equal(document.querySelectorAll('input[name="site-theme"]').length, 2);
   assert.equal(next().disabled, true);
   await act(async () => document.querySelector('button.theme-reset').click());
   assert.equal(document.querySelector('input:checked').value, 'padrao');
-  assert.equal(document.querySelectorAll('input[type="radio"]').length, 4);
+  assert.equal(document.querySelectorAll('input[name="site-theme"]').length, 4);
   assert.equal(window.localStorage.getItem(themes.THEME_STORAGE_KEY), 'padrao');
   console.log('PASS: ten CSS-only themes, pagination boundaries, no remote art, restore from last page');
   await act(async () => window.dispatchEvent(new window.StorageEvent('storage', { key: themes.THEME_STORAGE_KEY, newValue: 'claro' })));

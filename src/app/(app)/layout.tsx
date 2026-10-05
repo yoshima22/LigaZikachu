@@ -391,6 +391,7 @@ export default async function AppLayout({
                   <span className="text-cyan-300">◉ {ligaWallet?.balance.toLocaleString("pt-BR") ?? "0"} LC</span>
                 </span>
               )}
+              <HeaderMinimizeToggle placement="top" />
               <LogoutButton />
               <RouteTutorialHelpButton />
               <Link
@@ -422,7 +423,7 @@ export default async function AppLayout({
               zikaTvLive={zikaTvLive}
             />
             </div>
-            <HeaderMinimizeToggle />
+            <HeaderMinimizeToggle placement="grid" />
           </div>
           {globalNotice.message && (
             <details className="group border-t border-[#FFCB05]/15 bg-[#FFCB05]/10">

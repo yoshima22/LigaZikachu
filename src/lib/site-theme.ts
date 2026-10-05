@@ -1,5 +1,7 @@
 export const THEME_STORAGE_KEY = "liga-zikachu:site-theme";
 export const THEMES_PER_PAGE = 4;
+export const HEADER_LAYOUT_STORAGE_KEY = "liga-zikachu:header-layout"; // "classic" (padrão) | "stacked"
+export const HEADER_MIN_STORAGE_KEY = "liga-zikachu:header-min"; // "1" = minimizado
 export const SITE_THEMES = [
   { id: "padrao", name: "Padrão original", description: "Restaura as cores e o fundo originais, mantendo a nova logo da Liga.", accent: "#ffcb05", background: "#0f0f1a" },
   { id: "tecnologico", name: "Tecnológico", description: "Violeta, azul e linhas digitais para uma atmosfera futurista.", accent: "#a78bfa", background: "#080b26" },
@@ -18,4 +20,4 @@ export function normalizeSiteTheme(value: unknown): SiteTheme {
 }
 // Static, allow-listed initialization runs before paint, without a server cookie
 // or database read. Never interpolate values read from storage into this script.
-export const THEME_INIT_SCRIPT = `try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});document.documentElement.dataset.theme=${JSON.stringify(SITE_THEMES.map((theme) => theme.id))}.includes(t)?t:"padrao"}catch(e){document.documentElement.dataset.theme="padrao"}`;
+export const THEME_INIT_SCRIPT = `try{var h=localStorage.getItem(${JSON.stringify(HEADER_LAYOUT_STORAGE_KEY)});document.documentElement.dataset.headerLayout=h==="stacked"?"stacked":"classic";if(localStorage.getItem(${JSON.stringify(HEADER_MIN_STORAGE_KEY)})==="1")document.documentElement.setAttribute("data-header-min","1")}catch(e){document.documentElement.dataset.headerLayout="classic"}try{var t=localStorage.getItem(${JSON.stringify(THEME_STORAGE_KEY)});document.documentElement.dataset.theme=${JSON.stringify(SITE_THEMES.map((theme) => theme.id))}.includes(t)?t:"padrao"}catch(e){document.documentElement.dataset.theme="padrao"}`;
