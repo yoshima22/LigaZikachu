@@ -77,7 +77,7 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
         const days=Math.max(1,config.schedule.length);const now=new Date();const label=config.id==="singleton"?"Passe Apoiador":config.id;
         const title=await tx.shopItem.findFirst({where:{name:"Pilar da Comunidade",type:"TITLE"},select:{id:true}});
         if(title)await tx.playerInventory.upsert({where:{playerId_itemId:{playerId:order.playerId,itemId:title.id}},create:{playerId:order.playerId,itemId:title.id,quantity:1,source:"VIP_PASS"},update:{}});
-        await tx.supporterPass.create({data:{playerId:order.playerId,passLabel:label,startsAt:now,expiresAt:new Date(now.getTime()+(days+PAID_PASS_GRACE_DAYS)*86400000),allowRetroactiveClaims:config.allowRetroactiveClaims,titleItemId:title?.id}});
+        await tx.supporterPass.create({data:{playerId:order.playerId,passLabel:label,startsAt:now,expiresAt:new Date(now.getTime()+(days+PAID_PASS_GRACE_DAYS)*86400000),allowRetroactiveClaims:true,titleItemId:title?.id}});
         fulfilledAt=now;
       }
     }

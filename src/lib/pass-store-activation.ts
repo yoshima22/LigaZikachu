@@ -47,7 +47,7 @@ export async function processDuePassStoreActivation(now = new Date()): Promise<P
         await tx.supporterPass.create({ data: {
           playerId: order.playerId, passLabel: label, startsAt: now,
           expiresAt: new Date(now.getTime() + (config.schedule as unknown[]).length * 86_400_000 + PAID_PASS_GRACE_DAYS * 86_400_000),
-          allowRetroactiveClaims: config.storeActivationRetroactive, titleItemId: title.id,
+          allowRetroactiveClaims: true, titleItemId: title.id,
         } });
         await tx.ligaCashOrder.update({ where: { id: order.id }, data: { fulfilledAt: now, passScheduleKey: scheduleId } });
         created = true;
