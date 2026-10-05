@@ -75,7 +75,7 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
       // Presente de passe: vai para a Caixa de presentes do destinatário; o passe é concedido ao resgatar.
       const [sender,recipient]=await Promise.all([tx.player.findUnique({where:{id:order.playerId},select:{displayName:true}}),tx.player.findUnique({where:{id:order.giftRecipientPlayerId},select:{id:true}})]);
       if(!recipient)throw new Error("Destinatário do presente não encontrado.");
-      await tx.playerGift.create({data:{id:order.id,playerId:recipient.id,type:"CUSTOM",title:order.giftTitle||"Um presente de Passe Apoiador",description:order.giftMessage,payload:{rewardKind:"SUPPORTER_PASS",rewardLabel:order.productLabel,passSlot:order.passOfferSlot,passScheduleKey:order.passScheduleKey,senderPlayerId:order.playerId,senderName:sender?.displayName??"Um jogador",orderId:order.id}}});
+      await tx.playerGift.create({data:{id:order.id,playerId:recipient.id,type:"CUSTOM",title:order.giftTitle||"Um presente de Passe Apoiador",description:order.giftMessage,payload:{rewardKind:"SUPPORTER_PASS",rewardLabel:order.passScheduleKey==="singleton"?"Passe Apoiador":order.passScheduleKey,passSlot:order.passOfferSlot,passScheduleKey:order.passScheduleKey,senderPlayerId:order.playerId,senderName:sender?.displayName??"Um jogador",orderId:order.id}}});
       fulfilledAt=new Date();
     } else if(order.productType==="SUPPORTER_PASS"&&order.passOfferSlot==="CURRENT"&&order.passScheduleKey){
       const config=await tx.passScheduleConfig.findUnique({where:{id:order.passScheduleKey}});

@@ -12,6 +12,8 @@ import {
 } from "@/lib/manual-session";
 import { getGlobalNotice, getAckNotice } from "@/lib/app-settings";
 import { AcknowledgeNoticeModal } from "./_components/acknowledge-notice-modal";
+import { GiftPopupModal } from "./_components/gift-popup-modal";
+import { getGiftPopup } from "@/lib/gift-popup";
 import { Button } from "@/components/ui/button";
 import { Download, Megaphone } from "lucide-react";
 import { SITE_LOGO_URL } from "@/lib/site-theme-assets";
@@ -151,6 +153,7 @@ export default async function AppLayout({
   const birthdayPlayer = await prisma.player.findUnique({
     where: { userId: user.id },
     select: {
+      id: true,
       birthDate: true,
       birthdayGiftYear: true,
       birthdayGiftPendingKit: true,
@@ -166,6 +169,7 @@ export default async function AppLayout({
     ackNotice?.active && ackNotice.title.trim() &&
     ackNotice.version > (birthdayPlayer?.lastAckedNoticeVersion ?? 0),
   );
+  const giftPopup = !showAckNotice && birthdayPlayer?.id ? await getGiftPopup(birthdayPlayer.id).catch(() => null) : null;
   const birthdayPendingKit = birthdayPlayer?.birthdayGiftPendingKit ?? null;
   const birthdayReplayKit = birthdayPlayer?.birthdayGiftReplayKit ?? null;
   const birthdayEligible = Boolean(birthdayPlayer) && (
@@ -290,6 +294,7 @@ export default async function AppLayout({
           buttonText={ackNotice.buttonText}
         />
       )}
+      {giftPopup && <GiftPopupModal key={giftPopup.id} gift={giftPopup} />}
       {shouldShowOrderIntro && (
         <OrderEventIntroModal onSeen={markOrderIntroSeenAction} />
       )}
