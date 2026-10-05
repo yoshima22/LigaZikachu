@@ -1604,12 +1604,16 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
 
 const XP_SHARE_BUFF_TYPES = ["XP_SHARE", "XP_SHARE_TEAM"] as const;
 /** Mascote com Compartilhador de XP equipado não sai em expedição/férias (e vice-versa): explica o motivo ao jogador. */
-async function assertNoXpShareToLeave(mascot: { id: string; nickname: string | null; pokemonId: number }, action: string) {
+export async function mascotHasXpShare(mascotId: string) {
   const share = await prisma.mascotBuff.findFirst({
-    where: { mascotId: mascot.id, type: { in: [...XP_SHARE_BUFF_TYPES] }, expiresAt: { gt: new Date("2090-01-01") } },
+    where: { mascotId, type: { in: [...XP_SHARE_BUFF_TYPES] }, expiresAt: { gt: new Date("2090-01-01") } },
     select: { id: true },
   });
-  if (!share) return;
+  return Boolean(share);
+}
+
+async function assertNoXpShareToLeave(mascot: { id: string; nickname: string | null; pokemonId: number }, action: string) {
+  if (!(await mascotHasXpShare(mascot.id))) return;
   const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
   throw new Error(`${name} está com o Compartilhador de XP equipado, então não pode ${action}. O Compartilhador só funciona em um mascote que fica na base. Para continuar, abra o card de ${name}, clique em desequipar o Compartilhador (ele volta para o seu inventário) e tente de novo.`);
 }

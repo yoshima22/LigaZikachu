@@ -377,8 +377,8 @@ export function MascotList({
                       <p className="font-bold text-white">{result.mascotName}</p>
                       <p className="text-[10px] uppercase tracking-wider text-cyan-300">{EXPEDITION_MODE_LABELS[result.mode] ?? result.mode} · {result.durationKey}</p>
                     </div>
-                    <span className={`rounded-full px-2 py-1 text-[10px] font-black ${result.restarted ? "bg-emerald-500/15 text-emerald-300" : "bg-red-500/15 text-red-300"}`}>
-                      {result.restarted ? "EXPEDIÇÃO REINICIADA" : "NÃO REINICIADA"}
+                    <span title={result.stayedHome ? "Este mascote está com o Compartilhador de XP equipado e fica na base." : undefined} className={`rounded-full px-2 py-1 text-[10px] font-black ${result.restarted ? "bg-emerald-500/15 text-emerald-300" : result.stayedHome ? "bg-sky-500/15 text-sky-300" : "bg-red-500/15 text-red-300"}`}>
+                      {result.restarted ? "EXPEDIÇÃO REINICIADA" : result.stayedHome ? "FICOU NA BASE 📡" : "NÃO REINICIADA"}
                     </span>
                   </div>
                   {reward && (

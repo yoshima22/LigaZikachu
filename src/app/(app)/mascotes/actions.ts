@@ -10,7 +10,7 @@ import {
   interactWithMascot, startExpedition, claimExpedition, recalculateMood,
   skipExpedition, cancelExpedition, addExp, battleMascots, formFriendship, triggerSocialEvents,
   applyLuckyEgg, applyWeaknessPolicy, applyPicnicBasket, applyVacationTicket,
-  claimVacation, applyXpShare, removeXpShare, applyRainbowFeather,
+  claimVacation, applyXpShare, removeXpShare, mascotHasXpShare, applyRainbowFeather,
   rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds, isFeedInteraction } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
@@ -1141,6 +1141,8 @@ export type ExpeditionRoutineResult = {
   playMessage?: string;
   petMessage?: string;
   restarted: boolean;
+  /** Ficou na base de propósito (Compartilhador de XP equipado). Não é erro. */
+  stayedHome?: boolean;
   error?: string;
 };
 
@@ -1216,8 +1218,13 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
         entry.playMessage = play.message;
         entry.petMessage = pet.message;
 
-        await startExpedition(player.id, expedition.mascotId, durationKey, mode);
-        entry.restarted = true;
+        // Mascote com Compartilhador de XP fica na base: não é erro, só não reinicia.
+        if (await mascotHasXpShare(expedition.mascotId)) {
+          entry.stayedHome = true;
+        } else {
+          await startExpedition(player.id, expedition.mascotId, durationKey, mode);
+          entry.restarted = true;
+        }
       } catch (error) {
         entry.error = error instanceof Error ? error.message : "Falha ao concluir a rotina.";
       }

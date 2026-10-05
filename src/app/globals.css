@@ -399,3 +399,7 @@ a {
     transform: none;
   }
 }
+
+/* Menu do topo largo demais (ex.: com o menu Admin): usa o menu compacto. Definido por app-nav.tsx. */
+html[data-nav-compact] .app-nav-desktop { display: none !important; }
+html[data-nav-compact] .app-nav-mobile { display: block !important; }
