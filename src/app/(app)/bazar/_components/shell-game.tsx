@@ -189,6 +189,8 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
   const [showBall, setShowBall] = useState(false);   // bolinha visível?
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [bet, setBet]         = useState(100);
+  // Texto digitado: só é ajustado ao mínimo/máximo ao sair do campo, para não atrapalhar a digitação.
+  const [betText, setBetText] = useState("100");
   const [result, setResult]   = useState<{ won: boolean; prize: number; actualCup: number } | null>(null);
   const [localBalance, setLocalBalance] = useState(balance);
   const [cooldownEndAt, setCooldownEndAt] = useState<Date | null>(null);
@@ -333,7 +335,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
   };
 
   // Cálculo: aposta + 65% da aposta = prêmio total; tudo sai do cofre.
-  const totalPrize = getShellGamePrize(bet);
+  const totalPrize = getShellGamePrize(Math.max(bet, SHELL_MIN_BET));
   const maxVaultBet = getMaxShellBetForVault(vaultBalance);
   const maxAllowedBet = Math.min(SHELL_MAX_BET, localBalance, maxVaultBet);
   const vaultCanPayMinimum = maxVaultBet >= SHELL_MIN_BET;
@@ -341,9 +343,11 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
 
   useEffect(() => {
     if (phase !== "idle") return;
-    setBet((current) => maxAllowedBet >= SHELL_MIN_BET
+    const next = (current: number) => maxAllowedBet >= SHELL_MIN_BET
       ? Math.min(Math.max(current, SHELL_MIN_BET), maxAllowedBet)
-      : SHELL_MIN_BET);
+      : SHELL_MIN_BET;
+    setBet((current) => next(current));
+    setBetText((text) => String(next(parseInt(text) || 0)));
   }, [maxAllowedBet, phase]);
 
   return (
@@ -474,10 +478,21 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
                   </div>
                   <div className="flex gap-2">
                     <input
-                      type="number"
-                      min={SHELL_MIN_BET} max={Math.max(SHELL_MIN_BET, maxAllowedBet)}
-                      value={bet}
-                      onChange={e => setBet(Math.min(maxAllowedBet, Math.max(SHELL_MIN_BET, parseInt(e.target.value) || SHELL_MIN_BET)))}
+                      type="text"
+                      inputMode="numeric"
+                      autoComplete="off"
+                      aria-label="Valor da aposta em ZC"
+                      value={betText}
+                      onFocus={e => e.target.select()}
+                      onChange={e => {
+                        const digits = e.target.value.replace(/\D/g, "").slice(0, 7);
+                        setBetText(digits);
+                        setBet(digits ? parseInt(digits, 10) : 0);
+                      }}
+                      onBlur={() => {
+                        const fixed = maxAllowedBet >= SHELL_MIN_BET ? Math.min(maxAllowedBet, Math.max(SHELL_MIN_BET, bet)) : SHELL_MIN_BET;
+                        setBet(fixed); setBetText(String(fixed));
+                      }}
                       className="flex-1 rounded-xl border px-3 py-2 text-center text-sm font-bold outline-none"
                       style={{ background: "#0d0b08", borderColor: GOLD_D, color: "#FFCB05" }}
                     />
@@ -487,7 +502,7 @@ export function ShellGame({ balance, playerId, vaultBalance, lastWinnerMessage, 
                     {[50, 100, 250, 500].map(v => (
                       <button key={v} type="button"
                         disabled={v > maxAllowedBet}
-                        onClick={() => setBet(Math.min(v, maxAllowedBet))}
+                        onClick={() => { const n = Math.min(v, maxAllowedBet); setBet(n); setBetText(String(n)); }}
                         className="rounded-lg py-1 text-[11px] font-semibold transition-all"
                         style={{
                           background: bet === v ? GOLD : "#2a1a03",
