@@ -1602,6 +1602,18 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
   }
 }
 
+const XP_SHARE_BUFF_TYPES = ["XP_SHARE", "XP_SHARE_TEAM"] as const;
+/** Mascote com Compartilhador de XP equipado não sai em expedição/férias (e vice-versa): explica o motivo ao jogador. */
+async function assertNoXpShareToLeave(mascot: { id: string; nickname: string | null; pokemonId: number }, action: string) {
+  const share = await prisma.mascotBuff.findFirst({
+    where: { mascotId: mascot.id, type: { in: [...XP_SHARE_BUFF_TYPES] }, expiresAt: { gt: new Date("2090-01-01") } },
+    select: { id: true },
+  });
+  if (!share) return;
+  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  throw new Error(`${name} está com o Compartilhador de XP equipado, então não pode ${action}. O Compartilhador só funciona em um mascote que fica na base. Para continuar, abra o card de ${name}, clique em desequipar o Compartilhador (ele volta para o seu inventário) e tente de novo.`);
+}
+
 export async function startExpedition(
   playerId: string,
   mascotId: string,
@@ -1610,6 +1622,7 @@ export async function startExpedition(
 ) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId }, include: { routine: { select: { status: true, locationType: true } } } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote nao encontrado.");
+  await assertNoXpShareToLeave(mascot, "sair em expedição");
   if (mascot.routine?.status === "ACTIVE") throw new Error("Mascote ocupado no Refugio. Retire-o da area publica antes de iniciar outra atividade.");
   if (mascot.arenaState === "ARENA") throw new Error("Mascote registrado na Arena Z nao pode sair em expedicao.");
   if (mascot.arenaState === "INJURED") throw new Error("Mascote ferido nao pode sair em expedicao.");
@@ -3132,6 +3145,7 @@ export async function applyVacationTicket(playerId: string, mascotId: string) {
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
   if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para ir de férias.");
   if (mascot.expeditions.length > 0) throw new Error("Mascote está em expedição. Conclua antes das férias.");
+  await assertNoXpShareToLeave(mascot, "ir de férias");
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
   const vacationDays = meta.vacationDays ?? 5;
@@ -3213,7 +3227,12 @@ export async function applyXpShare(playerId: string, mascotId: string, type: "XP
     include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
   });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
-  if (mascot.expeditions.length > 0) throw new Error("Não pode equipar em mascote em expedição.");
+  if (mascot.expeditions.length > 0) {
+    const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+    const stored = (mascot.expeditions[0].rewardJson as Record<string, unknown> | null) ?? {};
+    const where = stored.mode === "VACATION" ? "de férias com o Professor Carvalho" : "em expedição";
+    throw new Error(`${name} está ${where}, então não pode receber o Compartilhador de XP agora. O Compartilhador só funciona em um mascote que fica na base. Espere ${name} voltar ou escolha outro mascote.`);
+  }
   await prisma.$transaction(async (tx) => {
     await tx.mascotBuff.deleteMany({
       where: {

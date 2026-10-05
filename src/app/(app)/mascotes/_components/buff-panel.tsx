@@ -363,7 +363,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
       else r = await useMascotBuffAction(selectedMascot, selectedBuff);
 
-      if (r.error) toast.error(r.error);
+      if (r.error) toast.error(r.error, { duration: 10000 });
       else {
         if (r.replacedExistingBuff) {
           toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
