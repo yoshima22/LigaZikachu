@@ -589,8 +589,13 @@ export async function claimPassDay(passId: string, dayNumber: number, stoneItemI
 export async function adminGrantVip(opts: {
   playerId: string;
   days: number;
-  /** Iniciar o passe a partir deste dia. Dias anteriores serão marcados como resgatados sem entregar recompensas. */
+  /**
+   * Iniciar o passe a partir deste dia. Se o passe for retroativo, os dias anteriores ficam disponíveis para resgate;
+   * se não for, são marcados como resgatados sem entregar recompensas (pulados).
+   */
   startDay?: number;
+  /** Força o passe retroativo (ou não). Sem valor, usa a opção do calendário do passe. */
+  allowRetroactiveClaims?: boolean;
   /** Rótulo/tier do passe (ex: "Passe Gold"). Default: "Passe Apoiador". */
   passLabel?: string;
 }): Promise<{ ok: boolean; passId?: string; error?: string }> {
@@ -659,20 +664,23 @@ export async function adminGrantVip(opts: {
       select: { allowRetroactiveClaims: true },
     }).catch(() => null);
 
+    const allowRetroactiveClaims = opts.allowRetroactiveClaims ?? passSchedule?.allowRetroactiveClaims ?? false;
+
     const pass = await prisma.supporterPass.create({
       data: {
         playerId: opts.playerId,
         passLabel,
         startsAt,
         expiresAt,
-        allowRetroactiveClaims: passSchedule?.allowRetroactiveClaims ?? false,
+        allowRetroactiveClaims,
         titleItemId: titleItem.id,
         createdByAdminId: admin?.id,
       },
     });
 
-    // Pré-criar claims para dias anteriores ao startDay (sem entregar recompensas)
-    if (startDay > 1) {
+    // Passe NÃO retroativo iniciado depois do dia 1: os dias anteriores são pulados (sem recompensa).
+    // Passe retroativo: nada é pulado, os dias anteriores continuam disponíveis para resgate.
+    if (startDay > 1 && !allowRetroactiveClaims) {
       await prisma.supporterPassClaim.createMany({
         data: Array.from({ length: startDay - 1 }, (_, i) => {
           const day = i + 1;
@@ -698,7 +706,7 @@ export async function adminGrantVip(opts: {
         action: "VIP_GRANTED",
         entityType: "SupporterPass",
         entityId: pass.id,
-        metadata: { playerId: opts.playerId, playerName: player.displayName, days, startDay, expiresAt },
+        metadata: { playerId: opts.playerId, playerName: player.displayName, days, startDay, expiresAt, allowRetroactiveClaims },
       },
     });
 
@@ -861,10 +869,12 @@ export async function adminListActiveVips(): Promise<{
 export async function adminSetRetroactiveClaims(passId: string, allow: boolean): Promise<{ ok: boolean; error?: string }> {
   try {
     await requireAdmin();
-    await prisma.supporterPass.update({
-      where: { id: passId },
-      data: { allowRetroactiveClaims: allow },
-    });
+    await prisma.$transaction([
+      prisma.supporterPass.update({ where: { id: passId }, data: { allowRetroactiveClaims: allow } }),
+      // Passe retroativo não pula dias: libera os dias que um "iniciar no dia #" tinha pulado.
+      ...(allow ? [prisma.supporterPassClaim.deleteMany({ where: { passId, rewardType: "DEBUG_SKIP" } })] : []),
+    ]);
+    revalidatePath("/passe-apoiador");
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
@@ -882,6 +892,7 @@ export async function adminSetRetroactiveClaimsByLabel(label: string, allow: boo
         where: { active: true, expiresAt: { gt: new Date() }, passLabel: label },
         data: { allowRetroactiveClaims: allow },
       }),
+      ...(allow ? [prisma.supporterPassClaim.deleteMany({ where: { rewardType: "DEBUG_SKIP", pass: { active: true, expiresAt: { gt: new Date() }, passLabel: label } } })] : []),
       prisma.passScheduleConfig.upsert({
         where: { id },
         create: {
@@ -969,10 +980,14 @@ export async function adminSavePassDisplayConfig(
 export async function adminSetRetroactiveClaimsAll(allow: boolean): Promise<{ ok: boolean; updated: number; error?: string }> {
   try {
     await requireAdmin();
-    const result = await prisma.supporterPass.updateMany({
-      where: { active: true, expiresAt: { gt: new Date() } },
-      data: { allowRetroactiveClaims: allow },
-    });
+    const [result] = await prisma.$transaction([
+      prisma.supporterPass.updateMany({
+        where: { active: true, expiresAt: { gt: new Date() } },
+        data: { allowRetroactiveClaims: allow },
+      }),
+      ...(allow ? [prisma.supporterPassClaim.deleteMany({ where: { rewardType: "DEBUG_SKIP", pass: { active: true, expiresAt: { gt: new Date() } } } })] : []),
+    ]);
+    revalidatePath("/passe-apoiador");
     return { ok: true, updated: result.count };
   } catch (err) {
     return { ok: false, updated: 0, error: err instanceof Error ? err.message : "Erro" };
