@@ -5,7 +5,8 @@ import { Search, Sparkles, Loader2, ArrowRight, TrendingUp, Eye, Swords, Shield,
 import { analyzeMascotAction, getStoredAnalysisAction, getMascotGrowthHistoryAction } from "../actions";
 import type { MascotGrowthHistory } from "../actions";
 import { RATING_STYLE, type MascotAnalysis, type MascotRating } from "@/lib/mascot-analysis";
-import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getStaticSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { CodeChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
 
 type AnalyzerMascot = {
   id: string;
@@ -18,7 +19,16 @@ type AnalyzerMascot = {
   analyzed: boolean;
   ivRating: string | null;
   ivScore: number | null;
+  performanceTag?: string | null;
+  stats?: MascotStats;
+  personality?: string;
+  battleWins?: number;
+  battleLosses?: number;
+  happiness?: number;
+  rarity?: string;
 };
+
+const RARITY_LABEL: Record<string, string> = { COMMON: "Comum", RARE: "Raro", SPECIAL: "Especial" };
 
 const PAGE = 12;
 
@@ -239,6 +249,9 @@ export function MascotAnalyzer({
               <img src={m.spriteUrl} alt="" className="mt-1 h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
               <p className="line-clamp-1 w-full text-center text-[9px] font-semibold text-white">{m.nickname || m.name}</p>
               <p className="text-[9px] text-slate-500">Lv.{m.level}</p>
+              <CodeChip id={m.id} />
+              <TagChip tag={m.performanceTag} />
+              <StatStrip stats={m.stats} />
             </button>
           ))}
           {paged.length === 0 && <p className="col-span-full py-6 text-center text-xs text-slate-500">Nenhum mascote encontrado.</p>}
@@ -319,7 +332,7 @@ export function MascotAnalyzer({
                   📄 Mostrando a análise salva{analysis.analyzedAtIso ? ` de ${new Date(analysis.analyzedAtIso).toLocaleDateString("pt-BR")}` : ""} (Nv.{analysis.currentLevel} → Nv.{analysis.targetLevel}). Faça uma nova simulação gratuitamente para atualizar.
                 </p>
               )}
-              <AnalysisResult analysis={analysis} />
+              <AnalysisResult analysis={analysis} mascot={selected} />
             </>
           )}
         </div>
@@ -502,12 +515,51 @@ function GrowthHistoryCard({
   );
 }
 
-function AnalysisResult({ analysis }: { analysis: MascotAnalysis }) {
+function IdentityCard({ mascot: m }: { mascot: AnalyzerMascot }) {
+  const wins = m.battleWins ?? 0;
+  const losses = m.battleLosses ?? 0;
+  const games = wins + losses;
+  const facts: [string, string][] = [
+    ["Personalidade", m.personality ? (PERSONALITY_LABEL[m.personality] ?? m.personality) : "—"],
+    ["Raridade", m.rarity ? (RARITY_LABEL[m.rarity] ?? m.rarity) : "—"],
+    ["Batalhas", games ? `${wins}V / ${losses}D · ${Math.round((wins / games) * 100)}%` : "Sem batalhas"],
+    ["Felicidade", typeof m.happiness === "number" ? `${m.happiness}/100` : "—"],
+  ];
+  return (
+    <div className="rounded-2xl border border-border bg-slate-950/40 p-4">
+      <div className="flex flex-wrap items-center gap-3">
+        <img src={m.spriteUrl} alt="" className="h-16 w-16 object-contain" style={{ imageRendering: "pixelated" }} />
+        <div className="min-w-0 flex-1">
+          <p className="truncate text-base font-bold text-white">{m.nickname || m.name}{m.isShiny ? " ✨" : ""}</p>
+          <p className="text-[11px] text-slate-500">{m.name} · Nv.{m.level} · Dex #{m.pokemonId}</p>
+          <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
+            <CodeChip id={m.id} />
+            <TagChip tag={m.performanceTag} />
+            {m.ivRating && <RatingBadge rating={m.ivRating} score={m.ivScore} size="sm" />}
+          </div>
+        </div>
+        <div className="w-full sm:w-64"><StatStrip stats={m.stats} size="md" /></div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/5 pt-3 sm:grid-cols-4">
+        {facts.map(([k, v]) => (
+          <div key={k} className="rounded-lg bg-slate-900/50 px-2.5 py-1.5">
+            <p className="text-[9px] uppercase tracking-wider text-slate-500">{k}</p>
+            <p className="text-xs font-semibold text-slate-200">{v}</p>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[10px] text-slate-600">ID único: <span className="font-mono">{m.id}</span></p>
+    </div>
+  );
+}
+
+function AnalysisResult({ analysis, mascot }: { analysis: MascotAnalysis; mascot: AnalyzerMascot }) {
   const a = analysis;
   const style = RATING_STYLE[a.ivRating];
   const roleSuggestions = a.roleSuggestions ?? [];
   return (
     <div className="space-y-4 border-t border-border/50 pt-4">
+      <IdentityCard mascot={mascot} />
       {/* Rating + potencial + veredito */}
       <div className={`rounded-2xl border p-4 ${style.border} ${style.bg}`}>
         <div className="flex flex-wrap items-center gap-x-5 gap-y-2">

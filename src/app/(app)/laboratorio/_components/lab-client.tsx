@@ -7,7 +7,8 @@ import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
 import { ChaoticRerollPanel } from "./chaotic-reroll-panel";
-import { PERFORMANCE_META, normalizePerformanceTag } from "@/lib/mascot-performance";
+import { CodeChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
+import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 
 type LabMascot = {
   id: string;
@@ -27,6 +28,11 @@ type LabMascot = {
   ivRating: string | null;
   ivScore: number | null;
   performanceTag?: string | null;
+  stats?: MascotStats;
+  personality?: string;
+  battleWins?: number;
+  battleLosses?: number;
+  happiness?: number;
 };
 
 type WeeklyUsage = {
@@ -376,7 +382,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                     : "border-dashed border-slate-700 bg-slate-800/30"
                 }`} style={{ minHeight: 90 }}>
                   {slot ? (
-                    <>
+                    <div className="flex w-full flex-col items-center gap-0.5 px-1 py-1.5">
                       <button
                         onClick={() => removeSlot(idx)}
                         className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-slate-700 text-slate-400 hover:bg-red-600 hover:text-white transition-colors"
@@ -384,10 +390,16 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                         <X size={9} />
                       </button>
                       <img src={slot.spriteUrl} alt="" className="h-10 w-10 object-contain" />
-                      <p className="mt-0.5 line-clamp-1 w-full px-1 text-[9px] font-semibold text-white">
+                      <p className="line-clamp-1 w-full px-1 text-[9px] font-semibold text-white">
                         {slot.nickname || slot.name}
                       </p>
                       <p className="text-[9px] text-slate-500">Lv.{slot.level}</p>
+                      <CodeChip id={slot.id} />
+                      <div className="flex flex-wrap items-center justify-center gap-0.5">
+                        <TagChip tag={slot.performanceTag} />
+                        {slot.ivRating && <RatingBadge rating={slot.ivRating} size="sm" />}
+                      </div>
+                      <StatStrip stats={slot.stats} />
                       {/* Show dust for this slot */}
                       {(() => {
                         const b = breakdown.find((b) => b.mascot.id === slot.id);
@@ -395,7 +407,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                           <span className="mt-0.5 text-[9px] font-bold text-[#FFCB05]">🧫 {b.dust}</span>
                         ) : null;
                       })()}
-                    </>
+                    </div>
                   ) : (
                     <div className="flex flex-col items-center gap-1 text-slate-700">
                       <Plus size={18} />
@@ -523,17 +535,12 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                       {m.analyzed && m.ivRating && (
                         <span className="absolute right-1.5 top-1.5"><RatingBadge rating={m.ivRating} size="sm" /></span>
                       )}
-                      {(() => {
-                        const meta = PERFORMANCE_META[normalizePerformanceTag(m.performanceTag)];
-                        return (
-                          <span className={`absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded border px-1 py-px text-[8px] font-bold ${meta.badge}`}>
-                            <span className={`inline-block h-1.5 w-1.5 rounded-full ${meta.dot}`} />{meta.label}
-                          </span>
-                        );
-                      })()}
-                      <img src={m.spriteUrl} alt="" className="h-12 w-12 object-contain" />
-                      <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}</p>
-                      <p className="text-[10px] text-slate-500">Lv.{m.level}</p>
+                      <span className="absolute left-1.5 top-1.5"><TagChip tag={m.performanceTag} /></span>
+                      <img src={m.spriteUrl} alt="" className="mt-3 h-12 w-12 object-contain" />
+                      <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}{m.isShiny ? " ✨" : ""}</p>
+                      <p className="flex items-center gap-1 text-[10px] text-slate-500">Lv.{m.level} <CodeChip id={m.id} /></p>
+                      {m.personality && <p className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}{typeof m.battleWins === "number" ? ` · ${m.battleWins}V/${m.battleLosses ?? 0}D` : ""}</p>}
+                      <StatStrip stats={m.stats} />
                       <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[m.rarity]}`}>
                         {RARITY_LABEL[m.rarity]}
                       </span>

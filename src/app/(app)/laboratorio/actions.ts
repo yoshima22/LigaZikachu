@@ -120,6 +120,8 @@ export async function getLabDataAction() {
         isFavorite: true, arenaState: true, bazarListed: true,
         operationsLocked: true, primordialBoundPlayerId: true,
         analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
+        statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+        personality: true, battleWins: true, battleLosses: true, happiness: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -166,6 +168,14 @@ export async function getLabDataAction() {
       ivRating: m.ivRating,
       ivScore: m.ivScore,
       performanceTag: m.performanceTag,
+      stats: {
+        force: m.statForce, agility: m.statAgility, charisma: m.statCharisma,
+        instinct: m.statInstinct, vitality: m.statVitality,
+      },
+      personality: m.personality as string,
+      battleWins: m.battleWins,
+      battleLosses: m.battleLosses,
+      happiness: m.happiness,
     };
   });
 
