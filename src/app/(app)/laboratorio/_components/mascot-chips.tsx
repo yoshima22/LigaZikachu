@@ -21,6 +21,10 @@ export function CodeChip({ id }: { id: string }) {
   );
 }
 
+export function EggChip({ origin }: { origin?: string | null }) {
+  return <p className="line-clamp-1 w-full text-center text-[9px] text-amber-200/80" title="Origem do ovo">🥚 {origin ?? "Origem desconhecida"}</p>;
+}
+
 export function TagChip({ tag }: { tag?: string | null }) {
   const meta = PERFORMANCE_META[normalizePerformanceTag(tag)];
   return (

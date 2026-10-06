@@ -7,7 +7,7 @@ import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
 import { ChaoticRerollPanel } from "./chaotic-reroll-panel";
-import { CodeChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
+import { CodeChip, EggChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
 import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 
 type LabMascot = {
@@ -30,6 +30,7 @@ type LabMascot = {
   performanceTag?: string | null;
   stats?: MascotStats;
   personality?: string;
+  eggOrigin?: string | null;
   battleWins?: number;
   battleLosses?: number;
   happiness?: number;
@@ -395,6 +396,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                       </p>
                       <p className="text-[9px] text-slate-500">Lv.{slot.level}</p>
                       <CodeChip id={slot.id} />
+                      <EggChip origin={slot.eggOrigin} />
                       <div className="flex flex-wrap items-center justify-center gap-0.5">
                         <TagChip tag={slot.performanceTag} />
                         {slot.ivRating && <RatingBadge rating={slot.ivRating} size="sm" />}
@@ -540,6 +542,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                       <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}{m.isShiny ? " ✨" : ""}</p>
                       <p className="flex items-center gap-1 text-[10px] text-slate-500">Lv.{m.level} <CodeChip id={m.id} /></p>
                       {m.personality && <p className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}{typeof m.battleWins === "number" ? ` · ${m.battleWins}V/${m.battleLosses ?? 0}D` : ""}</p>}
+                      <EggChip origin={m.eggOrigin} />
                       <StatStrip stats={m.stats} />
                       <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[m.rarity]}`}>
                         {RARITY_LABEL[m.rarity]}

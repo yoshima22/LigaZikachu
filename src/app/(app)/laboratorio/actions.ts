@@ -11,6 +11,7 @@ import { computeMascotAnalysis, MASCOT_ANALYSIS_VERSION } from "@/lib/mascot-ana
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
 import { getMascotRarity } from "./rarity";
 import { calculateLabDust } from "./dust";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { recordPlayerActivity } from "@/lib/player-activity";
@@ -121,7 +122,7 @@ export async function getLabDataAction() {
         operationsLocked: true, primordialBoundPlayerId: true,
         analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-        personality: true, battleWins: true, battleLosses: true, happiness: true,
+        personality: true, hatchedFromEggType: true, hatchedFromEggOrigin: true, battleWins: true, battleLosses: true, happiness: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -173,6 +174,7 @@ export async function getLabDataAction() {
         instinct: m.statInstinct, vitality: m.statVitality,
       },
       personality: m.personality as string,
+      eggOrigin: getHatchedEggLabel(m.hatchedFromEggType, m.hatchedFromEggOrigin),
       battleWins: m.battleWins,
       battleLosses: m.battleLosses,
       happiness: m.happiness,

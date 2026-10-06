@@ -6,7 +6,7 @@ import { analyzeMascotAction, getStoredAnalysisAction, getMascotGrowthHistoryAct
 import type { MascotGrowthHistory } from "../actions";
 import { RATING_STYLE, type MascotAnalysis, type MascotRating } from "@/lib/mascot-analysis";
 import { getStaticSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-data";
-import { CodeChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
+import { CodeChip, EggChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
 
 type AnalyzerMascot = {
   id: string;
@@ -22,6 +22,7 @@ type AnalyzerMascot = {
   performanceTag?: string | null;
   stats?: MascotStats;
   personality?: string;
+  eggOrigin?: string | null;
   battleWins?: number;
   battleLosses?: number;
   happiness?: number;
@@ -251,6 +252,7 @@ export function MascotAnalyzer({
               <p className="text-[9px] text-slate-500">Lv.{m.level}</p>
               <CodeChip id={m.id} />
               <TagChip tag={m.performanceTag} />
+              <EggChip origin={m.eggOrigin} />
               <StatStrip stats={m.stats} />
             </button>
           ))}
@@ -523,6 +525,7 @@ function IdentityCard({ mascot: m }: { mascot: AnalyzerMascot }) {
     ["Personalidade", m.personality ? (PERSONALITY_LABEL[m.personality] ?? m.personality) : "—"],
     ["Raridade", m.rarity ? (RARITY_LABEL[m.rarity] ?? m.rarity) : "—"],
     ["Batalhas", games ? `${wins}V / ${losses}D · ${Math.round((wins / games) * 100)}%` : "Sem batalhas"],
+    ["Origem do ovo", m.eggOrigin ?? "Desconhecida"],
     ["Felicidade", typeof m.happiness === "number" ? `${m.happiness}/100` : "—"],
   ];
   return (
@@ -540,7 +543,7 @@ function IdentityCard({ mascot: m }: { mascot: AnalyzerMascot }) {
         </div>
         <div className="w-full sm:w-64"><StatStrip stats={m.stats} size="md" /></div>
       </div>
-      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/5 pt-3 sm:grid-cols-4">
+      <div className="mt-3 grid grid-cols-2 gap-2 border-t border-white/5 pt-3 sm:grid-cols-3">
         {facts.map(([k, v]) => (
           <div key={k} className="rounded-lg bg-slate-900/50 px-2.5 py-1.5">
             <p className="text-[9px] uppercase tracking-wider text-slate-500">{k}</p>
