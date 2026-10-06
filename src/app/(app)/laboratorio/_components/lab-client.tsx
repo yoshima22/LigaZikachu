@@ -374,13 +374,13 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
               <p className="text-xs text-slate-500">{filledSlots.length}/{MAX_SLOTS} selecionados</p>
             </div>
 
-            <div className="grid grid-cols-3 gap-3 sm:grid-cols-6">
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
               {slots.map((slot, idx) => (
                 <div key={idx} className={`relative flex flex-col items-center justify-center rounded-xl border text-center transition-colors ${
                   slot
                     ? "border-[#FFCB05]/40 bg-[#FFCB05]/5"
                     : "border-dashed border-slate-700 bg-slate-800/30"
-                }`} style={{ minHeight: 90 }}>
+                }`} style={{ minHeight: 130 }}>
                   {slot ? (
                     <div className="flex w-full flex-col items-center gap-0.5 px-1 py-1.5">
                       <button

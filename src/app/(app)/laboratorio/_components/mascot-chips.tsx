@@ -30,23 +30,24 @@ export function TagChip({ tag }: { tag?: string | null }) {
   );
 }
 
-// Faixa compacta com os 5 atributos + total.
+// Grade compacta com os 5 atributos + total (2 linhas no tamanho sm, 1 linha + total no md).
 export function StatStrip({ stats, size = "sm" }: { stats?: MascotStats | null; size?: "sm" | "md" }) {
   if (!stats) return null;
   const md = size === "md";
-  return (
-    <div className="w-full">
-      <div className="grid grid-cols-5 gap-px">
-        {STAT_COLS.map(([key, label, color]) => (
-          <div key={key} className="min-w-0 text-center leading-none">
-            <p className={`${md ? "text-[9px]" : "text-[7px]"} font-bold text-slate-500`}>{label}</p>
-            <p className={`${md ? "mt-0.5 text-sm" : "mt-px text-[10px]"} font-black tabular-nums ${color}`}>{stats[key]}</p>
-          </div>
-        ))}
-      </div>
-      <p className={`${md ? "mt-1.5 text-[11px]" : "mt-1 text-[8px]"} text-center text-slate-500`}>
-        Total <strong className="tabular-nums text-slate-300">{statsTotal(stats)}</strong>
-      </p>
+  const cell = (label: string, value: number, color: string) => (
+    <div key={label} className="min-w-0 text-center leading-none">
+      <p className={`${md ? "text-[9px]" : "text-[8px]"} font-bold text-slate-500`}>{label}</p>
+      <p className={`${md ? "mt-0.5 text-sm" : "mt-0.5 text-[11px]"} font-black tabular-nums ${color}`}>{value}</p>
     </div>
   );
+  const cells = STAT_COLS.map(([key, label, color]) => cell(label, stats[key], color));
+  if (md) {
+    return (
+      <div className="w-full">
+        <div className="grid grid-cols-5 gap-1">{cells}</div>
+        <p className="mt-1.5 text-center text-[11px] text-slate-500">Total <strong className="tabular-nums text-slate-300">{statsTotal(stats)}</strong></p>
+      </div>
+    );
+  }
+  return <div className="mt-1 grid w-full grid-cols-3 gap-x-2 gap-y-1.5">{[...cells, cell("TOTAL", statsTotal(stats), "text-slate-200")]}</div>;
 }

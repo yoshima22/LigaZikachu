@@ -237,10 +237,10 @@ export function MascotAnalyzer({
             className="w-full rounded-xl border border-border bg-slate-950 py-2 pl-9 pr-3 text-sm text-slate-200 focus:outline-none focus:border-purple-400/50"
           />
         </div>
-        <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
           {paged.map(m => (
             <button key={m.id} onClick={() => pick(m)}
-              className={`relative flex flex-col items-center gap-0.5 rounded-xl border p-2 pt-2.5 transition-colors ${
+              className={`relative flex flex-col items-center gap-1 rounded-xl border p-3 pt-3 transition-colors ${
                 selected?.id === m.id ? "border-purple-400/60 bg-purple-500/10" : "border-border bg-slate-800/30 hover:border-purple-400/40"
               }`}>
               {m.analyzed && m.ivRating && (
