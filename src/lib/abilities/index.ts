@@ -104,8 +104,15 @@ const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;
 /** Descrição em português com o intervalo do efeito. */
 export function describeAbility(info: AbilityInfo): string {
   if (!info.hasEffect || !info.template) return "Sem efeito em combate nesta versão.";
-  const rng = info.min != null && info.max != null ? `de ${pct(info.min)} a ${pct(info.max)}` : "";
-  return info.template.replace("{rng}", rng).replace("{T}", info.param ?? "").replace("{S}", info.param ?? "");
+  let text = info.template;
+  if (info.min != null && info.max != null) {
+    // Concordância: "em 4% a 12%", "até 12%" e "de 4% a 12%" conforme a frase.
+    text = text
+      .replace("em {rng}", `em ${pct(info.min)} a ${pct(info.max)}`)
+      .replace("até {rng}", `até ${pct(info.max)}`)
+      .replace("{rng}", `de ${pct(info.min)} a ${pct(info.max)}`);
+  }
+  return text.replace("{T}", info.param ?? "").replace("{S}", info.param ?? "");
 }
 
 /** Descrição com o valor atual dos atributos do mascote. */
