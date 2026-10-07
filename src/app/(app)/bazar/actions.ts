@@ -6,6 +6,7 @@ import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getMascotRarity, getPokemonName, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { canonicalizeReservedInventoryOffer } from "@/lib/bazar-offer-items";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
@@ -3221,7 +3222,14 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
         where: { playerId_itemId: { playerId, itemId: inv.itemId } },
         data: { quantity: { decrement: quantity } },
       });
-      reserved.push({ ...normalized, escrowed: true, shopItemId: inv.itemId });
+      const inventoryItem = await tx.shopItem.findUniqueOrThrow({
+        where: { id: inv.itemId },
+        select: { name: true },
+      });
+      reserved.push(canonicalizeReservedInventoryOffer(normalized, {
+        itemId: inv.itemId,
+        name: inventoryItem.name,
+      }));
       continue;
     }
 

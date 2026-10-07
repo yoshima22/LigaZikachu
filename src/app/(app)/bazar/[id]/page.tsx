@@ -7,6 +7,7 @@ import { ArrowLeft, Coins, Crown, Heart, MessageSquare, Check, X, ShoppingCart, 
 import Link from "next/link";
 import { getMascotRarity, getShinySprite, getSpriteUrl, getStaticSpriteUrl, getPokemonName, PERSONALITY_LABEL, RARITY_COLOR, RARITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { CONSUMABLE_SHOP_ITEM_TYPES, getShopItemEmoji } from "@/lib/shop-config";
+import { directOfferItemKey, toDirectInventoryOffer } from "@/lib/bazar-offer-items";
 import { getHatchedEggLabel } from "@/lib/egg-origin";
 import {
   getListing, buyListing, createProposal, acceptProposal,
@@ -1322,7 +1323,7 @@ interface InventoryShopItem {
 // raridade (para distinguir "ovo com chance aumentada" de "ovo sem nada");
 // demais itens pelo tipo.
 function offerItemKey(i: ProposalOfferedItem) {
-  return i.mascotId ?? `${i.type}#${i.eggBonusPct ?? 0}`;
+  return directOfferItemKey(i);
 }
 
 interface InventoryData {
@@ -1591,13 +1592,13 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
             <div className="space-y-1">
               <p className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide px-1">✨ Itens Especiais</p>
               {visibleItems.map(item => {
-                const key = `${item.type}#0`;
+                const key = directOfferItemKey(item);
                 const sel = selectedKeys.has(key);
                 const emoji = getShopItemEmoji(item.type);
                 return (
                   <div key={key} className="flex items-center gap-2">
                     <button type="button"
-                      onClick={() => toggleItem({ type: item.type, quantity: 1, displayName: item.name })}
+                      onClick={() => toggleItem(toDirectInventoryOffer(item))}
                       className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                       {item.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
@@ -1610,7 +1611,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                     </button>
                     {sel && (
                       <input type="number" min={1} max={item.quantity} inputMode="numeric" pattern="[0-9]*"
-                        value={selected.find(i => i.type === item.type)?.quantity ?? 1}
+                        value={selected.find(i => offerItemKey(i) === key)?.quantity ?? 1}
                         onChange={e => updateQty(key, parseInt(e.target.value.replace(/\D/g, ""))||1)}
                         className="w-14 rounded border border-border bg-slate-950 px-1.5 py-0.5 text-[11px] text-center text-slate-200 outline-none" />
                     )}
