@@ -11,7 +11,9 @@ import { CELESTIAL_EGG_ICON, LAB_EGG_ICON, POKEBALL_ICON, ULTRABALL_ICON, curren
 import { EGG_SHOP_TO_EGG_TYPE, LEAGUE_SHOP_ITEM_TYPES, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { getActiveShopItems, getEnabledShopPromotions, invalidateShopCache } from "@/lib/shop-cache";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
-import { isMegaStoneType } from "@/lib/mega-evolution";
+import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
+import { filterAvailableTmItems, getDisabledSpeciesIds } from "@/lib/ability-tm-shop";
+import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
@@ -152,7 +154,10 @@ export default async function ShopPage() {
         description: `${item.description ?? ""}${item.description ? " " : ""}[Ordem da Trapaça: preço adulterado +${priceIncreasePct}%]`,
       }))
     : promotedItems;
-  const items=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice??suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
+  const pricedAll=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice??suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
+  // TMs cujas espécies compatíveis estão todas desligadas no painel não aparecem.
+  const items = await filterAvailableTmItems(pricedAll);
+  const disabledSpecies = items.some((i) => i.type === "ABILITY_TM") ? await getDisabledSpeciesIds() : new Set<number>();
   const activeGlobalPromotions = promotions.filter((promotion) =>
     promotion.scope === "GLOBAL"
     && promotion.active
@@ -179,8 +184,15 @@ export default async function ShopPage() {
   const banners  = items.filter((i) => i.type === "BANNER");
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
-  const megaItems = items.filter((i) => isMegaStoneType(i.type));
-  const tmItems = items.filter((i) => i.type === "ABILITY_TM");
+  // Quem pode ser beneficiado: a pedra serve a uma espécie; o TM, às espécies com aquela habilidade oculta (ligadas no painel).
+  const megaItems = items.filter((i) => isMegaStoneType(i.type)).map((i) => {
+    const stone = getMegaStoneByType(i.type);
+    return { ...i, compatibleIds: stone ? [stone.compatiblePokemonId] : [], megaTargetId: stone?.megaPokemonId };
+  });
+  const tmItems = items.filter((i) => i.type === "ABILITY_TM").map((i) => {
+    const def = getAbilityTmDef(readAbilityTmKey(i.metadata) ?? "");
+    return { ...i, compatibleIds: (def?.pokemonIds ?? []).filter((id) => !disabledSpecies.has(id)) };
+  });
   const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
   const mascotItems = items.filter((i) =>
     MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&

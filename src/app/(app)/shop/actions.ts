@@ -12,6 +12,7 @@ import { onShopPurchase, onCoinsSpent } from "@/lib/achievement-events";
 import { CONSUMABLE_SHOP_ITEM_TYPES, EGG_SHOP_TO_EGG_TYPE, isEggShopItemType, UNIQUE_ITEM_TYPES } from "@/lib/shop-config";
 import { isMegaStoneShopUnlocked } from "@/lib/mega-shop";
 import { isMegaStoneType } from "@/lib/mega-evolution";
+import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getCurrentShopPromotionPrice } from "@/lib/shop-promotions";
@@ -581,6 +582,10 @@ export async function purchaseItem(
     // oficiais dependem do evento da Ordem da Trapaça.
     if (isMegaStoneType(item.type) && !String(item.type).startsWith("MEGA_STONE_CUSTOM_") && !(await isMegaStoneShopUnlocked())) {
       return { error: "As Pedras de Mega EvoluÃ§Ã£o ainda nÃ£o foram liberadas." };
+    }
+
+    if (item.type === "ABILITY_TM" && (await filterAvailableTmItems([item])).length === 0) {
+      return { error: "Este TM não está disponível no momento." };
     }
 
     const isConsumable = CONSUMABLE_TYPES.includes(item.type);

@@ -4,7 +4,7 @@ import { SPECIES_ABILITIES } from "./data.generated";
 import { getAbilityInfo } from "./index";
 
 export const ABILITY_TM_TYPE = "ABILITY_TM" as const;
-export const ABILITY_TM_PRICE = 5000;
+export const ABILITY_TM_PRICE = 6500;
 export const ABILITY_TM_IMAGE = "/items/ability-tm.svg";
 /** Desconto máximo no Bazar (igual ao das Pedras de Mega). */
 export const ABILITY_TM_MAX_DISCOUNT = 20;

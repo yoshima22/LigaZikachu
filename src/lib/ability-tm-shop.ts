@@ -59,6 +59,30 @@ export async function ensureAbilityTmShopItems(activeOnCreate = false) {
   return { total: defs.length, changed };
 }
 
+/** Espécies desligadas no painel de admin (EggPokemonToggle): suas informações de habilidade ficam ocultas. */
+export async function getDisabledSpeciesIds(): Promise<Set<number>> {
+  const rows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
+  return new Set(rows.map((row) => row.pokemonId));
+}
+
+/** TMs sem nenhuma espécie compatível ligada no painel não devem aparecer nem ser vendidos. */
+export async function getUnavailableTmKeys(): Promise<Set<string>> {
+  const disabled = await getDisabledSpeciesIds();
+  return new Set(
+    getAbilityTmDefs().filter((def) => def.pokemonIds.every((id) => disabled.has(id))).map((def) => def.abilityKey),
+  );
+}
+
+export async function filterAvailableTmItems<T extends { type: string; metadata?: unknown }>(items: T[]): Promise<T[]> {
+  if (!items.some((item) => item.type === ABILITY_TM_TYPE)) return items;
+  const hidden = await getUnavailableTmKeys();
+  return items.filter((item) => {
+    if (item.type !== ABILITY_TM_TYPE) return true;
+    const key = readAbilityTmKey(item.metadata);
+    return !key || !hidden.has(key);
+  });
+}
+
 /** Liga/desliga TMs (liberação gradual). `abilityKeys` vazio = todos. */
 export async function setAbilityTmsActive(active: boolean, abilityKeys?: string[]) {
   const items = await prisma.shopItem.findMany({ where: { type: ABILITY_TM_TYPE }, select: { id: true, metadata: true } });

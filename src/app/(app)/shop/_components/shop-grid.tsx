@@ -8,6 +8,7 @@ import { purchaseItem } from "../actions";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
 import { isConsumableShopItemType } from "@/lib/shop-config";
+import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 
 const rarityColors: Record<string, string> = {
   COMMON:    "border-slate-600/50 text-slate-400",
@@ -41,6 +42,10 @@ interface Item {
   theme?: string;
   flavorText?: string | null;
   entranceEffect?: string;
+  /** Espécies que podem ser beneficiadas (pedra de mega e TM de habilidade). */
+  compatibleIds?: number[];
+  /** Mega que a pedra desperta. */
+  megaTargetId?: number;
 }
 
 interface Props {
@@ -327,6 +332,9 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, lig
                 {item.description && (
                   <p className="text-xs text-slate-400">{item.description}</p>
                 )}
+                {item.compatibleIds && item.compatibleIds.length > 0 && (
+                  <CompatibleSpecies ids={item.compatibleIds} megaTargetId={item.megaTargetId} isTm={item.type === "ABILITY_TM"} />
+                )}
                 {(isConsumable || ownedCount > 0) && (
                   <div className="inline-flex items-center gap-1 rounded-full border border-border bg-slate-900/70 px-2 py-0.5 text-[10px] font-semibold text-slate-300">
                     Inventário: <span className="text-[#FFCB05]">{ownedCount}</span>
@@ -416,5 +424,49 @@ export function ShopGrid({ title, items, ownedIds, inventoryCounts, balance, lig
       )}
     </div>
     </>
+  );
+}
+
+/** Botão que lista os Pokémon que podem se beneficiar da pedra de mega ou do TM. */
+function CompatibleSpecies({ ids, megaTargetId, isTm }: { ids: number[]; megaTargetId?: number; isTm: boolean }) {
+  const [open, setOpen] = useState(false);
+  const [q, setQ] = useState("");
+  const list = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    return ids.map((id) => ({ id, name: getPokemonName(id) })).filter((x) => !term || x.name.toLowerCase().includes(term));
+  }, [ids, q]);
+  return (
+    <div>
+      <button type="button" onClick={() => setOpen((v) => !v)}
+        className="w-full rounded-lg border border-cyan-400/30 bg-cyan-400/5 px-2 py-1.5 text-[11px] font-semibold text-cyan-200 hover:bg-cyan-400/10">
+        {open ? "Esconder" : isTm ? `Quem pode usar (${ids.length})` : "Quem pode usar"}
+      </button>
+      {open && (
+        <div className="mt-2 rounded-lg border border-white/10 bg-slate-900/70 p-2">
+          {!isTm && megaTargetId && (
+            <p className="mb-1.5 text-[10px] text-slate-400">Desperta <b className="text-slate-200">{getPokemonName(megaTargetId)}</b>.</p>
+          )}
+          {isTm && (
+            <>
+              <p className="mb-1.5 text-[10px] text-slate-400">Libera a habilidade oculta nestes mascotes (os que já a têm como oculta):</p>
+              {ids.length > 8 && (
+                <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Filtrar por nome…"
+                  className="mb-1.5 w-full rounded border border-border bg-slate-950 px-2 py-1 text-[10px] text-slate-200 outline-none" />
+              )}
+            </>
+          )}
+          <div className="flex max-h-44 flex-wrap gap-1.5 overflow-y-auto">
+            {list.map((x) => (
+              <span key={x.id} className="flex items-center gap-1 rounded-md border border-white/10 bg-slate-950/70 pr-1.5 text-[10px] text-slate-200">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={getStaticSpriteUrl(x.id)} alt="" className="h-7 w-7 object-contain" style={{ imageRendering: "pixelated" }} />
+                {x.name}
+              </span>
+            ))}
+            {list.length === 0 && <span className="text-[10px] text-slate-500">Nenhum nome encontrado.</span>}
+          </div>
+        </div>
+      )}
+    </div>
   );
 }

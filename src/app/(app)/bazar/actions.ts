@@ -11,6 +11,7 @@ import { getSessionPlayer } from "@/lib/session";
 import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
+import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
@@ -275,11 +276,11 @@ async function rollMiauvadaoOffers(
   stockOverrides: Record<string, number> = {},
 ): Promise<MiauvadaoOffer[]> {
   // Busca itens elegíveis do shop
-  const shopItems = await prisma.shopItem.findMany({
+  const shopItems = await filterAvailableTmItems(await prisma.shopItem.findMany({
     where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
     select: { id: true, name: true, type: true, price: true, imageUrl: true,
-              description: true, rarity: true },
-  });
+              description: true, rarity: true, metadata: true },
+  }));
 
   if (shopItems.length === 0) return [];
 
@@ -2620,10 +2621,10 @@ function _mulberry32(seed: number) {
 }
 
 async function _computePersonalOffer(playerId: string, vaultBalance: number, excludedItemIds: string[] = []): Promise<MiauvadaoOffer | null> {
-  const shopItems = await prisma.shopItem.findMany({
+  const shopItems = await filterAvailableTmItems(await prisma.shopItem.findMany({
     where: { active: true, type: { in: MIAUVADAO_ELIGIBLE_TYPES as never[] } },
-    select: { id: true, name: true, type: true, price: true, imageUrl: true, description: true, rarity: true },
-  });
+    select: { id: true, name: true, type: true, price: true, imageUrl: true, description: true, rarity: true, metadata: true },
+  }));
   if (shopItems.length === 0) return null;
   const rotation = getMiauvadaoRotation();
   const rng = _mulberry32(_hashSeed(`${playerId}|${rotation.start.toISOString()}`));

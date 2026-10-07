@@ -7,7 +7,8 @@ import {
 } from "@/lib/abilities";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
 import { abilityTmItemName, getAbilityTmDef } from "@/lib/abilities/tm";
-import { allTriggers, getAbilityHolders, getSpeciesHit, searchAbilities, searchSpecies, type SpeciesHit } from "@/lib/abilities/catalog";
+import { allTriggers, getAbilityHolders, getSpeciesHit, listSpeciesNames, searchAbilities, searchSpecies, type SpeciesHit } from "@/lib/abilities/catalog";
+import { getDisabledSpeciesIds } from "@/lib/ability-tm-shop";
 import { getPokedexLink } from "@/lib/pokedex-link";
 import { getPokemonName } from "@/lib/mascot-data";
 
@@ -86,13 +87,13 @@ function SpeciesCard({ hit }: { hit: SpeciesHit }) {
   );
 }
 
-function SearchBox({ tab, q, placeholder, extra }: { tab: string; q: string; placeholder: string; extra?: React.ReactNode }) {
+function SearchBox({ tab, q, placeholder, extra, listId }: { tab: string; q: string; placeholder: string; extra?: React.ReactNode; listId?: string }) {
   return (
     <form className="flex flex-wrap items-center gap-2" action="/habilidades">
       <input type="hidden" name="tab" value={tab} />
       <div className="flex min-w-60 flex-1 items-center gap-2 rounded-xl border border-border bg-slate-900 px-3 py-2">
         <Search size={14} className="text-slate-500" />
-        <input name="q" defaultValue={q} placeholder={placeholder} className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-600" />
+        <input name="q" defaultValue={q} placeholder={placeholder} list={listId} autoComplete="off" className="w-full bg-transparent text-sm text-white outline-none placeholder:text-slate-600" />
       </div>
       {extra}
       <button className="rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E]">Buscar</button>
@@ -104,12 +105,15 @@ export default async function HabilidadesPage({ searchParams }: Props) {
   const params = await searchParams;
   const tab = (TABS.some(([id]) => id === params.tab) ? params.tab : params.mascote ? "mascote" : "mascote") as (typeof TABS)[number][0];
   const q = (params.q ?? "").trim();
-  const direct = params.mascote && /^\d+$/.test(params.mascote) ? getSpeciesHit(Number(params.mascote)) : null;
-  const speciesHits = tab === "mascote" ? (direct ? [direct] : searchSpecies(q)) : [];
+  // Mascotes desligados no painel de admin ficam fora (com suas habilidades e TMs).
+  const disabled = await getDisabledSpeciesIds();
+  const direct = params.mascote && /^\d+$/.test(params.mascote) ? getSpeciesHit(Number(params.mascote), disabled) : null;
+  const speciesHits = tab === "mascote" ? (direct ? [direct] : searchSpecies(q, 30, disabled)) : [];
+  const speciesNames = tab === "mascote" ? listSpeciesNames(disabled) : [];
   const category = ABILITY_CATEGORIES.includes(params.cat as never) ? params.cat : "";
   const triggers = allTriggers();
   const trigger = triggers.includes(params.gat ?? "") ? params.gat : "";
-  const abilityHits = tab === "habilidade" ? searchAbilities({ q, category, trigger }) : [];
+  const abilityHits = tab === "habilidade" ? searchAbilities({ q, category, trigger, disabled }) : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">
@@ -131,7 +135,10 @@ export default async function HabilidadesPage({ searchParams }: Props) {
 
       {tab === "mascote" && (
         <section className="space-y-4">
-          <SearchBox tab="mascote" q={q} placeholder="Nome ou número do mascote (ex.: Gyarados, Mega, 130)…" />
+          <SearchBox tab="mascote" q={q} listId="mascot-names" placeholder="Nome ou número do mascote (ex.: Gyarados, Mega, 130)…" />
+          <datalist id="mascot-names">
+            {speciesNames.map((name) => <option key={name} value={name} />)}
+          </datalist>
           {direct && <p className="text-xs text-slate-500">Mostrando as habilidades de {direct.name}. <Link className="text-cyan-400 hover:underline" href="/habilidades?tab=mascote">Buscar outro</Link></p>}
           {!q && !direct && <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-slate-500">Digite o nome de um mascote para ver as habilidades dele.</p>}
           {q && speciesHits.length === 0 && <p className="text-sm text-slate-500">Nenhum mascote encontrado para “{q}”.</p>}
@@ -157,7 +164,7 @@ export default async function HabilidadesPage({ searchParams }: Props) {
           <p className="text-xs text-slate-500">{abilityHits.length} habilidade{abilityHits.length === 1 ? "" : "s"} · mostrando até 40</p>
           <div className="grid gap-3 md:grid-cols-2">
             {abilityHits.slice(0, 40).map((info) => {
-              const h = getAbilityHolders(info.slug);
+              const h = getAbilityHolders(info.slug, disabled);
               const names = (ids: number[]) => ids.slice(0, 8).map((id) => getPokemonName(id)).join(", ") + (ids.length > 8 ? ` e mais ${ids.length - 8}` : "");
               return (
                 <div key={info.slug} className="space-y-1.5">

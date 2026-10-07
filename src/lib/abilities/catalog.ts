@@ -9,7 +9,7 @@ export type AbilityHolders = { normal: number[]; hidden: number[] };
 let holders: Map<string, AbilityHolders> | null = null;
 
 /** Quais espécies têm cada habilidade (comum ou oculta). */
-export function getAbilityHolders(slug: string): AbilityHolders {
+export function getAbilityHolders(slug: string, disabled?: Set<number>): AbilityHolders {
   if (!holders) {
     holders = new Map();
     for (const [id, [normal, hidden]] of Object.entries(SPECIES_ABILITIES)) {
@@ -18,7 +18,9 @@ export function getAbilityHolders(slug: string): AbilityHolders {
       if (hidden && !normal.includes(hidden)) (holders.get(hidden) ?? holders.set(hidden, { normal: [], hidden: [] }).get(hidden)!).hidden.push(pid);
     }
   }
-  return holders.get(slug) ?? { normal: [], hidden: [] };
+  const all = holders.get(slug) ?? { normal: [], hidden: [] };
+  if (!disabled?.size) return all;
+  return { normal: all.normal.filter((id) => !disabled.has(id)), hidden: all.hidden.filter((id) => !disabled.has(id)) };
 }
 
 export function allTriggers(): string[] {
@@ -30,7 +32,7 @@ export function allTriggers(): string[] {
   return [...set].sort((a, b) => a.localeCompare(b, "pt-BR"));
 }
 
-export function searchAbilities(args: { q?: string; category?: string; trigger?: string; includeNoEffect?: boolean }): AbilityInfo[] {
+export function searchAbilities(args: { q?: string; category?: string; trigger?: string; includeNoEffect?: boolean; disabled?: Set<number> }): AbilityInfo[] {
   const q = norm(args.q ?? "");
   const result: AbilityInfo[] = [];
   for (const slug of Object.keys(ABILITIES)) {
@@ -40,6 +42,10 @@ export function searchAbilities(args: { q?: string; category?: string; trigger?:
     if (args.category && info.category !== args.category) continue;
     if (args.trigger && info.trigger !== args.trigger) continue;
     if (q && !norm(`${info.name} ${info.effectName ?? ""} ${info.category ?? ""}`).includes(q)) continue;
+    if (args.disabled?.size) {
+      const h = getAbilityHolders(slug, args.disabled);
+      if (h.normal.length + h.hidden.length === 0) continue; // só mascotes desligados a têm
+    }
     result.push(info);
   }
   return result.sort((a, b) => a.name.localeCompare(b.name));
@@ -57,17 +63,29 @@ function toHit(id: number): SpeciesHit {
   };
 }
 
-export function getSpeciesHit(id: number): SpeciesHit | null {
+export function getSpeciesHit(id: number, disabled?: Set<number>): SpeciesHit | null {
+  if (disabled?.has(id)) return null;
   return SPECIES_ABILITIES[id] ? toHit(id) : null;
 }
 
-export function searchSpecies(q: string, limit = 30): SpeciesHit[] {
+/** Nomes (únicos, ordenados) dos mascotes visíveis, para o autocompletar da busca. */
+export function listSpeciesNames(disabled?: Set<number>): string[] {
+  const names = new Set<string>();
+  for (const key of Object.keys(SPECIES_ABILITIES)) {
+    const id = Number(key);
+    if (!disabled?.has(id)) names.add(getPokemonName(id));
+  }
+  return [...names].sort((a, b) => a.localeCompare(b, "pt-BR"));
+}
+
+export function searchSpecies(q: string, limit = 30, disabled?: Set<number>): SpeciesHit[] {
   const term = norm(q);
   if (!term) return [];
   const out: SpeciesHit[] = [];
   const asNumber = /^\d+$/.test(term) ? Number(term) : null;
   for (const key of Object.keys(SPECIES_ABILITIES)) {
     const id = Number(key);
+    if (disabled?.has(id)) continue;
     if (asNumber !== null ? id !== asNumber : !norm(getPokemonName(id)).includes(term)) continue;
     out.push(toHit(id));
     if (out.length >= limit) break;
