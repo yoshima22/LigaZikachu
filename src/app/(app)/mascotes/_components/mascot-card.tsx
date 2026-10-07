@@ -1,5 +1,6 @@
 "use client";
 
+import { MascotAbilityPanel } from "./mascot-ability-panel";
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -80,6 +81,9 @@ interface MascotData {
   hatchedFromEggType?: string | null;
   hatchedFromEggOrigin?: string | null;
   megaStoneName?: string | null;
+  hiddenAbilityUnlocked?: boolean;
+  abilityChoice?: string | null;
+  pokedexLink?: { url: string | null; note: string | null } | null;
   lastInteractedAt: Date | null;
   lastPlayedAt?: Date | null;  // presente após migração SQL
   lastPettedAt?: Date | null;  // presente após migração SQL
@@ -1148,6 +1152,16 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 }}
               />
             </div>
+            {mascot.hiddenAbilityUnlocked !== undefined && (
+              <MascotAbilityPanel
+                mascotId={mascot.id}
+                pokemonId={mascot.pokemonId}
+                hiddenAbilityUnlocked={mascot.hiddenAbilityUnlocked}
+                abilityChoice={mascot.abilityChoice ?? null}
+                stats={{ force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality }}
+                pokedex={mascot.pokedexLink ?? null}
+              />
+            )}
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (
               <div className="text-[9px] text-slate-600">

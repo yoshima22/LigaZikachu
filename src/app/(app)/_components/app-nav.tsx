@@ -155,6 +155,7 @@ const colecaoLinks = [
   { href: "/mascotes", label: "Mascotes", icon: Heart, adminOnly: false },
   { href: "/lacos", label: "Laços", icon: Heart, adminOnly: false, alpha: true },
   { href: "/pokedex", label: "Pokedex", icon: Search, adminOnly: false },
+  { href: "/habilidades", label: "Habilidades", icon: Zap, adminOnly: false },
   {
     href: "/professor",
     label: "Prof. Enguiça",

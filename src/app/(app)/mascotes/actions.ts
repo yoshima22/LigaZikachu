@@ -4,7 +4,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getMegaStoneByType, getMegaStoneForMegaPokemon, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
-import { getAbilityInfo } from "@/lib/abilities";
+import { availableAbilities, getAbilityInfo } from "@/lib/abilities";
+import { getPokedexLink } from "@/lib/pokedex-link";
 import { canLearnAbilityTm, readAbilityTmKey } from "@/lib/abilities/tm";
 import { getSessionPlayer } from "@/lib/session";
 import {
@@ -1586,6 +1587,29 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
   }
 }
 
+// Escolhe a habilidade em uso (a oculta só com o TM). null volta ao padrão da espécie.
+export async function setMascotAbilityAction(mascotId: string, abilitySlug: string | null): Promise<{ error?: string; ability?: string | null }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const mascot = await prisma.mascot.findUnique({
+      where: { id: mascotId },
+      select: { id: true, playerId: true, pokemonId: true, hiddenAbilityUnlocked: true },
+    });
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    if (abilitySlug !== null && !availableAbilities(mascot.pokemonId, mascot.hiddenAbilityUnlocked, "REAL").includes(abilitySlug)) {
+      return { error: "Esta habilidade não está disponível para o mascote (a oculta exige o TM)." };
+    }
+    await prisma.mascot.update({ where: { id: mascot.id }, data: { abilityChoice: abilitySlug } });
+    revalidate(player.id);
+    return { ability: abilitySlug };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao trocar a habilidade." };
+  }
+}
+
 // TM de habilidade oculta: libera a oculta da espécie para este mascote (uma vez).
 export async function useAbilityTmAction(mascotId: string, itemId: string): Promise<{ error?: string; abilityName?: string }> {
   try {
@@ -2141,7 +2165,7 @@ export async function getBankMascotsPageAction(input?: {
       arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
       hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true, diseasedAt: true,
       lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
-      ivRating: true, ivScore: true, performanceTag: true,
+      ivRating: true, ivScore: true, performanceTag: true, hiddenAbilityUnlocked: true, abilityChoice: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
       expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true } },
       routine: { select: { status: true, locationType: true } },
@@ -2211,6 +2235,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; megaStoneName: string | null;
+    hiddenAbilityUnlocked: boolean; abilityChoice: string | null; pokedexLink: { url: string | null; note: string | null };
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string;
@@ -2262,6 +2287,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         hatchedFromEggType: m.hatchedFromEggType,
         hatchedFromEggOrigin: m.hatchedFromEggOrigin,
         megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
+        hiddenAbilityUnlocked: m.hiddenAbilityUnlocked, abilityChoice: m.abilityChoice, pokedexLink: getPokedexLink(m.pokemonId),
         lastInteractedAt: m.lastInteractedAt,
         lastPlayedAt: m.lastPlayedAt,
         lastPettedAt: m.lastPettedAt,

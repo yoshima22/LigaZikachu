@@ -23,6 +23,7 @@ import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { getMegaStoneForMegaPokemon, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/mega-evolution";
+import { getPokedexLink } from "@/lib/pokedex-link";
 import { getActiveEggRarityBonusPct, getExpeditionEventBonusPct } from "@/lib/timed-game-bonuses";
 
 export const dynamic = "force-dynamic";
@@ -99,7 +100,7 @@ async function fetchMascotPageData(playerId: string) {
         arenaState: true, bazarListed: true,
         injuredAt: true, restingUntil: true,
         hatchedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true,
-        lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, diseasedAt: true, diseaseLastSpreadAt: true, socialCooldownUntil: true, hiddenAbilityUnlocked: true,
+        lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, diseasedAt: true, diseaseLastSpreadAt: true, socialCooldownUntil: true, hiddenAbilityUnlocked: true, abilityChoice: true,
         expeditions: {
           where: { status: "ACTIVE" },
           orderBy: { startedAt: "desc" },
@@ -385,6 +386,9 @@ export default async function MascotesPage() {
     hatchedFromEggType: m.hatchedFromEggType,
     hatchedFromEggOrigin: m.hatchedFromEggOrigin,
     megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
+    hiddenAbilityUnlocked: m.hiddenAbilityUnlocked,
+    abilityChoice: m.abilityChoice,
+    pokedexLink: getPokedexLink(m.pokemonId),
     lastInteractedAt: m.lastInteractedAt,
     lastPlayedAt: m.lastPlayedAt,
     lastPettedAt: m.lastPettedAt,
