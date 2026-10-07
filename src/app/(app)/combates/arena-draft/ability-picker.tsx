@@ -40,7 +40,8 @@ export function AbilityPicker({
       ) : (
         <p className="mt-1 text-xs font-bold text-violet-100">{info.name}</p>
       )}
-      <p className="mt-1 text-[11px] leading-4 text-slate-300">{info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)}</p>
+      {info.dex && <p className="mt-1 text-[9px] text-slate-500">Na Pokédex: {info.dex}</p>}
+      <p className="mt-0.5 text-[11px] leading-4 text-slate-300">{info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)}</p>
       {info.hasEffect && <p className="mt-0.5 text-[9px] text-slate-500">Valor calculado com os status atuais; chega ao máximo com {info.scale ? "o atributo em 250" : "—"}.</p>}
       {lockedHidden && hidden && (
         <p className="mt-1 text-[9px] text-violet-200/70">A oculta ({getAbilityInfo(hidden)?.name}) é liberada com o TM dela (ZikaShop/Bazar).</p>

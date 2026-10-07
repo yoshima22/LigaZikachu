@@ -62,7 +62,8 @@ export function MascotAbilityPanel({
           )
         )}
       </div>
-      {info && <p className="mt-1 leading-snug text-slate-300">{info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)}</p>}
+      {info?.dex && <p className="mt-1 text-[9px] text-slate-500">Na Pokédex: {info.dex}</p>}
+      {info && <p className="mt-0.5 leading-snug text-slate-300">{info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)}</p>}
       {info?.hasEffect && info.scale && (
         <p className="mt-0.5 text-[9px] text-slate-600">O efeito cresce com o atributo {info.scale} (máximo em 250). Só vale no Arena Draft por enquanto.</p>
       )}

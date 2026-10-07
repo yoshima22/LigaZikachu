@@ -36,7 +36,8 @@ function AbilityBlock({ info, badge }: { info: AbilityInfo; badge?: React.ReactN
         {badge}
         {info.effectName && <span className="text-[10px] text-slate-500">Efeito: {info.effectName}</span>}
       </div>
-      <p className="mt-1.5 leading-relaxed text-slate-300">{describeAbility(info)}</p>
+      {info.dex && <p className="mt-1.5 text-[10px] text-slate-500">Na Pokédex: {info.dex}</p>}
+      <p className="mt-1 leading-relaxed text-slate-300">{info.hasEffect ? "No combate: " : ""}{describeAbility(info)}</p>
       {info.hasEffect && (
         <p className="mt-1 text-[10px] text-slate-500">
           Gatilho: <b className="text-slate-400">{info.trigger}</b>

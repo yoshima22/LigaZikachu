@@ -45,6 +45,8 @@ export type AbilityInfo = {
   max: number | null;
   param: string | null;
   template: string | null;
+  /** O que a habilidade faz na Pokédex (resumo em português). */
+  dex: string | null;
 };
 
 const cache = new Map<string, AbilityInfo | null>();
@@ -73,6 +75,7 @@ export function getAbilityInfo(slug: string | null | undefined): AbilityInfo | n
       max: max == null ? null : max / 100,
       param: def.param ?? null,
       template: eff?.text ?? null,
+      dex: def.dex ?? null,
     };
   }
   cache.set(slug, info);
