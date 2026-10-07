@@ -1286,25 +1286,25 @@ export async function submitArenaDraftStrategyAction(input: {
       if (battle.plans?.[side])
         throw new Error("Sua estratégia já foi confirmada.");
       const eligible = side === "A" ? battle.eligibleA : battle.eligibleB;
-      const unique = [...new Set(input.activeIds)];
       const dead = new Set(
         Object.entries(battle.runtime?.hp ?? {})
           .filter(([, hp]) => hp <= 0)
           .map(([id]) => id),
       );
+      // Derrotados saem do campo automaticamente.
+      const unique = [...new Set(input.activeIds)].filter((id) => !dead.has(id));
       const livingEligible = eligible.filter((id) => !dead.has(id));
       const requiredActive = Math.min(
         ARENA_DRAFT_RULES.activeSize,
         livingEligible.length,
       );
       if (
-        unique.length !== requiredActive ||
-        unique.some((id) => !eligible.includes(id) || dead.has(id))
+        unique.length < 1 ||
+        unique.length > requiredActive ||
+        unique.some((id) => !eligible.includes(id))
       )
         throw new Error(
-          requiredActive === ARENA_DRAFT_RULES.activeSize
-            ? "Escolha exatamente 6 mascotes vivos."
-            : `Sua equipe só possui ${requiredActive} mascote${requiredActive === 1 ? "" : "s"} vivo${requiredActive === 1 ? "" : "s"}; confirme com todos em campo.`,
+          `Escolha de 1 a ${requiredActive} mascote${requiredActive === 1 ? "" : "s"} vivo${requiredActive === 1 ? "" : "s"} para entrar em campo.`,
         );
       const validRoles = new Set([
         "DEFENDER",

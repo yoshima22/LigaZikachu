@@ -573,7 +573,13 @@ function StrategyWindow({
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [active, setActive] = useState(strategy.activeIds);
+  // Derrotados saem do campo sozinhos: não precisa removê-los à mão.
+  const aliveIds = (list: string[]) =>
+    list.filter((id) => {
+      const pet = pets.find((p) => p.id === id);
+      return pet && (pet.hp === null || pet.hp > 0);
+    });
+  const [active, setActive] = useState(() => aliveIds(strategy.activeIds));
   const [postures, setPostures] = useState<Record<string, Role>>(() =>
     Object.fromEntries(pets.map((p) => [p.id, p.posture])),
   );
@@ -587,12 +593,14 @@ function StrategyWindow({
   const [revealed, setRevealed] = useState(false);
   useEffect(() => {
     setRevealed(false);
+    setActive(aliveIds(strategy.activeIds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [strategy.checkpointTurn]);
   const toggle = (id: string) =>
     setActive((cur) =>
       cur.includes(id)
         ? cur.filter((x) => x !== id)
-        : cur.length < 6
+        : cur.length < requiredActive
           ? [...cur, id]
           : cur,
     );
@@ -668,7 +676,7 @@ function StrategyWindow({
         {pets.map((p) => {
           const selected = active.includes(p.id),
             dead = p.hp !== null && p.hp <= 0;
-          const benchFull = !selected && active.length >= 6;
+          const benchFull = !selected && active.length >= requiredActive;
           return (
             <article
               key={p.id}
@@ -754,7 +762,7 @@ function StrategyWindow({
                 onClick={() => toggle(p.id)}
                 title={
                   benchFull
-                    ? "Já há 6 em campo. Tire um do campo para colocar uma reserva."
+                    ? "Campo cheio. Tire um do campo para colocar uma reserva."
                     : dead && selected
                       ? "Derrotado: mande ao banco para liberar a vaga a uma reserva viva."
                       : undefined
@@ -768,7 +776,7 @@ function StrategyWindow({
                     : selected
                       ? "↓ Mandar ao banco"
                       : benchFull
-                        ? "Campo cheio (6/6)"
+                        ? `Campo cheio (${requiredActive}/${requiredActive})`
                         : "↑ Colocar em campo"}
               </button>
               <label className="mt-2 block text-[8px] font-bold uppercase tracking-wider text-slate-500">
@@ -877,7 +885,8 @@ function StrategyWindow({
             disabled={
               pending ||
               strategy.ownConfirmed ||
-              active.length !== requiredActive ||
+              active.length < 1 ||
+              active.length > requiredActive ||
               active.some((id) => !living.some((pet) => pet.id === id))
             }
             onClick={submit}
@@ -928,9 +937,10 @@ function AnimatedBattle({
   const [speedMs, setSpeedMs] = useState(1300);
   const finishedRef = useRef(false);
   useEffect(() => {
-    setCursor(Math.max(-1, from - 1));
+    setCursor(startCursor);
     setPlaying(true);
     finishedRef.current = false;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [from, initialCursor, end, events.length]);
   useEffect(() => {
     if (!playing) return;
@@ -1871,10 +1881,14 @@ function Replay({
     .map(statFor)
     .sort((a, b) => b.kos - a.kos || b.dealt - a.dealt);
   const mvp = stats[0];
-  const finalSegmentStart = Math.max(
-    0,
-    events.findIndex((event) => event.turn > 45),
-  );
+  // Começa logo após a última janela estratégica concluída (T20/35/45) — ou do
+  // início, se a luta acabou sem nenhuma pausa. Nunca recomeça a luta inteira.
+  const lastWindowTurn =
+    battle.checkpoint && battle.checkpoint > 0
+      ? (battle.checkpoints?.[battle.checkpoint - 1] ?? 0)
+      : 0;
+  const firstFinal = events.findIndex((event) => event.turn > lastWindowTurn);
+  const finalSegmentStart = firstFinal >= 0 ? firstFinal : events.length;
   // O resultado (campeão/estatísticas) só aparece depois que a luta rolar até o
   // fim — evita spoiler e garante que a animação final seja assistida.
   const [revealed, setRevealed] = useState(events.length === 0);
