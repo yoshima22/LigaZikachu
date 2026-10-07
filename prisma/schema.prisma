@@ -1862,6 +1862,7 @@ enum ShopItemType {
   XP_SHARE
   XP_SHARE_TEAM
   RAINBOW_FEATHER
+  ABILITY_TM
   MEGA_STONE_ABOMASITE
   MEGA_STONE_ABSOLITE
   MEGA_STONE_AERODACTYLITE
@@ -2740,6 +2741,10 @@ model Mascot {
   favoriteOrder             Int                       @default(0)
   // Postura de combate salva pelo jogador; se null, usa a recomendada pelo maior status.
   preferredCombatRole       String?
+  // Habilidade passiva: a oculta só fica disponível (modo Padrão) depois do TM correspondente.
+  hiddenAbilityUnlocked     Boolean                   @default(false)
+  // Habilidade escolhida pelo jogador (slug do PokeAPI); se null, vale a padrão da espécie.
+  abilityChoice             String?
   player                    Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions               MascotExpedition[]
   arenaTeamMembers          ArenaTeamMember[]

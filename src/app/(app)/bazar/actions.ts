@@ -240,6 +240,8 @@ const MIAUVADAO_ELIGIBLE_TYPES = [
 
 const MIAUVADAO_MAX_DISCOUNT = 70;
 const MIAUVADAO_MEGA_STONE_MAX_DISCOUNT = 20;
+// Pedras de Mega e TMs de habilidade compartilham o teto de desconto (itens de poder).
+const hasCappedDiscount = (type: string) => isMegaStoneType(type) || type === "ABILITY_TM";
 const MIAUVADAO_SLOT_REFRESH_COST = 250;
 const DEFAULT_MIAUVADAO_PURCHASE_RECHARGE_MINUTES = 10;
 
@@ -289,17 +291,21 @@ async function rollMiauvadaoOffers(
   const shuffled = [...shopItems].sort(() => Math.random() - 0.5);
   const chosen: typeof shopItems = [];
   let hasMegaStone = false;
+  let hasAbilityTm = false;
   for (const item of shuffled) {
     const megaStone = isMegaStoneType(item.type);
+    const abilityTm = item.type === "ABILITY_TM";
     if (megaStone && hasMegaStone) continue;
+    if (abilityTm && hasAbilityTm) continue; // no máximo 1 TM por rotação
     chosen.push(item);
     if (megaStone) hasMegaStone = true;
+    if (abilityTm) hasAbilityTm = true;
     if (chosen.length === 3) break;
   }
 
   return chosen.map(item => {
     const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
-    const maxAllowedDiscount = isMegaStoneType(item.type)
+    const maxAllowedDiscount = hasCappedDiscount(item.type)
       ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT
       : MIAUVADAO_MAX_DISCOUNT;
     const rawDiscount = minDisc + Math.floor(Math.random() * (maxDisc - minDisc + 1)) + vaultBonus + extraBonus;
@@ -923,6 +929,8 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           battleWins: mascot.battleWins,
           hatchedFromEggType: mascot.hatchedFromEggType,
           hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
+          hiddenAbilityUnlocked: mascot.hiddenAbilityUnlocked,
+          abilityChoice: mascot.abilityChoice,
           // Avaliação do Laboratório (quando o mascote já foi analisado).
           ...(mascot.analyzedAt ? { ivRating: mascot.ivRating, ivScore: mascot.ivScore, performanceTag: mascot.performanceTag } : {}),
         };
@@ -2624,7 +2632,7 @@ async function _computePersonalOffer(playerId: string, vaultBalance: number, exc
   const sorted = [...(eligible.length > 0 ? eligible : shopItems)].sort((a, b) => a.id.localeCompare(b.id)); // ordem base estável
   const item = sorted[Math.floor(rng() * sorted.length)];
   const [minDisc, maxDisc] = DISCOUNT_BY_RARITY[item.rarity] ?? [10, 25];
-  const maxAllowed = isMegaStoneType(item.type) ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT;
+  const maxAllowed = hasCappedDiscount(item.type) ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT : MIAUVADAO_MAX_DISCOUNT;
   const vaultBonus = Math.min(14, Math.floor(Math.sqrt(Math.max(0, vaultBalance) / 500) * 3));
   const discountPct = Math.min(maxAllowed, minDisc + Math.floor(rng() * (maxDisc - minDisc + 1)) + vaultBonus);
   const finalPrice = Math.max(1, Math.round(item.price * (1 - discountPct / 100)));
@@ -2786,7 +2794,7 @@ export async function adminSetMiauvadaoOffers(offers: MiauvadaoOffer[]): Promise
     await requireAdmin();
     const validUntil = getMiauvadaoRotation().next.toISOString();
     const offersWithExpiry = offers.map(o => {
-      const discountLimit = isMegaStoneType(o.itemType)
+      const discountLimit = hasCappedDiscount(o.itemType)
         ? MIAUVADAO_MEGA_STONE_MAX_DISCOUNT
         : MIAUVADAO_MAX_DISCOUNT;
       const discountPct = Math.max(0, Math.min(discountLimit, o.discountPct ?? 0));
@@ -2893,7 +2901,10 @@ export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ e
       const candidates = await rollMiauvadaoOffers(config.vaultBalance, 0, stockOverridesFromJson(config.offerStockOverrides));
       const existingIds = new Set(offers.map((offer) => offer.shopItemId));
       const anotherMegaStoneExists = offers.some((offer, index) => index !== offerIndex && isMegaStoneType(offer.itemType));
-      const eligibleCandidates = candidates.filter((offer) => !anotherMegaStoneExists || !isMegaStoneType(offer.itemType));
+      const anotherAbilityTmExists = offers.some((offer, index) => index !== offerIndex && offer.itemType === "ABILITY_TM");
+      const eligibleCandidates = candidates.filter((offer) =>
+        (!anotherMegaStoneExists || !isMegaStoneType(offer.itemType)) &&
+        (!anotherAbilityTmExists || offer.itemType !== "ABILITY_TM"));
       const replacement = eligibleCandidates.find((offer) => !existingIds.has(offer.shopItemId)) ?? eligibleCandidates[0];
       if (!replacement) throw new Error("Nenhum item elegível para a troca.");
       const updatedOffers = [...offers];
@@ -3926,6 +3937,8 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           battleWins: mascot.battleWins,
           hatchedFromEggType: mascot.hatchedFromEggType,
           hatchedFromEggOrigin: mascot.hatchedFromEggOrigin,
+          hiddenAbilityUnlocked: mascot.hiddenAbilityUnlocked,
+          abilityChoice: mascot.abilityChoice,
           ...(mascot.analyzedAt ? { ivRating: mascot.ivRating, ivScore: mascot.ivScore, performanceTag: mascot.performanceTag } : {}),
         };
       } else if (input.category === "ITEM") {

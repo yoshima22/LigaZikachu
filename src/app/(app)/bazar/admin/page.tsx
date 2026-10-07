@@ -115,7 +115,7 @@ export default function MiauvadaoAdminPage() {
       if (field === "discountPct" || field === "originalPrice" || field === "itemType") {
         const orig = field === "originalPrice" ? Number(value) : (next[idx].originalPrice ?? 0);
         const rawDisc = field === "discountPct" ? Number(value) : (next[idx].discountPct ?? 0);
-        const maxDiscount = isMegaStoneType(String(next[idx].itemType ?? "")) ? 20 : 90;
+        const maxDiscount = (isMegaStoneType(String(next[idx].itemType ?? "")) || next[idx].itemType === "ABILITY_TM") ? 20 : 90;
         const disc = Math.min(maxDiscount, Math.max(0, rawDisc));
         next[idx].discountPct = disc;
         next[idx].finalPrice = Math.round(orig * (1 - disc / 100));
@@ -353,7 +353,7 @@ export default function MiauvadaoAdminPage() {
                 </div>
                 <div className="space-y-1">
                   <label className="text-[10px] text-slate-500">Desconto (%)</label>
-                  <input type="number" min={1} max={isMegaStoneType(String(offer.itemType ?? "")) ? 20 : 90} value={offer.discountPct ?? ""}
+                  <input type="number" min={1} max={(isMegaStoneType(String(offer.itemType ?? "")) || offer.itemType === "ABILITY_TM") ? 20 : 90} value={offer.discountPct ?? ""}
                     onChange={e => updateOffer(idx, "discountPct", parseInt(e.target.value) || 0)}
                     className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-xs text-slate-200 outline-none" />
                 </div>

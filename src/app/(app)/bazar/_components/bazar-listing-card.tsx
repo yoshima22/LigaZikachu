@@ -151,6 +151,11 @@ export function BazarListingCard({ listing }: { listing: Listing }) {
                 🥚 {eggOriginLabel}
               </div>
             )}
+            {listing.category === "MASCOT" && payload.hiddenAbilityUnlocked === true && (
+              <div className="absolute left-1.5 top-1.5 rounded-full border border-violet-400/40 bg-slate-950/90 px-2 py-0.5 text-[9px] font-semibold text-violet-200" title="Habilidade oculta liberada por TM">
+                💿 Oculta liberada
+              </div>
+            )}
             {mascotRarity && mascotRarityLabel && (
               <div className={`absolute top-1.5 right-1.5 rounded-full border px-2 py-0.5 text-[9px] font-semibold ${RARITY_COLOR[mascotRarity] || "border-slate-500/40 bg-slate-800/80 text-slate-300"}`}>
                 {mascotRarityLabel}

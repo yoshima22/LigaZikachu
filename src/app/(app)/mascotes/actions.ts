@@ -4,6 +4,8 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getMegaStoneByType, getMegaStoneForMegaPokemon, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
+import { getAbilityInfo } from "@/lib/abilities";
+import { canLearnAbilityTm, readAbilityTmKey } from "@/lib/abilities/tm";
 import { getSessionPlayer } from "@/lib/session";
 import {
   startIncubation, hatchEgg, equipMascot, unequipMascot,
@@ -1581,6 +1583,62 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
     return { megaName: stone.megaPokemonName };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao usar Pedra de Mega EvoluÃ§Ã£o." };
+  }
+}
+
+// TM de habilidade oculta: libera a oculta da espécie para este mascote (uma vez).
+export async function useAbilityTmAction(mascotId: string, itemId: string): Promise<{ error?: string; abilityName?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const [mascot, inventoryItem] = await Promise.all([
+      prisma.mascot.findUnique({
+        where: { id: mascotId },
+        select: { id: true, playerId: true, pokemonId: true, nickname: true, hiddenAbilityUnlocked: true },
+      }),
+      prisma.playerInventory.findUnique({
+        where: { playerId_itemId: { playerId: player.id, itemId } },
+        include: { item: true },
+      }),
+    ]);
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    if (!inventoryItem || inventoryItem.quantity <= 0) return { error: "Você não tem este TM." };
+    const abilityKey = inventoryItem.item.type === "ABILITY_TM" ? readAbilityTmKey(inventoryItem.item.metadata) : null;
+    if (!abilityKey) return { error: "Este item não é um TM de habilidade." };
+    const info = getAbilityInfo(abilityKey);
+    if (!info) return { error: "Habilidade do TM não configurada." };
+    if (mascot.hiddenAbilityUnlocked) return { error: "Este mascote já desbloqueou a habilidade oculta." };
+    if (!canLearnAbilityTm({ pokemonId: mascot.pokemonId, abilityKey, hiddenUnlocked: false })) {
+      return { error: `${inventoryItem.item.name} só funciona em mascotes que têm ${info.name} como habilidade oculta.` };
+    }
+
+    await prisma.$transaction(async (tx) => {
+      // Atômico: só consome se o mascote ainda não tinha desbloqueado e o TM ainda existe.
+      const unlocked = await tx.mascot.updateMany({
+        where: { id: mascot.id, playerId: player.id, hiddenAbilityUnlocked: false },
+        data: { hiddenAbilityUnlocked: true },
+      });
+      if (unlocked.count !== 1) throw new Error("A habilidade oculta deste mascote já foi desbloqueada.");
+      const consumed = await tx.playerInventory.updateMany({
+        where: { playerId: player.id, itemId, quantity: { gt: 0 } },
+        data: { quantity: { decrement: 1 } },
+      });
+      if (consumed.count !== 1) throw new Error("Este TM já foi consumido em outra ação.");
+      await tx.mascotEvent.create({
+        data: {
+          mascotId: mascot.id,
+          emoji: "💿",
+          description: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} aprendeu a habilidade oculta ${info.name} com o ${inventoryItem.item.name}.`,
+        },
+      });
+    });
+    revalidate(player.id);
+    return { abilityName: info.name };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao usar o TM." };
   }
 }
 

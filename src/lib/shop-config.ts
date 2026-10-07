@@ -99,6 +99,9 @@ export const SPECIAL_MASCOT_SHOP_ITEM_TYPES = [
 // telas de uso sem exigir a manutenção manual de uma segunda lista.
 export const MEGA_STONE_SHOP_ITEM_TYPES = MEGA_STONES.map((stone) => stone.type);
 
+// TM de habilidade oculta: um tipo de item, a habilidade fica em ShopItem.metadata.
+export const ABILITY_TM_SHOP_ITEM_TYPES = ["ABILITY_TM"] as const;
+
 export const LEAGUE_SHOP_ITEM_TYPES = [
   "LEAGUE_CAPTAIN_BAND", "LEAGUE_FORMATION_WHISTLE", "LEAGUE_BENCH_SHIELD", "LEAGUE_CHEER_FLAG",
   "LEAGUE_ENGUICA_STRATEGY", "LEAGUE_ANALYSIS_LANTERN", "LEAGUE_ROUND_BOOTS", "LEAGUE_LOCKER_TONIC",
@@ -122,6 +125,7 @@ export const MASCOT_SHOP_ITEM_TYPES = [
   ...MASCOT_BUFF_SHOP_ITEM_TYPES,
   ...SPECIAL_MASCOT_SHOP_ITEM_TYPES,
   ...MEGA_STONE_SHOP_ITEM_TYPES,
+  ...ABILITY_TM_SHOP_ITEM_TYPES,
   ...LEAGUE_SHOP_ITEM_TYPES,
 ] as const;
 
@@ -184,6 +188,7 @@ export const SHOP_ITEM_EMOJI: Record<string, string> = {
   XP_SHARE: "📡",
   XP_SHARE_TEAM: "📡",
   RAINBOW_FEATHER: "🌈",
+  ABILITY_TM: "💿",
   BOND_SHARED_BERRY: "🫐", BOND_CALMING_HERB: "🌿", BOND_REVENGE_TOKEN: "🪙", BOND_TRAINING_RIBBON: "🎗️",
   BOND_SHARED_PILLOW: "🛏️", BOND_NIGHT_TEA: "🍵", BOND_YARD_TOY: "🪀", BOND_ILLUSTRATED_INVITATION: "💌",
   BOND_MEMORY_ALBUM: "📔", BOND_TRUCE_BELL: "🔔", BOND_PROMISE_CHARM: "🤝", BOND_PROMISE_SHIELD: "🛡️", BOND_CHALLENGE_LETTER: "✉️",

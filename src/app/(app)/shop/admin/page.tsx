@@ -40,6 +40,9 @@ export default async function ShopAdminPage() {
       <div>
         <h1 className="font-pixel text-base text-[#FFCB05]">Gerenciar ZikaShop</h1>
         <p className="mt-1 text-sm text-slate-400">Cadastre e gerencie itens da loja.</p>
+        <Link href="/shop/admin/tms" className="mt-2 inline-flex items-center gap-1.5 rounded-lg border border-violet-400/40 bg-violet-400/10 px-3 py-1.5 text-xs font-bold text-violet-200 hover:bg-violet-400/20">
+          💿 TMs de habilidade oculta (liberação gradual)
+        </Link>
       </div>
 
       {/* Guia de tamanhos */}

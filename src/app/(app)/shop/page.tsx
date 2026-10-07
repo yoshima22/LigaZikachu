@@ -180,11 +180,13 @@ export default async function ShopPage() {
   const frames   = items.filter((i) => i.type === "FRAME");
   const tickets  = items.filter((i) => i.type === "ZIKALOOT_TICKET");
   const megaItems = items.filter((i) => isMegaStoneType(i.type));
+  const tmItems = items.filter((i) => i.type === "ABILITY_TM");
   const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
   const mascotItems = items.filter((i) =>
     MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&
     !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]) &&
-    !isMegaStoneType(i.type)
+    !isMegaStoneType(i.type) &&
+    i.type !== "ABILITY_TM"
   );
   // Buffs ficam na mesma seção de Doces e Comidas — contar do inventário
   const buffInventory = inventoryRows.filter(r => {
@@ -299,6 +301,15 @@ export default async function ShopPage() {
             content: (
               <ShopGrid title="Pedras de Mega Evolução"
                 items={megaItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} searchable pageSize={12} />
+            ),
+          }] : []),
+          ...((tmItems.length > 0) ? [{
+            id: "tm-habilidades", label: "TMs de Habilidade", icon: TAB_ICONS.buffs,
+            count: tmItems.length,
+            content: (
+              <ShopGrid title="TMs de Habilidade Oculta"
+                items={tmItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} searchable pageSize={12} />
             ),
           }] : []),

@@ -4,14 +4,15 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
-import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, searchOwnedMascotsForItemAction } from "../actions";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
+import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
   description?: string; imageUrl?: string;
-  metadata?: { eggTier?: string; adminLabOriginOverride?: boolean } | null;
+  metadata?: { eggTier?: string; adminLabOriginOverride?: boolean; kind?: string; abilityKey?: string } | null;
 }
 interface MascotOption {
   id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
@@ -21,6 +22,7 @@ interface MascotOption {
   proteinDoses?: number;
   activeBuffTypes?: string[];
   diseasedAt?: Date | string | null;
+  hiddenAbilityUnlocked?: boolean;
 }
 
 type RainbowFeatherSnapshot = {
@@ -63,6 +65,7 @@ const BUFF_EMOJI: Record<string, string> = {
   RAINBOW_FEATHER:   "🌈",
   ANTIDOTE:          "🧪",
   FIRST_AID_KIT:     "🩹",
+  ABILITY_TM:        "💿",
 };
 
 // Onde cada buff de EXP se aplica
@@ -187,6 +190,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const isMegaStone = selectedBuffItem ? isMegaStoneType(selectedBuffItem.type) : false;
   const selectedMegaStone = selectedBuffItem ? getMegaStoneByType(selectedBuffItem.type) : null;
   const isRainbowFeather = selectedBuffItem?.type === "RAINBOW_FEATHER";
+  const isAbilityTm = selectedBuffItem?.type === "ABILITY_TM";
+  const abilityTmDef = isAbilityTm ? getAbilityTmDef(readAbilityTmKey(selectedBuffItem?.metadata) ?? "") : null;
   const isWeaknessPolicy = selectedBuffItem?.type === "WEAKNESS_POLICY";
   const isAntidote = selectedBuffItem?.type === "ANTIDOTE";
   // Kit age na conta inteira: qualquer mascote serve como ponto de uso.
@@ -207,6 +212,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   };
   const isEligible = (mascot: MascotOption) => {
     if (isFirstAidKit) return true;
+    if (isAbilityTm) return Boolean(abilityTmDef?.pokemonIds.includes(mascot.pokemonId)) && mascot.hiddenAbilityUnlocked !== true;
     if (isAntidote) return Boolean(mascot.diseasedAt);
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
@@ -315,7 +321,9 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (!isPlayerLevel && selectedMascotObj && !isEligible(selectedMascotObj)) {
       toast.error(isMegaStone && selectedMegaStone
         ? `Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`
-        : "Este mascote não é elegível para este item.");
+        : isAbilityTm
+          ? "Este TM só funciona em mascotes que têm essa habilidade como oculta e ainda não a desbloquearam."
+          : "Este mascote não é elegível para este item.");
       return;
     }
 
@@ -344,6 +352,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         error?: string;
         replacedExistingBuff?: boolean;
         megaName?: string;
+        abilityName?: string;
         statRange?: string;
         comparison?: RainbowFeatherComparison;
         honeyOutcome?: {
@@ -361,6 +370,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
       else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
       else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
+      else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
       else r = await useMascotBuffAction(selectedMascot, selectedBuff);
 
       if (r.error) toast.error(r.error, { duration: 10000 });
@@ -377,6 +387,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`${mascotName} renasceu no nível 1 com atributos ${r.statRange ?? "ressorteados"}! 🌈`);
           if (r.comparison) setFeatherComparison(r.comparison);
           else window.setTimeout(() => window.location.reload(), 600);
+        } else if (t === "ABILITY_TM") {
+          toast.success(`${mascotName} desbloqueou a habilidade oculta ${r.abilityName ?? ""}! 💿`);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "LUCKY_EGG") {
