@@ -1,4 +1,5 @@
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
+import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { EXTRA_FORM_NAMES, EXTRA_FORM_ELEMENTS, EXTRA_FORM_POOL_BY_GEN } from "@/lib/extra-forms-data";
 
 /**
@@ -1284,7 +1285,8 @@ const OFFICIAL_MEGA_FORM_IDS = [
   10074, 10075, 10076, 10079, 10087, 10088, 10089, 10090,
 ] as const;
 const ANIMATED_MEGA_SPRITE_IDS = new Set<number>(OFFICIAL_MEGA_FORM_IDS);
-const MEGA_FORM_ID_SET = new Set<number>([...OFFICIAL_MEGA_FORM_IDS, 10301, 10302]);
+// Inclui as megas custom (10278–10326) adicionadas depois, para exibirem a tag Mega.
+const MEGA_FORM_ID_SET = new Set<number>([...OFFICIAL_MEGA_FORM_IDS, 10301, 10302, ...CUSTOM_MEGA_POKEMON_IDS]);
 const SPRITE_ID_OVERRIDES: Record<number, number> = {
   // Galar form IDs in this codebase differ from PokeAPI sprite IDs
   10158: 10161, // Meowth-Galar
