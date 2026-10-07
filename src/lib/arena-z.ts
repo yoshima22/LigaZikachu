@@ -1378,7 +1378,7 @@ function runArenaCombatInternal(
         });
         if (abilityEngine)
           for (const c of abilityEngine.flushHpChanges())
-            pushAbilityLog({ actor: c.by, target: c.m, hpAfter: c.hpAfter, text: c.text });
+            pushAbilityLog({ actor: c.by, target: c.m, hpAfter: c.hpAfter, heal: c.heal, text: c.text });
         turn++;
       }
     }

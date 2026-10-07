@@ -33,6 +33,8 @@ export type AbilityRuntime = {
   armed: string[];
   /** Origem do maior debuff ativo por atributo. */
   origins: Record<string, Partial<Record<Stat4, DebuffOrigin>>>;
+  /** Bônus de Ambiente e Aura do lado anulados nesta rodada (Anula bônus rivais). */
+  anular: { A: boolean; D: boolean };
 };
 
 export type AbilityStandalone = {
@@ -60,7 +62,7 @@ const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;
 const statLabel: Record<Stat4, string> = { force: "Força", agility: "Agilidade", instinct: "Instinto", vitality: "Vitalidade" };
 
 export function emptyAbilityRuntime(): AbilityRuntime {
-  return { started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {} };
+  return { started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {}, anular: { A: false, D: false } };
 }
 
 export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, previous?: AbilityRuntime) {
@@ -78,7 +80,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   const hpOf = (m: ArenaMascot) => host.hp.get(m.id) ?? 0;
   const events: DebuffEvent[] = [];
   const standalone: AbilityStandalone[] = [];
-  const hpChanges: Array<{ m: ArenaMascot; hpAfter: number; by: ArenaMascot; text: string }> = [];
+  const hpChanges: Array<{ m: ArenaMascot; hpAfter: number; by: ArenaMascot; text: string; heal?: number }> = [];
   let redirected: string | null = null; // quem foi redirecionado por Para-raios neste golpe
 
   const held = (m: ArenaMascot): Held | null => {
@@ -246,6 +248,35 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         }
       }
     }
+    // Anula bônus rivais: nas 3 primeiras rodadas o Ambiente e a Aura do lado oposto não valem.
+    for (const side of ["A", "D"] as const) {
+      rt.anular[side] = false;
+      const foes = side === "A" ? host.defenders : host.attackers;
+      for (const holder of alive(foes)) {
+        const h = heldAs(holder, "ANULAR_BONUS");
+        if (!h || round > 3 || !hasLeft(holder, h)) continue;
+        rt.anular[side] = true;
+        rt.ambient[side] = null;
+        standalone.push({ actor: holder, text: say(holder, h, `os bônus de Ambiente e Aura dos rivais foram anulados nesta rodada.`) });
+        break;
+      }
+    }
+    // Pesadelo: cada rival perde uma fração do HP máximo no início da rodada.
+    for (const m of all) {
+      const h = heldAs(m, "PESADELO");
+      if (!h || hpOf(m) <= 0 || round > 3 || !hasLeft(m, h)) continue;
+      const v = value(m, h);
+      const head = say(m, h, `os rivais perdem ${pct(v)} do HP máximo.`);
+      let first = true;
+      for (const foe of alive(foesOf(m))) {
+        const loss = Math.max(1, Math.round(foe.hp * v));
+        host.hp.set(foe.id, Math.max(0, hpOf(foe) - loss));
+        const notes: string[] = [];
+        if (hpOf(foe) <= 0) onFall(foe, m, notes);
+        standalone.push({ actor: m, target: foe, hpAfter: hpOf(foe), text: `${first ? head + " " : ""}${foe.name} perdeu ${loss} HP.${notes.length ? " " + notes.join(" ") : ""}` });
+        first = false;
+      }
+    }
   }
 
   // ── Ataque ─────────────────────────────────────────────────────────────────
@@ -269,6 +300,8 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         case "VANTAGEM": ok = a.multiplier > 1; break;
         case "LENTE": ok = a.multiplier < 1; text = `o golpe resistido perde menos dano (+${pct(v)}).`; break;
         case "ULTIMO": ok = a.isLastOfSide; break;
+        case "GOLPE_FELIZ": ok = host.rand() < REACTION_CHANCE; text = `golpe feliz: ${pct(v)} mais dano.`; break;
+        case "AQUECIMENTO": ok = host.getRound() >= 3; text = `já aquecido: golpe com ${pct(v)} mais dano.`; break;
         case "ANALISE": {
           const weakest = [...alive(foesOf(a.actor))].sort((x, y) => x.vitality - y.vitality)[0];
           ok = weakest?.id === a.target.id;
@@ -293,7 +326,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     let bestAura: { m: ArenaMascot; h: Held; v: number } | null = null;
     for (const ally of alive(teamOf(a.actor))) {
       const ah = heldAs(ally, "AURA");
-      if (ah && hasLeft(ally, ah) && matchesTypes(ah, types)) {
+      if (ah && !rt.anular[sideOf.get(a.actor.id)!] && hasLeft(ally, ah) && matchesTypes(ah, types)) {
         const v = value(ally, ah);
         if (!bestAura || v > bestAura.v) bestAura = { m: ally, h: ah, v };
       }
@@ -362,6 +395,14 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     const h = held(a.target);
     if (!h) return { factor, heal, notes };
     const code = h.info.effectCode;
+    if (code === "AQUECIMENTO") {
+      // Nas 2 primeiras rodadas o dono se protege; depois passa a bater mais forte (ver attackBonus).
+      if (host.getRound() <= 2) {
+        const v = value(a.target, h);
+        return { factor: 1 - v, heal, notes: [`✨ ${h.info.name} de ${a.target.name}: aquecendo, o golpe causou ${pct(v)} menos dano.`] };
+      }
+      return { factor, heal, notes };
+    }
     const hpFull = hpOf(a.target) >= a.target.hp;
     const hpPct = hpOf(a.target) / a.target.hp;
     const attackerTypes = host.typesOf(a.actor);
@@ -477,6 +518,15 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         healTarget(a.target, gain);
         notes.push(say(a.target, t, `recuperou ${hpOf(a.target) - before} HP.`));
       }
+    }
+    const vamp = heldAs(a.actor, "VAMPIRISMO");
+    if (vamp && hasLeft(a.actor, vamp) && a.damage > 0 && hpOf(a.actor) > 0 && hpOf(a.actor) < a.actor.hp) {
+      const v = value(a.actor, vamp);
+      const before = hpOf(a.actor);
+      healTarget(a.actor, Math.max(1, Math.round(a.damage * v)));
+      const gained = hpOf(a.actor) - before;
+      notes.push(say(a.actor, vamp, `recuperou ${gained} HP do dano causado.`));
+      hpChanges.push({ m: a.actor, hpAfter: hpOf(a.actor), by: a.actor, heal: gained, text: `${a.actor.name} recupera ${gained} HP` });
     }
     const h = held(a.actor);
     if (h && h.info.effectCode === "TOQUE" && targetAlive && hasLeft(a.actor, h) && hpOf(a.actor) > 0 && host.rand() < REACTION_CHANCE) {

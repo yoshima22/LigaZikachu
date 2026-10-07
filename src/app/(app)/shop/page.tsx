@@ -157,7 +157,7 @@ export default async function ShopPage() {
   const pricedAll=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice??suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
   // TMs cujas espécies compatíveis estão todas desligadas no painel não aparecem.
   const items = await filterAvailableTmItems(pricedAll);
-  const disabledSpecies = items.some((i) => i.type === "ABILITY_TM") ? await getDisabledSpeciesIds() : new Set<number>();
+  const disabledSpecies = items.some((i) => i.type === "ABILITY_TM" || isMegaStoneType(i.type)) ? await getDisabledSpeciesIds() : new Set<number>();
   const activeGlobalPromotions = promotions.filter((promotion) =>
     promotion.scope === "GLOBAL"
     && promotion.active
@@ -187,7 +187,9 @@ export default async function ShopPage() {
   // Quem pode ser beneficiado: a pedra serve a uma espécie; o TM, às espécies com aquela habilidade oculta (ligadas no painel).
   const megaItems = items.filter((i) => isMegaStoneType(i.type)).map((i) => {
     const stone = getMegaStoneByType(i.type);
-    return { ...i, compatibleIds: stone ? [stone.compatiblePokemonId] : [], megaTargetId: stone?.megaPokemonId };
+    // Espécies não liberadas no painel de admin não aparecem na lista.
+    const ids = stone ? [stone.compatiblePokemonId].filter((id) => !disabledSpecies.has(id)) : [];
+    return { ...i, compatibleIds: ids, megaTargetId: stone && !disabledSpecies.has(stone.megaPokemonId) ? stone.megaPokemonId : undefined };
   });
   const tmItems = items.filter((i) => i.type === "ABILITY_TM").map((i) => {
     const def = getAbilityTmDef(readAbilityTmKey(i.metadata) ?? "");

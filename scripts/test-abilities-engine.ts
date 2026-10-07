@@ -64,6 +64,22 @@ for (const stop of [20, 35, 45, undefined]) {
 }
 assert.deepEqual(parts.map((e) => [e.turn, e.actorId, e.targetId, e.damage, e.action]), full.log.map((e) => [e.turn, e.actorId, e.targetId, e.damage, e.action]), "segmentos devem reproduzir a luta inteira");
 
+// 3b) Efeitos novos (ex-"sem efeito"): rodam sem estourar limites e geram eventos.
+const cfg2: AbilityLineup = {
+  a1: { slug: "bad-dreams", factor: 1 }, a2: { slug: "serene-grace", factor: 1 }, a3: { slug: "slow-start", factor: 1 }, a4: { slug: "magician", factor: 1 },
+  b1: { slug: "air-lock", factor: 1 }, b2: { slug: "dark-aura", factor: 1 }, b3: { slug: "truant", factor: 1 }, b4: { slug: "pickpocket", factor: 0.7 },
+};
+const novo = runArenaCombat(A, B, { seed: 11, abilities: cfg2 });
+assert.ok(novo.finished);
+for (const [id, n] of Object.entries(novo.runtime.abilities!.uses)) {
+  const info = getAbilityInfo(cfg2[id].slug)!;
+  assert.ok(n <= info.activations, `${id}/${cfg2[id].slug}: ${n} > ${info.activations}`);
+}
+const nm = novo.log.filter((e) => e.action === "ABILITY").map((e) => e.effect).join(" ");
+assert.ok(nm.includes("Bad Dreams") && nm.includes("perdeu"), "Pesadelo deve tirar HP dos rivais");
+assert.ok(novo.log.every((e) => e.targetHpAfter === undefined || e.targetHpAfter >= 0));
+for (const m of [...A, ...B]) assert.ok((novo.runtime.hp[m.id] ?? 0) <= m.hp, "HP acima do máximo");
+
 // 4) Limite de time: 3º Dano desligado, 2º reduzido.
 const ev = evaluateTeamAbilities(["blaze", "moxie", "technician", "static"]);
 assert.deepEqual(ev.map((s) => s.state), ["ACTIVE", "REDUCED", "OFF", "ACTIVE"]);
