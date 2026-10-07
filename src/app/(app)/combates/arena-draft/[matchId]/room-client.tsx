@@ -1,5 +1,7 @@
 "use client";
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
+import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
+import { EventLine } from "../event-line";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -44,6 +46,20 @@ const ROLE_LABELS: Record<(typeof ROLES)[number], string> = {
   SURVIVOR: "Sobrevivente",
 };
 type Role = (typeof ROLES)[number];
+const roleLabelOf = (value?: string) =>
+  value ? (ROLE_LABELS[value as Role] ?? value) : null;
+// Adapta um pet do draft ao formato da análise de equipe (draft não tem nível: usa 100).
+const toAnalysisMascot = (p: Pet) => ({
+  id: p.id,
+  pokemonId: p.speciesId,
+  name: p.name,
+  level: 100,
+  statForce: p.stats?.force ?? 20,
+  statAgility: p.stats?.agility ?? 20,
+  statVitality: p.stats?.vitality ?? 20,
+  statInstinct: p.stats?.instinct ?? 20,
+  statCharisma: p.stats?.charisma ?? 20,
+});
 // Espelha o pickOrder do servidor (actions.ts): draft em serpentina.
 const DRAFT_PICK_ORDER = [
   "A",
@@ -588,6 +604,7 @@ function StrategyWindow({
     [pets],
   );
   const requiredActive = Math.min(6, living.length);
+  const maxHpOf = new Map([...pets, ...rival].map((p) => [p.id, p.maxHp]));
   // Só revela os cards de decisão (com o HP final do segmento) depois que a
   // animação do combate termina — assim o banco não dá spoiler da luta.
   const [revealed, setRevealed] = useState(false);
@@ -652,7 +669,12 @@ function StrategyWindow({
             Trocas preservam HP. Mascotes derrotados não retornam.
           </p>
         </div>
-        <div className="flex gap-3 text-[10px] font-bold">
+        <div className="flex items-center gap-3 text-[10px] font-bold">
+          <TeamCombatAnalysisButton
+            mascots={pets.filter((p) => active.includes(p.id)).map(toAnalysisMascot)}
+            roles={postures}
+            mode="ARENA"
+          />
           {strategy.deadlineAt && (
             <Countdown deadlineAt={strategy.deadlineAt} />
           )}
@@ -683,11 +705,13 @@ function StrategyWindow({
               className={`rounded-2xl border p-3 ${selected ? "border-cyan-300/60 bg-cyan-300/10" : "border-white/10 bg-white/[.02]"} ${dead ? "opacity-50" : ""}`}
             >
               <div className="flex items-center gap-3">
+                <MascotInfoTrigger pokemonId={p.speciesId} displayName={p.name} types={p.types} className="shrink-0">
                 <img
                   src={p.sprite}
                   alt=""
                   className={`h-16 w-16 shrink-0 object-contain [image-rendering:pixelated] ${dead ? "grayscale" : ""}`}
                 />
+                </MascotInfoTrigger>
                 <div className="min-w-0 flex-1">
                   <b className="block truncate text-sm text-white">{p.name}</b>
                   <span className="mt-0.5 flex flex-wrap gap-1">
@@ -846,18 +870,14 @@ function StrategyWindow({
               .map((event, index) => (
                 <div
                   key={`${event.turn}-${index}`}
-                  className="rounded-lg bg-slate-950/70 px-3 py-2 text-[10px] text-slate-300"
+                  className="rounded-lg bg-slate-950/70 px-3 py-2"
                 >
-                  <b className="text-white">
-                    T{event.turn} · {event.actorName}
-                  </b>{" "}
-                  → {event.targetName} · {event.damage}{" "}
-                  {event.action === "HEAL" ? "HP" : "dano"}
-                  {event.effect && (
-                    <span className="mt-1 block text-fuchsia-200">
-                      {event.effect}
-                    </span>
-                  )}
+                  <p className="text-[9px] font-black text-slate-500">T{event.turn}</p>
+                  <EventLine
+                    event={event}
+                    roleLabel={roleLabelOf}
+                    targetMaxHp={event.targetId ? maxHpOf.get(event.targetId) : undefined}
+                  />
                 </div>
               ))}
           </div>
@@ -988,13 +1008,8 @@ function AnimatedBattle({
     .filter((event) => event.actorId);
   // Efeitos recentes aplicados (lista separada e legível).
   const recentEffects = events
-    .slice(from, cursor + 1)
+    .slice(Math.max(from, cursor - 5), cursor + 1)
     .map((event, index) => ({ event, index }))
-    .filter(
-      ({ event }) =>
-        event.effect || event.targetHpAfter === 0 || event.advantageApplied,
-    )
-    .slice(-6)
     .reverse();
   const renderSide = (pets: Pet[], right = false) => (
     <div
@@ -1159,11 +1174,13 @@ function AnimatedBattle({
                 className="flex shrink-0 items-center gap-1 rounded-lg bg-white/[.04] px-1.5 py-0.5"
               >
                 {actor && (
+                  <MascotInfoTrigger pokemonId={actor.speciesId} displayName={actor.name} types={actor.types} className="shrink-0">
                   <img
                     src={actor.sprite}
                     alt=""
                     className="h-5 w-5 object-contain [image-rendering:pixelated]"
                   />
+                  </MascotInfoTrigger>
                 )}
                 <span className="text-[8px] text-slate-300">
                   {event.actorName}
@@ -1174,31 +1191,25 @@ function AnimatedBattle({
         </div>
       )}
 
-      {/* Lista de efeitos aplicados */}
+      {/* Últimas ações, com o detalhamento de dano */}
       {recentEffects.length > 0 && (
         <div className="mt-2 rounded-xl border border-fuchsia-300/15 bg-fuchsia-300/[.03] p-2">
           <p className="text-[8px] font-black uppercase tracking-widest text-fuchsia-300">
-            Efeitos aplicados
+            Últimas ações
           </p>
-          <div className="mt-1 space-y-1">
+          <div className="mt-1 space-y-1.5">
             {recentEffects.map(({ event, index }) => (
-              <p
+              <div
                 key={`${event.turn}-${index}`}
-                className="text-[10px] leading-tight text-slate-300"
+                className={`rounded-lg px-2 py-1.5 ${event.targetHpAfter === 0 ? "bg-rose-400/5" : "bg-slate-950/40"}`}
               >
-                <b className="text-slate-500">T{event.turn}</b>{" "}
-                {event.targetHpAfter === 0 && (
-                  <span className="font-black text-rose-300">
-                    {event.targetName} sofreu KO ·{" "}
-                  </span>
-                )}
-                {event.advantageApplied && event.action !== "HEAL" && (
-                  <span className="text-yellow-200">⚡ super efetivo · </span>
-                )}
-                {event.effect && (
-                  <span className="text-fuchsia-100">{event.effect}</span>
-                )}
-              </p>
+                <p className="text-[9px] font-black text-slate-500">T{event.turn}</p>
+                <EventLine
+                  event={event}
+                  roleLabel={roleLabelOf}
+                  targetMaxHp={event.targetId ? petById.get(event.targetId)?.maxHp : undefined}
+                />
+              </div>
             ))}
           </div>
         </div>
@@ -1439,11 +1450,13 @@ function DraftBoard({
                   className={`relative rounded-lg border p-2 ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
                 >
                   <div className="flex items-center gap-2">
+                    <MascotInfoTrigger pokemonId={pet.speciesId} displayName={pet.name} types={pet.types} className="shrink-0">
                     <img
                       src={pet.sprite}
                       alt=""
                       className={`h-10 w-10 shrink-0 object-contain [image-rendering:pixelated] ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
                     />
+                    </MascotInfoTrigger>
                     <div className="min-w-0 flex-1">
                       <span
                         className={`block break-words text-[11px] font-bold leading-tight ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
@@ -1512,11 +1525,13 @@ function DraftBoard({
                   key={pet.id}
                   className={`relative rounded-lg border p-2 text-center ${pet.status === "BANNED" ? "border-rose-400/40 bg-rose-950/30" : pet.status === "PICKED" ? "border-cyan-300/50 bg-cyan-300/10" : "border-white/10 bg-slate-950/40"}`}
                 >
+                  <MascotInfoTrigger pokemonId={pet.speciesId} displayName={pet.name} types={pet.types} className="shrink-0">
                   <img
                     src={pet.sprite}
                     alt=""
                     className={`mx-auto h-12 w-12 object-contain [image-rendering:pixelated] ${pet.status === "BANNED" ? "opacity-40 grayscale" : ""}`}
                   />
+                  </MascotInfoTrigger>
                   <span
                     className={`mt-1 block break-words text-[10px] font-bold leading-tight ${pet.status === "BANNED" ? "text-rose-300 line-through" : "text-white"}`}
                   >
@@ -1612,6 +1627,9 @@ function SelectionGrid({
                     {index + 1}
                   </span>
                 )}
+                <MascotInfoTrigger pokemonId={pet.speciesId} displayName={pet.name} types={pet.types} className="absolute left-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[9px] font-black text-cyan-200">
+                  ?
+                </MascotInfoTrigger>
                 <img
                   src={pet.sprite}
                   alt=""
@@ -1800,11 +1818,13 @@ function DraftActivity({
                 className="flex min-w-44 items-center gap-2 rounded-xl bg-white/[.035] px-3 py-2"
               >
                 {pet && (
+                  <MascotInfoTrigger pokemonId={pet.speciesId} displayName={pet.name} types={pet.types} className="shrink-0">
                   <img
                     src={pet.sprite}
                     alt=""
                     className="h-9 w-9 object-contain"
                   />
+                  </MascotInfoTrigger>
                 )}
                 <span className="min-w-0 text-[9px] text-slate-400">
                   <b className="block truncate text-slate-200">{entry.actor}</b>
@@ -1834,6 +1854,7 @@ function Replay({
   rival: Pet[];
 }) {
   const events = battle.events ?? [];
+  const maxHpOf = new Map([...own, ...rival].map((p) => [p.id, p.maxHp]));
   const involved = new Set<string>();
   events.forEach((event) => {
     if (event.actorId) involved.add(event.actorId);
@@ -1949,11 +1970,13 @@ function Replay({
       {revealed && mvp && (
         <div className="rounded-2xl border border-white/10 bg-white/[.03] p-4 text-center">
             <div className="mx-auto mt-4 inline-flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[.03] px-4 py-2">
+              <MascotInfoTrigger pokemonId={mvp.pet.speciesId} displayName={mvp.pet.name} types={mvp.pet.types} className="shrink-0">
               <img
                 src={mvp.pet.sprite}
                 alt=""
                 className="h-12 w-12 object-contain [image-rendering:pixelated]"
               />
+              </MascotInfoTrigger>
               <div className="text-left">
                 <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">
                   Destaque da luta
@@ -1989,11 +2012,13 @@ function Replay({
               {stats.map(({ pet, dealt, received, healing, kos, alive }) => (
                 <tr key={pet.id} className="border-t border-white/5">
                   <td className="flex items-center gap-2 py-2">
+                    <MascotInfoTrigger pokemonId={pet.speciesId} displayName={pet.name} types={pet.types} className="shrink-0">
                     <img
                       src={pet.sprite}
                       alt=""
                       className="h-8 w-8 object-contain [image-rendering:pixelated]"
                     />
+                    </MascotInfoTrigger>
                     <span className="truncate font-bold text-white">
                       {pet.name}
                     </span>
@@ -2035,20 +2060,16 @@ function Replay({
           {events.map((event, index) => (
             <div
               key={`${event.turn}-${index}`}
-              className="rounded-xl border border-white/5 bg-white/[.025] p-3"
+              className={`rounded-xl border p-3 ${event.targetHpAfter === 0 ? "border-rose-400/30 bg-rose-400/5" : "border-white/5 bg-white/[.025]"}`}
             >
-              <p className="text-[9px] font-bold uppercase text-slate-500">
-                Evento {event.turn} · {event.action}
+              <p className="mb-1 text-[9px] font-bold uppercase text-slate-500">
+                Ação {index + 1} · Turno {event.turn}
               </p>
-              <p className="text-xs text-slate-200">
-                <b>{event.actorName}</b> → {event.targetName} · {event.damage}{" "}
-                {event.action === "HEAL" ? "HP" : "dano"}
-              </p>
-              {event.effect && (
-                <p className="mt-1 text-[10px] text-fuchsia-200">
-                  {event.effect}
-                </p>
-              )}
+              <EventLine
+                event={event}
+                roleLabel={roleLabelOf}
+                targetMaxHp={event.targetId ? maxHpOf.get(event.targetId) : undefined}
+              />
             </div>
           ))}
         </div>

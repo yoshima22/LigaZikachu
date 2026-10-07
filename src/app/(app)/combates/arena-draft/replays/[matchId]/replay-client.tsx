@@ -1,6 +1,7 @@
 "use client";
 import { useMemo, useState } from "react";
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
+import { EventLine } from "../../event-line";
 type Pet = {
   id: string;
   speciesId: number;
@@ -30,6 +31,15 @@ type Event = {
   damage: number;
   effect?: string;
   targetHpAfter?: number;
+  multiplier?: number;
+  advantageApplied?: boolean;
+  actorRole?: string;
+  targetRole?: string;
+};
+const ROLE_PT: Record<string, string> = {
+  DEFENDER: "Defensor", ATTACKER: "Atacante", FLANK: "Flanco", OPPORTUNIST: "Oportunista",
+  ENCOURAGER: "Encorajador", GUARDIAN: "Guardião", DUELIST: "Duelista", SABOTEUR: "Sabotador",
+  HEALER: "Cuidador", SCOUT: "Batedor", PROVOKER: "Provocador", SPECIALIST: "Especialista", SURVIVOR: "Sobrevivente",
 };
 const STAT_LABELS: Record<string, string> = {
   force: "Força",
@@ -147,19 +157,10 @@ export function ArenaDraftReplay({
                   key={`${e.turn}-${i}`}
                   className={`rounded-xl border p-3 ${e.targetHpAfter === 0 ? "border-rose-400/30 bg-rose-400/5" : "border-white/5 bg-white/[.02]"}`}
                 >
-                  <p className="text-[9px] font-black uppercase text-slate-500">
-                    Ação {e.turn} · {e.action}
-                    {e.targetHpAfter === 0 ? " · KO" : ""}
+                  <p className="mb-1 text-[9px] font-black uppercase text-slate-500">
+                    Turno {e.turn}
                   </p>
-                  <p className="text-xs text-slate-200">
-                    <b>{e.actorName}</b> → {e.targetName} · {e.damage}{" "}
-                    {e.action === "HEAL" ? "HP" : "dano"}
-                  </p>
-                  {e.effect && (
-                    <p className="mt-1 text-[10px] text-fuchsia-200">
-                      {e.effect}
-                    </p>
-                  )}
+                  <EventLine event={e} roleLabel={(role) => (role ? (ROLE_PT[role] ?? role) : null)} />
                 </div>
               ))
             ) : (

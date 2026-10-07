@@ -28,6 +28,8 @@ import {
   type ArenaDraftPet,
 } from "@/lib/arena-draft";
 import { PERSONALITY_LABEL, TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
+import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import { COMBAT_ROLE_DESCRIPTIONS, type CombatRole } from "@/lib/combat-roles";
 import { PERSONALITY_DESIGN_BY_KEY } from "@/lib/personality-design";
 import {
@@ -308,8 +310,10 @@ export function ArenaDraftClient({
   const addPet = (item: Species) => {
     if (pets.length >= 12)
       return toast.error("Os 12 slots já estão preenchidos.");
-    if (item.isMega && megas >= 2)
-      return toast.error("O preset já possui as 2 formas Mega permitidas.");
+    if (item.isMega && megas >= ARENA_DRAFT_RULES.maxMegas)
+      return toast.error(
+        `Limite atingido: o time só pode ter ${ARENA_DRAFT_RULES.maxMegas} formas Mega.`,
+      );
     const id = crypto.randomUUID();
     setPets([
       ...pets,
@@ -342,6 +346,15 @@ export function ArenaDraftClient({
   };
   const save = () =>
     start(async () => {
+      const clash = presets.some(
+        (p) =>
+          p.id !== selectedId &&
+          p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (clash)
+        return void toast.error(
+          `Você já tem um time chamado “${name.trim()}”. Escolha outro nome.`,
+        );
       const result = await saveDraftPresetAction({
         id: selectedId ?? undefined,
         name,
@@ -410,7 +423,7 @@ export function ArenaDraftClient({
             <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-[11px] font-bold text-slate-400">
               <span>◆ Sem premiações no Beta</span>
               <span>◆ Qualquer mascote disponível</span>
-              <span>◆ Até 2 Megas por equipe</span>
+              <span>◆ Até {ARENA_DRAFT_RULES.maxMegas} Megas por equipe</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
@@ -531,7 +544,7 @@ export function ArenaDraftClient({
               [
                 Bot,
                 "Crie seu preset",
-                "Distribua 4.500 pontos entre o time; todos começam com 20 em cada status. Escolha até 2 formas Mega.",
+                "Distribua 4.500 pontos entre o time; todos começam com 20 em cada status. Escolha até 5 formas Mega (o limite é bloqueado na montagem).",
               ],
               [
                 Search,
@@ -684,8 +697,8 @@ export function ArenaDraftClient({
                                   </b>
                                   <small className="text-slate-500">
                                     {p.pets.length}/12 ·{" "}
-                                    {p.pets.filter((x) => x.isMega).length}/2
-                                    Megas
+                                    {p.pets.filter((x) => x.isMega).length}/
+                                    {ARENA_DRAFT_RULES.maxMegas} Megas
                                   </small>
                                   {p.needsReview && (
                                     <span className="mt-0.5 inline-flex rounded-full border border-amber-300/30 bg-amber-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-amber-300">
@@ -847,8 +860,16 @@ export function ArenaDraftClient({
                       <button
                         key={item.id}
                         onClick={() => addPet(item)}
-                        className={`relative rounded-xl border bg-white/[.025] p-2 hover:border-cyan-300/40 ${item.isMega ? "border-fuchsia-400/40" : "border-white/10"}`}
+                        title={
+                          item.isMega && megas >= ARENA_DRAFT_RULES.maxMegas
+                            ? `Limite de ${ARENA_DRAFT_RULES.maxMegas} Megas atingido`
+                            : undefined
+                        }
+                        className={`relative rounded-xl border bg-white/[.025] p-2 hover:border-cyan-300/40 ${item.isMega ? "border-fuchsia-400/40" : "border-white/10"} ${item.isMega && megas >= ARENA_DRAFT_RULES.maxMegas ? "opacity-40" : ""}`}
                       >
+                        <MascotInfoTrigger pokemonId={item.id} displayName={item.name} className="absolute left-1 top-1 z-10 flex h-4 w-4 items-center justify-center rounded-full bg-slate-800 text-[9px] font-black text-cyan-200">
+                          ?
+                        </MascotInfoTrigger>
                         <img
                           src={item.sprite}
                           alt=""
@@ -905,10 +926,31 @@ export function ArenaDraftClient({
                       className="w-full max-w-md border-b border-white/10 bg-transparent text-lg font-black text-white outline-none sm:text-xl"
                     />
                     <p className="mt-1 flex min-h-[2.25rem] items-center text-xs text-slate-500">
-                      Slots {pets.length}/12 · Megas {megas}/2 · Pontos do time{" "}
+                      Slots {pets.length}/12 · Megas {megas}/{ARENA_DRAFT_RULES.maxMegas} (máx.) · Pontos do time{" "}
                       {allocatedPoints.toLocaleString("pt-BR")}
                       /4.500 disponíveis
                     </p>
+                    <p className={`text-[10px] font-bold ${megas >= ARENA_DRAFT_RULES.maxMegas ? "text-amber-300" : "text-slate-500"}`}>
+                      Limite de {ARENA_DRAFT_RULES.maxMegas} Megas por time — não é possível ultrapassar.
+                    </p>
+                    <div className="mt-1">
+                      <TeamCombatAnalysisButton
+                        mascots={pets.map((pet) => ({
+                          id: pet.id,
+                          pokemonId: pet.speciesId,
+                          name: species.find((sp) => sp.id === pet.speciesId)?.name,
+                          nickname: pet.nickname,
+                          level: 100,
+                          statForce: pet.stats.force,
+                          statAgility: pet.stats.agility,
+                          statVitality: pet.stats.vitality,
+                          statInstinct: pet.stats.instinct,
+                          statCharisma: pet.stats.charisma,
+                        }))}
+                        roles={Object.fromEntries(pets.map((pet) => [pet.id, pet.posture]))}
+                        mode="ARENA"
+                      />
+                    </div>
                     <div className="mt-1 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
                       <div
                         className="h-full rounded-full transition-all duration-300"
@@ -1726,7 +1768,16 @@ function RealRosterBuilder({
     (Math.min(page, pages) - 1) * perPage,
     Math.min(page, pages) * perPage,
   );
+  const megaCount = selected.filter((id) => byId.get(id)?.isMega).length;
   const toggle = (id: string) => {
+    if (
+      !selected.includes(id) &&
+      byId.get(id)?.isMega &&
+      megaCount >= ARENA_DRAFT_RULES.maxMegas
+    )
+      return void toast.error(
+        `Limite atingido: o time só pode ter ${ARENA_DRAFT_RULES.maxMegas} Megas.`,
+      );
     setSelected((cur) =>
       cur.includes(id)
         ? cur.filter((x) => x !== id)
@@ -1757,6 +1808,15 @@ function RealRosterBuilder({
   };
   const save = () =>
     start(async () => {
+      const clash = realPresets.some(
+        (p) =>
+          p.id !== editingId &&
+          p.name.trim().toLowerCase() === name.trim().toLowerCase(),
+      );
+      if (clash)
+        return void toast.error(
+          `Você já tem um time chamado “${name.trim()}”. Escolha outro nome.`,
+        );
       const result = await saveRealRosterAction({
         id: editingId ?? undefined,
         name,
@@ -1841,6 +1901,27 @@ function RealRosterBuilder({
             onChange={(e) => setName(e.target.value)}
             className="max-w-xs flex-1 border-b border-white/10 bg-transparent text-lg font-black text-white outline-none"
           />
+          <TeamCombatAnalysisButton
+            mascots={selected.flatMap((id) => {
+              const m = byId.get(id);
+              return m
+                ? [{
+                    id: m.id,
+                    pokemonId: m.speciesId,
+                    nickname: m.nickname,
+                    name: m.name,
+                    level: m.level,
+                    statForce: m.stats.force,
+                    statAgility: m.stats.agility,
+                    statVitality: m.stats.vitality,
+                    statInstinct: m.stats.instinct,
+                    statCharisma: m.stats.charisma,
+                  }]
+                : [];
+            })}
+            roles={postures}
+            mode="ARENA"
+          />
           <button
             disabled={pending || selected.length !== 12}
             onClick={save}
@@ -1850,6 +1931,13 @@ function RealRosterBuilder({
             /12)
           </button>
         </div>
+        <p className="mt-2 text-[11px] text-slate-400">
+          Megas no time:{" "}
+          <b className={megaCount >= ARENA_DRAFT_RULES.maxMegas ? "text-amber-300" : "text-slate-200"}>
+            {megaCount}/{ARENA_DRAFT_RULES.maxMegas}
+          </b>{" "}
+          · o limite é {ARENA_DRAFT_RULES.maxMegas} Megas por time e não pode ser ultrapassado.
+        </p>
         <input
           value={search}
           onChange={(e) => {
@@ -1868,7 +1956,10 @@ function RealRosterBuilder({
             <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">
               {visible.map((m) => {
                 const picked = selected.includes(m.id);
-                const full = selected.length >= 12 && !picked;
+                const full =
+                  !picked &&
+                  (selected.length >= 12 ||
+                    (m.isMega && megaCount >= ARENA_DRAFT_RULES.maxMegas));
                 return (
                   <article
                     key={m.id}
@@ -1880,11 +1971,13 @@ function RealRosterBuilder({
                       className="w-full text-left disabled:opacity-40"
                     >
                       <div className="flex items-center gap-2">
-                        <img
-                          src={m.sprite}
-                          alt=""
-                          className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
-                        />
+                        <MascotInfoTrigger pokemonId={m.speciesId} displayName={m.nickname ?? m.name} level={m.level} className="shrink-0">
+                          <img
+                            src={m.sprite}
+                            alt=""
+                            className="h-11 w-11 shrink-0 object-contain [image-rendering:pixelated]"
+                          />
+                        </MascotInfoTrigger>
                         <div className="min-w-0">
                           <b className="block truncate text-[11px] text-white">
                             {m.nickname?.trim() || m.name}
@@ -2088,7 +2181,7 @@ function ArenaDraftTutorial({
             <TutorialStep
               number="01"
               title="Monte seus 12"
-              text="Todo mascote começa com 20 em cada status. Depois, distribua 4.500 pontos adicionais pelo time inteiro. Formas Mega são reconhecidas automaticamente e o limite é 2."
+              text="Todo mascote começa com 20 em cada status. Depois, distribua 4.500 pontos adicionais pelo time inteiro. Formas Mega são reconhecidas automaticamente e o limite é 5 por time, tanto no Customizado quanto no Padrão — não é possível passar disso."
             />
             <TutorialStep
               number="02"

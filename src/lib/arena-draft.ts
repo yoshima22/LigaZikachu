@@ -8,7 +8,7 @@ export const ARENA_DRAFT_RULES = {
   // um mesmo status, somando todos os mascotes, não pode passar de 900.
   perStatBudget: 900,
   baseStat: 20,
-  maxMegas: 2,
+  maxMegas: 5,
   bansPerPlayer: 3,
   activeSize: 6,
   reserveSize: 3,
@@ -104,11 +104,13 @@ export function validateArenaDraftPets(
     errors.push(`Selecione ${ARENA_DRAFT_RULES.teamSize} mascotes.`);
   if (new Set(pets.map((pet) => pet.slot)).size !== pets.length)
     errors.push("Existem slots duplicados.");
-  // O modo REAL usa os mascotes de verdade: sem orçamento, teto por status ou
-  // limite de Megas.
+  // O limite de Megas vale nos dois modos.
+  if (pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
+    errors.push(
+      `O time pode ter no máximo ${ARENA_DRAFT_RULES.maxMegas} Megas.`,
+    );
+  // O modo REAL usa os mascotes de verdade: sem orçamento nem teto por status.
   if (mode === "CUSTOM") {
-    if (pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
-      errors.push("O preset pode ter no máximo 2 Megas.");
     for (const pet of pets)
       for (const key of DRAFT_STAT_KEYS) {
         const cap = pet.isMega ? 240 : 250;

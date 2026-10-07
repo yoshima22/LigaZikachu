@@ -99,6 +99,26 @@ export async function getMyDraftMascotsAction() {
   }));
 }
 
+// Nomes de time são únicos por jogador (sem diferenciar maiúsculas).
+async function assertUniquePresetName(
+  ownerId: string,
+  name: string,
+  exceptId?: string,
+) {
+  const clash = await prisma.arenaDraftPreset.findFirst({
+    where: {
+      ownerId,
+      name: { equals: name, mode: "insensitive" },
+      ...(exceptId ? { id: { not: exceptId } } : {}),
+    },
+    select: { id: true },
+  });
+  if (clash)
+    throw new Error(
+      `Você já tem um time chamado “${name}”. Escolha outro nome.`,
+    );
+}
+
 // Salva um "preset" de mascotes reais (source REAL). O snapshot congela os
 // status reais no momento do salvamento.
 export async function saveRealRosterAction(input: {
@@ -112,6 +132,7 @@ export async function saveRealRosterAction(input: {
     const name = input.name.trim().slice(0, 40);
     if (name.length < 3)
       throw new Error("Dê um nome de ao menos 3 caracteres ao time.");
+    await assertUniquePresetName(player.id, name, input.id);
     const uniqueIds = [...new Set(input.mascotIds)];
     if (uniqueIds.length !== ARENA_DRAFT_RULES.teamSize)
       throw new Error(
@@ -172,6 +193,10 @@ export async function saveRealRosterAction(input: {
       };
     });
     const validation = validateArenaDraftPets(pets, "REAL");
+    if (pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
+      throw new Error(
+        `O time pode ter no máximo ${ARENA_DRAFT_RULES.maxMegas} Megas.`,
+      );
     if (!validation.valid)
       throw new Error(validation.errors[0] ?? "Time inválido.");
     if (input.id) {
@@ -282,7 +307,12 @@ export async function saveDraftPresetAction(input: {
     const name = input.name.trim().slice(0, 40);
     if (name.length < 3)
       throw new Error("Dê um nome de ao menos 3 caracteres ao preset.");
+    await assertUniquePresetName(player.id, name, input.id);
     const validation = validateArenaDraftPets(input.pets);
+    if (validation.pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
+      throw new Error(
+        `O time pode ter no máximo ${ARENA_DRAFT_RULES.maxMegas} Megas.`,
+      );
     const disabledMegas = await disabledMegaIdsInPreset(validation.pets);
     const isReady = validation.valid && disabledMegas.length === 0;
     const errors = [
@@ -385,10 +415,24 @@ export async function duplicateDraftPresetAction(id: string) {
         "Você já atingiu o limite de 10 presets. Exclua um antes de duplicar.",
       );
     const dupMode = preset.source === "REAL" ? "REAL" : "CUSTOM";
+    const taken = new Set(
+      (
+        await prisma.arenaDraftPreset.findMany({
+          where: { ownerId: player.id },
+          select: { name: true },
+        })
+      ).map((row) => row.name.toLowerCase()),
+    );
+    let copyName = "";
+    for (let n = 1; n <= 10; n += 1) {
+      const suffix = n === 1 ? " (cópia)" : ` (cópia ${n})`;
+      copyName = `${preset.name.slice(0, 40 - suffix.length)}${suffix}`;
+      if (!taken.has(copyName.toLowerCase())) break;
+    }
     await prisma.arenaDraftPreset.create({
       data: {
         ownerId: player.id,
-        name: `${preset.name} (cópia)`.slice(0, 40),
+        name: copyName,
         source: preset.source,
         petsJson: preset.petsJson as Prisma.InputJsonValue,
         isReady:
@@ -1122,7 +1166,8 @@ async function persistCombatSegment(
     teamA = applyBonds(teamA, modifiersA);
     teamB = applyBonds(teamB, modifiersB);
   }
-  const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint] ?? 80;
+  // Após o último checkpoint (T45) não há teto: a luta segue até o fim.
+  const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint];
   const combat = runArenaCombat(teamA, teamB, {
     runtime: battle.runtime,
     stopAtTurn,
