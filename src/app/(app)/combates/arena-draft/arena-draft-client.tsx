@@ -1789,23 +1789,46 @@ function RealRosterBuilder({
               </p>
             ) : (
               realPresets.map((p) => (
-                <button
+                <div
                   key={p.id}
-                  onClick={() => loadPreset(p)}
-                  className={`flex w-full items-center justify-between rounded-xl border p-2.5 text-left ${editingId === p.id ? "border-emerald-400/50 bg-emerald-400/10" : "border-white/10 hover:border-emerald-400/30"}`}
+                  className={`flex items-center gap-1 rounded-xl border pr-1 ${editingId === p.id ? "border-emerald-400/50 bg-emerald-400/10" : "border-white/10 hover:border-emerald-400/30"}`}
                 >
-                  <span className="min-w-0">
-                    <b className="block truncate text-sm text-white">
-                      {p.name}
-                    </b>
-                    <small className="text-slate-500">
-                      {p.pets.length}/12 mascotes
-                    </small>
-                  </span>
-                  {p.isReady && (
-                    <CheckCircle2 className="text-emerald-300" size={15} />
-                  )}
-                </button>
+                  <button
+                    onClick={() => loadPreset(p)}
+                    className="flex min-w-0 flex-1 items-center justify-between p-2.5 text-left"
+                  >
+                    <span className="min-w-0">
+                      <b className="block truncate text-sm text-white">
+                        {p.name}
+                      </b>
+                      <small className="text-slate-500">
+                        {p.pets.length}/12 mascotes
+                      </small>
+                    </span>
+                    {p.isReady && (
+                      <CheckCircle2 className="text-emerald-300" size={15} />
+                    )}
+                  </button>
+                  <button
+                    title="Excluir time"
+                    disabled={pending}
+                    onClick={() => {
+                      if (!window.confirm(`Excluir o time “${p.name}”? Esta ação não pode ser desfeita.`)) return;
+                      start(async () => {
+                        const result = await deleteDraftPresetAction(p.id);
+                        if (result.error) toast.error(result.error);
+                        else {
+                          toast.success(result.success);
+                          if (editingId === p.id) reset();
+                          onSaved();
+                        }
+                      });
+                    }}
+                    className="rounded-lg p-2 text-slate-400 hover:bg-rose-400/10 hover:text-rose-300 disabled:opacity-40"
+                  >
+                    <Trash2 size={14} />
+                  </button>
+                </div>
               ))
             )}
           </div>
