@@ -1,14 +1,12 @@
 import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
-import { getPokemonName } from "@/lib/mascot-data";
 import { describeAbility, getAbilityInfo } from "@/lib/abilities";
 import { ABILITY_TM_IMAGE, ABILITY_TM_PRICE, ABILITY_TM_TYPE, abilityTmItemName, abilityTmMetadata, getAbilityTmDefs, readAbilityTmKey } from "@/lib/abilities/tm";
 
-function tmDescription(abilityKey: string, pokemonIds: number[]) {
+function tmDescription(abilityKey: string) {
   const info = getAbilityInfo(abilityKey)!;
-  const sample = pokemonIds.slice(0, 4).map((id) => getPokemonName(id)).join(", ");
-  const more = pokemonIds.length > 4 ? ` e mais ${pokemonIds.length - 4}` : "";
-  return `Libera a habilidade oculta ${info.name} (${info.effectName}) para um mascote que a tenha como oculta (${sample}${more}). ${describeAbility(info)} O TM é consumido ao usar.`;
+  // Sem lista de mascotes: ela muda conforme o painel de admin (use o botão "Quem pode usar").
+  return `Libera a habilidade oculta ${info.name} (${info.effectName}) para um mascote que a tenha como oculta. ${describeAbility(info)} O TM é consumido ao usar.`;
 }
 
 async function safeInvalidate() {
@@ -31,7 +29,7 @@ export async function ensureAbilityTmShopItems(activeOnCreate = false) {
   let changed = 0;
   for (const [index, def] of defs.entries()) {
     const name = abilityTmItemName(def.abilityKey);
-    const description = tmDescription(def.abilityKey, def.pokemonIds);
+    const description = tmDescription(def.abilityKey);
     const found = byKey.get(def.abilityKey);
     if (found) {
       if (found.name !== name || found.description !== description || found.imageUrl !== ABILITY_TM_IMAGE) {

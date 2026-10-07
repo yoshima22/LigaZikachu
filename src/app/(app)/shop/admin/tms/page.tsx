@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName } from "@/lib/mascot-data";
 import { getAbilityInfo } from "@/lib/abilities";
 import { getAbilityTmDefs, readAbilityTmKey } from "@/lib/abilities/tm";
+import { getDisabledSpeciesIds } from "@/lib/ability-tm-shop";
 import { AbilityTmAdmin } from "./tm-admin";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,7 @@ export default async function AbilityTmAdminPage() {
     where: { type: "ABILITY_TM" },
     select: { id: true, metadata: true, active: true, price: true, _count: { select: { ownerships: true } } },
   });
+  const disabled = await getDisabledSpeciesIds();
   const byKey = new Map(items.map((item) => [readAbilityTmKey(item.metadata), item]));
   const rows = getAbilityTmDefs().map((def) => {
     const item = byKey.get(def.abilityKey);
@@ -24,8 +26,9 @@ export default async function AbilityTmAdminPage() {
       name: def.name,
       category: info.category ?? "",
       effectName: info.effectName ?? "",
-      species: def.pokemonIds.length,
-      sample: def.pokemonIds.slice(0, 3).map((id) => getPokemonName(id)).join(", "),
+      // Só espécies ligadas no painel (as desligadas ainda não foram lançadas).
+      species: def.pokemonIds.filter((id) => !disabled.has(id)).length,
+      sample: def.pokemonIds.filter((id) => !disabled.has(id)).slice(0, 3).map((id) => getPokemonName(id)).join(", "),
       created: Boolean(item),
       active: item?.active ?? false,
       price: item?.price ?? null,
