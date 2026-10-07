@@ -191,6 +191,7 @@ export default async function HabilidadesPage({ searchParams }: Props) {
               <li>Cada mascote usa <b className="text-slate-300">uma habilidade por vez</b>. Quem tem mais de uma escolhe qual usar.</li>
               <li>A <b className="text-slate-300">habilidade oculta</b> do modo Padrão é liberada com o TM dela (ZikaShop e Bazar). No modo Customizado do Draft ela é livre.</li>
               <li>Megas usam a habilidade própria da Pokédex. Só se a forma não tiver uma, vale a da forma anterior à mega.</li>
+              <li><strong className="text-slate-300">Ambiente</strong> é o clima ou terreno criado por habilidades como Drought, Drizzle ou Electric Surge: nas 3 primeiras rodadas, aliados do tipo correspondente causam mais dano. <strong className="text-slate-300">Aura</strong> é o bônus de dano que habilidades como Fairy Aura ou Dark Aura dão aos aliados de um tipo enquanto o mascote está em campo. Habilidades como Air Lock anulam os dois nos <em>rivais</em> (o time inimigo perde esses bônus de dano).</li>
               <li>Debuffs duram a luta toda e <b className="text-slate-300">não se somam</b>: em cada atributo vale o maior valor. Habilidades de Defesa e Suporte podem reduzir ou remover debuffs.</li>
             </ul>
           </div>

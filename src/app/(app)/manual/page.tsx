@@ -1434,6 +1434,13 @@ export default async function ManualPage() {
             continuando após evoluir e acompanhando o mascote em trocas e vendas. No modo <strong className="text-slate-200">Customizado</strong> as ocultas são livres.
           </p>
         </Sub>
+        <Sub title="Ambiente e Aura">
+          <p className="text-xs leading-6 text-slate-400">
+            <strong className="text-slate-200">Ambiente</strong> é o clima ou terreno criado por habilidades como Drought, Drizzle ou Electric Surge: nas 3 primeiras rodadas, aliados do tipo correspondente causam mais dano.{" "}
+            <strong className="text-slate-200">Aura</strong> é o bônus de dano que habilidades como Fairy Aura ou Dark Aura dão aos aliados de um tipo enquanto o mascote está em campo.
+            Habilidades como Air Lock anulam os dois bônus nos <strong className="text-slate-200">rivais</strong> (o time inimigo perde esse bônus de dano).
+          </p>
+        </Sub>
         <Sub title="Debuffs">
           <p className="text-xs leading-6 text-slate-400">
             Um debuff reduz um atributo (Força, Agilidade, Instinto ou Vitalidade) e dura a luta inteira, a não ser que uma habilidade o remova.
