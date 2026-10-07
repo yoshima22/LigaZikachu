@@ -7,11 +7,10 @@ import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 // (EggPokemonToggle), não pelo evento da Ordem da Trapaça.
 const CUSTOM_MEGA_SET = new Set(CUSTOM_MEGA_POKEMON_IDS);
 
-// Conjunto de megas custom desligados (fora do drop) — a pedra fica inativa.
-async function getDisabledCustomMegaIds(): Promise<Set<number>> {
-  if (CUSTOM_MEGA_POKEMON_IDS.length === 0) return new Set();
+// Megas desligadas no painel (oficiais e custom) — a pedra fica inativa.
+async function getDisabledMegaIds(): Promise<Set<number>> {
   const rows = await prisma.eggPokemonToggle.findMany({
-    where: { pokemonId: { in: CUSTOM_MEGA_POKEMON_IDS }, disabled: true },
+    where: { pokemonId: { in: MEGA_STONES.map((stone) => stone.megaPokemonId) }, disabled: true },
     select: { pokemonId: true },
   });
   return new Set(rows.map((r) => r.pokemonId));
@@ -57,13 +56,15 @@ export async function ensureMegaStoneShopItems(active = false) {
     },
   });
   const existingByType = new Map(existingItems.map((item) => [item.type, item]));
-  const disabledCustom = await getDisabledCustomMegaIds();
+  const disabledMegas = await getDisabledMegaIds();
 
   for (const stone of MEGA_STONES) {
     // Pedra custom: ativa apenas se o mega correspondente estiver LIGADO no admin.
-    // Pedra oficial: segue o parâmetro `active` (evento da Ordem da Trapaça).
+    // Pedra oficial: segue o evento da Ordem da Trapaça E o painel (desligada no
+    // painel = pedra inativa).
     const isCustom = CUSTOM_MEGA_SET.has(stone.megaPokemonId);
-    const stoneActive = isCustom ? !disabledCustom.has(stone.megaPokemonId) : active;
+    const megaOff = disabledMegas.has(stone.megaPokemonId);
+    const stoneActive = isCustom ? !megaOff : active && !megaOff;
     const data = {
       type: stone.type,
       name: stone.stoneName,
@@ -79,7 +80,7 @@ export async function ensureMegaStoneShopItems(active = false) {
     if (existing) {
       // Custom: estado exato do toggle (desligar precisa desativar de verdade).
       // Oficial: mantém "sticky on" (uma vez ativa pelo evento, permanece).
-      const nextActive = isCustom ? stoneActive : (active || existing.active);
+      const nextActive = isCustom ? stoneActive : megaOff ? false : (active || existing.active);
       const nextMetadata = data.metadata;
       const currentMetadata = existing.metadata;
       const metadataChanged = JSON.stringify(currentMetadata ?? null) !== JSON.stringify(nextMetadata);
@@ -109,8 +110,11 @@ export async function ensureMegaStoneShopItems(active = false) {
 
 export async function activateMegaStoneShopItems() {
   await ensureMegaStoneShopItems(false);
-  // Ativa apenas as pedras OFICIAIS. As custom seguem só o toggle do admin.
-  const officialTypes = MEGA_STONES.filter((stone) => !CUSTOM_MEGA_SET.has(stone.megaPokemonId)).map((stone) => stone.type);
+  // Ativa apenas as pedras OFICIAIS ligadas no painel. As custom seguem só o toggle do admin.
+  const disabledMegas = await getDisabledMegaIds();
+  const officialTypes = MEGA_STONES
+    .filter((stone) => !CUSTOM_MEGA_SET.has(stone.megaPokemonId) && !disabledMegas.has(stone.megaPokemonId))
+    .map((stone) => stone.type);
   await prisma.shopItem.updateMany({
     where: { type: { in: officialTypes } },
     data: { active: true },
@@ -122,7 +126,9 @@ export async function activateMegaStoneShopItems() {
 // toggle do admin. Cria a ShopItem se ainda não existir.
 export async function syncCustomMegaStoneShopItem(megaPokemonId: number, enabled: boolean) {
   const stone = getMegaStoneForMegaPokemon(megaPokemonId);
-  if (!stone || !CUSTOM_MEGA_SET.has(megaPokemonId)) return;
+  if (!stone) return;
+  // Pedra oficial: só fica ativa se o evento da Ordem da Trapaça já liberou as pedras.
+  if (!CUSTOM_MEGA_SET.has(megaPokemonId)) enabled = enabled && (await isMegaStoneShopUnlocked());
   const existing = await prisma.shopItem.findFirst({ where: { type: stone.type }, select: { id: true } });
   if (existing) {
     await prisma.shopItem.update({ where: { id: existing.id }, data: { active: enabled } });

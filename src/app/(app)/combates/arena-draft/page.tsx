@@ -13,7 +13,6 @@ import {
   type ArenaDraftPet,
 } from "@/lib/arena-draft";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
-import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { ArenaDraftClient } from "./arena-draft-client";
 
 export const dynamic = "force-dynamic";
@@ -89,10 +88,7 @@ export default async function ArenaDraftPage() {
         },
       }),
       prisma.eggPokemonToggle.findMany({
-        where: {
-          pokemonId: { in: CUSTOM_MEGA_POKEMON_IDS },
-          disabled: true,
-        },
+        where: { disabled: true },
         select: { pokemonId: true },
       }),
       prisma.arenaDraftMatch.groupBy({
@@ -107,11 +103,11 @@ export default async function ArenaDraftPage() {
     queueCounts[m] += row._count._all;
   }
   const disabledMegaIds = new Set(disabledMegas.map((row) => row.pokemonId));
-  const customMegaIds = new Set(CUSTOM_MEGA_POKEMON_IDS);
   const species = Array.from(
     new Set([...WISHLIST_POKEMON_IDS, ...MEGA_FORM_IDS]),
   )
-    .filter((id) => !customMegaIds.has(id) || !disabledMegaIds.has(id))
+    // O painel de admin manda: forma desligada não aparece no catálogo.
+    .filter((id) => !disabledMegaIds.has(id))
     .map((id) => ({
       id,
       name: getPokemonName(id),
@@ -217,7 +213,7 @@ export default async function ArenaDraftPage() {
             (mode === "REAL" ||
               !(p.petsJson as unknown as ArenaDraftPet[]).some(
                 (pet) =>
-                  customMegaIds.has(pet.speciesId) &&
+                  MEGA_FORM_IDS.has(pet.speciesId) &&
                   disabledMegaIds.has(pet.speciesId),
               )),
           pets: p.petsJson as unknown as ArenaDraftPet[],

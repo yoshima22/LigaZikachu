@@ -17,7 +17,7 @@ export const MEGA_STAT_BONUS = 10;
 export const MEGA_MIN_LEVEL_DEFAULT = 50;
 export const MEGA_STONE_PRICE = 15000;
 
-const MEGA_STONES_OFFICIAL: readonly MegaStoneConfig[] = [
+export const MEGA_STONES_OFFICIAL: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_ABOMASITE", stoneName: "Abomasite", compatiblePokemonId: 460, compatiblePokemonName: "Abomasnow", megaPokemonId: 10060, megaPokemonName: "Mega Abomasnow", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_ABSOLITE", stoneName: "Absolite", compatiblePokemonId: 359, compatiblePokemonName: "Absol", megaPokemonId: 10057, megaPokemonName: "Mega Absol", minLevel: 50, price: MEGA_STONE_PRICE },
   { type: "MEGA_STONE_AERODACTYLITE", stoneName: "Aerodactylite", compatiblePokemonId: 142, compatiblePokemonName: "Aerodactyl", megaPokemonId: 10042, megaPokemonName: "Mega Aerodactyl", minLevel: 50, price: MEGA_STONE_PRICE },

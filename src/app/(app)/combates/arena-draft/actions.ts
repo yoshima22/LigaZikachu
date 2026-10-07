@@ -19,7 +19,6 @@ import {
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
-import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { trackGachaObjective } from "@/lib/gacha";
 import {
@@ -268,15 +267,11 @@ export async function searchDraftOpponentsAction(query: string) {
 async function disabledMegaIdsInPreset(
   pets: ReturnType<typeof validateArenaDraftPets>["pets"],
 ) {
-  const managedMegaIds = new Set(CUSTOM_MEGA_POKEMON_IDS);
   const ids = [
     ...new Set(
       pets
         .map((pet) => pet.speciesId)
-        .filter(
-          (speciesId) =>
-            MEGA_FORM_IDS.has(speciesId) && managedMegaIds.has(speciesId),
-        ),
+        .filter((speciesId) => MEGA_FORM_IDS.has(speciesId)),
     ),
   ];
   if (!ids.length) return [];
