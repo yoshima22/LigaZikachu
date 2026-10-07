@@ -29,6 +29,8 @@ import {
 } from "@/lib/arena-draft";
 import { PERSONALITY_LABEL, TYPE_LABELS_PT } from "@/lib/mascot-data";
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
+import { AbilityPicker, AbilityTeamSummary } from "./ability-picker";
+import { draftAbilityOptions, draftAbilitySlug } from "@/lib/abilities/draft";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import { COMBAT_ROLE_DESCRIPTIONS, type CombatRole } from "@/lib/combat-roles";
 import { PERSONALITY_DESIGN_BY_KEY } from "@/lib/personality-design";
@@ -83,6 +85,8 @@ type RealMascot = {
   personality: string;
   posture: string;
   isMega: boolean;
+  abilityOptions?: string[];
+  ability?: string | null;
   stats: {
     force: number;
     agility: number;
@@ -424,6 +428,7 @@ export function ArenaDraftClient({
               <span>◆ Sem premiações no Beta</span>
               <span>◆ Qualquer mascote disponível</span>
               <span>◆ Até {ARENA_DRAFT_RULES.maxMegas} Megas por equipe</span>
+              <span>◆ Habilidades passivas por mascote</span>
             </div>
             <div className="mt-8 flex flex-wrap gap-3">
               <button
@@ -933,6 +938,7 @@ export function ArenaDraftClient({
                     <p className={`text-[10px] font-bold ${megas >= ARENA_DRAFT_RULES.maxMegas ? "text-amber-300" : "text-slate-500"}`}>
                       Limite de {ARENA_DRAFT_RULES.maxMegas} Megas por time — não é possível ultrapassar.
                     </p>
+                    <AbilityTeamSummary slugs={pets.map((pet) => draftAbilitySlug(pet, "CUSTOM"))} />
                     <div className="mt-1">
                       <TeamCombatAnalysisButton
                         mascots={pets.map((pet) => ({
@@ -1208,6 +1214,15 @@ export function ArenaDraftClient({
                                         ? "Forma Mega · +10"
                                         : "Forma comum"}
                                     </div>
+                                  </div>
+                                  <div className="mt-2">
+                                    <AbilityPicker
+                                      speciesId={pet.speciesId}
+                                      value={pet.ability}
+                                      options={draftAbilityOptions(pet.speciesId, "CUSTOM")}
+                                      stats={pet.stats}
+                                      onChange={(slug) => updatePet(pet.id, { ability: slug })}
+                                    />
                                   </div>
                                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                     <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.04] p-2.5">
@@ -1741,6 +1756,7 @@ function RealRosterBuilder({
   const [name, setName] = useState("Meu time real");
   const [selected, setSelected] = useState<string[]>([]);
   const [postures, setPostures] = useState<Record<string, string>>({});
+  const [abilities, setAbilities] = useState<Record<string, string>>({});
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const perPage = 18;
@@ -1799,12 +1815,20 @@ function RealRosterBuilder({
         preset.pets.filter((p) => byId.has(p.id)).map((p) => [p.id, p.posture]),
       ),
     );
+    setAbilities(
+      Object.fromEntries(
+        preset.pets
+          .filter((p) => byId.has(p.id) && p.ability)
+          .map((p) => [p.id, p.ability as string]),
+      ),
+    );
   };
   const reset = () => {
     setEditingId(null);
     setName("Meu time real");
     setSelected([]);
     setPostures({});
+    setAbilities({});
   };
   const save = () =>
     start(async () => {
@@ -1822,6 +1846,7 @@ function RealRosterBuilder({
         name,
         mascotIds: selected,
         postures,
+        abilities,
       });
       if (result.error) toast.error(result.error);
       else {
@@ -1938,6 +1963,7 @@ function RealRosterBuilder({
           </b>{" "}
           · o limite é {ARENA_DRAFT_RULES.maxMegas} Megas por time e não pode ser ultrapassado.
         </p>
+        <AbilityTeamSummary slugs={selected.map((id) => abilities[id] ?? byId.get(id)?.ability)} />
         <input
           value={search}
           onChange={(e) => {
@@ -2043,6 +2069,18 @@ function RealRosterBuilder({
                         >
                           <Trash2 size={12} />
                         </button>
+                      </div>
+                    )}
+                    {picked && m.abilityOptions && (
+                      <div className="mt-2">
+                        <AbilityPicker
+                          speciesId={m.speciesId}
+                          value={abilities[m.id] ?? m.ability}
+                          options={m.abilityOptions}
+                          stats={m.stats}
+                          lockedHidden
+                          onChange={(slug) => setAbilities((cur) => ({ ...cur, [m.id]: slug }))}
+                        />
                       </div>
                     )}
                   </article>
@@ -2197,6 +2235,16 @@ function ArenaDraftTutorial({
               number="04"
               title="Combate e reação"
               text="A luta é automática. Nos turnos 20, 35 e 45, cada lado prepara mudanças em segredo; HP, debuffs e derrotas continuam valendo após a troca."
+            />
+            <TutorialStep
+              number="05"
+              title="Habilidades passivas"
+              text="Cada mascote usa uma habilidade da Pokédex adaptada ao combate (efeito de no máximo 20%, com número fixo de ativações). Por categoria, o 1º mascote em campo usa 100%, o 2º usa 70% e os seguintes ficam desligados. Mude a ordem dos slots a cada janela. No modo Padrão, a habilidade oculta exige o TM dela. Consulte tudo na aba Habilidades."
+            />
+            <TutorialStep
+              number="06"
+              title="Debuffs"
+              text="Debuffs duram a luta toda e não se somam: em cada atributo vale o maior. Passe o mouse no ícone ⬇ ao lado do mascote no replay para ver o que o afeta, quanto e de onde veio."
             />
           </div>
           <div className="mt-3 rounded-xl bg-amber-300/8 p-3 text-[11px] leading-4 text-amber-100 ring-1 ring-amber-300/20">

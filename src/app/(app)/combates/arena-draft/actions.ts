@@ -19,6 +19,8 @@ import {
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
+import { availableAbilities, resolveAbilitySlug } from "@/lib/abilities";
+import { buildDraftAbilityPlan, validateDraftAbilities, type DraftAbilityState } from "@/lib/abilities/draft";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { trackGachaObjective } from "@/lib/gacha";
 import {
@@ -65,9 +67,14 @@ export async function getMyDraftMascotsAction() {
       megaEvolvedFromPokemonId: true,
       staticSpriteUrlOverride: true,
       animatedSpriteUrlOverride: true,
+      hiddenAbilityUnlocked: true,
+      abilityChoice: true,
     },
   });
   return mascots.map((mascot) => ({
+    // Habilidades disponíveis (a oculta só com o TM) e a que está em uso.
+    abilityOptions: availableAbilities(mascot.pokemonId, mascot.hiddenAbilityUnlocked, "REAL"),
+    ability: resolveAbilitySlug({ pokemonId: mascot.pokemonId, choice: mascot.abilityChoice, hiddenUnlocked: mascot.hiddenAbilityUnlocked, mode: "REAL" }),
     id: mascot.id,
     speciesId: mascot.pokemonId,
     name: getPokemonName(mascot.pokemonId),
@@ -125,6 +132,8 @@ export async function saveRealRosterAction(input: {
   name: string;
   mascotIds: string[];
   postures?: Record<string, string>;
+  /** Habilidade escolhida por mascote (slug); sem isto vale a que o mascote já usa. */
+  abilities?: Record<string, string>;
 }) {
   try {
     const player = await currentPlayer();
@@ -153,6 +162,8 @@ export async function saveRealRosterAction(input: {
         statVitality: true,
         megaEvolvedAt: true,
         megaEvolvedFromPokemonId: true,
+        hiddenAbilityUnlocked: true,
+        abilityChoice: true,
       },
     });
     if (mascots.length !== uniqueIds.length)
@@ -161,7 +172,20 @@ export async function saveRealRosterAction(input: {
     const byId = new Map(mascots.map((m) => [m.id, m]));
     const pets = uniqueIds.map((mascotId, slot) => {
       const mascot = byId.get(mascotId)!;
+      const wantedAbility = input.abilities?.[mascot.id];
+      if (
+        wantedAbility &&
+        !availableAbilities(mascot.pokemonId, mascot.hiddenAbilityUnlocked, "REAL").includes(wantedAbility)
+      )
+        throw new Error("Uma habilidade escolhida não está disponível (a oculta exige o TM).");
+      const ability = resolveAbilitySlug({
+        pokemonId: mascot.pokemonId,
+        choice: wantedAbility ?? mascot.abilityChoice,
+        hiddenUnlocked: mascot.hiddenAbilityUnlocked,
+        mode: "REAL",
+      });
       return {
+        ...(ability ? { ability } : {}),
         id: mascot.id,
         slot,
         speciesId: mascot.pokemonId,
@@ -304,6 +328,8 @@ export async function saveDraftPresetAction(input: {
       throw new Error("Dê um nome de ao menos 3 caracteres ao preset.");
     await assertUniquePresetName(player.id, name, input.id);
     const validation = validateArenaDraftPets(input.pets);
+    const abilityError = validateDraftAbilities(validation.pets, "CUSTOM");
+    if (abilityError) throw new Error(abilityError);
     if (validation.pets.filter((pet) => pet.isMega).length > ARENA_DRAFT_RULES.maxMegas)
       throw new Error(
         `O time pode ter no máximo ${ARENA_DRAFT_RULES.maxMegas} Megas.`,
@@ -1072,6 +1098,9 @@ type DraftBattle = {
   }>;
   result?: string;
   rounds?: number;
+  /** Estado das habilidades (ligada/reduzida/desligada) do trecho atual e histórico por janela. */
+  abilityStates?: { A: Record<string, DraftAbilityState>; B: Record<string, DraftAbilityState> };
+  abilityHistory?: Array<{ checkpoint: number; A: Record<string, DraftAbilityState>; B: Record<string, DraftAbilityState> }>;
 };
 
 const STRATEGY_CHECKPOINTS = [20, 35, 45] as const;
@@ -1163,10 +1192,17 @@ async function persistCombatSegment(
   }
   // Após o último checkpoint (T45) não há teto: a luta segue até o fim.
   const stopAtTurn = STRATEGY_CHECKPOINTS[battle.checkpoint];
+  // Habilidades: a ordem dos slots em campo decide quem fica ligado/reduzido/desligado
+  // neste trecho (fixo até a próxima janela estratégica).
+  const planA = buildDraftAbilityPlan(petsA, battle.activeA, mode);
+  const planB = buildDraftAbilityPlan(petsB, battle.activeB, mode);
+  battle.abilityStates = { A: planA.states, B: planB.states };
+  (battle.abilityHistory ??= []).push({ checkpoint: battle.checkpoint, A: planA.states, B: planB.states });
   const combat = runArenaCombat(teamA, teamB, {
     runtime: battle.runtime,
     stopAtTurn,
     seed: battle.seed,
+    abilities: { ...planA.lineup, ...planB.lineup },
   });
   battle.runtime = combat.runtime;
   battle.events.push(...combat.log);

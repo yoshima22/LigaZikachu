@@ -10,6 +10,7 @@ import {
 } from "@/lib/mascot-data";
 import type { ArenaDraftPet } from "@/lib/arena-draft";
 import type { ArenaCombatRuntime, ArenaMascot } from "@/lib/arena-z";
+import { draftAbilitySlug } from "@/lib/abilities/draft";
 import { DraftRoomClient } from "./room-client";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,10 @@ type BattleData = {
   }>;
   checkpoint?: number;
   checkpoints?: number[];
+  abilityStates?: {
+    A?: Record<string, { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null }>;
+    B?: Record<string, { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null }>;
+  };
   eligibleA?: string[];
   eligibleB?: string[];
   activeA?: string[];
@@ -128,6 +133,8 @@ export default async function DraftRoomPage({
             : getPokemonName(p.speciesId),
           sprite: getSpriteUrl(p.speciesId),
           personality: revealBuild ? p.personality : null,
+          // A habilidade escolhida é segredo do dono até o combate revelar tudo.
+          ability: revealBuild ? draftAbilitySlug(p, match.mode === "REAL" ? "REAL" : "CUSTOM") : null,
           types: types.map((type) => TYPE_LABELS_PT[type] ?? type),
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),

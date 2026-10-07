@@ -170,6 +170,8 @@ export default async function ManualPage() {
     { id: "atributos-combate", label: "Atributos & Combate" },
     { id: "posturas", label: "Posturas" },
     { id: "personalidades", label: "Personalidades" },
+    { id: "habilidades", label: "Habilidades" },
+    { id: "arena-draft", label: "Arena Draft" },
     { id: "laboratorio-analise", label: "Lab & Análise" },
     { id: "arena", label: "Arena Z (PvP/PvE)" },
     { id: "economia", label: "Economia & ZikaCoins" },
@@ -1386,6 +1388,76 @@ export default async function ManualPage() {
             = 9 Pó de Criação. Favoritos, mascotes em Liga Semanal, Arena,
             expedição ou bazar não devem aparecer como recicláveis.
           </Note>
+        </Sub>
+      </Section>
+
+      {/* ── Habilidades passivas ───────────────────────────────────────────── */}
+      <Section id="habilidades" title="Habilidades Passivas" emoji="✨">
+        <Sub title="O que são">
+          <p className="text-xs leading-6 text-slate-400">
+            Cada mascote usa uma habilidade da Pokédex adaptada ao combate. Elas dão personalidade própria a cada espécie
+            além de tipo e status e, por enquanto, valem no <strong className="text-slate-200">Arena Draft</strong>.
+            Consulte qualquer mascote (mesmo um que você não tem) ou qualquer habilidade na aba{" "}
+            <a href="/habilidades" className="text-cyan-400 underline">Habilidades</a>.
+          </p>
+        </Sub>
+        <Sub title="Regras gerais">
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-6 text-slate-400">
+            <li>Nenhum efeito passa de <strong className="text-slate-200">20%</strong>. Ele cresce com um atributo do mascote e chega ao máximo quando o atributo chega a 250.</li>
+            <li>Cada habilidade tem um número fixo de <strong className="text-slate-200">ativações por luta</strong>, mostrado no card e no log (ex.: 1/2).</li>
+            <li>Cada mascote usa <strong className="text-slate-200">uma habilidade por vez</strong>; quem tem mais de uma escolhe no card do mascote.</li>
+            <li>Megas usam a habilidade própria que a Pokédex lista para elas; só sem habilidade própria vale a da forma anterior.</li>
+          </ul>
+        </Sub>
+        <Sub title="Limite por categoria no time">
+          <p className="text-xs leading-6 text-slate-400">
+            As habilidades têm 6 categorias: Dano, Defesa, Reflexo, Controle, Suporte e Sobrevivência. Em campo, por categoria, vale a ordem dos slots:
+            o 1º mascote usa 100% do efeito, o 2º usa 70% e do 3º em diante a habilidade fica desligada (Sobrevivência: só o 1º liga).
+            Você muda a posição dos mascotes a cada janela estratégica; o estado fica fixo durante o trecho e não muda se alguém cair.
+          </p>
+          <Table
+            headers={["Categoria", "O que faz", "Ligadas por time"]}
+            rows={[
+              ["Dano", "Aumenta o dano de um golpe", 2],
+              ["Defesa", "Reduz o dano ou o debuff recebido", 2],
+              ["Reflexo", "Devolve parte do dano ao atacante", 2],
+              ["Controle", "Aplica debuff no rival", 2],
+              ["Suporte", "Buff, cura, purificação de debuff", 2],
+              ["Sobrevivência", "Impede ou adia a derrota", 1],
+            ]}
+          />
+        </Sub>
+        <Sub title="TM de habilidade oculta">
+          <p className="text-xs leading-6 text-slate-400">
+            No modo <strong className="text-slate-200">Padrão</strong>, a habilidade oculta de um mascote só fica disponível depois de usar o TM dela
+            (ZikaShop ou Bazar). O TM só funciona em mascotes que têm aquela habilidade como oculta, é consumido ao usar e o desbloqueio é permanente,
+            continuando após evoluir e acompanhando o mascote em trocas e vendas. No modo <strong className="text-slate-200">Customizado</strong> as ocultas são livres.
+          </p>
+        </Sub>
+        <Sub title="Debuffs">
+          <p className="text-xs leading-6 text-slate-400">
+            Um debuff reduz um atributo (Força, Agilidade, Instinto ou Vitalidade) e dura a luta inteira, a não ser que uma habilidade o remova.
+            Debuffs <strong className="text-slate-200">não se somam</strong>: em cada atributo vale o maior valor aplicado, e a origem mostrada é a de quem aplicou esse maior valor.
+            Aplicam debuff a postura Oportunista, a personalidade Travesso e habilidades de Controle. No replay, o ícone ⬇ ao lado do mascote mostra, ao passar o mouse,
+            os atributos afetados, o valor e a origem.
+          </p>
+        </Sub>
+      </Section>
+
+      <Section id="arena-draft" title="Arena Draft" emoji="🃏">
+        <Sub title="Montagem de times">
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-6 text-slate-400">
+            <li>Times de 12 mascotes, em dois modos: <strong className="text-slate-200">Customizado</strong> (4.500 pontos de status) e <strong className="text-slate-200">Padrão</strong> (seus mascotes reais).</li>
+            <li>Limite de <strong className="text-slate-200">5 Megas por time</strong> nos dois modos; a montagem bloqueia o excesso.</li>
+            <li>Não é permitido salvar dois times com o mesmo nome.</li>
+          </ul>
+        </Sub>
+        <Sub title="Luta e janelas estratégicas">
+          <ul className="list-disc space-y-1 pl-5 text-xs leading-6 text-slate-400">
+            <li>A luta é automática e vai até o fim, sem limite de rodadas. Nos turnos 20, 35 e 45 cada lado reorganiza o time em segredo.</li>
+            <li>Mascotes derrotados saem do campo sozinhos. Dá para travar a estratégia com menos de 6 mascotes (de 1 até o número de vivos).</li>
+            <li>A ordem dos slots em campo decide quais habilidades ficam ligadas.</li>
+          </ul>
         </Sub>
       </Section>
 

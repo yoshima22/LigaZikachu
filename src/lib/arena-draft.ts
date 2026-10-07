@@ -68,6 +68,8 @@ export const arenaDraftPetSchema = z.object({
   slot: z.number().int().min(0).max(11),
   speciesId: z.number().int().positive(),
   isMega: z.boolean(),
+  // Habilidade passiva escolhida (slug do PokeAPI). Sem ela vale a padrão da espécie.
+  ability: z.string().max(60).optional(),
   nickname: z.string().trim().max(18).optional(),
   personality: z.string().min(1),
   posture: z.string().min(1),

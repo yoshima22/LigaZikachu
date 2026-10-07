@@ -331,7 +331,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
     // Resumo do turno em texto
     turnLines: string[];
     battleAnimation: Array<{
-      turn: number; action: "ATTACK" | "DEFEND" | "HEAL";
+      turn: number; action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
       attackerId: string; attackerName: string; attackerPokemonId: number;
       defenderId: string; defenderName: string; defenderPokemonId: number;
       damage: number; advantageApplied: boolean; isPlayerAttacker: boolean;
@@ -399,7 +399,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
 
     const log = Array.isArray(battle.turnLog)
       ? (battle.turnLog as Array<{
-          turn: number; action: "ATTACK" | "DEFEND" | "HEAL";
+          turn: number; action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
           actorId: string; actorName: string; actorOwnerId?: string | null; actorRole?: string;
           targetId: string; targetName: string; targetOwnerId?: string | null; targetRole?: string;
           damage: number; advantageApplied?: boolean; effect?: string;

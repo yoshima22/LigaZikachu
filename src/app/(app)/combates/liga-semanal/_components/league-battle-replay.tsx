@@ -17,7 +17,7 @@ export type TurnLog = {
   targetOwnerId?: string | null;
   targetPokemonId?: number;
   targetLevel?: number;
-  action: "ATTACK" | "DEFEND" | "HEAL";
+  action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
   damage: number;
   multiplier: number;
   advantageApplied: boolean;

@@ -1,7 +1,9 @@
 "use client";
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
-import { EventLine } from "../event-line";
+import { EventLine, type DebuffEvt } from "../event-line";
+import { evaluateTeamAbilities, getAbilityInfo, describeAbility, type AbilitySlotState } from "@/lib/abilities";
+import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
@@ -144,6 +146,7 @@ type Pet = {
   name: string;
   sprite: string;
   personality?: string | null;
+  ability?: string | null;
   types: string[];
   advantages: string[];
   weaknesses: string[];
@@ -177,10 +180,14 @@ type Battle = {
     targetRole?: string;
     advantageApplied?: boolean;
     multiplier?: number;
+    debuffEvents?: DebuffEvt[];
   }>;
   checkpoint?: number;
   checkpoints?: number[];
+  abilityStates?: { A?: Record<string, AbilityState>; B?: Record<string, AbilityState> };
+  runtime?: { abilities?: { uses?: Record<string, number> } };
 } | null;
+type AbilityState = { slug: string; state: AbilitySlotState; factor: number; reason: string | null };
 type Strategy = {
   activeIds: string[];
   rivalActiveIds: string[];
@@ -570,6 +577,85 @@ export function DraftRoomClient({
     </div>
   );
 }
+
+const STATE_STYLE: Record<AbilitySlotState, { label: string; cls: string }> = {
+  ACTIVE: { label: "ligada", cls: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" },
+  REDUCED: { label: "70%", cls: "border-amber-400/40 bg-amber-500/10 text-amber-300" },
+  OFF: { label: "desligada", cls: "border-rose-400/40 bg-rose-500/10 text-rose-300 line-through" },
+  NONE: { label: "sem efeito", cls: "border-slate-500/40 bg-slate-500/10 text-slate-400" },
+};
+
+/** Nome da habilidade com categoria; passe `state` para mostrar ligada/reduzida/desligada. */
+function AbilityChip({ slug, state, reason }: { slug?: string | null; state?: AbilitySlotState; reason?: string | null }) {
+  const info = getAbilityInfo(slug);
+  if (!info) return null;
+  const st = state ? STATE_STYLE[state] : null;
+  return (
+    <span className="mt-0.5 flex flex-wrap items-center gap-1" title={`${describeAbility(info)}${reason ? `
+${reason}` : ""}`}>
+      <span className="text-[9px] font-bold text-fuchsia-200">✨ {info.name}</span>
+      {info.category && <span className={`rounded border px-1 text-[7px] font-bold ${ABILITY_CATEGORY_STYLE[info.category]}`}>{info.category}</span>}
+      {st && <span className={`rounded border px-1 text-[7px] font-black ${st.cls}`}>{st.label}</span>}
+    </span>
+  );
+}
+
+/** Ordem dos slots em campo: define quem fica com a habilidade ligada, reduzida ou desligada. */
+function LineupPanel({
+  pets, active, setActive, locked,
+}: {
+  pets: Pet[];
+  active: string[];
+  setActive: (updater: (cur: string[]) => string[]) => void;
+  locked: boolean;
+}) {
+  const ordered = active.map((id) => pets.find((p) => p.id === id)).filter((p): p is Pet => Boolean(p));
+  const slots = evaluateTeamAbilities(ordered.map((p) => p.ability ?? null));
+  const move = (index: number, delta: number) =>
+    setActive((cur) => {
+      const next = [...cur];
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return cur;
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+  const off = ordered.map((p, i) => ({ p, slot: slots[i] })).filter(({ slot }) => slot.state === "OFF" || slot.state === "REDUCED");
+  return (
+    <div className="mt-4 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/[.03] p-3">
+      <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">Ordem em campo e habilidades</p>
+      <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
+        Dentro de cada categoria, o 1º mascote usa a habilidade com 100%, o 2º com 70% e do 3º em diante ela fica desligada (Sobrevivência: só o 1º).
+        Mude a posição para escolher quem fica ligado. O estado vale até a próxima janela.
+      </p>
+      <ol className="mt-2 grid gap-1.5 sm:grid-cols-2">
+        {ordered.map((pet, index) => (
+          <li key={pet.id} className="flex items-center gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-1.5">
+            <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-300/15 text-[10px] font-black text-cyan-200">{index + 1}</span>
+            <img src={pet.sprite} alt="" className="h-8 w-8 shrink-0 object-contain [image-rendering:pixelated]" />
+            <div className="min-w-0 flex-1">
+              <b className="block truncate text-[11px] text-white">{pet.name}</b>
+              <AbilityChip slug={pet.ability} state={slots[index].state} reason={slots[index].reason} />
+            </div>
+            <div className="flex shrink-0 flex-col">
+              <button disabled={locked || index === 0} onClick={() => move(index, -1)} aria-label="Subir"
+                className="rounded px-1.5 text-[11px] leading-none text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-25">▲</button>
+              <button disabled={locked || index === ordered.length - 1} onClick={() => move(index, 1)} aria-label="Descer"
+                className="rounded px-1.5 text-[11px] leading-none text-slate-400 hover:bg-white/10 hover:text-white disabled:opacity-25">▼</button>
+            </div>
+          </li>
+        ))}
+      </ol>
+      {off.length > 0 && (
+        <ul className="mt-2 space-y-0.5 text-[10px] text-amber-200/90">
+          {off.map(({ p, slot }) => (
+            <li key={p.id}>⚠ Slot {ordered.indexOf(p) + 1} · {getAbilityInfo(p.ability)?.name}: {slot.reason}.</li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
 function StrategyWindow({
   matchId,
   mode,
@@ -694,6 +780,7 @@ function StrategyWindow({
           </span>
         </div>
       </div>
+      <LineupPanel pets={pets} active={active} setActive={setActive} locked={strategy.ownConfirmed} />
       <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         {pets.map((p) => {
           const selected = active.includes(p.id),
@@ -714,6 +801,7 @@ function StrategyWindow({
                 </MascotInfoTrigger>
                 <div className="min-w-0 flex-1">
                   <b className="block truncate text-sm text-white">{p.name}</b>
+                  <AbilityChip slug={p.ability} />
                   <span className="mt-0.5 flex flex-wrap gap-1">
                     <span
                       className={`rounded px-1.5 py-0.5 text-[8px] font-black ${dead ? "bg-rose-500/15 text-rose-300" : selected ? "bg-cyan-400/15 text-cyan-200" : "bg-slate-500/15 text-slate-300"}`}
@@ -924,6 +1012,8 @@ function StrategyWindow({
 type BattleEvent = NonNullable<NonNullable<Battle>["events"]>[number];
 // Player de combate por eventos: reproduz as ações em sequência, com sprites
 // grandes e barras de vida que descem a cada golpe (feedback real da luta).
+const DEBUFF_STAT_LABEL: Record<string, string> = { force: "Força", agility: "Agilidade", instinct: "Instinto", vitality: "Vitalidade" };
+
 function AnimatedBattle({
   leftName,
   rightName,
@@ -935,7 +1025,9 @@ function AnimatedBattle({
   controls = false,
   initialCursor,
   onFinish,
+  abilityStates,
 }: {
+  abilityStates?: Record<string, AbilityState>;
   leftName: string;
   rightName: string;
   leftPets: Pet[];
@@ -991,6 +1083,22 @@ function AnimatedBattle({
       hp.set(event.targetId, event.targetHpAfter);
   }
   const current = cursor >= from && cursor < events.length ? events[cursor] : null;
+  // Debuffs ativos no ponto atual do replay (aplicados menos removidos), com a origem de cada um.
+  const activeDebuffs = new Map<string, Map<string, { pct: number; sourceName: string; label: string; round: number }>>();
+  for (let index = 0; index <= cursor && index < events.length; index += 1) {
+    for (const d of events[index].debuffEvents ?? []) {
+      const byStat = activeDebuffs.get(d.targetId) ?? new Map();
+      if (d.kind === "APPLY") byStat.set(d.stat, { pct: d.pct, sourceName: d.sourceName, label: d.label, round: d.round });
+      else {
+        const entry = byStat.get(d.stat);
+        if (entry) {
+          entry.pct -= d.pct;
+          if (entry.pct <= 0.005) byStat.delete(d.stat);
+        }
+      }
+      activeDebuffs.set(d.targetId, byStat);
+    }
+  }
   const navigationStartCursor = controls ? Math.max(-1, from - 1) : startCursor;
   const roleLabel = (value?: string) =>
     value ? (ROLE_LABELS[value as Role] ?? value) : null;
@@ -1020,15 +1128,18 @@ function AnimatedBattle({
         const percent = Math.max(0, Math.min(100, (value / pet.maxHp) * 100));
         const isActor = current?.actorId === pet.id;
         const isTarget = current?.targetId === pet.id;
-        const beingHit = isTarget && current?.action !== "HEAL";
-        const beingHealed = isTarget && current?.action === "HEAL";
+        const beingHit = isTarget && current?.action === "ATTACK";
+        const beingHealed =
+          isTarget &&
+          (current?.action === "HEAL" || (current?.action === "ABILITY" && (current?.damage ?? 0) > 0));
+        const debuffList = [...(activeDebuffs.get(pet.id)?.entries() ?? [])];
         const dead = value <= 0;
         return (
           <MascotInfoTrigger key={pet.id} pokemonId={pet.speciesId} displayName={pet.name}>
           <div
             className={`relative w-[4.75rem] rounded-xl border p-1.5 transition ${dead ? "border-white/10 opacity-40 grayscale" : isTarget ? "border-rose-400/70 bg-rose-500/10" : isActor ? "border-cyan-300/70 bg-cyan-300/10 ring-1 ring-cyan-300/40" : "border-white/10 bg-slate-950/60"}`}
           >
-            {isTarget && (
+            {(beingHit || beingHealed) && (
               <span
                 key={cursor}
                 className={`adb-float pointer-events-none absolute left-1/2 top-1 z-10 -translate-x-1/2 text-xs font-black ${beingHealed ? "text-emerald-300" : "text-rose-300"}`}
@@ -1058,6 +1169,15 @@ function AnimatedBattle({
             <span className="block truncate text-center text-[8px] font-bold text-white">
               {pet.name}
             </span>
+            {abilityStates?.[pet.id] && (
+              <span
+                className={`mt-px block truncate text-center text-[7px] font-bold ${abilityStates[pet.id].state === "OFF" ? "text-rose-300 line-through" : abilityStates[pet.id].state === "REDUCED" ? "text-amber-300" : "text-fuchsia-200"}`}
+                title={`${describeAbility(getAbilityInfo(abilityStates[pet.id].slug)!)}${abilityStates[pet.id].reason ? `
+${abilityStates[pet.id].reason}` : ""}`}
+              >
+                ✨ {getAbilityInfo(abilityStates[pet.id].slug)?.name}
+              </span>
+            )}
             <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-white/10">
               <div
                 className="h-full transition-all duration-500"
@@ -1071,6 +1191,23 @@ function AnimatedBattle({
             <span className="mt-0.5 block text-center text-[7px] tabular-nums text-slate-400">
               {value}/{pet.maxHp}
             </span>
+            {debuffList.length > 0 && (
+              <span className="group/dbg absolute -right-1 -top-1 z-20">
+                <span className="grid h-5 min-w-5 cursor-help place-items-center rounded-full border border-fuchsia-400/60 bg-fuchsia-950 px-1 text-[9px] font-black text-fuchsia-200">
+                  ⬇{debuffList.length}
+                </span>
+                <span className="pointer-events-none invisible absolute right-0 top-full z-30 mt-1 w-48 rounded-lg border border-fuchsia-400/30 bg-slate-950 p-2 text-left text-[9px] leading-snug text-slate-200 shadow-xl group-hover/dbg:visible">
+                  <b className="block text-fuchsia-300">Debuffs de {pet.name}</b>
+                  {debuffList.map(([stat, d]) => (
+                    <span key={stat} className="mt-1 block">
+                      <b className="text-white">{DEBUFF_STAT_LABEL[stat] ?? stat} −{Math.round(d.pct * 1000) / 10}%</b>
+                      <span className="block text-slate-400">Origem: {d.label} · {d.sourceName} · rodada {d.round}</span>
+                    </span>
+                  ))}
+                  <span className="mt-1 block text-slate-500">Debuffs não somam: vale o maior por atributo.</span>
+                </span>
+              </span>
+            )}
           </div>
           </MascotInfoTrigger>
         );
@@ -1129,7 +1266,7 @@ function AnimatedBattle({
               </span>
             )}
             <span className="text-slate-400">
-              {current.action === "HEAL" ? "curou" : "atacou"}
+              {current.action === "HEAL" ? "curou" : current.action === "ABILITY" ? "ativou habilidade" : "atacou"}
             </span>
             <b className="text-slate-200">{current.targetName}</b>
             {roleLabel(current.targetRole) && (
@@ -1137,14 +1274,19 @@ function AnimatedBattle({
                 {roleLabel(current.targetRole)}
               </span>
             )}
-            <span
-              className={
-                current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
-              }
-            >
-              · {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
-            </span>
-            {current.advantageApplied && current.action !== "HEAL" && (
+            {current.action !== "ABILITY" && (
+              <span
+                className={
+                  current.action === "HEAL" ? "text-emerald-300" : "text-rose-300"
+                }
+              >
+                · {current.damage} {current.action === "HEAL" ? "HP" : "dano"}
+              </span>
+            )}
+            {current.action === "ABILITY" && current.effect && (
+              <span className="basis-full text-center text-[10px] text-fuchsia-200">{current.effect}</span>
+            )}
+            {current.advantageApplied && current.action === "ATTACK" && (
               <span className="rounded-full border border-yellow-300/40 bg-yellow-300/10 px-1.5 py-0.5 text-[8px] font-black text-yellow-200">
                 ⚡ SUPER EFETIVO
               </span>
@@ -1345,6 +1487,7 @@ function CombatStage({
             from={from}
             to={to}
             onFinish={onFinish}
+            abilityStates={{ ...battle?.abilityStates?.A, ...battle?.abilityStates?.B }}
           />
         ) : (
           <p className="py-6 text-center text-xs text-slate-500">
@@ -1855,6 +1998,8 @@ function Replay({
 }) {
   const events = battle.events ?? [];
   const maxHpOf = new Map([...own, ...rival].map((p) => [p.id, p.maxHp]));
+  const abilityStates: Record<string, AbilityState> = { ...battle.abilityStates?.A, ...battle.abilityStates?.B };
+  const abilityUses = battle.runtime?.abilities?.uses ?? {};
   const involved = new Set<string>();
   events.forEach((event) => {
     if (event.actorId) involved.add(event.actorId);
@@ -1940,6 +2085,7 @@ function Replay({
             initialCursor={finalSegmentStart}
             controls={revealed}
             onFinish={() => setRevealed(true)}
+            abilityStates={abilityStates}
           />
           {!revealed && (
             <p className="mt-3 text-center text-[10px] font-bold uppercase tracking-widest text-cyan-200">
@@ -2048,6 +2194,35 @@ function Replay({
           </table>
         </div>
       </div>
+      )}
+
+      {/* Habilidades da luta: estado do time em campo e ativações usadas */}
+      {revealed && Object.keys(abilityStates).length > 0 && (
+        <div className="rounded-2xl border border-fuchsia-300/20 bg-slate-950/70 p-4">
+          <p className="text-[10px] font-black uppercase tracking-widest text-fuchsia-300">Habilidades no último trecho</p>
+          <div className="mt-3 overflow-x-auto">
+            <table className="w-full text-xs">
+              <thead className="text-left text-slate-500">
+                <tr><th className="py-2">Mascote</th><th>Habilidade</th><th className="text-center">Estado</th><th className="text-center">Ativações usadas</th></tr>
+              </thead>
+              <tbody>
+                {[...own, ...rival].filter((pet) => abilityStates[pet.id]).map((pet) => {
+                  const st = abilityStates[pet.id];
+                  const info = getAbilityInfo(st.slug);
+                  const style = STATE_STYLE[st.state];
+                  return (
+                    <tr key={pet.id} className="border-t border-white/5">
+                      <td className="py-2 font-bold text-white">{pet.name}</td>
+                      <td className="text-slate-200" title={info ? describeAbility(info) : undefined}>{info?.name} <span className="text-[10px] text-slate-500">{info?.category}</span></td>
+                      <td className="text-center"><span className={`rounded border px-1.5 py-0.5 text-[9px] font-black ${style.cls}`} title={st.reason ?? undefined}>{style.label}</span></td>
+                      <td className="text-center tabular-nums text-slate-300">{info && info.activations > 0 ? `${abilityUses[pet.id] ?? 0}/${info.activations}` : "passiva"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
       )}
 
       {/* Log completo, recolhido por padrão */}

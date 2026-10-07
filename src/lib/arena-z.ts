@@ -54,6 +54,7 @@ import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type AbilityRuntime, type DebuffEvent } from "@/lib/abilities/combat";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -344,7 +345,7 @@ export type ArenaTurnLog = {
   targetPokemonId?: number;
   targetLevel?: number;
   targetHpAfter?: number;
-  action: "ATTACK" | "DEFEND" | "HEAL";
+  action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
   damage: number;
   attackerType: string;
   defenderType: string;
@@ -353,6 +354,8 @@ export type ArenaTurnLog = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  /** Debuffs aplicados/removidos neste evento (origem e valores), para o ícone do replay. */
+  debuffEvents?: DebuffEvent[];
 };
 
 export type ArenaCombatRuntime = {
@@ -372,6 +375,7 @@ export type ArenaCombatRuntime = {
   playfulTeamBuff: Record<"A" | "D", boolean>;
   guard: { team: "A" | "D"; reduction: number } | null;
   rngCounter: number;
+  abilities?: AbilityRuntime;
 };
 
 export type ArenaCombatOptions = {
@@ -381,6 +385,8 @@ export type ArenaCombatOptions = {
   maxTurns?: number;
   /** Seed canônica da partida. Quando omitida, mantém o comportamento aleatório tradicional. */
   seed?: number;
+  /** Habilidades passivas (só o Arena Draft usa). Sem isto o combate é idêntico ao de sempre. */
+  abilities?: AbilityLineup;
 };
 
 const combatRng = new AsyncLocalStorage<() => number>();
@@ -533,6 +539,9 @@ function alive(team: ArenaMascot[], hp: Map<string, number>) {
   return team.filter((m) => (hp.get(m.id) ?? 0) > 0);
 }
 
+// Motor de habilidades da luta em andamento (síncrono; cada execução o redefine).
+let activeAbilityEngine: AbilityEngine | null = null;
+
 function getEffectiveStat(
   m: ArenaMascot,
   debuffs: Map<
@@ -542,7 +551,8 @@ function getEffectiveStat(
   stat: "force" | "agility" | "instinct" | "vitality",
 ) {
   const pct = debuffs.get(m.id)?.[stat] ?? 0;
-  return Math.max(1, Math.round(m[stat] * (1 - pct)));
+  const boost = stat === "agility" && activeAbilityEngine ? activeAbilityEngine.agilityMult(m.id) : 1;
+  return Math.max(1, Math.round(m[stat] * (1 - pct) * boost));
 }
 
 function aliveEncourageBonus(team: ArenaMascot[], hp: Map<string, number>) {
@@ -657,6 +667,7 @@ function tryApplyOpportunistDebuff(
     string,
     Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>
   >,
+  apply?: (stat: "force" | "agility" | "instinct" | "vitality", amount: number) => void,
 ) {
   if (actor.combatRole !== "OPPORTUNIST") return null;
   const opportunist = getOpportunistProfile(
@@ -672,10 +683,12 @@ function tryApplyOpportunistDebuff(
     "vitality",
   ];
   const stat = stats[Math.floor(arenaRandom() * stats.length)];
-  debuffs.set(target.id, {
-    ...current,
-    [stat]: Math.max(current[stat] ?? 0, amount),
-  });
+  if (apply) apply(stat, amount);
+  else
+    debuffs.set(target.id, {
+      ...current,
+      [stat]: Math.max(current[stat] ?? 0, amount),
+    });
   return `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% (resistência aplicada).`;
 }
 
@@ -890,11 +903,56 @@ function runArenaCombatInternal(
   const maxTurns = options.maxTurns ?? 1000;
   const segmentEnd = Math.min(options.stopAtTurn ?? maxTurns, maxTurns);
 
+  // Habilidades passivas: só existem quando o chamador (Arena Draft) as informa.
+  const abilityEngine = options.abilities
+    ? createAbilityEngine(
+        options.abilities,
+        { attackers, defenders, hp, debuffs, rand: arenaRandom, typesOf: arenaTypes, getRound: () => round },
+        previous?.abilities,
+      )
+    : null;
+  activeAbilityEngine = abilityEngine;
+  const pushAbilityLog = (e: { actor: ArenaMascot; target?: ArenaMascot; text: string; heal?: number; hpAfter?: number; events?: DebuffEvent[] }) => {
+    const target = e.target ?? e.actor;
+    log.push({
+      turn,
+      actorId: e.actor.id,
+      actorName: e.actor.name,
+      actorOwnerId: e.actor.ownerId,
+      targetId: target.id,
+      targetName: target.name,
+      targetOwnerId: target.ownerId,
+      action: "ABILITY",
+      damage: e.heal ?? 0,
+      targetHpAfter: e.hpAfter,
+      attackerType: arenaElement(e.actor),
+      defenderType: arenaElement(target),
+      multiplier: 1,
+      advantageApplied: false,
+      actorRole: getCombatRoleLabel(e.actor.combatRole),
+      targetRole: getCombatRoleLabel(target.combatRole),
+      effect: e.text,
+      ...(e.events?.length ? { debuffEvents: e.events } : {}),
+    });
+  };
+  const flushAbilityLog = () => {
+    if (!abilityEngine) return;
+    for (const e of abilityEngine.flushStandalone()) pushAbilityLog(e);
+  };
+  if (abilityEngine) {
+    abilityEngine.onBattleStart();
+    flushAbilityLog();
+  }
+
   while (
     alive(attackers, hp).length > 0 &&
     alive(defenders, hp).length > 0 &&
     turn <= segmentEnd
   ) {
+    if (abilityEngine) {
+      abilityEngine.onRoundStart(round);
+      flushAbilityLog();
+    }
     const aAlive = alive(attackers, hp);
     const dAlive = alive(defenders, hp);
     const all = [
@@ -935,6 +993,7 @@ function runArenaCombatInternal(
         const opponents = alive(enemyTeam, hp);
         const allies = entry.side === "A" ? attackers : defenders;
         if (opponents.length === 0) break;
+        if ((hp.get(actor.id) ?? 0) <= 0) break; // caiu no meio da própria rodada (reflexo)
 
         // HEALER: may heal instead of attacking
         const healResult = tryHealerAction(
@@ -984,10 +1043,11 @@ function runArenaCombatInternal(
         // PROVOKER: may redirect attacker to self
         const provoked = tryProvokerRedirect(actor, target, opponents, hp);
         if (provoked) target = provoked;
+        const abilityNotes: string[] = [];
 
         const attackerType = arenaElement(actor);
-        const defenderType = arenaElement(target);
-        const multiplier = getTypeAdvantageMultiplier(
+        let defenderType = arenaElement(target);
+        let multiplier = getTypeAdvantageMultiplier(
           arenaTypes(actor),
           arenaTypes(target),
         );
@@ -1023,12 +1083,22 @@ function runArenaCombatInternal(
             advantageApplied: false,
             actorRole: getCombatRoleLabel(actor.combatRole),
             targetRole: getCombatRoleLabel(actor.combatRole),
-            effect: `${getCombatRoleLabel(actor.combatRole)} preparou defesa (${Math.round(reduction * 100)}%).${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}`,
+            effect: `${getCombatRoleLabel(actor.combatRole)} preparou defesa (${Math.round(reduction * 100)}%).${actionIndex > 0 ? ` Ação extra por Agilidade (${actionIndex + 1}/${actionProfile.actions}).` : ""}${abilityEngine ? (() => { const extra = abilityEngine.onDefend(actor).join(" "); return extra ? ` ${extra}` : ""; })() : ""}`,
           });
           turn++;
           continue;
         }
 
+        // Habilidades: Para-raios pode desviar o golpe para outro mascote.
+        if (abilityEngine) {
+          const redirect = abilityEngine.maybeRedirect(actor, target);
+          if (redirect) {
+            target = redirect.target;
+            abilityNotes.push(redirect.note);
+            defenderType = arenaElement(target);
+            multiplier = getTypeAdvantageMultiplier(arenaTypes(actor), arenaTypes(target));
+          }
+        }
         const force = getEffectiveStat(actor, debuffs, "force");
         const instinct = getEffectiveStat(actor, debuffs, "instinct");
         const vitality = getEffectiveStat(target, debuffs, "vitality");
@@ -1042,9 +1112,26 @@ function runArenaCombatInternal(
           hp,
           bestEncourager,
         );
-        const encourage =
+        let encourage =
           aliveEncourageBonus(allies, hp) * (1 - saboteurSuppression);
-        const scoutBonus = aliveScoutBonus(allies, hp);
+        let scoutBonus = aliveScoutBonus(allies, hp);
+        // Habilidades: Reforço e Ignorar bônus mexem nos bônus de equipe.
+        if (abilityEngine) {
+          const bm = abilityEngine.buffMods({ actor, target, encourage, scout: scoutBonus });
+          encourage = bm.encourage;
+          scoutBonus = bm.scout;
+          abilityNotes.push(...bm.notes);
+        }
+        const isLastOfSide =
+          all.filter((e) => e.side === entry.side).at(-1)?.mascot.id === actor.id;
+        const abilityAtk = abilityEngine
+          ? abilityEngine.attackBonus({ actor, target, multiplier, isLastOfSide })
+          : null;
+        if (abilityAtk) abilityNotes.push(...abilityAtk.notes);
+        const abilityDef = abilityEngine
+          ? abilityEngine.defense({ actor, target, multiplier })
+          : null;
+        if (abilityDef) abilityNotes.push(...abilityDef.notes);
         const duelistBonus =
           actor.combatRole === "DUELIST" &&
           duelistLock.get(actor.id) === target.id
@@ -1099,8 +1186,10 @@ function runArenaCombatInternal(
           duelistBonus *
           survivorDmgBonus *
           persOff *
-          loyalMult;
-        const mitigation = vitality * 0.8 + target.level;
+          loyalMult *
+          (1 + (abilityAtk?.off ?? 0));
+        const mitigation =
+          (vitality * 0.8 + target.level) * (1 - (abilityAtk?.ignore ?? 0));
         const guarded =
           guard && guard.team !== entry.side ? guard.reduction : 0;
         let damage = Math.max(
@@ -1109,9 +1198,13 @@ function runArenaCombatInternal(
             (raw * multiplier - mitigation) *
               (1 - guarded) *
               survivorDefBonus *
-              persDef,
+              persDef *
+              (abilityDef?.factor ?? 1),
           ),
         );
+        // Habilidades: Golpe duplo soma um segundo impacto.
+        if (abilityAtk?.extraHit)
+          damage += Math.max(1, Math.round(damage * abilityAtk.extraHit));
 
         // PROVOKER: attacker deals less damage when redirected
         if (provoked) damage = Math.round(damage * 0.92);
@@ -1123,7 +1216,17 @@ function runArenaCombatInternal(
           hp,
           damage,
         );
-        if (guardianIntercept) damage = guardianIntercept.newDamage;
+        if (guardianIntercept) {
+          damage = guardianIntercept.newDamage;
+          const guardianMascot = [...attackers, ...defenders].find(
+            (m) => m.id === guardianIntercept.guardianId,
+          );
+          if (abilityEngine && guardianMascot) {
+            const ge = abilityEngine.guardianExtra(guardianMascot, damage);
+            damage = ge.damage;
+            if (ge.note) abilityNotes.push(ge.note);
+          }
+        }
 
         // SURVIVOR: last stand (survive lethal once)
         const survivorLS = trySurvivorLastStand(
@@ -1133,6 +1236,14 @@ function runArenaCombatInternal(
           survivorUsed,
         );
         if (survivorLS) damage = survivorLS.newDamage;
+        // Habilidades: Resistência (Sturdy) segura um golpe fatal com HP cheio.
+        if (abilityEngine && !survivorLS) {
+          const sv = abilityEngine.survive(target, damage);
+          if (sv) {
+            damage = sv.damage;
+            abilityNotes.push(sv.note);
+          }
+        }
 
         // Dramático: 1x por batalha, 25% de sobreviver a um golpe fatal com 1 HP.
         let dramaticEffect: string | null = null;
@@ -1164,8 +1275,21 @@ function runArenaCombatInternal(
         }
         if (damage > 0) hitTaken.add(target.id);
         guard = null;
+        if (abilityEngine && abilityDef?.heal && newHp > 0)
+          abilityEngine.healTarget(target, abilityDef.heal);
 
-        const debuffEffect = tryApplyOpportunistDebuff(actor, target, debuffs);
+        const debuffEffect = tryApplyOpportunistDebuff(
+          actor,
+          target,
+          debuffs,
+          abilityEngine
+            ? (stat, amount) => {
+                abilityNotes.push(
+                  ...abilityEngine.applyDebuff({ target, source: actor, stat, pct: amount, label: "Postura Oportunista" }),
+                );
+              }
+            : undefined,
+        );
         // Travesso: 1º ataque contra cada inimigo, 15% de -8%×resistência no atributo mais útil.
         let travessoEffect: string | null = null;
         const travessoKey = `${actor.id}:${target.id}`;
@@ -1173,15 +1297,30 @@ function runArenaCombatInternal(
           travessoFirstHit.add(travessoKey);
           const tv = rollTravessoDebuff(actor, target, arenaRandom);
           if (tv) {
-            const cur = debuffs.get(target.id) ?? {};
-            debuffs.set(target.id, {
-              ...cur,
-              [tv.stat]: Math.max(cur[tv.stat] ?? 0, tv.amount),
-            });
+            if (abilityEngine) {
+              abilityNotes.push(
+                ...abilityEngine.applyDebuff({
+                  target,
+                  source: actor,
+                  stat: tv.stat as "force" | "agility" | "instinct" | "vitality",
+                  pct: tv.amount,
+                  label: "Personalidade Travesso",
+                }),
+              );
+            } else {
+              const cur = debuffs.get(target.id) ?? {};
+              debuffs.set(target.id, {
+                ...cur,
+                [tv.stat]: Math.max(cur[tv.stat] ?? 0, tv.amount),
+              });
+            }
             travessoEffect = `Travessura de ${actor.name}: -${Math.round(tv.amount * 100)}% de ${tv.stat} de ${target.name}.`;
           }
         }
         const saboteurEffect = trySaboteurDisrupt(actor, opponents, hp);
+        const abilityAfter = abilityEngine
+          ? abilityEngine.afterHit({ actor, target, damage })
+          : [];
         const effects =
           [
             actionIndex > 0
@@ -1208,6 +1347,8 @@ function runArenaCombatInternal(
             actor.combatRole === "DUELIST"
               ? `Duelista ${actor.name} focou em ${target.name}.`
               : null,
+            ...abilityNotes,
+            ...abilityAfter,
           ]
             .filter(Boolean)
             .join(" ") || undefined;
@@ -1222,7 +1363,7 @@ function runArenaCombatInternal(
           targetOwnerId: target.ownerId,
           action: "ATTACK",
           damage,
-          targetHpAfter: newHp,
+          targetHpAfter: hp.get(target.id) ?? newHp,
           attackerType,
           defenderType,
           multiplier,
@@ -1230,7 +1371,14 @@ function runArenaCombatInternal(
           actorRole: getCombatRoleLabel(actor.combatRole),
           targetRole: getCombatRoleLabel(target.combatRole),
           effect: effects,
+          ...(() => {
+            const dbg = abilityEngine?.flushEvents();
+            return dbg?.length ? { debuffEvents: dbg } : {};
+          })(),
         });
+        if (abilityEngine)
+          for (const c of abilityEngine.flushHpChanges())
+            pushAbilityLog({ actor: c.by, target: c.m, hpAfter: c.hpAfter, text: c.text });
         turn++;
       }
     }
@@ -1264,7 +1412,9 @@ function runArenaCombatInternal(
     playfulTeamBuff,
     guard,
     rngCounter: previous?.rngCounter ?? 0,
+    ...(abilityEngine ? { abilities: abilityEngine.snapshot() } : {}),
   };
+  activeAbilityEngine = null;
   const finished =
     alive(attackers, hp).length === 0 ||
     alive(defenders, hp).length === 0 ||

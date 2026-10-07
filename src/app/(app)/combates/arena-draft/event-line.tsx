@@ -11,6 +11,20 @@ export type LogEvent = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  targetId?: string;
+  debuffEvents?: DebuffEvt[];
+};
+
+/** Debuff aplicado ou removido (dados estruturados do motor). */
+export type DebuffEvt = {
+  kind: "APPLY" | "REMOVE";
+  targetId: string;
+  stat: "force" | "agility" | "instinct" | "vitality";
+  pct: number;
+  sourceId: string | null;
+  sourceName: string;
+  label: string;
+  round: number;
 };
 
 export function EventLine({
@@ -24,6 +38,24 @@ export function EventLine({
 }) {
   const heal = event.action === "HEAL";
   const defend = event.action === "DEFEND";
+  if (event.action === "ABILITY") {
+    return (
+      <div className="space-y-1 text-xs text-slate-200">
+        <p className="text-fuchsia-200">
+          <b>{event.actorName}</b>
+          {event.targetName !== event.actorName && <> → <b>{event.targetName}</b></>}
+        </p>
+        <p className="flex flex-wrap items-center gap-1.5 text-[10px]">
+          {event.damage > 0 && <span className="rounded bg-emerald-400/10 px-1.5 py-0.5 font-black text-emerald-300">+{event.damage} HP</span>}
+          {event.targetHpAfter !== undefined && (
+            <span className="rounded bg-white/5 px-1.5 py-0.5 text-slate-300">HP de {event.targetName}: <b>{event.targetHpAfter}{targetMaxHp ? `/${targetMaxHp}` : ""}</b></span>
+          )}
+          {event.targetHpAfter === 0 && <span className="rounded bg-rose-500/20 px-1.5 py-0.5 font-black text-rose-300">KO</span>}
+        </p>
+        {event.effect && <p className="text-[10px] text-fuchsia-200">{event.effect}</p>}
+      </div>
+    );
+  }
   const actor = roleLabel?.(event.actorRole);
   const target = roleLabel?.(event.targetRole);
   const mult = event.multiplier && event.multiplier !== 1 ? event.multiplier : null;
