@@ -13,7 +13,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
-import { DISCOUNT_BY_RARITY, MIAUVADAO_MAX_DISCOUNT, MIAUVADAO_MEGA_STONE_MAX_DISCOUNT } from "@/lib/miauvadao-pricing";
+import { DISCOUNT_BY_RARITY, MIAUVADAO_MAX_DISCOUNT, MIAUVADAO_MEGA_STONE_MAX_DISCOUNT, settleVaultForPurchase } from "@/lib/miauvadao-pricing";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
@@ -2524,13 +2524,14 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
         where: { id: "singleton" },
         data: {
           dailyOffers: updatedOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-          ...(coinsToVault > 0 ? { vaultBalance: { increment: coinsToVault } } : {}),
           lastNpcMessage: currency === "ZC"
             ? `${player.displayName} comprou ${offer.name} e deixou +${coinsToVault} ZC nos fundos! 💰`
             : `${player.displayName} comprou ${offer.name} pagando com LigaCash! 💎`,
           lastNpcMessageAt: new Date(),
         },
       });
+      // O desconto concedido sai do cofre do Miauvadão.
+      await settleVaultForPurchase(tx, { coinsToVault, discountZc: offer.originalPrice - offer.finalPrice });
 
       // Entregar item (mesmo esquema da shop)
       await _deliverMiauvadaoItem(tx, player.id, offer);
@@ -2755,9 +2756,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
         )
         WHERE id = 'singleton'
       `);
-      if (coinsToVault > 0) {
-        await tx.miauvadaoConfig.update({ where: { id: "singleton" }, data: { vaultBalance: { increment: coinsToVault } } });
-      }
+      await settleVaultForPurchase(tx, { coinsToVault, discountZc: offer.originalPrice - offer.finalPrice });
       await recordPlayerActivity(tx, {
         playerId: player.id,
         actorUserId: user.id,

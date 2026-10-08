@@ -1,4 +1,18 @@
 // Regras de desconto do Miauvadão, compartilhadas pelos slots padrão e pelos TMs da Semana.
+import { Prisma } from "@prisma/client";
+
+/**
+ * Acerta o cofre numa compra: entra 25% do pago em ZC e sai o valor do desconto dado
+ * (preço original - preço final, em ZC). O cofre nunca fica negativo.
+ */
+export async function settleVaultForPurchase(
+  tx: Prisma.TransactionClient,
+  { coinsToVault, discountZc }: { coinsToVault: number; discountZc: number },
+) {
+  const net = coinsToVault - Math.max(0, discountZc);
+  if (net === 0) return;
+  await tx.$executeRaw(Prisma.sql`UPDATE miauvadao_config SET "vaultBalance" = GREATEST(0, "vaultBalance" + ${net}) WHERE id = 'singleton'`);
+}
 
 export const MIAUVADAO_MAX_DISCOUNT = 70;
 /** Teto de desconto de Pedras de Mega e TMs (itens de poder). */

@@ -11,7 +11,7 @@ import { recordPlayerActivity } from "@/lib/player-activity";
 import { filterAvailableTmItems, getDisabledSpeciesIds } from "@/lib/ability-tm-shop";
 import { getAbilityInfo, describeAbility } from "@/lib/abilities";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
-import { rollDiscountPct } from "@/lib/miauvadao-pricing";
+import { rollDiscountPct, settleVaultForPurchase } from "@/lib/miauvadao-pricing";
 import { getWeeklyTmWindow, pickDistinct, WEEKLY_TM_SLOTS, type WeeklyTmSlot, type WeeklyTmView } from "@/lib/weekly-tm";
 
 const SINGLETON = "singleton";
@@ -206,11 +206,12 @@ export async function buyWeeklyTmSlot(slotIndex: number, currency: "ZC" | "LC" =
         where: { id: SINGLETON },
         data: {
           weeklyTmSlots: updated as unknown as Prisma.InputJsonValue,
-          ...(coinsToVault > 0 ? { vaultBalance: { increment: coinsToVault } } : {}),
           lastNpcMessage: `${player.displayName} levou o ${item.name}, o TM da semana! 💿`,
           lastNpcMessageAt: new Date(),
         },
       });
+      // O desconto concedido sai do cofre do Miauvadão.
+      await settleVaultForPurchase(tx, { coinsToVault, discountZc: slot.originalPrice - slot.finalPrice });
       await recordPlayerActivity(tx, {
         playerId: player.id,
         actorUserId: user.id,
