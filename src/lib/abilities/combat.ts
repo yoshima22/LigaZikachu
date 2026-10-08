@@ -441,12 +441,12 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     return { damage: Math.max(0, Math.round(remaining * (1 - v))), note: say(guardian, h, `o golpe protegido causou ${pct(v)} menos dano.`) };
   }
 
-  /** Resistência (Sturdy): sobrevive a um golpe fatal com HP cheio. */
+  /** Resistência (Sturdy): resiste a um golpe fatal, qualquer que seja o HP. */
   function survive(target: ArenaMascot, damage: number): { damage: number; note: string } | null {
     const h = heldAs(target, "RESISTENCIA");
     if (!h || !hasLeft(target, h)) return null;
     const current = hpOf(target);
-    if (current < target.hp || damage < current) return null;
+    if (damage < current) return null;
     return { damage: current - 1, note: say(target, h, `resistiu ao golpe fatal e ficou com 1 HP.`) };
   }
 

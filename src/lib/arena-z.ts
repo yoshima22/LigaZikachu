@@ -1236,7 +1236,7 @@ function runArenaCombatInternal(
           survivorUsed,
         );
         if (survivorLS) damage = survivorLS.newDamage;
-        // Habilidades: Resistência (Sturdy) segura um golpe fatal com HP cheio.
+        // Habilidades: Resistência (Sturdy) segura um golpe fatal.
         if (abilityEngine && !survivorLS) {
           const sv = abilityEngine.survive(target, damage);
           if (sv) {

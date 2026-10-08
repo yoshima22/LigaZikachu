@@ -242,7 +242,7 @@ NOTES = {
     'magic-bounce': 'Reflete golpes de status de volta.',
     'mirror-armor': 'Reflete efeitos que reduzem atributos.',
     'synchronize': 'Devolve queimadura, paralisia e veneno a quem os causou.',
-    'sturdy': 'Não é derrotado de uma vez com HP cheio.',
+    'sturdy': 'Resiste a um golpe que seria fatal (uma vez).',
     'rough-skin': 'Machuca quem o atinge com contato.',
     'iron-barbs': 'Machuca quem o atinge com contato.',
     'aftermath': 'Machuca quem o derrota com contato.',
