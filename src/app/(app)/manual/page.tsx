@@ -1483,7 +1483,7 @@ export default async function ManualPage() {
             <li>A ZikaShop tem uma aba <strong className="text-slate-200">TMs de Habilidade</strong>, com busca. Cada TM custa 6.500 ZC; em LigaCash o valor é calculado automaticamente (cerca de 590 LC) e acompanha a economia da loja.</li>
             <li>Os cards de TM e de Pedra de Mega Evolução têm o botão <strong className="text-slate-200">Quem pode usar</strong>, que lista os Pokémon beneficiados (mascotes não lançados não aparecem).</li>
             <li>Os TMs são liberados aos poucos pela equipe, conforme o balanceamento. As Pedras de Mega também seguem a liberação de cada mega.</li>
-            <li>No Bazar, os TMs ficam em uma vitrine própria, a <strong className="text-slate-200">TMs da Semana</strong>: 5 TMs diferentes que só mudam na segunda-feira, 00:00 (Brasília), sem resorteio. Só 1 dos 5 vem com desconto (mesmas regras das ofertas do Miauvadão), cada um tem 1 cópia e, depois de comprado, o slot fica apagado até o próximo reset. Os TMs não aparecem mais nas ofertas de 6 em 6 horas.</li>
+            <li>No Bazar, os TMs ficam em uma vitrine própria, a <strong className="text-slate-200">TMs da Semana</strong>: 5 TMs diferentes que só mudam na segunda-feira, 00:00 (Brasília), sem resorteio. Todos vêm com desconto (mesmas regras das ofertas do Miauvadão, até 20% em TMs), pago pelo cofre, e cada um tem 1 cópia e, depois de comprado, o slot fica apagado até o próximo reset. Os TMs não aparecem mais nas ofertas de 6 em 6 horas.</li>
           </ul>
         </Sub>
         <Sub title="Balanceamento">

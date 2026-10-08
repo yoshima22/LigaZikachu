@@ -37,12 +37,9 @@ export async function ensureWeeklyTmSlots(): Promise<void> {
     if (candidates.length === 0) return;
 
     const picks = pickDistinct(candidates, WEEKLY_TM_SLOTS);
-    // Só um dos slots recebe desconto, pela mesma regra dos slots padrão.
-    const discountedIndex = Math.floor(Math.random() * picks.length);
-    const slots: WeeklyTmSlot[] = picks.map((item, index) => {
-      const discountPct = index === discountedIndex
-        ? rollDiscountPct({ rarity: item.rarity, capped: true, vaultBalance: config.vaultBalance })
-        : 0;
+    // Todos os slots recebem desconto, pela mesma regra dos slots padrão (teto de 20% para TMs).
+    const slots: WeeklyTmSlot[] = picks.map((item) => {
+      const discountPct = rollDiscountPct({ rarity: item.rarity, capped: true, vaultBalance: config.vaultBalance });
       return {
         shopItemId: item.id,
         abilityKey: readAbilityTmKey(item.metadata)!,
