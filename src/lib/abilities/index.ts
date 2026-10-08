@@ -102,28 +102,33 @@ export function abilityValue(info: AbilityInfo, stats: Stats, factor = 1): numbe
   return (info.min + (info.max - info.min) * ratio) * factor;
 }
 
-const pct = (v: number) => `${Math.round(v * 1000) / 10}%`;
+const pct = (v: number) => `${String(Math.round(v * 1000) / 10).replace(".", ",")}%`;
+
+/** Substitui TODOS os marcadores (um efeito pode citar mais de um valor, como o Aquecimento). */
+function fill(template: string, rng: { em: string; ate: string; de: string } | null, info: AbilityInfo) {
+  let text = template;
+  if (rng) {
+    // Concordância: "em 4% a 12%", "até 12%" e "de 4% a 12%" conforme a frase.
+    text = text.replace(/em \{rng\}/g, `em ${rng.em}`).replace(/até \{rng\}/g, `até ${rng.ate}`).replace(/\{rng\}/g, rng.de);
+  }
+  return text.replace(/\{T\}/g, info.param ?? "").replace(/\{S\}/g, info.param ?? "");
+}
 
 /** Descrição em português com o intervalo do efeito. */
 export function describeAbility(info: AbilityInfo): string {
   if (!info.hasEffect || !info.template) return "Sem efeito em combate nesta versão.";
-  let text = info.template;
-  if (info.min != null && info.max != null) {
-    // Concordância: "em 4% a 12%", "até 12%" e "de 4% a 12%" conforme a frase.
-    text = text
-      .replace("em {rng}", `em ${pct(info.min)} a ${pct(info.max)}`)
-      .replace("até {rng}", `até ${pct(info.max)}`)
-      .replace("{rng}", `de ${pct(info.min)} a ${pct(info.max)}`);
-  }
-  return text.replace("{T}", info.param ?? "").replace("{S}", info.param ?? "");
+  const rng = info.min != null && info.max != null
+    ? { em: `${pct(info.min)} a ${pct(info.max)}`, ate: pct(info.max), de: `de ${pct(info.min)} a ${pct(info.max)}` }
+    : null;
+  return fill(info.template, rng, info);
 }
 
 /** Descrição com o valor atual dos atributos do mascote. */
 export function describeAbilityAt(info: AbilityInfo, stats: Stats, factor = 1): string {
   if (!info.hasEffect || !info.template) return describeAbility(info);
   if (info.min == null || info.max == null) return describeAbility(info);
-  const v = abilityValue(info, stats, factor);
-  return info.template.replace("{rng}", pct(v)).replace("{T}", info.param ?? "").replace("{S}", info.param ?? "");
+  const v = pct(abilityValue(info, stats, factor));
+  return fill(info.template, { em: v, ate: v, de: v }, info);
 }
 
 // ── Mascotes e espécies ───────────────────────────────────────────────────────
