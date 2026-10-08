@@ -6,6 +6,8 @@ import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-
 import { isAdmin, isStaff } from "@/lib/auth/permissions";
 import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { MiauvadaoGames } from "./_components/miauvadao-games";
+import { WeeklyTmPanel } from "./_components/weekly-tm-panel";
+import { getWeeklyTmView } from "./weekly-tm-actions";
 import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
@@ -106,6 +108,7 @@ export default async function BazarPage({
 
   const purchaseStatus = await getMiauvadaoPurchaseStatus(playerId);
   const personalOffer = playerId ? await getPersonalMiauvadaoOffer().catch(() => null) : null;
+  const weeklyTmView = await getWeeklyTmView().catch(() => null);
   const rotation = getMiauvadaoRotation();
   const slotRefreshAvailable = !freshMiauvadao.slotRefreshUsedCycle
     || freshMiauvadao.slotRefreshUsedCycle < rotation.start;
@@ -236,6 +239,16 @@ export default async function BazarPage({
         sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
         personalOffer={personalOffer as never}
       />
+
+      {/* TMs da Semana: 5 slots fixos, reset na segunda 00:00 */}
+      {weeklyTmView && (
+        <WeeklyTmPanel
+          view={weeklyTmView}
+          balance={wallet?.balance ?? 0}
+          ligaCashBalance={ligaWallet?.balance ?? 0}
+          playerId={playerId}
+        />
+      )}
 
       {shouldShowBazarAnomaly && (
         <div className="rounded-2xl border border-purple-500/35 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.18),transparent_35%),rgba(15,23,42,0.85)] p-4">

@@ -3494,6 +3494,9 @@ model MiauvadaoConfig {
   offersRefreshedAt          DateTime?
   playerRefreshData          Json      @default("{}") // { playerId: { date: "YYYY-MM-DD", count: N, lastAt: ISO } }
   slotRefreshUsedCycle       DateTime?
+  // TMs da Semana: 5 slots fixos que só resetam na segunda 00:00 (Brasília); sem resort.
+  weeklyTmWeekStart          DateTime?
+  weeklyTmSlots              Json      @default("[]")
   // Shell Game — última mensagem do NPC
   lastWinnerMessage          String?
   lastWinnerAt               DateTime?

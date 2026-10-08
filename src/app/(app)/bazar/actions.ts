@@ -13,6 +13,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
+import { DISCOUNT_BY_RARITY, MIAUVADAO_MAX_DISCOUNT, MIAUVADAO_MEGA_STONE_MAX_DISCOUNT } from "@/lib/miauvadao-pricing";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
@@ -234,14 +235,13 @@ function sanitizePayloadImageUrl(url: string | null | undefined): string | null 
 
 // Tipos de shop que o Miauvadão pode oferecer (excluindo cosméticos únicos)
 const MIAUVADAO_ELIGIBLE_TYPES = [
-  ...MASCOT_SHOP_ITEM_TYPES,
+  // TMs de habilidade têm vitrine própria (TMs da Semana) e não entram nos slots padrão.
+  ...MASCOT_SHOP_ITEM_TYPES.filter((type) => type !== "ABILITY_TM"),
   "ZIKALOOT_TICKET",
   // Pedras de mega custom (liberadas pelo toggle do admin) também entram no pool.
   ...CUSTOM_MEGA_POKEMON_IDS.map((id) => `MEGA_STONE_CUSTOM_${id}`),
 ];
 
-const MIAUVADAO_MAX_DISCOUNT = 70;
-const MIAUVADAO_MEGA_STONE_MAX_DISCOUNT = 20;
 // Pedras de Mega e TMs de habilidade compartilham o teto de desconto (itens de poder).
 const hasCappedDiscount = (type: string) => isMegaStoneType(type) || type === "ABILITY_TM";
 const MIAUVADAO_SLOT_REFRESH_COST = 250;
@@ -258,17 +258,6 @@ function stockOverridesFromJson(value: Prisma.JsonValue): Record<string, number>
     return Number.isFinite(parsed) && parsed > 0 ? [[key, parsed]] : [];
   }));
 }
-
-// Faixa de desconto por raridade do item
-const DISCOUNT_BY_RARITY: Record<string, [number, number]> = {
-  COMMON:    [15, 35],
-  UNCOMMON:  [12, 28],
-  RARE:      [10, 25],
-  EPIC:      [8,  20],
-  LEGENDARY: [5,  15],
-  MYTHIC:    [5,  12],
-  RELIC:     [5,  10],
-};
 
 /** Sorteia 3 itens do shop ativo e aplica descontos */
 async function rollMiauvadaoOffers(

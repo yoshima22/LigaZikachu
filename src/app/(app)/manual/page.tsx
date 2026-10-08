@@ -1483,14 +1483,14 @@ export default async function ManualPage() {
             <li>A ZikaShop tem uma aba <strong className="text-slate-200">TMs de Habilidade</strong>, com busca. Cada TM custa 6.500 ZC; em LigaCash o valor é calculado automaticamente (cerca de 590 LC) e acompanha a economia da loja.</li>
             <li>Os cards de TM e de Pedra de Mega Evolução têm o botão <strong className="text-slate-200">Quem pode usar</strong>, que lista os Pokémon beneficiados (mascotes não lançados não aparecem).</li>
             <li>Os TMs são liberados aos poucos pela equipe, conforme o balanceamento. As Pedras de Mega também seguem a liberação de cada mega.</li>
-            <li>No Bazar, os TMs entram nas ofertas do Miauvadão, no máximo 1 por rotação e com desconto de até 20%. Eles estão aparecendo com frequência demais e vamos ajustar para não tomarem as promoções do Bazar toda hora.</li>
+            <li>No Bazar, os TMs ficam em uma vitrine própria, a <strong className="text-slate-200">TMs da Semana</strong>: 5 TMs diferentes que só mudam na segunda-feira, 00:00 (Brasília), sem resorteio. Só 1 dos 5 vem com desconto (mesmas regras das ofertas do Miauvadão), cada um tem 1 cópia e, depois de comprado, o slot fica apagado até o próximo reset. Os TMs não aparecem mais nas ofertas de 6 em 6 horas.</li>
           </ul>
         </Sub>
         <Sub title="Balanceamento">
           <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
             <li>Os valores ainda não são definitivos: com mais de 300 habilidades, vamos organizá-los com o tempo, observando as partidas. Alguns efeitos vão parecer fortes ou fracos demais nesta fase.</li>
             <li>O teto de 20% por habilidade e as regras de limite por categoria são a base; percentuais, ativações e crescimento podem mudar. Mudanças valem para as partidas seguintes e não desfazem times salvos nem compras.</li>
-            <li>Também vamos ajustar a oferta e o preço dos TMs. O combate ainda não tem esquiva de verdade (habilidades de esquiva reduzem o dano).</li>
+            <li>Também vamos ajustar o preço dos TMs. O combate ainda não tem esquiva de verdade (habilidades de esquiva reduzem o dano).</li>
             <li>Se uma habilidade parecer injusta, avise a equipe com o nome dela e o que aconteceu na partida.</li>
           </ul>
         </Sub>
