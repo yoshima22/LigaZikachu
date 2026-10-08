@@ -39,6 +39,10 @@ async function main() {
       source: "C:/Users/LUIZAG~1/AppData/Local/Temp/codex-clipboard-90a0b91e-5f53-4cd9-976c-2f5686c8b693.png",
       storagePath: "items/lab-egg-v1.webp",
     },
+    {
+      source: "C:/Users/LuizAguiar/Pictures/ImagensZikachu/Icones/Itens/ovoPokemonEvento.png",
+      storagePath: "items/event-egg-v1.webp",
+    },
   ];
 
   for (const asset of assets) {

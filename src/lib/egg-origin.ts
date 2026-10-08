@@ -1,12 +1,13 @@
 export const CELESTIAL_EGG_IMAGE =
   "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/Icons/IconeOrigem_Celestial.webp";
-export { LAB_EGG_IMAGE } from "@/lib/item-image-assets";
-import { LAB_EGG_IMAGE } from "@/lib/item-image-assets";
+export { EVENT_EGG_IMAGE, LAB_EGG_IMAGE } from "@/lib/item-image-assets";
+import { EVENT_EGG_IMAGE, LAB_EGG_IMAGE } from "@/lib/item-image-assets";
 
 /** Imagem do ovo por tipo. Usada também por ovos que já estavam no inventário. */
 export function eggImageUrl(type?: string | null) {
   if (type === "CELESTIAL") return CELESTIAL_EGG_IMAGE;
   if (type === "LAB") return LAB_EGG_IMAGE;
+  if (type === "EVENT") return EVENT_EGG_IMAGE;
   return "/mascot/egg-common.webp";
 }
 

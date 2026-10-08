@@ -15,7 +15,7 @@ import {
 } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
-import { CELESTIAL_EGG_IMAGE, LAB_EGG_IMAGE, eggImageUrl } from "@/lib/egg-origin";
+import { CELESTIAL_EGG_IMAGE, EVENT_EGG_IMAGE, LAB_EGG_IMAGE, eggImageUrl } from "@/lib/egg-origin";
 
 interface IncubatorData {
   id: string;
@@ -82,7 +82,7 @@ const EGG_IMAGE: Record<string, string> = {
   RARE:    "/mascot/egg-common.webp",
   SPECIAL: "/mascot/egg-common.webp",
   LAB:     LAB_EGG_IMAGE,
-  EVENT:   "/mascot/egg-common.webp",
+  EVENT:   EVENT_EGG_IMAGE,
 };
 
 function Countdown({ finishAt }: { finishAt: Date }) {
