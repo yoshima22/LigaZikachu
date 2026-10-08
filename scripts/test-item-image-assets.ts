@@ -5,8 +5,9 @@ import { eggImageUrl } from "../src/lib/egg-origin";
 import { mascotOriginIcon } from "../src/lib/mascot-origin-icons";
 
 const ASSET_BASE = "https://fwxqywivezsixamietps.supabase.co/storage/v1/render/image/public/assets/items";
-const LAB_EGG_IMAGE = `${ASSET_BASE}/lab-egg-v1.webp?width=256&quality=85&format=webp`;
-const ABILITY_TM_ART = `${ASSET_BASE}/ability-tm-v1.webp?width=256&quality=85&format=webp`;
+const TRANSFORM = "?width=256&height=256&resize=contain&quality=85&format=webp";
+const LAB_EGG_IMAGE = `${ASSET_BASE}/lab-egg-v1.webp${TRANSFORM}`;
+const ABILITY_TM_ART = `${ASSET_BASE}/ability-tm-v1.webp${TRANSFORM}`;
 
 function assertExistingLabEggUsesNewArtwork() {
   assert.equal(

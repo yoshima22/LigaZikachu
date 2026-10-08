@@ -13,12 +13,14 @@ for (const file of [".env", ".env.local"]) {
 }
 
 import { prisma } from "../src/lib/prisma";
-import { ensureAbilityTmShopItems } from "../src/lib/ability-tm-shop";
-import { LAB_EGG_IMAGE } from "../src/lib/item-image-assets";
+import { ABILITY_TM_IMAGE, LAB_EGG_IMAGE } from "../src/lib/item-image-assets";
 
 async function main() {
   console.log("Synchronizing ability TM shop items...");
-  const tm = await ensureAbilityTmShopItems(false);
+  const tm = await prisma.shopItem.updateMany({
+    where: { type: "ABILITY_TM", imageUrl: { not: ABILITY_TM_IMAGE } },
+    data: { imageUrl: ABILITY_TM_IMAGE },
+  });
   console.log("Synchronizing laboratory egg shop item...");
   const labEgg = await prisma.shopItem.updateMany({
     where: { type: "EGG_LAB", imageUrl: { not: LAB_EGG_IMAGE } },
@@ -28,7 +30,7 @@ async function main() {
   const existingInventory = await prisma.playerInventory.count({
     where: { item: { type: { in: ["ABILITY_TM", "EGG_LAB"] } } },
   });
-  console.log(JSON.stringify({ tm, labEggsUpdated: labEgg.count, existingInventoryUsingUpdatedShopItems: existingInventory }, null, 2));
+  console.log(JSON.stringify({ abilityTmsUpdated: tm.count, labEggsUpdated: labEgg.count, existingInventoryUsingUpdatedShopItems: existingInventory }, null, 2));
 }
 
 main()
