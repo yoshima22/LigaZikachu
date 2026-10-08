@@ -18,6 +18,25 @@ export async function refreshNavNotificationsAction(): Promise<NavNotificationSn
   return current ? getNavNotificationSnapshot(current.playerId) : null;
 }
 
+/** Marca como lidas TODAS as notificações de uma categoria (botão "limpar"). */
+export async function clearNavCategoryAction(category: "MESSAGE" | "BAZAR" | "BONDS") {
+  const current = await currentPlayer();
+  if (!current) return;
+
+  if (category === "MESSAGE") {
+    await prisma.directMessage.updateMany({
+      where: { receiverId: current.playerId, readAt: null },
+      data: { readAt: new Date() },
+    });
+  } else {
+    await prisma.playerNotification.updateMany({
+      where: { playerId: current.playerId, category, readAt: null },
+      data: { readAt: new Date() },
+    });
+  }
+  revalidateTag(`nav-${current.userId}`);
+}
+
 export async function markNavAlertViewedAction(input: {
   category: "MESSAGE" | "BAZAR" | "BONDS";
   id: string;

@@ -41,6 +41,7 @@ import { createClient } from "@supabase/supabase-js";
 import {
   markNavAlertViewedAction,
   refreshNavNotificationsAction,
+  clearNavCategoryAction,
 } from "./nav-notification-actions";
 import type { NavAlert, NavNotificationSnapshot } from "@/lib/nav-notifications";
 
@@ -445,6 +446,19 @@ export function AppNav({
     startTransition(() => { void markNavAlertViewedAction(alert); });
   }, []);
 
+  const clearAlerts = useCallback((category: "MESSAGE" | "BAZAR" | "BONDS") => {
+    setNotifications((current) => {
+      const next = category === "MESSAGE"
+        ? { ...current, messageCount: 0, messageAlerts: [] }
+        : category === "BONDS"
+          ? { ...current, bondsCount: 0, bondsAlerts: [] }
+          : { ...current, bazarCount: 0, bazarAlerts: [] };
+      window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+      return next;
+    });
+    startTransition(() => { void clearNavCategoryAction(category); });
+  }, []);
+
   useEffect(() => {
     function onPointerDown(event: PointerEvent) {
       if (!rootRef.current?.contains(event.target as Node)) {
@@ -525,6 +539,7 @@ export function AppNav({
             badgeHrefs={{ "/bazar": notifications.bazarCount }}
             alerts={notifications.bazarAlerts}
             onAlertClick={dismissAlert}
+            onClearAll={clearAlerts}
           />
           <NavDropdown
             id="colecao"
@@ -537,6 +552,7 @@ export function AppNav({
             badgeHrefs={{ "/lacos": notifications.bondsCount }}
             alerts={notifications.bondsAlerts}
             onAlertClick={dismissAlert}
+            onClearAll={clearAlerts}
           />
           <NavDropdown
             id="perfil"
@@ -552,6 +568,7 @@ export function AppNav({
             }}
             alerts={notifications.messageAlerts}
             onAlertClick={dismissAlert}
+            onClearAll={clearAlerts}
             tutorialId="nav-perfil"
           />
           {admin && (
@@ -633,6 +650,7 @@ export function AppNav({
               badgeHrefs={{ "/bazar": notifications.bazarCount }}
               alerts={notifications.bazarAlerts}
               onAlertClick={dismissAlert}
+              onClearAll={clearAlerts}
             />
             <MobileNavGroup
               id="mobile-colecao"
@@ -645,6 +663,7 @@ export function AppNav({
               badgeHrefs={{ "/lacos": notifications.bondsCount }}
               alerts={notifications.bondsAlerts}
               onAlertClick={dismissAlert}
+              onClearAll={clearAlerts}
             />
             <MobileNavGroup
               id="mobile-perfil"
@@ -657,6 +676,7 @@ export function AppNav({
               badgeHrefs={{ "/caixa-de-presentes": giftCount, "/mensagens": notifications.messageCount }}
               alerts={notifications.messageAlerts}
               onAlertClick={dismissAlert}
+              onClearAll={clearAlerts}
             />
             {admin && (
               <MobileNavGroup
@@ -690,6 +710,7 @@ function NavDropdown({
   badgeHrefs = {},
   alerts = [],
   onAlertClick,
+  onClearAll,
   tutorialId,
 }: {
   id: string;
@@ -705,6 +726,7 @@ function NavDropdown({
   badgeHrefs?: Record<string, number>;
   alerts?: NavAlert[];
   onAlertClick?: (alert: NavAlert) => void;
+  onClearAll?: (category: NavAlert["category"]) => void;
   tutorialId?: string;
 }) {
   const visibleLinks = links.filter(
@@ -744,8 +766,17 @@ function NavDropdown({
         <div className={`absolute right-0 top-10 z-50 max-w-[calc(100vw-2rem)] rounded-2xl border border-border bg-slate-950/95 p-1.5 shadow-2xl ${alerts.length > 0 ? "w-80" : "w-56"}`}>
           {alerts.length > 0 && (
             <div className="mb-2 space-y-1 border-b border-white/10 pb-2">
-              <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
-              {alerts.map((alert) => (
+              <div className="flex items-center justify-between px-2 py-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
+                <button
+                  type="button"
+                  onClick={() => onClearAll?.(alerts[0].category)}
+                  className="text-[9px] font-semibold text-slate-500 transition-colors hover:text-slate-300"
+                >
+                  Limpar
+                </button>
+              </div>
+              {alerts.slice(0, 3).map((alert) => (
                 <Link
                   key={alert.id}
                   href={alert.href}
@@ -757,6 +788,9 @@ function NavDropdown({
                   <span className="mt-0.5 block line-clamp-2 text-[10px] leading-relaxed text-slate-300">{alert.body}</span>
                 </Link>
               ))}
+              {alerts.length > 3 && (
+                <p className="px-2 pt-0.5 text-[9px] text-slate-500">+{alerts.length - 3} mais</p>
+              )}
             </div>
           )}
           {visibleLinks.map(
@@ -811,6 +845,7 @@ function MobileNavGroup({
   badgeHrefs = {},
   alerts = [],
   onAlertClick,
+  onClearAll,
 }: {
   id: string;
   label: string;
@@ -825,6 +860,7 @@ function MobileNavGroup({
   badgeHrefs?: Record<string, number>;
   alerts?: NavAlert[];
   onAlertClick?: (alert: NavAlert) => void;
+  onClearAll?: (category: NavAlert["category"]) => void;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [popupGeometry, setPopupGeometry] = useState({ left: 12, width: 240 });
@@ -884,8 +920,17 @@ function MobileNavGroup({
         >
           {alerts.length > 0 && (
             <div className="mb-1 space-y-1 border-b border-white/10 pb-1">
-              <p className="px-2 py-1 text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
-              {alerts.map((alert) => (
+              <div className="flex items-center justify-between px-2 py-1">
+                <p className="text-[9px] font-black uppercase tracking-widest text-[#FFCB05]">Novidades</p>
+                <button
+                  type="button"
+                  onClick={() => onClearAll?.(alerts[0].category)}
+                  className="text-[9px] font-semibold text-slate-500 transition-colors hover:text-slate-300"
+                >
+                  Limpar
+                </button>
+              </div>
+              {alerts.slice(0, 3).map((alert) => (
                 <Link
                   key={alert.id}
                   href={alert.href}
@@ -897,6 +942,9 @@ function MobileNavGroup({
                   <span className="mt-0.5 block line-clamp-2 text-[10px] text-slate-300">{alert.body}</span>
                 </Link>
               ))}
+              {alerts.length > 3 && (
+                <p className="px-2 pt-0.5 text-[9px] text-slate-500">+{alerts.length - 3} mais</p>
+              )}
             </div>
           )}
           {visibleLinks.map(
