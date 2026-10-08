@@ -17,6 +17,7 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getCurrentShopPromotionPrice } from "@/lib/shop-promotions";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
+import { LAB_EGG_IMAGE } from "@/lib/item-image-assets";
 
 // ── Admin: criar item ─────────────────────────────────────────────────────────
 
@@ -94,7 +95,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
     type: ShopItemType.EGG_LAB,
     name: "Ovo de Laboratório",
     description: "Apresenta 3 opções de Pokémon ao chocar. Stats superiores e pool especial com 10% de chance lendária.",
-    imageUrl: "/mascot/egg-common.webp",
+    imageUrl: LAB_EGG_IMAGE,
     rarity: ShopItemRarity.LEGENDARY,
     price: 12000,
     sortOrder: 35,

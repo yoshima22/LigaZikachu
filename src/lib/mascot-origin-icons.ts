@@ -1,5 +1,6 @@
 // Ícones de origem (raridade do ovo de nascimento) e de fome dos mascotes.
 // Hospedados no Supabase Storage (bucket público "assets").
+import { LAB_EGG_IMAGE } from "@/lib/item-image-assets";
 
 const BASE = "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/Icons";
 
@@ -10,7 +11,7 @@ export const ORIGIN_ICON_URL: Record<MascotOriginRarity, string> = {
   RARE:    `${BASE}/IconeOrigem_Raro.png`,
   EVENT:   `${BASE}/IconeOrigem_Evento.png`,
   SPECIAL: `${BASE}/IconeOrigem_Especial.png`,
-  LAB:     `${BASE}/IconeOrigem_Lab.png`,
+  LAB:     LAB_EGG_IMAGE,
   CELESTIAL: `${BASE}/IconeOrigem_Celestial.webp`,
 };
 

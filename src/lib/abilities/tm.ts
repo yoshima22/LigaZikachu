@@ -2,10 +2,11 @@
 // O item só funciona em mascotes cuja habilidade oculta é a do TM.
 import { SPECIES_ABILITIES } from "./data.generated";
 import { getAbilityInfo } from "./index";
+import { ABILITY_TM_IMAGE as hostedAbilityTmImage } from "@/lib/item-image-assets";
 
 export const ABILITY_TM_TYPE = "ABILITY_TM" as const;
 export const ABILITY_TM_PRICE = 6500;
-export const ABILITY_TM_IMAGE = "/items/ability-tm.svg";
+export const ABILITY_TM_IMAGE = hostedAbilityTmImage;
 /** Desconto máximo no Bazar (igual ao das Pedras de Mega). */
 export const ABILITY_TM_MAX_DISCOUNT = 20;
 
