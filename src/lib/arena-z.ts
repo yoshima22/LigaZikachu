@@ -3442,20 +3442,16 @@ export async function runBotBattle(
     }
     for (const member of team.members) {
       const injured = injuredMascotIds.includes(member.mascotId);
+      // Vitória/derrota segue o resultado da batalha (o time todo venceu ou
+      // perdeu), não a lesão individual do mascote.
       await tx.mascot.update({
         where: { id: member.mascotId },
-        data: injured
-          ? {
-              arenaState: "INJURED",
-              injuredAt: new Date(),
-              isEquipped: false,
-              battleLosses: { increment: 1 },
-            }
-          : {
-              arenaState: "ARENA",
-              restingUntil: null,
-              battleWins: won ? { increment: 1 } : undefined,
-            },
+        data: {
+          ...(injured
+            ? { arenaState: "INJURED", injuredAt: new Date(), isEquipped: false }
+            : { arenaState: "ARENA", restingUntil: null }),
+          ...(won ? { battleWins: { increment: 1 } } : { battleLosses: { increment: 1 } }),
+        },
       });
       await tx.mascotEvent.create({
         data: {
@@ -4486,22 +4482,20 @@ export async function runPvpBattle(
         const isLoserInjured = injuredMascotIds.includes(member.mascotId);
         const isWinnerInjured = winnerInjuredIds.includes(member.mascotId);
         const injured = isLoserInjured || isWinnerInjured;
-        const won = winnerTeam?.id === member.teamId;
+        // Vitória/derrota segue o RESULTADO DO TIME, não a lesão: um mascote do
+        // time vencedor que caiu em combate ainda é uma vitória (antes era
+        // contado como derrota, e ficou comum desde que o combate roda até o fim).
+        const teamWon = !!winnerTeam && member.teamId === winnerTeam.id;
+        const teamLost = !!loserTeam && member.teamId === loserTeam.id;
         await tx.mascot.update({
           where: { id: member.mascotId },
-          data: injured
-            ? {
-                arenaState: "INJURED",
-                injuredAt: new Date(),
-                restingUntil: null,
-                isEquipped: false,
-                battleLosses: { increment: 1 },
-              }
-            : {
-                arenaState: "ARENA",
-                restingUntil: null,
-                battleWins: won ? { increment: 1 } : undefined,
-              },
+          data: {
+            ...(injured
+              ? { arenaState: "INJURED", injuredAt: new Date(), restingUntil: null, isEquipped: false }
+              : { arenaState: "ARENA", restingUntil: null }),
+            ...(teamWon ? { battleWins: { increment: 1 } } : {}),
+            ...(teamLost ? { battleLosses: { increment: 1 } } : {}),
+          },
         });
         await tx.mascotEvent.create({
           data: {
@@ -4509,7 +4503,7 @@ export async function runPvpBattle(
             emoji: injured ? "PVP!" : "PVP",
             description: injured
               ? "Saiu ferido de um combate PvP da Arena Z e precisa de Atendimento SUS."
-              : `Participou de um combate PvP da Arena Z${won ? " e protegeu/roubou loot." : "."}`,
+              : `Participou de um combate PvP da Arena Z${teamWon ? " e protegeu/roubou loot." : "."}`,
           },
         });
       }
