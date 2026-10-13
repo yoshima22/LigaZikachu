@@ -29,12 +29,13 @@ type MutationResult =
 
 async function transition(
   operation: (playerId: string) => ReturnType<typeof openJohtoInvitation>,
+  options: { revalidate?: boolean } = {},
 ): Promise<MutationResult> {
   const playerId = await sessionPlayerId();
   if (!playerId) return { ok: false, message: "Faça login novamente." };
   try {
     const state = await operation(playerId);
-    refreshInvitation();
+    if (options.revalidate !== false) refreshInvitation();
     return { ok: true, state };
   } catch (error) {
     return { ok: false, message: error instanceof Error ? error.message : "Não foi possível atualizar o convite." };
@@ -47,7 +48,9 @@ export async function getJohtoInvitationAction() {
 }
 
 export async function openJohtoInvitationAction(_formData?: FormData): Promise<MutationResult> {
-  return transition(openJohtoInvitation);
+  // A abertura é gravada, mas o layout não pode ser revalidado neste momento:
+  // ele removeria o modal antes de o jogador conseguir ler o convite.
+  return transition(openJohtoInvitation, { revalidate: false });
 }
 
 export async function skipJohtoInvitationVoteAction(_formData?: FormData): Promise<MutationResult> {
@@ -58,5 +61,6 @@ export async function submitJohtoInvitationVoteAction(formData: FormData): Promi
   const answers = Object.fromEntries(
     JOHTO_VOTE_QUESTIONS.map(({ key }) => [key, String(formData.get(key) ?? "")]),
   ) as Record<JohtoVoteQuestionKey, string>;
-  return transition((playerId) => submitJohtoInvitationVote(playerId, answers));
+  // Mantém a confirmação do voto visível até o jogador escolher continuar.
+  return transition((playerId) => submitJohtoInvitationVote(playerId, answers), { revalidate: false });
 }
