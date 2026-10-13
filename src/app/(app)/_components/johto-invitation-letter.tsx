@@ -1,5 +1,6 @@
 "use client";
 
+import { createPortal } from "react-dom";
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { JOHTO_INVITATION_COPY, JOHTO_VOTE_QUESTIONS } from "@/lib/johto-invitation-copy";
 import {
@@ -47,12 +48,15 @@ export function JohtoInvitationLetter({
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [mounted, setMounted] = useState(false);
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
   const choices = candidates;
   const totalPages = JOHTO_INVITATION_COPY.pages.length;
   const question = JOHTO_VOTE_QUESTIONS[voteIndex];
+
+  useEffect(() => setMounted(true), []);
 
   useEffect(() => {
     returnFocusRef.current = document.activeElement as HTMLElement | null;
@@ -160,7 +164,9 @@ export function JohtoInvitationLetter({
     setStage("submitted");
   }
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div className="johto-invitation-backdrop" role="presentation">
       <div className="johto-invitation-glow" aria-hidden="true" />
       <div ref={dialogRef} className="johto-invitation-dialog" role="dialog" aria-modal="true" aria-labelledby="johto-invitation-title" aria-describedby="johto-invitation-description" tabIndex={-1}>
@@ -275,6 +281,7 @@ export function JohtoInvitationLetter({
         {error && <p className="johto-invitation-error" role="alert">{error}</p>}
         {mode === "preview" && <span className="johto-invitation-preview-tag">PRÉVIA · NENHUM DADO SERÁ SALVO</span>}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

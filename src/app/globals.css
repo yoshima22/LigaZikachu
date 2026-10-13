@@ -442,7 +442,7 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
 
 /* Convite de Johto: papel, lacre e duas metades que chegam pelas laterais. */
 .johto-invitation-backdrop {
-  position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center;
+  position: fixed; inset: 0; z-index: 10100; display: grid; place-items: center;
   padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
   background: radial-gradient(circle at 50% 28%, #263d53 0%, #101b2a 45%, #080d17 100%);
   color: #f8edd5; isolation: isolate;
