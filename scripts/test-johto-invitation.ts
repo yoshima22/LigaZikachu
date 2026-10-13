@@ -275,6 +275,7 @@ if (process.argv.includes("--actions")) {
   const state = { available: true, openedAt: null, votingSkippedAt: null, voteSubmittedAt: null, candidates: [] };
   const summary = { campaign: null, counts: { recipients: 0, delivered: 0, pushSent: 0, opened: 0, skipped: 0, voted: 0 }, results: {} };
   const service = {
+    JOHTO_INVITATION_PUSH: { title: "Ginásios de Johto", body: "Johto em festa com a etapa final da Liga Zikachu TCG", url: "/combates/raid-johto" },
     getJohtoInvitationForPlayer: async (playerId: string) => { calls.push({ method: "get", playerId }); return state; },
     openJohtoInvitation: async (playerId: string) => { calls.push({ method: "open", playerId }); return { ...state, openedAt: "opened" }; },
     skipJohtoInvitationVote: async (playerId: string) => { calls.push({ method: "skip", playerId }); return { ...state, votingSkippedAt: "skipped" }; },
@@ -282,11 +283,16 @@ if (process.argv.includes("--actions")) {
     prepareJohtoInvitationCampaign: async ({ publish }: { publish: boolean }) => { calls.push({ method: "prepare", publish }); return {}; },
     getJohtoInvitationAdminSummary: async () => { calls.push({ method: "summary" }); return summary; },
   };
+  const testPushes: { userIds: string[] | null; payload: Row }[] = [];
   const mocks: Row = {
     "@/lib/auth/permissions": { getSessionUser: async () => session, isAdmin: (role: string) => role === "ADMIN" || role === "SUPER_ADMIN" },
     "@/lib/prisma": { prisma: { player: { findUnique: async ({ where }: Row) => where.userId === "user-1" ? { id: "player-1" } : where.userId === "admin-user" ? { id: "admin-player" } : null } } },
     "@/lib/johto-invitation": service,
     "@/lib/johto-raid": { getJohtoEvent: async () => null },
+    "@/lib/notifications": { sendNotificationToUsers: async (userIds: string[] | null, payload: Row) => {
+      testPushes.push({ userIds, payload });
+      return { configured: true, users: 1, tokenCount: 1, sent: 1, failed: 0 };
+    } },
     "next/cache": { revalidatePath: (path: string, type?: string) => revalidated.push(`${path}:${type ?? "page"}`) },
   };
   function loadAction(file: string): Row {
@@ -343,8 +349,127 @@ if (process.argv.includes("--actions")) {
   assert.deepEqual(calls.slice(beforePreview + 1), [{ method: "prepare", publish: false }, { method: "prepare", publish: true }]);
   const beforePush = calls.length;
   const push = await raidActions.johtoAdminAction({ type: "sendInvitationTestPush" });
-  assert.equal(push.ok, false, "test push is unavailable until its transport is wired");
+  assert.equal(push.ok, true, "admin can send a launch-copy test push");
+  assert.deepEqual(testPushes, [{ userIds: ["admin-user"], payload: {
+    title: "Ginásios de Johto",
+    body: "Johto em festa com a etapa final da Liga Zikachu TCG",
+    url: "/combates/raid-johto",
+    data: { source: "johto-invitation-test" },
+    category: "ANUNCIOS",
+  } }], "test push has the launch copy and only targets the caller");
   assert.equal(calls.length, beforePush, "test push cannot publish or transition invitation state");
   console.log("ok ações do convite: sessão, escopo individual, admin e prévia sem persistência");
+}
+if (process.argv.includes("--push")) {
+  type Row = Record<string, any>;
+  const before = new Date("2026-10-14T10:59:59.999Z");
+  const launch = new Date("2026-10-14T11:00:00.000Z");
+  const campaign: Row = { id: "campaign-1", slug: "johto-invitation-2026", launchAt: launch, publishedAt: before, pushStartedAt: null, pushSentAt: null };
+  const players: Row[] = [
+    { id: "player-1", userId: "user-1", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "player-2", userId: "user-2", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "offline", userId: "offline-user", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "admin", userId: "admin-user", active: true, user: { status: "ACTIVE", role: "ADMIN" } },
+    { id: "pending", userId: "pending-user", active: true, user: { status: "PENDING_APPROVAL", role: "PLAYER" } },
+  ];
+  const recipients: Row[] = [];
+  const markers = new Set<string>();
+  let markerDbDown = false;
+  const pushes: { userIds: string[] | null; payload: Row }[] = [];
+  const database: Row = {
+    tournament: { findUnique: async () => ({ id: "tournament-3", name: "Liga Zikachu 3" }) },
+    johtoInvitationCampaign: {
+      findUnique: async ({ where }: Row) => where.slug === campaign.slug ? { ...campaign } : null,
+      upsert: async () => ({ ...campaign }),
+      updateMany: async ({ where, data }: Row) => {
+        if (where.id !== campaign.id) return { count: 0 };
+        Object.assign(campaign, data);
+        return { count: 1 };
+      },
+    },
+    player: { findMany: async () => players.filter((player) => player.active && player.user.status === "ACTIVE" && player.user.role === "PLAYER") },
+    johtoInvitationRecipient: {
+      upsert: async ({ where, create }: Row) => {
+        let row = recipients.find((item) => item.campaignId === where.campaignId_playerId.campaignId && item.playerId === where.campaignId_playerId.playerId);
+        if (!row) { row = { id: `recipient-${recipients.length + 1}`, openedAt: null, votingSkippedAt: null, voteSubmittedAt: null, pushSentAt: null, ...create }; recipients.push(row as Row); }
+        return row;
+      },
+      findMany: async ({ where }: Row) => recipients.filter((row) => row.campaignId === where.campaignId && row.availableAt)
+        .map((row) => ({ ...row, player: players.find((player) => player.id === row.playerId) })),
+      updateMany: async ({ where, data }: Row) => {
+        const rows = recipients.filter((row) => row.id === where.id && row.pushSentAt === where.pushSentAt);
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
+      },
+    },
+    pushNotificationMarker: { create: async ({ data }: Row) => {
+      if (markerDbDown) throw new Error("marker database unavailable");
+      if (markers.has(data.eventKey)) throw Object.assign(new Error("unique marker"), { code: "P2002" });
+      markers.add(data.eventKey);
+      return { id: `marker-${markers.size}`, eventKey: data.eventKey };
+    } },
+  };
+  const notifications = { sendNotificationToUsers: async (userIds: string[] | null, payload: Row) => {
+    pushes.push({ userIds, payload });
+    return userIds?.[0] === "offline-user"
+      ? { configured: true, users: 1, tokenCount: 1, sent: 0, failed: 1 }
+      : { configured: true, users: 1, tokenCount: 1, sent: 1, failed: 0 };
+  } };
+  function loadModule(file: string, mocks: Row): Row {
+    const source = readFileSync(join(process.cwd(), file), "utf8");
+    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+    const loaded = { exports: {} as Row };
+    const localRequire = (name: string) => {
+      if (name in mocks) return mocks[name];
+      throw new Error(`Unexpected push dependency: ${name}`);
+    };
+    runInThisContext(`(function(require,module,exports){${code}\n})`, { filename: file })(localRequire, loaded, loaded.exports);
+    return loaded.exports;
+  }
+  const service = loadModule("src/lib/johto-invitation.ts", {
+    "@/lib/prisma": { prisma: database },
+    "@/lib/johto-invitation-copy": { JOHTO_INVITATION_LAUNCH_AT, JOHTO_VOTE_QUESTIONS },
+    "@/lib/notifications": notifications,
+  });
+  assert.deepEqual(await service.runJohtoInvitationLaunch(before), { sent: 0, recipients: 0 });
+  assert.equal(recipients.length, 0, "before 08:00 BRT no letter recipient is written");
+  assert.equal(pushes.length, 0, "before 08:00 BRT no push is sent");
+
+  const concurrent = await Promise.all([service.runJohtoInvitationLaunch(launch), service.runJohtoInvitationLaunch(launch)]);
+  assert.equal(concurrent.reduce((sum, result) => sum + result.sent, 0), 2, "parallel cron calls deliver once per recipient");
+  assert.ok(concurrent.every((result) => result.recipients === 3));
+  assert.deepEqual(pushes, ["user-1", "user-2", "offline-user"].map((userId, index) => ({ userIds: [userId], payload: {
+    title: "Ginásios de Johto",
+    body: "Johto em festa com a etapa final da Liga Zikachu TCG",
+    url: "/combates/raid-johto",
+    data: { eventKey: `johto-invitation:campaign-1:recipient-${index + 1}` },
+    category: "ANUNCIOS",
+  } })), "one exact launch push is sent to each eligible user");
+  assert.equal(markers.size, 3, "each recipient has a unique claim marker");
+  assert.ok(recipients.slice(0, 2).every((row) => row.pushSentAt?.toISOString() === launch.toISOString()));
+  assert.equal(recipients[2].pushSentAt, null, "failed delivery is not marked sent");
+  assert.ok(recipients[2].availableAt, "failed push still leaves the invitation available");
+  assert.ok(recipients.every((row) => !row.openedAt && !row.votingSkippedAt && !row.voteSubmittedAt), "push cannot change invitation or vote state");
+  assert.equal(campaign.pushSentAt?.toISOString(), launch.toISOString(), "completed launch is recorded at campaign level");
+  players.push({ id: "late-player", userId: "late-user", active: true, user: { status: "ACTIVE", role: "PLAYER" } });
+  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-14T12:00:00.000Z")), { sent: 0, recipients: 0 });
+  assert.equal(pushes.length, 3, "repeat launch does not send twice");
+  assert.equal(recipients.length, 3, "later cron runs do not enroll new players in the one-time launch");
+  campaign.pushSentAt = null; // Simulate an interrupted launch before its completion marker was written.
+  markerDbDown = true;
+  await assert.rejects(service.runJohtoInvitationLaunch(new Date("2026-10-14T11:00:01.000Z")), /marker database unavailable/);
+  assert.equal(campaign.pushSentAt, null, "database claim failure leaves the launch retryable");
+  markerDbDown = false;
+  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-14T11:00:02.000Z")), { sent: 1, recipients: 4 });
+  assert.deepEqual(pushes.at(-1)?.userIds, ["late-user"], "retry only sends to the unclaimed recipient");
+
+  const automation = loadModule("src/lib/push-automation.ts", {
+    "@/lib/prisma": { prisma: { mascotExpedition: { findMany: async () => [] }, mascotBuff: { findMany: async () => [] }, weeklyMascotLeague: { findFirst: async () => null }, rushLeague: { findFirst: async () => null }, pushNotificationMarker: { deleteMany: async () => ({ count: 0 }) } } },
+    "@/lib/notifications": notifications,
+    "@/lib/mascot-data": { getPokemonName: () => "" },
+    "@/lib/johto-invitation": { runJohtoInvitationLaunch: async (now: Date) => { assert.equal(now, launch); return { sent: 2, recipients: 2 }; } },
+  });
+  assert.deepEqual(await automation.runPushAutomation(launch), { success: true, sent: 2 }, "cron includes Johto launch delivery");
+  console.log("ok push do convite: corte BRT, público elegível, payload, idempotência e cron");
 }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

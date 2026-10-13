@@ -3,7 +3,8 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
-import { getJohtoInvitationAdminSummary, prepareJohtoInvitationCampaign } from "@/lib/johto-invitation";
+import { getJohtoInvitationAdminSummary, JOHTO_INVITATION_PUSH, prepareJohtoInvitationCampaign } from "@/lib/johto-invitation";
+import { sendNotificationToUsers } from "@/lib/notifications";
 import {
   claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
   previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest,
@@ -98,7 +99,14 @@ export async function johtoAdminAction(
       return done(publish ? "Convite de Johto publicado." : "Convite de Johto preparado.");
     }
     if (command.type === "sendInvitationTestPush") {
-      return fail("O envio de teste estará disponível com a integração de push.");
+      const result = await sendNotificationToUsers([user.id], {
+        ...JOHTO_INVITATION_PUSH,
+        data: { source: "johto-invitation-test" },
+        category: "ANUNCIOS",
+      });
+      return result.sent > 0
+        ? { ok: true, message: "Push de teste do convite enviado." }
+        : fail("Nenhum push de teste foi entregue. Verifique o token e as preferências de anúncios.");
     }
     if (command.type === "create") {
       const event = await getJohtoEvent();

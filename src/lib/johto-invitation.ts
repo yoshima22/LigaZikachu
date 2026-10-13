@@ -1,4 +1,5 @@
 import { prisma } from "@/lib/prisma";
+import { sendNotificationToUsers } from "@/lib/notifications";
 import {
   JOHTO_INVITATION_LAUNCH_AT,
   JOHTO_VOTE_QUESTIONS,
@@ -6,6 +7,11 @@ import {
 } from "@/lib/johto-invitation-copy";
 
 export const JOHTO_INVITATION_CAMPAIGN_SLUG = "johto-invitation-2026";
+export const JOHTO_INVITATION_PUSH = {
+  title: "Ginásios de Johto",
+  body: "Johto em festa com a etapa final da Liga Zikachu TCG",
+  url: "/combates/raid-johto",
+} as const;
 const TOURNAMENT_SLUG = "liga-zikachu-3-edicao-rumo-a-johto";
 const ADMIN_ROLES = ["ADMIN", "SUPER_ADMIN"] as const;
 
@@ -203,6 +209,57 @@ export async function canPlayerAccessJohtoRaid(playerId: string, now = new Date(
     where: { campaignId_playerId: { campaignId: campaign.id, playerId } },
   });
   return !!recipient?.availableAt && !!recipient.openedAt;
+}
+
+export async function runJohtoInvitationLaunch(now = new Date()): Promise<{ sent: number; recipients: number }> {
+  const campaign = await prisma.johtoInvitationCampaign.findUnique({ where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG } });
+  if (!campaign || !isLive(campaign, now) || campaign.pushSentAt) return { sent: 0, recipients: 0 };
+
+  await prepareJohtoInvitationCampaign({ now });
+  await prisma.johtoInvitationCampaign.updateMany({
+    where: { id: campaign.id, pushStartedAt: null },
+    data: { pushStartedAt: now },
+  });
+  const recipients = await prisma.johtoInvitationRecipient.findMany({
+    where: {
+      campaignId: campaign.id,
+      availableAt: { not: null },
+      player: { active: true, user: { status: "ACTIVE", role: { notIn: [...ADMIN_ROLES] } } },
+    },
+    select: { id: true, pushSentAt: true, player: { select: { userId: true } } },
+  });
+  let sent = 0;
+  for (const recipient of recipients) {
+    if (recipient.pushSentAt) continue;
+    const eventKey = `johto-invitation:${campaign.id}:${recipient.id}`;
+    try {
+      await prisma.pushNotificationMarker.create({ data: { eventKey } });
+    } catch (error) {
+      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") continue;
+      throw error;
+    }
+    try {
+      const result = await sendNotificationToUsers([recipient.player.userId], {
+        ...JOHTO_INVITATION_PUSH,
+        data: { eventKey },
+        category: "ANUNCIOS",
+      });
+      sent += result.sent;
+      if (result.sent > 0) {
+        await prisma.johtoInvitationRecipient.updateMany({
+          where: { id: recipient.id, pushSentAt: null },
+          data: { pushSentAt: now },
+        });
+      }
+    } catch (error) {
+      console.error("[JohtoInvitation] push", { recipientId: recipient.id, error });
+    }
+  }
+  await prisma.johtoInvitationCampaign.updateMany({
+    where: { id: campaign.id, pushSentAt: null },
+    data: { pushSentAt: now },
+  });
+  return { sent, recipients: recipients.length };
 }
 
 export async function getJohtoInvitationAdminSummary() {
