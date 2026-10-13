@@ -53,6 +53,8 @@ import { AndroidUpdateBadge } from "@/components/android-update";
 import { SpecMiniPlayer } from "@/components/spec/spec-mini-player";
 import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-control-dock";
 import { AccountAccessObserver } from "@/components/account-access-observer";
+import { getJohtoInvitationForPlayer } from "@/lib/johto-invitation";
+import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 
 const ACCESS_OBSERVATION_USER_IDS = new Set([
   "cmpkvjuf2000ajx04uoi89ypa", // Shira
@@ -264,9 +266,16 @@ export default async function AppLayout({
     })
     .catch(() => null);
   const { player, giftCount, wallet, ligaWallet, unreadNews } = navData;
+  const johtoInvitation = !isPlatformAdmin && player?.id
+    ? await getJohtoInvitationForPlayer(player.id).catch((error) => {
+        console.error("[Layout] Johto invitation unavailable", { playerId: player.id, error });
+        return null;
+      })
+    : null;
 
   return (
     <>
+      {johtoInvitation?.available && !johtoInvitation.openedAt && <JohtoInvitationGate initialState={johtoInvitation} />}
       <Toaster
         position="top-right"
         theme="dark"

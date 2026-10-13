@@ -8,6 +8,7 @@ import type { JohtoAdminSummary } from "@/lib/johto-raid";
 import { JOHTO_LEADERS } from "@/lib/johto-raid-sim";
 import { johtoAdminAction, johtoTestBattleAction } from "../actions";
 import { JohtoBattleResultView } from "./johto-battle-view";
+import { JohtoInvitationLetter } from "../../../_components/johto-invitation-letter";
 
 export type JohtoTestMascot = {
   id: string; pokemonId: number; nickname: string | null; level: number;
@@ -42,6 +43,7 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
   const [combo, setCombo] = useState("0");
   const [prizes, setPrizes] = useState<Prize[] | null>(null);
   const [showTest, setShowTest] = useState(false);
+  const [showInvitationPreview, setShowInvitationPreview] = useState(false);
 
   function run(command: Cmd, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -67,6 +69,15 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
           {summary.defeated && <span className="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">SERVIDOR VENCEU</span>}
         </div>
       </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-3">
+        <div>
+          <p className="text-sm font-bold text-amber-100">Convite animado de Johto</p>
+          <p className="text-xs text-amber-100/70">Veja a experiência completa sem abrir convites, registrar votos ou alterar a campanha.</p>
+        </div>
+        <button type="button" className={`${good} min-h-11 px-4 text-sm`} onClick={() => setShowInvitationPreview(true)}>Visualizar convite</button>
+      </div>
+      {showInvitationPreview && <JohtoInvitationLetter mode="preview" onClose={() => setShowInvitationPreview(false)} />}
 
       {!summary.exists ? (
         <div className="flex flex-wrap items-end gap-2">

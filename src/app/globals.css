@@ -439,3 +439,129 @@ html[data-nav-tight] .app-nav-desktop button,
 html[data-nav-tight] .app-nav-desktop a button { padding-inline: 0.5rem !important; }
 html[data-nav-tight] .app-nav-desktop svg { margin-right: 0.25rem !important; }
 html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
+
+/* Convite de Johto: papel, lacre e duas metades que chegam pelas laterais. */
+.johto-invitation-backdrop {
+  position: fixed; inset: 0; z-index: 10000; display: grid; place-items: center;
+  padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  background: radial-gradient(circle at 50% 28%, #263d53 0%, #101b2a 45%, #080d17 100%);
+  color: #f8edd5; isolation: isolate;
+}
+.johto-invitation-backdrop::before {
+  content: ""; position: absolute; inset: 0; z-index: -1; pointer-events: none;
+  background-image: radial-gradient(circle at 15% 20%, #f9d98e66 1px, transparent 2px), radial-gradient(circle at 78% 72%, #b4d7d766 1px, transparent 2px);
+  background-size: 130px 130px, 185px 185px; opacity: .45;
+}
+.johto-invitation-glow {
+  position: absolute; width: min(75vw, 700px); aspect-ratio: 1; border-radius: 50%; pointer-events: none;
+  background: radial-gradient(circle, #dfb46424, transparent 65%); filter: blur(18px);
+}
+.johto-invitation-dialog {
+  position: relative; display: flex; flex-direction: column; width: min(100%, 690px); max-height: min(900px, calc(100dvh - 24px));
+  min-height: min(590px, calc(100dvh - 24px)); outline: none;
+}
+.johto-invitation-topline {
+  display: flex; justify-content: space-between; align-items: center; gap: 12px; min-height: 42px;
+  color: #d7b776; font-size: 10px; font-weight: 800; letter-spacing: .24em;
+}
+.johto-invitation-preview-close { min-width: 44px; min-height: 44px; padding: 6px 8px; color: #f8edd5; letter-spacing: 0; font-size: 12px; border-radius: 8px; }
+.johto-invitation-preview-close:focus-visible, .johto-invitation-dialog button:focus-visible, .johto-vote-choice:focus-within { outline: 3px solid #7bd3cb; outline-offset: 3px; }
+.johto-invitation-preview-close span { margin-left: 5px; font-size: 20px; vertical-align: -2px; }
+.johto-invitation-arrival { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 18px 0 28px; }
+.johto-invitation-kicker { color: #ddb973; font-size: 11px; font-weight: 800; letter-spacing: .15em; text-transform: uppercase; }
+.johto-invitation-arrival-title { margin: 10px 0 clamp(35px, 9vh, 74px); font-family: Georgia, serif; font-size: clamp(31px, 7vw, 56px); font-weight: 500; line-height: 1.12; letter-spacing: -.04em; text-wrap: balance; }
+.johto-envelope {
+  position: relative; display: block; width: min(84vw, 380px); aspect-ratio: 1.58; padding: 0; border: 0; border-radius: 9px;
+  background: transparent; filter: drop-shadow(0 24px 28px #0009); cursor: pointer;
+  transform: translateY(0) scale(1); transition: transform 180ms ease;
+}
+.johto-envelope:hover:not(:disabled) { transform: translateY(-7px) scale(1.025); }
+.johto-envelope:active:not(:disabled) { transform: translateY(2px) scale(.975); }
+.johto-envelope-left, .johto-envelope-right {
+  position: absolute; z-index: 3; top: 0; bottom: 0; width: 50.5%; overflow: hidden;
+  background: linear-gradient(145deg, #f7e8c5, #d8bf94); box-shadow: inset 0 0 0 1px #80653a33;
+}
+.johto-envelope-left { left: 0; border-radius: 9px 0 0 9px; animation: johto-arrive-left 860ms cubic-bezier(.16,.78,.19,1) both; }
+.johto-envelope-right { right: 0; border-radius: 0 9px 9px 0; animation: johto-arrive-right 860ms cubic-bezier(.16,.78,.19,1) both; }
+.johto-envelope-left::after, .johto-envelope-right::after { content: ""; position: absolute; top: 0; bottom: 0; width: 100%; background: #be996255; }
+.johto-envelope-left::after { right: -48%; transform: skewX(42deg); }
+.johto-envelope-right::after { left: -48%; transform: skewX(-42deg); }
+.johto-envelope-flap { position: absolute; z-index: 4; top: 0; left: 0; right: 0; height: 54%; transform-origin: 50% 0%; background: linear-gradient(#f9e8c4, #dbc59f); clip-path: polygon(0 0, 100% 0, 50% 100%); box-shadow: 0 2px 3px #60462a44; animation: johto-show-center 80ms 850ms both; }
+.johto-envelope-paper { position: absolute; z-index: 2; left: 7%; right: 7%; top: 9%; height: 80%; padding-top: 15%; background: #fcf3dd; color: #8f6738; font-size: 10px; font-weight: 800; letter-spacing: .15em; box-shadow: 0 0 0 1px #8a6a3633; animation: johto-show-center 80ms 850ms both; }
+.johto-envelope-seal { position: absolute; z-index: 5; display: flex; left: 50%; top: 50%; width: 64px; height: 64px; margin: -12px 0 0 -32px; border-radius: 50%; filter: drop-shadow(0 4px 5px #45201588); animation: johto-show-center 80ms 850ms both; }
+.johto-envelope-seal span { display: grid; place-items: center; width: 50%; height: 100%; overflow: hidden; background: #a53d34; color: #f8d996; font-family: Georgia, serif; font-size: 28px; font-weight: 700; }
+.johto-envelope-seal span:first-child { border-radius: 32px 0 0 32px; padding-left: 10px; }
+.johto-envelope-seal span:last-child { border-radius: 0 32px 32px 0; padding-right: 10px; color: transparent; }
+.johto-envelope-opening .johto-envelope-seal span:first-child { animation: johto-seal-left 430ms ease-in both; }
+.johto-envelope-opening .johto-envelope-seal span:last-child { animation: johto-seal-right 430ms ease-in both; }
+.johto-envelope-opening .johto-envelope-flap { animation: johto-flap-up 650ms 250ms ease-out both; }
+.johto-envelope-opening .johto-envelope-paper { animation: johto-paper-lift 720ms 410ms ease-out both; }
+.johto-invitation-hint { margin-top: 32px; color: #e9d6ae; font-size: 12px; letter-spacing: .07em; }
+.johto-letter-shell {
+  position: relative; display: flex; flex-direction: column; min-height: 0; flex: 1; overflow: hidden;
+  padding: clamp(20px, 5vw, 38px); border: 1px solid #cdb681; border-radius: 4px;
+  background: radial-gradient(circle at 50% 0%, #fffaf0, #f1e7cf 82%); color: #333a38;
+  box-shadow: 0 38px 80px #0009, inset 0 0 0 6px #f6eedc, inset 0 0 0 7px #cbb78488;
+  animation: johto-letter-enter 450ms cubic-bezier(.2,.8,.25,1) both;
+}
+.johto-letter-shell::before { content: ""; position: absolute; inset: 11px; border: 1px solid #b7a47488; pointer-events: none; }
+.johto-letter-header { display: flex; align-items: center; gap: 15px; padding-bottom: 17px; border-bottom: 1px solid #cab990; }
+.johto-letter-mark { flex: none; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: #a54137; color: #fae4ac; font-family: Georgia, serif; font-size: 29px; box-shadow: 0 3px 0 #813429; }
+.johto-letter-eyebrow { color: #936d43; font-size: 9px; font-weight: 800; letter-spacing: .17em; }
+.johto-letter-header h2 { margin-top: 5px; color: #243b39; font-family: Georgia, serif; font-size: clamp(23px, 5.2vw, 34px); font-weight: 500; line-height: 1.15; }
+.johto-letter-header h2:focus { outline: none; }
+.johto-letter-page, .johto-vote-form, .johto-letter-submitted { display: flex; flex: 1; min-height: 0; flex-direction: column; overflow-y: auto; overscroll-behavior: contain; padding-top: 22px; animation: johto-page-enter 360ms ease-out both; }
+.johto-letter-greeting { margin-bottom: 18px; color: #934e39; font-family: Georgia, serif; font-size: 21px; font-style: italic; }
+.johto-letter-body { flex: 1; min-height: min-content; padding: 0 3px; color: #414b48; font-family: Georgia, serif; font-size: clamp(16px, 3.8vw, 20px); line-height: 1.55; }
+.johto-letter-body p + p { margin-top: 18px; }
+.johto-letter-footer { display: flex; justify-content: space-between; gap: 8px; margin-top: 20px; color: #9d7c53; font-size: 9px; font-weight: 800; letter-spacing: .16em; }
+.johto-letter-progress { height: 3px; margin-top: 9px; background: #d8caaa; overflow: hidden; }
+.johto-letter-progress span { display: block; width: 100%; height: 100%; transform-origin: left; background: #a54238; }
+.johto-letter-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 22px; }
+.johto-letter-primary, .johto-letter-secondary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 10px 18px; border-radius: 7px; font-size: 13px; font-weight: 800; text-align: center; transition: transform 180ms ease, opacity 180ms ease; }
+.johto-letter-primary { background: #a54137; color: #fff6e5; box-shadow: 0 4px 0 #7a3029; }
+.johto-letter-secondary { border: 1px solid #b69e75; background: #fbf5e8; color: #513e2b; }
+.johto-letter-primary:hover:not(:disabled), .johto-letter-secondary:hover:not(:disabled) { transform: translateY(-2px); }
+.johto-letter-primary:active:not(:disabled), .johto-letter-secondary:active:not(:disabled) { transform: translateY(2px); }
+.johto-letter-primary:disabled, .johto-letter-secondary:disabled { opacity: .48; cursor: not-allowed; }
+.johto-letter-final { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 17px; }
+.johto-letter-final p { grid-column: 1 / -1; margin-bottom: 5px; color: #76644d; font-size: 13px; line-height: 1.45; }
+.johto-letter-final .johto-letter-empty { color: #8b3c33; }
+.johto-vote-intro { color: #6f6251; font-size: 13px; line-height: 1.45; }
+.johto-vote-progress { margin-top: 15px; color: #a54137; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+.johto-vote-form fieldset { display: flex; flex: 1; min-height: min-content; flex-direction: column; margin-top: 14px; }
+.johto-vote-form legend { color: #243b39; font-family: Georgia, serif; font-size: clamp(19px, 4vw, 25px); line-height: 1.2; }
+.johto-vote-choices { display: grid; gap: 8px; padding: 15px 4px 4px; }
+.johto-vote-choice { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 10px 12px; border: 1px solid #c5b593; border-radius: 8px; background: #fffaf0; color: #33423e; cursor: pointer; font-size: 14px; font-weight: 700; }
+.johto-vote-choice-selected { border-color: #a54137; background: #f9e9d9; }
+.johto-vote-choice input { width: 20px; height: 20px; flex: none; accent-color: #a54137; }
+.johto-vote-skip { align-self: center; min-height: 44px; margin-top: 5px; padding: 8px 12px; color: #745a43; font-size: 12px; text-decoration: underline; }
+.johto-letter-submitted { justify-content: center; align-items: center; gap: 25px; text-align: center; font-family: Georgia, serif; font-size: 20px; line-height: 1.45; }
+.johto-invitation-error { margin-top: 12px; padding: 10px 12px; border: 1px solid #f5a795; border-radius: 7px; background: #50221d; color: #fff2e9; font-size: 13px; }
+.johto-invitation-preview-tag { align-self: center; padding: 11px 0 2px; color: #cbb787; font-size: 9px; font-weight: 800; letter-spacing: .17em; text-align: center; }
+@keyframes johto-arrive-left { from { transform: translateX(-75vw); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes johto-arrive-right { from { transform: translateX(75vw); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes johto-show-center { from { opacity: 0; } to { opacity: 1; } }
+@keyframes johto-seal-left { to { transform: translate(-26px, 24px) rotate(-35deg); opacity: 0; } }
+@keyframes johto-seal-right { to { transform: translate(26px, 24px) rotate(35deg); opacity: 0; } }
+@keyframes johto-flap-up { to { transform: rotateX(178deg); opacity: .8; } }
+@keyframes johto-paper-lift { to { transform: translateY(-95px); opacity: 1; } }
+@keyframes johto-letter-enter { from { transform: translateY(22px) scale(.94); opacity: 0; } to { transform: translateY(0) scale(1); opacity: 1; } }
+@keyframes johto-page-enter { from { transform: translateX(14px); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@media (max-width: 520px) {
+  .johto-invitation-dialog { min-height: 0; height: calc(100dvh - 24px); }
+  .johto-invitation-topline { font-size: 8px; letter-spacing: .13em; }
+  .johto-letter-shell { padding: 22px 19px; }
+  .johto-letter-header { gap: 10px; }
+  .johto-letter-mark { width: 42px; height: 42px; font-size: 23px; }
+  .johto-letter-body { font-size: 16px; }
+  .johto-letter-final { grid-template-columns: 1fr; }
+  .johto-letter-final p { grid-column: 1; }
+  .johto-letter-actions { gap: 7px; }
+  .johto-letter-actions > button { flex: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .johto-invitation-backdrop *, .johto-invitation-backdrop *::before, .johto-invitation-backdrop *::after {
+    animation-duration: .01ms !important; animation-delay: 0ms !important; transition-duration: .01ms !important;
+  }
+}

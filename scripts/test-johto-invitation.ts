@@ -472,4 +472,8 @@ if (process.argv.includes("--push")) {
   assert.deepEqual(await automation.runPushAutomation(launch), { success: true, sent: 2 }, "cron includes Johto launch delivery");
   console.log("ok push do convite: corte BRT, público elegível, payload, idempotência e cron");
 }
+if (process.argv.includes("--ui")) {
+  const { johtoInvitationUiHarness } = await import("./test-johto-invitation-ui");
+  await johtoInvitationUiHarness;
+}
 })().catch((error) => { console.error(error); process.exitCode = 1; });
