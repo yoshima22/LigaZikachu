@@ -104,3 +104,145 @@ assert.match(migration, /FOREIGN KEY \("recipientId", "campaignId"\)\s+REFERENCE
 assert.match(migration, /FOREIGN KEY \("candidatePlayerId"\) REFERENCES "players"\("id"\) ON DELETE SET NULL/);
 
 console.log("ok copy, data de lançamento e contrato de persistência do convite de Johto");
+
+(async () => {
+if (process.argv.includes("--service")) {
+  type Row = Record<string, any>;
+  const before = new Date("2026-10-14T10:59:59.999Z");
+  const after = new Date("2026-10-14T11:00:00.000Z");
+  const questions = JOHTO_VOTE_QUESTIONS.map(({ key }) => key);
+  const answers = Object.fromEntries(questions.map((key) => [key, "candidate-1"])) as Record<(typeof questions)[number], string>;
+  const players: Row[] = [
+    { id: "voter", displayName: "Eleitor", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "candidate-1", displayName: "Primeiro", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "candidate-2", displayName: "Segundo", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
+    { id: "candidate-3", displayName: "Terceiro", active: false, user: { status: "SUSPENDED", role: "PLAYER" } },
+    { id: "admin", displayName: "Admin", active: true, user: { status: "ACTIVE", role: "ADMIN" } },
+    { id: "pending", displayName: "Pendente", active: true, user: { status: "PENDING_APPROVAL", role: "PLAYER" } },
+  ];
+  const registrations: Row[] = [
+    { tournamentId: "tournament-3", playerId: "candidate-1", status: "APPROVED" },
+    { tournamentId: "tournament-3", playerId: "candidate-2", status: "APPROVED" },
+    { tournamentId: "tournament-3", playerId: "candidate-3", status: "APPROVED" },
+    { tournamentId: "tournament-3", playerId: "admin", status: "APPROVED" },
+    { tournamentId: "old-tournament", playerId: "voter", status: "APPROVED" },
+  ];
+  const campaigns: Row[] = [];
+  const recipients: Row[] = [];
+  const votes: Row[] = [];
+  let tournamentAvailable = true;
+  const eligible = (player: Row) => player.active && player.user.status === "ACTIVE" && !["ADMIN", "SUPER_ADMIN"].includes(player.user.role);
+  const recipientBy = (campaignId: string, playerId: string) => recipients.find((row) => row.campaignId === campaignId && row.playerId === playerId);
+  const database: Row = {
+    tournament: {
+      findUnique: async ({ where }: Row) => tournamentAvailable && where.slug === "liga-zikachu-3-edicao-rumo-a-johto" ? { id: "tournament-3", name: "Liga Zikachu 3" } : null,
+    },
+    player: {
+      findUnique: async ({ where }: Row) => players.find((row) => row.id === where.id) ?? null,
+      findMany: async ({ where }: Row) => players.filter((row) => eligible(row) && (!where?.id?.in || where.id.in.includes(row.id))),
+    },
+    tournamentRegistration: {
+      findMany: async ({ where }: Row) => registrations.filter((row) => row.tournamentId === where.tournamentId && row.status === where.status)
+        .map((row) => ({ ...row, player: players.find((player) => player.id === row.playerId) })),
+    },
+    johtoInvitationCampaign: {
+      findUnique: async ({ where }: Row) => campaigns.find((row) => row.slug === where.slug) ?? null,
+      upsert: async ({ where, create, update }: Row) => {
+        let row = campaigns.find((item) => item.slug === where.slug);
+        if (row) Object.assign(row, update);
+        else { row = { id: `campaign-${campaigns.length + 1}`, publishedAt: null, ...create }; campaigns.push(row as Row); }
+        return row;
+      },
+    },
+    johtoInvitationRecipient: {
+      findUnique: async ({ where }: Row) => {
+        if (where.campaignId_playerId) return recipientBy(where.campaignId_playerId.campaignId, where.campaignId_playerId.playerId) ?? null;
+        return recipients.find((row) => row.id === where.id) ?? null;
+      },
+      findMany: async ({ where }: Row) => recipients.filter((row) => row.campaignId === where.campaignId),
+      upsert: async ({ where, create, update }: Row) => {
+        let row = recipientBy(where.campaignId_playerId.campaignId, where.campaignId_playerId.playerId);
+        if (row) Object.assign(row, update);
+        else { row = { id: `recipient-${recipients.length + 1}`, openedAt: null, votingSkippedAt: null, voteSubmittedAt: null, pushSentAt: null, ...create }; recipients.push(row as Row); }
+        return row;
+      },
+      updateMany: async ({ where, data }: Row) => {
+        const rows = recipients.filter((row) => row.id === where.id && Object.entries(where).every(([key, value]) => key === "id" || row[key] === value));
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
+      },
+      update: async ({ where, data }: Row) => {
+        const row = recipients.find((item) => item.id === where.id);
+        assert.ok(row);
+        Object.assign(row, data);
+        return row;
+      },
+    },
+    johtoInvitationVote: {
+      createMany: async ({ data }: Row) => { votes.push(...data); return { count: data.length }; },
+      findMany: async ({ where }: Row) => votes.filter((row) => row.campaignId === where.campaignId),
+    },
+    $queryRaw: async () => [],
+    $transaction: async (callback: (tx: Row) => Promise<unknown>) => {
+      const recipientsBefore = recipients.map((row) => ({ ...row }));
+      const votesBefore = votes.map((row) => ({ ...row }));
+      try { return await callback(database); }
+      catch (error) { recipients.splice(0, recipients.length, ...recipientsBefore); votes.splice(0, votes.length, ...votesBefore); throw error; }
+    },
+  };
+  (globalThis as Row).prisma = database;
+  const service = await import("../src/lib/johto-invitation");
+
+  await service.prepareJohtoInvitationCampaign({ publish: true, now: before });
+  assert.equal(recipients.length, 0, "prelaunch preparation does not deliver invitations");
+  assert.equal((await service.getJohtoInvitationForPlayer("voter", before)).available, false);
+  await assert.rejects(service.openJohtoInvitation("voter", before));
+  assert.equal(recipients.length, 0, "opening before launch does not create a recipient");
+
+  await service.prepareJohtoInvitationCampaign({ now: after });
+  assert.deepEqual(recipients.map((row) => row.playerId).sort(), ["candidate-1", "candidate-2", "voter"]);
+  assert.deepEqual((await service.getJohtoInvitationForPlayer("voter", after)).candidates.map((candidate: Row) => candidate.id), ["candidate-1", "candidate-2", "candidate-3"], "accepted participants remain candidates even if their accounts later become inactive");
+  assert.equal((await service.getJohtoInvitationForPlayer("admin", after)).available, false);
+  assert.equal((await service.getJohtoInvitationForPlayer("pending", after)).available, false);
+
+  const opened = await service.openJohtoInvitation("voter", after);
+  const firstOpenedAt = opened.openedAt;
+  assert.ok(firstOpenedAt);
+  assert.equal((await service.openJohtoInvitation("voter", new Date(after.getTime() + 1000))).openedAt, firstOpenedAt);
+  assert.equal(await service.canPlayerAccessJohtoRaid("voter", after), true);
+  const skipped = await service.skipJohtoInvitationVote("voter", after);
+  assert.ok(skipped.votingSkippedAt);
+  assert.equal(await service.canPlayerAccessJohtoRaid("voter", after), true);
+
+  await assert.rejects(service.submitJohtoInvitationVote("voter", { ...answers, breakthrough: "" }, after));
+  const incomplete = { ...answers } as Row;
+  delete incomplete.breakthrough;
+  await assert.rejects(service.submitJohtoInvitationVote("voter", incomplete, after));
+  await assert.rejects(service.submitJohtoInvitationVote("voter", { ...answers, breakthrough: "admin" }, after));
+  await assert.rejects(service.submitJohtoInvitationVote("voter", { ...answers, breakthrough: "voter" }, after));
+  assert.equal(votes.length, 0, "invalid votes never partially persist");
+  const submitted = await service.submitJohtoInvitationVote("voter", answers, after);
+  assert.ok(submitted.voteSubmittedAt);
+  assert.equal(votes.length, 6);
+  assert.deepEqual(votes.map((row) => row.questionKey), questions);
+  assert.ok(votes.every((row) => row.candidatePlayerId === "candidate-1" && row.candidateDisplayName === "Primeiro"));
+  await assert.rejects(service.submitJohtoInvitationVote("voter", Object.fromEntries(questions.map((key) => [key, "candidate-2"])) as typeof answers, after));
+  assert.ok(votes.every((row) => row.candidatePlayerId === "candidate-1"), "second submit cannot overwrite answers");
+  await service.openJohtoInvitation("candidate-2", after);
+  const directVote = await service.submitJohtoInvitationVote("candidate-2", answers, after);
+  assert.equal(directVote.votingSkippedAt, null, "submitting directly must not record a skip");
+  const summary = await service.getJohtoInvitationAdminSummary();
+  assert.equal(summary.counts.recipients, 3);
+  assert.equal(summary.counts.opened, 2);
+  assert.equal(summary.counts.skipped, 1);
+  assert.equal(summary.counts.voted, 2);
+  assert.equal(summary.results.most_creative[0].count, 2);
+  votes[0].candidatePlayerId = null;
+  votes[6].candidatePlayerId = null;
+  assert.equal((await service.getJohtoInvitationAdminSummary()).results.most_creative[0].candidateDisplayName, "Primeiro");
+  assert.equal((await service.getJohtoInvitationAdminSummary()).results.most_creative[0].count, 2, "deleted candidates group by stored name");
+  tournamentAvailable = false;
+  assert.equal(await service.canPlayerAccessJohtoRaid("voter", after), true, "access depends on the opened invitation, not the later tournament lookup");
+  console.log("ok serviço de convite: lançamento, elegibilidade, abertura, acesso, voto único e resumo");
+}
+})().catch((error) => { console.error(error); process.exitCode = 1; });
