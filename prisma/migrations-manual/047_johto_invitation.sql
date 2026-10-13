@@ -30,6 +30,8 @@ CREATE INDEX IF NOT EXISTS "johto_invitation_recipients_campaignId_availableAt_i
   ON "johto_invitation_recipients"("campaignId", "availableAt");
 CREATE INDEX IF NOT EXISTS "johto_invitation_recipients_playerId_idx"
   ON "johto_invitation_recipients"("playerId");
+CREATE UNIQUE INDEX IF NOT EXISTS "johto_invitation_recipients_id_campaignId_key"
+  ON "johto_invitation_recipients"("id", "campaignId");
 CREATE INDEX IF NOT EXISTS "johto_invitation_recipients_campaignId_openedAt_idx"
   ON "johto_invitation_recipients"("campaignId", "openedAt");
 CREATE INDEX IF NOT EXISTS "johto_invitation_recipients_campaignId_votingSkippedAt_idx"
@@ -42,12 +44,23 @@ CREATE INDEX IF NOT EXISTS "johto_invitation_recipients_campaignId_pushSentAt_id
 CREATE TABLE IF NOT EXISTS "johto_invitation_votes" (
   "id" TEXT PRIMARY KEY,
   "campaignId" TEXT NOT NULL REFERENCES "johto_invitation_campaigns"("id") ON DELETE CASCADE,
-  "recipientId" TEXT NOT NULL REFERENCES "johto_invitation_recipients"("id") ON DELETE CASCADE,
+  "recipientId" TEXT NOT NULL,
   "questionKey" TEXT NOT NULL,
-  "candidatePlayerId" TEXT NOT NULL REFERENCES "players"("id") ON DELETE CASCADE,
+  "candidatePlayerId" TEXT,
   "candidateDisplayName" TEXT NOT NULL,
   "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
+-- Replace earlier single-column references safely and keep snapshots when a candidate is deleted.
+ALTER TABLE "johto_invitation_votes" ALTER COLUMN "candidatePlayerId" DROP NOT NULL;
+ALTER TABLE "johto_invitation_votes" DROP CONSTRAINT IF EXISTS "johto_invitation_votes_recipientId_fkey";
+ALTER TABLE "johto_invitation_votes" DROP CONSTRAINT IF EXISTS "johto_invitation_votes_recipientId_campaignId_fkey";
+ALTER TABLE "johto_invitation_votes" ADD CONSTRAINT "johto_invitation_votes_recipientId_campaignId_fkey"
+  FOREIGN KEY ("recipientId", "campaignId")
+  REFERENCES "johto_invitation_recipients"("id", "campaignId") ON DELETE CASCADE;
+ALTER TABLE "johto_invitation_votes" DROP CONSTRAINT IF EXISTS "johto_invitation_votes_candidatePlayerId_fkey";
+ALTER TABLE "johto_invitation_votes" DROP CONSTRAINT IF EXISTS "johto_invitation_votes_candidatePlayerId_history_fkey";
+ALTER TABLE "johto_invitation_votes" ADD CONSTRAINT "johto_invitation_votes_candidatePlayerId_history_fkey"
+  FOREIGN KEY ("candidatePlayerId") REFERENCES "players"("id") ON DELETE SET NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS "johto_invitation_votes_campaignId_recipientId_questionKey_key"
   ON "johto_invitation_votes"("campaignId", "recipientId", "questionKey");
 CREATE INDEX IF NOT EXISTS "johto_invitation_votes_campaignId_questionKey_candidatePlayerId_idx"

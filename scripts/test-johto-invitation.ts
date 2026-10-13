@@ -75,6 +75,7 @@ const vote = models.get("JohtoInvitationVote");
 assert.ok(campaign && recipient && vote, "Prisma client exposes all invitation models");
 assert.ok(campaign.fields.some((field) => field.name === "slug" && field.isUnique), "campaign slug is unique");
 assert.ok(recipient.uniqueFields.some((fields) => fields.join(",") === "campaignId,playerId"));
+assert.ok(recipient.uniqueFields.some((fields) => fields.join(",") === "id,campaignId"), "recipient exposes a composite key for campaign-scoped vote references");
 assert.ok(vote.uniqueFields.some((fields) => fields.join(",") === "campaignId,recipientId,questionKey"));
 for (const field of ["availableAt", "openedAt", "votingSkippedAt", "voteSubmittedAt", "pushSentAt"]) {
   assert.ok(recipient.fields.some((candidate) => candidate.name === field), `recipient stores ${field}`);
@@ -82,6 +83,12 @@ for (const field of ["availableAt", "openedAt", "votingSkippedAt", "voteSubmitte
 for (const field of ["candidatePlayerId", "candidateDisplayName"]) {
   assert.ok(vote.fields.some((candidate) => candidate.name === field), `vote stores ${field}`);
 }
+const voteRecipientRelation = vote.fields.find((field) => field.name === "recipient");
+assert.deepEqual(voteRecipientRelation?.relationFromFields, ["recipientId", "campaignId"]);
+assert.deepEqual(voteRecipientRelation?.relationToFields, ["id", "campaignId"]);
+const candidateIdField = vote.fields.find((field) => field.name === "candidatePlayerId");
+assert.equal(candidateIdField?.isRequired, false, "candidate deletion leaves the historical vote snapshot intact");
+assert.equal(vote.fields.find((field) => field.name === "candidatePlayer")?.relationOnDelete, "SetNull");
 
 const migration = readFileSync(join(process.cwd(), "prisma/migrations-manual/047_johto_invitation.sql"), "utf8");
 for (const table of ["johto_invitation_campaigns", "johto_invitation_recipients", "johto_invitation_votes"]) {
@@ -91,6 +98,9 @@ for (const table of ["johto_invitation_campaigns", "johto_invitation_recipients"
 assert.match(migration, /REFERENCES "players"\("id"\) ON DELETE CASCADE/);
 assert.match(migration, /REFERENCES "johto_invitation_campaigns"\("id"\) ON DELETE CASCADE/);
 assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS "johto_invitation_recipients_campaignId_playerId_key"/);
+assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS "johto_invitation_recipients_id_campaignId_key"/);
 assert.match(migration, /CREATE UNIQUE INDEX IF NOT EXISTS "johto_invitation_votes_campaignId_recipientId_questionKey_key"/);
+assert.match(migration, /FOREIGN KEY \("recipientId", "campaignId"\)\s+REFERENCES "johto_invitation_recipients"\("id", "campaignId"\) ON DELETE CASCADE/);
+assert.match(migration, /FOREIGN KEY \("candidatePlayerId"\) REFERENCES "players"\("id"\) ON DELETE SET NULL/);
 
 console.log("ok copy, data de lançamento e contrato de persistência do convite de Johto");

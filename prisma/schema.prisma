@@ -5165,6 +5165,7 @@ model JohtoInvitationRecipient {
   votes           JohtoInvitationVote[]
 
   @@unique([campaignId, playerId])
+  @@unique([id, campaignId])
   @@index([campaignId, availableAt])
   @@index([playerId])
   @@index([campaignId, openedAt])
@@ -5179,12 +5180,12 @@ model JohtoInvitationVote {
   campaignId           String
   recipientId          String
   questionKey          String
-  candidatePlayerId    String
+  candidatePlayerId    String?
   candidateDisplayName String
   createdAt            DateTime @default(now())
   campaign             JohtoInvitationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
-  recipient            JohtoInvitationRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
-  candidatePlayer      Player   @relation("JohtoInvitationVoteCandidate", fields: [candidatePlayerId], references: [id], onDelete: Cascade)
+  recipient            JohtoInvitationRecipient @relation(fields: [recipientId, campaignId], references: [id, campaignId], onDelete: Cascade)
+  candidatePlayer      Player?  @relation("JohtoInvitationVoteCandidate", fields: [candidatePlayerId], references: [id], onDelete: SetNull)
 
   @@unique([campaignId, recipientId, questionKey])
   @@index([campaignId, questionKey, candidatePlayerId])
