@@ -42,7 +42,7 @@ Criar/recriar evento (HP por líder), liberar/ocultar, abrir/pausar ataques, esp
 ## Arquivos
 - Migrações: `prisma/migrations-manual/045_johto_raid.sql`, `046_johto_raid_teams.sql` (aplicadas; `scripts/apply-046-johto-raid-teams.ts`). Eventos criados antes da 046 são completados sozinhos (`ensureLeaderMascots`).
 - Lib: `src/lib/johto-raid.ts` (estado, ataque, prêmios, escolha, replays, laboratório) · `src/lib/johto-raid-sim.ts` (líderes, recompensas, time do líder, análise do log, `runJohtoBattle`).
-- UI: `src/app/(app)/combates/raid-johto/` · imagens dos treinadores em `public/johto-leaders/*.png` · seletor de equipe compartilhado com a Ordem (`OrderRaidTeamSelector`, com `attackAction`, `labels`, `renderResult`, `extraFields`).
+- UI: `src/app/(app)/combates/raid-johto/` · imagens dos treinadores no Supabase Storage (`assets/JohtoLeaders/`, enviadas por `scripts/upload-johto-leaders.ts`) · seletor de equipe compartilhado com a Ordem (`OrderRaidTeamSelector`, com `attackAction`, `labels`, `renderResult`, `extraFields`).
 - Testes: `npx tsx scripts/test-johto-raid.ts --db` (puro + fluxo completo no banco com evento/contas temporárias).
 
 ## Pendências / ideias

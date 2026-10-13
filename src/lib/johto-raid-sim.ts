@@ -34,25 +34,28 @@ export type JohtoLeaderDef = {
   key: string; name: string; city: string; badge: string; type: string; quote: string; image: string; roster: JohtoRosterEntry[];
 };
 
+/** Imagens no Storage do Supabase (bucket assets, junto com as demais), com cache de 1 ano. */
+const LEADER_IMAGE_BASE = "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/JohtoLeaders";
+
 const roster = (entries: Array<[number, CombatRole, string]>): JohtoRosterEntry[] => entries.map(([pokemonId, role, personality]) => ({ pokemonId, role, personality }));
 
 /** Ordem de combate: Violet → Azalea → Goldenrod → Ecruteak → Cianwood → Olivine → Mahogany → Blackthorn. */
 export const JOHTO_LEADERS: JohtoLeaderDef[] = [
-  { key: "falkner", name: "Falkner", city: "Violet City", badge: "Insígnia Zephyr", type: "flying", quote: "Meus pássaros dominam o céu!", image: "/johto-leaders/falkner.png",
+  { key: "falkner", name: "Falkner", city: "Violet City", badge: "Insígnia Zephyr", type: "flying", quote: "Meus pássaros dominam o céu!", image: `${LEADER_IMAGE_BASE}/falkner.png`,
     roster: roster([[18, "FLANK", "ELECTRIC"], [22, "ATTACKER", "COMPETITIVE"], [85, "OPPORTUNIST", "MISCHIEVOUS"], [164, "HEALER", "SERENE"], [227, "DEFENDER", "LAZY"], [430, "DUELIST", "PROUD"]]) },
-  { key: "bugsy", name: "Bugsy", city: "Azalea Town", badge: "Insígnia Hive", type: "bug", quote: "Minha pesquisa sobre insetos vai te surpreender!", image: "/johto-leaders/bugsy.png",
+  { key: "bugsy", name: "Bugsy", city: "Azalea Town", badge: "Insígnia Hive", type: "bug", quote: "Minha pesquisa sobre insetos vai te surpreender!", image: `${LEADER_IMAGE_BASE}/bugsy.png`,
     roster: roster([[123, "FLANK", "ELECTRIC"], [212, "DEFENDER", "LAZY"], [214, "ATTACKER", "COMPETITIVE"], [168, "OPPORTUNIST", "CURIOUS"], [12, "HEALER", "SERENE"], [469, "DUELIST", "PROUD"]]) },
-  { key: "whitney", name: "Whitney", city: "Goldenrod City", badge: "Insígnia Plain", type: "normal", quote: "Não vou perder! Buááá!", image: "/johto-leaders/whitney.png",
+  { key: "whitney", name: "Whitney", city: "Goldenrod City", badge: "Insígnia Plain", type: "normal", quote: "Não vou perder! Buááá!", image: `${LEADER_IMAGE_BASE}/whitney.png`,
     roster: roster([[241, "ATTACKER", "COMPETITIVE"], [36, "ENCOURAGER", "PLAYFUL"], [143, "DEFENDER", "GLUTTON"], [242, "HEALER", "SERENE"], [217, "DUELIST", "PROUD"], [115, "GUARDIAN", "LOYAL"]]) },
-  { key: "morty", name: "Morty", city: "Ecruteak City", badge: "Insígnia Fog", type: "ghost", quote: "Enxergo o que ninguém mais vê.", image: "/johto-leaders/morty.png",
+  { key: "morty", name: "Morty", city: "Ecruteak City", badge: "Insígnia Fog", type: "ghost", quote: "Enxergo o que ninguém mais vê.", image: `${LEADER_IMAGE_BASE}/morty.png`,
     roster: roster([[94, "OPPORTUNIST", "MISCHIEVOUS"], [429, "HEALER", "SERENE"], [477, "DEFENDER", "LAZY"], [354, "SABOTEUR", "TIMID"], [426, "GUARDIAN", "LOYAL"], [302, "FLANK", "CURIOUS"]]) },
-  { key: "chuck", name: "Chuck", city: "Cianwood City", badge: "Insígnia Storm", type: "fighting", quote: "Treino debaixo de cachoeiras!", image: "/johto-leaders/chuck.png",
+  { key: "chuck", name: "Chuck", city: "Cianwood City", badge: "Insígnia Storm", type: "fighting", quote: "Treino debaixo de cachoeiras!", image: `${LEADER_IMAGE_BASE}/chuck.png`,
     roster: roster([[62, "DEFENDER", "GLUTTON"], [68, "ATTACKER", "COMPETITIVE"], [106, "FLANK", "ELECTRIC"], [107, "DUELIST", "PROUD"], [297, "GUARDIAN", "LOYAL"], [448, "OPPORTUNIST", "CURIOUS"]]) },
-  { key: "jasmine", name: "Jasmine", city: "Olivine City", badge: "Insígnia Mineral", type: "steel", quote: "...Eu... vou dar o meu melhor.", image: "/johto-leaders/jasmine.png",
+  { key: "jasmine", name: "Jasmine", city: "Olivine City", badge: "Insígnia Mineral", type: "steel", quote: "...Eu... vou dar o meu melhor.", image: `${LEADER_IMAGE_BASE}/jasmine.png`,
     roster: roster([[208, "DEFENDER", "LAZY"], [462, "OPPORTUNIST", "CURIOUS"], [437, "HEALER", "SERENE"], [306, "ATTACKER", "PROUD"], [376, "DUELIST", "COMPETITIVE"], [205, "GUARDIAN", "LOYAL"]]) },
-  { key: "pryce", name: "Pryce", city: "Mahogany Town", badge: "Insígnia Glacier", type: "ice", quote: "Vi mais invernos do que você anos.", image: "/johto-leaders/pryce.png",
+  { key: "pryce", name: "Pryce", city: "Mahogany Town", badge: "Insígnia Glacier", type: "ice", quote: "Vi mais invernos do que você anos.", image: `${LEADER_IMAGE_BASE}/pryce.png`,
     roster: roster([[473, "ATTACKER", "COMPETITIVE"], [87, "HEALER", "SERENE"], [362, "DEFENDER", "LAZY"], [461, "FLANK", "ELECTRIC"], [131, "GUARDIAN", "LOYAL"], [91, "SABOTEUR", "MISCHIEVOUS"]]) },
-  { key: "clair", name: "Clair", city: "Blackthorn City", badge: "Insígnia Rising", type: "dragon", quote: "Eu sou a maior treinadora de dragões!", image: "/johto-leaders/clair.png",
+  { key: "clair", name: "Clair", city: "Blackthorn City", badge: "Insígnia Rising", type: "dragon", quote: "Eu sou a maior treinadora de dragões!", image: `${LEADER_IMAGE_BASE}/clair.png`,
     roster: roster([[230, "OPPORTUNIST", "CURIOUS"], [149, "ATTACKER", "COMPETITIVE"], [373, "DUELIST", "PROUD"], [445, "FLANK", "ELECTRIC"], [334, "HEALER", "SERENE"], [130, "DEFENDER", "GLUTTON"]]) },
 ];
 
