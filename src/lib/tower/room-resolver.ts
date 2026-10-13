@@ -51,7 +51,7 @@ export function groupActiveMembersByRoom(state: TowerExpeditionV2): Map<string, 
 export function freezeRoomEncounter(
   state: TowerExpeditionV2,
   roomId: string,
-  enemies: { pokemonId: number; name: string; level: number }[],
+  enemies: { pokemonId: number; name: string; level: number; captiveMascotId?: string }[],
   preparationTurns: number,
 ): TowerExpeditionV2 {
   const room = state.graph.find((entry) => entry.id === roomId);

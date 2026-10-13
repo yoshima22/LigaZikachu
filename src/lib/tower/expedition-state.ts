@@ -15,7 +15,7 @@ export type TowerExpeditionRoom = {
   visitedBy: string[];
   encounter?: {
     preparationTurns: number;
-    enemies: { pokemonId: number; name: string; level: number }[];
+    enemies: { pokemonId: number; name: string; level: number; captiveMascotId?: string }[];
   };
   replay?: unknown;
   lastOutcome?: string;
@@ -52,7 +52,7 @@ export function newExpeditionState(
     availableFromTurn: 1,
   }]));
   const rooms = Object.fromEntries(graph.map((room) => [room.id, {
-    cleared: room.id === entrance.id,
+    cleared: room.id === entrance.id || room.kind === "RECOVERY",
     visitedBy: room.id === entrance.id ? [...ids] : [],
   }]));
 

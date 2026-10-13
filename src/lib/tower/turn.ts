@@ -43,6 +43,7 @@ import {
   transitionFloor,
   updateOverload,
 } from "./pressure-rules";
+import { releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -62,9 +63,54 @@ type V2RunInput = {
   members: Array<{
     userId: string;
     expeditionRole: string;
-    mascots: Array<{ mascotId: string; currentHp: number; currentStance: string }>;
+    mascots: Array<{ mascotId: string; currentHp: number; maxHp: number; currentStance: string }>;
   }>;
 };
+
+async function resolveV2Recoveries(
+  tx: Prisma.TransactionClient,
+  run: V2RunInput,
+  state: TowerExpeditionV2,
+  submissions: NonNullable<TowerVolatile["submissions"]>,
+): Promise<{ state: TowerExpeditionV2; log: string[] }> {
+  let next = state;
+  const log: string[] = [];
+  const vitals = await tx.towerRunMascot.findMany({
+    where: { member: { runId: run.id } },
+    select: { mascotId: true, ownerUserId: true, currentHp: true, maxHp: true },
+  });
+  for (const [actorId, submission] of Object.entries(submissions)) {
+    const payload = (submission.actions ?? {}) as { action?: string; targetMemberId?: string };
+    if (payload.action !== "REVIVE_ITEM" && payload.action !== "REVIVE_ROOM") continue;
+    if (!payload.targetMemberId) continue;
+    const kind = payload.action === "REVIVE_ITEM" ? "ITEM" : "ROOM";
+    try {
+      const revived = reviveMember(next, payload.targetMemberId, { kind, actorId }, run.currentFloor, vitals);
+      if (kind === "ITEM") {
+        const player = await tx.player.findUnique({ where: { userId: actorId }, select: { id: true } });
+        const consumed = player ? await tx.playerInventory.updateMany({
+          where: { playerId: player.id, itemId: TOWER_REVIVE_ITEM_ID, quantity: { gte: 1 } },
+          data: { quantity: { decrement: 1 } },
+        }) : { count: 0 };
+        if (!consumed.count) {
+          log.push(`${actorId} não tinha um Kit de Reanimação disponível; nenhum item foi consumido.`);
+          continue;
+        }
+      }
+      for (const [mascotId, currentHp] of Object.entries(revived.hpByMascotId))
+        await tx.towerRunMascot.updateMany({
+          where: { mascotId, member: { runId: run.id, userId: payload.targetMemberId } },
+          data: { currentHp, state: "IN_TOWER" },
+        });
+      next = revived.state;
+      log.push(`${actorId} reanimou ${payload.targetMemberId}: os dois mascotes voltaram com 50% do HP.`);
+    } catch (error) {
+      if (!(error instanceof TowerRecoveryError)) throw error;
+      log.push(`${actorId} não conseguiu reanimar ${payload.targetMemberId}: ${error.message}`);
+    }
+  }
+  return { state: next, log };
+}
 
 /** One DB read for the party, then a separate deterministic battle per occupied room. */
 async function resolveV2RoomFronts(
@@ -97,8 +143,28 @@ async function resolveV2RoomFronts(
         : present.length;
       const preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
       if (currentRoom.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
+      const reservedCaptives = new Set(Object.values(next.rooms).flatMap((savedRoom) =>
+        savedRoom.encounter?.enemies.flatMap((enemy) => enemy.captiveMascotId ? [enemy.captiveMascotId] : []) ?? []));
+      const candidates = await tx.towerLostMascot.findMany({
+        where: { recoveredAt: null }, orderBy: { createdAt: "asc" }, take: 8,
+        select: { mascotId: true },
+      });
+      const candidate = candidates.find((entry) => !reservedCaptives.has(entry.mascotId));
+      if (candidate && preview.length < 8) {
+        const captive = await tx.mascot.findUnique({
+          where: { id: candidate.mascotId },
+          select: { pokemonId: true, nickname: true, level: true },
+        });
+        if (captive) preview.push({
+          pokemonId: captive.pokemonId,
+          name: `${captive.nickname ?? getPokemonName(captive.pokemonId)} · cativo da Torre`,
+          level: captive.level,
+          captiveMascotId: candidate.mascotId,
+        } as typeof preview[number]);
+      }
       next = freezeRoomEncounter(next, roomId, preview, currentRoom.kind === "BOSS" ? 2 : 1);
     }
+    const frozenEnemies = next.rooms[roomId]?.encounter?.enemies ?? [];
     const actions: RoomFrontAction[] = Object.entries(submissions).map(([memberId, submission]) => {
       const payload = (submission.actions ?? {}) as { action?: string; puzzleChoice?: string };
       return { memberId, action: payload.action, puzzleChoice: payload.puzzleChoice };
@@ -175,6 +241,48 @@ async function resolveV2RoomFronts(
     next = result.state;
     fronts.push(result);
     log.push(...result.events);
+    if (result.interaction === "REST") {
+      const healMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.healingMultiplier, 1);
+      for (const snapshot of snapshots.filter((entry) => result.participantIds.includes(entry.member.userId) && entry.currentHp > 0)) {
+        const ritual = snapshot.member.expeditionRole === "RITUALISTA" ? 1.1 : 1;
+        const currentHp = Math.min(snapshot.maxHp, snapshot.currentHp + Math.round(snapshot.maxHp * 0.2 * healMult * ritual));
+        await tx.towerRunMascot.updateMany({ where: { mascotId: snapshot.mascotId, member: { runId: run.id } }, data: { currentHp } });
+      }
+      log.push("A sala de descanso curou apenas os mascotes dos treinadores presentes.");
+    }
+    const releaseStore = {
+      markRecoveredIfCaptive: async (mascotId: string, encounterId: string, actorId: string) => {
+        const changed = await tx.towerLostMascot.updateMany({
+          where: { mascotId, recoveredAt: null },
+          data: { recoveredAt: new Date(), recoveredById: actorId },
+        });
+        if (changed.count) await tx.towerFeat.create({
+          data: { userId: actorId, runId: run.id, featKey: "TOWER_CAPTIVE_RESCUE", data: { mascotId, encounterId } },
+        });
+        return changed.count > 0;
+      },
+      restoreMascotToOwner: async (mascotId: string) => {
+        await tx.towerRunMascot.updateMany({
+          where: { mascotId, state: { in: ["LOST_IN_TOWER", "DEFEATED"] } },
+          data: { state: "RECOVERED", currentHp: 1 },
+        });
+      },
+    };
+    if (result.interaction === "RESCUE") {
+      const captives = await tx.towerLostMascot.findMany({
+        where: { recoveredAt: null }, orderBy: { createdAt: "asc" }, take: 2,
+        select: { mascotId: true },
+      });
+      for (const captive of captives) {
+        const released = await releaseCapturedMascot(releaseStore, captive.mascotId, `${run.id}:${roomId}:${run.globalTurn}`, result.participantIds[0]);
+        if (released) log.push(`Mascote ${captive.mascotId} foi libertado e voltou ao dono em repouso.`);
+      }
+    }
+    for (const [index, enemy] of frozenEnemies.entries()) {
+      if (!enemy.captiveMascotId || !result.kos.includes(`tower:${run.id}:${roomId}:${index}`)) continue;
+      const released = await releaseCapturedMascot(releaseStore, enemy.captiveMascotId, `${run.id}:${roomId}:${run.globalTurn}`, result.participantIds[0]);
+      if (released) log.push(`${enemy.name} foi libertado e voltou ao dono em repouso; não entrou no espólio.`);
+    }
     if (result.blockedBy.length) log.push(`Chefe bloqueado: aguardando ${result.blockedBy.join(", ")}.`);
     for (const [mascotId, hp] of Object.entries(result.hpByMascotId))
       await tx.towerRunMascot.updateMany({
@@ -803,16 +911,18 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         const turn = advanceV2Turn(vol.exploration, mapped, run.globalTurn, deadlineReached);
         if (!turn) return;
         const activeState = { ...turn.state, globalTurn: run.globalTurn };
-        const resolved = await resolveV2RoomFronts(tx, run, activeState, submissions, turn.defensiveMemberIds);
+        const recovery = await resolveV2Recoveries(tx, run, activeState, submissions);
+        const resolved = await resolveV2RoomFronts(tx, run, recovery.state, submissions, turn.defensiveMemberIds);
         const members = { ...resolved.state.members };
         for (const member of run.members) {
           const nextMember = members[member.userId];
           if (!nextMember) continue;
           if (nextMember.status === "AFK_ABANDONED") {
-            await tx.towerRunMascot.updateMany({
-              where: { memberId: member.id, state: "IN_TOWER" },
-              data: { state: "RECOVERED" },
-            });
+            for (const mascot of member.mascots)
+              await tx.towerRunMascot.updateMany({
+                where: { memberId: member.id, mascotId: mascot.mascotId },
+                data: terminalMascotDisposition("AFK_ABANDONED", false, mascot.currentHp),
+              });
           }
           await tx.towerRunMember.update({
             where: { id: member.id },
@@ -870,6 +980,26 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         const allAbandoned = Object.values(members).every((member) => member.status === "AFK_ABANDONED");
         const wonRun = bossVictory && run.currentFloor === 7;
         const ended = !hasActive || wonRun;
+        if (ended) {
+          for (const mascot of latestMascots) {
+            const member = members[mascot.member.userId];
+            if (member?.status === "AFK_ABANDONED") continue;
+            const disposition = terminalMascotDisposition(member?.status ?? "DOWNED", wonRun, mascot.currentHp);
+            if (disposition.state === "LOST_IN_TOWER") {
+              await tx.towerLostMascot.upsert({
+                where: { mascotId: mascot.mascotId },
+                create: { mascotId: mascot.mascotId, ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor },
+                update: { ownerUserId: mascot.ownerUserId, lostRunId: runId, floor: run.currentFloor, recoveredAt: null, recoveredById: null },
+              });
+              await tx.towerRunMascot.update({ where: { id: mascot.id }, data: { state: "LOST_IN_TOWER" } });
+            } else {
+              await tx.towerRunMascot.update({
+                where: { id: mascot.id },
+                data: disposition,
+              });
+            }
+          }
+        }
         await tx.towerRun.update({
           where: { id: runId },
           data: {
@@ -884,7 +1014,7 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
               submissions: {},
               lastResolvedTurn: run.globalTurn,
               log: [
-                ...(vol.log ?? []), ...turn.events, ...resolved.log,
+                ...(vol.log ?? []), ...turn.events, ...recovery.log, ...resolved.log,
                 `Pressão ${appliedPressure > 0 ? "+" : ""}${appliedPressure}: ${pressureChange.reasons.join("; ")}.`,
                 ...(bossVictory ? [wonRun ? "O 7º regente caiu. Expedição concluída!" : `O grupo alcançou o ${nextFloor}º andar; a Pressão diminuiu.`] : []),
                 `Turno ${run.globalTurn} resolvido.`,

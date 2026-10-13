@@ -61,6 +61,7 @@ import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from
 import { isExpeditionV2, newExpeditionState } from "@/lib/tower/expedition-state";
 import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
+import { reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -100,6 +101,23 @@ async function ensureTowerTicket() {
       description: "Consumido somente quando a expedição realmente começa.",
       inventoryEnabled: true,
     },
+  });
+}
+
+async function ensureTowerReviveItem() {
+  return prisma.shopItem.upsert({
+    where: { id: TOWER_REVIVE_ITEM_ID },
+    create: {
+      id: TOWER_REVIVE_ITEM_ID,
+      type: "FIRST_AID_KIT",
+      name: "Kit de Reanimação da Torre",
+      description: "Um aliado vivo usa este kit na mesma sala do treinador caído; ambos os mascotes voltam com 50% do HP e agem no próximo turno.",
+      price: 0,
+      active: false,
+      inventoryEnabled: true,
+      metadata: { towerOnly: true, adminGrantOnly: true },
+    },
+    update: { inventoryEnabled: true },
   });
 }
 
@@ -1602,6 +1620,7 @@ export async function startTowerExpeditionAction(
     return { error: "Todos os jogadores precisam marcar Pronto." };
   const config = await getTowerConfig();
   await ensureTowerTicket();
+  await ensureTowerReviveItem();
   const memberPlayers = await prisma.player.findMany({
     where: { userId: { in: run.members.map((member) => member.userId) } },
     select: { id: true, userId: true },
@@ -2374,10 +2393,36 @@ export async function submitTowerActionAction(
         });
         if (!validation.ok) throw new Error(`Ação recusada (${validation.code}). Atualize a expedição e tente novamente.`);
         if (typeof payload.routeId === "string" && payload.routeId) {
+          if (payload.action === "REVIVE_ITEM" || payload.action === "REVIVE_ROOM")
+            throw new Error("Mover-se e reanimar exigem janelas diferentes.");
           try { moveMember(v2, user.id, payload.routeId); }
           catch (error) {
             if (error instanceof TowerRouteError) throw new Error(error.message);
             throw error;
+          }
+        }
+        if (payload.action === "REVIVE_ITEM" || payload.action === "REVIVE_ROOM") {
+          const targetId = typeof payload.targetMemberId === "string" ? payload.targetMemberId : "";
+          const target = run.members.find((member) => member.userId === targetId);
+          const vitals = target?.mascots.map((mascot) => ({
+            mascotId: mascot.mascotId,
+            ownerUserId: targetId,
+            currentHp: mascot.currentHp,
+            maxHp: mascot.maxHp,
+          })) ?? [];
+          try {
+            reviveMember(v2, targetId, { kind: payload.action === "REVIVE_ITEM" ? "ITEM" : "ROOM", actorId: user.id }, run.currentFloor, vitals);
+          } catch (error) {
+            if (error instanceof TowerRecoveryError) throw new Error(error.message);
+            throw error;
+          }
+          if (payload.action === "REVIVE_ITEM") {
+            const player = await tx.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+            const inventory = player ? await tx.playerInventory.findUnique({
+              where: { playerId_itemId: { playerId: player.id, itemId: TOWER_REVIVE_ITEM_ID } },
+              select: { quantity: true },
+            }) : null;
+            if (!inventory || inventory.quantity < 1) throw new Error("Você não tem um Kit de Reanimação da Torre.");
           }
         }
       }

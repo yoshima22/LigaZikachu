@@ -1,4 +1,4 @@
-export type TowerRoomKind = "ENTRANCE" | "PUZZLE" | "COMBAT" | "REST" | "EVENT" | "RESCUE" | "LUCK" | "BOSS";
+export type TowerRoomKind = "ENTRANCE" | "PUZZLE" | "COMBAT" | "REST" | "RECOVERY" | "EVENT" | "RESCUE" | "LUCK" | "BOSS";
 
 export type TowerPuzzle = {
   id: string;
@@ -130,12 +130,12 @@ export function generateTowerRoomGraph(seed: string, floor = 1): TowerExploratio
     PUZZLE:["Arquivo das Vozes","Observatório Partido","Sala dos Sinos","Galeria de Espelhos"],
     EVENT:["Cripta Lacrada","Arsenal Rebelde","Oficina Rotom","Câmara das Correntes"],
     REST:["Capela Silenciosa","Jardim Noturno","Biblioteca Adormecida"],
-    RESCUE:["Sala Anti-Psicose","Ala de Contenção"], LUCK:["Relicário Instável","Cofre do Acaso"],
+    RESCUE:["Sala Anti-Psicose","Ala de Contenção"], RECOVERY:["Enfermaria Rebelde"], LUCK:["Relicário Instável","Cofre do Acaso"],
   };
   const graph: TowerRoomNode[] = [];
   for(let column=0;column<13;column++) for(let row=0;row<3;row++) {
     const id=column===0&&row===1?"entrance":column===12&&row===1?"boss":`f${floor}-c${column}-r${row}`;
-    let kind:TowerRoomKind=column===0&&row===1?"ENTRANCE":column===12&&row===1?"BOSS":kinds[hash(`${seed}:${floor}:${column}:${row}`)%kinds.length];
+    let kind:TowerRoomKind=column===0&&row===1?"ENTRANCE":column===12&&row===1?"BOSS":column===6&&row===1?"RECOVERY":kinds[hash(`${seed}:${floor}:${column}:${row}`)%kinds.length];
     const next:string[]=[];
     if(column<12){
       const same=column+1===12&&row===1?"boss":`f${floor}-c${column+1}-r${row}`; next.push(same);
@@ -144,8 +144,8 @@ export function generateTowerRoomGraph(seed: string, floor = 1): TowerExploratio
     }
     if(column===12&&row!==1)next.push("boss");
     const title=kind==="ENTRANCE"?`Entrada do ${floor}º andar`:kind==="BOSS"?`Câmara do Chefe ${floor}/7`:names[kind][hash(`${id}:name`)%names[kind].length];
-    const description=kind==="BOSS"?`O regente do ${floor}º andar aguarda com seus seguidores.`:kind==="PUZZLE"?"Um mecanismo pode abrir ou cortar caminhos adiante.":kind==="RESCUE"?"Jaulas de contenção guardam mascotes perdidos em outras runs.":"A função real desta sala só fica clara ao atravessá-la.";
-    graph.push(room(id,column*3+row,kind,title,description,[...new Set(next)],[18,50,82][row],4+column*7.6,kind==="ENTRANCE",kind==="PUZZLE"?PUZZLES[hash(`${id}:puzzle`)%PUZZLES.length]:undefined));
+    const description=kind==="BOSS"?`O regente do ${floor}º andar aguarda com seus seguidores.`:kind==="PUZZLE"?"Um mecanismo pode abrir ou cortar caminhos adiante.":kind==="RESCUE"?"Jaulas de contenção guardam mascotes perdidos em outras runs.":kind==="RECOVERY"?"Um aliado vivo pode recuperar daqui um treinador caído, mesmo à distância. O uso é compartilhado e volta após dois andares.":"A função real desta sala só fica clara ao atravessá-la.";
+    graph.push(room(id,column*3+row,kind,title,description,[...new Set(next)],[18,50,82][row],4+column*7.6,kind==="ENTRANCE"||kind==="RECOVERY",kind==="PUZZLE"?PUZZLES[hash(`${id}:puzzle`)%PUZZLES.length]:undefined));
   }
   return { currentRoomId: "entrance", visited: ["entrance"], graph, pressure: 0, activeModifiers: [] };
 }
