@@ -42,7 +42,7 @@ const mk = (i: number, pokemonId: number) => toLeagueMascot({
 }, i, ROLES[i]);
 const team = [25, 6, 143, 94, 130, 150].map(mk);
 const falkner = getJohtoLeader("falkner")!;
-const MASCOT_HP = 5_833_333;
+const MASCOT_HP = 833_333;
 const alive = (slots: number[]) => slots.map((slot) => ({ slot, hpMax: MASCOT_HP, hpCurrent: MASCOT_HP }));
 const leaderTeam = buildLeaderTeam(falkner, alive([0, 1, 2, 3, 4, 5]), team, 0);
 assert.ok(leaderTeam.every((m) => m.hp === MASCOT_HP), "o mascote do líder entra com a vida global completa");

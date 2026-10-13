@@ -256,7 +256,7 @@ export type JohtoAttackResult =
 function buildPayload(outcome: JohtoBattleOutcome, playerId: string, playerName: string, leaderName: string): JohtoBattlePayload {
   const { battle } = outcome;
   return {
-    winner: battle.winner, log: battle.log, lineupA: toReplayLineup(battle.lineupA), lineupB: toReplayLineup(battle.lineupB),
+    winner: battle.winner, log: battle.log, lineupA: toReplayLineup(battle.lineupA), lineupB: toReplayLineup(battle.lineupB, outcome.startingHp),
     survivorsA: battle.teamASurvivors, survivorsB: battle.teamBSurvivors, playerId, playerName, leaderName,
   };
 }

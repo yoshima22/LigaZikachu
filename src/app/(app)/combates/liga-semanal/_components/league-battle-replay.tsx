@@ -42,6 +42,7 @@ interface Fighter {
   hp: number;
   hasExactMaxHp: boolean;
   role?: string;
+  startHp?: number;
 }
 
 export type ReplayLineupFighter = {
@@ -53,6 +54,8 @@ export type ReplayLineupFighter = {
   role?: string;
   maxHp?: number;
   hp?: number; // snapshot do combate guarda o HP máximo aqui (ex.: Liga Rush)
+  /** HP com que o mascote ENTRA na luta, se menor que o máximo (ex.: líder da Raid de Johto com dano persistente). */
+  startHp?: number;
 };
 const EMPTY_LINEUP: ReplayLineupFighter[] = [];
 
@@ -100,6 +103,7 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
         hp: exactMax ?? 100,
         hasExactMaxHp: exactMax !== null,
         role: mascot.role,
+        startHp: typeof mascot.startHp === "number" ? mascot.startHp : undefined,
       });
     }
   }
@@ -159,7 +163,7 @@ function buildFighters(turns: TurnLog[], playerAId?: string, survivorsA = 0, sur
     if (!fighter.hasExactMaxHp) {
       fighter.maxHp = Math.max(received + (survivorIds.has(fighter.id) ? 100 : 0), 1);
     }
-    fighter.hp = fighter.maxHp;
+    fighter.hp = fighter.startHp !== undefined ? Math.min(fighter.maxHp, fighter.startHp) : fighter.maxHp;
   }
   return [...seen.values()];
 }

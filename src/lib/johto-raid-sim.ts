@@ -5,7 +5,7 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 
 export const JOHTO_EVENT_SLUG = "raid-lideres-johto";
 export const JOHTO_VISIBLE_KEY = "johto_raid_visible";
-export const JOHTO_LEADER_HP = 35_000_000;
+export const JOHTO_LEADER_HP = 5_000_000;
 export const JOHTO_MASCOTS_PER_LEADER = 6;
 export const JOHTO_DEFAULT_COOLDOWN_MIN = 20;
 export const JOHTO_DEFAULT_DAMAGE_SCALE = 1;
@@ -202,6 +202,8 @@ export function analyzeLeagueBattle(lineups: LeagueMascot[], log: LeagueBattleRe
 export type JohtoBattleOutcome = {
   battle: LeagueBattleResult;
   leaderTeam: LeagueMascot[];
+  /** Vida com que cada mascote do líder entrou na luta (dano persistente). */
+  startingHp: Map<string, number>;
   win: boolean;
   /** Dano causado a cada mascote do líder em HP de combate e já convertido para a vida global. */
   perSlot: Array<{ slot: number; pokemonId: number; name: string; battleDamage: number; globalDamage: number; fellInBattle: boolean }>;
@@ -225,7 +227,7 @@ export function runJohtoBattle(playerTeam: LeagueMascot[], def: JohtoLeaderDef, 
   });
   const playerIds = new Set(playerTeam.map((m) => m.id));
   return {
-    battle, leaderTeam, win: battle.winner === "A", perSlot,
+    battle, leaderTeam, startingHp, win: battle.winner === "A", perSlot,
     totalGlobalDamage: perSlot.reduce((sum, p) => sum + p.globalDamage, 0),
     playerFallenIds: playerTeam.filter((m) => (analysis.hpEnd.get(m.id) ?? 0) <= 0).map((m) => m.id),
     playerKos: analysis.kos.filter((k) => playerIds.has(k.targetId)),
@@ -234,6 +236,6 @@ export function runJohtoBattle(playerTeam: LeagueMascot[], def: JohtoLeaderDef, 
 }
 
 /** Escalação no formato que o replay da Liga espera. */
-export function toReplayLineup(team: LeagueMascot[]) {
-  return team.map((m) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, level: m.level, ownerId: m.ownerId, role: getCombatRoleLabel(m.combatRole), maxHp: m.hp }));
+export function toReplayLineup(team: LeagueMascot[], startingHp?: Map<string, number>) {
+  return team.map((m) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, level: m.level, ownerId: m.ownerId, role: getCombatRoleLabel(m.combatRole), maxHp: m.hp, ...(startingHp?.has(m.id) ? { startHp: Math.min(m.hp, startingHp.get(m.id)!) } : {}) }));
 }
