@@ -56,7 +56,7 @@ export async function johtoTestBattleAction(formData: FormData) {
   const user = await requireAdminUser();
   if (!user) return { ok: false as const, message: "Apenas administradores." };
   const { mascotIds, roles } = readTeam(formData);
-  const result = await simulateJohtoTest(user.id, mascotIds, roles, String(formData.get("leaderKey") ?? ""), Number(formData.get("runs") ?? 20));
+  const result = await simulateJohtoTest(user.id, mascotIds, roles, String(formData.get("leaderKey") ?? ""), Number(formData.get("runs") ?? 20), Math.max(0, Math.min(4, Math.floor(Number(formData.get("combo") ?? 0)))));
   if (!result.ok) return result;
   return { ok: true as const, message: `Simulação concluída (${result.summary.runs} lutas).`, test: result.summary };
 }

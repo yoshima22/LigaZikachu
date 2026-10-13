@@ -1,7 +1,7 @@
 /** Raid de Johto: npx tsx scripts/test-johto-raid.ts [--db]  (--db roda um fluxo completo no banco com contas temporárias, apagadas no fim) */
 import assert from "node:assert/strict";
 import {
-  buildLeaderTeam, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_LEADERS, readRewardConfig, runJohtoBattle,
+  applyComboBonus, buildLeaderTeam, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_LEADERS, readRewardConfig, runJohtoBattle,
 } from "../src/lib/johto-raid-sim";
 import { toLeagueMascot } from "../src/lib/league-combat";
 
@@ -32,6 +32,9 @@ assert.deepEqual(rows.filter((r) => r.playerId === "b").map((r) => [r.tier, r.zc
 // sem golpe final atribuído (admin/debug): ninguém ganha ovo
 assert.equal(computeLeaderRewards([stat("a", 10)], null, c).some((r) => r.egg), false);
 
+// ── Combo de grupo ───────────────────────────────────────────────────────────
+assert.deepEqual([0, 1, 2, 3, 4, 9].map(comboBonusPct), [0, 2, 4, 6, 8, 8], "2% por treinador, máximo 8%");
+
 // ── Combate 6x6 equilibrado ──────────────────────────────────────────────────
 const ROLES = ["ATTACKER", "DEFENDER", "FLANK", "HEALER", "OPPORTUNIST", "GUARDIAN"] as const;
 const mk = (i: number, pokemonId: number) => toLeagueMascot({
@@ -45,12 +48,17 @@ const power = (m: { force: number; agility: number; instinct: number; vitality: 
 const ratio = leaderTeam.reduce((s, m) => s + power(m), 0) / team.reduce((s, m) => s + power(m), 0);
 assert.ok(ratio > 0.9 && ratio < 1.1, `líder deve ter poder próximo ao do time (razão ${ratio.toFixed(2)})`);
 assert.equal(buildLeaderTeam(falkner, [2, 5], team, 0).length, 2, "só os mascotes vivos entram");
+assert.ok(leaderTeam.every((m) => m.personality), "cada mascote do líder tem personalidade");
+const boosted = applyComboBonus(team, 8);
+assert.equal(boosted[0].force, Math.round(team[0].force * 1.08));
+assert.equal(applyComboBonus(team, 0), team);
 
 let wins = 0, global = 0, fell = 0;
 const N = 60;
 for (let i = 0; i < N; i++) {
   const o = runJohtoBattle(team, falkner, 0, [0, 1, 2, 3, 4, 5], 10);
   if (o.win) wins++;
+  assert.notEqual(o.battle.winner, "DRAW", "a luta vai até um dos lados cair");
   global += o.totalGlobalDamage;
   fell += o.perSlot.filter((p) => p.fellInBattle).length;
   for (const p of o.perSlot) {

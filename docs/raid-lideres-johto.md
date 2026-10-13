@@ -1,6 +1,6 @@
 # Raid dos Líderes de Johto (evento da Semana 8)
 
-Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes **em sequência** (Falkner → Bugsy → Whitney → Morty → Chuck → Jasmine → Pryce → Clair). Cada líder luta com **6 mascotes** e tem **100.000.000 de HP** (1/6 por mascote ≈ 16,67 mi). O dano dos jogadores é somado; cada líder fica disponível por **até 5 dias** (se ninguém o vencer, ele foge e o próximo entra, sem recompensa pelo líder que fugiu).
+Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes **em sequência** (Falkner → Bugsy → Whitney → Morty → Chuck → Jasmine → Pryce → Clair). Cada líder luta com **6 mascotes** e tem **35.000.000 de HP** por padrão (1/6 por mascote ≈ 5,83 mi; editável ao criar o evento). O dano dos jogadores é somado; cada líder fica disponível por **até 5 dias** (se ninguém o vencer a tempo, **ele vence** e o próximo entra, sem recompensa por ele (o Professor Enguiça avisa)).
 
 ## Estado atual: oculto
 - `/combates/raid-johto` e o item de menu "Líderes de Johto" só aparecem para **ADMIN/SUPER_ADMIN**. Jogadores só veem depois de **Liberar para jogadores** (Admin → aba **Eventos**, ou a caixa de admin na própria página).
@@ -13,7 +13,12 @@ Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes *
 - Cada mascote do líder tem 1/6 da vida total. Quando um cai de vez, "quem derrotou" fica registrado; quando os 6 caem, o líder cai e quem deu o último dano ganha o **golpe final**.
 - Atômico: as 6 linhas de mascote são travadas (`FOR UPDATE`) na transação, então ataques simultâneos somam certo. Trava por jogador (advisory lock) impede dois ataques por duplo clique.
 - **Ferimentos como na Arena:** mascotes do jogador que caíram na luta ficam feridos (Atendimento SUS); vitória/derrota segue o resultado do time.
-- Espera entre ataques: 30 min (editável).
+- Espera entre ataques: **20 min** (editável).
+- **A luta vai até um dos lados cair** (sem limite prático de rodadas, sem empates). O jogador causa dano livremente; mascotes do líder derrubados ficam de fora das próximas lutas e os do jogador que caíram ficam feridos até passarem pelo SUS (na própria página ou direto no resultado da luta).
+- **Postura + personalidade:** cada mascote do líder tem uma postura e uma personalidade que combinam (ex.: Defensor Preguiçoso, Cuidador Sereno, Atacante Competitivo, Guardião Leal, Flanco Elétrico, Oportunista Travesso/Curioso). Dá para ver o time de cada líder no botão **Ver time**.
+
+## Combo de ataque em grupo
+Cada treinador (não admin) que atacou nos últimos **5 minutos** vale **+2%** em todos os status do próximo atacante, até **+8%** (4 treinadores). O líder escala pelo time sem o bônus (o bônus é real). Quando passam 5 minutos sem ataques, o bônus zera. A página mostra o combo atual e um cronômetro para o próximo degrau cair.
 - **Replays:** os últimos **20 combates** do servidor ficam com replay (qualquer jogador assiste, modal da Liga); os mais antigos perdem o JSON pesado, mas mantêm o resumo.
 
 ## Recompensas (por líder derrotado — `DEFAULT_JOHTO_REWARDS`, editável em `rewardConfigJson`)

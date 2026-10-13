@@ -5,9 +5,9 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { toLeagueMascot } from "@/lib/league-combat";
 import { publishLeagueTicker } from "@/lib/league-ticker";
-import { getPokemonName } from "@/lib/mascot-data";
+import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import {
-  computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
+  COMBO_MAX_STACKS, COMBO_WINDOW_MS, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
   JOHTO_DEFAULT_LEADER_DAYS, JOHTO_EVENT_SLUG, JOHTO_LEADER_HP, JOHTO_LEADERS, JOHTO_MASCOTS_PER_LEADER, JOHTO_REPLAY_HISTORY,
   JOHTO_VISIBLE_KEY, readRewardConfig, runJohtoBattle, toReplayLineup, type JohtoLeaderDef, type JohtoBattleOutcome,
 } from "@/lib/johto-raid-sim";
@@ -32,7 +32,7 @@ export async function setJohtoRaidVisible(visible: boolean) {
 
 // ── Tipos de estado ──────────────────────────────────────────────────────────
 
-export type JohtoMascotState = { slot: number; pokemonId: number; name: string; hpMax: number; hpCurrent: number; defeated: boolean; defeatedByName: string | null };
+export type JohtoMascotState = { slot: number; pokemonId: number; name: string; hpMax: number; hpCurrent: number; defeated: boolean; defeatedByName: string | null; role: string; personality: string; types: string[] };
 
 export type JohtoLeaderState = Omit<JohtoLeaderDef, "roster"> & {
   id: string; position: number; hpMax: number; hpCurrent: number; status: "DEFEATED" | "ESCAPED" | "CURRENT" | "WAITING";
@@ -59,7 +59,11 @@ export type JohtoRaidState = {
   totalAttacks: number;
   me: { damageOnCurrent: number; attacksOnCurrent: number; rankOnCurrent: number | null; cooldownUntil: string | null } | null;
   myRewards: JohtoPendingReward[];
+  /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 5 min). */
+  combo: JohtoComboState;
 };
+
+export type JohtoComboState = { stacks: number; bonusPct: number; nextDropAt: string | null };
 
 // O slug só é trocado nos testes (para não tocar no evento real).
 let eventSlug = JOHTO_EVENT_SLUG;
@@ -120,7 +124,14 @@ export async function advanceExpiredLeaders(eventId: string, now = new Date()) {
   const expired = await prisma.johtoRaidLeader.findMany({ where: { eventId, defeatedAt: null, escapedAt: null, expiresAt: { lt: now } }, select: { id: true } });
   for (const leader of expired) {
     const flagged = await prisma.johtoRaidLeader.updateMany({ where: { id: leader.id, escapedAt: null, defeatedAt: null }, data: { escapedAt: now } });
-    if (flagged.count > 0) await openNextLeaderWindow(eventId, now);
+    if (flagged.count > 0) {
+      await openNextLeaderWindow(eventId, now);
+      if (await isJohtoRaidVisibleToPlayers().catch(() => false)) {
+        const row = await prisma.johtoRaidLeader.findUnique({ where: { id: leader.id }, select: { key: true } });
+        const name = getJohtoLeader(row?.key ?? "")?.name ?? "O líder";
+        await publishLeagueTicker({ type: "JOHTO_RAID_TIMEOUT", href: HREF, priority: 16, ttlHours: 24, eventKey: `johto-timeout:${leader.id}`, message: `👨‍🏫 Professor Enguiça: o tempo acabou e ${name} venceu o desafio! O próximo líder já está esperando.` }).catch(() => undefined);
+      }
+    }
   }
   if (expired.length > 0) {
     const open = await prisma.johtoRaidLeader.count({ where: { eventId, defeatedAt: null, escapedAt: null } });
@@ -128,10 +139,27 @@ export async function advanceExpiredLeaders(eventId: string, now = new Date()) {
   }
 }
 
+// ── Combo ────────────────────────────────────────────────────────────────────
+
+/** Treinadores (não admin, exceto o próprio) que atacaram nos últimos 5 minutos: cada um vale +2% de status, até +8%. */
+export async function getComboState(eventId: string, excludePlayerId?: string | null, now = new Date()): Promise<JohtoComboState> {
+  const rows = await prisma.johtoRaidAttempt.findMany({
+    where: { eventId, createdAt: { gte: new Date(now.getTime() - COMBO_WINDOW_MS) }, player: NON_ADMIN, ...(excludePlayerId ? { playerId: { not: excludePlayerId } } : {}) },
+    select: { playerId: true, createdAt: true }, orderBy: { createdAt: "desc" },
+  });
+  const latest = new Map<string, Date>();
+  for (const row of rows) if (!latest.has(row.playerId)) latest.set(row.playerId, row.createdAt);
+  const times = [...latest.values()].sort((a, b) => b.getTime() - a.getTime()).slice(0, COMBO_MAX_STACKS);
+  const stacks = times.length;
+  // O bônus cai quando o ataque mais antigo dentre os que contam sair da janela.
+  const oldest = times[times.length - 1];
+  return { stacks, bonusPct: comboBonusPct(stacks), nextDropAt: oldest ? new Date(oldest.getTime() + COMBO_WINDOW_MS).toISOString() : null };
+}
+
 // ── Estado para a página ─────────────────────────────────────────────────────
 
 export async function getJohtoRaidState(playerId?: string | null): Promise<JohtoRaidState> {
-  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [] };
+  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], combo: { stacks: 0, bonusPct: 0, nextDropAt: null } };
   const event = await getJohtoEvent();
   if (!event) return empty;
   await ensureLeaderMascots(event.id).catch(() => undefined);
@@ -154,11 +182,11 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
       finalBlowName: row.finalBlowPlayerId ? names.get(row.finalBlowPlayerId) ?? null : null,
       status: row.defeatedAt ? "DEFEATED" : row.escapedAt ? "ESCAPED" : open?.id === row.id ? "CURRENT" : "WAITING",
       rosterPokemonIds: roster.map((r) => r.pokemonId),
-      mascots: row.mascots.map((m) => ({ slot: m.slot, pokemonId: m.pokemonId, name: getPokemonName(m.pokemonId), hpMax: m.hpMax, hpCurrent: m.hpCurrent, defeated: m.hpCurrent <= 0, defeatedByName: m.defeatedByPlayerId ? names.get(m.defeatedByPlayerId) ?? null : null })),
+      mascots: row.mascots.map((m) => ({ slot: m.slot, pokemonId: m.pokemonId, name: getPokemonName(m.pokemonId), hpMax: m.hpMax, hpCurrent: m.hpCurrent, defeated: m.hpCurrent <= 0, defeatedByName: m.defeatedByPlayerId ? names.get(m.defeatedByPlayerId) ?? null : null, role: roster[m.slot]?.role ?? "ATTACKER", personality: roster[m.slot]?.personality ?? "", types: getPokemonTypes(m.pokemonId) })),
     }];
   });
   const current = leaders.find((l) => l.status === "CURRENT") ?? null;
-  const [stats, recent, attackCount, participants, myLast, rewards] = await Promise.all([
+  const [stats, recent, attackCount, participants, myLast, rewards, combo] = await Promise.all([
     current ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: current.id, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { id: "asc" }], take: 15, select: { playerId: true, damage: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
     prisma.johtoRaidAttempt.findMany({
       where: { eventId: event.id, replayJson: { not: Prisma.DbNull }, player: NON_ADMIN }, orderBy: { createdAt: "desc" }, take: JOHTO_REPLAY_HISTORY,
@@ -168,6 +196,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     prisma.johtoRaidLeaderStat.findMany({ where: { leader: { eventId: event.id }, player: NON_ADMIN }, distinct: ["playerId"], select: { playerId: true } }),
     playerId ? prisma.johtoRaidAttempt.findFirst({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }) : null,
     playerId ? prisma.johtoRaidReward.findMany({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" } }) : [],
+    getComboState(event.id, playerId),
   ]);
   const ranking = stats.map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }));
   const mineIndex = playerId ? ranking.findIndex((r) => r.playerId === playerId) : -1;
@@ -195,6 +224,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
       damageOnCurrent: mine?.damage ?? 0, attacksOnCurrent: mine?.attackCount ?? 0, rankOnCurrent: mineIndex >= 0 ? mineIndex + 1 : null,
       cooldownUntil: myLast ? new Date(myLast.createdAt.getTime() + fresh.cooldownMinutes * 60_000).toISOString() : null,
     } : null,
+    combo,
     myRewards: rewards.map((r) => ({
       id: r.id, leaderKey: r.leaderKey, leaderName: getJohtoLeader(r.leaderKey)?.name ?? r.leaderKey, tier: r.tier, zc: r.zc, level: r.mascotLevel, egg: r.egg,
       claimed: Boolean(r.claimedAt), chosenPokemonId: r.chosenPokemonId, options: getJohtoLeader(r.leaderKey)?.roster.map((e) => e.pokemonId) ?? [],
@@ -218,8 +248,8 @@ export type JohtoBattlePayload = {
 export type JohtoAttackResult =
   | { ok: false; message: string; cooldownUntil?: string }
   | {
-    ok: true; message: string; win: boolean; damage: number; rounds: number; leaderName: string; leaderKey: string;
-    perSlot: JohtoBattleOutcome["perSlot"]; fallenMascots: string[]; koSlots: number[]; cooldownUntil: string;
+    ok: true; message: string; win: boolean; damage: number; rounds: number; leaderName: string; leaderKey: string; comboPct: number;
+    perSlot: JohtoBattleOutcome["perSlot"]; fallenMascots: string[]; fallenIds: string[]; koSlots: number[]; cooldownUntil: string;
     leaderDefeated: boolean; eventDefeated: boolean; battle: JohtoBattlePayload;
   };
 
@@ -271,7 +301,8 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
   if (aliveSlots.length === 0) return { ok: false, message: `${def.name} já foi derrotado.` };
 
   const playerTeam = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, selectedRoles[m.id]));
-  const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, aliveSlots, event.damageScale);
+  const combo = await getComboState(event.id, player.id, now);
+  const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, aliveSlots, event.damageScale, combo.bonusPct);
   const payload = buildPayload(outcome, player.id, player.displayName, def.name);
   const fallenNames = outcome.playerFallenIds.map((id) => playerTeam.find((m) => m.id === id)?.name ?? "");
 
@@ -321,7 +352,7 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
           eventId: event.id, leaderKey: leaderRow.key, playerId: player.id, damage: total, koCount: outcome.playerFallenIds.length, finalBlow: leaderDefeated,
           teamSnapshotJson: playerTeam.map((m) => ({ id: m.id, pokemonId: m.pokemonId, name: m.name, level: m.level, role: m.combatRole })) as unknown as Prisma.InputJsonValue,
           replayJson: admin ? Prisma.DbNull : (JSON.parse(JSON.stringify(payload)) as Prisma.InputJsonValue),
-          summaryJson: { win: outcome.win, rounds: outcome.rounds, perSlot: outcome.perSlot, fallen: fallenNames, scale: event.damageScale } as unknown as Prisma.InputJsonValue,
+          summaryJson: { win: outcome.win, rounds: outcome.rounds, perSlot: outcome.perSlot, fallen: fallenNames, scale: event.damageScale, comboPct: combo.bonusPct } as unknown as Prisma.InputJsonValue,
         },
       });
       if (!admin) {
@@ -355,20 +386,20 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
     if (!applied.eventDefeated) await openNextLeaderWindow(event.id, now).catch(() => undefined);
     await grantLeaderRewards(leaderRow.id).catch((error) => console.error("[JohtoRaid] Falha ao entregar prêmios do líder.", error));
   }
-  if (!admin && (await isJohtoRaidVisibleToPlayers().catch(() => false))) await announceProgress(def, player.displayName, applied.koSlots, applied.leaderDefeated, applied.eventDefeated, leaderRow.id).catch(() => undefined);
+  if (!admin && (await isJohtoRaidVisibleToPlayers().catch(() => false))) await announceProgress(def, player.displayName, applied.koSlots, applied.leaderDefeated, applied.eventDefeated, leaderRow.id, event.id).catch(() => undefined);
 
   const leaderName = def.name;
   return {
     ok: true,
     message: applied.eventDefeated ? "OS LÍDERES DE JOHTO CAÍRAM! O servidor venceu!" : applied.leaderDefeated ? `${leaderName} foi derrotado!` : outcome.win ? `Vitória contra o time de ${leaderName}!` : `Ataque registrado contra ${leaderName}.`,
-    win: outcome.win, damage: applied.total, rounds: outcome.rounds, leaderName, leaderKey: def.key, perSlot: outcome.perSlot, fallenMascots: fallenNames,
+    win: outcome.win, damage: applied.total, rounds: outcome.rounds, leaderName, leaderKey: def.key, comboPct: combo.bonusPct, perSlot: outcome.perSlot, fallenMascots: fallenNames, fallenIds: outcome.playerFallenIds,
     koSlots: applied.koSlots.map((k) => k.slot), cooldownUntil: new Date(now.getTime() + cooldownMs).toISOString(),
     leaderDefeated: applied.leaderDefeated, eventDefeated: applied.eventDefeated, battle: payload,
   };
 }
 
 /** Avisos do Professor Enguiça (faixa do topo) a cada mascote do líder derrubado e a cada líder vencido. */
-async function announceProgress(def: JohtoLeaderDef, killer: string, koSlots: Array<{ slot: number; pokemonId: number }>, leaderDefeated: boolean, eventDefeated: boolean, leaderId: string) {
+async function announceProgress(def: JohtoLeaderDef, killer: string, koSlots: Array<{ slot: number; pokemonId: number }>, leaderDefeated: boolean, eventDefeated: boolean, leaderId: string, eventId: string) {
   const alive = await prisma.johtoRaidLeaderMascot.count({ where: { leaderId, hpCurrent: { gt: 0 } } });
   for (const ko of koSlots) {
     await publishLeagueTicker({
@@ -377,11 +408,15 @@ async function announceProgress(def: JohtoLeaderDef, killer: string, koSlots: Ar
     });
   }
   if (leaderDefeated) {
+    const top = await prisma.johtoRaidLeaderStat.findMany({ where: { leaderId, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { attackCount: "desc" }], take: 3, select: { damage: true, player: { select: { displayName: true } } } });
+    const podium = top.map((t, i) => `${["🥇", "🥈", "🥉"][i]} ${t.player.displayName} (${t.damage.toLocaleString("pt-BR")})`).join(" · ");
+    const next = eventDefeated ? null : await prisma.johtoRaidLeader.findFirst({ where: { eventId, defeatedAt: null, escapedAt: null, startedAt: { not: null } }, orderBy: { position: "asc" }, select: { key: true } });
+    const nextName = next ? getJohtoLeader(next.key)?.name : null;
     await publishLeagueTicker({
       type: "JOHTO_RAID_LEADER", href: HREF, priority: 18, ttlHours: 36, eventKey: `johto-leader:${leaderId}`,
       message: eventDefeated
-        ? `👨‍🏫 Professor Enguiça: INCRÍVEL! ${killer} deu o golpe final e os oito Líderes de Johto caíram! Confiram os prêmios!`
-        : `👨‍🏫 Professor Enguiça: ${def.name} caiu! ${killer} deu o golpe final. Resgatem o mascote de recompensa e enfrentem o próximo líder!`,
+        ? `👨‍🏫 Professor Enguiça: INCRÍVEL! ${killer} deu o golpe final e os oito Líderes de Johto caíram! Pódio do último líder: ${podium}. Prêmios entregues!`
+        : `👨‍🏫 Professor Enguiça: ${def.name} caiu! Golpe final de ${killer}. Pódio: ${podium}. Prêmios entregues — escolham o mascote na página!${nextName ? ` ${nextName} já é o próximo desafio!` : ""}`,
     });
   }
 }
@@ -483,13 +518,13 @@ export async function getJohtoReplay(attemptId: string): Promise<JohtoBattlePayl
 
 export type JohtoTestSummary = {
   runs: number; leaderName: string; leaderKey: string; winRate: number; avgRounds: number; avgBattleDamage: number; avgGlobalDamage: number;
-  avgLeaderFallen: number; avgPlayerFallen: number; attacksToDefeatLeader: number | null; damageScale: number;
+  avgLeaderFallen: number; avgPlayerFallen: number; attacksToDefeatLeader: number | null; damageScale: number; comboPct: number;
   perSlot: Array<{ slot: number; name: string; avgBattleDamage: number; avgGlobalDamage: number; fellRate: number; globalHpMax: number }>;
   battle: JohtoBattlePayload;
 };
 
 /** Simula N lutas do time do admin contra um líder, sem gravar nada: taxa de vitória, dano convertido e ataques estimados para derrubar o líder. */
-export async function simulateJohtoTest(userId: string, mascotIds: string[], roles: Record<string, string>, leaderKey: string, runs: number): Promise<{ ok: false; message: string } | { ok: true; summary: JohtoTestSummary }> {
+export async function simulateJohtoTest(userId: string, mascotIds: string[], roles: Record<string, string>, leaderKey: string, runs: number, comboStacks = 0): Promise<{ ok: false; message: string } | { ok: true; summary: JohtoTestSummary }> {
   const def = getJohtoLeader(leaderKey);
   if (!def) return { ok: false, message: "Líder desconhecido." };
   const player = await prisma.player.findUnique({ where: { userId }, select: { id: true, displayName: true } });
@@ -505,7 +540,7 @@ export async function simulateJohtoTest(userId: string, mascotIds: string[], rol
   mascots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const team = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, roles[m.id]));
   const total = Math.max(1, Math.min(50, Math.floor(runs) || 1));
-  const all = Array.from({ length: total }, () => runJohtoBattle(team, def, position, def.roster.map((_, slot) => slot), scale));
+  const all = Array.from({ length: total }, () => runJohtoBattle(team, def, position, def.roster.map((_, slot) => slot), scale, comboBonusPct(comboStacks)));
   const avg = (pick: (o: JohtoBattleOutcome) => number) => all.reduce((sum, o) => sum + pick(o), 0) / total;
   const avgGlobal = avg((o) => o.totalGlobalDamage);
   const hpMax = (event ? (await prisma.johtoRaidLeader.findFirst({ where: { eventId: event.id, key: leaderKey }, select: { hpMax: true } }))?.hpMax : null) ?? JOHTO_LEADER_HP;
@@ -515,7 +550,7 @@ export async function simulateJohtoTest(userId: string, mascotIds: string[], rol
       runs: total, leaderName: def.name, leaderKey, winRate: all.filter((o) => o.win).length / total, avgRounds: avg((o) => o.rounds),
       avgBattleDamage: avg((o) => o.perSlot.reduce((sum, p) => sum + p.battleDamage, 0)), avgGlobalDamage: avgGlobal,
       avgLeaderFallen: avg((o) => o.perSlot.filter((p) => p.fellInBattle).length), avgPlayerFallen: avg((o) => o.playerFallenIds.length),
-      attacksToDefeatLeader: avgGlobal > 0 ? Math.ceil(hpMax / avgGlobal) : null, damageScale: scale,
+      attacksToDefeatLeader: avgGlobal > 0 ? Math.ceil(hpMax / avgGlobal) : null, damageScale: scale, comboPct: comboBonusPct(comboStacks),
       perSlot: def.roster.map((entry, slot) => {
         const rows = all.map((o) => o.perSlot.find((p) => p.slot === slot)!);
         return {

@@ -22,7 +22,7 @@ const neutral = `${btn} border-slate-600 bg-slate-800 text-slate-100 hover:bg-sl
 const danger = `${btn} border-red-500/50 bg-red-500/10 text-red-200 hover:bg-red-500/20`;
 const good = `${btn} border-emerald-500/50 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20`;
 const input = "mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white";
-const STATUS_LABEL: Record<string, string> = { DEFEATED: "derrotado", ESCAPED: "fugiu", CURRENT: "em andamento", WAITING: "aguardando" };
+const STATUS_LABEL: Record<string, string> = { DEFEATED: "derrotado", ESCAPED: "venceu pelo prazo", CURRENT: "em andamento", WAITING: "aguardando" };
 
 /** Controles do evento para administradores: liberar ao público, abrir/pausar ataques, debug e laboratório de testes de combate. */
 export function JohtoAdminControls({ summary, testMascots = [] }: { summary: JohtoAdminSummary; testMascots?: JohtoTestMascot[] }) {
@@ -32,11 +32,12 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
   const [scale, setScale] = useState(String(summary.damageScale));
   const [days, setDays] = useState(String(summary.leaderDays));
   const [damage, setDamage] = useState("1000000");
-  const [hp, setHp] = useState("100000000");
+  const [hp, setHp] = useState("35000000");
   const [extend, setExtend] = useState("24");
   const [rewardLeader, setRewardLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [testLeader, setTestLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [runs, setRuns] = useState("20");
+  const [combo, setCombo] = useState("0");
   const [prizes, setPrizes] = useState<Prize[] | null>(null);
   const [showTest, setShowTest] = useState(false);
 
@@ -170,6 +171,11 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
                     </select>
                   </label>
                   <label className="text-[10px] text-slate-400">Simulações (1–50)<input value={runs} onChange={(e) => setRuns(e.target.value.replace(/\D/g, ""))} className={`${input} w-20`} /></label>
+                  <label className="text-[10px] text-slate-400">Combo simulado
+                    <select value={combo} onChange={(e) => setCombo(e.target.value)} className={`${input} w-28`}>
+                      {[0, 1, 2, 3, 4].map((n) => <option key={n} value={n}>{n === 0 ? "sem combo" : `+${n * 2}% (${n} treinador${n > 1 ? "es" : ""})`}</option>)}
+                    </select>
+                  </label>
                 </div>
                 {testMascots.length < 6 ? (
                   <p className="text-xs text-amber-200">Sua conta precisa de pelo menos 6 mascotes livres para testar.</p>
@@ -178,7 +184,7 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
                     mascots={testMascots}
                     attackAction={johtoTestBattleAction}
                     submitLabel="Simular combate"
-                    extraFields={{ leaderKey: testLeader, runs }}
+                    extraFields={{ leaderKey: testLeader, runs, combo }}
                     renderResult={(result, close) => <JohtoBattleResultView result={result} onClose={close} />}
                   />
                 )}

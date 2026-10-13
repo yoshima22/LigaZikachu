@@ -8,7 +8,7 @@ import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, t
 import { OrderRaidTeamSelector, type RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
 import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoBattleResultView } from "./_components/johto-battle-view";
-import { JohtoReplayList, JohtoRewardPicker } from "./_components/johto-extras";
+import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
 import { attackJohtoRaidAction, healJohtoMascotSusAction } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -24,15 +24,6 @@ const fmt = (n: number) => n.toLocaleString("pt-BR");
 const pctOf = (cur: number, max: number) => (max > 0 ? Math.max(0, Math.min(100, (cur / max) * 100)) : 0);
 const when = (iso: string) => new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" });
 
-function timeLeft(iso: string | null) {
-  if (!iso) return null;
-  const ms = new Date(iso).getTime() - Date.now();
-  if (ms <= 0) return "prazo encerrado";
-  const days = Math.floor(ms / 86_400_000);
-  const hours = Math.floor((ms % 86_400_000) / 3_600_000);
-  return days > 0 ? `${days}d ${hours}h restantes` : `${hours}h ${Math.floor((ms % 3_600_000) / 60_000)}min restantes`;
-}
-
 function HpBar({ current, max, big = false }: { current: number; max: number; big?: boolean }) {
   return (
     <div className={`overflow-hidden rounded-full bg-black/50 ring-1 ring-white/10 ${big ? "h-5" : "h-2"}`}>
@@ -45,7 +36,7 @@ function TrainerImage({ leader, size = 80, dim = false }: { leader: Pick<JohtoLe
   return <img src={leader.image} alt={leader.name} width={size} height={size} className={`mx-auto ${dim ? "opacity-40 grayscale" : ""}`} style={{ imageRendering: "pixelated", width: size, height: size }} />;
 }
 
-function LeaderCard({ leader }: { leader: JohtoLeaderState }) {
+function LeaderCard({ leader, days }: { leader: JohtoLeaderState; days: number }) {
   const type = TYPE_STYLE[leader.type];
   const gone = leader.status === "DEFEATED" || leader.status === "ESCAPED";
   const border = leader.status === "CURRENT" ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 shadow-[0_0_24px_rgba(255,203,5,0.15)]" : leader.status === "DEFEATED" ? "border-emerald-500/30 bg-emerald-500/5" : leader.status === "ESCAPED" ? "border-red-500/25 bg-red-500/5" : "border-slate-800 bg-slate-900/50";
@@ -59,9 +50,12 @@ function LeaderCard({ leader }: { leader: JohtoLeaderState }) {
       <div className="mt-2"><HpBar current={leader.hpCurrent} max={leader.hpMax} /></div>
       <p className="mt-1 text-[10px] font-semibold text-slate-300">
         {leader.status === "DEFEATED" ? `Derrotado${leader.finalBlowName ? ` · golpe final de ${leader.finalBlowName}` : ""}`
-          : leader.status === "ESCAPED" ? "Fugiu (prazo esgotado)"
-            : leader.status === "CURRENT" ? timeLeft(leader.expiresAt) : "Aguardando"}
+          : leader.status === "ESCAPED" ? "O líder venceu (prazo esgotado)"
+            : leader.status === "CURRENT" && leader.expiresAt ? <Countdown to={leader.expiresAt} prefix="⏳ " doneText="Tempo esgotado" />
+              : `Aguardando · ${days} dia${days > 1 ? "s" : ""} de prazo`}
       </p>
+      {leader.status === "WAITING" && <p className="text-[9px] text-slate-500">começa quando o anterior cair ou vencer</p>}
+      <LeaderTeamButton leader={leader} compact />
     </div>
   );
 }
@@ -108,7 +102,7 @@ export default async function JohtoRaidPage() {
       <header className="relative overflow-hidden rounded-3xl border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_top,rgba(255,203,5,0.18),transparent_50%),linear-gradient(180deg,#1a1233,#050816)] p-6">
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FFCB05]">Evento especial · Semana 8</p>
         <h1 className="mt-1 flex items-center gap-2 text-3xl font-black text-white"><Swords className="text-[#FFCB05]" size={28} /> Líderes de Johto</h1>
-        <p className="mt-2 max-w-3xl text-sm text-slate-300">Os oito líderes de ginásio de Johto enfrentam os treinadores com o time completo de 6 mascotes. Todo o dano que vocês causam é somado na vida do líder: derrubem os mascotes um a um e o líder cai. Cada líder fica disponível por até {event.leaderDays} dias — se ninguém o vencer a tempo, ele foge. Quem lutar ganha ZC e escolhe um mascote do próprio líder!</p>
+        <p className="mt-2 max-w-3xl text-sm text-slate-300">Os oito líderes de ginásio de Johto enfrentam os treinadores com o time completo de 6 mascotes. Todo o dano que vocês causam é somado na vida do líder: derrubem os mascotes um a um e o líder cai. Cada líder fica disponível por até {event.leaderDays} dias — se ninguém o vencer a tempo, ele vence. Quem lutar ganha ZC e escolhe um mascote do próprio líder!</p>
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-[11px] text-slate-300">
             <span>Vida total dos líderes</span>
@@ -117,14 +111,14 @@ export default async function JohtoRaidPage() {
           <HpBar current={state.totalHpCurrent} max={state.totalHpMax} big />
           <div className="mt-2 flex flex-wrap gap-3 text-[11px] text-slate-400">
             <span>👥 {state.participants} treinadores</span><span>⚔️ {fmt(state.totalAttacks)} ataques</span>
-            {current && <span>⏳ {current.name}: {timeLeft(current.expiresAt)}</span>}
+            {current?.expiresAt && <span>⏳ {current.name}: <Countdown to={current.expiresAt} doneText="tempo esgotado" /></span>}
             {!event.active && !event.defeatedAt && <span className="font-bold text-amber-300">Ataques fechados no momento</span>}
           </div>
         </div>
       </header>
 
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-        {state.leaders.map((leader) => <LeaderCard key={leader.id} leader={leader} />)}
+        {state.leaders.map((leader) => <LeaderCard key={leader.id} leader={leader} days={event.leaderDays} />)}
       </section>
 
       {event.defeatedAt && (
@@ -137,6 +131,25 @@ export default async function JohtoRaidPage() {
 
       <JohtoRewardPicker rewards={pendingRewards} />
 
+      {injured.length > 0 && (
+        <section id="sus" className="rounded-2xl border border-orange-500/25 bg-slate-900/60 p-4">
+          <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-white"><AlertTriangle size={16} className="text-orange-300" /> Atendimento SUS</h2>
+          <div className="space-y-2">
+            {injured.map((mascot) => (
+              <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-orange-500/20 bg-orange-500/10 p-2.5">
+                <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
+                <p className="min-w-0 flex-1 truncate text-sm font-bold text-orange-100">{mascot.nickname ?? getPokemonName(mascot.pokemonId)} <span className="text-[10px] font-normal text-orange-200/70">Nv.{mascot.level}</span></p>
+                <form action={healJohtoMascotSusAction}>
+                  <input type="hidden" name="mascotId" value={mascot.id} />
+                  <button className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-[10px] font-black text-slate-950 hover:brightness-110">Atendimento SUS · 10 ZC</button>
+                </form>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+
+
       {current && (
         <section className="grid gap-4 lg:grid-cols-[1fr_1.4fr]">
           <div className="rounded-3xl border border-[#FFCB05]/30 bg-slate-900/70 p-5 text-center">
@@ -148,7 +161,8 @@ export default async function JohtoRaidPage() {
             <p className="mt-3 text-xs italic text-slate-400">“{current.quote}”</p>
             <div className="mt-4"><HpBar current={current.hpCurrent} max={current.hpMax} big /></div>
             <p className="mt-1 text-sm font-bold text-white">{fmt(current.hpCurrent)} / {fmt(current.hpMax)} HP</p>
-            <p className="text-[11px] text-slate-500">{timeLeft(current.expiresAt)}</p>
+            <p className="text-[11px] text-slate-400">{current.expiresAt && <Countdown to={current.expiresAt} prefix="⏳ " doneText="Tempo esgotado" />}</p>
+            <div className="mt-2"><LeaderTeamButton leader={current} /></div>
             <div className="mt-4 grid grid-cols-3 gap-2">
               {current.mascots.map((m) => (
                 <div key={m.slot} className={`rounded-xl border p-2 ${m.defeated ? "border-red-500/20 bg-red-500/5" : "border-slate-800 bg-slate-950/50"}`}>
@@ -166,6 +180,7 @@ export default async function JohtoRaidPage() {
             {canAttack ? (
               <>
                 <p className="mb-3 text-xs text-slate-500">6 mascotes livres contra o time de 6 do líder. Espera de {event.cooldownMinutes} min entre ataques.</p>
+                <div className="mb-3"><ComboMeter {...state.combo} /></div>
                 <OrderRaidTeamSelector
                   mascots={freeMascots}
                   labels={LABELS}
@@ -179,24 +194,6 @@ export default async function JohtoRaidPage() {
                 )}
               </>
             ) : <p className="rounded-xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">Os ataques estão fechados no momento.</p>}
-          </div>
-        </section>
-      )}
-
-      {injured.length > 0 && (
-        <section className="rounded-2xl border border-orange-500/25 bg-slate-900/60 p-4">
-          <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-white"><AlertTriangle size={16} className="text-orange-300" /> Atendimento SUS</h2>
-          <div className="space-y-2">
-            {injured.map((mascot) => (
-              <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-orange-500/20 bg-orange-500/10 p-2.5">
-                <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                <p className="min-w-0 flex-1 truncate text-sm font-bold text-orange-100">{mascot.nickname ?? getPokemonName(mascot.pokemonId)} <span className="text-[10px] font-normal text-orange-200/70">Nv.{mascot.level}</span></p>
-                <form action={healJohtoMascotSusAction}>
-                  <input type="hidden" name="mascotId" value={mascot.id} />
-                  <button className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-[10px] font-black text-slate-950 hover:brightness-110">Atendimento SUS · 10 ZC</button>
-                </form>
-              </div>
-            ))}
           </div>
         </section>
       )}
@@ -227,7 +224,7 @@ export default async function JohtoRaidPage() {
               <li><b className="text-slate-200">🥉 3º em dano:</b> {fmt(rewards.top[2].zc)} ZC + mascote no nível {rewards.top[2].level}.</li>
               <li>Quem fica no pódio recebe o prêmio do pódio no lugar do de participante.</li>
               <li><b className="text-slate-200">🎯 Golpe final:</b> o bônus de participante + um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade.</li>
-              <li>Se um líder não cair no prazo, ele foge e não há recompensa por ele.</li>
+              <li>Se um líder não cair no prazo, ele vence e não há recompensa por ele.</li>
             </ul>
           </div>
         </div>

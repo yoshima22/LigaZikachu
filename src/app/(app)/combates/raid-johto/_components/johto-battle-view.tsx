@@ -4,6 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { LeagueBattleReplayModal, type TurnLog } from "../../liga-semanal/_components/league-battle-replay";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { healJohtoMascotSusAction } from "../actions";
 import type { JohtoBattlePayload, JohtoTestSummary } from "@/lib/johto-raid";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("pt-BR");
@@ -57,7 +58,7 @@ function SlotTable({ rows }: { rows: PerSlot }) {
 
 type AttackView = {
   message?: string; win?: boolean; damage?: number; rounds?: number; leaderName?: string; perSlot?: PerSlot; fallenMascots?: string[];
-  koSlots?: number[]; leaderDefeated?: boolean; eventDefeated?: boolean; battle?: JohtoBattlePayload; test?: JohtoTestSummary;
+  koSlots?: number[]; leaderDefeated?: boolean; eventDefeated?: boolean; battle?: JohtoBattlePayload; test?: JohtoTestSummary; fallenIds?: string[]; comboPct?: number;
 };
 
 /** Resultado de uma investida (real) ou de uma simulação de teste (admin): resumo + botão para assistir ao replay. */
@@ -70,7 +71,7 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
   const won = test ? test.winRate >= 0.5 : view.win;
   return (
     <>
-      <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3">
+      {!replay && <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 p-3">
         <div className="max-h-[92vh] w-full max-w-2xl overflow-y-auto rounded-3xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl">
           <div className="flex items-start justify-between gap-3">
             <div>
@@ -92,6 +93,7 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
                 <Stat label="Dano no líder" value={fmt(test.avgGlobalDamage)} hint={`×${test.damageScale} convertido`} />
                 <Stat label="Mascotes do líder caídos" value={test.avgLeaderFallen.toFixed(1)} hint="de 6 (por luta)" />
                 <Stat label="Seus mascotes caídos" value={test.avgPlayerFallen.toFixed(1)} hint="feridos na luta" />
+                <Stat label="Combo simulado" value={`+${test.comboPct}%`} hint="em todos os status" />
                 <Stat label="Ataques p/ derrubar" value={test.attacksToDefeatLeader ? fmt(test.attacksToDefeatLeader) : "—"} hint="só você, em média" />
               </div>
               <p className="mb-1 mt-4 text-[10px] font-black uppercase tracking-wider text-slate-400">Por mascote do líder (média · dano convertido)</p>
@@ -113,9 +115,24 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
                 <Stat label="Rodadas" value={String(view.rounds ?? 0)} />
                 <Stat label="Caíram do líder" value={String(view.koSlots?.length ?? 0)} hint="derrubados de vez" />
                 <Stat label="Seus feridos" value={String(view.fallenMascots?.length ?? 0)} hint={view.fallenMascots?.length ? "Atendimento SUS" : undefined} />
+                <Stat label="Combo" value={`+${view.comboPct ?? 0}%`} hint="bônus de grupo" />
               </div>
               {view.perSlot && <div className="mt-4"><p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Dano por mascote do líder (em combate · convertido)</p><SlotTable rows={view.perSlot} /></div>}
-              {view.fallenMascots && view.fallenMascots.length > 0 && <p className="mt-3 text-[11px] text-orange-200">Feridos: {view.fallenMascots.join(", ")}.</p>}
+              {view.fallenIds && view.fallenIds.length > 0 && (
+                <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-3">
+                  <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-orange-200">Mascotes feridos — Atendimento SUS (10 ZC cada)</p>
+                  <div className="space-y-1.5">
+                    {view.fallenIds.map((id, index) => (
+                      <form key={id} action={healJohtoMascotSusAction} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/70 px-2 py-1.5 text-xs">
+                        <span className="min-w-0 truncate font-bold text-orange-100">{view.fallenMascots?.[index] ?? "Mascote"}</span>
+                        <input type="hidden" name="mascotId" value={id} />
+                        <button className="rounded-lg bg-[#FFCB05] px-3 py-1 text-[10px] font-black text-slate-950 hover:brightness-110">Curar no SUS</button>
+                      </form>
+                    ))}
+                  </div>
+                  <p className="mt-2 text-[10px] text-slate-500">Eles continuam feridos nas próximas lutas até passarem pelo SUS.</p>
+                </div>
+              )}
             </>
           )}
 
@@ -124,7 +141,7 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
             <button onClick={onClose} className="rounded-xl border border-slate-700 px-4 py-2 text-xs font-bold text-slate-200 hover:bg-slate-800">Fechar</button>
           </div>
         </div>
-      </div>
+      </div>}
       {replay && <JohtoReplay battle={battle} onClose={() => setReplay(false)} />}
     </>
   );

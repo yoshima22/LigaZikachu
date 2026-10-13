@@ -1,15 +1,108 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useEffect, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
-import type { JohtoBattlePayload, JohtoPendingReward, JohtoRecentFight } from "@/lib/johto-raid";
+import { COMBAT_ROLE_LABELS } from "@/lib/combat-roles";
+import { PERSONALITY_LABEL } from "@/lib/mascot-data";
+import type { JohtoBattlePayload, JohtoLeaderState, JohtoPendingReward, JohtoRecentFight } from "@/lib/johto-raid";
 import { claimJohtoMascotAction, getJohtoReplayAction } from "../actions";
 import { JohtoReplay } from "./johto-battle-view";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
+
+function formatRemaining(ms: number) {
+  if (ms <= 0) return "encerrado";
+  const total = Math.floor(ms / 1000);
+  const d = Math.floor(total / 86400), h = Math.floor((total % 86400) / 3600), m = Math.floor((total % 3600) / 60), sec = total % 60;
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return d > 0 ? `${d}d ${pad(h)}h ${pad(m)}m ${pad(sec)}s` : `${pad(h)}h ${pad(m)}m ${pad(sec)}s`;
+}
+
+/** Contagem regressiva ao vivo até uma data (prazo do líder, fim do combo...). */
+export function Countdown({ to, prefix = "", doneText = "encerrado" }: { to: string; prefix?: string; doneText?: string }) {
+  const [now, setNow] = useState<number | null>(null);
+  useEffect(() => {
+    setNow(Date.now());
+    const id = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+  if (now === null) return <span suppressHydrationWarning>{prefix}…</span>;
+  const left = new Date(to).getTime() - now;
+  return <span className="tabular-nums">{left <= 0 ? doneText : `${prefix}${formatRemaining(left)}`}</span>;
+}
+
+/** Combo de ataque em grupo: +2% de status por treinador que atacou nos últimos 5 min (máx. +8%). */
+export function ComboMeter({ stacks, bonusPct, nextDropAt }: { stacks: number; bonusPct: number; nextDropAt: string | null }) {
+  return (
+    <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3">
+      <div className="flex items-center justify-between gap-2">
+        <p className="text-[10px] font-black uppercase tracking-wider text-fuchsia-200">🔥 Combo de ataque em grupo</p>
+        <p className="text-sm font-black text-white">{bonusPct > 0 ? `+${bonusPct}% em todos os status` : "sem bônus"}</p>
+      </div>
+      <div className="mt-2 grid grid-cols-4 gap-1.5">
+        {[1, 2, 3, 4].map((n) => (
+          <div key={n} className={`rounded-lg border py-1 text-center text-[10px] font-black ${stacks >= n ? "border-fuchsia-400 bg-fuchsia-500/25 text-white" : "border-slate-800 bg-slate-950/60 text-slate-500"}`}>+{n * 2}%</div>
+        ))}
+      </div>
+      <p className="mt-1.5 text-[10px] text-slate-400">
+        {stacks > 0 && nextDropAt ? <>Cada treinador que atacou nos últimos 5 min soma +2%. O próximo degrau cai em <b className="text-fuchsia-200"><Countdown to={nextDropAt} /></b>.</> : "Ataque junto com outros treinadores (até 5 min de diferença) para ganhar +2% por treinador, até +8%. Sem ataques por 5 min, o bônus zera."}
+      </p>
+    </div>
+  );
+}
 const TIER_LABEL: Record<string, string> = { TOP1: "🥇 1º em dano", TOP2: "🥈 2º em dano", TOP3: "🥉 3º em dano", PARTICIPANT: "Participação", FINAL_BLOW: "🎯 Golpe final" };
+
+const TYPE_PT: Record<string, string> = {
+  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico", grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno", ground: "Terra",
+  flying: "Voador", psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio", steel: "Aço", fairy: "Fada",
+};
+
+/** Botão "Ver time": abre a UI com os 6 mascotes do líder (espécie, tipos, postura, personalidade e vida atual). */
+export function LeaderTeamButton({ leader, compact = false }: { leader: Pick<JohtoLeaderState, "name" | "image" | "city" | "badge" | "mascots" | "hpCurrent" | "hpMax">; compact?: boolean }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={`rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 ${compact ? "mt-1.5 w-full px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs"}`}>
+        👥 Ver time
+      </button>
+      {open && (
+        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3" onClick={() => setOpen(false)}>
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <div className="flex items-center gap-3">
+              <img src={leader.image} alt="" className="h-16 w-16" style={{ imageRendering: "pixelated" }} />
+              <div className="min-w-0 flex-1">
+                <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FFCB05]">Time de {leader.name}</p>
+                <h3 className="truncate text-xl font-black text-white">{leader.city} · {leader.badge}</h3>
+                <p className="text-[11px] text-slate-400">Vida do líder: {fmt(leader.hpCurrent)} / {fmt(leader.hpMax)} (cada mascote tem 1/6)</p>
+              </div>
+              <button onClick={() => setOpen(false)} className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-300 hover:text-white">Fechar</button>
+            </div>
+            <div className="mt-4 grid gap-2 sm:grid-cols-2">
+              {leader.mascots.map((m) => (
+                <div key={m.slot} className={`flex items-center gap-3 rounded-2xl border p-3 ${m.defeated ? "border-red-500/25 bg-red-500/5" : "border-slate-800 bg-slate-900/60"}`}>
+                  <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className={`h-16 w-16 shrink-0 object-contain ${m.defeated ? "opacity-30 grayscale" : ""}`} style={{ imageRendering: "pixelated" }} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-sm font-black text-white">{m.name}</p>
+                    <div className="mt-0.5 flex flex-wrap gap-1 text-[9px] font-bold">
+                      {m.types.map((t) => <span key={t} className="rounded-full bg-slate-800 px-1.5 py-0.5 text-slate-200">{TYPE_PT[t] ?? t}</span>)}
+                      <span className="rounded-full bg-[#FFCB05]/15 px-1.5 py-0.5 text-[#FFCB05]">{COMBAT_ROLE_LABELS[m.role as keyof typeof COMBAT_ROLE_LABELS] ?? m.role}</span>
+                      {m.personality && <span className="rounded-full bg-fuchsia-500/15 px-1.5 py-0.5 text-fuchsia-200">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
+                    </div>
+                    <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/50"><div className="h-full rounded-full bg-gradient-to-r from-red-600 via-orange-400 to-[#FFCB05]" style={{ width: `${m.hpMax > 0 ? Math.max(0, (m.hpCurrent / m.hpMax) * 100) : 0}%` }} /></div>
+                    <p className="mt-0.5 text-[10px] text-slate-400">{m.defeated ? `Derrotado${m.defeatedByName ? ` por ${m.defeatedByName}` : ""}` : `${fmt(m.hpCurrent)} / ${fmt(m.hpMax)} HP`}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="mt-3 text-[10px] text-slate-500">Na luta, o líder usa só os mascotes ainda de pé, com atributos equilibrados com o seu time. Os já derrotados ficam fora das próximas lutas.</p>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
 
 /** Últimos 20 combates do servidor, com replay sob demanda. */
 export function JohtoReplayList({ fights }: { fights: JohtoRecentFight[] }) {
