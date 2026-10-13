@@ -111,6 +111,16 @@ export default async function JohtoRaidPage() {
       <header className="relative isolate overflow-hidden rounded-3xl border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_top,rgba(255,203,5,0.14),transparent_50%),#1a1233] px-5 py-6 sm:p-6">
         <div
           aria-hidden="true"
+          className="pointer-events-none absolute inset-0"
+          style={{
+            backgroundImage: "linear-gradient(90deg, rgba(26,18,51,.88) 0%, rgba(26,18,51,.78) 52%, rgba(26,18,51,.7) 100%), url('https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/events/johto/leaders-banner.png')",
+            backgroundPosition: "center",
+            backgroundSize: "cover",
+            backgroundRepeat: "no-repeat",
+          }}
+        />
+        <div
+          aria-hidden="true"
           className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[72%]"
           style={{
             backgroundImage: "linear-gradient(90deg, #1a1233 0%, rgba(26,18,51,.94) 32%, rgba(26,18,51,.68) 68%, rgba(26,18,51,.38) 100%), url('https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/events/johto/leaders-banner.png')",
