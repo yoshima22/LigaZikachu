@@ -582,7 +582,7 @@ export async function syncOrderRaidBossThresholds(raidEventId?: string) {
   });
 }
 
-function mascotRaidPower(mascot: {
+export function mascotRaidPower(mascot: {
   level: number;
   statForce: number;
   statAgility: number;

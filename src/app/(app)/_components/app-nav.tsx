@@ -121,6 +121,14 @@ const combatLinks = [
     eventOnly: true,
   },
   {
+    href: "/combates/raid-johto",
+    label: "Líderes de Johto",
+    icon: Swords,
+    adminOnly: false,
+    johtoOnly: true,
+    beta: true,
+  },
+  {
     href: "/combates/torre-dos-rebeldes",
     label: "Torre dos Rebeldes",
     icon: Swords,
@@ -246,6 +254,7 @@ type NavLink = {
   platformAdminOnly?: boolean; // só ADMIN/SUPER_ADMIN (exclui GM) — ex.: Torre dos Rebeldes
   tutorialId?: string;
   eventOnly?: boolean;
+  johtoOnly?: boolean; // Raid de Johto: admin sempre; jogadores só quando liberada no painel
   livePvpOnly?: boolean;
   beta?: boolean;
   alpha?: boolean;
@@ -261,6 +270,7 @@ export function AppNav({
   unreadNews = 0,
   playerId,
   orderEventVisible = false,
+  johtoRaidVisible = false,
   livePvpVisible = false,
   zikaTvLive = false,
 }: {
@@ -272,6 +282,7 @@ export function AppNav({
   unreadNews?: number;
   playerId?: string;
   orderEventVisible?: boolean;
+  johtoRaidVisible?: boolean;
   livePvpVisible?: boolean;
   zikaTvLive?: boolean;
 }) {
@@ -515,6 +526,7 @@ export function AppNav({
             admin={admin}
             platformAdmin={platformAdmin}
             orderEventVisible={orderEventVisible}
+            johtoRaidVisible={johtoRaidVisible}
             livePvpVisible={livePvpVisible}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
@@ -626,6 +638,7 @@ export function AppNav({
               admin={admin}
               platformAdmin={platformAdmin}
               orderEventVisible={orderEventVisible}
+              johtoRaidVisible={johtoRaidVisible}
               livePvpVisible={livePvpVisible}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
@@ -704,6 +717,7 @@ function NavDropdown({
   admin,
   platformAdmin = false,
   orderEventVisible = false,
+  johtoRaidVisible = false,
   livePvpVisible = false,
   openMenu,
   setOpenMenu,
@@ -720,6 +734,7 @@ function NavDropdown({
   admin: boolean;
   platformAdmin?: boolean;
   orderEventVisible?: boolean;
+  johtoRaidVisible?: boolean;
   livePvpVisible?: boolean;
   openMenu: string | null;
   setOpenMenu: (v: string | null) => void;
@@ -734,6 +749,7 @@ function NavDropdown({
       (!link.adminOnly || admin) &&
       (!link.platformAdminOnly || platformAdmin) &&
       (!link.eventOnly || admin || orderEventVisible) &&
+      (!link.johtoOnly || johtoRaidVisible) &&
       (!link.livePvpOnly || admin || livePvpVisible),
   );
   if (visibleLinks.length === 0) return null;
@@ -839,6 +855,7 @@ function MobileNavGroup({
   admin,
   platformAdmin = false,
   orderEventVisible = false,
+  johtoRaidVisible = false,
   livePvpVisible = false,
   openMenu,
   setOpenMenu,
@@ -854,6 +871,7 @@ function MobileNavGroup({
   admin: boolean;
   platformAdmin?: boolean;
   orderEventVisible?: boolean;
+  johtoRaidVisible?: boolean;
   livePvpVisible?: boolean;
   openMenu: string | null;
   setOpenMenu: (v: string | null) => void;
@@ -869,6 +887,7 @@ function MobileNavGroup({
       (!link.adminOnly || admin) &&
       (!link.platformAdminOnly || platformAdmin) &&
       (!link.eventOnly || admin || orderEventVisible) &&
+      (!link.johtoOnly || johtoRaidVisible) &&
       (!link.livePvpOnly || admin || livePvpVisible),
   );
   if (visibleLinks.length === 0) return null;

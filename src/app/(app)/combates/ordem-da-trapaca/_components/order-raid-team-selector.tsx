@@ -25,6 +25,9 @@ type RaidMascot = {
 type RaidResult = Awaited<ReturnType<typeof attackOrderRaidBossAction>>;
 type SuccessfulRaidResult = Extract<RaidResult, { ok: true }>;
 type RecentRaidAttempt = { id: string; playerName: string; damage: number; createdAt: string };
+/** Textos do evento: por padrão, a Ordem da Trapaça. O mesmo seletor serve a outras raids. */
+export type RaidLabels = { foe: string; foeIn: string; subtitle: string; globalName: string; recentTitle: string };
+const ORDER_LABELS: RaidLabels = { foe: "a Ordem", foeIn: "na Ordem", subtitle: "Lider da Ordem", globalName: "da Ordem", recentTitle: "Últimos ataques contra a Ordem" };
 
 function nameOf(mascot: RaidMascot) {
   return mascot.nickname ?? getPokemonName(mascot.pokemonId);
@@ -38,7 +41,7 @@ function recommended(mascot: RaidMascot): CombatRole {
   return recommendCombatRole(mascot);
 }
 
-function RaidBattleModal({ result, onClose }: { result: SuccessfulRaidResult; onClose: () => void }) {
+function RaidBattleModal({ result, onClose, labels }: { result: SuccessfulRaidResult; onClose: () => void; labels: RaidLabels }) {
   const turns = Array.isArray(result.replay) ? result.replay : [];
   const [step, setStep] = useState(0);
   const [playing, setPlaying] = useState(true);
@@ -92,7 +95,7 @@ function RaidBattleModal({ result, onClose }: { result: SuccessfulRaidResult; on
           <button onClick={onClose} className="absolute right-4 top-4 rounded-full border border-white/15 bg-black/30 p-2 text-slate-200 hover:text-white">
             <X size={16} />
           </button>
-          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-purple-200">Confronto contra a Ordem</p>
+          <p className="text-[10px] font-black uppercase tracking-[0.25em] text-purple-200">Confronto contra {labels.foe}</p>
           <div className="mt-4 grid gap-5 lg:grid-cols-[1fr_1.3fr] lg:items-center">
             <div className="text-center">
               <img
@@ -102,7 +105,7 @@ function RaidBattleModal({ result, onClose }: { result: SuccessfulRaidResult; on
                 style={{ imageRendering: "pixelated" }}
               />
               <h2 className="mt-2 text-2xl font-black text-white">{result.boss.name}</h2>
-              <p className="text-xs text-purple-200">{result.boss.megaPhase ? "Forma intensificada" : "Lider da Ordem"}</p>
+              <p className="text-xs text-purple-200">{result.boss.megaPhase ? "Forma intensificada" : labels.subtitle}</p>
               <div className="mt-3 h-4 overflow-hidden rounded-full bg-black/50 ring-1 ring-purple-300/25">
                 <div className="h-full rounded-full bg-gradient-to-r from-red-600 via-orange-400 to-[#FFCB05]" style={{ width: `${bossHpPct}%` }} />
               </div>
@@ -140,12 +143,12 @@ function RaidBattleModal({ result, onClose }: { result: SuccessfulRaidResult; on
                       ? `${String(current.actor)} atingiu ${String(current.target)} causando ${Number(current.damage ?? 0).toLocaleString("pt-BR")} dano.`
                       : current.action === "KO"
                         ? `${String(current.actor)} caiu em combate.`
-                        : `${String(current.actor)} causou ${Number(current.damage ?? 0).toLocaleString("pt-BR")} dano na Ordem${current.crit ? " com um golpe critico" : ""}.`
+                        : `${String(current.actor)} causou ${Number(current.damage ?? 0).toLocaleString("pt-BR")} dano ${labels.foeIn}${current.crit ? " com um golpe critico" : ""}.`
                     : step >= turns.length ? "Replay concluido." : "A investida começou."}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-500">
                   {step >= turns.length
-                    ? "A equipe inteira foi retirada de combate. O dano causado ficou registrado na vida global da Ordem."
+                    ? `A equipe inteira foi retirada de combate. O dano causado ficou registrado na vida global ${labels.globalName}.`
                     : `Turno ${Math.min(step + 1, turns.length)}/${Math.max(1, turns.length)}`}
                 </p>
                 <div className="mt-3 flex gap-2">
@@ -178,7 +181,7 @@ function RaidBattleModal({ result, onClose }: { result: SuccessfulRaidResult; on
   );
 }
 
-export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = [] }: { mascots: RaidMascot[]; cooldownText?: string | null; recentAttempts?: RecentRaidAttempt[] }) {
+export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = [], attackAction = attackOrderRaidBossAction, labels = ORDER_LABELS }: { mascots: RaidMascot[]; cooldownText?: string | null; recentAttempts?: RecentRaidAttempt[]; attackAction?: (form: FormData) => Promise<RaidResult>; labels?: RaidLabels }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string[]>([]);
@@ -217,9 +220,9 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
         form.append("mascotId", id);
         form.append(`role:${id}`, roles[id] ?? "ATTACKER");
       }
-      const response = await attackOrderRaidBossAction(form);
+      const response = await attackAction(form);
       if (!response?.ok) {
-        toast.error(response?.message ?? "Nao foi possivel atacar a Ordem.");
+        toast.error(response?.message ?? `Nao foi possivel atacar ${labels.foe}.`);
         return;
       }
       setResult(response);
@@ -298,7 +301,7 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
 
         {recentAttempts.length > 0 && (
           <div className="rounded-2xl border border-slate-800 bg-slate-950/65 p-3">
-            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-purple-200">Últimos ataques contra a Ordem</p>
+            <p className="mb-2 text-[10px] font-black uppercase tracking-[0.2em] text-purple-200">{labels.recentTitle}</p>
             <div className="space-y-1.5">
               {recentAttempts.map((attempt) => (
                 <div key={attempt.id} className="flex items-center justify-between gap-3 rounded-lg border border-slate-800 bg-slate-900/50 px-3 py-2 text-xs">
@@ -310,7 +313,7 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
           </div>
         )}
       </div>
-      {result && <RaidBattleModal result={result} onClose={() => { setResult(null); router.refresh(); }} />}
+      {result && <RaidBattleModal labels={labels} result={result} onClose={() => { setResult(null); router.refresh(); }} />}
     </>
   );
 }

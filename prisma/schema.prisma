@@ -347,6 +347,8 @@ model Player {
   newsRewardClaims            NewsRewardClaim[]
   raidBattleAttempts          RaidBattleAttempt[]
   raidDamageRankings          RaidDamageRanking[]
+  johtoRaidAttempts           JohtoRaidAttempt[]
+  johtoRaidRankings           JohtoRaidRanking[]
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
   notifications               PlayerNotification[]
   mascotInteractionJobs       MascotInteractionJob[]
@@ -4990,4 +4992,78 @@ model RedeemCodeRedemption {
   @@unique([codeId, playerId])
   @@index([playerId])
   @@map("redeem_code_redemptions")
+}
+
+// ── Raid dos Líderes de Johto (evento do início da Semana 8) ─────────────────
+model JohtoRaidEvent {
+  id                String   @id @default(cuid())
+  slug              String   @unique
+  name              String
+  active            Boolean  @default(false)
+  startsAt          DateTime?
+  endsAt            DateTime?
+  defeatedAt        DateTime?
+  rewardsGrantedAt  DateTime?
+  cooldownMinutes   Int      @default(30)
+  rewardConfigJson  Json?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  leaders  JohtoRaidLeader[]
+  attempts JohtoRaidAttempt[]
+  rankings JohtoRaidRanking[]
+
+  @@map("johto_raid_events")
+}
+
+model JohtoRaidLeader {
+  id               String   @id @default(cuid())
+  eventId          String
+  position         Int
+  key              String
+  hpMax            Int
+  hpCurrent        Int
+  defeatedAt       DateTime?
+  finalBlowPlayerId String?
+  event            JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, position])
+  @@map("johto_raid_leaders")
+}
+
+model JohtoRaidAttempt {
+  id               String   @id @default(cuid())
+  eventId          String
+  leaderKey        String
+  playerId         String
+  damage           Int      @default(0)
+  koCount          Int      @default(0)
+  finalBlow        Boolean  @default(false)
+  teamSnapshotJson Json
+  replayJson       Json?
+  createdAt        DateTime @default(now())
+  event            JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@index([eventId, playerId, createdAt])
+  @@map("johto_raid_attempts")
+}
+
+model JohtoRaidRanking {
+  id                  String   @id @default(cuid())
+  eventId             String
+  playerId            String
+  totalDamage         Int      @default(0)
+  attackCount         Int      @default(0)
+  highestSingleDamage Int      @default(0)
+  finalBlows          Int      @default(0)
+  leadersJson         Json     @default("[]")
+  rewardGranted       Boolean  @default(false)
+  lastAttackAt        DateTime?
+  event               JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player              Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerId])
+  @@index([eventId, totalDamage])
+  @@map("johto_raid_rankings")
 }

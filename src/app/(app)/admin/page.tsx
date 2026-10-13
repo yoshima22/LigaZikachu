@@ -15,6 +15,8 @@ import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
 import { GamemasterPanel } from "./_components/gamemaster-panel";
 import { TimedGameBonusPanel } from "./_components/timed-game-bonus-panel";
 import { CombatTestPanel } from "./_components/combat-test-panel";
+import { JohtoAdminControls } from "../combates/raid-johto/_components/johto-admin-controls";
+import { getJohtoAdminSummary } from "@/lib/johto-raid";
 import {
   AlertTriangle,
   BarChart3,
@@ -169,6 +171,7 @@ export default async function AdminPage() {
   // O catálogo de formas altera pools globais e é exclusivo do administrador
   // de plataforma. Não execute a action (que redireciona) para Gamemasters.
   const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
+  const johtoSummary = isAdmin(currentUser.role) ? await getJohtoAdminSummary() : null;
   const ackNotice = await getAckNotice();
   const patchNotes = await getPatchNotes();
   const serverCostGoal = await getServerCostGoal();
@@ -375,6 +378,11 @@ export default async function AdminPage() {
 
       </>
     ) },
+    ...(johtoSummary ? [{ id: "eventos", label: "Eventos", content: (
+      <>
+      <JohtoAdminControls summary={johtoSummary} />
+      </>
+    ) }] : []),
     { id: "testes", label: "Testes e simulações", content: (
       <>
       <CombatTestPanel />

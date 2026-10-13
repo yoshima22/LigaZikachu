@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { isJohtoRaidVisibleToPlayers } from "@/lib/johto-raid";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { unstable_cache } from "next/cache";
@@ -240,6 +241,8 @@ export default async function AppLayout({
     orderIntro.phase !== "ENDED" &&
     (orderIntro.active || orderIntro.phase === "RAID_DEFEATED"),
   );
+  // Raid de Johto: oculta dos jogadores até o admin liberar no painel.
+  const johtoRaidVisible = isPlatformAdmin || await isJohtoRaidVisibleToPlayers();
   const pendingOrderReward = await prisma.userRaidNotification
     .findFirst({
       where: {
@@ -334,6 +337,7 @@ export default async function AppLayout({
               unreadNews={unreadNews}
               playerId={player?.id}
               orderEventVisible={orderEventVisible}
+              johtoRaidVisible={johtoRaidVisible}
               livePvpVisible={livePvpVisible}
               zikaTvLive={zikaTvLive}
             />
@@ -419,6 +423,7 @@ export default async function AppLayout({
               unreadNews={unreadNews}
               playerId={player?.id}
               orderEventVisible={orderEventVisible}
+              johtoRaidVisible={johtoRaidVisible}
               livePvpVisible={livePvpVisible}
               zikaTvLive={zikaTvLive}
             />
