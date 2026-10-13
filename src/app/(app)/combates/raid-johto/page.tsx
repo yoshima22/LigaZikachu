@@ -108,7 +108,18 @@ export default async function JohtoRaidPage() {
     <div className="mx-auto max-w-6xl space-y-5 p-4">
       {adminBox}
 
-      <header className="relative overflow-hidden rounded-3xl border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_top,rgba(255,203,5,0.18),transparent_50%),linear-gradient(180deg,#1a1233,#050816)] p-6">
+      <header className="relative isolate overflow-hidden rounded-3xl border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_top,rgba(255,203,5,0.18),transparent_50%),linear-gradient(180deg,#1a1233,#050816)] p-6">
+        <div
+          aria-hidden="true"
+          className="pointer-events-none absolute inset-y-0 right-0 w-full md:w-[72%]"
+          style={{
+            backgroundImage: "linear-gradient(90deg, #1a1233 0%, rgba(26,18,51,.88) 34%, rgba(26,18,51,.38) 100%), linear-gradient(0deg, #050816 0%, transparent 65%), url('https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/events/johto/leaders-banner.png')",
+            backgroundPosition: "center, center, right bottom",
+            backgroundSize: "cover, cover, auto 100%",
+            backgroundRepeat: "no-repeat",
+          }}
+        />
+        <div className="relative z-10">
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FFCB05]">Evento especial · Semana 8</p>
         <h1 className="mt-1 flex items-center gap-2 text-3xl font-black text-white"><Swords className="text-[#FFCB05]" size={28} /> Líderes de Johto</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-300">Os oito líderes de ginásio de Johto enfrentam os treinadores com o time completo de 6 mascotes. Todo o dano que vocês causam é somado na vida do líder: o dano é persistente: cada mascote do líder tem uma vida enorme e, quando ela acaba, ele sai de todas as lutas seguintes. Quando os 6 caem, o líder cai. Cada líder fica disponível por até {event.leaderDays} dias — se ninguém o vencer a tempo, ele vence. Quem lutar ganha ZC e escolhe um mascote do próprio líder!</p>
@@ -123,6 +134,7 @@ export default async function JohtoRaidPage() {
             {current?.expiresAt && <span>⏳ {current.name}: <Countdown to={current.expiresAt} doneText="tempo esgotado" /></span>}
             {!event.active && !event.defeatedAt && <span className="font-bold text-amber-300">Ataques fechados no momento</span>}
           </div>
+        </div>
         </div>
       </header>
 
