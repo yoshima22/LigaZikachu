@@ -2,7 +2,7 @@ import type { ArenaTurnLog } from "./arena-z";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
 import { PERSONALITY_AFFINITY } from "./personality-design";
 import { debuffResistanceFactor } from "./personality-combat";
-import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
+import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, splitOpportunistDebuff, describeOpportunistSplit, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 import type { BondCombatLink, OpposingBondCombatEffect } from "@/lib/mascot-bonds";
@@ -466,7 +466,7 @@ export function runLeagueCombat(
     all.sort((x, y) => {
       const xPriority = priorityIds.has(x.mascot.id) ? 2 : options.initiativeTeam === x.side ? 1 : 0;
       const yPriority = priorityIds.has(y.mascot.id) ? 2 : options.initiativeTeam === y.side ? 1 : 0;
-      return yPriority - xPriority || y.mascot.agility - x.mascot.agility + rand(-3, 3);
+      return yPriority - xPriority || getStat(y.mascot, debuffs, "agility") - getStat(x.mascot, debuffs, "agility") + rand(-3, 3);
     });
 
     for (const entry of all) {
@@ -475,10 +475,10 @@ export function runLeagueCombat(
       const enemyTeam = entry.side === "A" ? b : a;
       // Agilidade efetiva para as ações extras: Elétrico (mais no 1º round) e
       // Brincalhão (buff de time nos 2 primeiros rounds).
-      let effAgility = actor.agility;
+      let effAgility = getStat(actor, debuffs, "agility");
       if (actor.personality === "ELECTRIC") effAgility *= round === 1 ? 1.12 : 1.05;
       if (round <= 2 && playfulTeamBuff[entry.side]) effAgility *= 1.05;
-      const actionProfile = getCombatActionsPerRound(effAgility, alive(enemyTeam, hp).map((m) => m.agility));
+      const actionProfile = getCombatActionsPerRound(effAgility, alive(enemyTeam, hp).map((m) => getStat(m, debuffs, "agility")));
 
       for (let actionIndex = 0; actionIndex < actionProfile.actions; actionIndex++) {
       // Uma ação anterior do ciclo pode alterar o estado da luta. Nunca deixe
@@ -662,14 +662,14 @@ export function runLeagueCombat(
       // Opportunist debuff
       let debuffEffect: string | null = null;
       if (actor.combatRole === "OPPORTUNIST") {
-        const opportunist = getOpportunistProfile(instinct);
-        if (Math.random() < opportunist.procChance) {
-          const amount = opportunist.debuffPct * debuffResistanceFactor(actor, target);
-          const stats: Array<"force" | "agility" | "instinct" | "vitality"> = ["force", "agility", "instinct", "vitality"];
-          const stat = stats[rand(0, 3)];
+        // Sempre aplica: Agilidade e Vitalidade do alvo atacado, divididos quase igualmente. Não soma (vale o maior).
+        const split = splitOpportunistDebuff(getOpportunistProfile(instinct).debuffPct * debuffResistanceFactor(actor, target));
+        if (split.length > 0) {
           const cur = debuffs.get(target.id) ?? {};
-          debuffs.set(target.id, { ...cur, [stat]: Math.max(cur[stat] ?? 0, amount) });
-          debuffEffect = `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% (resistência aplicada).`;
+          const next = { ...cur };
+          for (const part of split) next[part.stat] = Math.max(cur[part.stat] ?? 0, part.pct);
+          debuffs.set(target.id, next);
+          debuffEffect = `Oportunista reduziu ${describeOpportunistSplit(split)} de ${target.name} (resistência aplicada).`;
         }
       }
 

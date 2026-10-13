@@ -19,6 +19,8 @@ import {
   getGuardianIntercept,
   getGuardianReduction,
   getOpportunistProfile,
+  splitOpportunistDebuff,
+  describeOpportunistSplit,
   getProvokerChance,
   getSaboteurProcChance,
   getSaboteurSuppression,
@@ -54,7 +56,7 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
     case "FLANK":
       return [`Bônus pessoal de dano: ${pct(getFlankDamageBonus(a))}.`, `Chance de ignorar a atração do Defensor e focar o alvo mais frágil: ${pct(getFlankBypassChance(a))}.`, `Redução defensiva na Arena: até ${pct(cap(a / 360, 0.25))}; +12% de dano contra suportes.`];
     case "OPPORTUNIST":
-      { const profile = getOpportunistProfile(i); return [`Chance de aplicar redução: ${pct(profile.procChance)}.`, `Redução-base: ${pct(profile.debuffPct)} antes da resistência do alvo.`, "Instinto (60%) e Vitalidade (40%) do alvo reduzem a intensidade. Recebe +10% de dano se superar o Instinto inimigo."]; }
+      { const profile = getOpportunistProfile(i); return ["Todo ataque aplica a redução no alvo atacado, sem chance de falhar.", `Redução total: ${pct(profile.debuffPct)} (${describeOpportunistSplit(splitOpportunistDebuff(profile.debuffPct))}), antes da resistência do alvo.`, "Instinto (60%) e Vitalidade (40%) do alvo reduzem a intensidade. Debuffs não acumulam no mesmo inimigo: vale o maior. Causa +10% de dano se superar o Instinto inimigo."]; }
     case "ENCOURAGER":
       return [`Bônus de dano para toda a equipe enquanto estiver vivo: ${pct(getEncouragerBonus(c))}.`, "Vale o melhor Encorajador vivo e o bônus é passivo: ele ainda ataca.", "Um Sabotador inimigo pode reduzir parte desse bônus."];
     case "GUARDIAN":

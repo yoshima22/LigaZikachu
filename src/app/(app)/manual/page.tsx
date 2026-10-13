@@ -906,7 +906,7 @@ export default async function ManualPage() {
               [
                 "Oportunista",
                 "Instinto",
-                "Até 250: 22% a 62% de chance e 8% a 25% de redução-base. Instinto/Vitalidade do alvo reduzem o valor final.",
+                "Todo ataque reduz Agilidade e Vitalidade do alvo atacado (sem chance). Até 250 de Instinto: 8% a 25% de redução total, dividida quase igual entre os dois (ex.: 17% = 9% Agilidade + 8% Vitalidade). Instinto/Vitalidade do alvo reduzem o valor final; não acumula no mesmo inimigo (vale o maior).",
               ],
               [
                 "Encorajador",

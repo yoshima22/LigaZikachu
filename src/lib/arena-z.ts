@@ -12,6 +12,8 @@ import {
   getCombatActionsPerRound,
   getHealerHealAmount,
   getOpportunistProfile,
+  splitOpportunistDebuff,
+  describeOpportunistSplit,
   normalizeCombatRole,
   recommendCombatRole,
   defaultCombatRoleFor,
@@ -673,23 +675,18 @@ function tryApplyOpportunistDebuff(
   const opportunist = getOpportunistProfile(
     getEffectiveStat(actor, debuffs, "instinct"),
   );
-  if (arenaRandom() > opportunist.procChance) return null;
+  // Sempre aplica no alvo atacado: Agilidade + Vitalidade, divididos quase igualmente.
+  // Não acumula (vale o maior por atributo), mesmo vindo de Oportunistas diferentes.
+  const split = splitOpportunistDebuff(opportunist.debuffPct * debuffResistanceFactor(actor, target));
+  if (split.length === 0) return null;
   const current = debuffs.get(target.id) ?? {};
-  const amount = opportunist.debuffPct * debuffResistanceFactor(actor, target);
-  const stats: Array<"force" | "agility" | "instinct" | "vitality"> = [
-    "force",
-    "agility",
-    "instinct",
-    "vitality",
-  ];
-  const stat = stats[Math.floor(arenaRandom() * stats.length)];
-  if (apply) apply(stat, amount);
-  else
-    debuffs.set(target.id, {
-      ...current,
-      [stat]: Math.max(current[stat] ?? 0, amount),
-    });
-  return `Oportunista reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% (resistência aplicada).`;
+  if (apply) for (const part of split) apply(part.stat, part.pct);
+  else {
+    const next = { ...current };
+    for (const part of split) next[part.stat] = Math.max(current[part.stat] ?? 0, part.pct);
+    debuffs.set(target.id, next);
+  }
+  return `Oportunista reduziu ${describeOpportunistSplit(split)} de ${target.name} (resistência aplicada).`;
 }
 
 function trySaboteurDisrupt(
@@ -976,7 +973,7 @@ function runArenaCombatInternal(
       const actor = entry.mascot;
       const enemyTeam = entry.side === "A" ? defenders : attackers;
       const effAgility =
-        actor.agility *
+        getEffectiveStat(actor, debuffs, "agility") *
         personalityAgilityMult(actor, round, playfulTeamBuff[entry.side]);
       const actionProfile = getCombatActionsPerRound(
         effAgility,

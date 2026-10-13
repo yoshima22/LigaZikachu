@@ -41,12 +41,34 @@ export function getProvokerChance(charisma: number, instinct: number) { return s
 export function getSpecialistDamageBonus(bestStat: number) { return scaleCombatRoleEffect(bestStat, 0.06, 0.20); }
 export function getSurvivorReduction(vitality: number) { return scaleCombatRoleEffect(vitality, 0, 0.15); }
 
-/** Escala linearmente entre os valores publicados no manual até 250 de Instinto. */
+/**
+ * Oportunista: todo ataque aplica o debuff (sem chance). A redução total vem do Instinto,
+ * escalando linearmente de 8% a 25% até 250 de Instinto, antes da resistência do alvo.
+ */
 export function getOpportunistProfile(instinct: number) {
   return {
-    procChance: scaleCombatRoleEffect(instinct, 0.22, 0.62, OPPORTUNIST_INSTINCT_CAP),
     debuffPct: scaleCombatRoleEffect(instinct, 0.08, 0.25, OPPORTUNIST_INSTINCT_CAP),
   };
+}
+
+/**
+ * Divide a redução total do Oportunista quase igualmente entre Agilidade e Vitalidade,
+ * em pontos percentuais inteiros (ex.: 17% vira 9% de Agilidade e 8% de Vitalidade).
+ * Retorna frações (0,09) prontas para o mapa de debuffs; vazio se arredondar para 0%.
+ */
+export function splitOpportunistDebuff(totalFraction: number): Array<{ stat: "agility" | "vitality"; pct: number }> {
+  const total = Math.round(totalFraction * 100);
+  if (total <= 0) return [];
+  const agility = Math.ceil(total / 2);
+  return [
+    { stat: "agility", pct: agility / 100 },
+    ...(total - agility > 0 ? [{ stat: "vitality" as const, pct: (total - agility) / 100 }] : []),
+  ];
+}
+
+/** Texto do log: "Agilidade -9% e Vitalidade -8%". */
+export function describeOpportunistSplit(split: ReturnType<typeof splitOpportunistDebuff>) {
+  return split.map((part) => `${part.stat === "agility" ? "Agilidade" : "Vitalidade"} -${Math.round(part.pct * 100)}%`).join(" e ");
 }
 
 // Posturas consideradas "suporte" em todo o jogo: Provocador, Encorajador e
@@ -76,7 +98,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   DEFENDER: "Atributo direto: Vitalidade. Até 250, escala de 8% a 35% de redução de dano. Atrai 78% dos ataques, ou 62% quando o agressor é Atacante.",
   ATTACKER: "Atributo direto: Força. Até 250, escala de +8% a +26% de dano e recebe mais +15% contra Defensores.",
   FLANK: "Atributo direto: Agilidade. Até 250, escala de +4% a +18% de dano e de 35% a 82% de chance de furar a defesa; causa +12% contra suportes.",
-  OPPORTUNIST: "Atributo direto: Instinto. Até 250, escala de 22% a 62% de chance e de 8% a 25% de redução. Instinto/Vitalidade do alvo reduzem a intensidade; causa +10% se superar o Instinto inimigo.",
+  OPPORTUNIST: "Atributo direto: Instinto. Todo ataque reduz Agilidade e Vitalidade do alvo atacado, sempre, sem chance. Até 250, o Instinto escala a redução total de 8% a 25%, dividida quase igualmente entre os dois atributos. Instinto/Vitalidade do alvo reduzem a intensidade; não acumula no mesmo inimigo (vale o maior); causa +10% se superar o Instinto inimigo.",
   ENCOURAGER: "Atributo direto: Carisma. Até 250, concede de +4% a +18% de dano à equipe enquanto estiver ativo. Vale apenas o melhor Encorajador; Sabotadores reduzem o bônus.",
   GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Pela média dos dois até 250, intercepta de 15% a 40% do dano; Vitalidade dá de 5% a 20% de redução pessoal. Causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",

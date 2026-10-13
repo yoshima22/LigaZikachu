@@ -14,8 +14,7 @@ import { getPreferredSpriteUrl } from "@/lib/sprite-preferences";
 import {
   COMBAT_ROLE_VALUES,
   defaultCombatRoleFor,
-  type CombatRole,
-} from "@/lib/combat-roles";
+  type CombatRole, getOpportunistProfile, splitOpportunistDebuff, describeOpportunistSplit } from "@/lib/combat-roles";
 import {
   canAccessLivePvp,
   getLivePvpAccessConfig,
@@ -2134,45 +2133,33 @@ function resolveTacticalRound(match: MatchValue) {
       amount: damage,
     });
     if (actor.role === "OPPORTUNIST" && target.hp > 0) {
-      const chance = Math.min(
-        0.62,
-        0.22 + effectiveStat(actor, "instinct") / 500,
+      // Sempre aplica: Agilidade + Vitalidade do alvo atacado, divididos quase igualmente.
+      // O id é por alvo, então vários Oportunistas não somam (vale o maior).
+      const split = splitOpportunistDebuff(
+        getOpportunistProfile(effectiveStat(actor, "instinct")).debuffPct,
       );
-      if (
-        deterministicRoll(battle.round, actor.id, target.id, "opportunist") <
-        chance
-      ) {
-        const stats = ["force", "agility", "instinct", "vitality"] as const;
-        const stat =
-          stats[
-            Math.floor(
-              deterministicRoll(battle.round, target.id, actor.id, "stat") *
-                stats.length,
-            )
-          ];
-        const value = Math.min(
-          0.25,
-          0.08 + effectiveStat(actor, "instinct") / 900,
-        );
+      for (const { stat, pct: value } of split) {
+        const id = `opportunist:${target.id}:${stat}`;
+        const previous = target.effects.find((effect) => effect.id === id);
         target.effects = [
-          ...target.effects.filter(
-            (effect) => effect.id !== `opportunist:${actor.id}:${stat}`,
-          ),
+          ...target.effects.filter((effect) => effect.id !== id),
           {
-            id: `opportunist:${actor.id}:${stat}`,
-            label: `Interferência: ${stat === "force" ? "Força" : stat === "agility" ? "Agilidade" : stat === "instinct" ? "Instinto" : "Vitalidade"}`,
+            id,
+            label: `Interferência: ${stat === "agility" ? "Agilidade" : "Vitalidade"}`,
             kind: "DEBUFF",
             stat,
-            value,
+            value: Math.max(previous?.value ?? 0, value),
             duration: 4,
           },
         ];
+      }
+      if (split.length > 0) {
         events.push({
           unitId: actor.id,
           targetId: target.id,
           kind: "DEBUFF",
-          text: `${actor.name} aplicou ${Math.round(value * 100)}% de Interferência em ${target.name} por 3 rodadas.`,
-          amount: Math.round(value * 100),
+          text: `${actor.name} aplicou Interferência em ${target.name}: ${describeOpportunistSplit(split)} por 3 rodadas.`,
+          amount: split.reduce((sum, part) => sum + Math.round(part.pct * 100), 0),
         });
       }
     }

@@ -5,7 +5,7 @@
 // vantagem de tipo). Nada aqui importa o motor da Arena — é código independente.
 
 import type { CombatRole } from "@/lib/combat-roles";
-import { getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianReduction, getHealerHealAmount, getOpportunistProfile, getSaboteurSuppression, getScoutBonus, getSurvivorReduction } from "@/lib/combat-roles";
+import { getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianReduction, getHealerHealAmount, getOpportunistProfile, splitOpportunistDebuff, describeOpportunistSplit, getSaboteurSuppression, getScoutBonus, getSurvivorReduction } from "@/lib/combat-roles";
 import { debuffResistanceFactor } from "@/lib/personality-combat";
 import { getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import {
@@ -257,19 +257,20 @@ export function resolveTowerRound(input: TowerRoundInput): TowerRoundResult {
     events.push({ unitId: actor.id, targetId: target.id, kind: "ATTACK", text: `${actor.name} atacou ${target.name} (${dmg}).`, amount: dmg });
     if (actor.role === "OPPORTUNIST" && after > 0) {
       const profile = getOpportunistProfile(effectiveStat(actor, "instinct"));
-      if (towerRoll(seed, round, actor.id, target.id, "opportunist") < profile.procChance) {
-        const stats = ["force", "agility", "instinct", "vitality"] as const;
-        const stat = stats[Math.floor(towerRoll(seed, round, actor.id, target.id, "opportunist-stat") * stats.length)];
-        const amount = profile.debuffPct * debuffResistanceFactor(actor, target);
-        const id = `role:opportunist:${actor.id}:${target.id}:${stat}`;
-        const previous = target.effects.find((effect) => effect.id === id);
-        if (previous) {
-          previous.value = Math.max(previous.value, amount);
-          previous.duration = 2;
-        } else {
-          target.effects.push({ id, label: "Oportunista", kind: "DEBUFF", stat, value: amount, duration: 2 });
+      // Sempre aplica no alvo atacado (Agilidade + Vitalidade); o id é por alvo, então vários Oportunistas não somam.
+      const split = splitOpportunistDebuff(profile.debuffPct * debuffResistanceFactor(actor, target));
+      if (split.length > 0) {
+        for (const { stat, pct: amount } of split) {
+          const id = `role:opportunist:${target.id}:${stat}`;
+          const previous = target.effects.find((effect) => effect.id === id);
+          if (previous) {
+            previous.value = Math.max(previous.value, amount);
+            previous.duration = 2;
+          } else {
+            target.effects.push({ id, label: "Oportunista", kind: "DEBUFF", stat, value: amount, duration: 2 });
+          }
         }
-        events.push({ unitId: actor.id, targetId: target.id, kind: "DEBUFF", text: `${actor.name} reduziu ${stat} de ${target.name} em ${Math.round(amount * 100)}% após resistência.`, amount: Math.round(amount * 100) });
+        events.push({ unitId: actor.id, targetId: target.id, kind: "DEBUFF", text: `${actor.name} reduziu ${describeOpportunistSplit(split)} de ${target.name} após resistência.`, amount: split.reduce((sum, part) => sum + Math.round(part.pct * 100), 0) });
       }
     }
     if (before > 0 && after <= 0) {
