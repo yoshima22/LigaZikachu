@@ -13,12 +13,20 @@ import {
   adminFinalizeRoomAction,
 } from "../combat-actions";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
+import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { SyncCombatReplayModal, isStandardSyncReplay } from "./sync-battle-replay";
 import type { AnySyncReplayJson, SyncReplayJson } from "./sync-battle-replay";
 
 // ── Tipos ──────────────────────────────────────────────────────────────────────
 
-interface MascotSlim { id: string; pokemonId: number; nickname: string | null; level: number }
+interface MascotSlim {
+  id: string; pokemonId: number; nickname: string | null; level: number;
+  statForce?: number; statAgility?: number; statCharisma?: number; statInstinct?: number; statVitality?: number;
+  megaEvolvedAt?: Date | string | null; megaEvolvedFromPokemonId?: number | null;
+}
+type LineupEntry = { playerId: string; mascotId: string; slot: number; combatRole?: string | null; mascot: MascotSlim };
+const isMega = (m: MascotSlim) => Boolean(m.megaEvolvedAt || m.megaEvolvedFromPokemonId);
+const statTotal = (m: MascotSlim) => (m.statForce ?? 0) + (m.statAgility ?? 0) + (m.statCharisma ?? 0) + (m.statInstinct ?? 0) + (m.statVitality ?? 0);
 
 interface RoundSel {
   id: string;
@@ -73,7 +81,7 @@ interface Team {
   playerBId: string | null;
   playerA: { id: string; displayName: string };
   playerB: { id: string; displayName: string } | null;
-  lineups: { playerId: string; mascotId: string; slot: number; mascot: MascotSlim }[];
+  lineups: LineupEntry[];
 }
 
 interface Room {
@@ -412,6 +420,14 @@ function RoundCard({
           pending={pending}
           modifierEffect={round.modifier?.effectJson}
           modifierName={round.modifier?.name}
+          ally={(() => {
+            const allyId = myTeam.playerAId === playerId ? myTeam.playerBId : myTeam.playerAId;
+            if (!allyId) return null;
+            const allyName = myTeam.playerA.id === allyId ? myTeam.playerA.displayName : myTeam.playerB?.displayName ?? "Aliado";
+            const sel = round.selections.find((s) => s.playerId === allyId);
+            const lineup = myTeam.lineups.filter((l) => l.playerId === allyId);
+            return { name: allyName, selection: sel ?? null, lineup };
+          })()}
         />
       )}
 
@@ -477,16 +493,19 @@ function getUsedMascots(currentRound: Round, room: Room, playerId: string): Set<
 
 // ── Seletor de mascotes ────────────────────────────────────────────────────────
 
+const MAX_MEGAS_PER_ROUND = 1;
+
 function MascotSelector({
-  roundId, myTeamLineup, usedInPrevRounds, onAct, pending, modifierEffect, modifierName,
+  roundId, myTeamLineup, usedInPrevRounds, onAct, pending, modifierEffect, modifierName, ally,
 }: {
   roundId: string;
-  myTeamLineup: Team["lineups"];
+  myTeamLineup: LineupEntry[];
   usedInPrevRounds: Set<string>;
   onAct: (fn: () => Promise<{ error?: string }>) => void;
   pending: boolean;
   modifierEffect?: unknown;
   modifierName?: string;
+  ally?: { name: string; selection: RoundSel | null; lineup: LineupEntry[] } | null;
 }) {
   const [selected, setSelected] = useState<string[]>([]);
 
@@ -502,6 +521,20 @@ function MascotSelector({
     : null;
   const selectedAbove30 = myTeamLineup.filter(({ mascot }) => selected.includes(mascot.id) && mascot.level > 30).length;
 
+  // Regra "Divisão Limitada": no máximo 1 mega por rodada na escalação.
+  const selectedMegas = myTeamLineup.filter((l) => selected.includes(l.mascotId) && isMega(l.mascot)).length;
+  const megaBlocked = selectedMegas > MAX_MEGAS_PER_ROUND;
+  const canConfirm = selected.length === 3 && !megaBlocked && !pending;
+  const blockReason = selected.length !== 3
+    ? `Selecione ${3 - selected.length} mascote(s).`
+    : megaBlocked
+      ? `Mais de ${MAX_MEGAS_PER_ROUND} mega na rodada (${selectedMegas}). Remova ${selectedMegas - MAX_MEGAS_PER_ROUND}.`
+      : null;
+
+  // Escolhas do aliado nesta rodada.
+  const allyNameById = new Map((ally?.lineup ?? []).map((l) => [l.mascotId, l.mascot]));
+  const allyPicks = (ally?.selection?.mascotIds ?? []).map((id) => allyNameById.get(id));
+
   return (
     <div className="rounded-lg border border-amber-400/30 bg-amber-500/5 p-3 space-y-3">
       <p className="text-xs font-semibold text-amber-200">
@@ -516,37 +549,77 @@ function MascotSelector({
         <p className="text-xs text-slate-500">Todos os seus mascotes já foram usados. O sistema auto-selecionará.</p>
       )}
       <div className="grid grid-cols-5 gap-2">
-        {myTeamLineup.map(({ mascot }) => {
+        {myTeamLineup.map(({ mascot, combatRole }) => {
           const used = usedInPrevRounds.has(mascot.id);
           const sel = selected.includes(mascot.id);
+          const mega = isMega(mascot);
           return (
             <button
               key={mascot.id}
               type="button"
               disabled={used}
               onClick={() => toggle(mascot.id)}
+              title={mega ? "Mega evolução" : undefined}
               className={`flex flex-col items-center rounded-lg border p-1 transition-colors disabled:opacity-30 disabled:cursor-not-allowed ${
                 sel ? "border-[#FFCB05] bg-[#FFCB05]/20" : "border-border bg-slate-950/60 hover:border-slate-500"
               }`}
             >
-              <Image
-                src={getSpriteUrl(mascot.pokemonId)}
-                alt={mascot.nickname ?? `#${mascot.pokemonId}`}
-                width={40}
-                height={40}
-                className="pixelated"
-              />
-              <span className="text-[10px] text-slate-400 truncate w-full text-center">
-                {mascot.nickname ?? `Nv.${mascot.level}`}
+              <div className="relative">
+                <Image
+                  src={getSpriteUrl(mascot.pokemonId)}
+                  alt={mascot.nickname ?? `#${mascot.pokemonId}`}
+                  width={40}
+                  height={40}
+                  className="pixelated"
+                />
+                {mega && <span className="absolute -right-1 -top-1 rounded bg-fuchsia-500/90 px-1 text-[7px] font-black text-white">M</span>}
+              </div>
+              <span className="text-[10px] text-slate-200 truncate w-full text-center">
+                {mascot.nickname ?? getPokemonName(mascot.pokemonId)}
               </span>
-              {sel && <Lock size={10} className="text-[#FFCB05]" />}
+              <span className="text-[9px] text-slate-500">Nv.{mascot.level} · {statTotal(mascot)} pts</span>
+              {/* Status detalhados */}
+              <span className="text-[8px] leading-tight text-slate-400 text-center">
+                FOR {mascot.statForce ?? 0} · AGI {mascot.statAgility ?? 0} · VIT {mascot.statVitality ?? 0}
+              </span>
+              <span className="text-[8px] leading-tight text-slate-400 text-center">
+                CAR {mascot.statCharisma ?? 0} · INS {mascot.statInstinct ?? 0}
+              </span>
+              <span className="mt-0.5 rounded bg-slate-800 px-1 text-[8px] font-semibold text-cyan-300">{getCombatRoleLabel(combatRole)}</span>
+              {sel && <Lock size={10} className="mt-0.5 text-[#FFCB05]" />}
               {used && <span className="text-[10px] text-red-400">usado</span>}
             </button>
           );
         })}
       </div>
+
+      {/* Escolhas do aliado */}
+      {ally && (
+        <div className="rounded-md border border-cyan-400/20 bg-cyan-500/5 px-2 py-1.5">
+          <p className="text-[10px] font-bold text-cyan-200">Escolhas de {ally.name}</p>
+          {ally.selection ? (
+            <div className="mt-1 flex flex-wrap items-center gap-1.5">
+              {ally.selection.isAuto && <span className="text-[9px] text-slate-500">(automática)</span>}
+              {allyPicks.map((m, i) => (
+                <span key={m?.id ?? i} className="flex items-center gap-1 rounded bg-slate-900/70 px-1.5 py-0.5 text-[9px] text-slate-200">
+                  {m && <Image src={getSpriteUrl(m.pokemonId)} alt="" width={16} height={16} className="pixelated" />}
+                  {m ? (m.nickname ?? getPokemonName(m.pokemonId)) : "?"}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-0.5 text-[10px] text-slate-500">{ally.name} ainda não escolheu os mascotes desta rodada.</p>
+          )}
+        </div>
+      )}
+
+      {blockReason && (
+        <p className={`rounded-md border px-2 py-1.5 text-[11px] ${megaBlocked ? "border-red-500/30 bg-red-500/10 text-red-300" : "border-slate-500/20 bg-slate-500/5 text-slate-400"}`}>
+          {blockReason}
+        </p>
+      )}
       <button
-        disabled={selected.length !== 3 || pending}
+        disabled={!canConfirm}
         onClick={() => onAct(() => selectRoundMascotsAction(roundId, selected))}
         className="w-full rounded-lg bg-[#FFCB05] py-2 text-xs font-bold text-slate-950 disabled:cursor-not-allowed disabled:opacity-40 flex items-center justify-center gap-2"
       >

@@ -212,7 +212,7 @@ export default async function DesafioSincronizadoPage() {
         include: {
           playerA: { select: { id: true, displayName: true } },
           playerB: { select: { id: true, displayName: true } },
-          lineups: { include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true } } } },
+          lineups: { include: { mascot: { select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true } } } },
         },
       },
       rounds: {
