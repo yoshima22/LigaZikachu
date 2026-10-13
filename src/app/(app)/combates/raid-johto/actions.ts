@@ -72,6 +72,7 @@ export async function johtoAdminAction(
     | { type: "active"; value: boolean }
     | { type: "settings"; cooldownMinutes: number; damageScale: number; leaderDays: number }
     | { type: "extend"; hours: number }
+    | { type: "leaderHp"; leaderKey: string; hp: number }
     | { type: "damage"; amount: number }
     | { type: "healCurrent" }
     | { type: "skipCurrent" }
@@ -112,6 +113,20 @@ export async function johtoAdminAction(
         const leaderDays = Math.max(1, Math.min(30, Math.floor(command.leaderDays) || 5));
         await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { cooldownMinutes, damageScale, leaderDays } });
         return done(`Salvo: espera ${cooldownMinutes} min · escala de dano ×${damageScale} · ${leaderDays} dia(s) por líder (vale para os próximos líderes).`);
+      }
+      case "leaderHp": {
+        // Ajusta a vida total de um líder (ex.: os próximos da sequência). Mantém a proporção de vida que cada mascote já tem.
+        const leader = leaders.find((l) => l.key === command.leaderKey);
+        if (!leader) return fail("Líder não encontrado.");
+        if (leader.defeatedAt || leader.escapedAt) return fail("Esse líder já foi resolvido.");
+        const mascotHp = Math.max(60, Math.min(300_000_000, Math.floor(Number(command.hp) / 6)));
+        for (const m of leader.mascots) {
+          const fraction = m.hpMax > 0 ? m.hpCurrent / m.hpMax : 1;
+          await prisma.johtoRaidLeaderMascot.update({ where: { id: m.id }, data: { hpMax: mascotHp, hpCurrent: m.hpCurrent <= 0 ? 0 : Math.max(1, Math.round(mascotHp * fraction)) } });
+        }
+        const rows = await prisma.johtoRaidLeaderMascot.findMany({ where: { leaderId: leader.id } });
+        await prisma.johtoRaidLeader.update({ where: { id: leader.id }, data: { hpMax: mascotHp * 6, hpCurrent: rows.reduce((sum, m) => sum + m.hpCurrent, 0) } });
+        return done(`${leader.key}: vida total ajustada para ${(mascotHp * 6).toLocaleString("pt-BR")} (${mascotHp.toLocaleString("pt-BR")} por mascote).`);
       }
       case "extend": {
         if (!current?.expiresAt) return fail("Nenhum líder com prazo aberto.");

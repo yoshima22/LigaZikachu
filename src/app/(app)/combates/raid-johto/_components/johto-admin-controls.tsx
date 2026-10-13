@@ -32,8 +32,10 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
   const [scale, setScale] = useState(String(summary.damageScale));
   const [days, setDays] = useState(String(summary.leaderDays));
   const [damage, setDamage] = useState("1000000");
-  const [hp, setHp] = useState("5000000");
+  const [hp, setHp] = useState("2500000");
   const [extend, setExtend] = useState("24");
+  const [hpLeader, setHpLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
+  const [hpValue, setHpValue] = useState("2500000");
   const [rewardLeader, setRewardLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [testLeader, setTestLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [runs, setRuns] = useState("20");
@@ -126,6 +128,14 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
           </div>
 
           <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <label className="text-[10px] text-slate-400">Vida total do líder
+              <select value={hpLeader} onChange={(e) => setHpLeader(e.target.value)} className={`${input} w-36`}>
+                {JOHTO_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+              </select>
+            </label>
+            <input value={hpValue} onChange={(e) => setHpValue(e.target.value.replace(/D/g, ""))} className={`${input} w-28`} />
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "leaderHp", leaderKey: hpLeader, hp: Number(hpValue) || 2500000 }, "Ajustar a vida total deste líder? A proporção de vida atual de cada mascote é mantida.")}>Ajustar vida do líder</button>
+            <span className="mx-1 hidden h-6 w-px bg-slate-700 sm:block" />
             <label className="text-[10px] text-slate-400">Prêmios do líder
               <select value={rewardLeader} onChange={(e) => setRewardLeader(e.target.value)} className={`${input} w-36`}>
                 {JOHTO_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}

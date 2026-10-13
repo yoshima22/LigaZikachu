@@ -5,7 +5,7 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 
 export const JOHTO_EVENT_SLUG = "raid-lideres-johto";
 export const JOHTO_VISIBLE_KEY = "johto_raid_visible";
-export const JOHTO_LEADER_HP = 5_000_000;
+export const JOHTO_LEADER_HP = 2_500_000;
 export const JOHTO_MASCOTS_PER_LEADER = 6;
 export const JOHTO_DEFAULT_COOLDOWN_MIN = 20;
 export const JOHTO_DEFAULT_DAMAGE_SCALE = 1;

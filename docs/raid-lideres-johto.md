@@ -1,6 +1,6 @@
 # Raid dos Líderes de Johto (evento da Semana 8)
 
-Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes **em sequência** (Falkner → Bugsy → Whitney → Morty → Chuck → Jasmine → Pryce → Clair). Cada líder luta com **6 mascotes** e tem **5.000.000 de HP** por padrão (1/6 por mascote ≈ 833 mil; editável ao criar o evento). O dano dos jogadores é somado; cada líder fica disponível por **até 5 dias** (se ninguém o vencer a tempo, **ele vence** e o próximo entra, sem recompensa por ele (o Professor Enguiça avisa)).
+Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes **em sequência** (Falkner → Bugsy → Whitney → Morty → Chuck → Jasmine → Pryce → Clair). Cada líder luta com **6 mascotes** e tem **2.500.000 de HP** por padrão (1/6 por mascote ≈ 417 mil; editável ao criar o evento). O dano dos jogadores é somado; cada líder fica disponível por **até 5 dias** (se ninguém o vencer a tempo, **ele vence** e o próximo entra, sem recompensa por ele (o Professor Enguiça avisa)).
 
 ## Estado atual: oculto
 - `/combates/raid-johto` e o item de menu "Líderes de Johto" só aparecem para **ADMIN/SUPER_ADMIN**. Jogadores só veem depois de **Liberar para jogadores** (Admin → aba **Eventos**, ou a caixa de admin na própria página).
@@ -8,10 +8,10 @@ Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes *
 
 ## Combate (motor oficial da Liga, `runLeagueCombat`)
 - O jogador usa 6 mascotes livres contra os mascotes **vivos** do líder (o time dele encolhe conforme caem).
-- **Cada mascote do líder luta com a vida global real** (ex.: 833.333, 1/6 dos 5 mi) — a luta mostra essa vida cheia. O dano que o jogador causa é **persistente**: fica registrado para todos. Na prática **toda luta termina em derrota do time do jogador** (o dano causado numa luta é de ~3,5 a 6 mil), até o líder estar quase caído.
+- **Cada mascote do líder luta com a vida global real** (ex.: 416.666, 1/6 dos 2,5 mi) — a luta mostra essa vida cheia. O dano que o jogador causa é **persistente**: fica registrado para todos. Na prática **toda luta termina em derrota do time do jogador** (o dano causado numa luta é de ~3,5 a 6 mil), até o líder estar quase caído.
 - Quando a vida de um mascote chega a 0, ele sai de **todas** as lutas futuras contra esse líder. Quando os 6 caem, o líder cai: prêmios disponíveis e o próximo líder começa. Quem causa o último dano leva o **golpe final**.
 - O líder tem atributos equilibrados com o time atacante (principal da postura +15%, demais −5%, +2% por ginásio avançado) e cada mascote tem postura+personalidade que combinam.
-- Multiplicador de dano (padrão ×1 = dano real; editável) existe só para calibrar a duração. **Calibração (time do Glauco, o mais forte, dano real ×1):** ~850 a 1.400 lutas por líder com 5 mi (≈4 a 6 mil de dano por luta); o servidor todo divide esse total. Use o laboratório para conferir antes de abrir.
+- Multiplicador de dano (padrão ×1 = dano real; editável) existe só para calibrar a duração. **Calibração (escalação do Glauco que mais causou dano na Liga, dano real ×1):** média de ~3,8 mil de dano por luta (máx. ~7,6 mil) → ~650 lutas por líder com 2,5 mi (~450 com combo +8% nos melhores casos); o servidor todo divide esse total. Se algum líder cair rápido demais, aumente a vida dele no painel.
 - Atômico: as 6 linhas de mascote são travadas (`FOR UPDATE`) na transação. Trava por jogador impede dois ataques por duplo clique.
 - **Ferimentos como na Arena:** mascotes do jogador que caíram ficam feridos (SUS na página ou no resultado da luta).
 - Espera entre ataques: **20 min** (editável). Luta vai até um lado cair (sem empates).
