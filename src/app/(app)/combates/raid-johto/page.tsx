@@ -40,11 +40,19 @@ function TrainerImage({ leader, size = 80, dim = false }: { leader: Pick<JohtoLe
 function LeaderCard({ leader, days }: { leader: JohtoLeaderState; days: number }) {
   const type = TYPE_STYLE[leader.type];
   const gone = leader.status === "DEFEATED" || leader.status === "ESCAPED";
-  const border = leader.status === "CURRENT" ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 shadow-[0_0_24px_rgba(255,203,5,0.15)]" : leader.status === "DEFEATED" ? "border-emerald-500/30 bg-emerald-500/5" : leader.status === "ESCAPED" ? "border-red-500/25 bg-red-500/5" : "border-slate-800 bg-slate-900/50";
+  // Moldura por estado: ATIVO (dourado, pulsando) · AGUARDANDO (cinza tracejado) · DERROTADO (verde) · VENCEU o prazo (vermelho).
+  const frame = {
+    CURRENT: { box: "border-2 border-[#FFCB05] bg-[#FFCB05]/10 shadow-[0_0_28px_rgba(255,203,5,0.35)] ring-1 ring-[#FFCB05]/40", badge: "bg-[#FFCB05] text-slate-950", label: "⚔️ ATIVO" },
+    WAITING: { box: "border border-dashed border-slate-700 bg-slate-900/40 opacity-80", badge: "bg-slate-700 text-slate-200", label: "🔒 AGUARDANDO" },
+    DEFEATED: { box: "border-2 border-emerald-500/60 bg-emerald-500/10", badge: "bg-emerald-500 text-slate-950", label: "✅ DERROTADO" },
+    ESCAPED: { box: "border-2 border-red-500/60 bg-red-500/10", badge: "bg-red-500 text-white", label: "⛔ VENCEU O PRAZO" },
+  }[leader.status];
+  const border = frame.box;
   return (
     <div className={`relative rounded-2xl border p-3 text-center transition ${border}`}>
       <span className="absolute left-2 top-2 text-[10px] font-black text-slate-500">#{leader.position + 1}</span>
-      <TrainerImage leader={leader} dim={gone} />
+      <span className={`absolute -top-2 left-1/2 -translate-x-1/2 whitespace-nowrap rounded-full px-2 py-0.5 text-[9px] font-black shadow ${frame.badge}`}>{frame.label}</span>
+      <div className="pt-2"><TrainerImage leader={leader} dim={gone} /></div>
       <p className="mt-1 text-sm font-black text-white">{leader.name}</p>
       <p className="text-[10px] text-slate-400">{leader.city}</p>
       <span className="mt-1 inline-block rounded-full px-2 py-0.5 text-[9px] font-bold text-slate-950" style={{ background: type?.color ?? "#999" }}>{type?.label ?? leader.type}</span>
@@ -121,6 +129,7 @@ export default async function JohtoRaidPage() {
       <section className="grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
         {state.leaders.map((leader) => <LeaderCard key={leader.id} leader={leader} days={event.leaderDays} />)}
       </section>
+      <p className="-mt-2 flex flex-wrap justify-center gap-x-4 gap-y-1 text-[10px] text-slate-500"><span>⚔️ ativo agora</span><span>🔒 ainda não chegou a vez</span><span>✅ derrotado pelo servidor</span><span>⛔ venceu o prazo</span></p>
 
       {event.defeatedAt && (
         <section className="rounded-2xl border border-emerald-500/40 bg-emerald-500/10 p-5 text-center">
