@@ -528,6 +528,7 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
 .johto-letter-primary:active:not(:disabled), .johto-letter-secondary:active:not(:disabled) { transform: translateY(2px); }
 .johto-letter-primary:disabled, .johto-letter-secondary:disabled { opacity: .48; cursor: not-allowed; }
 .johto-letter-final { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 17px; }
+.johto-letter-continue { grid-column: 1 / -1; width: 100%; }
 .johto-letter-final p { grid-column: 1 / -1; margin-bottom: 5px; color: #76644d; font-size: 13px; line-height: 1.45; }
 .johto-letter-final .johto-letter-empty { color: #8b3c33; }
 .johto-vote-intro { color: #6f6251; font-size: 13px; line-height: 1.45; }

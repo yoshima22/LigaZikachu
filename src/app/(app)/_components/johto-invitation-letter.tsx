@@ -218,7 +218,7 @@ export function JohtoInvitationLetter({
                     <p>{JOHTO_INVITATION_COPY.voting.description}</p>
                     <button type="button" className="johto-letter-secondary" onClick={() => setPage(page - 1)}>Página anterior</button>
                     <button type="button" className="johto-letter-primary" onClick={() => setStage("voting")} disabled={choices.length === 0}>{JOHTO_INVITATION_COPY.voting.participateLabel}</button>
-                    <button type="button" className="johto-letter-secondary" onClick={continueToJohto} disabled={busy}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
+                    <button type="button" className="johto-letter-secondary johto-letter-continue" onClick={continueToJohto} disabled={busy}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
                     {choices.length === 0 && <p className="johto-letter-empty">A votação ainda não tem participantes disponíveis.</p>}
                   </div>
                 )}

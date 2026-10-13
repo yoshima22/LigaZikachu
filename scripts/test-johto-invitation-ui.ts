@@ -55,7 +55,7 @@ function render(mode: "preview" | "player", overrides: Record<number, unknown> =
   const tree = Letter({ mode, onClose: () => { previewCloses++; }, candidates: participants, displayName: mode === "player" ? "Misty" : undefined }) as React.ReactElement;
   return { tree, html: renderToStaticMarkup(tree) };
 }
-function findButton(node: unknown, label: string): { props: { onClick: () => Promise<void> } } | null {
+function findButton(node: unknown, label: string): { props: { onClick: () => Promise<void>; className?: string } } | null {
   if (!node || typeof node !== "object") return null;
   if (Array.isArray(node)) return node.map((item) => findButton(item, label)).find(Boolean) ?? null;
   const element = node as { type?: string; props?: Record<string, unknown> };
@@ -74,6 +74,10 @@ assert.match(finalPage, /convidado\(a\) de honra para este evento/, "final page 
 assert.match(finalPage, /Página anterior/, "last letter page can go back");
 assert.match(finalPage, /Participar da votação/, "last letter page offers the secret vote");
 assert.match(finalPage, /Continuar para os Ginásios/, "last letter page lets the player skip the vote");
+const continueButton = findButton(finalTree, "Continuar para os Ginásios")!;
+assert.match(continueButton.props.className ?? "", /johto-letter-continue/, "last-page continuation stays an outlined control with a dedicated full-width layout");
+const styles = readFileSync(join(process.cwd(), "src/app/globals.css"), "utf8");
+assert.match(styles, /\.johto-letter-continue\s*\{[^}]*grid-column:\s*1\s*\/\s*-1;[^}]*width:\s*100%;/s, "last-page continuation spans its own full-width row");
 assert.match(finalPage, /CONVITE PÁGINA 06/, "letter footer identifies the actual page number");
 assert.match(finalPage, /Liga Zikachu TCG 3ª Edição/, "final page identifies the players being recognized");
 assert.match(render("preview", { 0: "reading" }).html, /Boas vindas a Johto/, "first page has its requested label");
