@@ -34,7 +34,7 @@ export function Countdown({ to, prefix = "", doneText = "encerrado" }: { to: str
   return <span className="tabular-nums">{left <= 0 ? doneText : `${prefix}${formatRemaining(left)}`}</span>;
 }
 
-/** Combo de ataque em grupo: +2% de status por treinador que atacou nos últimos 5 min (máx. +8%). */
+/** Combo de ataque em grupo: +2% de status por treinador que atacou nos últimos 30 min (máx. +8%). */
 export function ComboMeter({ stacks, bonusPct, nextDropAt }: { stacks: number; bonusPct: number; nextDropAt: string | null }) {
   return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3">

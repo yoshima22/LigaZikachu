@@ -13,8 +13,8 @@ export const JOHTO_DEFAULT_LEADER_DAYS = 5;
 export const JOHTO_REPLAY_HISTORY = 20;
 
 // ── Combo de ataque em grupo ─────────────────────────────────────────────────
-/** Quem ataca com outros treinadores que atacaram nos últimos 5 minutos ganha +2% em todos os status por treinador (máx. 4 = +8%). */
-export const COMBO_WINDOW_MS = 5 * 60_000;
+/** Quem ataca com outros treinadores que atacaram nos últimos 30 minutos ganha +2% em todos os status por treinador (máx. 4 = +8%). */
+export const COMBO_WINDOW_MS = 30 * 60_000;
 export const COMBO_STEP_PCT = 2;
 export const COMBO_MAX_STACKS = 4;
 export const comboBonusPct = (stacks: number) => Math.max(0, Math.min(COMBO_MAX_STACKS, Math.floor(stacks))) * COMBO_STEP_PCT;

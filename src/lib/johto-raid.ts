@@ -61,7 +61,7 @@ export type JohtoRaidState = {
   myRewards: JohtoPendingReward[];
   /** Regra do evento: só UM mascote pode ser escolhido em toda a raid. Preenchido quando o jogador já usou a escolha. */
   choiceUsed: { leaderName: string; pokemonId: number } | null;
-  /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 5 min). */
+  /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 30 min). */
   combo: JohtoComboState;
 };
 
@@ -147,7 +147,7 @@ export async function advanceExpiredLeaders(eventId: string, now = new Date()) {
 
 // ── Combo ────────────────────────────────────────────────────────────────────
 
-/** Treinadores (não admin, exceto o próprio) que atacaram nos últimos 5 minutos: cada um vale +2% de status, até +8%. */
+/** Treinadores (não admin, exceto o próprio) que atacaram nos últimos 30 minutos: cada um vale +2% de status, até +8%. */
 export async function getComboState(eventId: string, excludePlayerId?: string | null, now = new Date()): Promise<JohtoComboState> {
   const rows = await prisma.johtoRaidAttempt.findMany({
     where: { eventId, createdAt: { gte: new Date(now.getTime() - COMBO_WINDOW_MS) }, player: NON_ADMIN, ...(excludePlayerId ? { playerId: { not: excludePlayerId } } : {}) },

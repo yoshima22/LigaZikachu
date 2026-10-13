@@ -7,9 +7,11 @@ import { JohtoInvitationLetter } from "../../../_components/johto-invitation-let
 export function JohtoInvitationReviewButton({
   displayName,
   voteSubmitted,
+  candidates,
 }: {
   displayName: string | null;
   voteSubmitted: boolean;
+  candidates: { id: string; displayName: string }[];
 }) {
   const [open, setOpen] = useState(false);
 
@@ -22,7 +24,16 @@ export function JohtoInvitationReviewButton({
       >
         <MailOpen size={15} /> Ler convite novamente
       </button>
-      {open && <JohtoInvitationLetter mode="review" displayName={displayName} voteSubmitted={voteSubmitted} onClose={() => setOpen(false)} />}
+      {open && (
+        <JohtoInvitationLetter
+          mode={voteSubmitted ? "review" : "player"}
+          candidates={candidates}
+          displayName={displayName}
+          voteSubmitted={voteSubmitted}
+          onClose={() => setOpen(false)}
+          onFinish={() => setOpen(false)}
+        />
+      )}
     </>
   );
 }

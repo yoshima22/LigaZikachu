@@ -42,7 +42,7 @@ export function JohtoInvitationLetter({
   onClose?: () => void;
   onFinish?: () => void;
 }) {
-  const [stage, setStage] = useState<Stage>(mode === "review" ? "reading" : "envelope");
+  const [stage, setStage] = useState<Stage>("envelope");
   const [page, setPage] = useState(0);
   const [voteIndex, setVoteIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
