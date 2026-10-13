@@ -22,6 +22,11 @@ export type TowerRoomNode = {
   y: number;
 };
 
+/** Undirected identity for a corridor once a trainer has traversed it. */
+export function towerRouteKey(firstRoomId: string, secondRoomId: string): string {
+  return [firstRoomId, secondRoomId].sort().join("::");
+}
+
 export type TowerPressureModifier = {
   key: string;
   name: string;

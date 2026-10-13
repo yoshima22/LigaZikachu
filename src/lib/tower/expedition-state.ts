@@ -21,6 +21,7 @@ export type TowerExpeditionV2 = TowerExplorationState & {
   globalTurn: number;
   members: Record<string, TowerExpeditionMember>;
   rooms: Record<string, TowerExpeditionRoom>;
+  openedEdges: string[];
   lastRecoveryFloor: number | null;
 };
 
@@ -56,6 +57,7 @@ export function newExpeditionState(
     globalTurn: 1,
     members,
     rooms,
+    openedEdges: [],
     lastRecoveryFloor: null,
   };
 }
@@ -67,7 +69,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 export function isExpeditionV2(value: unknown): value is TowerExpeditionV2 {
   if (!isRecord(value) || value.version !== 2 || !Array.isArray(value.graph) ||
       !Number.isInteger(value.globalTurn) || Number(value.globalTurn) < 1 ||
-      !isRecord(value.members) || !isRecord(value.rooms)) return false;
+      !isRecord(value.members) || !isRecord(value.rooms) || !Array.isArray(value.openedEdges)) return false;
   const members = Object.entries(value.members);
   if (members.length < 1 || members.length > 3) return false;
   const roomIds = new Set<string>();
