@@ -43,11 +43,11 @@ export function getSurvivorReduction(vitality: number) { return scaleCombatRoleE
 
 /**
  * Oportunista: todo ataque aplica o debuff (sem chance). A redução total vem do Instinto,
- * escalando linearmente de 8% a 25% até 250 de Instinto, antes da resistência do alvo.
+ * escalando linearmente de 8% a 40% até 250 de Instinto, antes da resistência do alvo.
  */
 export function getOpportunistProfile(instinct: number) {
   return {
-    debuffPct: scaleCombatRoleEffect(instinct, 0.08, 0.25, OPPORTUNIST_INSTINCT_CAP),
+    debuffPct: scaleCombatRoleEffect(instinct, 0.08, 0.40, OPPORTUNIST_INSTINCT_CAP),
   };
 }
 
@@ -98,7 +98,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   DEFENDER: "Atributo direto: Vitalidade. Até 250, escala de 8% a 35% de redução de dano. Atrai 78% dos ataques, ou 62% quando o agressor é Atacante.",
   ATTACKER: "Atributo direto: Força. Até 250, escala de +8% a +26% de dano e recebe mais +15% contra Defensores.",
   FLANK: "Atributo direto: Agilidade. Até 250, escala de +4% a +18% de dano e de 35% a 82% de chance de furar a defesa; causa +12% contra suportes.",
-  OPPORTUNIST: "Atributo direto: Instinto. Todo ataque reduz Agilidade e Vitalidade do alvo atacado, sempre, sem chance. Até 250, o Instinto escala a redução total de 8% a 25%, dividida quase igualmente entre os dois atributos. Instinto/Vitalidade do alvo reduzem a intensidade; não acumula no mesmo inimigo (vale o maior); causa +10% se superar o Instinto inimigo.",
+  OPPORTUNIST: "Atributo direto: Instinto. Todo ataque reduz Agilidade e Vitalidade do alvo atacado, sempre, sem chance. Até 250, o Instinto escala a redução total de 8% a 40%, dividida quase igualmente entre os dois atributos. Instinto/Vitalidade do alvo reduzem a intensidade; não acumula no mesmo inimigo (vale o maior); causa +10% se superar o Instinto inimigo.",
   ENCOURAGER: "Atributo direto: Carisma. Até 250, concede de +4% a +18% de dano à equipe enquanto estiver ativo. Vale apenas o melhor Encorajador; Sabotadores reduzem o bônus.",
   GUARDIAN: "Atributos diretos: Vitalidade e Carisma. Pela média dos dois até 250, intercepta de 15% a 40% do dano; Vitalidade dá de 5% a 20% de redução pessoal. Causa 10% menos dano.",
   DUELIST: "Atributos diretos: Força e Instinto. Marca um alvo, recebe de +6% a +18% de dano base e +12% enquanto mantém o mesmo duelo.",
