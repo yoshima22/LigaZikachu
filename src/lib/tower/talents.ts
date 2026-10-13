@@ -62,7 +62,7 @@ export type TowerTalentEffects = {
   pressureShieldStart: number;
   /** Fator de crescimento inimigo por Pressão (base 0.02, nunca abaixo de 0.01). */
   enemyPressureScale: number;
-  /** Penalidade efetiva de dividir a equipe (base 2, nunca abaixo de 1). */
+  /** Multiplicador da divisão: V2 cobra (splitPenalty - 1) por frente extra, no máximo duas; rank reduz esse extra até zero. */
   splitPenalty: number;
 };
 

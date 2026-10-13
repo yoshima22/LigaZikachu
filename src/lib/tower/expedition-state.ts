@@ -29,6 +29,8 @@ export type TowerExpeditionV2 = TowerExplorationState & {
   rooms: Record<string, TowerExpeditionRoom>;
   openedEdges: string[];
   lastRecoveryFloor: number | null;
+  overload?: { value: number; expiresAfterTurn: number } | null;
+  lastPressureChange?: { applied: number; reasons: string[] };
 };
 
 export function newExpeditionState(
@@ -65,6 +67,7 @@ export function newExpeditionState(
     rooms,
     openedEdges: [],
     lastRecoveryFloor: null,
+    overload: null,
   };
 }
 

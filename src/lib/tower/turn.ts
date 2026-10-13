@@ -36,6 +36,13 @@ import { resolveTowerTalents } from "./talents";
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
+import {
+  applyPressureToExpedition,
+  overloadFromResults,
+  pressureDelta,
+  transitionFloor,
+  updateOverload,
+} from "./pressure-rules";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -66,7 +73,7 @@ async function resolveV2RoomFronts(
   state: TowerExpeditionV2,
   submissions: NonNullable<TowerVolatile["submissions"]>,
   defensiveMemberIds: string[],
-): Promise<{ state: TowerExpeditionV2; log: string[]; fronts: RoomFrontResult[] }> {
+): Promise<{ state: TowerExpeditionV2; log: string[]; fronts: RoomFrontResult[]; splitPenalty: number }> {
   const snapshots = run.members.flatMap((member) => member.mascots.map((mascot) => ({ ...mascot, member })));
   const rows = await tx.mascot.findMany({ where: { id: { in: snapshots.map((mascot) => mascot.mascotId) } } });
   const mascotById = new Map(rows.map((mascot) => [mascot.id, mascot]));
@@ -125,7 +132,8 @@ async function resolveV2RoomFronts(
         .map((enemy) => ({ ...enemy }));
       if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
       const pressureMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.enemyMultiplier, 1) *
-        (1 + next.pressure * talentFx.enemyPressureScale);
+        (1 + next.pressure * talentFx.enemyPressureScale) *
+        (1 - (next.overload && next.overload.expiresAfterTurn >= next.globalTurn ? next.overload.value : 0));
       const enemies: LeagueMascot[] = preview.map((enemy, index) => {
         const base = Math.max(12, Math.round((averageLevel * 0.72 + 18 + room.index * 2) * pressureMult));
         const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
@@ -174,7 +182,7 @@ async function resolveV2RoomFronts(
         data: { currentHp: hp, state: hp <= 0 ? "DEFEATED" : "IN_TOWER" },
       });
   }
-  return { state: next, log, fronts };
+  return { state: next, log, fronts, splitPenalty: talentFx.splitPenalty };
 }
 
 function finalHp(
@@ -826,22 +834,61 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
             members[memberId] = { ...member, status: "DOWNED" };
           }
         }
+        const waits = new Set(Object.entries(submissions)
+          .filter(([, submission]) => (submission.actions as { action?: string } | null)?.action === "WAIT")
+          .map(([memberId]) => activeState.members[memberId]?.roomId)
+          .filter((roomId): roomId is string => Boolean(roomId))).size;
+        const pressureChange = pressureDelta({
+          activeFronts: groupActiveMembersByRoom(activeState).size,
+          mistakes: resolved.fronts.reduce((sum, front) => sum + front.mistakes, 0),
+          waits,
+          shield: resolved.state.pressureShield ?? 0,
+          splitPenalty: resolved.splitPenalty,
+        });
+        let nextState = applyPressureToExpedition({ ...resolved.state, members }, pressureChange);
+        const appliedPressure = nextState.lastPressureChange?.applied ?? 0;
+        nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts));
+        const bossVictory = resolved.fronts.some((front) =>
+          front.success && nextState.graph.find((room) => room.id === front.roomId)?.kind === "BOSS");
+        let nextFloor = run.currentFloor;
+        if (bossVictory && run.currentFloor < 7) {
+          nextFloor = run.currentFloor + 1;
+          const transition = transitionFloor(nextState, nextFloor, run.seed, latestMascots.map((mascot) => ({
+            mascotId: mascot.mascotId,
+            ownerUserId: mascot.ownerUserId,
+            currentHp: mascot.currentHp,
+            maxHp: mascot.maxHp,
+          })));
+          nextState = transition.state;
+          for (const [mascotId, currentHp] of Object.entries(transition.healingByMascotId))
+            await tx.towerRunMascot.updateMany({
+              where: { mascotId, member: { runId } },
+              data: { currentHp },
+            });
+        }
         const hasActive = Object.values(members).some((member) => member.status === "ACTIVE");
         const allAbandoned = Object.values(members).every((member) => member.status === "AFK_ABANDONED");
-        const ended = !hasActive;
+        const wonRun = bossVictory && run.currentFloor === 7;
+        const ended = !hasActive || wonRun;
         await tx.towerRun.update({
           where: { id: runId },
           data: {
             globalTurn: turn.state.globalTurn,
-            status: ended ? (allAbandoned ? "ABANDONED" : "FAILED") : "ACTIVE",
+            currentFloor: nextFloor,
+            status: wonRun ? "FINISHED" : ended ? (allAbandoned ? "ABANDONED" : "FAILED") : "ACTIVE",
             endedAt: ended ? new Date() : null,
             nextDeadline: ended ? null : new Date(Date.now() + windowMsFor(run.pace)),
             volatileState: {
               ...vol,
-              exploration: { ...resolved.state, globalTurn: turn.state.globalTurn, members },
+              exploration: { ...nextState, globalTurn: turn.state.globalTurn },
               submissions: {},
               lastResolvedTurn: run.globalTurn,
-              log: [...(vol.log ?? []), ...turn.events, ...resolved.log, `Turno ${run.globalTurn} resolvido.`].slice(-50),
+              log: [
+                ...(vol.log ?? []), ...turn.events, ...resolved.log,
+                `Pressão ${appliedPressure > 0 ? "+" : ""}${appliedPressure}: ${pressureChange.reasons.join("; ")}.`,
+                ...(bossVictory ? [wonRun ? "O 7º regente caiu. Expedição concluída!" : `O grupo alcançou o ${nextFloor}º andar; a Pressão diminuiu.`] : []),
+                `Turno ${run.globalTurn} resolvido.`,
+              ].slice(-50),
             } as unknown as Prisma.InputJsonValue,
           },
         });
