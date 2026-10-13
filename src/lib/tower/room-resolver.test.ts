@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { newExpeditionState } from "./expedition-state";
 import { moveMember } from "./route-rules";
 import { generateTowerRoomGraph } from "./rooms";
-import { canStartBoss, groupActiveMembersByRoom, resolveRoomFront } from "./room-resolver";
+import { canStartBoss, freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront } from "./room-resolver";
 
 function fronts() {
   const source = generateTowerRoomGraph("separate-fronts");
@@ -118,4 +118,14 @@ test("rest and rescue interactions clear only the occupied room", () => {
   });
   assert.equal(rescue.interaction, "RESCUE");
   assert.equal(rescue.state.rooms[secondId].cleared, true);
+});
+
+test("an encounter preview is frozen for its room and cannot be replaced by a later arrival", () => {
+  const { state, firstId, secondId } = fronts();
+  const first = freezeRoomEncounter(state, firstId, [{ pokemonId: 92, name: "Gastly", level: 9 }], 1);
+  const second = freezeRoomEncounter(first, firstId, [{ pokemonId: 94, name: "Gengar", level: 99 }], 3);
+  assert.deepEqual(second.rooms[firstId].encounter?.enemies, [{ pokemonId: 92, name: "Gastly", level: 9 }]);
+  assert.equal(second.rooms[firstId].encounter?.preparationTurns, 1);
+  assert.equal(second.rooms[secondId].encounter, undefined);
+  assert.equal(state.rooms[firstId].encounter, undefined);
 });

@@ -48,6 +48,27 @@ export function groupActiveMembersByRoom(state: TowerExpeditionV2): Map<string, 
   return groups;
 }
 
+export function freezeRoomEncounter(
+  state: TowerExpeditionV2,
+  roomId: string,
+  enemies: { pokemonId: number; name: string; level: number }[],
+  preparationTurns: number,
+): TowerExpeditionV2 {
+  const room = state.graph.find((entry) => entry.id === roomId);
+  if (!room || (room.kind !== "COMBAT" && room.kind !== "BOSS") ||
+      !state.rooms[roomId] || state.rooms[roomId].cleared || state.rooms[roomId].encounter) return state;
+  return {
+    ...state,
+    rooms: {
+      ...state.rooms,
+      [roomId]: {
+        ...state.rooms[roomId],
+        encounter: { preparationTurns, enemies: enemies.map((enemy) => ({ ...enemy })) },
+      },
+    },
+  };
+}
+
 export function canStartBoss(
   state: TowerExpeditionV2,
   bossRoomId: string,

@@ -34,7 +34,8 @@ import {
 } from "./exclusive-mascots";
 import { resolveTowerTalents } from "./talents";
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
-import { groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction } from "./room-resolver";
+import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
+import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -64,7 +65,8 @@ async function resolveV2RoomFronts(
   run: V2RunInput,
   state: TowerExpeditionV2,
   submissions: NonNullable<TowerVolatile["submissions"]>,
-): Promise<{ state: TowerExpeditionV2; log: string[] }> {
+  defensiveMemberIds: string[],
+): Promise<{ state: TowerExpeditionV2; log: string[]; fronts: RoomFrontResult[] }> {
   const snapshots = run.members.flatMap((member) => member.mascots.map((mascot) => ({ ...mascot, member })));
   const rows = await tx.mascot.findMany({ where: { id: { in: snapshots.map((mascot) => mascot.mascotId) } } });
   const mascotById = new Map(rows.map((mascot) => [mascot.id, mascot]));
@@ -75,7 +77,21 @@ async function resolveV2RoomFronts(
   const talentFx = resolveTowerTalents(talentValue);
   let next = state;
   const log: string[] = [];
+  const fronts: RoomFrontResult[] = [];
   for (const roomId of groupActiveMembersByRoom(state).keys()) {
+    const currentRoom = next.graph.find((room) => room.id === roomId);
+    if (currentRoom && (currentRoom.kind === "COMBAT" || currentRoom.kind === "BOSS") && !next.rooms[roomId]?.encounter) {
+      const presentIds = groupActiveMembersByRoom(next).get(roomId) ?? [];
+      const present = snapshots.filter((snapshot) => presentIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
+      const levels = present.map((snapshot) => mascotById.get(snapshot.mascotId)?.level ?? 1);
+      const averageLevel = Math.max(1, Math.round(levels.reduce((sum, level) => sum + level, 0) / Math.max(1, levels.length)));
+      const allyCount = currentRoom.kind === "BOSS"
+        ? snapshots.filter((snapshot) => next.members[snapshot.member.userId]?.status === "ACTIVE" && snapshot.currentHp > 0).length
+        : present.length;
+      const preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
+      if (currentRoom.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
+      next = freezeRoomEncounter(next, roomId, preview, currentRoom.kind === "BOSS" ? 2 : 1);
+    }
     const actions: RoomFrontAction[] = Object.entries(submissions).map(([memberId, submission]) => {
       const payload = (submission.actions ?? {}) as { action?: string; puzzleChoice?: string };
       return { memberId, action: payload.action, puzzleChoice: payload.puzzleChoice };
@@ -87,6 +103,7 @@ async function resolveV2RoomFronts(
         if (!mascot) return [];
         const fighter = toLeagueMascot(mascot, index + 1, snapshot.currentStance);
         fighter.hp = snapshot.currentHp;
+        if (defensiveMemberIds.includes(snapshot.member.userId)) fighter.combatRole = normalizeCombatRole("DEFENDER");
         const role = snapshot.member.expeditionRole;
         if (role === "INVESTIGADOR") fighter.instinct = Math.round(fighter.instinct * 1.08);
         if (role === "NAVEGADOR") fighter.agility = Math.round(fighter.agility * 1.03);
@@ -148,6 +165,7 @@ async function resolveV2RoomFronts(
       };
     });
     next = result.state;
+    fronts.push(result);
     log.push(...result.events);
     if (result.blockedBy.length) log.push(`Chefe bloqueado: aguardando ${result.blockedBy.join(", ")}.`);
     for (const [mascotId, hp] of Object.entries(result.hpByMascotId))
@@ -156,7 +174,7 @@ async function resolveV2RoomFronts(
         data: { currentHp: hp, state: hp <= 0 ? "DEFEATED" : "IN_TOWER" },
       });
   }
-  return { state: next, log };
+  return { state: next, log, fronts };
 }
 
 function finalHp(
@@ -748,7 +766,7 @@ export function runLockKey(runId: string): number {
  * A resolução de gameplay (exploração/encounters via o núcleo tático) entra aqui
  * nas próximas fases — este é o esqueleto do loop.
  */
-export async function resolveTowerTurnLocked(runId: string): Promise<void> {
+export async function resolveTowerTurnLocked(runId: string, expectedTurn?: number): Promise<void> {
   await prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
@@ -761,20 +779,69 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       const vol = (run.volatileState ?? {}) as TowerVolatile;
       if (isExpeditionV2(vol.exploration)) {
         const submissions = vol.submissions ?? {};
-        if (!Object.keys(submissions).length && (!run.nextDeadline || run.nextDeadline > new Date())) return;
-        const resolved = await resolveV2RoomFronts(tx, run, vol.exploration, submissions);
-        const nextTurn = run.globalTurn + 1;
+        if (expectedTurn !== undefined && expectedTurn !== run.globalTurn) return;
+        if (vol.lastResolvedTurn === run.globalTurn) return;
+        if (vol.exploration.globalTurn !== run.globalTurn) throw new Error("Turno V2 fora de sincronia com a run.");
+        const mapped: Record<string, V2Submission> = Object.fromEntries(Object.entries(submissions).map(([memberId, submission]) => {
+          const payload = (submission.actions ?? {}) as { roomId?: string; globalTurn?: number };
+          return [memberId, {
+            memberId,
+            roomId: payload.roomId ?? "",
+            globalTurn: payload.globalTurn ?? -1,
+            actions: submission.actions,
+          }];
+        }));
+        const deadlineReached = Boolean(run.nextDeadline && run.nextDeadline <= new Date());
+        const turn = advanceV2Turn(vol.exploration, mapped, run.globalTurn, deadlineReached);
+        if (!turn) return;
+        const activeState = { ...turn.state, globalTurn: run.globalTurn };
+        const resolved = await resolveV2RoomFronts(tx, run, activeState, submissions, turn.defensiveMemberIds);
+        const members = { ...resolved.state.members };
+        for (const member of run.members) {
+          const nextMember = members[member.userId];
+          if (!nextMember) continue;
+          if (nextMember.status === "AFK_ABANDONED") {
+            await tx.towerRunMascot.updateMany({
+              where: { memberId: member.id, state: "IN_TOWER" },
+              data: { state: "RECOVERED" },
+            });
+          }
+          await tx.towerRunMember.update({
+            where: { id: member.id },
+            data: {
+              consecutiveMisses: nextMember.consecutiveMisses,
+              afkRemoved: nextMember.status === "AFK_ABANDONED",
+              removedAt: nextMember.status === "AFK_ABANDONED" ? new Date() : null,
+            },
+          });
+        }
+        const latestMascots = await tx.towerRunMascot.findMany({
+          where: { member: { runId } },
+          include: { member: { select: { userId: true } } },
+        });
+        for (const [memberId, member] of Object.entries(members)) {
+          if (member.status !== "ACTIVE") continue;
+          const mascots = latestMascots.filter((entry) => entry.member.userId === memberId);
+          if (mascots.length && mascots.every((entry) => entry.currentHp <= 0)) {
+            members[memberId] = { ...member, status: "DOWNED" };
+          }
+        }
+        const hasActive = Object.values(members).some((member) => member.status === "ACTIVE");
+        const allAbandoned = Object.values(members).every((member) => member.status === "AFK_ABANDONED");
+        const ended = !hasActive;
         await tx.towerRun.update({
           where: { id: runId },
           data: {
-            globalTurn: nextTurn,
-            nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
+            globalTurn: turn.state.globalTurn,
+            status: ended ? (allAbandoned ? "ABANDONED" : "FAILED") : "ACTIVE",
+            endedAt: ended ? new Date() : null,
+            nextDeadline: ended ? null : new Date(Date.now() + windowMsFor(run.pace)),
             volatileState: {
               ...vol,
-              exploration: { ...resolved.state, globalTurn: nextTurn },
+              exploration: { ...resolved.state, globalTurn: turn.state.globalTurn, members },
               submissions: {},
               lastResolvedTurn: run.globalTurn,
-              log: [...(vol.log ?? []), ...resolved.log, `Turno ${run.globalTurn} resolvido.`].slice(-50),
+              log: [...(vol.log ?? []), ...turn.events, ...resolved.log, `Turno ${run.globalTurn} resolvido.`].slice(-50),
             } as unknown as Prisma.InputJsonValue,
           },
         });
@@ -1135,6 +1202,11 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
     },
     { timeout: 15000 },
   );
+}
+
+/** Explicit-turn entry point used by the final confirmation; cron uses the same locked resolver. */
+export async function resolveTowerTurnV2(runId: string, expectedTurn: number): Promise<void> {
+  await resolveTowerTurnLocked(runId, expectedTurn);
 }
 
 /** Varredura (cron): resolve janelas expiradas. Retorna quantas foram resolvidas. */

@@ -58,7 +58,9 @@ import {
 } from "@/lib/tower/narrative";
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
 import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from "@/lib/tower/rooms";
-import { newExpeditionState } from "@/lib/tower/expedition-state";
+import { isExpeditionV2, newExpeditionState } from "@/lib/tower/expedition-state";
+import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
+import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -2331,7 +2333,9 @@ export async function submitTowerActionAction(
   const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
 
-  const resolvedNow = await prisma.$transaction(
+  let resolution: { resolved: boolean; turn: number };
+  try {
+    resolution = await prisma.$transaction(
     async (tx) => {
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
       const run = await tx.towerRun.findUnique({
@@ -2359,11 +2363,29 @@ export async function submitTowerActionAction(
         throw new Error(
           "Sua ação nesta sala já foi confirmada e não pode ser substituída.",
         );
+      const v2 = isExpeditionV2(vol.exploration) ? vol.exploration : null;
+      if (v2) {
+        const payload = actions && typeof actions === "object" ? actions as Record<string, unknown> : {};
+        const validation = validateV2Submission(v2, {
+          memberId: user.id,
+          globalTurn: typeof payload.globalTurn === "number" ? payload.globalTurn : NaN,
+          roomId: typeof payload.roomId === "string" ? payload.roomId : "",
+          actions: payload,
+        });
+        if (!validation.ok) throw new Error(`Ação recusada (${validation.code}). Atualize a expedição e tente novamente.`);
+        if (typeof payload.routeId === "string" && payload.routeId) {
+          try { moveMember(v2, user.id, payload.routeId); }
+          catch (error) {
+            if (error instanceof TowerRouteError) throw new Error(error.message);
+            throw error;
+          }
+        }
+      }
       const scopedActions =
         actions && typeof actions === "object"
           ? {
               ...(actions as Record<string, unknown>),
-              _roomId: vol.exploration?.currentRoomId ?? null,
+              _roomId: v2?.members[user.id]?.roomId ?? vol.exploration?.currentRoomId ?? null,
             }
           : actions;
       submissions[user.id] = {
@@ -2375,11 +2397,21 @@ export async function submitTowerActionAction(
         data: {
           volatileState: {
             ...vol,
+            exploration: v2 ? {
+              ...v2,
+              members: { ...v2.members, [user.id]: { ...v2.members[user.id], confirmedTurn: run.globalTurn } },
+            } : vol.exploration,
             submissions,
           } as unknown as Prisma.InputJsonValue,
         },
       });
 
+      if (v2) {
+        const activeIds = Object.entries(v2.members)
+          .filter(([, member]) => member.status === "ACTIVE" && member.availableFromTurn <= run.globalTurn)
+          .map(([id]) => id);
+        return { resolved: activeIds.length > 0 && activeIds.every((id) => Boolean(submissions[id])), turn: run.globalTurn };
+      }
       const active = run.members.filter(
         (m) =>
           !m.afkRemoved &&
@@ -2387,12 +2419,15 @@ export async function submitTowerActionAction(
             (mascot) => mascot.currentHp > 0 && mascot.state === "IN_TOWER",
           ),
       );
-      return active.every((m) => Boolean(submissions[m.userId]));
+      return { resolved: active.every((m) => Boolean(submissions[m.userId])), turn: run.globalTurn };
     },
     { timeout: 15000 },
-  );
+    );
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível confirmar a ação." };
+  }
 
-  if (resolvedNow) await resolveTowerTurnLocked(runId).catch(() => null);
+  if (resolution.resolved) await resolveTowerTurnLocked(runId, resolution.turn).catch(() => null);
   revalidatePath(PATH);
-  return { ok: true as const, resolved: resolvedNow };
+  return { ok: true as const, resolved: resolution.resolved };
 }
