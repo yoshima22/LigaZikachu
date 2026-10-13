@@ -42,12 +42,15 @@ const mk = (i: number, pokemonId: number) => toLeagueMascot({
 }, i, ROLES[i]);
 const team = [25, 6, 143, 94, 130, 150].map(mk);
 const falkner = getJohtoLeader("falkner")!;
-const leaderTeam = buildLeaderTeam(falkner, [0, 1, 2, 3, 4, 5], team, 0);
+const MASCOT_HP = 5_833_333;
+const alive = (slots: number[]) => slots.map((slot) => ({ slot, hpMax: MASCOT_HP, hpCurrent: MASCOT_HP }));
+const leaderTeam = buildLeaderTeam(falkner, alive([0, 1, 2, 3, 4, 5]), team, 0);
+assert.ok(leaderTeam.every((m) => m.hp === MASCOT_HP), "o mascote do líder entra com a vida global completa");
 assert.equal(leaderTeam.length, 6);
 const power = (m: { force: number; agility: number; instinct: number; vitality: number; charisma: number }) => m.force + m.agility + m.instinct + m.vitality + m.charisma;
 const ratio = leaderTeam.reduce((s, m) => s + power(m), 0) / team.reduce((s, m) => s + power(m), 0);
 assert.ok(ratio > 0.9 && ratio < 1.1, `líder deve ter poder próximo ao do time (razão ${ratio.toFixed(2)})`);
-assert.equal(buildLeaderTeam(falkner, [2, 5], team, 0).length, 2, "só os mascotes vivos entram");
+assert.equal(buildLeaderTeam(falkner, alive([2, 5]), team, 0).length, 2, "só os mascotes vivos entram");
 assert.ok(leaderTeam.every((m) => m.personality), "cada mascote do líder tem personalidade");
 const boosted = applyComboBonus(team, 8);
 assert.equal(boosted[0].force, Math.round(team[0].force * 1.08));
@@ -56,19 +59,24 @@ assert.equal(applyComboBonus(team, 0), team);
 let wins = 0, global = 0, fell = 0;
 const N = 60;
 for (let i = 0; i < N; i++) {
-  const o = runJohtoBattle(team, falkner, 0, [0, 1, 2, 3, 4, 5], 10);
+  const o = runJohtoBattle(team, falkner, 0, alive([0, 1, 2, 3, 4, 5]), 1);
   if (o.win) wins++;
   assert.notEqual(o.battle.winner, "DRAW", "a luta vai até um dos lados cair");
   global += o.totalGlobalDamage;
   fell += o.perSlot.filter((p) => p.fellInBattle).length;
   for (const p of o.perSlot) {
-    assert.equal(p.globalDamage, Math.round(p.battleDamage * 10), "conversão = dano × escala");
+    assert.equal(p.globalDamage, p.battleDamage, "escala ×1: dano real = dano global");
     // Dano causado é bruto: pode passar do HP do mascote porque o Cuidador do líder o cura no meio da luta.
     assert.ok(p.battleDamage >= 0 && (p.fellInBattle || p.battleDamage < leaderTeam.find((m) => m.slot === p.slot)!.hp * 3));
   }
 }
 console.log("ok puro", { winRate: wins / N, avgGlobalDamage: Math.round(global / N), avgLeaderFallen: (fell / N).toFixed(2) });
-assert.ok(wins / N > 0.1 && wins / N < 0.9, "luta equilibrada: nem sempre vence, nem sempre perde");
+assert.equal(wins, 0, "com a vida global completa o time do jogador sempre cai");
+assert.equal(fell, 0, "nenhum mascote do líder cai numa luta só");
+assert.ok(global / N > 0, "mas causa dano persistente");
+// Mascote quase sem vida: o dano é limitado ao que resta e ele pode cair na luta.
+const weak = runJohtoBattle(team, falkner, 0, [{ slot: 0, hpMax: MASCOT_HP, hpCurrent: 50 }, { slot: 1, hpMax: MASCOT_HP, hpCurrent: 50 }], 1);
+assert.ok(weak.perSlot.every((x) => x.fellInBattle) && weak.win, "time quase morto cai e o jogador vence a luta");
 
 if (process.argv.includes("--db")) {
   (async () => {

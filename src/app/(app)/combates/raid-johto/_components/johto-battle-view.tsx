@@ -48,8 +48,7 @@ function SlotTable({ rows }: { rows: PerSlot }) {
         <div key={row.slot} className="flex items-center gap-2 rounded-lg bg-slate-900/70 px-2 py-1 text-[11px]">
           <img src={getStaticSpriteUrl(row.pokemonId)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} />
           <span className="min-w-0 flex-1 truncate font-bold text-white">{row.name}{row.fellInBattle && <span className="ml-1 text-red-300">✖ caiu</span>}</span>
-          <span className="text-slate-400">{fmt(row.battleDamage)} em combate</span>
-          <span className="w-24 text-right font-black text-amber-300">{fmt(row.globalDamage)}</span>
+          <span className="w-28 text-right font-black text-amber-300">{fmt(row.globalDamage)} dano</span>
         </div>
       ))}
     </div>
@@ -77,7 +76,7 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
             <div>
               <p className="text-[10px] font-black uppercase tracking-[0.25em] text-[#FFCB05]">{test ? `Teste · ${test.runs} simulações` : "Resultado do confronto"}</p>
               <h2 className="mt-1 text-xl font-black text-white">
-                {test ? `Contra ${test.leaderName}` : view.eventDefeated ? "OS LÍDERES CAÍRAM!" : view.leaderDefeated ? `${view.leaderName} foi derrotado!` : won ? `Vitória contra ${view.leaderName}` : `Derrota contra ${view.leaderName}`}
+                {test ? `Contra ${test.leaderName}` : view.eventDefeated ? "OS LÍDERES CAÍRAM!" : view.leaderDefeated ? `${view.leaderName} foi derrotado!` : won ? `Você derrubou o que restava do time de ${view.leaderName}!` : `Seu time caiu para ${view.leaderName}`}
               </h2>
               {!test && <p className="text-xs text-slate-400">{view.message}</p>}
             </div>
@@ -113,11 +112,11 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
               <div className="mt-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
                 <Stat label="Dano no líder" value={fmt(view.damage ?? 0)} />
                 <Stat label="Rodadas" value={String(view.rounds ?? 0)} />
-                <Stat label="Caíram do líder" value={String(view.koSlots?.length ?? 0)} hint="derrubados de vez" />
+                <Stat label="Mascotes do líder derrubados" value={String(view.koSlots?.length ?? 0)} hint="saem das próximas lutas" />
                 <Stat label="Seus feridos" value={String(view.fallenMascots?.length ?? 0)} hint={view.fallenMascots?.length ? "Atendimento SUS" : undefined} />
                 <Stat label="Combo" value={`+${view.comboPct ?? 0}%`} hint="bônus de grupo" />
               </div>
-              {view.perSlot && <div className="mt-4"><p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Dano por mascote do líder (em combate · convertido)</p><SlotTable rows={view.perSlot} /></div>}
+              {view.perSlot && <div className="mt-4"><p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Dano causado a cada mascote do líder (persistente para todos os jogadores)</p><SlotTable rows={view.perSlot} /></div>}
               {view.fallenIds && view.fallenIds.length > 0 && (
                 <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-3">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-orange-200">Mascotes feridos — Atendimento SUS (10 ZC cada)</p>

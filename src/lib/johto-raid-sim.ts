@@ -8,7 +8,7 @@ export const JOHTO_VISIBLE_KEY = "johto_raid_visible";
 export const JOHTO_LEADER_HP = 35_000_000;
 export const JOHTO_MASCOTS_PER_LEADER = 6;
 export const JOHTO_DEFAULT_COOLDOWN_MIN = 20;
-export const JOHTO_DEFAULT_DAMAGE_SCALE = 10;
+export const JOHTO_DEFAULT_DAMAGE_SCALE = 1;
 export const JOHTO_DEFAULT_LEADER_DAYS = 5;
 export const JOHTO_REPLAY_HISTORY = 20;
 
@@ -134,20 +134,20 @@ const ROLE_MAIN_STATS: Record<CombatRole, Array<"force" | "agility" | "instinct"
   SABOTEUR: ["instinct", "agility"], PROVOKER: ["charisma", "instinct"], SPECIALIST: ["force"], SURVIVOR: ["vitality"],
 };
 
-const leaderHp = (level: number, vitality: number) => Math.max(10, Math.round(55 + level * 6 + vitality * 4));
 
 /**
- * Time do líder para UMA luta: só os mascotes que ainda têm vida global. Os atributos vêm da média do time
- * atacante (luta equilibrada), com o atributo principal da postura em +15%, os demais em −5% e +2% de força
- * por ginásio avançado (`position`).
+ * Time do líder para UMA luta: só os mascotes que ainda têm vida global, cada um com a **vida global real** (ex.: 5.833.333),
+ * que persiste entre as lutas de todos os jogadores. Os atributos de ataque/defesa vêm da média do time atacante, com o
+ * atributo principal da postura em +15%, os demais em −5% e +2% por ginásio avançado (`position`).
  */
-export function buildLeaderTeam(def: JohtoLeaderDef, aliveSlots: number[], playerTeam: LeagueMascot[], position: number): LeagueMascot[] {
+export type JohtoAliveMascot = { slot: number; hpMax: number; hpCurrent: number };
+export function buildLeaderTeam(def: JohtoLeaderDef, alive: JohtoAliveMascot[], playerTeam: LeagueMascot[], position: number): LeagueMascot[] {
   const n = Math.max(1, playerTeam.length);
   const avg = (pick: (m: LeagueMascot) => number) => playerTeam.reduce((sum, m) => sum + pick(m), 0) / n;
   const base = { force: avg((m) => m.force), agility: avg((m) => m.agility), instinct: avg((m) => m.instinct), vitality: avg((m) => m.vitality), charisma: avg((m) => m.charisma) };
   const level = Math.max(1, Math.round(avg((m) => m.level)));
   const ramp = 1 + position * 0.02;
-  return aliveSlots.map((slot) => {
+  return alive.map(({ slot, hpMax }) => {
     const entry = def.roster[slot];
     const mains = ROLE_MAIN_STATS[entry.role];
     const stat = (key: keyof typeof base) => Math.max(1, Math.round(base[key] * (mains.includes(key) ? 1.15 : 0.95) * ramp));
@@ -155,7 +155,7 @@ export function buildLeaderTeam(def: JohtoLeaderDef, aliveSlots: number[], playe
     return {
       id: `johto:${def.key}:${slot}`, ownerId: `johto:${def.key}`, pokemonId: entry.pokemonId, types: getPokemonTypes(entry.pokemonId),
       name: getPokemonName(entry.pokemonId), level, force: stat("force"), agility: stat("agility"), instinct: stat("instinct"), vitality,
-      charisma: stat("charisma"), hp: leaderHp(level, vitality), combatRole: normalizeCombatRole(entry.role), personality: entry.personality, slot,
+      charisma: stat("charisma"), hp: hpMax, combatRole: normalizeCombatRole(entry.role), personality: entry.personality, slot,
     };
   });
 }
@@ -168,12 +168,12 @@ export type BattleAnalysis = {
 };
 
 /** Reconstrói HP final, dano efetivo e KOs a partir do log (a Liga não devolve o HP). Considera curas e Guardião. */
-export function analyzeLeagueBattle(lineups: LeagueMascot[], log: LeagueBattleResult["log"]): BattleAnalysis {
+export function analyzeLeagueBattle(lineups: LeagueMascot[], log: LeagueBattleResult["log"], startingHp?: Map<string, number>): BattleAnalysis {
   const hp = new Map<string, number>();
   const max = new Map<string, number>();
   const guardians = new Map<string, string>();
   for (const m of lineups) {
-    hp.set(m.id, m.hp); max.set(m.id, m.hp);
+    hp.set(m.id, Math.min(m.hp, startingHp?.get(m.id) ?? m.hp)); max.set(m.id, m.hp);
     if (m.combatRole === "GUARDIAN") guardians.set(`${m.ownerId}|${m.name}`, m.id);
   }
   const damageTaken = new Map<string, number>();
@@ -212,11 +212,13 @@ export type JohtoBattleOutcome = {
 };
 
 /** Uma investida: time do jogador (6) contra os mascotes vivos do líder, convertendo o dano para a vida global. */
-export function runJohtoBattle(playerTeam: LeagueMascot[], def: JohtoLeaderDef, position: number, aliveSlots: number[], damageScale: number, comboPct = 0): JohtoBattleOutcome {
+export function runJohtoBattle(playerTeam: LeagueMascot[], def: JohtoLeaderDef, position: number, alive: JohtoAliveMascot[], damageScale: number, comboPct = 0): JohtoBattleOutcome {
   // O líder escala pelo time SEM o bônus do combo (senão o bônus seria anulado). A luta vai até um dos lados cair (sem limite prático de rodadas).
-  const leaderTeam = buildLeaderTeam(def, aliveSlots, playerTeam, position);
-  const battle = runLeagueCombat(applyComboBonus(playerTeam, comboPct), leaderTeam, null, [], [], { maxRounds: 1000 });
-  const analysis = analyzeLeagueBattle([...battle.lineupA, ...battle.lineupB], battle.log);
+  const leaderTeam = buildLeaderTeam(def, alive, playerTeam, position);
+  // Cada mascote do líder entra com a vida global que ainda tem (o dano é persistente entre as lutas).
+  const startingHp = new Map(leaderTeam.map((m) => [m.id, alive.find((a) => a.slot === m.slot)?.hpCurrent ?? m.hp]));
+  const battle = runLeagueCombat(applyComboBonus(playerTeam, comboPct), leaderTeam, null, [], [], { maxRounds: 1000, startingHp });
+  const analysis = analyzeLeagueBattle([...battle.lineupA, ...battle.lineupB], battle.log, startingHp);
   const perSlot = leaderTeam.map((m) => {
     const battleDamage = Math.round(analysis.damageTaken.get(m.id) ?? 0);
     return { slot: m.slot, pokemonId: m.pokemonId, name: m.name, battleDamage, globalDamage: Math.round(battleDamage * damageScale), fellInBattle: (analysis.hpEnd.get(m.id) ?? 0) <= 0 };

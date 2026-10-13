@@ -7,19 +7,19 @@ Evento cooperativo do servidor: os 8 líderes de ginásio de Johto são chefes *
 - O evento nasce **inativo**: criar → conferir/testar → abrir ataques. "Liberar" e "Abrir ataques" são interruptores independentes. O prazo de 5 dias do líder só começa a contar ao **abrir os ataques** (ou quando o líder anterior cai/foge).
 
 ## Combate (motor oficial da Liga, `runLeagueCombat`)
-- O jogador usa 6 mascotes livres contra o time de 6 do líder (só os mascotes que ainda têm vida global entram: o time encolhe conforme caem).
-- **Equilibrado:** os atributos dos mascotes do líder saem da média do time atacante (principal da postura +15%, demais −5%, +2% por ginásio avançado), no mesmo nível médio. As posturas de cada mascote do líder estão em `JOHTO_LEADERS[].roster`.
-- **Conversão de dano:** o dano causado a cada mascote do líder (em HP de combate, sem overkill, incluindo o absorvido por Guardião) × **escala de dano** (padrão ×10, editável no painel) vira dano na vida global daquele mascote. O dano é **bruto**: se o Cuidador do líder curar, o dano que o jogador causou antes continua contando.
-- Cada mascote do líder tem 1/6 da vida total. Quando um cai de vez, "quem derrotou" fica registrado; quando os 6 caem, o líder cai e quem deu o último dano ganha o **golpe final**.
-- Atômico: as 6 linhas de mascote são travadas (`FOR UPDATE`) na transação, então ataques simultâneos somam certo. Trava por jogador (advisory lock) impede dois ataques por duplo clique.
-- **Ferimentos como na Arena:** mascotes do jogador que caíram na luta ficam feridos (Atendimento SUS); vitória/derrota segue o resultado do time.
-- Espera entre ataques: **20 min** (editável).
-- **A luta vai até um dos lados cair** (sem limite prático de rodadas, sem empates). O jogador causa dano livremente; mascotes do líder derrubados ficam de fora das próximas lutas e os do jogador que caíram ficam feridos até passarem pelo SUS (na própria página ou direto no resultado da luta).
-- **Postura + personalidade:** cada mascote do líder tem uma postura e uma personalidade que combinam (ex.: Defensor Preguiçoso, Cuidador Sereno, Atacante Competitivo, Guardião Leal, Flanco Elétrico, Oportunista Travesso/Curioso). Dá para ver o time de cada líder no botão **Ver time**.
+- O jogador usa 6 mascotes livres contra os mascotes **vivos** do líder (o time dele encolhe conforme caem).
+- **Cada mascote do líder luta com a vida global real** (ex.: 5.833.333, 1/6 dos 35 mi) — a luta mostra essa vida cheia. O dano que o jogador causa é **persistente**: fica registrado para todos. Na prática **toda luta termina em derrota do time do jogador** (o dano causado numa luta é de ~3,5 a 6 mil), até o líder estar quase caído.
+- Quando a vida de um mascote chega a 0, ele sai de **todas** as lutas futuras contra esse líder. Quando os 6 caem, o líder cai: prêmios disponíveis e o próximo líder começa. Quem causa o último dano leva o **golpe final**.
+- O líder tem atributos equilibrados com o time atacante (principal da postura +15%, demais −5%, +2% por ginásio avançado) e cada mascote tem postura+personalidade que combinam.
+- Multiplicador de dano (padrão ×1 = dano real; editável) existe só para calibrar a duração. **Calibração (time do Glauco, o mais forte):** ~5 a 10 mil lutas para zerar 35 mi num líder, dependendo do líder — muito acima dos 5 dias; reduza a vida ou aumente o multiplicador conforme o laboratório indicar.
+- Atômico: as 6 linhas de mascote são travadas (`FOR UPDATE`) na transação. Trava por jogador impede dois ataques por duplo clique.
+- **Ferimentos como na Arena:** mascotes do jogador que caíram ficam feridos (SUS na página ou no resultado da luta).
+- Espera entre ataques: **20 min** (editável). Luta vai até um lado cair (sem empates).
+- **Replays:** os últimos **20 combates** do servidor ficam com replay (modal da Liga); os mais antigos mantêm só o resumo.
+- **Elegibilidade por líder:** só recebe as recompensas de um líder quem o atacou (estatística por líder). Quem não atacou aquele líder não é elegível a ele.
 
 ## Combo de ataque em grupo
-Cada treinador (não admin) que atacou nos últimos **5 minutos** vale **+2%** em todos os status do próximo atacante, até **+8%** (4 treinadores). O líder escala pelo time sem o bônus (o bônus é real). Quando passam 5 minutos sem ataques, o bônus zera. A página mostra o combo atual e um cronômetro para o próximo degrau cair.
-- **Replays:** os últimos **20 combates** do servidor ficam com replay (qualquer jogador assiste, modal da Liga); os mais antigos perdem o JSON pesado, mas mantêm o resumo.
+Cada treinador (não admin) que atacou nos últimos **5 minutos** vale **+2%** em todos os status do próximo atacante, até **+8%**. O líder escala pelo time sem o bônus. Sem ataques por 5 minutos, o bônus zera. A página mostra o combo e o cronômetro do próximo degrau.
 
 ## Recompensas (por líder derrotado — `DEFAULT_JOHTO_REWARDS`, editável em `rewardConfigJson`)
 | Quem | ZC | Mascote do líder (escolha 1 dos 6) |

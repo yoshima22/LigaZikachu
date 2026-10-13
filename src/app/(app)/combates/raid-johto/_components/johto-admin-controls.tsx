@@ -100,7 +100,7 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
                 <label className="text-[10px] text-slate-400">Dias por líder<input value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} className={`${input} w-16`} /></label>
                 <button disabled={pending} className={neutral} onClick={() => run({ type: "settings", cooldownMinutes: Number(cooldown) || 0, damageScale: Number(scale) || 10, leaderDays: Number(days) || 5 })}>Salvar</button>
               </div>
-              <p className="text-[10px] text-slate-500">A escala converte o dano de combate em dano na vida do líder: use o laboratório abaixo para calibrar quantos ataques cada líder aguenta.</p>
+              <p className="text-[10px] text-slate-500">Multiplicador do dano causado aos mascotes do líder (1 = dano real da luta). Os mascotes do líder lutam com a vida global real; use o laboratório abaixo para ver quantas lutas cada líder aguenta e ajuste a vida ou este multiplicador.</p>
               {summary.expiresAt && (
                 <div className="flex flex-wrap items-end gap-2">
                   <p className="text-[10px] text-slate-400">Prazo do líder atual: {new Date(summary.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>

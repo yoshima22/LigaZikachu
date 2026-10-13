@@ -1,4 +1,4 @@
-/** Ajusta o evento de Johto já criado (sem progresso) para os novos padrões: 35 mi por líder e espera de 20 min. npx tsx scripts/rescale-johto-event.ts */
+/** Ajusta o evento de Johto já criado (sem progresso) para os novos padrões: 35 mi por líder e espera de 20 min e dano ×1. npx tsx scripts/rescale-johto-event.ts */
 import { config } from "dotenv"; config({ path: ".env.local" }); config();
 import { PrismaClient } from "@prisma/client";
 const prisma = new PrismaClient();
@@ -9,6 +9,6 @@ const prisma = new PrismaClient();
   const mascotHp = Math.floor(35_000_000 / 6);
   await prisma.$executeRaw`UPDATE johto_raid_leader_mascots SET "hpMax" = ${mascotHp}, "hpCurrent" = ${mascotHp} WHERE "leaderId" IN (SELECT id FROM johto_raid_leaders WHERE "eventId" = ${event.id})`;
   await prisma.$executeRaw`UPDATE johto_raid_leaders SET "hpMax" = ${mascotHp * 6}, "hpCurrent" = ${mascotHp * 6} WHERE "eventId" = ${event.id}`;
-  await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { cooldownMinutes: 20 } });
+  await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { cooldownMinutes: 20, damageScale: 1 } });
   console.log(`ok: líderes com ${(mascotHp * 6).toLocaleString("pt-BR")} HP (${mascotHp.toLocaleString("pt-BR")} por mascote), espera de 20 min`);
 })().finally(() => prisma.$disconnect());

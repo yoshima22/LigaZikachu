@@ -297,12 +297,12 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
   if (!leaderRow) return { ok: false, message: "Nenhum líder disponível no momento." };
   const def = getJohtoLeader(leaderRow.key);
   if (!def) return { ok: false, message: "Líder desconhecido." };
-  const aliveSlots = leaderRow.mascots.filter((m) => m.hpCurrent > 0).map((m) => m.slot);
-  if (aliveSlots.length === 0) return { ok: false, message: `${def.name} já foi derrotado.` };
+  const alive = leaderRow.mascots.filter((m) => m.hpCurrent > 0).map((m) => ({ slot: m.slot, hpMax: m.hpMax, hpCurrent: m.hpCurrent }));
+  if (alive.length === 0) return { ok: false, message: `${def.name} já foi derrotado.` };
 
   const playerTeam = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, selectedRoles[m.id]));
   const combo = await getComboState(event.id, player.id, now);
-  const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, aliveSlots, event.damageScale, combo.bonusPct);
+  const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, alive, event.damageScale, combo.bonusPct);
   const payload = buildPayload(outcome, player.id, player.displayName, def.name);
   const fallenNames = outcome.playerFallenIds.map((id) => playerTeam.find((m) => m.id === id)?.name ?? "");
 
@@ -384,6 +384,7 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
 
   if (applied.leaderDefeated) {
     if (!applied.eventDefeated) await openNextLeaderWindow(event.id, now).catch(() => undefined);
+    if (applied.eventDefeated) await thankParticipants(event.id).catch(() => undefined);
     await grantLeaderRewards(leaderRow.id).catch((error) => console.error("[JohtoRaid] Falha ao entregar prêmios do líder.", error));
   }
   if (!admin && (await isJohtoRaidVisibleToPlayers().catch(() => false))) await announceProgress(def, player.displayName, applied.koSlots, applied.leaderDefeated, applied.eventDefeated, leaderRow.id, event.id).catch(() => undefined);
@@ -422,6 +423,20 @@ async function announceProgress(def: JohtoLeaderDef, killer: string, koSlots: Ar
 }
 
 // ── Prêmios ──────────────────────────────────────────────────────────────────
+
+/** Agradecimento do último líder: notificação a todo treinador que participou de algum líder (idempotente). */
+async function thankParticipants(eventId: string) {
+  const rows = await prisma.johtoRaidLeaderStat.findMany({ where: { leader: { eventId }, player: NON_ADMIN }, distinct: ["playerId"], select: { playerId: true } });
+  if (rows.length === 0) return;
+  await prisma.playerNotification.createMany({
+    data: rows.map((row) => ({
+      playerId: row.playerId, category: "EVENT", type: "JOHTO_RAID_THANKS", title: "Os Líderes de Johto caíram! Obrigado!",
+      body: "Obrigado por lutar nesta raid: o servidor venceu os oito Líderes de Johto! As recompensas de cada líder que você atacou continuam disponíveis na página da raid, inclusive a escolha dos mascotes.",
+      href: HREF, entityId: eventId, eventKey: `johto-raid-thanks:${eventId}:${row.playerId}`,
+    })),
+    skipDuplicates: true,
+  });
+}
 
 /** Prévia dos prêmios de um líder com as estatísticas atuais (sem entregar nada). */
 export async function previewLeaderRewards(leaderId: string) {
@@ -540,10 +555,13 @@ export async function simulateJohtoTest(userId: string, mascotIds: string[], rol
   mascots.sort((a, b) => (order.get(a.id) ?? 0) - (order.get(b.id) ?? 0));
   const team = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, roles[m.id]));
   const total = Math.max(1, Math.min(50, Math.floor(runs) || 1));
-  const all = Array.from({ length: total }, () => runJohtoBattle(team, def, position, def.roster.map((_, slot) => slot), scale, comboBonusPct(comboStacks)));
+  const leaderHpMax = (event ? (await prisma.johtoRaidLeader.findFirst({ where: { eventId: event.id, key: leaderKey }, select: { hpMax: true } }))?.hpMax : null) ?? JOHTO_LEADER_HP;
+  const mascotHp = Math.floor(leaderHpMax / JOHTO_MASCOTS_PER_LEADER);
+  const fullTeam = def.roster.map((_, slot) => ({ slot, hpMax: mascotHp, hpCurrent: mascotHp }));
+  const all = Array.from({ length: total }, () => runJohtoBattle(team, def, position, fullTeam, scale, comboBonusPct(comboStacks)));
   const avg = (pick: (o: JohtoBattleOutcome) => number) => all.reduce((sum, o) => sum + pick(o), 0) / total;
   const avgGlobal = avg((o) => o.totalGlobalDamage);
-  const hpMax = (event ? (await prisma.johtoRaidLeader.findFirst({ where: { eventId: event.id, key: leaderKey }, select: { hpMax: true } }))?.hpMax : null) ?? JOHTO_LEADER_HP;
+  const hpMax = leaderHpMax;
   return {
     ok: true,
     summary: {
