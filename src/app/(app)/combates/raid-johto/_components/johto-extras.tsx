@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useTransition } from "react";
+import { createPortal } from "react-dom";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
@@ -67,38 +68,39 @@ export function LeaderTeamButton({ leader, compact = false }: { leader: Pick<Joh
       <button type="button" onClick={() => setOpen(true)} className={`rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 ${compact ? "mt-1.5 w-full px-2 py-1 text-[10px]" : "px-3 py-1.5 text-xs"}`}>
         👥 Ver time
       </button>
-      {open && (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center bg-black/80 p-3" onClick={() => setOpen(false)}>
-          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[#FFCB05]/30 bg-slate-950 p-5 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+      {open && typeof document !== "undefined" && createPortal(
+        <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3" onClick={() => setOpen(false)}>
+          <div className="max-h-[92vh] w-full max-w-3xl overflow-y-auto rounded-3xl border border-[#FFCB05]/40 bg-[#07111f] p-5 text-slate-100 shadow-2xl shadow-black/80" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center gap-3">
               <img src={leader.image} alt="" className="h-16 w-16" style={{ imageRendering: "pixelated" }} />
               <div className="min-w-0 flex-1">
                 <p className="text-[10px] font-black uppercase tracking-[0.2em] text-[#FFCB05]">Time de {leader.name}</p>
                 <h3 className="truncate text-xl font-black text-white">{leader.city} · {leader.badge}</h3>
-                <p className="text-[11px] text-slate-400">Vida do líder: {fmt(leader.hpCurrent)} / {fmt(leader.hpMax)} (cada mascote tem 1/6)</p>
+                <p className="text-[11px] text-slate-300">Vida do líder: {fmt(leader.hpCurrent)} / {fmt(leader.hpMax)} (cada mascote tem 1/6)</p>
               </div>
               <button onClick={() => setOpen(false)} className="rounded-full border border-white/15 px-3 py-1 text-xs text-slate-300 hover:text-white">Fechar</button>
             </div>
             <div className="mt-4 grid gap-2 sm:grid-cols-2">
               {leader.mascots.map((m) => (
-                <div key={m.slot} className={`flex items-center gap-3 rounded-2xl border p-3 ${m.defeated ? "border-red-500/25 bg-red-500/5" : "border-slate-800 bg-slate-900/60"}`}>
+                <div key={m.slot} className={`flex items-center gap-3 rounded-2xl border p-3 ${m.defeated ? "border-red-400/40 bg-[#351b25]" : "border-slate-700 bg-[#111d31]"}`}>
                   <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className={`h-16 w-16 shrink-0 object-contain ${m.defeated ? "opacity-30 grayscale" : ""}`} style={{ imageRendering: "pixelated" }} />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-black text-white">{m.name}</p>
                     <div className="mt-0.5 flex flex-wrap gap-1 text-[9px] font-bold">
-                      {m.types.map((t) => <span key={t} className="rounded-full bg-slate-800 px-1.5 py-0.5 text-slate-200">{TYPE_PT[t] ?? t}</span>)}
-                      <span className="rounded-full bg-[#FFCB05]/15 px-1.5 py-0.5 text-[#FFCB05]">{COMBAT_ROLE_LABELS[m.role as keyof typeof COMBAT_ROLE_LABELS] ?? m.role}</span>
-                      {m.personality && <span className="rounded-full bg-fuchsia-500/15 px-1.5 py-0.5 text-fuchsia-200">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
+                      {m.types.map((t) => <span key={t} className="rounded-full bg-slate-700 px-1.5 py-0.5 text-slate-100">{TYPE_PT[t] ?? t}</span>)}
+                      <span className="rounded-full bg-[#FFCB05]/20 px-1.5 py-0.5 text-[#FFE477]">{COMBAT_ROLE_LABELS[m.role as keyof typeof COMBAT_ROLE_LABELS] ?? m.role}</span>
+                      {m.personality && <span className="rounded-full bg-fuchsia-500/25 px-1.5 py-0.5 text-fuchsia-100">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
                     </div>
                     <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-black/50"><div className="h-full rounded-full bg-gradient-to-r from-red-600 via-orange-400 to-[#FFCB05]" style={{ width: `${m.hpMax > 0 ? Math.max(0, (m.hpCurrent / m.hpMax) * 100) : 0}%` }} /></div>
-                    <p className="mt-0.5 text-[10px] text-slate-400">{m.defeated ? `Derrotado${m.defeatedByName ? ` por ${m.defeatedByName}` : ""}` : `${fmt(m.hpCurrent)} / ${fmt(m.hpMax)} HP`}</p>
+                    <p className="mt-0.5 text-[10px] font-medium text-slate-300">{m.defeated ? `Derrotado${m.defeatedByName ? ` por ${m.defeatedByName}` : ""}` : `${fmt(m.hpCurrent)} / ${fmt(m.hpMax)} HP`}</p>
                   </div>
                 </div>
               ))}
             </div>
-            <p className="mt-3 text-[10px] text-slate-500">Na luta, o líder usa só os mascotes ainda de pé, com atributos equilibrados com o seu time. Os já derrotados ficam fora das próximas lutas.</p>
+            <p className="mt-3 text-[10px] text-slate-300">Na luta, o líder usa só os mascotes ainda de pé, com atributos equilibrados com o seu time. Os já derrotados ficam fora das próximas lutas.</p>
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </>
   );
