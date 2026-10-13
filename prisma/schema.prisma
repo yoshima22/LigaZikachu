@@ -349,6 +349,8 @@ model Player {
   raidDamageRankings          RaidDamageRanking[]
   johtoRaidAttempts           JohtoRaidAttempt[]
   johtoRaidRankings           JohtoRaidRanking[]
+  johtoRaidLeaderStats        JohtoRaidLeaderStat[]
+  johtoRaidRewards            JohtoRaidReward[]
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
   notifications               PlayerNotification[]
   mascotInteractionJobs       MascotInteractionJob[]
@@ -5005,6 +5007,8 @@ model JohtoRaidEvent {
   defeatedAt        DateTime?
   rewardsGrantedAt  DateTime?
   cooldownMinutes   Int      @default(30)
+  damageScale       Float    @default(10)
+  leaderDays        Int      @default(5)
   rewardConfigJson  Json?
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
@@ -5012,6 +5016,7 @@ model JohtoRaidEvent {
   leaders  JohtoRaidLeader[]
   attempts JohtoRaidAttempt[]
   rankings JohtoRaidRanking[]
+  rewards  JohtoRaidReward[]
 
   @@map("johto_raid_events")
 }
@@ -5025,7 +5030,13 @@ model JohtoRaidLeader {
   hpCurrent        Int
   defeatedAt       DateTime?
   finalBlowPlayerId String?
+  startedAt        DateTime?
+  expiresAt        DateTime?
+  escapedAt        DateTime?
+  rewardsGrantedAt DateTime?
   event            JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  mascots          JohtoRaidLeaderMascot[]
+  stats            JohtoRaidLeaderStat[]
 
   @@unique([eventId, position])
   @@map("johto_raid_leaders")
@@ -5041,6 +5052,7 @@ model JohtoRaidAttempt {
   finalBlow        Boolean  @default(false)
   teamSnapshotJson Json
   replayJson       Json?
+  summaryJson      Json?
   createdAt        DateTime @default(now())
   event            JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
   player           Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
@@ -5066,4 +5078,54 @@ model JohtoRaidRanking {
   @@unique([eventId, playerId])
   @@index([eventId, totalDamage])
   @@map("johto_raid_rankings")
+}
+
+model JohtoRaidLeaderMascot {
+  id                 String          @id @default(cuid())
+  leaderId           String
+  slot               Int
+  pokemonId          Int
+  hpMax              Int
+  hpCurrent          Int
+  defeatedAt         DateTime?
+  defeatedByPlayerId String?
+  leader             JohtoRaidLeader @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+
+  @@unique([leaderId, slot])
+  @@map("johto_raid_leader_mascots")
+}
+
+model JohtoRaidLeaderStat {
+  id                  String          @id @default(cuid())
+  leaderId            String
+  playerId            String
+  damage              Int             @default(0)
+  attackCount         Int             @default(0)
+  highestSingleDamage Int             @default(0)
+  leader              JohtoRaidLeader @relation(fields: [leaderId], references: [id], onDelete: Cascade)
+  player              Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([leaderId, playerId])
+  @@index([leaderId, damage])
+  @@map("johto_raid_leader_stats")
+}
+
+model JohtoRaidReward {
+  id              String         @id @default(cuid())
+  eventId         String
+  leaderKey       String
+  playerId        String
+  tier            String
+  zc              Int            @default(0)
+  mascotLevel     Int            @default(55)
+  egg             Boolean        @default(false)
+  claimedAt       DateTime?
+  chosenPokemonId Int?
+  createdAt       DateTime       @default(now())
+  event           JohtoRaidEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player          Player         @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, leaderKey, playerId, tier], map: "johto_raid_rewards_event_leader_player_tier_key")
+  @@index([playerId])
+  @@map("johto_raid_rewards")
 }

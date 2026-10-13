@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X } from "lucide-react";
@@ -181,13 +181,23 @@ function RaidBattleModal({ result, onClose, labels }: { result: SuccessfulRaidRe
   );
 }
 
-export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = [], attackAction = attackOrderRaidBossAction, labels = ORDER_LABELS }: { mascots: RaidMascot[]; cooldownText?: string | null; recentAttempts?: RecentRaidAttempt[]; attackAction?: (form: FormData) => Promise<RaidResult>; labels?: RaidLabels }) {
+/** Resultado genérico de uma investida (cada raid devolve o seu formato; `renderResult` sabe exibi-lo). */
+type AnyAttackResult = { ok: boolean; message?: string; [key: string]: unknown };
+export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = [], attackAction = attackOrderRaidBossAction, labels = ORDER_LABELS, renderResult, submitLabel, extraFields }: {
+  mascots: RaidMascot[]; cooldownText?: string | null; recentAttempts?: RecentRaidAttempt[];
+  attackAction?: (form: FormData) => Promise<AnyAttackResult>; labels?: RaidLabels;
+  /** Substitui o modal da Ordem (ex.: replay da Liga). Recebe o resultado e a função de fechar. */
+  renderResult?: (result: AnyAttackResult, onClose: () => void) => ReactNode;
+  submitLabel?: string;
+  /** Campos extras enviados junto com a equipe (ex.: líder e nº de simulações do teste). */
+  extraFields?: Record<string, string>;
+}) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<string[]>([]);
   const [roles, setRoles] = useState<Record<string, CombatRole>>({});
   const [search, setSearch] = useState("");
-  const [result, setResult] = useState<SuccessfulRaidResult | null>(null);
+  const [result, setResult] = useState<AnyAttackResult | null>(null);
 
   const selectedMascots = selected.map((id) => mascots.find((mascot) => mascot.id === id)).filter(Boolean) as RaidMascot[];
   const displayed = useMemo(() => {
@@ -220,13 +230,14 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
         form.append("mascotId", id);
         form.append(`role:${id}`, roles[id] ?? "ATTACKER");
       }
+      for (const [key, value] of Object.entries(extraFields ?? {})) form.append(key, value);
       const response = await attackAction(form);
       if (!response?.ok) {
         toast.error(response?.message ?? `Nao foi possivel atacar ${labels.foe}.`);
         return;
       }
       setResult(response);
-      toast.success(response.message);
+      toast.success(response.message ?? "Pronto!");
     });
   }
 
@@ -272,7 +283,7 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
           <div className="rounded-xl border border-orange-500/25 bg-orange-500/10 p-3 text-xs text-orange-100">{cooldownText}</div>
         ) : (
           <button disabled={pending || selected.length !== 6} type="button" onClick={submit} className="w-full rounded-xl bg-red-500 px-4 py-3 text-sm font-black text-white transition hover:bg-red-400 disabled:cursor-not-allowed disabled:opacity-40">
-            {pending ? "Atacando..." : "Atacar com equipe de 6"}
+            {pending ? "Atacando..." : (submitLabel ?? "Atacar com equipe de 6")}
           </button>
         )}
 
@@ -313,7 +324,9 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
           </div>
         )}
       </div>
-      {result && <RaidBattleModal labels={labels} result={result} onClose={() => { setResult(null); router.refresh(); }} />}
+      {result && (renderResult
+        ? renderResult(result, () => { setResult(null); router.refresh(); })
+        : <RaidBattleModal labels={labels} result={result as unknown as SuccessfulRaidResult} onClose={() => { setResult(null); router.refresh(); }} />)}
     </>
   );
 }

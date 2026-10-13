@@ -3,27 +3,42 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { johtoAdminAction } from "../actions";
-
+import { OrderRaidTeamSelector } from "../../ordem-da-trapaca/_components/order-raid-team-selector";
 import type { JohtoAdminSummary } from "@/lib/johto-raid";
+import { JOHTO_LEADERS } from "@/lib/johto-raid-sim";
+import { johtoAdminAction, johtoTestBattleAction } from "../actions";
+import { JohtoBattleResultView } from "./johto-battle-view";
+
+export type JohtoTestMascot = {
+  id: string; pokemonId: number; nickname: string | null; level: number;
+  statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number;
+};
 
 type Cmd = Parameters<typeof johtoAdminAction>[0];
-type Prize = { playerId: string; playerName: string; zc: number; egg: boolean; lines: string[] };
+type Prize = { playerId: string; playerName: string; zc: number; egg: boolean; tier: string; mascotLevel: number };
 
 const btn = "rounded-lg border px-3 py-1.5 text-xs font-bold transition disabled:opacity-50";
 const neutral = `${btn} border-slate-600 bg-slate-800 text-slate-100 hover:bg-slate-700`;
 const danger = `${btn} border-red-500/50 bg-red-500/10 text-red-200 hover:bg-red-500/20`;
 const good = `${btn} border-emerald-500/50 bg-emerald-500/10 text-emerald-200 hover:bg-emerald-500/20`;
+const input = "mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white";
+const STATUS_LABEL: Record<string, string> = { DEFEATED: "derrotado", ESCAPED: "fugiu", CURRENT: "em andamento", WAITING: "aguardando" };
 
-/** Controles do evento para administradores: liberar ao público, abrir/pausar ataques e ferramentas de debug. */
-export function JohtoAdminControls({ summary }: { summary: JohtoAdminSummary }) {
+/** Controles do evento para administradores: liberar ao público, abrir/pausar ataques, debug e laboratório de testes de combate. */
+export function JohtoAdminControls({ summary, testMascots = [] }: { summary: JohtoAdminSummary; testMascots?: JohtoTestMascot[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [cooldown, setCooldown] = useState(String(summary.cooldownMinutes));
-  const [duration, setDuration] = useState("48");
+  const [scale, setScale] = useState(String(summary.damageScale));
+  const [days, setDays] = useState(String(summary.leaderDays));
   const [damage, setDamage] = useState("1000000");
   const [hp, setHp] = useState("100000000");
+  const [extend, setExtend] = useState("24");
+  const [rewardLeader, setRewardLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
+  const [testLeader, setTestLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
+  const [runs, setRuns] = useState("20");
   const [prizes, setPrizes] = useState<Prize[] | null>(null);
+  const [showTest, setShowTest] = useState(false);
 
   function run(command: Cmd, confirmText?: string) {
     if (confirmText && !window.confirm(confirmText)) return;
@@ -41,88 +56,135 @@ export function JohtoAdminControls({ summary }: { summary: JohtoAdminSummary }) 
       <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <p className="text-[10px] font-black uppercase tracking-[0.2em] text-amber-300">Painel do administrador · Raid de Johto</p>
-          <p className="mt-1 text-xs text-slate-400">Só administradores veem esta caixa. Ataques de contas de admin não entram no ranking nem nos prêmios.</p>
+          <p className="mt-1 text-xs text-slate-400">Só administradores veem esta caixa. Ataques de contas de admin contam como teste: não entram no ranking, nos prêmios nem nos avisos do Professor Enguiça.</p>
         </div>
         <div className="flex flex-wrap gap-1.5 text-[10px] font-bold">
           <span className={`rounded-full px-2 py-1 ${summary.visible ? "bg-emerald-500/20 text-emerald-200" : "bg-slate-700 text-slate-300"}`}>{summary.visible ? "VISÍVEL AOS JOGADORES" : "OCULTA (só admin)"}</span>
           <span className={`rounded-full px-2 py-1 ${summary.active ? "bg-sky-500/20 text-sky-200" : "bg-slate-700 text-slate-300"}`}>{summary.active ? "ATAQUES ABERTOS" : "ATAQUES PAUSADOS"}</span>
-          {summary.defeated && <span className="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">VENCIDO{summary.rewardsGranted ? " · PRÊMIOS ENTREGUES" : ""}</span>}
+          {summary.defeated && <span className="rounded-full bg-amber-500/20 px-2 py-1 text-amber-200">SERVIDOR VENCEU</span>}
         </div>
       </div>
 
       {!summary.exists ? (
         <div className="flex flex-wrap items-end gap-2">
-          <label className="text-[10px] text-slate-400">HP por líder
-            <input value={hp} onChange={(e) => setHp(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-36 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
+          <label className="text-[10px] text-slate-400">HP total por líder (dividido em 6 mascotes)
+            <input value={hp} onChange={(e) => setHp(e.target.value.replace(/\D/g, ""))} className={`${input} w-40`} />
           </label>
           <button disabled={pending} className={good} onClick={() => run({ type: "create", hpPerLeader: Number(hp) || undefined })}>Criar evento (inativo e oculto)</button>
         </div>
       ) : (
         <>
+          <div className="flex flex-wrap gap-1.5 text-[10px]">
+            {summary.leaders.map((l) => (
+              <span key={l.key} className={`rounded-full border px-2 py-1 ${l.status === "CURRENT" ? "border-[#FFCB05]/60 text-[#FFCB05]" : l.status === "DEFEATED" ? "border-emerald-500/40 text-emerald-300" : l.status === "ESCAPED" ? "border-red-500/40 text-red-300" : "border-slate-700 text-slate-400"}`}>
+                {l.name}: {STATUS_LABEL[l.status] ?? l.status}{l.rewardsGranted ? " ✓prêmios" : ""}
+              </span>
+            ))}
+          </div>
+
           <div className="grid gap-3 md:grid-cols-2">
-            <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
               <p className="text-[10px] font-black uppercase tracking-wider text-slate-300">Publicação</p>
               <div className="flex flex-wrap gap-2">
                 <button disabled={pending} className={summary.visible ? danger : good} onClick={() => run({ type: "visible", value: !summary.visible }, summary.visible ? undefined : "Liberar a página para TODOS os jogadores?")}>
                   {summary.visible ? "Ocultar dos jogadores" : "Liberar para jogadores"}
                 </button>
-              </div>
-              <div className="flex flex-wrap items-end gap-2">
-                <label className="text-[10px] text-slate-400">Duração (h, 0 = sem prazo)
-                  <input value={duration} onChange={(e) => setDuration(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
-                </label>
-                <button disabled={pending} className={summary.active ? danger : good} onClick={() => run({ type: "active", value: !summary.active, durationHours: Number(duration) || 0 })}>
+                <button disabled={pending} className={summary.active ? danger : good} onClick={() => run({ type: "active", value: !summary.active })}>
                   {summary.active ? "Pausar ataques" : "Abrir ataques"}
                 </button>
               </div>
               <div className="flex flex-wrap items-end gap-2">
-                <label className="text-[10px] text-slate-400">Espera entre ataques (min)
-                  <input value={cooldown} onChange={(e) => setCooldown(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-24 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
-                </label>
-                <button disabled={pending} className={neutral} onClick={() => run({ type: "cooldown", minutes: Number(cooldown) || 0 })}>Salvar</button>
+                <label className="text-[10px] text-slate-400">Espera (min)<input value={cooldown} onChange={(e) => setCooldown(e.target.value.replace(/\D/g, ""))} className={`${input} w-20`} /></label>
+                <label className="text-[10px] text-slate-400">Escala de dano ×<input value={scale} onChange={(e) => setScale(e.target.value.replace(/[^\d.]/g, ""))} className={`${input} w-20`} /></label>
+                <label className="text-[10px] text-slate-400">Dias por líder<input value={days} onChange={(e) => setDays(e.target.value.replace(/\D/g, ""))} className={`${input} w-16`} /></label>
+                <button disabled={pending} className={neutral} onClick={() => run({ type: "settings", cooldownMinutes: Number(cooldown) || 0, damageScale: Number(scale) || 10, leaderDays: Number(days) || 5 })}>Salvar</button>
               </div>
-              {summary.endsAt && <p className="text-[10px] text-slate-500">Termina em {new Date(summary.endsAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>}
+              <p className="text-[10px] text-slate-500">A escala converte o dano de combate em dano na vida do líder: use o laboratório abaixo para calibrar quantos ataques cada líder aguenta.</p>
+              {summary.expiresAt && (
+                <div className="flex flex-wrap items-end gap-2">
+                  <p className="text-[10px] text-slate-400">Prazo do líder atual: {new Date(summary.expiresAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
+                  <label className="text-[10px] text-slate-400">±horas<input value={extend} onChange={(e) => setExtend(e.target.value.replace(/[^\d-]/g, ""))} className={`${input} w-16`} /></label>
+                  <button disabled={pending} className={neutral} onClick={() => run({ type: "extend", hours: Number(extend) || 0 })}>Ajustar prazo</button>
+                </div>
+              )}
             </div>
 
             <div className="space-y-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="text-[10px] font-black uppercase tracking-wider text-slate-300">Debug · {summary.currentLeader ?? "todos derrotados"} ({pctLeft}% do HP)</p>
+              <p className="text-[10px] font-black uppercase tracking-wider text-slate-300">Debug · {summary.currentLeader ?? "nenhum líder em andamento"} ({pctLeft}% do HP)</p>
               <p className="text-[10px] text-slate-500">{summary.participants} jogadores · {summary.attacks} ataques registrados</p>
               <div className="flex flex-wrap items-end gap-2">
-                <label className="text-[10px] text-slate-400">Tirar HP
-                  <input value={damage} onChange={(e) => setDamage(e.target.value.replace(/\D/g, ""))} className="mt-1 block w-32 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1.5 text-xs text-white" />
-                </label>
+                <label className="text-[10px] text-slate-400">Tirar HP<input value={damage} onChange={(e) => setDamage(e.target.value.replace(/\D/g, ""))} className={`${input} w-32`} /></label>
                 <button disabled={pending} className={neutral} onClick={() => run({ type: "damage", amount: Number(damage) || 1 })}>Aplicar</button>
               </div>
               <div className="flex flex-wrap gap-2">
-                <button disabled={pending} className={neutral} onClick={() => run({ type: "healCurrent" })}>Curar líder atual</button>
-                <button disabled={pending} className={neutral} onClick={() => run({ type: "skipCurrent" }, "Derrubar o líder atual sem atribuir golpe final?")}>Derrubar líder atual</button>
+                <button disabled={pending} className={neutral} onClick={() => run({ type: "healCurrent" })}>Restaurar líder</button>
+                <button disabled={pending} className={neutral} onClick={() => run({ type: "skipCurrent" }, "Derrubar o líder atual sem atribuir golpe final?")}>Derrubar líder</button>
                 <button disabled={pending} className={neutral} onClick={() => run({ type: "resetMyCooldown" })}>Zerar meu cooldown</button>
               </div>
             </div>
           </div>
 
-          <div className="flex flex-wrap gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-            <button disabled={pending} className={good} onClick={() => run({ type: "grantRewards" })}>Prévia / entregar prêmios</button>
-            <button disabled={pending} className={danger} onClick={() => run({ type: "resetProgress" }, "Zerar TODO o progresso (HP, ranking e ataques)? Prêmios já entregues não são desfeitos.")}>Zerar progresso</button>
-            <button disabled={pending} className={danger} onClick={() => run({ type: "create", reset: true, hpPerLeader: Number(hp) || undefined }, "Apagar o evento e recriar do zero?")}>Recriar do zero</button>
-            <label className="ml-auto flex items-center gap-1 text-[10px] text-slate-400">HP por líder (recriar)
-              <input value={hp} onChange={(e) => setHp(e.target.value.replace(/\D/g, ""))} className="w-28 rounded-lg border border-slate-700 bg-slate-950 px-2 py-1 text-xs text-white" />
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <label className="text-[10px] text-slate-400">Prêmios do líder
+              <select value={rewardLeader} onChange={(e) => setRewardLeader(e.target.value)} className={`${input} w-36`}>
+                {JOHTO_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+              </select>
             </label>
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "rewards", leaderKey: rewardLeader, deliver: false })}>Ver prévia</button>
+            <button disabled={pending} className={good} onClick={() => run({ type: "rewards", leaderKey: rewardLeader, deliver: true }, "Entregar agora os prêmios deste líder (só funciona se ele estiver derrotado; é idempotente)?")}>Entregar prêmios</button>
+            <span className="mx-1 hidden h-6 w-px bg-slate-700 sm:block" />
+            <button disabled={pending} className={danger} onClick={() => run({ type: "resetProgress" }, "Zerar TODO o progresso (HP, prazos, ranking, ataques e recompensas)? ZC e mascotes já entregues não são desfeitos.")}>Zerar progresso</button>
+            <button disabled={pending} className={danger} onClick={() => run({ type: "create", reset: true, hpPerLeader: Number(hp) || undefined }, "Apagar o evento e recriar do zero?")}>Recriar do zero</button>
+            <label className="ml-auto text-[10px] text-slate-400">HP por líder (recriar)<input value={hp} onChange={(e) => setHp(e.target.value.replace(/\D/g, ""))} className={`${input} w-32`} /></label>
           </div>
 
           {prizes && (
             <div className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-              <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-300">Prévia dos prêmios ({prizes.length} jogadores)</p>
-              <div className="max-h-64 space-y-1 overflow-y-auto text-[11px]">
-                {prizes.map((p) => (
-                  <div key={p.playerId} className="rounded-lg bg-slate-900/70 px-2 py-1.5">
-                    <span className="font-bold text-white">{p.playerName}</span> <span className="text-amber-300">{p.zc.toLocaleString("pt-BR")} ZC{p.egg ? " + ovo" : ""}</span>
-                    <p className="text-slate-500">{p.lines.join(" · ")}</p>
+              <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-slate-300">Prêmios ({prizes.length})</p>
+              <div className="max-h-56 space-y-1 overflow-y-auto text-[11px]">
+                {prizes.map((p, i) => (
+                  <div key={`${p.playerId}-${p.tier}-${i}`} className="rounded-lg bg-slate-900/70 px-2 py-1.5">
+                    <span className="font-bold text-white">{p.playerName}</span> <span className="text-slate-400">{p.tier}</span>{" "}
+                    <span className="text-amber-300">{p.zc.toLocaleString("pt-BR")} ZC{p.egg ? " + ovo especial" : ""} + mascote Nv.{p.mascotLevel}</span>
                   </div>
                 ))}
+                {prizes.length === 0 && <p className="text-slate-500">Ninguém atacou este líder ainda.</p>}
               </div>
             </div>
           )}
+
+          <div className="rounded-xl border border-cyan-500/30 bg-cyan-950/10 p-3">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <div>
+                <p className="text-[10px] font-black uppercase tracking-wider text-cyan-200">🧪 Laboratório de combate</p>
+                <p className="text-[11px] text-slate-400">Monte uma equipe de 6 e rode várias simulações contra um líder (time completo, 6 mascotes). Não grava nada: mostra taxa de vitória, dano convertido, ataques estimados e permite assistir ao replay.</p>
+              </div>
+              <button className={neutral} onClick={() => setShowTest((v) => !v)}>{showTest ? "Esconder" : "Abrir laboratório"}</button>
+            </div>
+            {showTest && (
+              <div className="mt-3 space-y-3">
+                <div className="flex flex-wrap items-end gap-2">
+                  <label className="text-[10px] text-slate-400">Líder
+                    <select value={testLeader} onChange={(e) => setTestLeader(e.target.value)} className={`${input} w-36`}>
+                      {JOHTO_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+                    </select>
+                  </label>
+                  <label className="text-[10px] text-slate-400">Simulações (1–50)<input value={runs} onChange={(e) => setRuns(e.target.value.replace(/\D/g, ""))} className={`${input} w-20`} /></label>
+                </div>
+                {testMascots.length < 6 ? (
+                  <p className="text-xs text-amber-200">Sua conta precisa de pelo menos 6 mascotes livres para testar.</p>
+                ) : (
+                  <OrderRaidTeamSelector
+                    mascots={testMascots}
+                    attackAction={johtoTestBattleAction}
+                    submitLabel="Simular combate"
+                    extraFields={{ leaderKey: testLeader, runs }}
+                    renderResult={(result, close) => <JohtoBattleResultView result={result} onClose={close} />}
+                  />
+                )}
+              </div>
+            )}
+          </div>
         </>
       )}
     </div>

@@ -172,6 +172,13 @@ export default async function AdminPage() {
   // de plataforma. Não execute a action (que redireciona) para Gamemasters.
   const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
   const johtoSummary = isAdmin(currentUser.role) ? await getJohtoAdminSummary() : null;
+  const johtoTestMascots = johtoSummary
+    ? await prisma.mascot.findMany({
+        where: { player: { userId: currentUser.id }, arenaState: "FREE", expeditions: { none: { status: "ACTIVE" } } },
+        select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
+        orderBy: { level: "desc" }, take: 250,
+      })
+    : [];
   const ackNotice = await getAckNotice();
   const patchNotes = await getPatchNotes();
   const serverCostGoal = await getServerCostGoal();
@@ -380,7 +387,7 @@ export default async function AdminPage() {
     ) },
     ...(johtoSummary ? [{ id: "eventos", label: "Eventos", content: (
       <>
-      <JohtoAdminControls summary={johtoSummary} />
+      <JohtoAdminControls summary={johtoSummary} testMascots={johtoTestMascots} />
       </>
     ) }] : []),
     { id: "testes", label: "Testes e simulações", content: (

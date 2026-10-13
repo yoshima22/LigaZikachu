@@ -4,7 +4,8 @@ import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import {
-  createJohtoEvent, getJohtoEvent, grantJohtoRaidRewards, isJohtoRaidVisibleToPlayers, previewJohtoRewards, runJohtoRaidAttack, setJohtoRaidVisible,
+  claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
+  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest,
 } from "@/lib/johto-raid";
 
 const PATH = "/combates/raid-johto";
@@ -16,16 +17,48 @@ async function requireAdminUser() {
   return user;
 }
 
+function readTeam(formData: FormData) {
+  const mascotIds = formData.getAll("mascotId").map((id) => String(id)).filter(Boolean);
+  const roles = Object.fromEntries(mascotIds.map((id) => [id, String(formData.get(`role:${id}`) ?? "ATTACKER")]));
+  return { mascotIds, roles };
+}
+
 /** Ataque de jogador: só vale com a página liberada (ou conta de admin). */
 export async function attackJohtoRaidAction(formData: FormData) {
   const user = await getSessionUser();
   if (!user) return { ok: false as const, message: "Faça login novamente." };
   if (!isAdmin(user.role) && !(await isJohtoRaidVisibleToPlayers())) return { ok: false as const, message: "Esta raid ainda não foi liberada." };
-  const mascotIds = formData.getAll("mascotId").map((id) => String(id)).filter(Boolean);
-  const roles = Object.fromEntries(mascotIds.map((id) => [id, String(formData.get(`role:${id}`) ?? "ATTACKER")]));
+  const { mascotIds, roles } = readTeam(formData);
   const result = await runJohtoRaidAttack(user.id, mascotIds, roles);
   refresh();
   return result;
+}
+
+/** Replay de um dos últimos combates (qualquer jogador com acesso à página). */
+export async function getJohtoReplayAction(attemptId: string) {
+  const user = await getSessionUser();
+  if (!user) return null;
+  if (!isAdmin(user.role) && !(await isJohtoRaidVisibleToPlayers())) return null;
+  return getJohtoReplay(String(attemptId).slice(0, 60));
+}
+
+/** Escolha do mascote de recompensa entre os seis do líder. */
+export async function claimJohtoMascotAction(rewardId: string, pokemonId: number) {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, message: "Faça login novamente." };
+  const result = await claimJohtoMascotReward(user.id, String(rewardId).slice(0, 60), Math.floor(Number(pokemonId)));
+  refresh();
+  return result;
+}
+
+/** Teste do admin: N simulações sem gravar nada, com estatísticas de combate e uma luta para assistir. */
+export async function johtoTestBattleAction(formData: FormData) {
+  const user = await requireAdminUser();
+  if (!user) return { ok: false as const, message: "Apenas administradores." };
+  const { mascotIds, roles } = readTeam(formData);
+  const result = await simulateJohtoTest(user.id, mascotIds, roles, String(formData.get("leaderKey") ?? ""), Number(formData.get("runs") ?? 20));
+  if (!result.ok) return result;
+  return { ok: true as const, message: `Simulação concluída (${result.summary.runs} lutas).`, test: result.summary };
 }
 
 type AdminResult = { ok: boolean; message: string };
@@ -36,15 +69,16 @@ export async function johtoAdminAction(
   command:
     | { type: "create"; reset?: boolean; hpPerLeader?: number }
     | { type: "visible"; value: boolean }
-    | { type: "active"; value: boolean; durationHours?: number }
-    | { type: "cooldown"; minutes: number }
+    | { type: "active"; value: boolean }
+    | { type: "settings"; cooldownMinutes: number; damageScale: number; leaderDays: number }
+    | { type: "extend"; hours: number }
     | { type: "damage"; amount: number }
     | { type: "healCurrent" }
     | { type: "skipCurrent" }
     | { type: "resetProgress" }
     | { type: "resetMyCooldown" }
-    | { type: "grantRewards" },
-): Promise<AdminResult & { preview?: Awaited<ReturnType<typeof previewJohtoRewards>> }> {
+    | { type: "rewards"; leaderKey: string; deliver: boolean },
+): Promise<AdminResult & { preview?: Awaited<ReturnType<typeof previewLeaderRewards>> }> {
   const user = await requireAdminUser();
   if (!user) return fail("Apenas administradores.");
   try {
@@ -52,7 +86,7 @@ export async function johtoAdminAction(
       const event = await getJohtoEvent();
       if (event && !command.reset) return fail("O evento já existe. Use 'Recriar do zero' para apagá-lo.");
       await createJohtoEvent({ reset: Boolean(command.reset), hpPerLeader: command.hpPerLeader });
-      return done(command.reset ? "Evento recriado do zero (8 líderes, HP cheio). Continua inativo." : "Evento criado. Continua inativo e oculto.");
+      return done(command.reset ? "Evento recriado do zero (8 líderes com 6 mascotes, HP cheio). Continua inativo." : "Evento criado. Continua inativo e oculto.");
     }
     if (command.type === "visible") {
       await setJohtoRaidVisible(Boolean(command.value));
@@ -60,79 +94,97 @@ export async function johtoAdminAction(
     }
     const event = await getJohtoEvent();
     if (!event) return fail("Crie o evento primeiro.");
+    const leaders = await prisma.johtoRaidLeader.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" }, include: { mascots: { orderBy: { slot: "asc" } } } });
+    const current = leaders.find((l) => l.startedAt && !l.defeatedAt && !l.escapedAt) ?? null;
     switch (command.type) {
       case "active": {
-        const hours = Math.max(0, Math.min(24 * 14, Math.floor(command.durationHours ?? 0)));
-        await prisma.johtoRaidEvent.update({
-          where: { id: event.id },
-          data: command.value
-            ? { active: true, startsAt: event.startsAt ?? new Date(), endsAt: hours > 0 ? new Date(Date.now() + hours * 3600_000) : null }
-            : { active: false },
-        });
-        return done(command.value ? `Ataques ABERTOS${hours ? ` por ${hours}h` : " (sem prazo)"}.` : "Ataques pausados.");
+        if (command.value) {
+          await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { active: true } });
+          await openNextLeaderWindow(event.id);
+          return done("Ataques ABERTOS. O prazo do líder atual começou a contar.");
+        }
+        await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { active: false } });
+        return done("Ataques pausados (o prazo do líder continua correndo).");
       }
-      case "cooldown": {
-        const minutes = Math.max(0, Math.min(1440, Math.floor(command.minutes)));
-        await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { cooldownMinutes: minutes } });
-        return done(`Espera entre ataques: ${minutes} min.`);
+      case "settings": {
+        const cooldownMinutes = Math.max(0, Math.min(1440, Math.floor(command.cooldownMinutes)));
+        const damageScale = Math.max(0.1, Math.min(10000, Number(command.damageScale) || 10));
+        const leaderDays = Math.max(1, Math.min(30, Math.floor(command.leaderDays) || 5));
+        await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { cooldownMinutes, damageScale, leaderDays } });
+        return done(`Salvo: espera ${cooldownMinutes} min · escala de dano ×${damageScale} · ${leaderDays} dia(s) por líder (vale para os próximos líderes).`);
+      }
+      case "extend": {
+        if (!current?.expiresAt) return fail("Nenhum líder com prazo aberto.");
+        const hours = Math.max(-72, Math.min(240, Math.floor(command.hours)));
+        await prisma.johtoRaidLeader.update({ where: { id: current.id }, data: { expiresAt: new Date(current.expiresAt.getTime() + hours * 3600_000) } });
+        return done(`Prazo do líder atual ${hours >= 0 ? "estendido" : "reduzido"} em ${Math.abs(hours)}h.`);
       }
       case "damage": {
-        const amount = Math.max(1, Math.floor(command.amount));
-        const row = await prisma.johtoRaidLeader.findFirst({ where: { eventId: event.id, hpCurrent: { gt: 0 } }, orderBy: { position: "asc" } });
-        if (!row) return fail("Todos os líderes já caíram.");
-        const hpCurrent = Math.max(0, row.hpCurrent - amount);
-        await prisma.johtoRaidLeader.update({ where: { id: row.id }, data: { hpCurrent, defeatedAt: hpCurrent === 0 ? new Date() : null } });
-        return done(`Debug: −${amount.toLocaleString("pt-BR")} HP no líder atual (sem ranking).`);
+        if (!current) return fail("Nenhum líder em andamento.");
+        let left = Math.max(1, Math.floor(command.amount));
+        for (const m of current.mascots) {
+          if (left <= 0) break;
+          if (m.hpCurrent <= 0) continue;
+          const dealt = Math.min(left, m.hpCurrent);
+          left -= dealt;
+          await prisma.johtoRaidLeaderMascot.update({ where: { id: m.id }, data: { hpCurrent: m.hpCurrent - dealt, ...(m.hpCurrent - dealt === 0 ? { defeatedAt: new Date() } : {}) } });
+        }
+        const rows = await prisma.johtoRaidLeaderMascot.findMany({ where: { leaderId: current.id } });
+        const remaining = rows.reduce((sum, m) => sum + m.hpCurrent, 0);
+        await prisma.johtoRaidLeader.update({ where: { id: current.id }, data: { hpCurrent: remaining, ...(remaining === 0 ? { defeatedAt: new Date() } : {}) } });
+        if (remaining === 0) await openNextLeaderWindow(event.id);
+        return done(`Debug: −${Math.floor(command.amount).toLocaleString("pt-BR")} HP no líder atual (sem ranking${remaining === 0 ? "; ele caiu, use 'Entregar prêmios' se quiser testar" : ""}).`);
       }
       case "healCurrent": {
-        const rows = await prisma.johtoRaidLeader.findMany({ where: { eventId: event.id }, orderBy: { position: "asc" } });
-        const row = rows.find((r) => r.hpCurrent > 0) ?? [...rows].reverse().find((r) => r.hpCurrent <= 0);
-        if (!row) return fail("Sem líderes.");
-        await prisma.johtoRaidLeader.update({ where: { id: row.id }, data: { hpCurrent: row.hpMax, defeatedAt: null, finalBlowPlayerId: null } });
+        const target = current ?? [...leaders].reverse().find((l) => l.defeatedAt || l.escapedAt);
+        if (!target) return fail("Sem líderes.");
+        await prisma.$executeRaw`UPDATE johto_raid_leader_mascots SET "hpCurrent" = "hpMax", "defeatedAt" = NULL, "defeatedByPlayerId" = NULL WHERE "leaderId" = ${target.id}`;
+        await prisma.johtoRaidLeader.update({
+          where: { id: target.id },
+          data: { hpCurrent: target.hpMax, defeatedAt: null, escapedAt: null, finalBlowPlayerId: null, startedAt: target.startedAt ?? new Date(), expiresAt: new Date(Date.now() + event.leaderDays * 86_400_000) },
+        });
         await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { defeatedAt: null } });
-        return done("Debug: líder restaurado com HP cheio.");
+        return done(`Debug: ${target.key} restaurado com os 6 mascotes e HP cheio (prazo reiniciado).`);
       }
       case "skipCurrent": {
-        const row = await prisma.johtoRaidLeader.findFirst({ where: { eventId: event.id, hpCurrent: { gt: 0 } }, orderBy: { position: "asc" } });
-        if (!row) return fail("Todos os líderes já caíram.");
-        await prisma.johtoRaidLeader.update({ where: { id: row.id }, data: { hpCurrent: 0, defeatedAt: new Date(), finalBlowPlayerId: null } });
-        const open = await prisma.johtoRaidLeader.count({ where: { eventId: event.id, hpCurrent: { gt: 0 } } });
+        if (!current) return fail("Nenhum líder em andamento.");
+        await prisma.$executeRaw`UPDATE johto_raid_leader_mascots SET "hpCurrent" = 0, "defeatedAt" = NOW() WHERE "leaderId" = ${current.id} AND "hpCurrent" > 0`;
+        await prisma.johtoRaidLeader.update({ where: { id: current.id }, data: { hpCurrent: 0, defeatedAt: new Date(), finalBlowPlayerId: null } });
+        const open = await prisma.johtoRaidLeader.count({ where: { eventId: event.id, defeatedAt: null, escapedAt: null } });
         if (open === 0) await prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { defeatedAt: new Date(), active: false } });
-        return done("Debug: líder atual derrubado (sem golpe final atribuído).");
+        else await openNextLeaderWindow(event.id);
+        return done("Debug: líder atual derrubado (sem golpe final atribuído). Prêmios não foram entregues automaticamente.");
       }
       case "resetProgress": {
         await prisma.$transaction([
           prisma.johtoRaidAttempt.deleteMany({ where: { eventId: event.id } }),
-          prisma.johtoRaidRanking.deleteMany({ where: { eventId: event.id } }),
-          prisma.$executeRaw`UPDATE johto_raid_leaders SET "hpCurrent" = "hpMax", "defeatedAt" = NULL, "finalBlowPlayerId" = NULL WHERE "eventId" = ${event.id}`,
-          prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { defeatedAt: null, rewardsGrantedAt: null, active: false } }),
+          prisma.johtoRaidReward.deleteMany({ where: { eventId: event.id } }),
+          prisma.$executeRaw`DELETE FROM johto_raid_leader_stats WHERE "leaderId" IN (SELECT id FROM johto_raid_leaders WHERE "eventId" = ${event.id})`,
+          prisma.$executeRaw`UPDATE johto_raid_leader_mascots SET "hpCurrent" = "hpMax", "defeatedAt" = NULL, "defeatedByPlayerId" = NULL WHERE "leaderId" IN (SELECT id FROM johto_raid_leaders WHERE "eventId" = ${event.id})`,
+          prisma.$executeRaw`UPDATE johto_raid_leaders SET "hpCurrent" = "hpMax", "defeatedAt" = NULL, "escapedAt" = NULL, "finalBlowPlayerId" = NULL, "startedAt" = NULL, "expiresAt" = NULL, "rewardsGrantedAt" = NULL WHERE "eventId" = ${event.id}`,
+          prisma.johtoRaidEvent.update({ where: { id: event.id }, data: { defeatedAt: null, active: false } }),
         ]);
-        return done("Progresso zerado: líderes com HP cheio, ranking e ataques apagados. Prêmios já entregues não são desfeitos.");
+        return done("Progresso zerado: 8 líderes com HP cheio, sem prazo, ranking/ataques/recompensas apagados. ZC e mascotes já entregues não são desfeitos.");
       }
       case "resetMyCooldown": {
         await prisma.johtoRaidAttempt.deleteMany({ where: { eventId: event.id, player: { userId: user.id } } });
         return done("Seu cooldown e seus ataques de teste foram limpos.");
       }
-      case "grantRewards": {
-        const preview = await previewJohtoRewards(event.id);
-        if (!event.defeatedAt) return { ok: false, message: "Prévia: os líderes ainda não caíram, nada foi entregue.", preview };
-        const result = await grantJohtoRaidRewards(event.id);
+      case "rewards": {
+        const leader = leaders.find((l) => l.key === command.leaderKey);
+        if (!leader) return fail("Líder não encontrado.");
+        const preview = await previewLeaderRewards(leader.id);
+        if (!command.deliver) return { ok: true, message: `Prévia dos prêmios de ${leader.key} (${preview.length} recompensas).`, preview };
+        if (!leader.defeatedAt) return { ok: false, message: "Esse líder ainda não foi derrotado: nada foi entregue.", preview };
+        const result = await grantLeaderRewards(leader.id);
         refresh();
-        return { ok: true, message: `Prêmios entregues a ${result.granted} jogador(es) (${result.total - result.granted} já tinham recebido).`, preview };
+        return { ok: true, message: `Prêmios entregues: ${result.granted} novos (${result.total - result.granted} já tinham sido entregues).`, preview };
       }
     }
   } catch (error) {
     console.error("[JohtoRaid] admin", error);
     return fail(error instanceof Error ? error.message : "Erro inesperado.");
   }
-}
-
-/** Só a prévia dos prêmios, com o ranking atual — não entrega nada. */
-export async function previewJohtoRewardsAction() {
-  if (!(await requireAdminUser())) return { ok: false as const, message: "Apenas administradores." };
-  const event = await getJohtoEvent();
-  if (!event) return { ok: false as const, message: "Crie o evento primeiro." };
-  return { ok: true as const, preview: await previewJohtoRewards(event.id) };
 }
 
 /** Atendimento SUS dos mascotes derrotados na raid (mesmo da Arena Z). */
