@@ -488,10 +488,12 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
 .johto-envelope-right::after { left: -48%; transform: skewX(-42deg); }
 .johto-envelope-flap { position: absolute; z-index: 4; top: 0; left: 0; right: 0; height: 54%; transform-origin: 50% 0%; background: linear-gradient(#f9e8c4, #dbc59f); clip-path: polygon(0 0, 100% 0, 50% 100%); box-shadow: 0 2px 3px #60462a44; animation: johto-show-center 80ms 850ms both; }
 .johto-envelope-paper { position: absolute; z-index: 2; left: 7%; right: 7%; top: 9%; height: 80%; padding-top: 15%; background: #fcf3dd; color: #8f6738; font-size: 10px; font-weight: 800; letter-spacing: .15em; box-shadow: 0 0 0 1px #8a6a3633; animation: johto-show-center 80ms 850ms both; }
-.johto-envelope-seal { position: absolute; z-index: 5; display: flex; left: 50%; top: 50%; width: 64px; height: 64px; margin: -12px 0 0 -32px; border-radius: 50%; filter: drop-shadow(0 4px 5px #45201588); animation: johto-show-center 80ms 850ms both; }
-.johto-envelope-seal span { display: grid; place-items: center; width: 50%; height: 100%; overflow: hidden; background: #a53d34; color: #f8d996; font-family: Georgia, serif; font-size: 28px; font-weight: 700; }
-.johto-envelope-seal span:first-child { border-radius: 32px 0 0 32px; padding-left: 10px; }
-.johto-envelope-seal span:last-child { border-radius: 0 32px 32px 0; padding-right: 10px; color: transparent; }
+.johto-envelope-seal { position: absolute; z-index: 5; display: flex; left: 50%; top: 50%; width: 72px; height: 72px; margin: -16px 0 0 -36px; border-radius: 50%; filter: drop-shadow(0 5px 5px #31233f88); animation: johto-show-center 80ms 850ms both; }
+.johto-envelope-seal > span { position: relative; width: 50%; height: 100%; overflow: hidden; background: radial-gradient(circle at 58% 38%, #b89bc4 0%, #654576 35%, #39264e 70%, #241b35 100%); box-shadow: inset 0 0 0 3px #e8c36a, inset 0 0 0 5px #fff0b599, inset 0 0 13px #140e27; }
+.johto-envelope-seal > span:first-child { border-radius: 36px 0 0 36px; }
+.johto-envelope-seal > span:last-child { border-radius: 0 36px 36px 0; }
+.johto-envelope-seal svg { position: absolute; top: 0; left: 0; width: 72px; height: 72px; max-width: none; filter: drop-shadow(0 1px 0 #241b35); }
+.johto-envelope-seal > span:last-child svg { left: -36px; }
 .johto-envelope-opening .johto-envelope-seal span:first-child { animation: johto-seal-left 430ms ease-in both; }
 .johto-envelope-opening .johto-envelope-seal span:last-child { animation: johto-seal-right 430ms ease-in both; }
 .johto-envelope-opening .johto-envelope-flap { animation: johto-flap-up 650ms 250ms ease-out both; }
@@ -506,7 +508,8 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
 }
 .johto-letter-shell::before { content: ""; position: absolute; inset: 11px; border: 1px solid #b7a47488; pointer-events: none; }
 .johto-letter-header { display: flex; align-items: center; gap: 15px; padding-bottom: 17px; border-bottom: 1px solid #cab990; }
-.johto-letter-mark { flex: none; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 50%; background: #a54137; color: #fae4ac; font-family: Georgia, serif; font-size: 29px; box-shadow: 0 3px 0 #813429; }
+.johto-letter-mark { flex: none; display: grid; place-items: center; width: 50px; height: 50px; border: 2px solid #e3ba62; border-radius: 50%; background: radial-gradient(circle at 40% 30%, #a98db7, #563c6c 64%, #2e2040); box-shadow: 0 3px 0 #5a405f, inset 0 0 0 2px #fff0b680, inset 0 0 9px #211734; }
+.johto-letter-mark svg { width: 100%; height: 100%; filter: drop-shadow(0 1px 0 #241b35); }
 .johto-letter-eyebrow { color: #936d43; font-size: 9px; font-weight: 800; letter-spacing: .17em; }
 .johto-letter-header h2 { margin-top: 5px; color: #243b39; font-family: Georgia, serif; font-size: clamp(23px, 5.2vw, 34px); font-weight: 500; line-height: 1.15; }
 .johto-letter-header h2:focus { outline: none; }
@@ -529,10 +532,11 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
 .johto-letter-final .johto-letter-empty { color: #8b3c33; }
 .johto-vote-intro { color: #6f6251; font-size: 13px; line-height: 1.45; }
 .johto-vote-progress { margin-top: 15px; color: #a54137; font-size: 11px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
-.johto-vote-form fieldset { display: flex; flex: 1; min-height: min-content; flex-direction: column; margin-top: 14px; }
+.johto-vote-form fieldset { display: flex; flex: 1; min-height: 0; flex-direction: column; margin-top: 14px; }
 .johto-vote-form legend { color: #243b39; font-family: Georgia, serif; font-size: clamp(19px, 4vw, 25px); line-height: 1.2; }
-.johto-vote-choices { display: grid; gap: 8px; padding: 15px 4px 4px; }
-.johto-vote-choice { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 10px 12px; border: 1px solid #c5b593; border-radius: 8px; background: #fffaf0; color: #33423e; cursor: pointer; font-size: 14px; font-weight: 700; }
+.johto-vote-choices { display: grid; gap: 8px; min-height: 0; max-height: min(43dvh, 420px); overflow-y: auto; overscroll-behavior: contain; scrollbar-gutter: stable; padding: 15px 6px 4px 4px; }
+.johto-vote-choice { display: flex; align-items: center; gap: 12px; min-height: 50px; padding: 10px 12px; border: 1px solid #c5b593; border-radius: 8px; background: #fffaf0; color: #33423e; cursor: pointer; font-size: 14px; font-weight: 700; overflow-wrap: anywhere; }
+.johto-vote-choice span { min-width: 0; }
 .johto-vote-choice-selected { border-color: #a54137; background: #f9e9d9; }
 .johto-vote-choice input { width: 20px; height: 20px; flex: none; accent-color: #a54137; }
 .johto-vote-skip { align-self: center; min-height: 44px; margin-top: 5px; padding: 8px 12px; color: #745a43; font-size: 12px; text-decoration: underline; }
@@ -559,6 +563,7 @@ html[data-nav-tight] .hdr-user { max-width: 9rem !important; }
   .johto-letter-final p { grid-column: 1; }
   .johto-letter-actions { gap: 7px; }
   .johto-letter-actions > button { flex: 1; }
+  .johto-vote-choices { max-height: 40dvh; }
 }
 @media (prefers-reduced-motion: reduce) {
   .johto-invitation-backdrop *, .johto-invitation-backdrop *::before, .johto-invitation-backdrop *::after {

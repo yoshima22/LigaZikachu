@@ -11,11 +11,20 @@ import {
 type Candidate = { id: string; displayName: string };
 type Stage = "envelope" | "opening" | "reading" | "voting" | "submitted";
 
-const previewCandidates: Candidate[] = [
-  { id: "preview-a", displayName: "Treinador A" },
-  { id: "preview-b", displayName: "Treinador B" },
-  { id: "preview-c", displayName: "Treinador C" },
-];
+function JohtoCrestArtwork() {
+  return (
+    <svg viewBox="0 0 72 72" aria-hidden="true" focusable="false">
+      <circle cx="36" cy="36" r="30" fill="none" stroke="#f7d984" strokeWidth="2.4" />
+      <circle cx="36" cy="36" r="25.5" fill="none" stroke="#6f4c88" strokeWidth="1.5" />
+      <path d="M36 12v6M36 54v6M12 36h6M54 36h6M19 19l4 4M49 49l4 4M53 19l-4 4M23 49l-4 4" stroke="#f8e4a5" strokeWidth="1.5" strokeLinecap="round" />
+      <path d="M13 37c8-1 13-5 17-13l4 8-5 13c-5-4-10-6-16-8Zm46 0c-8-1-13-5-17-13l-4 8 5 13c5-4 10-6 16-8Z" fill="#eac575" stroke="#5d3d71" strokeWidth="1.4" strokeLinejoin="round" />
+      <path d="M21 36c5-2 8-5 10-9M51 36c-5-2-8-5-10-9M19 39c5 0 8 2 11 5M53 39c-5 0-8 2-11 5" fill="none" stroke="#fff0bc" strokeWidth="1.6" strokeLinecap="round" />
+      <path d="m36 23 7 12-7 14-7-14 7-12Z" fill="#705186" stroke="#f8df91" strokeWidth="2" strokeLinejoin="round" />
+      <path d="m36 27 3.5 8-3.5 8-3.5-8 3.5-8Z" fill="#bda4c9" />
+      <path d="M31 50q5 5 10 0" fill="none" stroke="#f7d984" strokeWidth="1.8" strokeLinecap="round" />
+    </svg>
+  );
+}
 
 export function JohtoInvitationLetter({
   mode,
@@ -37,7 +46,7 @@ export function JohtoInvitationLetter({
   const dialogRef = useRef<HTMLDivElement>(null);
   const headingRef = useRef<HTMLHeadingElement>(null);
   const returnFocusRef = useRef<HTMLElement | null>(null);
-  const choices = mode === "preview" ? previewCandidates : candidates;
+  const choices = candidates;
   const totalPages = JOHTO_INVITATION_COPY.pages.length;
   const question = JOHTO_VOTE_QUESTIONS[voteIndex];
 
@@ -114,7 +123,7 @@ export function JohtoInvitationLetter({
     if (busy) return;
     setError("");
     if (mode === "preview") {
-      onClose?.();
+      setStage("submitted");
       return;
     }
     setBusy(true);
@@ -165,7 +174,7 @@ export function JohtoInvitationLetter({
               <span className="johto-envelope-right" aria-hidden="true" />
               <span className="johto-envelope-flap" aria-hidden="true" />
               <span className="johto-envelope-paper" aria-hidden="true">JOHTO · LIGA ZIKACHU</span>
-              <span className="johto-envelope-seal" aria-hidden="true"><span>J</span><span>J</span></span>
+              <span className="johto-envelope-seal" aria-hidden="true"><span><JohtoCrestArtwork /></span><span><JohtoCrestArtwork /></span></span>
             </button>
             <p className="johto-invitation-hint">{stage === "opening" ? "Abrindo o convite…" : "Toque no selo para abrir"}</p>
           </div>
@@ -174,7 +183,7 @@ export function JohtoInvitationLetter({
         {(stage === "reading" || stage === "voting" || stage === "submitted") && (
           <div className="johto-letter-shell">
             <div className="johto-letter-header">
-              <span className="johto-letter-mark" aria-hidden="true">J</span>
+              <span className="johto-letter-mark" aria-hidden="true"><JohtoCrestArtwork /></span>
               <div>
                 <span className="johto-letter-eyebrow">LIGA ZIKACHU TCG · EDIÇÃO JOHTO</span>
                 <h2 id="johto-invitation-title" ref={headingRef} tabIndex={-1}>
@@ -191,7 +200,7 @@ export function JohtoInvitationLetter({
                   {JOHTO_INVITATION_COPY.pages[page].paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
                 </div>
                 <div className="johto-letter-footer">
-                  <span>CONVITE Nº {String(page + 1).padStart(2, "0")}</span>
+                  <span>CONVITE PÁGINA {String(page + 1).padStart(2, "0")}</span>
                   <span>{String(page + 1).padStart(2, "0")} / {String(totalPages).padStart(2, "0")}</span>
                 </div>
                 <div className="johto-letter-progress" role="progressbar" aria-label="Progresso da leitura" aria-valuemin={1} aria-valuemax={totalPages} aria-valuenow={page + 1}>
@@ -242,7 +251,7 @@ export function JohtoInvitationLetter({
 
             {stage === "submitted" && (
               <div className="johto-letter-submitted">
-                <p>{mode === "preview" ? "Este é o encerramento da votação. Nenhum voto foi registrado nesta prévia." : "Obrigado por participar. Seus votos foram registrados em segredo."}</p>
+                <p>{mode === "preview" ? "Prévia concluída. Nenhum voto foi registrado e nenhum dado foi salvo." : "Obrigado por participar. Seus votos foram registrados em segredo."}</p>
                 <button type="button" className="johto-letter-primary" onClick={mode === "preview" ? onClose : onFinish}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
               </div>
             )}

@@ -15,7 +15,7 @@ export function JohtoInvitationGate({ initialState }: { initialState: JohtoInvit
       candidates={initialState.candidates}
       onFinish={() => {
         setVisible(false);
-        router.refresh();
+        router.push("/combates/raid-johto");
       }}
     />
   );

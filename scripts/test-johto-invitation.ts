@@ -35,7 +35,7 @@ assert.deepEqual(JOHTO_INVITATION_COPY, {
       paragraphs: [
         "Os oito líderes são enfrentados em sequência. Cada líder tem seis mascotes e uma barra de vida compartilhada por toda a comunidade.",
         "Cada líder fica disponível por até cinco dias. Se o tempo acabar, não há recompensa por esse líder.",
-        "Sua equipe usa até seis mascotes gratuitos, e o dano causado é coletivo.",
+        "Sua equipe usa até seis mascotes, e o dano causado é coletivo.",
       ],
     },
     {
@@ -53,7 +53,7 @@ assert.deepEqual(JOHTO_INVITATION_COPY, {
     },
     {
       heading: "Prepare sua equipe",
-      paragraphs: ["Combates → Líderes de Johto"],
+      paragraphs: ["O evento está disponível em Combates → Líderes de Johto. Prepare sua equipe e acompanhe o progresso coletivo dos líderes por lá."],
     },
     {
       paragraphs: [
@@ -64,7 +64,7 @@ assert.deepEqual(JOHTO_INVITATION_COPY, {
   ],
   voting: {
     title: "Antes de partir para Johto…",
-    description: "A votação é opcional e secreta. Cada voto pode ser enviado apenas uma vez.",
+    description: "Esta é uma votação opcional e confidencial de reconhecimento dos jogadores da Liga Zikachu TCG 3ª Edição. São seis categorias e você pode enviar suas escolhas apenas uma vez.",
     participateLabel: "Participar da votação",
     continueLabel: "Continuar para os Ginásios",
   },
@@ -207,6 +207,13 @@ if (process.argv.includes("--service")) {
   };
   (globalThis as Row).prisma = database;
   const service = await import("../src/lib/johto-invitation");
+
+  assert.deepEqual(await service.getJohtoInvitationPreviewCandidates(), [
+    { id: "candidate-1", displayName: "Primeiro" },
+    { id: "candidate-2", displayName: "Segundo" },
+    { id: "candidate-3", displayName: "Terceiro" },
+  ], "admin preview uses actual approved third-edition participant names");
+  assert.equal(recipients.length, 0, "reading preview candidates creates no recipients");
 
   await service.prepareJohtoInvitationCampaign({ publish: true, now: before });
   assert.equal(recipients.length, 0, "prelaunch preparation does not deliver invitations");

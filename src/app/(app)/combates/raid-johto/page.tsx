@@ -5,6 +5,7 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, type JohtoLeaderState } from "@/lib/johto-raid";
+import { getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
 import { OrderRaidTeamSelector, type RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
 import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoBattleResultView } from "./_components/johto-battle-view";
@@ -80,7 +81,7 @@ export default async function JohtoRaidPage() {
     ])
     : [[], []];
 
-  const adminBox = admin ? <JohtoAdminControls summary={await getJohtoAdminSummary(state)} testMascots={freeMascots} /> : null;
+  const adminBox = admin ? <JohtoAdminControls summary={await getJohtoAdminSummary(state)} testMascots={freeMascots} invitationCandidates={await getJohtoInvitationPreviewCandidates()} /> : null;
   if (!state.event) {
     return <div className="mx-auto max-w-5xl space-y-5 p-4">{adminBox}<p className="rounded-2xl border border-dashed border-slate-800 p-6 text-sm text-slate-500">O evento ainda não foi criado.</p></div>;
   }

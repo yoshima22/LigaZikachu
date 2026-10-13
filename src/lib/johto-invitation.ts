@@ -62,6 +62,11 @@ async function listCandidates(): Promise<Candidate[]> {
     .sort((a, b) => a.displayName.localeCompare(b.displayName, "pt-BR") || a.id.localeCompare(b.id));
 }
 
+/** Shared, read-only roster for the admin preview and the real ballot. */
+export async function getJohtoInvitationPreviewCandidates(): Promise<Candidate[]> {
+  return listCandidates();
+}
+
 function isLive(campaign: { publishedAt: Date | null; launchAt: Date }, now: Date): boolean {
   return !!campaign.publishedAt && campaign.publishedAt <= now && campaign.launchAt <= now;
 }

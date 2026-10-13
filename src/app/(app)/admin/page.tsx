@@ -17,6 +17,7 @@ import { TimedGameBonusPanel } from "./_components/timed-game-bonus-panel";
 import { CombatTestPanel } from "./_components/combat-test-panel";
 import { JohtoAdminControls } from "../combates/raid-johto/_components/johto-admin-controls";
 import { getJohtoAdminSummary } from "@/lib/johto-raid";
+import { getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
 import {
   AlertTriangle,
   BarChart3,
@@ -172,6 +173,7 @@ export default async function AdminPage() {
   // de plataforma. Não execute a action (que redireciona) para Gamemasters.
   const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
   const johtoSummary = isAdmin(currentUser.role) ? await getJohtoAdminSummary() : null;
+  const johtoPreviewCandidates = johtoSummary ? await getJohtoInvitationPreviewCandidates() : [];
   const johtoTestMascots = johtoSummary
     ? await prisma.mascot.findMany({
         where: { player: { userId: currentUser.id }, arenaState: "FREE", expeditions: { none: { status: "ACTIVE" } } },
@@ -387,7 +389,7 @@ export default async function AdminPage() {
     ) },
     ...(johtoSummary ? [{ id: "eventos", label: "Eventos", content: (
       <>
-      <JohtoAdminControls summary={johtoSummary} testMascots={johtoTestMascots} />
+      <JohtoAdminControls summary={johtoSummary} testMascots={johtoTestMascots} invitationCandidates={johtoPreviewCandidates} />
       </>
     ) }] : []),
     { id: "testes", label: "Testes e simulações", content: (

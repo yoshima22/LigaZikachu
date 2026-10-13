@@ -26,7 +26,7 @@ const input = "mt-1 block rounded-lg border border-slate-700 bg-slate-950 px-2 p
 const STATUS_LABEL: Record<string, string> = { DEFEATED: "derrotado", ESCAPED: "venceu pelo prazo", CURRENT: "em andamento", WAITING: "aguardando" };
 
 /** Controles do evento para administradores: liberar ao público, abrir/pausar ataques, debug e laboratório de testes de combate. */
-export function JohtoAdminControls({ summary, testMascots = [] }: { summary: JohtoAdminSummary; testMascots?: JohtoTestMascot[] }) {
+export function JohtoAdminControls({ summary, testMascots = [], invitationCandidates = [] }: { summary: JohtoAdminSummary; testMascots?: JohtoTestMascot[]; invitationCandidates?: { id: string; displayName: string }[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [cooldown, setCooldown] = useState(String(summary.cooldownMinutes));
@@ -77,7 +77,7 @@ export function JohtoAdminControls({ summary, testMascots = [] }: { summary: Joh
         </div>
         <button type="button" className={`${good} min-h-11 px-4 text-sm`} onClick={() => setShowInvitationPreview(true)}>Visualizar convite</button>
       </div>
-      {showInvitationPreview && <JohtoInvitationLetter mode="preview" onClose={() => setShowInvitationPreview(false)} />}
+      {showInvitationPreview && <JohtoInvitationLetter mode="preview" candidates={invitationCandidates} onClose={() => setShowInvitationPreview(false)} />}
 
       {!summary.exists ? (
         <div className="flex flex-wrap items-end gap-2">
