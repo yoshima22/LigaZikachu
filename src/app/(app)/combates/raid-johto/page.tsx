@@ -6,9 +6,9 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, type JohtoLeaderState } from "@/lib/johto-raid";
 import { getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
-import { OrderRaidTeamSelector, type RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
+import type { RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
 import { JohtoAdminControls } from "./_components/johto-admin-controls";
-import { JohtoBattleResultView } from "./_components/johto-battle-view";
+import { JohtoTeamSelector } from "./_components/johto-team-selector";
 import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
 import { attackJohtoRaidAction, healJohtoMascotSusAction } from "./actions";
 
@@ -213,11 +213,10 @@ export default async function JohtoRaidPage() {
               <>
                 <p className="mb-3 text-xs text-slate-500">6 mascotes livres contra o time de 6 do líder. Espera de {event.cooldownMinutes} min entre ataques.</p>
                 <div className="mb-3"><ComboMeter {...state.combo} /></div>
-                <OrderRaidTeamSelector
+                <JohtoTeamSelector
                   mascots={freeMascots}
                   labels={LABELS}
                   attackAction={attackJohtoRaidAction}
-                  renderResult={(result, close) => <JohtoBattleResultView result={result} onClose={close} />}
                   cooldownText={onCooldown && cooldownUntil ? `Sua equipe está se reagrupando. Próximo ataque após ${when(cooldownUntil.toISOString())}.` : null}
                   recentAttempts={[]}
                 />
