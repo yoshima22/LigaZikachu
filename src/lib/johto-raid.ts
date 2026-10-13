@@ -63,9 +63,11 @@ export type JohtoRaidState = {
   choiceUsed: { leaderName: string; pokemonId: number } | null;
   /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 30 min). */
   combo: JohtoComboState;
+  shield: JohtoShieldState | null;
 };
 
 export type JohtoComboState = { stacks: number; bonusPct: number; nextDropAt: string | null };
+export type JohtoShieldState = { available: boolean };
 
 // O slug só é trocado nos testes (para não tocar no evento real).
 let eventSlug = JOHTO_EVENT_SLUG;
@@ -73,6 +75,31 @@ export function useJohtoEventSlugForTests(slug: string) { eventSlug = slug; }
 
 export async function getJohtoEvent() {
   return prisma.johtoRaidEvent.findUnique({ where: { slug: eventSlug } });
+}
+
+export async function getJohtoShieldState(eventId: string, playerId: string): Promise<JohtoShieldState> {
+  const row = await prisma.johtoRaidShield.findUnique({ where: { eventId_playerId: { eventId, playerId } }, select: { available: true } });
+  return { available: row?.available ?? true };
+}
+
+export async function useJohtoRaidShield(userId: string, targetMascotId: string) {
+  const [event, player] = await Promise.all([getJohtoEvent(), prisma.player.findUnique({ where: { userId }, select: { id: true } })]);
+  if (!event?.active || !player) return { ok: false, message: "O escudo de Johto não está disponível." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const target = await tx.mascot.findUnique({ where: { id: targetMascotId }, select: { id: true, playerId: true, arenaState: true } });
+      if (!target || target.playerId === player.id) throw new Error("O escudo só pode reviver o mascote de outro jogador.");
+      if (target.arenaState !== "INJURED") throw new Error("Esse mascote não está mais ferido.");
+      const now = new Date();
+      const existing = await tx.johtoRaidShield.findUnique({ where: { eventId_playerId: { eventId: event.id, playerId: player.id } }, select: { available: true } });
+      if (existing && !existing.available) throw new Error("Seu escudo recarrega após seu próximo ataque na raid.");
+      if (existing) await tx.johtoRaidShield.update({ where: { eventId_playerId: { eventId: event.id, playerId: player.id } }, data: { available: false, usedAt: now } });
+      else await tx.johtoRaidShield.create({ data: { eventId: event.id, playerId: player.id, available: false, usedAt: now } });
+      const revived = await tx.mascot.updateMany({ where: { id: target.id, arenaState: "INJURED", playerId: { not: player.id } }, data: { arenaState: "FREE", injuredAt: null, restingUntil: null, susRestBonusMinutes: 0 } });
+      if (revived.count !== 1) throw new Error("Esse mascote não está mais ferido.");
+    });
+    return { ok: true, message: "Aliado revivido! O escudo volta após seu próximo ataque." };
+  } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Não foi possível usar o escudo." }; }
 }
 
 /** Eventos criados antes dos times de 6 mascotes não têm linhas de mascote: completa (idempotente). */
@@ -159,7 +186,7 @@ export async function getComboState(eventId: string, now = new Date()): Promise<
 // ── Estado para a página ─────────────────────────────────────────────────────
 
 export async function getJohtoRaidState(playerId?: string | null): Promise<JohtoRaidState> {
-  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null } };
+  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null }, shield: null };
   const event = await getJohtoEvent();
   if (!event) return empty;
   await ensureLeaderMascots(event.id).catch(() => undefined);
@@ -186,7 +213,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     }];
   });
   const current = leaders.find((l) => l.status === "CURRENT") ?? null;
-  const [stats, recent, attackCount, participants, myLast, rewards, combo] = await Promise.all([
+  const [stats, recent, attackCount, participants, myLast, rewards, combo, shield] = await Promise.all([
     current ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: current.id, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { id: "asc" }], take: 15, select: { playerId: true, damage: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
     prisma.johtoRaidAttempt.findMany({
       where: { eventId: event.id, replayJson: { not: Prisma.DbNull }, player: NON_ADMIN }, orderBy: { createdAt: "desc" }, take: JOHTO_REPLAY_HISTORY,
@@ -197,6 +224,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     playerId ? prisma.johtoRaidAttempt.findFirst({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }) : null,
     playerId ? prisma.johtoRaidReward.findMany({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" } }) : [],
     getComboState(event.id),
+    playerId ? getJohtoShieldState(event.id, playerId) : Promise.resolve(null),
   ]);
   const ranking = stats
     .map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }))
@@ -226,7 +254,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
       damageOnCurrent: mine?.damage ?? 0, attacksOnCurrent: mine?.attackCount ?? 0, rankOnCurrent: mineIndex >= 0 ? mineIndex + 1 : null,
       cooldownUntil: myLast ? new Date(myLast.createdAt.getTime() + fresh.cooldownMinutes * 60_000).toISOString() : null,
     } : null,
-    combo,
+    combo, shield,
     choiceUsed: (() => {
       const used = rewards.find((r) => r.tier !== "MOST_ATTACKS" && r.claimedAt && r.chosenPokemonId);
       return used ? { leaderName: getJohtoLeader(used.leaderKey)?.name ?? used.leaderKey, pokemonId: used.chosenPokemonId! } : null;
@@ -370,6 +398,11 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
           where: { leaderId_playerId: { leaderId: leaderRow.id, playerId: player.id } },
           create: { leaderId: leaderRow.id, playerId: player.id, damage: total, attackCount: 1, highestSingleDamage: total },
           update: { damage: { increment: total }, attackCount: { increment: 1 }, highestSingleDamage: Math.max(stat?.highestSingleDamage ?? 0, total) },
+        });
+        await tx.johtoRaidShield.upsert({
+          where: { eventId_playerId: { eventId: event.id, playerId: player.id } },
+          create: { eventId: event.id, playerId: player.id, available: true, rechargedAt: now },
+          update: { available: true, rechargedAt: now },
         });
       }
       // Como na Arena: quem caiu na luta fica ferido (Atendimento SUS); vitória/derrota segue o resultado do time.

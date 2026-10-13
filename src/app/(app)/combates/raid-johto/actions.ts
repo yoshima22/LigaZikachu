@@ -7,7 +7,7 @@ import { getJohtoInvitationAdminSummary, JOHTO_INVITATION_PUSH, prepareJohtoInvi
 import { sendNotificationToUsers } from "@/lib/notifications";
 import {
   claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
-  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest,
+  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest, useJohtoRaidShield,
 } from "@/lib/johto-raid";
 
 const PATH = "/combates/raid-johto";
@@ -266,13 +266,26 @@ export async function healJohtoMascotSusAction(formData: FormData): Promise<void
 }
 
 /** Atendimento único para todos os mascotes que caíram na investida da Raid. */
-export async function healAllJohtoMascotsSusAction(formData: FormData): Promise<void> {
+export async function healAllJohtoMascotsSusAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
   const user = await getSessionUser();
-  if (!user) return;
+  if (!user) return { ok: false, message: "Faça login novamente." };
   const mascotIds = formData.getAll("mascotId").map(String).filter(Boolean);
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
-  if (!player || mascotIds.length === 0) return;
+  if (!player || mascotIds.length === 0) return { ok: false, message: "Nenhum mascote ferido foi selecionado." };
   const { healMascotsSus } = await import("@/lib/arena-z");
-  await healMascotsSus(player.id, mascotIds);
-  refresh();
+  try {
+    await healMascotsSus(player.id, mascotIds);
+    refresh();
+    return { ok: true };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Não foi possível recuperar os mascotes." };
+  }
+}
+
+export async function useJohtoRaidShieldAction(formData: FormData) {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, message: "Faça login novamente." };
+  const result = await useJohtoRaidShield(user.id, String(formData.get("mascotId") ?? ""));
+  if (result.ok) refresh();
+  return result;
 }

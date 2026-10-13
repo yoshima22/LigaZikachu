@@ -351,6 +351,7 @@ model Player {
   johtoRaidRankings           JohtoRaidRanking[]
   johtoRaidLeaderStats        JohtoRaidLeaderStat[]
   johtoRaidRewards            JohtoRaidReward[]
+  johtoRaidShields            JohtoRaidShield[]
   johtoInvitationRecipients   JohtoInvitationRecipient[]
   johtoInvitationVotes        JohtoInvitationVote[]      @relation("JohtoInvitationVoteCandidate")
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
@@ -5019,6 +5020,7 @@ model JohtoRaidEvent {
   attempts JohtoRaidAttempt[]
   rankings JohtoRaidRanking[]
   rewards  JohtoRaidReward[]
+  shields  JohtoRaidShield[]
 
   @@map("johto_raid_events")
 }
@@ -5130,6 +5132,23 @@ model JohtoRaidReward {
   @@unique([eventId, leaderKey, playerId, tier], map: "johto_raid_rewards_event_leader_player_tier_key")
   @@index([playerId])
   @@map("johto_raid_rewards")
+}
+
+model JohtoRaidShield {
+  id          String          @id @default(cuid())
+  eventId     String
+  playerId    String
+  available   Boolean         @default(true)
+  usedAt      DateTime?
+  rechargedAt DateTime?
+  createdAt   DateTime        @default(now())
+  updatedAt   DateTime        @updatedAt
+  event       JohtoRaidEvent  @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  player      Player          @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([eventId, playerId])
+  @@index([eventId, available])
+  @@map("johto_raid_shields")
 }
 
 model JohtoInvitationCampaign {

@@ -11,7 +11,8 @@ import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoTeamSelector } from "./_components/johto-team-selector";
 import { JohtoInvitationReviewButton } from "./_components/johto-invitation-review-button";
 import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
-import { attackJohtoRaidAction, healJohtoMascotSusAction } from "./actions";
+import { attackJohtoRaidAction, healAllJohtoMascotsSusAction, healJohtoMascotSusAction, useJohtoRaidShieldAction } from "./actions";
+import { JohtoCooldownRefresh } from "./_components/johto-cooldown-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -101,6 +102,7 @@ export default async function JohtoRaidPage() {
   const canAttack = event.active && !event.defeatedAt && Boolean(current);
   const cooldownUntil = state.me?.cooldownUntil ? new Date(state.me.cooldownUntil) : null;
   const onCooldown = Boolean(cooldownUntil && cooldownUntil > new Date());
+  const alliedInjured = player ? await prisma.mascot.findMany({ where: { playerId: { not: player.id }, arenaState: "INJURED" }, select: { id: true, pokemonId: true, nickname: true, level: true, player: { select: { displayName: true } } }, orderBy: { injuredAt: "desc" }, take: 12 }) : [];
   const currentType = current ? TYPE_STYLE[current.type] : null;
   const rewards = event.rewards;
   const pendingRewards = state.myRewards;
@@ -169,6 +171,7 @@ export default async function JohtoRaidPage() {
       {injured.length > 0 && (
         <section id="sus" className="rounded-2xl border border-orange-500/25 bg-slate-900/60 p-4">
           <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-white"><AlertTriangle size={16} className="text-orange-300" /> Atendimento SUS</h2>
+          <form action={healAllJohtoMascotsSusAction} className="mb-3">{injured.map((mascot) => <input key={mascot.id} type="hidden" name="mascotId" value={mascot.id} />)}<button className="rounded-lg bg-orange-400 px-3 py-2 text-xs font-black text-slate-950">Recuperar todos · {injured.length * 10} ZC</button></form>
           <div className="space-y-2">
             {injured.map((mascot) => (
               <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-orange-500/20 bg-orange-500/10 p-2.5">
@@ -183,6 +186,12 @@ export default async function JohtoRaidPage() {
           </div>
         </section>
       )}
+      <section className="rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-4">
+        <h2 className="text-base font-bold text-white">🛡️ Escudo Cooperativo de Johto</h2>
+        <p className="mt-1 text-xs text-slate-400">Exclusivo de Johto: revive um aliado e volta após seu próximo ataque — diferente do escudo diário da Arena Z.</p>
+        <p className={`mt-2 text-xs font-bold ${state.shield?.available ? "text-emerald-300" : "text-amber-300"}`}>{state.shield?.available ? "Escudo pronto para resgatar um aliado." : "Escudo gasto: ataque novamente na raid para recarregar."}</p>
+        <div className="mt-3 space-y-2">{alliedInjured.length ? alliedInjured.map((mascot) => <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-2"><img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} /><p className="min-w-0 flex-1 truncate text-xs font-bold text-cyan-100">{mascot.nickname ?? getPokemonName(mascot.pokemonId)} · {mascot.player.displayName}</p><form action={useJohtoRaidShieldAction}><input type="hidden" name="mascotId" value={mascot.id} /><button disabled={!state.shield?.available} className="rounded-lg bg-cyan-300 px-3 py-1.5 text-[10px] font-black text-slate-950 disabled:opacity-40">Reviver aliado</button></form></div>) : <p className="text-xs text-slate-500">Nenhum aliado ferido no momento.</p>}</div>
+      </section>
 
 
       {current && (
@@ -216,6 +225,7 @@ export default async function JohtoRaidPage() {
               <>
                 <p className="mb-3 text-xs text-slate-500">6 mascotes livres contra o time de 6 do líder. Espera de {event.cooldownMinutes} min entre ataques.</p>
                 <div className="mb-3"><ComboMeter {...state.combo} /></div>
+                <JohtoCooldownRefresh until={onCooldown && cooldownUntil ? cooldownUntil.toISOString() : null} />
                 <JohtoTeamSelector
                   mascots={freeMascots}
                   labels={LABELS}
