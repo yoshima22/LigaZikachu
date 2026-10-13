@@ -239,11 +239,10 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               defenderPlayer: { select: { displayName: true, ptcglNick: true } },
             },
             orderBy: { createdAt: "desc" },
-            take: 30,
+            take: 25,
           })
-        : Promise.all([
-          prisma.arenaBattle.findMany({
-            where: { attackerPlayerId: historyPlayerId },
+        : prisma.arenaBattle.findMany({
+            where: { OR: [{ attackerPlayerId: historyPlayerId }, { defenderPlayerId: historyPlayerId }] },
             select: {
               id: true, type: true, status: true, result: true,
               attackerPlayerId: true, defenderPlayerId: true,
@@ -256,29 +255,8 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               defenderPlayer: { select: { displayName: true, ptcglNick: true } },
             },
             orderBy: { createdAt: "desc" },
-            take: 15,
-          }),
-          prisma.arenaBattle.findMany({
-            where: { defenderPlayerId: historyPlayerId },
-            select: {
-              id: true, type: true, status: true, result: true,
-              attackerPlayerId: true, defenderPlayerId: true,
-              attackTeamId: true, defenseTeamId: true,
-              botName: true, levelBandMin: true, levelBandMax: true,
-              winnerPlayerId: true, loserPlayerId: true,
-              lootResult: true, injuredMascotIds: true,
-              createdAt: true,
-              attackerPlayer: { select: { displayName: true, ptcglNick: true } },
-              defenderPlayer: { select: { displayName: true, ptcglNick: true } },
-            },
-            orderBy: { createdAt: "desc" },
-            take: 15,
-          }),
-          ]).then(([asAttacker, asDefender]) =>
-          [...asAttacker, ...asDefender]
-            .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime())
-            .slice(0, 15)
-          )
+            take: 25,
+          })
       : Promise.resolve([]),
     prisma.arenaBattle.findFirst({
       where: {

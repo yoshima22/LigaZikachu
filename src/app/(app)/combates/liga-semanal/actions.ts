@@ -196,6 +196,7 @@ export async function createLeagueAction() {
       }
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -232,6 +233,7 @@ export async function startWeeklyLeagueNowAction() {
       if (activePlayers.length) await tx.weeklyMascotLeagueParticipant.createMany({ data: activePlayers.map((player) => ({ id: createId(), leagueId: league!.id, playerId: player.id, updatedAt: new Date() })), skipDuplicates: true });
       return { leagueId: league.id, participants: activePlayers.length, modifier: modifier.name };
     });
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, ...result };
   } catch (error) {
@@ -264,6 +266,7 @@ export async function cancelLeagueAction(leagueId: string) {
       });
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -288,6 +291,7 @@ export async function deleteLeagueAction(leagueId: string) {
       await tx.weeklyMascotLeague.delete({ where: { id: leagueId } });
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -328,6 +332,7 @@ export async function purgeAdminsFromLeagueAction(leagueId: string) {
       });
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, removed: adminIds.length };
   } catch (err) {
@@ -380,6 +385,7 @@ export async function purgeInactivePlayersAction(leagueId: string) {
       });
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, removed: invalidIds.length };
   } catch (err) {
@@ -414,7 +420,8 @@ export async function joinLeagueAction(leagueId: string) {
     data: { id: createId(), leagueId, playerId: player.id, updatedAt: new Date() },
   });
 
-  revalidatePath(PATH);
+  revalidateTag("weekly-league-highlights");
+    revalidatePath(PATH);
   return { success: true };
 }
 
@@ -578,6 +585,7 @@ export async function generateDailyMatchupsAction(leagueId: string, forceRegener
       }
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, matchups: created };
   } catch (err) {
@@ -654,6 +662,7 @@ export async function saveDailyTeamAction(
       },
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -811,7 +820,8 @@ export async function equipWeeklyPresetAction(leagueId: string, battleSlot: numb
     create: { id: createId(), leagueId, playerId: player.id, battleDate, battleSlot, source: "MANUAL", mascotIdsJson: v.ids, rolesJson: v.normalizedRoles, lockedAt: new Date(), updatedAt: new Date() },
     update: { mascotIdsJson: v.ids, rolesJson: v.normalizedRoles, source: "MANUAL", lockedAt: new Date(), updatedAt: new Date() },
   });
-  revalidatePath(PATH);
+  revalidateTag("weekly-league-highlights");
+    revalidatePath(PATH);
   return { success: true };
 }
 
@@ -841,6 +851,7 @@ export async function clearTeamSlotAction(leagueId: string, battleSlot: number) 
       update: { mascotIdsJson: [], rolesJson: {}, source: "CLEARED", updatedAt: new Date() },
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -912,6 +923,7 @@ export async function swapTeamSlotsAction(leagueId: string, slotA: number, slotB
       }
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -1052,6 +1064,7 @@ export async function swapTeamMascotPositionsAction(
       }
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -1099,6 +1112,7 @@ export async function toggleLeagueBetsAction(leagueId: string, enabled: boolean)
       }
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     revalidatePath("/zikabet");
     revalidatePath("/zikabet/minhas-apostas");
@@ -1124,6 +1138,7 @@ export async function setModifierAction(leagueId: string, modifierId: string) {
       where: { id: leagueId },
       data: { modifierJson: mod as unknown as any, status: "ACTIVE", updatedAt: new Date() },
     });
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -1396,7 +1411,8 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
   await Promise.all(settledMatches.map((match) => settleWeeklyLeagueBets(match.id)));
   await publishWeeklyRoundTicker(leagueId, today, battleSlot);
 
-  revalidatePath(PATH);
+  revalidateTag("weekly-league-highlights");
+    revalidatePath(PATH);
   return { success: true, matches: pairings.length };
   } catch (err) {
     return { error: `Erro na simulação: ${String(err).slice(0, 200)}` };
@@ -1525,6 +1541,7 @@ export async function regenerateReplaysAction(leagueId: string) {
       updated++;
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, updated };
   } catch (err) {
@@ -1618,6 +1635,7 @@ export async function resetAndResimulateAction(leagueId: string, slots: number[]
       results.push({ slot, result: await simulateRoundAction(leagueId, slot) });
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, results };
   } catch (err) {
@@ -1678,6 +1696,7 @@ export async function fullLeagueResetAction(leagueId: string) {
       results.push({ slot, result: await simulateRoundAction(leagueId, slot) });
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true, purged: 0, matchups: (genResult as any).matchups, results };
   } catch (err) {
@@ -1717,6 +1736,7 @@ export async function seedLeagueItemsAction() {
       }
     }
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     revalidatePath("/shop");
     revalidateTag("shop-items-active");
@@ -1758,6 +1778,7 @@ export async function buyLeagueItemAction(itemType: string) {
       });
     });
 
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (err) {
@@ -1792,6 +1813,7 @@ export async function selectBattleItemsAction(leagueId: string, battleSlot: numb
         await tx.weeklyMascotLeagueBattleItem.create({ data: { id: createId(), leagueId, playerId: player.id, itemId: inventory.itemId, effectType: type, targetType: definition.targetType, battleDate, battleSlot } });
       }
     });
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     return { success: true };
   } catch (error) {
@@ -1925,6 +1947,7 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
       priority: 10,
       ttlHours: 48,
     });
+    revalidateTag("weekly-league-highlights");
     revalidatePath(PATH);
     revalidatePath("/caixa-de-presentes");
     return { success: true, granted };

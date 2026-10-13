@@ -295,6 +295,8 @@ export async function activateBondItemV2Action(relationId: string, itemType: Dir
         if (reciprocal) {
           const reciprocalScore = clampScore(reciprocal.relationshipScore + effect.reciprocalDelta);
           await tx.mascotRelation.update({ where: { id: reciprocal.id }, data: { relationshipScore: reciprocalScore, type: relationTypeFromScore(reciprocalScore), interactionCount: { increment: 1 }, lastInteractionAt: new Date() } });
+        } else {
+          await tx.mascotRelation.create({ data: { mascotAId: relation.mascotBId, mascotBId: relation.mascotAId, relationshipScore: effect.reciprocalDelta, type: relationTypeFromScore(effect.reciprocalDelta), interactionCount: 1, lastInteractionAt: new Date(), isActive: true } });
         }
       }
       await tx.mascotBondMemory.create({ data: { mascotAId: relation.mascotAId, mascotBId: relation.mascotBId, memoryType: "ITEM_ATIVADO", sourceType: "BOND_ITEM", sourceId: itemType, title: effect.title, description: `${BOND_ITEM_CATALOG.find((item) => item.type === itemType)?.name ?? itemType} foi usado neste vínculo${delta ? ` (${delta > 0 ? "+" : ""}${delta})` : " para registrar uma trégua"}.`, intensity: 1, metadata: { itemType, scoreDelta: delta, reciprocalScoreDelta: effect.reciprocalDelta ?? 0 } as Prisma.InputJsonValue } });

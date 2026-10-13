@@ -62,9 +62,10 @@ export default async function ArenaDraftPage() {
           state: "FINISHED",
           finishedAt: { gte: seasonStart },
         },
-        orderBy: { finishedAt: "asc" },
-        take: 20,
-        include: {
+        orderBy: [{ finishedAt: "desc" }, { id: "desc" }],
+        take: 25,
+        select: {
+          id: true, state: true, playerAId: true, winnerId: true, createdAt: true,
           playerA: { select: { displayName: true } },
           playerB: { select: { displayName: true } },
         },

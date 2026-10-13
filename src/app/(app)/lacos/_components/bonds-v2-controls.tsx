@@ -9,6 +9,8 @@ import {
 } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
+import { getRefugeHistoryAction } from "../history-actions";
+import type { RefugeReport } from "@/lib/refuge-history";
 import { toast } from "sonner";
 import {
   BookOpen,
@@ -287,26 +289,9 @@ export type RefugeLocationTab = {
   location: RefugeLocation;
   occupants: SceneMascot[];
   backgroundUrl: string;
-  stories: SceneStory[];
 };
 
-function BondStoryReport({ stories }: { stories: SceneStory[] }) {
-  const summary = useMemo(() => {
-    const social = stories.filter((story) => !story.conflict).length;
-    const conflicts = stories.filter((story) => story.conflict).length;
-    const scoreUp = stories.reduce((total, story) => total + Math.max(0, story.scoreDelta ?? 0), 0);
-    const scoreDown = Math.abs(stories.reduce((total, story) => total + Math.min(0, story.scoreDelta ?? 0), 0));
-    const fights = stories.filter((story) => Boolean(story.fight)).length;
-    const pairs = Object.entries(stories.reduce<Record<string, number>>((result, story) => {
-      result[story.participants] = (result[story.participants] ?? 0) + 1;
-      return result;
-    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    const trainers = Object.entries(stories.reduce<Record<string, number>>((result, story) => {
-      story.owners.split(" · ").filter(Boolean).forEach((owner) => { result[owner] = (result[owner] ?? 0) + 1; });
-      return result;
-    }, {})).sort((a, b) => b[1] - a[1]).slice(0, 3);
-    return { social, conflicts, scoreUp, scoreDown, fights, pairs, trainers };
-  }, [stories]);
+function BondStoryReport({ summary }: { summary: RefugeReport }) {
 
   return (
     <section className="mb-4 rounded-2xl border border-violet-300/15 bg-violet-300/[.04] p-3">
@@ -315,7 +300,7 @@ function BondStoryReport({ stories }: { stories: SceneStory[] }) {
           <p className="text-[10px] font-black uppercase tracking-[.16em] text-violet-300">Relatório da região</p>
           <p className="mt-1 text-[10px] text-slate-400">Resumo das até 50 páginas mais recentes deste diário.</p>
         </div>
-        <span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-slate-400">{stories.length} relatos analisados</span>
+        <span className="rounded-full border border-white/10 px-2 py-1 text-[9px] text-slate-400">{summary.total} relatos analisados</span>
       </div>
       <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-5">
         {[
@@ -510,13 +495,11 @@ export function RefugeLocationScene({
   occupants,
   ownMascots,
   backgroundUrl,
-  stories,
 }: {
   location: RefugeLocation;
   occupants: SceneMascot[];
   ownMascots: SceneMascot[];
   backgroundUrl: string;
-  stories: SceneStory[];
 }) {
   const definition = REFUGE_LOCATIONS[location];
   const router = useRouter();
@@ -583,33 +566,28 @@ export function RefugeLocationScene({
     (safeOccupantPage - 1) * occupantsPerPage,
     safeOccupantPage * occupantsPerPage,
   );
-  const retainedStories = useMemo(() => stories.slice(0, 450), [stories]);
-  const filteredStories = useMemo(
-    () =>
-      retainedStories.filter((story) => {
-        const normalizedQuery = storyQuery.trim().toLocaleLowerCase("pt-BR");
-        const matchesQuery =
-          !normalizedQuery ||
-          `${story.participants} ${story.owners} ${story.title} ${story.description}`
-            .toLocaleLowerCase("pt-BR")
-            .includes(normalizedQuery);
-        const matchesKind =
-          storyKind === "ALL" ||
-          (storyKind === "CONFLICT" ? story.conflict : !story.conflict);
-        return matchesQuery && matchesKind;
-      }),
-    [retainedStories, storyKind, storyQuery],
-  );
+  const [history, setHistory] = useState<Awaited<ReturnType<typeof getRefugeHistoryAction>> | null>(null);
+  const [historyLoading, setHistoryLoading] = useState(true);
+  const [historyError, setHistoryError] = useState<string | null>(null);
+  const [historyRetry, setHistoryRetry] = useState(0);
+  useEffect(() => {
+    let cancelled = false;
+    setHistoryLoading(true);
+    setHistoryError(null);
+    const timer = window.setTimeout(() => {
+      getRefugeHistoryAction({ location, page: storyPage, query: storyQuery, kind: storyKind })
+        .then(result => { if (!cancelled) setHistory(result); })
+        .catch(() => { if (!cancelled) setHistoryError("Não foi possível carregar o diário."); })
+        .finally(() => { if (!cancelled) setHistoryLoading(false); });
+    }, storyQuery ? 300 : 0);
+    return () => { cancelled = true; window.clearTimeout(timer); };
+  }, [location, storyPage, storyQuery, storyKind, occupants, historyRetry]);
+  const retainedTotal = history?.report.total ?? 0;
+  const filteredTotal = history?.total ?? 0;
   const storiesPerPage = 9;
-  const storyPages = Math.max(
-    1,
-    Math.ceil(filteredStories.length / storiesPerPage),
-  );
-  const safeStoryPage = Math.min(storyPage, storyPages);
-  const visibleStories = filteredStories.slice(
-    (safeStoryPage - 1) * storiesPerPage,
-    safeStoryPage * storiesPerPage,
-  );
+  const storyPages = Math.max(1, Math.ceil(filteredTotal / storiesPerPage));
+  const safeStoryPage = history?.page ?? 1;
+  const visibleStories = history?.stories ?? [];
 
   useEffect(() => {
     setNow(Date.now());
@@ -1048,8 +1026,9 @@ export function RefugeLocationScene({
                     <p className="truncate text-[11px] font-bold text-white">
                       {mascot.name}
                     </p>
-                    <span className="inline-flex rounded-full bg-fuchsia-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-fuchsia-200">
-                      {mascot.performanceTag}
+                    <p className="truncate text-[9px] text-cyan-200">Personalidade: {mascot.personality}</p>
+                    <span className="inline-flex rounded-full bg-fuchsia-300/10 px-1.5 py-0.5 text-[8px] font-black uppercase text-fuchsia-200" title="Estilo de combate estimado; não altera a personalidade nem a disponibilidade.">
+                      Estilo: {mascot.performanceTag}
                     </span>
                     <p
                       className={`truncate text-[9px] ${cooldown > 0 && !here ? "text-amber-300" : "text-slate-500"}`}
@@ -1121,10 +1100,10 @@ export function RefugeLocationScene({
             </p>
           </div>
           <span className="rounded-full bg-white/5 px-2 py-1 text-[9px] text-slate-500">
-            {retainedStories.length} relatos preservados nesta área
+            Últimos 25 relatos por categoria
           </span>
         </div>
-        <BondStoryReport stories={retainedStories} />
+        {history && <BondStoryReport summary={history.report} />}
         <div className="mb-3 grid gap-2 sm:grid-cols-[1fr_220px]">
           <div className="relative">
             <Search
@@ -1133,6 +1112,7 @@ export function RefugeLocationScene({
             />
             <input
               value={storyQuery}
+              maxLength={120}
               onChange={(event) => {
                 setStoryQuery(event.target.value);
                 setStoryPage(1);
@@ -1154,11 +1134,11 @@ export function RefugeLocationScene({
             <option value="CONFLICT">Conflitos</option>
           </select>
         </div>
-        {retainedStories.length === 0 ? (
+        {historyLoading ? <p className="py-4 text-xs text-slate-400" role="status">Carregando diário...</p> : historyError ? <div role="alert" className="py-4 text-xs text-rose-300">{historyError} <button type="button" onClick={() => setHistoryRetry(n => n + 1)} className="underline">Tentar novamente</button></div> : retainedTotal === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-xs text-slate-500">
             Ainda não há histórias registradas neste local.
           </p>
-        ) : filteredStories.length === 0 ? (
+        ) : filteredTotal === 0 ? (
           <p className="rounded-xl border border-dashed border-white/10 p-4 text-xs text-slate-500">
             Nenhum relato corresponde à busca e ao filtro selecionados.
           </p>
@@ -1219,10 +1199,10 @@ export function RefugeLocationScene({
                 <span className="text-[10px] text-slate-500">
                   Relatos {(safeStoryPage - 1) * storiesPerPage + 1}–
                   {Math.min(
-                    filteredStories.length,
+                    filteredTotal,
                     safeStoryPage * storiesPerPage,
                   )}{" "}
-                  de {filteredStories.length}
+                  de {filteredTotal}
                 </span>
                 <button
                   type="button"
@@ -2188,11 +2168,30 @@ function InfoPill({
   );
 }
 
+export type SocialGroupItem = {
+  leader: { name: string; owner: string; sprite: string };
+  members: Array<{ name: string; owner: string; sprite: string; score: number; effect: string }>;
+};
+
+export function SocialGroupsPager({ groups, kind }: { groups: SocialGroupItem[]; kind: "FRIEND" | "RIVAL" }) {
+  const [page, setPage] = useState(1);
+  const perPage = 2;
+  const pages = Math.max(1, Math.ceil(groups.length / perPage));
+  const safePage = Math.min(page, pages);
+  const visible = groups.slice((safePage - 1) * perPage, safePage * perPage);
+  const friendly = kind === "FRIEND";
+  const surface = friendly ? "border-emerald-300/20 bg-emerald-300/[.035]" : "border-rose-300/20 bg-rose-300/[.035]";
+  const accent = friendly ? "text-emerald-300" : "text-rose-300";
+  const effect = friendly ? "Bônus coletivo: reunidos fora do Treino, +10 pp de chance de recurso comum e de Momento coletivo." : "Bônus coletivo: reunidos no Treino, +10 pp de chance de recurso competitivo e de desafio coletivo.";
+  return <div className="space-y-3">{visible.map((group) => <article key={group.leader.name} className={`rounded-2xl border p-4 ${surface}`}><div className="flex items-center gap-3"><img src={group.leader.sprite} alt="" className="h-12 w-12 rounded-full border border-white/10 bg-slate-950 object-contain" /><div><p className={`text-[10px] font-black uppercase tracking-[.16em] ${accent}`}>{friendly ? "Ponto de encontro" : "Centro da disputa"}</p><p className="font-bold text-white">{friendly ? "Círculo" : "Clube"} de {group.leader.name}</p><p className="text-[10px] text-slate-400">{group.leader.owner}</p></div></div><p className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400"><strong className="text-white">Mascote central:</strong> possui dois ou mais vínculos compatíveis. Indisponível ou fora do local, ele pausa o grupo — sem apagar relações.</p><p className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400">{effect}</p><div className="mt-2 space-y-1.5">{group.members.map((member) => <div key={`${member.name}-${member.owner}`} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2"><img src={member.sprite} alt="" className="h-6 w-6 object-contain" /><p className="min-w-0 flex-1 truncate text-[10px] text-slate-300"><strong className="text-white">{member.name}</strong> · {member.owner}</p><span className={`text-[10px] font-bold ${accent}`}>{member.score > 0 ? "+" : ""}{member.score}</span></div>)}</div></article>)}{pages > 1 && <div className="flex items-center justify-center gap-3"><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronLeft size={14} /></button><span className="text-[10px] text-slate-500">Grupos {(safePage - 1) * perPage + 1}–{Math.min(groups.length, safePage * perPage)} de {groups.length}</span><button type="button" disabled={safePage >= pages} onClick={() => setPage(safePage + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronRight size={14} /></button></div>}</div>;
+}
+
 export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<"ALL" | "FRIEND" | "RIVAL">("ALL");
   const [page, setPage] = useState(1);
   const [selected, setSelected] = useState<string | null>(null);
+  const [profilePage, setProfilePage] = useState(1);
   const perPage = 5;
   const trainers = useMemo(
     () =>
@@ -2283,9 +2282,10 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
               <button
                 key={trainer.name}
                 type="button"
-                onClick={() =>
-                  setSelected(selected === trainer.name ? null : trainer.name)
-                }
+                onClick={() => {
+                  setSelected(selected === trainer.name ? null : trainer.name);
+                  setProfilePage(1);
+                }}
                 className={`w-full rounded-xl border p-3 text-left transition ${selected === trainer.name ? "border-cyan-300/40 bg-cyan-300/[.07]" : "border-white/10 bg-black/20 hover:border-white/20"}`}
               >
                 <div className="flex flex-wrap items-center justify-between gap-2">
@@ -2352,8 +2352,14 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
               <X size={14} />
             </button>
           </div>
+          {(() => {
+            const profilePerPage = 6;
+            const profilePages = Math.max(1, Math.ceil(profile.relations.length / profilePerPage));
+            const safeProfilePage = Math.min(profilePage, profilePages);
+            const visibleProfileRelations = profile.relations.slice((safeProfilePage - 1) * profilePerPage, safeProfilePage * profilePerPage);
+            return <>
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
-            {profile.relations.map((relation) => (
+            {visibleProfileRelations.map((relation) => (
               <article
                 key={relation.id}
                 className="rounded-xl border border-white/10 bg-white/[.025] p-2"
@@ -2390,6 +2396,9 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
               </article>
             ))}
           </div>
+          {profilePages > 1 && <div className="mt-3 flex items-center justify-center gap-3"><button type="button" disabled={safeProfilePage <= 1} onClick={() => setProfilePage(safeProfilePage - 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25" aria-label="Página anterior das relações"><ChevronLeft size={14} /></button><span className="text-[10px] text-slate-500">Relações {(safeProfilePage - 1) * profilePerPage + 1}–{Math.min(profile.relations.length, safeProfilePage * profilePerPage)} de {profile.relations.length}</span><button type="button" disabled={safeProfilePage >= profilePages} onClick={() => setProfilePage(safeProfilePage + 1)} className="rounded-lg border border-white/10 p-2 text-slate-300 disabled:opacity-25" aria-label="Próxima página das relações"><ChevronRight size={14} /></button></div>}
+            </>;
+          })()}
         </div>
       )}
     </div>

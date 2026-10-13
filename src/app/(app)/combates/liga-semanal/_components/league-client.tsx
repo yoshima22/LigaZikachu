@@ -1462,6 +1462,7 @@ export function OpponentAnalysisModal({ analysis, myMascots, showRecommendations
 }
 
 function ResultsTab({ data }: { data: PageData }) {
+  const [replayPending, startReplay] = useTransition();
   const [replayMatch, setReplayMatch] = useState<any>(null);
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
   const [analysisTargetId, setAnalysisTargetId] = useState<string | null>(null);
@@ -1498,8 +1499,14 @@ function ResultsTab({ data }: { data: PageData }) {
   };
 
   const openReplay = (match: any) => {
-    revealMatch(match.id);
-    setReplayMatch(match);
+    startReplay(async () => {
+      try {
+        const { getWeeklyReplayAction } = await import("../replay-actions");
+        const replay = await getWeeklyReplayAction(match.id);
+        revealMatch(match.id);
+        setReplayMatch({ ...match, ...replay });
+      } catch { toast.error("Não foi possível carregar o replay. Tente novamente."); }
+    });
   };
 
   // Um resultado está visível se a opção está desligada ou se a partida foi revelada.
@@ -1617,8 +1624,9 @@ function ResultsTab({ data }: { data: PageData }) {
                     {analysisError?.matchId === match.id && <p className="text-center text-[9px] text-red-300">{analysisError?.message}</p>}
                   </>
                 )}
-                {isResolved && match.replayJson && (
+                {isResolved && match.hasReplay && (
                   <button
+                    disabled={replayPending}
                     onClick={() => openReplay(match)}
                     className="mt-1 w-full rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 py-1 text-[10px] font-semibold text-[#FFCB05] hover:bg-[#FFCB05]/10 transition-colors"
                   >

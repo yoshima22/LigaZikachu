@@ -80,22 +80,23 @@ export async function publishLeagueTicker(input: PublishLeagueTickerInput): Prom
 }
 
 export async function getPendingLeagueTickerEvents(playerId: string, limit = 12): Promise<LeagueTickerItem[]> {
-  const viewed = await prisma.leagueTickerView.findMany({
-    where: { playerId },
-    select: { eventId: true },
-    orderBy: { seenAt: "desc" },
-    take: 500,
-  });
-  return prisma.leagueTickerEvent.findMany({
-    where: {
-      startsAt: { lte: new Date() },
-      expiresAt: { gt: new Date() },
-      id: viewed.length ? { notIn: viewed.map((item) => item.eventId) } : undefined,
-    },
-    orderBy: [{ priority: "desc" }, { createdAt: "desc" }],
-    take: Math.max(1, Math.min(20, limit)),
-    select: { id: true, type: true, message: true, href: true, priority: true, createdAt: true },
-  });
+  const now = new Date();
+  const take = Number.isFinite(limit) ? Math.max(1, Math.min(20, Math.floor(limit))) : 12;
+  // Preserve the latest-500 seen window without transferring those IDs to the server.
+  // Tagged parameters keep player IDs and limits out of the SQL text.
+  return prisma.$queryRaw<LeagueTickerItem[]>`
+    SELECT e.id, e.type, e.message, e.href, e.priority, e."createdAt"
+    FROM league_ticker_events e
+    WHERE e."startsAt" <= ${now} AND e."expiresAt" > ${now}
+      AND e.id NOT IN (
+        SELECT v."eventId" FROM league_ticker_views v
+        WHERE v."playerId" = ${playerId}
+        ORDER BY v."seenAt" DESC
+        LIMIT 500
+      )
+    ORDER BY e.priority DESC, e."createdAt" DESC
+    LIMIT ${take}
+  `;
 }
 
 export async function markLeagueTickerEventSeen(playerId: string, eventId: string): Promise<void> {
