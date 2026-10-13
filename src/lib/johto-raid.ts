@@ -40,7 +40,7 @@ export type JohtoLeaderState = Omit<JohtoLeaderDef, "roster"> & {
   mascots: JohtoMascotState[]; rosterPokemonIds: number[];
 };
 
-export type JohtoLeaderRankingEntry = { playerId: string; playerName: string; damage: number; attackCount: number; highestSingleDamage: number };
+export type JohtoLeaderRankingEntry = { playerId: string; playerName: string; damage: number; damageReceived: number; attackCount: number; highestSingleDamage: number };
 export type JohtoPendingReward = { id: string; leaderKey: string; leaderName: string; tier: string; zc: number; level: number; egg: boolean; claimed: boolean; chosenPokemonId: number | null; options: number[] };
 export type JohtoRecentFight = { id: string; playerName: string; leaderName: string; damage: number; win: boolean; createdAt: string; hasReplay: boolean };
 
@@ -226,7 +226,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
   });
   const current = leaders.find((l) => l.status === "CURRENT") ?? null;
   const [stats, recent, attackCount, participants, myLast, rewards, combo, shield] = await Promise.all([
-    current ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: current.id, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { id: "asc" }], take: 15, select: { playerId: true, damage: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
+    current ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: current.id, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { id: "asc" }], take: 15, select: { playerId: true, damage: true, damageReceived: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
     prisma.johtoRaidAttempt.findMany({
       where: { eventId: event.id, replayJson: { not: Prisma.DbNull }, player: NON_ADMIN }, orderBy: { createdAt: "desc" }, take: JOHTO_REPLAY_HISTORY,
       select: { id: true, damage: true, leaderKey: true, createdAt: true, summaryJson: true, player: { select: { displayName: true } } },
@@ -239,12 +239,12 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     playerId ? getJohtoShieldState(event.id, playerId) : Promise.resolve(null),
   ]);
   const ranking = stats
-    .map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }))
+    .map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, damageReceived: s.damageReceived, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }))
     .sort((a, b) => b.damage - a.damage || b.attackCount - a.attackCount || a.playerId.localeCompare(b.playerId));
   const mineIndex = playerId ? ranking.findIndex((r) => r.playerId === playerId) : -1;
   let mine = mineIndex >= 0 ? ranking[mineIndex] : null;
   if (!mine && playerId && current) {
-    const own = await prisma.johtoRaidLeaderStat.findUnique({ where: { leaderId_playerId: { leaderId: current.id, playerId } }, select: { damage: true, attackCount: true, highestSingleDamage: true } });
+    const own = await prisma.johtoRaidLeaderStat.findUnique({ where: { leaderId_playerId: { leaderId: current.id, playerId } }, select: { damage: true, damageReceived: true, attackCount: true, highestSingleDamage: true } });
     if (own) mine = { playerId, playerName: "", ...own };
   }
   return {
@@ -408,8 +408,8 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
         const stat = await tx.johtoRaidLeaderStat.findUnique({ where: { leaderId_playerId: { leaderId: leaderRow.id, playerId: player.id } }, select: { highestSingleDamage: true } });
         await tx.johtoRaidLeaderStat.upsert({
           where: { leaderId_playerId: { leaderId: leaderRow.id, playerId: player.id } },
-          create: { leaderId: leaderRow.id, playerId: player.id, damage: total, attackCount: 1, highestSingleDamage: total },
-          update: { damage: { increment: total }, attackCount: { increment: 1 }, highestSingleDamage: Math.max(stat?.highestSingleDamage ?? 0, total) },
+          create: { leaderId: leaderRow.id, playerId: player.id, damage: total, damageReceived: outcome.playerDamageTaken, attackCount: 1, highestSingleDamage: total },
+          update: { damage: { increment: total }, damageReceived: { increment: outcome.playerDamageTaken }, attackCount: { increment: 1 }, highestSingleDamage: Math.max(stat?.highestSingleDamage ?? 0, total) },
         });
         await tx.johtoRaidShield.upsert({
           where: { eventId_playerId: { eventId: event.id, playerId: player.id } },

@@ -8,6 +8,7 @@ import { revalidateTag } from "next/cache";
 import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { after } from "next/server";
+import { isDirectMessageBlocked } from "@/lib/dm-block";
 
 async function requirePlayer(returnTo?: string) {
   const user = await getSessionUser();
@@ -80,7 +81,7 @@ export async function getConversationAction(otherPlayerId: string) {
   }
 
   try {
-    const [newestMessages, other, unread] = await Promise.all([
+    const [newestMessages, other, unread, myBlock] = await Promise.all([
     prisma.directMessage.findMany({
       where: {
         OR: [
@@ -107,6 +108,7 @@ export async function getConversationAction(otherPlayerId: string) {
     prisma.directMessage.count({
       where: { senderId: safePlayerId, receiverId: me.id, readAt: null },
     }),
+    prisma.directMessageBlock.findUnique({ where: { blockerId_blockedId: { blockerId: me.id, blockedId: safePlayerId } }, select: { blockerId: true, blockedId: true } }),
     ]);
 
     if (!other) return { ok: false as const, error: "Jogador não encontrado.", retryable: false as const };
@@ -120,7 +122,7 @@ export async function getConversationAction(otherPlayerId: string) {
     }
 
     const messages = newestMessages.reverse();
-    return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages) };
+    return { ok: true as const, me, other, messages: await hydrateItemAttachments(messages), muted: Boolean(myBlock) };
   } catch (error) {
     console.error("[messages] failed to load conversation", {
       otherPlayerId: safePlayerId,
@@ -148,6 +150,8 @@ export async function sendMessageAction(
 
   const receiver = await prisma.player.findUnique({ where: { id: receiverId }, select: { id: true, userId: true } });
   if (!receiver) return { ok: false as const, error: "Destinatário não encontrado." };
+  const blocks = await prisma.directMessageBlock.findMany({ where: { OR: [{ blockerId: receiverId, blockedId: me.id }, { blockerId: me.id, blockedId: receiverId }] }, select: { blockerId: true, blockedId: true } });
+  if (isDirectMessageBlocked(blocks, me.id, receiverId)) return { ok: false as const, error: "Este jogador silenciou esta conversa." };
 
   const msg = await prisma.directMessage.create({
     data: {
@@ -173,6 +177,14 @@ export async function sendMessageAction(
       category: "MENSAGENS",
     }).catch(() => undefined));
   return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
+}
+
+export async function setDirectMessageMuteAction(otherPlayerId: string, muted: boolean) {
+  const me = await requirePlayer("/mensagens");
+  if (!otherPlayerId || otherPlayerId === me.id) return { ok: false as const, error: "Jogador inválido." };
+  if (muted) await prisma.directMessageBlock.upsert({ where: { blockerId_blockedId: { blockerId: me.id, blockedId: otherPlayerId } }, create: { blockerId: me.id, blockedId: otherPlayerId }, update: {} });
+  else await prisma.directMessageBlock.deleteMany({ where: { blockerId: me.id, blockedId: otherPlayerId } });
+  return { ok: true as const };
 }
 
 /** Busca dados dos remetentes uma única vez (em vez de repetir o join — e o

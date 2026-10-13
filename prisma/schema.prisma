@@ -322,6 +322,8 @@ model Player {
   supporterPasses             SupporterPass[]
   sentMessages                DirectMessage[]                @relation("SentMessages")
   receivedMessages            DirectMessage[]                @relation("ReceivedMessages")
+  directMessageBlocksMade     DirectMessageBlock[]           @relation("DirectMessageBlocksMade")
+  directMessageBlocksReceived DirectMessageBlock[]           @relation("DirectMessageBlocksReceived")
   generalMessages             GeneralChatMessage[]
   syncChallengeEntries        SyncChallengeEntry[]
   generatedSyncTicketHalves   SyncTicketHalf[]               @relation("SyncTicketHalfGeneratedBy")
@@ -627,6 +629,20 @@ model DirectMessage {
   @@index([senderId, receiverId])
   @@index([receiverId, readAt])
   @@map("direct_messages")
+}
+
+model DirectMessageBlock {
+  id        String   @id @default(cuid())
+  blockerId String
+  blockedId String
+  createdAt DateTime @default(now())
+
+  blocker Player @relation("DirectMessageBlocksMade", fields: [blockerId], references: [id], onDelete: Cascade)
+  blocked Player @relation("DirectMessageBlocksReceived", fields: [blockedId], references: [id], onDelete: Cascade)
+
+  @@unique([blockerId, blockedId])
+  @@index([blockedId])
+  @@map("direct_message_blocks")
 }
 
 model PlayerNotification {
@@ -5104,6 +5120,7 @@ model JohtoRaidLeaderStat {
   leaderId            String
   playerId            String
   damage              Int             @default(0)
+  damageReceived      Int             @default(0)
   attackCount         Int             @default(0)
   highestSingleDamage Int             @default(0)
   leader              JohtoRaidLeader @relation(fields: [leaderId], references: [id], onDelete: Cascade)

@@ -1041,6 +1041,8 @@ export type ExpeditionOdds = {
   coins: number;
   specialItem: number;
   megaStone: number;
+  /** Chance absoluta (em %) de Ovo de Lab; só existe no cenário extremo de Itens 6h. */
+  labEgg: number;
   eggType: "COMMON" | "RARE" | "SPECIAL";
   coinMin: number;
   coinMax: number;
@@ -1109,7 +1111,7 @@ export function getExpeditionOdds(params: {
       food: weights.food * rewardShare,
       coins: weights.coins * rewardShare,
       specialItem: weights.specialItem * rewardShare,
-      megaStone: 0, eggType, coinMin,
+      megaStone: 0, labEgg: 0, eggType, coinMin,
       coinMax: coinMin + 100 + rewardBonus * 12 + level * 3,
     };
   }
@@ -1123,6 +1125,11 @@ export function getExpeditionOdds(params: {
   const megaStone = mode === "ITEMS" && duration === "6h"
     ? getMegaStoneExpeditionChance(instinct)
     : 0;
+  // Fonte excepcional, não recorrente: exige a expedição mais longa de Itens,
+  // Instinto extremo, oito amigos e Amuleto da Sorte. O máximo é 1% da expedição.
+  const labEgg = mode === "ITEMS" && duration === "6h" && luckBuff && instinct >= 220 && allyCount >= 8
+    ? Math.min(1, 0.2 + ((Math.min(250, instinct) - 220) / 30) * 0.6 + Math.min(2, allyCount - 8) * 0.1)
+    : 0;
   const total = Object.values(weights).reduce((sum, value) => sum + value, 0);
   const rewardShare = (100 - megaStone) / total;
   return {
@@ -1132,7 +1139,7 @@ export function getExpeditionOdds(params: {
     food: weights.food * rewardShare,
     coins: 0,
     specialItem: weights.specialItem * rewardShare,
-    megaStone, eggType, coinMin: 0, coinMax: 0,
+    megaStone, labEgg, eggType, coinMin: 0, coinMax: 0,
   };
 }
 

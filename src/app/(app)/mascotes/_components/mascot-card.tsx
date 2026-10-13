@@ -971,6 +971,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     <p className="text-[9px] uppercase tracking-wider text-slate-600 mb-1">📦 Itens</p>
                     <div className="grid grid-cols-2 gap-x-3 gap-y-0.5 text-[10px] text-slate-400">
                       {renderEggLine(items.egg)}
+                      {items.labEgg > 0 && <span className="col-span-2 text-fuchsia-300">🧪 Ovo de Laboratório <strong>{pct(items.labEgg)}%</strong> <span className="text-slate-500">(Itens 6h · Instinto 220+, 8 amigos e Amuleto da Sorte)</span></span>}
                       <span>🍬 Doce <strong className="text-slate-200">{pct(items.sweet)}%</strong></span>
                       <span>🍖 Comida <strong className="text-slate-200">{pct(items.food)}%</strong></span>
                       <span className="col-span-2 text-purple-400">🧪 Item especial <strong className="text-purple-200">{pct(items.specialItem)}%</strong> <span className="text-slate-600">(Vitamina, Amuleto, Piquenique…)</span></span>

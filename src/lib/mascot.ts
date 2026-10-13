@@ -1513,9 +1513,11 @@ async function rollItemExpeditionReward(
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
   if (roll < odds.megaStone) return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
+  const labEggLimit = odds.megaStone + odds.labEgg;
   const eggLimit = odds.megaStone + odds.egg + picnicBonusPct;
   const sweetLimit = eggLimit + odds.sweet;
   const foodLimit = sweetLimit + Math.max(0, odds.food - picnicBonusPct * 2);
+  if (roll < labEggLimit) return { type: "EGG", eggType: "LAB" };
   if (roll < eggLimit) return { type: "EGG", eggType };
   if (roll < sweetLimit) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
   if (roll < foodLimit) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
@@ -1525,7 +1527,7 @@ async function rollItemExpeditionReward(
 async function describeExpeditionReward(reward: ExpeditionReward) {
   switch (reward.type) {
     case "EGG": {
-      const eggLabel = reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "RARE" ? "Raro" : "Comum";
+      const eggLabel = reward.eggType === "LAB" ? "de Laboratório" : reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "RARE" ? "Raro" : "Comum";
       return {
         title: `Ovo ${eggLabel} encontrado!`,
         description: "Seu mascote voltou da expedição carregando um ovo.",

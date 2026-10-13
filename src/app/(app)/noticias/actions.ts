@@ -10,6 +10,7 @@ import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { creditCoins } from "@/lib/zikacoins";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
 import { EGG_SHOP_TO_EGG_TYPE, isEggShopItemType } from "@/lib/shop-config";
+import { isRestrictedEventItem } from "@/lib/restricted-event-items";
 
 const rewardKindSchema = z.enum(["NONE", "ZIKA_COINS", "LIGA_CASH", "MASCOT_EGG", "MASCOT_FOOD", "MASCOT_BUFF", "SHOP_ITEM"]);
 
@@ -70,9 +71,9 @@ async function buildRewardPayload(data: z.infer<typeof newsSchema>) {
     // entrega é roteada por tipo no resgate, igual à compra na loja.
     const item = await prisma.shopItem.findFirst({
       where: { id: data.rewardType, inventoryEnabled: true },
-      select: { id: true, name: true, type: true },
+      select: { id: true, name: true, type: true, metadata: true },
     });
-    if (!item) throw new Error("Item da loja não encontrado ou indisponível.");
+    if (!item || isRestrictedEventItem(item.metadata)) throw new Error("Este item é exclusivo de um evento e não pode ser usado como recompensa de notícia.");
     const quantity = Math.max(1, data.rewardAmount || 1);
     return {
       rewardEnabled: true,

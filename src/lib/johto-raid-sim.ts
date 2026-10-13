@@ -230,6 +230,7 @@ export type JohtoBattleOutcome = {
   /** Dano causado a cada mascote do líder em HP de combate e já convertido para a vida global. */
   perSlot: Array<{ slot: number; pokemonId: number; name: string; battleDamage: number; globalDamage: number; fellInBattle: boolean }>;
   totalGlobalDamage: number;
+  playerDamageTaken: number;
   playerFallenIds: string[];
   playerKos: Array<{ targetId: string; killerId: string }>;
   rounds: number;
@@ -251,6 +252,7 @@ export function runJohtoBattle(playerTeam: LeagueMascot[], def: JohtoLeaderDef, 
   return {
     battle, leaderTeam, startingHp, win: battle.winner === "A", perSlot,
     totalGlobalDamage: perSlot.reduce((sum, p) => sum + p.globalDamage, 0),
+    playerDamageTaken: playerTeam.reduce((sum, mascot) => sum + Math.round(analysis.damageTaken.get(mascot.id) ?? 0), 0),
     playerFallenIds: playerTeam.filter((m) => (analysis.hpEnd.get(m.id) ?? 0) <= 0).map((m) => m.id),
     playerKos: analysis.kos.filter((k) => playerIds.has(k.targetId)),
     rounds: battle.rounds,

@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { createClient } from "@supabase/supabase-js";
-import { sendMessageAction, pollNewMessagesAction, type AttachmentData } from "../../actions";
-import { ArrowLeft, Paperclip, Send, User, X } from "lucide-react";
+import { sendMessageAction, pollNewMessagesAction, setDirectMessageMuteAction, type AttachmentData } from "../../actions";
+import { ArrowLeft, Paperclip, Send, User, VolumeX, Volume2, X } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -29,6 +30,7 @@ interface Props {
   initialMessages: Message[];
   compact?: boolean;
   onBack?: () => void;
+  muted?: boolean;
 }
 
 const RARITY_COLOR: Record<string, string> = {
@@ -92,12 +94,13 @@ export function AttachmentCard({ data, mine }: { data: AttachmentData; mine: boo
   return null;
 }
 
-export function DmChat({ me, other, initialMessages, compact = false, onBack }: Props) {
+export function DmChat({ me, other, initialMessages, compact = false, onBack, muted = false }: Props) {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [text, setText] = useState("");
   const [pending, start] = useTransition();
   const [showPicker, setShowPicker] = useState(false);
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
+  const [isMuted, setIsMuted] = useState(muted);
   const bottomRef = useRef<HTMLDivElement>(null);
   const realtimeReadyRef = useRef(false);
 
@@ -215,6 +218,7 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
 
 
   const handleSend = () => {
+    if (isMuted) return;
     const val = text.trim();
     if (!val && !attachment) return;
     setText("");
@@ -223,7 +227,7 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
 
     start(async () => {
       const res = await sendMessageAction(other.id, val, att ?? undefined);
-      if (!res.ok) return;
+      if (!res.ok) { toast.error(res.error); return; }
 
       const msg: Message = {
         id: res.message.id,
@@ -239,6 +243,14 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
       setMessages((prev) => prev.some((m) => m.id === msg.id) ? prev : [...prev, msg]);
     });
   };
+
+  const toggleMute = () => start(async () => {
+    const next = !isMuted;
+    const res = await setDirectMessageMuteAction(other.id, next);
+    if (!res.ok) { toast.error(res.error); return; }
+    setIsMuted(next);
+    toast.success(next ? "Jogador silenciado: não poderá enviar mensagens nem anexos." : "Silenciamento removido.");
+  });
 
   return (
     <div
@@ -268,6 +280,9 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
         <Link href={`/jogadores/${other.id}`} className="font-medium text-white hover:text-[#FFCB05] transition-colors">
           {other.displayName}
         </Link>
+        <button type="button" disabled={pending} onClick={toggleMute} title={isMuted ? "Permitir mensagens deste jogador" : "Silenciar jogador"} className={`ml-auto rounded-lg border p-2 ${isMuted ? "border-red-400/40 text-red-300" : "border-slate-700 text-slate-400 hover:text-white"}`}>
+          {isMuted ? <VolumeX size={14} /> : <Volume2 size={14} />}
+        </button>
       </div>
 
       {/* Messages */}
@@ -313,6 +328,7 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
 
       {/* Input */}
       <div className="border-t border-border px-4 py-3 shrink-0">
+        {isMuted && <p className="mb-2 rounded-lg border border-red-400/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">Você silenciou este jogador. Ele não pode enviar mensagens ou anexos até você reverter isso.</p>}
         {/* Preview do anexo selecionado */}
         {attachment && (
           <div className="mb-2 flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2">
@@ -349,6 +365,7 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
             <button
               type="button"
               onClick={() => setShowPicker((v) => !v)}
+              disabled={isMuted}
               className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border transition-colors ${
                 showPicker || attachment
                   ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 text-[#FFCB05]"
@@ -363,12 +380,12 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack }: 
               placeholder={attachment ? "Adicione uma mensagem (opcional)…" : `Mensagem para ${other.displayName}…`}
               maxLength={500}
               className="flex-1 rounded-xl border border-border bg-slate-900 px-4 py-2 text-sm text-white placeholder-slate-500 outline-none focus:border-[#FFCB05]/40"
-              disabled={pending}
+              disabled={pending || isMuted}
             />
             <Button
               type="submit"
               size="icon"
-              disabled={pending || (!text.trim() && !attachment)}
+              disabled={pending || isMuted || (!text.trim() && !attachment)}
               className="h-10 w-10 shrink-0 bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40"
             >
               <Send size={16} />

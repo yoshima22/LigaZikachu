@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useTransition } from "react";
 import { X } from "lucide-react";
 import { LeagueBattleReplayModal, type TurnLog } from "../../liga-semanal/_components/league-battle-replay";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
@@ -67,6 +67,8 @@ type AttackView = {
 export function JohtoBattleResultView({ result, onClose }: { result: Record<string, unknown>; onClose: () => void }) {
   const view = result as AttackView;
   const [replay, setReplay] = useState(false);
+  const [fallenIds, setFallenIds] = useState(view.fallenIds ?? []);
+  const [susPending, startSus] = useTransition();
   const test = view.test;
   const battle = test?.battle ?? view.battle;
   if (!battle) return null;
@@ -120,15 +122,12 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
                 <Stat label="Combo" value={`+${view.comboPct ?? 0}%`} hint="bônus de grupo" />
               </div>
               {view.perSlot && <div className="mt-4"><p className="mb-1 text-[10px] font-black uppercase tracking-wider text-slate-400">Dano causado a cada mascote do líder (persistente para todos os jogadores)</p><SlotTable rows={view.perSlot} /></div>}
-              {view.fallenIds && view.fallenIds.length > 0 && (
+              {fallenIds.length > 0 && (
                 <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-3">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-orange-200">Mascotes feridos — Atendimento SUS (10 ZC cada)</p>
-                  <form action={submitAllSus} className="mb-2">
-                    {view.fallenIds.map((id) => <input key={id} type="hidden" name="mascotId" value={id} />)}
-                    <button className="w-full rounded-lg bg-orange-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:brightness-110">Recuperar todos no SUS · {(view.fallenIds.length * 10).toLocaleString("pt-BR")} ZC</button>
-                  </form>
+                  <button type="button" disabled={susPending} onClick={() => startSus(async () => { const healed = await healAllJohtoMascotsSusAction(); if (healed.ok) setFallenIds([]); })} className="mb-2 w-full rounded-lg bg-orange-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:brightness-110 disabled:opacity-60">{susPending ? "Recuperando…" : `Recuperar todos no SUS · ${(fallenIds.length * 10).toLocaleString("pt-BR")} ZC`}</button>
                   <div className="space-y-1.5">
-                    {view.fallenIds.map((id, index) => (
+                    {fallenIds.map((id, index) => (
                       <form key={id} action={submitOneSus} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/70 px-2 py-1.5 text-xs">
                         <span className="min-w-0 truncate font-bold text-orange-100">{view.fallenMascots?.[index] ?? "Mascote"}</span>
                         <input type="hidden" name="mascotId" value={id} />

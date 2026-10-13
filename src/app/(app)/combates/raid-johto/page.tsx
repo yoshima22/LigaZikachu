@@ -242,7 +242,7 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
                 <li key={row.playerId} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
                   <span className="w-6 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
                   <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
-                  <span className="text-[10px] text-slate-500">{row.attackCount} atq · maior {fmt(row.highestSingleDamage)}</span>
+                  <span className="text-[10px] text-slate-500">{row.attackCount} atq · média {fmt(Math.round(row.damage / Math.max(1, row.attackCount)))} · recebido {fmt(row.damageReceived)} · maior {fmt(row.highestSingleDamage)}</span>
                   <span className="font-black text-red-200">{fmt(row.damage)}</span>
                 </li>
               ))}

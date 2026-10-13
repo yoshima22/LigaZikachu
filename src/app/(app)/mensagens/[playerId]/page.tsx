@@ -45,6 +45,7 @@ export default async function ConversationPage({ params }: Props) {
         attachmentType: m.attachmentType,
         attachmentData: (m.attachmentData as AttachmentData) ?? null,
       }))}
+      muted={result.muted}
     />
   );
 }
