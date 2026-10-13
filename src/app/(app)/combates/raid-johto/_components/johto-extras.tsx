@@ -34,7 +34,7 @@ export function Countdown({ to, prefix = "", doneText = "encerrado" }: { to: str
   return <span className="tabular-nums">{left <= 0 ? doneText : `${prefix}${formatRemaining(left)}`}</span>;
 }
 
-/** Combo de ataque em grupo: +2% de status por treinador que atacou nos últimos 30 min (máx. +8%). */
+/** Combo de ataque em grupo: cada ataque sobe um degrau e renova os 30 min (máx. +8%). */
 export function ComboMeter({ stacks, bonusPct, nextDropAt }: { stacks: number; bonusPct: number; nextDropAt: string | null }) {
   return (
     <div className="rounded-xl border border-fuchsia-500/30 bg-fuchsia-500/5 p-3">
@@ -48,12 +48,12 @@ export function ComboMeter({ stacks, bonusPct, nextDropAt }: { stacks: number; b
         ))}
       </div>
       <p className="mt-1.5 text-[10px] text-slate-400">
-        {stacks > 0 && nextDropAt ? <>Cada treinador que atacou nos últimos 5 min soma +2%. O próximo degrau cai em <b className="text-fuchsia-200"><Countdown to={nextDropAt} /></b>.</> : "Ataque junto com outros treinadores (até 5 min de diferença) para ganhar +2% por treinador, até +8%. Sem ataques por 5 min, o bônus zera."}
+        {stacks > 0 && nextDropAt ? <>Cada ataque sobe um degrau e reinicia os 30 min do combo. Se ninguém atacar até <b className="text-fuchsia-200"><Countdown to={nextDropAt} /></b>, todos os degraus zeram.</> : "Cada ataque sobe +2% (até +8%) e reinicia o cronômetro de 30 min. Sem novos ataques nesse período, o combo zera."}
       </p>
     </div>
   );
 }
-const TIER_LABEL: Record<string, string> = { TOP1: "🥇 1º em dano", TOP2: "🥈 2º em dano", TOP3: "🥉 3º em dano", PARTICIPANT: "Participação", FINAL_BLOW: "🎯 Golpe final" };
+const TIER_LABEL: Record<string, string> = { TOP1: "🥇 1º em dano", TOP2: "🥈 2º em dano", TOP3: "🥉 3º em dano", PARTICIPANT: "Participação", FINAL_BLOW: "🎯 Golpe final", MOST_ATTACKS: "⚔️ Mais ataques" };
 
 const TYPE_PT: Record<string, string> = {
   normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico", grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno", ground: "Terra",

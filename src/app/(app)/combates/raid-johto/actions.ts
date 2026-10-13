@@ -264,3 +264,15 @@ export async function healJohtoMascotSusAction(formData: FormData): Promise<void
   await healMascotSus(player.id, mascotId);
   refresh();
 }
+
+/** Atendimento único para todos os mascotes que caíram na investida da Raid. */
+export async function healAllJohtoMascotsSusAction(formData: FormData): Promise<void> {
+  const user = await getSessionUser();
+  if (!user) return;
+  const mascotIds = formData.getAll("mascotId").map(String).filter(Boolean);
+  const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+  if (!player || mascotIds.length === 0) return;
+  const { healMascotsSus } = await import("@/lib/arena-z");
+  await healMascotsSus(player.id, mascotIds);
+  refresh();
+}

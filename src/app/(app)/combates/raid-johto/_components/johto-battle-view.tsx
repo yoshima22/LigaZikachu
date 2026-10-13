@@ -4,7 +4,7 @@ import { useState } from "react";
 import { X } from "lucide-react";
 import { LeagueBattleReplayModal, type TurnLog } from "../../liga-semanal/_components/league-battle-replay";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
-import { healJohtoMascotSusAction } from "../actions";
+import { healAllJohtoMascotsSusAction, healJohtoMascotSusAction } from "../actions";
 import type { JohtoBattlePayload, JohtoTestSummary } from "@/lib/johto-raid";
 
 const fmt = (n: number) => Math.round(n).toLocaleString("pt-BR");
@@ -120,6 +120,10 @@ export function JohtoBattleResultView({ result, onClose }: { result: Record<stri
               {view.fallenIds && view.fallenIds.length > 0 && (
                 <div className="mt-4 rounded-xl border border-orange-500/25 bg-orange-500/5 p-3">
                   <p className="mb-2 text-[10px] font-black uppercase tracking-wider text-orange-200">Mascotes feridos — Atendimento SUS (10 ZC cada)</p>
+                  <form action={healAllJohtoMascotsSusAction} className="mb-2">
+                    {view.fallenIds.map((id) => <input key={id} type="hidden" name="mascotId" value={id} />)}
+                    <button className="w-full rounded-lg bg-orange-400 px-3 py-2 text-[10px] font-black text-slate-950 hover:brightness-110">Recuperar todos no SUS · {(view.fallenIds.length * 10).toLocaleString("pt-BR")} ZC</button>
+                  </form>
                   <div className="space-y-1.5">
                     {view.fallenIds.map((id, index) => (
                       <form key={id} action={healJohtoMascotSusAction} className="flex items-center justify-between gap-2 rounded-lg bg-slate-900/70 px-2 py-1.5 text-xs">

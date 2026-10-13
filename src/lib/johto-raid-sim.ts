@@ -19,6 +19,26 @@ export const COMBO_STEP_PCT = 2;
 export const COMBO_MAX_STACKS = 4;
 export const comboBonusPct = (stacks: number) => Math.max(0, Math.min(COMBO_MAX_STACKS, Math.floor(stacks))) * COMBO_STEP_PCT;
 
+/**
+ * O combo é uma sequência única: todo ataque dentro da janela adiciona um degrau
+ * (até quatro) e renova o prazo inteiro a partir do ataque mais recente. Depois
+ * de 30 minutos sem um novo ataque, a sequência toda expira.
+ */
+export function getComboWindowState(attackTimes: Date[], now = new Date()) {
+  const latestFirst = [...attackTimes].sort((a, b) => b.getTime() - a.getTime());
+  const latest = latestFirst[0];
+  if (!latest || now.getTime() >= latest.getTime() + COMBO_WINDOW_MS) return { stacks: 0, bonusPct: 0, nextDropAt: null };
+
+  let stacks = 0;
+  let previous = latest;
+  for (const attackedAt of latestFirst) {
+    if (previous.getTime() - attackedAt.getTime() >= COMBO_WINDOW_MS) break;
+    stacks++;
+    previous = attackedAt;
+  }
+  return { stacks: Math.min(COMBO_MAX_STACKS, stacks), bonusPct: comboBonusPct(stacks), nextDropAt: new Date(latest.getTime() + COMBO_WINDOW_MS).toISOString() };
+}
+
 /** Aplica o bônus do combo (em %) a todos os status e à vida de combate dos mascotes do jogador. */
 export function applyComboBonus(team: LeagueMascot[], bonusPct: number): LeagueMascot[] {
   if (bonusPct <= 0) return team;
@@ -102,7 +122,7 @@ export function readRewardConfig(value: unknown): JohtoRewardConfig {
 }
 
 export type LeaderStatRow = { playerId: string; damage: number; attackCount: number };
-export type RewardTier = "TOP1" | "TOP2" | "TOP3" | "PARTICIPANT" | "FINAL_BLOW";
+export type RewardTier = "TOP1" | "TOP2" | "TOP3" | "PARTICIPANT" | "FINAL_BLOW" | "MOST_ATTACKS";
 export type RewardRow = { playerId: string; tier: RewardTier; zc: number; mascotLevel: number; egg: boolean };
 
 /**
@@ -118,6 +138,8 @@ export function computeLeaderRewards(stats: LeaderStatRow[], finalBlowPlayerId: 
     if (index < 3) rows.push({ playerId: s.playerId, tier: (["TOP1", "TOP2", "TOP3"] as const)[index], zc: config.top[index].zc, mascotLevel: config.top[index].level, egg: false });
     else rows.push({ playerId: s.playerId, tier: "PARTICIPANT", zc: config.participantZc, mascotLevel: config.participantLevel, egg: false });
   });
+  const mostAttacks = active[0] ? [...active].sort((a, b) => b.attackCount - a.attackCount || b.damage - a.damage || a.playerId.localeCompare(b.playerId))[0] : null;
+  if (mostAttacks) rows.push({ playerId: mostAttacks.playerId, tier: "MOST_ATTACKS", zc: 0, mascotLevel: 0, egg: true });
   if (finalBlowPlayerId && active.some((s) => s.playerId === finalBlowPlayerId)) {
     const own = rows.find((r) => r.playerId === finalBlowPlayerId)!;
     if (own.tier === "PARTICIPANT") own.egg = true;

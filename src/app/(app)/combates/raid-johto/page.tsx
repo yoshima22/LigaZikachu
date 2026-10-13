@@ -235,6 +235,7 @@ export default async function JohtoRaidPage() {
       <section className="grid gap-4 lg:grid-cols-2">
         <div className="rounded-2xl border border-border bg-slate-900/60 p-4">
           <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-white"><Trophy size={17} className="text-[#FFCB05]" /> Ranking de dano{current ? ` · ${current.name}` : ""}</h2>
+          {current && <p className="-mt-2 mb-3 text-[10px] text-slate-500">Ranking exclusivo deste líder. Empates de dano são decididos pelo maior número de ataques.</p>}
           {state.currentRanking.length === 0 ? <p className="rounded-xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">Ninguém atacou este líder ainda. Seja o primeiro!</p> : (
             <ol className="space-y-1.5">
               {state.currentRanking.map((row, index) => (
@@ -260,6 +261,7 @@ export default async function JohtoRaidPage() {
               <li className="font-bold text-amber-300">⚠️ Só dá para escolher UM mascote em toda a raid, de qualquer líder e faixa. Escolher um impede de escolher qualquer outro, inclusive de líderes futuros. Escolha com sabedoria!</li>
               <li>O mascote nasce de ovo especial: status sorteados proporcionais ao nível e personalidade aleatória.</li>
               <li><b className="text-slate-200">🎯 Golpe final:</b> o bônus de participante + um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade.</li>
+              <li><b className="text-slate-200">⚔️ Maior número de ataques:</b> um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade. Em empate de dano, mais ataques decide a posição.</li>
               <li>Se um líder não cair no prazo, ele vence e não há recompensa por ele.</li>
             </ul>
           </div>

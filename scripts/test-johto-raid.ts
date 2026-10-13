@@ -1,7 +1,7 @@
 /** Raid de Johto: npx tsx scripts/test-johto-raid.ts [--db]  (--db roda um fluxo completo no banco com contas temporárias, apagadas no fim) */
 import assert from "node:assert/strict";
 import {
-  applyComboBonus, buildLeaderTeam, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_LEADERS, readRewardConfig, runJohtoBattle,
+  applyComboBonus, buildLeaderTeam, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getComboWindowState, getJohtoLeader, JOHTO_LEADERS, readRewardConfig, runJohtoBattle,
 } from "../src/lib/johto-raid-sim";
 import { toLeagueMascot } from "../src/lib/league-combat";
 
@@ -20,20 +20,30 @@ const stat = (playerId: string, damage: number, attackCount = 1) => ({ playerId,
 // a=1º, b=2º, c=3º, d,e = participantes, z não atacou. d dá o golpe final (só participante): ovo no mesmo prêmio.
 let rows = computeLeaderRewards([stat("a", 900), stat("b", 800), stat("c", 700), stat("d", 50), stat("e", 40), stat("z", 0, 0)], "d", c);
 const by = (id: string) => rows.filter((r) => r.playerId === id);
+const standardBy = (id: string) => by(id).filter((r) => r.tier !== "MOST_ATTACKS");
 assert.equal(rows.some((r) => r.playerId === "z"), false);
-assert.deepEqual(by("a").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP1", 10000, 85]]);
-assert.deepEqual(by("b").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP2", 8000, 75]]);
-assert.deepEqual(by("c").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP3", 6500, 65]]);
-assert.deepEqual(by("d").map((r) => [r.tier, r.zc, r.mascotLevel, r.egg]), [["PARTICIPANT", 2500, 55, true]]);
-assert.deepEqual(by("e").map((r) => [r.tier, r.zc, r.egg]), [["PARTICIPANT", 2500, false]]);
+assert.deepEqual(standardBy("a").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP1", 10000, 85]]);
+assert.deepEqual(standardBy("b").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP2", 8000, 75]]);
+assert.deepEqual(standardBy("c").map((r) => [r.tier, r.zc, r.mascotLevel]), [["TOP3", 6500, 65]]);
+assert.deepEqual(standardBy("d").map((r) => [r.tier, r.zc, r.mascotLevel, r.egg]), [["PARTICIPANT", 2500, 55, true]]);
+assert.deepEqual(standardBy("e").map((r) => [r.tier, r.zc, r.egg]), [["PARTICIPANT", 2500, false]]);
 // golpe final de quem está no pódio: pódio + linha FINAL_BLOW (participante + ovo)
 rows = computeLeaderRewards([stat("a", 900), stat("b", 800), stat("c", 700)], "b", c);
-assert.deepEqual(rows.filter((r) => r.playerId === "b").map((r) => [r.tier, r.zc, r.egg]), [["TOP2", 8000, false], ["FINAL_BLOW", 2500, true]]);
-// sem golpe final atribuído (admin/debug): ninguém ganha ovo
-assert.equal(computeLeaderRewards([stat("a", 10)], null, c).some((r) => r.egg), false);
+assert.deepEqual(rows.filter((r) => r.playerId === "b" && r.tier !== "MOST_ATTACKS").map((r) => [r.tier, r.zc, r.egg]), [["TOP2", 8000, false], ["FINAL_BLOW", 2500, true]]);
+// Sem golpe final atribuído (admin/debug), ainda existe o prêmio de maior número de ataques.
+assert.deepEqual(computeLeaderRewards([stat("a", 10)], null, c).filter((r) => r.egg).map((r) => r.tier), ["MOST_ATTACKS"]);
+// Em empate de dano, mais ataques vence; além do pódio, quem mais atacou ganha um ovo especial.
+rows = computeLeaderRewards([stat("a", 500, 2), stat("b", 500, 5), stat("c", 300, 1)], null, c);
+assert.deepEqual(rows.filter((r) => r.tier.startsWith("TOP")).map((r) => [r.playerId, r.tier]), [["b", "TOP1"], ["a", "TOP2"], ["c", "TOP3"]]);
+assert.deepEqual(rows.filter((r) => r.tier === "MOST_ATTACKS").map((r) => [r.playerId, r.egg, r.zc, r.mascotLevel]), [["b", true, 0, 0]]);
 
 // ── Combo de grupo ───────────────────────────────────────────────────────────
 assert.deepEqual([0, 1, 2, 3, 4, 9].map(comboBonusPct), [0, 2, 4, 6, 8, 8], "2% por treinador, máximo 8%");
+const t0 = new Date("2026-10-13T11:00:00.000Z");
+assert.deepEqual(getComboWindowState([t0], new Date("2026-10-13T11:29:59.000Z")), { stacks: 1, bonusPct: 2, nextDropAt: "2026-10-13T11:30:00.000Z" });
+// Cada ataque dentro da janela sobe um degrau e recomeça os 30 min a partir do ataque mais recente.
+assert.deepEqual(getComboWindowState([t0, new Date("2026-10-13T11:20:00.000Z")], new Date("2026-10-13T11:25:00.000Z")), { stacks: 2, bonusPct: 4, nextDropAt: "2026-10-13T11:50:00.000Z" });
+assert.deepEqual(getComboWindowState([t0, new Date("2026-10-13T11:20:00.000Z")], new Date("2026-10-13T11:50:00.000Z")), { stacks: 0, bonusPct: 0, nextDropAt: null });
 
 // ── Combate 6x6 equilibrado ──────────────────────────────────────────────────
 const ROLES = ["ATTACKER", "DEFENDER", "FLANK", "HEALER", "OPPORTUNIST", "GUARDIAN"] as const;

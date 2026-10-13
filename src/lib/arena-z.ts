@@ -4707,6 +4707,52 @@ export async function healMascotSus(playerId: string, mascotId: string) {
   });
 }
 
+/** Recupera vários mascotes no SUS em uma única transação (ou todos, ou nenhum). */
+export async function healMascotsSus(playerId: string, mascotIds: string[]) {
+  const ids = [...new Set(mascotIds.filter(Boolean))];
+  if (ids.length === 0) throw new Error("Nenhum mascote foi selecionado.");
+  const mascots = await prisma.mascot.findMany({
+    where: { id: { in: ids }, playerId },
+    include: {
+      relationsAsA: { where: { type: "FRIEND" }, include: { mascotB: { select: { playerId: true, statVitality: true, happiness: true } } } },
+      relationsAsB: { where: { type: "FRIEND" }, include: { mascotA: { select: { playerId: true, statVitality: true, happiness: true } } } },
+    },
+  });
+  if (mascots.length !== ids.length) throw new Error("Mascote nao encontrado.");
+  if (mascots.some((mascot) => mascot.arenaState !== "INJURED")) throw new Error("Todos os mascotes precisam estar feridos.");
+
+  const baseRestMs = ARENA_Z_CONFIG.restAfterSusHours * 3_600_000;
+  const recoveries = mascots.map((mascot) => {
+    const vitalFactor = Math.min(20 * 60_000, Math.floor((mascot.statVitality + mascot.happiness) / 5) * 60_000);
+    const bonusReductionMs = (mascot.susRestBonusMinutes ?? 0) * 60_000;
+    const friends = [...mascot.relationsAsA.map((r) => r.mascotB), ...mascot.relationsAsB.map((r) => r.mascotA)];
+    const friendReductionMs = Math.min(15 * 60_000, friends.length * 3 * 60_000);
+    const restingUntil = new Date(Date.now() + Math.max(30 * 60_000, baseRestMs - bonusReductionMs - vitalFactor - friendReductionMs));
+    return { mascot, friends, bonusReductionMs, vitalFactor, friendReductionMs, restingUntil };
+  });
+
+  await prisma.$transaction(async (tx) => {
+    await creditCoins(tx, {
+      playerId,
+      type: "ADMIN_ADJUSTMENT",
+      amount: -(ARENA_Z_CONFIG.susCost * recoveries.length),
+      description: `Atendimento SUS Arena Z para ${recoveries.length} mascote${recoveries.length === 1 ? "" : "s"}`,
+    });
+    for (const recovery of recoveries) {
+      const { mascot, friends, bonusReductionMs, vitalFactor, friendReductionMs, restingUntil } = recovery;
+      await tx.mascot.update({ where: { id: mascot.id }, data: { arenaState: "RESTING", injuredAt: null, restingUntil, susRestBonusMinutes: 0 } });
+      const reductions: string[] = [];
+      if (bonusReductionMs > 0) reductions.push(`${mascot.susRestBonusMinutes}min por Super Amigos`);
+      if (vitalFactor > 0) reductions.push(`${Math.floor(vitalFactor / 60_000)}min por vitalidade/felicidade`);
+      if (friendReductionMs > 0) reductions.push(`${Math.floor(friendReductionMs / 60_000)}min por ${friends.length} amigo(s)`);
+      const bonusNote = reductions.length > 0 ? ` (reduzido: ${reductions.join(", ")})` : "";
+      await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🏥", description: `Recebeu Atendimento SUS. Repouso até ${restingUntil.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.${bonusNote}` } });
+      if (friends.length > 0) await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🤝", description: `${friends.length} amigo(s) ajudaram na recuperação, reduzindo o tempo de repouso.` } });
+    }
+  });
+  return { recovered: recoveries.length };
+}
+
 /** Usa o escudo diário para proteger mascote de um amigo no SUS */
 export async function useSusShield(
   shieldOwnerPlayerId: string,

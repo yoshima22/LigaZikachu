@@ -23,6 +23,7 @@ export function JohtoInvitationReviewButton({
         className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#FFCB05]/45 bg-slate-950/45 px-3 py-2 text-xs font-black text-[#fff0b0] transition hover:border-[#FFCB05] hover:bg-[#FFCB05]/15"
       >
         <MailOpen size={15} /> Ler convite novamente
+        {!voteSubmitted && <span className="rounded-full bg-[#FFCB05] px-1.5 py-0.5 text-[9px] font-black uppercase tracking-wide text-slate-950">Votação pendente</span>}
       </button>
       {open && (
         <JohtoInvitationLetter

@@ -7,7 +7,7 @@ import { toLeagueMascot } from "@/lib/league-combat";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { EGG_SHINY_CHANCE, EGG_STAT_RANGES, getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import {
-  COMBO_MAX_STACKS, COMBO_WINDOW_MS, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
+  comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getComboWindowState, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
   JOHTO_DEFAULT_LEADER_DAYS, JOHTO_EVENT_SLUG, JOHTO_LEADER_HP, JOHTO_LEADERS, JOHTO_MASCOTS_PER_LEADER, JOHTO_REPLAY_HISTORY,
   JOHTO_VISIBLE_KEY, readRewardConfig, runJohtoBattle, toReplayLineup, type JohtoLeaderDef, type JohtoBattleOutcome,
 } from "@/lib/johto-raid-sim";
@@ -147,19 +147,13 @@ export async function advanceExpiredLeaders(eventId: string, now = new Date()) {
 
 // ── Combo ────────────────────────────────────────────────────────────────────
 
-/** Treinadores (não admin, exceto o próprio) que atacaram nos últimos 30 minutos: cada um vale +2% de status, até +8%. */
-export async function getComboState(eventId: string, excludePlayerId?: string | null, now = new Date()): Promise<JohtoComboState> {
+/** Sequência global da raid: cada ataque renova os 30 min e soma +2% (máx. +8%); sem ataques, ela zera. */
+export async function getComboState(eventId: string, now = new Date()): Promise<JohtoComboState> {
   const rows = await prisma.johtoRaidAttempt.findMany({
-    where: { eventId, createdAt: { gte: new Date(now.getTime() - COMBO_WINDOW_MS) }, player: NON_ADMIN, ...(excludePlayerId ? { playerId: { not: excludePlayerId } } : {}) },
-    select: { playerId: true, createdAt: true }, orderBy: { createdAt: "desc" },
+    where: { eventId, player: NON_ADMIN },
+    select: { createdAt: true }, orderBy: { createdAt: "desc" },
   });
-  const latest = new Map<string, Date>();
-  for (const row of rows) if (!latest.has(row.playerId)) latest.set(row.playerId, row.createdAt);
-  const times = [...latest.values()].sort((a, b) => b.getTime() - a.getTime()).slice(0, COMBO_MAX_STACKS);
-  const stacks = times.length;
-  // O bônus cai quando o ataque mais antigo dentre os que contam sair da janela.
-  const oldest = times[times.length - 1];
-  return { stacks, bonusPct: comboBonusPct(stacks), nextDropAt: oldest ? new Date(oldest.getTime() + COMBO_WINDOW_MS).toISOString() : null };
+  return getComboWindowState(rows.map((row) => row.createdAt), now);
 }
 
 // ── Estado para a página ─────────────────────────────────────────────────────
@@ -202,9 +196,11 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     prisma.johtoRaidLeaderStat.findMany({ where: { leader: { eventId: event.id }, player: NON_ADMIN }, distinct: ["playerId"], select: { playerId: true } }),
     playerId ? prisma.johtoRaidAttempt.findFirst({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" }, select: { createdAt: true } }) : null,
     playerId ? prisma.johtoRaidReward.findMany({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" } }) : [],
-    getComboState(event.id, playerId),
+    getComboState(event.id),
   ]);
-  const ranking = stats.map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }));
+  const ranking = stats
+    .map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }))
+    .sort((a, b) => b.damage - a.damage || b.attackCount - a.attackCount || a.playerId.localeCompare(b.playerId));
   const mineIndex = playerId ? ranking.findIndex((r) => r.playerId === playerId) : -1;
   let mine = mineIndex >= 0 ? ranking[mineIndex] : null;
   if (!mine && playerId && current) {
@@ -232,10 +228,10 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     } : null,
     combo,
     choiceUsed: (() => {
-      const used = rewards.find((r) => r.claimedAt && r.chosenPokemonId);
+      const used = rewards.find((r) => r.tier !== "MOST_ATTACKS" && r.claimedAt && r.chosenPokemonId);
       return used ? { leaderName: getJohtoLeader(used.leaderKey)?.name ?? used.leaderKey, pokemonId: used.chosenPokemonId! } : null;
     })(),
-    myRewards: rewards.map((r) => ({
+    myRewards: rewards.filter((r) => r.tier !== "MOST_ATTACKS").map((r) => ({
       id: r.id, leaderKey: r.leaderKey, leaderName: getJohtoLeader(r.leaderKey)?.name ?? r.leaderKey, tier: r.tier, zc: r.zc, level: r.mascotLevel, egg: r.egg,
       claimed: Boolean(r.claimedAt), chosenPokemonId: r.chosenPokemonId, options: getJohtoLeader(r.leaderKey)?.roster.map((e) => e.pokemonId) ?? [],
     })),
@@ -311,7 +307,7 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
   if (alive.length === 0) return { ok: false, message: `${def.name} já foi derrotado.` };
 
   const playerTeam = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, selectedRoles[m.id]));
-  const combo = await getComboState(event.id, player.id, now);
+  const combo = await getComboState(event.id, now);
   const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, alive, event.damageScale, combo.bonusPct);
   const payload = buildPayload(outcome, player.id, player.displayName, def.name);
   const fallenNames = outcome.playerFallenIds.map((id) => playerTeam.find((m) => m.id === id)?.name ?? "");
@@ -476,11 +472,14 @@ export async function grantLeaderRewards(leaderId: string) {
         const reward = await tx.johtoRaidReward.findFirstOrThrow({ where: { eventId: leader.eventId, leaderKey: leader.key, playerId: row.playerId, tier: row.tier } });
         if (row.zc > 0) await creditCoins(tx, { playerId: row.playerId, type: ZikaCoinTxType.ADMIN_ADJUSTMENT, amount: row.zc, description: `Raid de Johto: recompensa contra ${def?.name ?? leader.key}` });
         if (row.egg) await tx.mascotEgg.create({ data: { playerId: row.playerId, type: config.finalBlowEggType, origin: config.eggOrigin, hatchRarityBonusPct: config.finalBlowEggBonusPct } });
-        const label = row.tier === "FINAL_BLOW" ? "golpe final" : row.tier === "PARTICIPANT" ? "participação" : `${row.tier.slice(3)}º lugar em dano`;
+        const label = row.tier === "FINAL_BLOW" ? "golpe final" : row.tier === "MOST_ATTACKS" ? "maior número de ataques" : row.tier === "PARTICIPANT" ? "participação" : `${row.tier.slice(3)}º lugar em dano`;
+        const prizeDescription = row.tier === "MOST_ATTACKS"
+          ? `Recompensa (${label}): um ovo especial com +${config.finalBlowEggBonusPct}% de chance de raridade já foi enviado para sua conta.`
+          : `Recompensa (${label}): ${row.zc.toLocaleString("pt-BR")} ZC${row.egg ? " + ovo especial" : ""} e a escolha de um mascote de ${def?.name ?? "o líder"} no nível ${row.mascotLevel}. Escolha na página da raid.`;
         await tx.playerNotification.createMany({
           data: [{
             playerId: row.playerId, category: "EVENT", type: "JOHTO_RAID_REWARD", title: `${def?.name ?? "O líder"} foi derrotado!`,
-            body: `Recompensa (${label}): ${row.zc.toLocaleString("pt-BR")} ZC${row.egg ? " + ovo especial" : ""} e a escolha de um mascote de ${def?.name ?? "o líder"} no nível ${row.mascotLevel}. Escolha na página da raid.`,
+            body: prizeDescription,
             href: HREF, entityId: reward.id, eventKey: `johto-raid-reward:${reward.id}`,
           }],
           skipDuplicates: true,
@@ -502,6 +501,7 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
   if (!player) return { ok: false, message: "Perfil não encontrado." };
   const reward = await prisma.johtoRaidReward.findUnique({ where: { id: rewardId } });
   if (!reward || reward.playerId !== player.id) return { ok: false, message: "Prêmio não encontrado." };
+  if (reward.tier === "MOST_ATTACKS") return { ok: false, message: "O ovo por maior número de ataques já foi enviado para sua conta." };
   if (reward.claimedAt) return { ok: false, message: "Você já escolheu o mascote deste prêmio." };
   const earlier = await prisma.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, claimedAt: { not: null } }, select: { leaderKey: true, chosenPokemonId: true } });
   if (earlier) return { ok: false, message: `Você já escolheu ${earlier.chosenPokemonId ? getPokemonName(earlier.chosenPokemonId) : "um mascote"} (${getJohtoLeader(earlier.leaderKey)?.name ?? earlier.leaderKey}). Só é possível escolher UM mascote em toda a raid.` };
