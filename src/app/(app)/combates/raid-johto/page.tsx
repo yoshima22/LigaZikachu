@@ -5,10 +5,11 @@ import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, type JohtoLeaderState } from "@/lib/johto-raid";
-import { getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
+import { getJohtoInvitationForPlayer, getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
 import type { RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
 import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoTeamSelector } from "./_components/johto-team-selector";
+import { JohtoInvitationReviewButton } from "./_components/johto-invitation-review-button";
 import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
 import { attackJohtoRaidAction, healJohtoMascotSusAction } from "./actions";
 
@@ -78,6 +79,7 @@ export default async function JohtoRaidPage() {
 
   const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
   const state = await getJohtoRaidState(player?.id);
+  const invitation = !admin && player?.id ? await getJohtoInvitationForPlayer(player.id) : null;
   if (!state.event && !admin) redirect("/dashboard");
 
   const mascotSelect = { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true } as const;
@@ -133,6 +135,7 @@ export default async function JohtoRaidPage() {
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FFCB05]">Evento especial · Semana 8</p>
         <h1 className="mt-1 flex items-center gap-2 text-3xl font-black text-white"><Swords className="text-[#FFCB05]" size={28} /> Líderes de Johto</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-300">Os oito líderes de ginásio de Johto enfrentam os treinadores com o time completo de 6 mascotes. Todo o dano que vocês causam é somado na vida do líder: o dano é persistente: cada mascote do líder tem uma vida enorme e, quando ela acaba, ele sai de todas as lutas seguintes. Quando os 6 caem, o líder cai. Cada líder fica disponível por até {event.leaderDays} dias — se ninguém o vencer a tempo, ele vence. Quem lutar ganha ZC e escolhe um mascote do próprio líder!</p>
+        {invitation?.available && <JohtoInvitationReviewButton displayName={invitation.displayName} voteSubmitted={Boolean(invitation.voteSubmittedAt)} />}
         <div className="mt-4">
           <div className="mb-1 flex items-center justify-between text-[11px] text-slate-300">
             <span>Vida total dos líderes</span>

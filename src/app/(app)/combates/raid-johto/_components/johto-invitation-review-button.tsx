@@ -1,0 +1,28 @@
+"use client";
+
+import { useState } from "react";
+import { MailOpen } from "lucide-react";
+import { JohtoInvitationLetter } from "../../../_components/johto-invitation-letter";
+
+export function JohtoInvitationReviewButton({
+  displayName,
+  voteSubmitted,
+}: {
+  displayName: string | null;
+  voteSubmitted: boolean;
+}) {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => setOpen(true)}
+        className="mt-4 inline-flex items-center gap-2 rounded-xl border border-[#FFCB05]/45 bg-slate-950/45 px-3 py-2 text-xs font-black text-[#fff0b0] transition hover:border-[#FFCB05] hover:bg-[#FFCB05]/15"
+      >
+        <MailOpen size={15} /> Ler convite novamente
+      </button>
+      {open && <JohtoInvitationLetter mode="review" displayName={displayName} voteSubmitted={voteSubmitted} onClose={() => setOpen(false)} />}
+    </>
+  );
+}

@@ -30,16 +30,18 @@ export function JohtoInvitationLetter({
   mode,
   candidates = [],
   displayName,
+  voteSubmitted = false,
   onClose,
   onFinish,
 }: {
-  mode: "player" | "preview";
+  mode: "player" | "preview" | "review";
   candidates?: Candidate[];
   displayName?: string | null;
+  voteSubmitted?: boolean;
   onClose?: () => void;
   onFinish?: () => void;
 }) {
-  const [stage, setStage] = useState<Stage>("envelope");
+  const [stage, setStage] = useState<Stage>(mode === "review" ? "reading" : "envelope");
   const [page, setPage] = useState(0);
   const [voteIndex, setVoteIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string>>({});
@@ -60,7 +62,7 @@ export function JohtoInvitationLetter({
 
     function onKeyDown(event: KeyboardEvent) {
       if (event.key === "Escape") {
-        if (mode === "preview") {
+        if (mode !== "player") {
           event.preventDefault();
           onClose?.();
         }
@@ -164,7 +166,7 @@ export function JohtoInvitationLetter({
       <div ref={dialogRef} className="johto-invitation-dialog" role="dialog" aria-modal="true" aria-labelledby="johto-invitation-title" aria-describedby="johto-invitation-description" tabIndex={-1}>
         <div className="johto-invitation-topline">
           <span>✦ UMA MENSAGEM DE JOHTO ✦</span>
-          {mode === "preview" && <button type="button" className="johto-invitation-preview-close" onClick={onClose}>Fechar prévia <span aria-hidden="true">×</span></button>}
+          {mode !== "player" && <button type="button" className="johto-invitation-preview-close" onClick={onClose}>{mode === "preview" ? "Fechar prévia" : "Fechar carta"} <span aria-hidden="true">×</span></button>}
         </div>
 
         {(stage === "envelope" || stage === "opening") && (
@@ -215,11 +217,21 @@ export function JohtoInvitationLetter({
                   </div>
                 ) : (
                   <div className="johto-letter-final">
-                    <p>{JOHTO_INVITATION_COPY.voting.description}</p>
-                    <button type="button" className="johto-letter-secondary" onClick={() => setPage(page - 1)}>Página anterior</button>
-                    <button type="button" className="johto-letter-primary" onClick={() => setStage("voting")} disabled={choices.length === 0}>{JOHTO_INVITATION_COPY.voting.participateLabel}</button>
-                    <button type="button" className="johto-letter-secondary johto-letter-continue" onClick={continueToJohto} disabled={busy}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
-                    {choices.length === 0 && <p className="johto-letter-empty">A votação ainda não tem participantes disponíveis.</p>}
+                    {mode === "review" ? (
+                      <>
+                        <p>{voteSubmitted ? "Sua votação da Liga Zikachu TCG 3ª Edição já foi registrada e não pode ser alterada." : "A votação da Liga Zikachu TCG 3ª Edição é opcional e pode ser acessada pelo convite original."}</p>
+                        <button type="button" className="johto-letter-secondary" onClick={() => setPage(page - 1)}>Página anterior</button>
+                        <button type="button" className="johto-letter-primary" onClick={onClose}>Fechar carta</button>
+                      </>
+                    ) : (
+                      <>
+                        <p>{JOHTO_INVITATION_COPY.voting.description}</p>
+                        <button type="button" className="johto-letter-secondary" onClick={() => setPage(page - 1)}>Página anterior</button>
+                        <button type="button" className="johto-letter-primary" onClick={() => setStage("voting")} disabled={choices.length === 0}>{JOHTO_INVITATION_COPY.voting.participateLabel}</button>
+                        <button type="button" className="johto-letter-secondary johto-letter-continue" onClick={continueToJohto} disabled={busy}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
+                        {choices.length === 0 && <p className="johto-letter-empty">A votação ainda não tem participantes disponíveis.</p>}
+                      </>
+                    )}
                   </div>
                 )}
               </div>
