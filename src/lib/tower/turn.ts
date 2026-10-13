@@ -33,6 +33,7 @@ import {
   XANDINHO,
 } from "./exclusive-mascots";
 import { resolveTowerTalents } from "./talents";
+import { isExpeditionV2 } from "./expedition-state";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -644,6 +645,9 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       if (!run || run.status !== "ACTIVE") return;
 
       const vol = (run.volatileState ?? {}) as TowerVolatile;
+      // V2 is resolved by its own turn engine. Until that engine is wired in
+      // Task 4, never feed individual positions to the majority-route V1 engine.
+      if (isExpeditionV2(vol.exploration)) return;
       const submissions = vol.submissions ?? {};
       const active = run.members.filter(
         (m) =>

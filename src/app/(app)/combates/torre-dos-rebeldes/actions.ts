@@ -58,6 +58,7 @@ import {
 } from "@/lib/tower/narrative";
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
 import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from "@/lib/tower/rooms";
+import { newExpeditionState } from "@/lib/tower/expedition-state";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -1637,7 +1638,10 @@ export async function startTowerExpeditionAction(
     (key) =>
       progress.find((row) => row.metricKey === `TALENT:${key}`)?.value ?? 0,
   );
-  const exploration = {
+  const order = [...run.members]
+    .sort((a, b) => a.resolutionIndex - b.resolutionIndex)
+    .map((m) => m.userId);
+  const exploration = newExpeditionState({
     ...generateTowerRoomGraph(run.seed),
     countermeasures: [...unlocked, ...roleCounters],
     pressureShield:
@@ -1645,10 +1649,7 @@ export async function startTowerExpeditionAction(
       (unlocked.includes("BULWARK") ? 1 : 0) +
       pressureTalent +
       talentFx.pressureShieldStart,
-  };
-  const order = [...run.members]
-    .sort((a, b) => a.resolutionIndex - b.resolutionIndex)
-    .map((m) => m.userId);
+  }, order);
   await prisma.$transaction(async (tx) => {
     if (config.requireTicket)
       for (const player of memberPlayers) {
