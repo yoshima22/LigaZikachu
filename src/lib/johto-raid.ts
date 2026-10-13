@@ -118,7 +118,11 @@ export async function openNextLeaderWindow(eventId: string, now = new Date()) {
   if (leaders.some((l) => l.startedAt && !l.defeatedAt && !l.escapedAt)) return null;
   const next = leaders.find((l) => !l.startedAt && !l.defeatedAt && !l.escapedAt);
   if (!next) return null;
-  return prisma.johtoRaidLeader.update({ where: { id: next.id }, data: { startedAt: now, expiresAt: new Date(now.getTime() + event.leaderDays * DAY_MS) } });
+  const opened = await prisma.johtoRaidLeader.updateMany({
+    where: { id: next.id, startedAt: null, defeatedAt: null, escapedAt: null },
+    data: { startedAt: now, expiresAt: new Date(now.getTime() + event.leaderDays * DAY_MS) },
+  });
+  return opened.count ? prisma.johtoRaidLeader.findUnique({ where: { id: next.id } }) : null;
 }
 
 /** Líder que não caiu no prazo foge; o próximo entra. Idempotente (chamado ao ler o estado e ao atacar). */

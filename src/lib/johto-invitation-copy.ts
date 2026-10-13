@@ -1,4 +1,4 @@
-export const JOHTO_INVITATION_LAUNCH_AT = new Date("2026-10-14T11:00:00.000Z");
+export const JOHTO_INVITATION_LAUNCH_AT = new Date("2026-10-13T11:00:00.000Z");
 
 export const JOHTO_VOTE_QUESTIONS = [
   { key: "most_creative", label: "Quem é o jogador mais criativo dessa edição?" },
@@ -13,9 +13,10 @@ export type JohtoVoteQuestionKey = (typeof JOHTO_VOTE_QUESTIONS)[number]["key"];
 
 export const JOHTO_INVITATION_COPY = {
   title: "Convite especial de Johto",
-  greeting: "Olá, Treinador!",
+  greeting: "Prezado,",
   pages: [
     {
+      heading: "Boas vindas a Johto",
       paragraphs: [
         "Os Líderes de Ginásio de Johto estão animados com a Liga Zikachu TCG acontecendo nas proximidades e querem dar mais um grande show de batalhas para apoiar esta etapa final.",
         "Por isso, Falkner, Bugsy, Whitney, Morty, Chuck, Jasmine, Pryce e Clair desafiaram toda a comunidade da Liga Zikachu.",
@@ -48,7 +49,7 @@ export const JOHTO_INVITATION_COPY = {
     },
     {
       paragraphs: [
-        "Johto está em festa. Reúna sua equipe, ajude a comunidade e deixe sua marca nesta reta final da Liga Zikachu TCG!",
+        "Johto está em festa. Reúna sua equipe, ajude a comunidade e deixe sua marca nesta reta final da Liga Zikachu TCG. Você é nosso convidado(a) de honra para este evento!",
         "— Professor Enguiça",
       ],
     },

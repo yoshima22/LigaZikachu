@@ -29,11 +29,13 @@ function JohtoCrestArtwork() {
 export function JohtoInvitationLetter({
   mode,
   candidates = [],
+  displayName,
   onClose,
   onFinish,
 }: {
   mode: "player" | "preview";
   candidates?: Candidate[];
+  displayName?: string | null;
   onClose?: () => void;
   onFinish?: () => void;
 }) {
@@ -195,7 +197,7 @@ export function JohtoInvitationLetter({
 
             {stage === "reading" && (
               <div className="johto-letter-page" key={page}>
-                {page === 0 && <p className="johto-letter-greeting">{JOHTO_INVITATION_COPY.greeting}</p>}
+                {page === 0 && <p className="johto-letter-greeting">{JOHTO_INVITATION_COPY.greeting} {displayName?.trim() || "Treinador(a)"}!</p>}
                 <div className="johto-letter-body">
                   {JOHTO_INVITATION_COPY.pages[page].paragraphs.map((paragraph) => <p key={paragraph}>{paragraph}</p>)}
                 </div>
@@ -214,6 +216,7 @@ export function JohtoInvitationLetter({
                 ) : (
                   <div className="johto-letter-final">
                     <p>{JOHTO_INVITATION_COPY.voting.description}</p>
+                    <button type="button" className="johto-letter-secondary" onClick={() => setPage(page - 1)}>Página anterior</button>
                     <button type="button" className="johto-letter-primary" onClick={() => setStage("voting")} disabled={choices.length === 0}>{JOHTO_INVITATION_COPY.voting.participateLabel}</button>
                     <button type="button" className="johto-letter-secondary" onClick={continueToJohto} disabled={busy}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
                     {choices.length === 0 && <p className="johto-letter-empty">A votação ainda não tem participantes disponíveis.</p>}

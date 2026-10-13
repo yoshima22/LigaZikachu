@@ -2,7 +2,6 @@ import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
 import { getPokemonName } from "@/lib/mascot-data";
 import type { NotifCategory } from "@/lib/notification-preferences";
-import { runJohtoInvitationLaunch } from "@/lib/johto-invitation";
 
 const TZ = "America/Sao_Paulo";
 const EXPEDITION_LABELS: Record<string, string> = {
@@ -38,7 +37,6 @@ export async function runPushAutomation(now = new Date()) {
   const local = brt(now);
   const recentCutoff = new Date(now.getTime() - 30 * 60_000);
   let sent = 0;
-  sent += (await runJohtoInvitationLaunch(now)).sent;
 
   // Expedições ficam ACTIVE até a coleta. O marcador por ID garante um único aviso.
   const expeditions = await prisma.mascotExpedition.findMany({

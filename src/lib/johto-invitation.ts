@@ -19,6 +19,7 @@ type Candidate = { id: string; displayName: string };
 
 export type JohtoInvitationPlayerState = {
   available: boolean;
+  displayName: string | null;
   openedAt: string | null;
   votingSkippedAt: string | null;
   voteSubmittedAt: string | null;
@@ -27,6 +28,7 @@ export type JohtoInvitationPlayerState = {
 
 const unavailableState = (): JohtoInvitationPlayerState => ({
   available: false,
+  displayName: null,
   openedAt: null,
   votingSkippedAt: null,
   voteSubmittedAt: null,
@@ -81,7 +83,7 @@ export async function prepareJohtoInvitationCampaign(input: { publish?: boolean;
       launchAt: JOHTO_INVITATION_LAUNCH_AT,
       publishedAt: null,
     },
-    update: {},
+    update: { launchAt: JOHTO_INVITATION_LAUNCH_AT },
   });
   if (input.publish) {
     await prisma.johtoInvitationCampaign.updateMany({
@@ -92,7 +94,7 @@ export async function prepareJohtoInvitationCampaign(input: { publish?: boolean;
   const campaign = input.publish
     ? await prisma.johtoInvitationCampaign.findUniqueOrThrow({ where: { id: prepared.id } })
     : prepared;
-  if (isLive(campaign, now)) {
+  if (isLive(campaign, now) && !campaign.pushSentAt) {
     const players = await prisma.player.findMany({
       where: { active: true, user: { status: "ACTIVE", role: { notIn: [...ADMIN_ROLES] } } },
       select: { id: true },
@@ -113,7 +115,7 @@ export async function getJohtoInvitationForPlayer(playerId: string, now = new Da
   if (!campaign || !isLive(campaign, now)) return unavailableState();
   const player = await prisma.player.findUnique({
     where: { id: playerId },
-    select: { active: true, user: { select: { status: true, role: true } } },
+    select: { displayName: true, active: true, user: { select: { status: true, role: true } } },
   });
   if (!isEligiblePlayer(player)) return unavailableState();
   const recipient = await prisma.johtoInvitationRecipient.upsert({
@@ -123,6 +125,7 @@ export async function getJohtoInvitationForPlayer(playerId: string, now = new Da
   });
   return {
     available: !!recipient.availableAt,
+    displayName: player!.displayName,
     openedAt: recipient.openedAt?.toISOString() ?? null,
     votingSkippedAt: recipient.votingSkippedAt?.toISOString() ?? null,
     voteSubmittedAt: recipient.voteSubmittedAt?.toISOString() ?? null,

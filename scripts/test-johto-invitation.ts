@@ -10,7 +10,7 @@ import {
   JOHTO_VOTE_QUESTIONS,
 } from "../src/lib/johto-invitation-copy";
 
-assert.equal(JOHTO_INVITATION_LAUNCH_AT.toISOString(), "2026-10-14T11:00:00.000Z");
+assert.equal(JOHTO_INVITATION_LAUNCH_AT.toISOString(), "2026-10-13T11:00:00.000Z");
 assert.deepEqual(JOHTO_VOTE_QUESTIONS, [
   { key: "most_creative", label: "Quem é o jogador mais criativo dessa edição?" },
   { key: "breakthrough", label: "Quem foi a grande revelação dessa edição?" },
@@ -22,9 +22,10 @@ assert.deepEqual(JOHTO_VOTE_QUESTIONS, [
 
 assert.deepEqual(JOHTO_INVITATION_COPY, {
   title: "Convite especial de Johto",
-  greeting: "Olá, Treinador!",
+  greeting: "Prezado,",
   pages: [
     {
+      heading: "Boas vindas a Johto",
       paragraphs: [
         "Os Líderes de Ginásio de Johto estão animados com a Liga Zikachu TCG acontecendo nas proximidades e querem dar mais um grande show de batalhas para apoiar esta etapa final.",
         "Por isso, Falkner, Bugsy, Whitney, Morty, Chuck, Jasmine, Pryce e Clair desafiaram toda a comunidade da Liga Zikachu.",
@@ -57,7 +58,7 @@ assert.deepEqual(JOHTO_INVITATION_COPY, {
     },
     {
       paragraphs: [
-        "Johto está em festa. Reúna sua equipe, ajude a comunidade e deixe sua marca nesta reta final da Liga Zikachu TCG!",
+        "Johto está em festa. Reúna sua equipe, ajude a comunidade e deixe sua marca nesta reta final da Liga Zikachu TCG. Você é nosso convidado(a) de honra para este evento!",
         "— Professor Enguiça",
       ],
     },
@@ -110,8 +111,8 @@ console.log("ok copy, data de lançamento e contrato de persistência do convite
 (async () => {
 if (process.argv.includes("--service")) {
   type Row = Record<string, any>;
-  const before = new Date("2026-10-14T10:59:59.999Z");
-  const after = new Date("2026-10-14T11:00:00.000Z");
+  const before = new Date("2026-10-13T10:59:59.999Z");
+  const after = new Date("2026-10-13T11:00:00.000Z");
   const questions = JOHTO_VOTE_QUESTIONS.map(({ key }) => key);
   const answers = Object.fromEntries(questions.map((key) => [key, "candidate-1"])) as Record<(typeof questions)[number], string>;
   const players: Row[] = [
@@ -223,7 +224,9 @@ if (process.argv.includes("--service")) {
 
   await service.prepareJohtoInvitationCampaign({ now: after });
   assert.deepEqual(recipients.map((row) => row.playerId).sort(), ["candidate-1", "candidate-2", "voter"]);
-  assert.deepEqual((await service.getJohtoInvitationForPlayer("voter", after)).candidates.map((candidate: Row) => candidate.id), ["candidate-1", "candidate-2", "candidate-3"], "accepted participants remain candidates even if their accounts later become inactive");
+  const voterInvitation = await service.getJohtoInvitationForPlayer("voter", after);
+  assert.equal(voterInvitation.displayName, "Eleitor", "the recipient's own name travels with the invitation");
+  assert.deepEqual(voterInvitation.candidates.map((candidate: Row) => candidate.id), ["candidate-1", "candidate-2", "candidate-3"], "accepted participants remain candidates even if their accounts later become inactive");
   assert.equal((await service.getJohtoInvitationForPlayer("admin", after)).available, false);
   assert.equal((await service.getJohtoInvitationForPlayer("pending", after)).available, false);
 
@@ -268,10 +271,10 @@ if (process.argv.includes("--service")) {
   tournamentAvailable = true;
   campaigns[0].publishedAt = null;
   await Promise.all([
-    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-14T11:00:01.000Z") }),
-    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-14T11:00:02.000Z") }),
+    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-13T11:00:01.000Z") }),
+    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-13T11:00:02.000Z") }),
   ]);
-  assert.equal(campaigns[0].publishedAt.toISOString(), "2026-10-14T11:00:01.000Z", "concurrent publication must preserve the first timestamp");
+  assert.equal(campaigns[0].publishedAt.toISOString(), "2026-10-13T11:00:01.000Z", "concurrent publication must preserve the first timestamp");
   console.log("ok serviço de convite: lançamento, elegibilidade, abertura, acesso, voto único e resumo");
 }
 if (process.argv.includes("--actions")) {
@@ -369,8 +372,8 @@ if (process.argv.includes("--actions")) {
 }
 if (process.argv.includes("--push")) {
   type Row = Record<string, any>;
-  const before = new Date("2026-10-14T10:59:59.999Z");
-  const launch = new Date("2026-10-14T11:00:00.000Z");
+  const before = new Date("2026-10-13T10:59:59.999Z");
+  const launch = new Date("2026-10-13T11:00:00.000Z");
   const campaign: Row = { id: "campaign-1", slug: "johto-invitation-2026", launchAt: launch, publishedAt: before, pushStartedAt: null, pushSentAt: null };
   const players: Row[] = [
     { id: "player-1", userId: "user-1", active: true, user: { status: "ACTIVE", role: "PLAYER" } },
@@ -387,6 +390,7 @@ if (process.argv.includes("--push")) {
     tournament: { findUnique: async () => ({ id: "tournament-3", name: "Liga Zikachu 3" }) },
     johtoInvitationCampaign: {
       findUnique: async ({ where }: Row) => where.slug === campaign.slug ? { ...campaign } : null,
+      findUniqueOrThrow: async ({ where }: Row) => { assert.equal(where.id, campaign.id); return { ...campaign }; },
       upsert: async () => ({ ...campaign }),
       updateMany: async ({ where, data }: Row) => {
         if (where.id !== campaign.id) return { count: 0 };
@@ -459,25 +463,26 @@ if (process.argv.includes("--push")) {
   assert.ok(recipients.every((row) => !row.openedAt && !row.votingSkippedAt && !row.voteSubmittedAt), "push cannot change invitation or vote state");
   assert.equal(campaign.pushSentAt?.toISOString(), launch.toISOString(), "completed launch is recorded at campaign level");
   players.push({ id: "late-player", userId: "late-user", active: true, user: { status: "ACTIVE", role: "PLAYER" } });
-  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-14T12:00:00.000Z")), { sent: 0, recipients: 0 });
+  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-13T12:00:00.000Z")), { sent: 0, recipients: 0 });
+  await service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-13T12:00:00.000Z") });
   assert.equal(pushes.length, 3, "repeat launch does not send twice");
   assert.equal(recipients.length, 3, "later cron runs do not enroll new players in the one-time launch");
   campaign.pushSentAt = null; // Simulate an interrupted launch before its completion marker was written.
   markerDbDown = true;
-  await assert.rejects(service.runJohtoInvitationLaunch(new Date("2026-10-14T11:00:01.000Z")), /marker database unavailable/);
+  await assert.rejects(service.runJohtoInvitationLaunch(new Date("2026-10-13T11:00:01.000Z")), /marker database unavailable/);
   assert.equal(campaign.pushSentAt, null, "database claim failure leaves the launch retryable");
   markerDbDown = false;
-  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-14T11:00:02.000Z")), { sent: 1, recipients: 4 });
+  assert.deepEqual(await service.runJohtoInvitationLaunch(new Date("2026-10-13T11:00:02.000Z")), { sent: 1, recipients: 4 });
   assert.deepEqual(pushes.at(-1)?.userIds, ["late-user"], "retry only sends to the unclaimed recipient");
 
   const automation = loadModule("src/lib/push-automation.ts", {
     "@/lib/prisma": { prisma: { mascotExpedition: { findMany: async () => [] }, mascotBuff: { findMany: async () => [] }, weeklyMascotLeague: { findFirst: async () => null }, rushLeague: { findFirst: async () => null }, pushNotificationMarker: { deleteMany: async () => ({ count: 0 }) } } },
     "@/lib/notifications": notifications,
     "@/lib/mascot-data": { getPokemonName: () => "" },
-    "@/lib/johto-invitation": { runJohtoInvitationLaunch: async (now: Date) => { assert.equal(now, launch); return { sent: 2, recipients: 2 }; } },
+    "@/lib/johto-invitation": { runJohtoInvitationLaunch: async () => { throw new Error("Johto launch belongs to weekly cron"); } },
   });
-  assert.deepEqual(await automation.runPushAutomation(launch), { success: true, sent: 2 }, "cron includes Johto launch delivery");
-  console.log("ok push do convite: corte BRT, público elegível, payload, idempotência e cron");
+  assert.deepEqual(await automation.runPushAutomation(launch), { success: true, sent: 0 }, "general push cron does not run Johto launch");
+  console.log("ok push do convite: corte BRT, público elegível, payload e idempotência");
 }
 if (process.argv.includes("--ui")) {
   const { johtoInvitationUiHarness } = await import("./test-johto-invitation-ui");

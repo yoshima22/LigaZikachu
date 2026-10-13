@@ -45,13 +45,14 @@ const Letter = module.exports.JohtoInvitationLetter as (props: {
   mode: "preview" | "player";
   onClose?: () => void;
   candidates?: { id: string; displayName: string }[];
+  displayName?: string;
 }) => React.ReactElement;
 assert.equal(typeof Letter, "function", "letter component is exported");
 function render(mode: "preview" | "player", overrides: Record<number, unknown> = {}) {
   hookIndex = 0;
   hookOverrides = overrides;
   hookUpdates = [];
-  const tree = Letter({ mode, onClose: () => { previewCloses++; }, candidates: participants }) as React.ReactElement;
+  const tree = Letter({ mode, onClose: () => { previewCloses++; }, candidates: participants, displayName: mode === "player" ? "Misty" : undefined }) as React.ReactElement;
   return { tree, html: renderToStaticMarkup(tree) };
 }
 function findButton(node: unknown, label: string): { props: { onClick: () => Promise<void> } } | null {
@@ -69,10 +70,15 @@ assert.match(preview, /johto-envelope-left/, "left envelope segment is present")
 assert.match(preview, /johto-envelope-right/, "right envelope segment is present");
 assert.match(preview, /Fechar prévia/, "admin can leave preview without persistence");
 const { html: finalPage, tree: finalTree } = render("preview", { 0: "reading", 1: JOHTO_INVITATION_COPY.pages.length - 1 });
+assert.match(finalPage, /convidado\(a\) de honra para este evento/, "final page honors the guest");
+assert.match(finalPage, /Página anterior/, "last letter page can go back");
 assert.match(finalPage, /Participar da votação/, "last letter page offers the secret vote");
 assert.match(finalPage, /Continuar para os Ginásios/, "last letter page lets the player skip the vote");
 assert.match(finalPage, /CONVITE PÁGINA 06/, "letter footer identifies the actual page number");
 assert.match(finalPage, /Liga Zikachu TCG 3ª Edição/, "final page identifies the players being recognized");
+assert.match(render("preview", { 0: "reading" }).html, /Boas vindas a Johto/, "first page has its requested label");
+assert.match(render("preview", { 0: "reading" }).html, /Prezado, Treinador\(a\)!/, "admin preview uses a sensible addressee");
+assert.match(render("player", { 0: "reading" }).html, /Prezado, Misty!/, "player sees their own display name");
 await findButton(finalTree, "Continuar para os Ginásios")!.props.onClick();
 assert.equal(previewCloses, 0, "preview continuation demonstrates completion instead of closing");
 assert.ok(hookUpdates.some(({ index, value }) => index === 0 && value === "submitted"), "preview continuation enters its completion screen");
@@ -107,9 +113,10 @@ runInThisContext(`(function(require,module,exports){${gateOutput}\n})`, { filena
     throw new Error(`Unexpected gate dependency: ${name}`);
   }, gateModule, gateModule.exports,
 );
-const Gate = gateModule.exports.JohtoInvitationGate as (props: { initialState: { available: boolean; openedAt: null; candidates: typeof participants } }) => React.ReactElement<{ candidates: typeof participants; onFinish: () => void }>;
-const gate = Gate({ initialState: { available: true, openedAt: null, candidates: participants } });
+const Gate = gateModule.exports.JohtoInvitationGate as (props: { initialState: { available: boolean; openedAt: null; displayName: string; candidates: typeof participants } }) => React.ReactElement<{ candidates: typeof participants; displayName: string; onFinish: () => void }>;
+const gate = Gate({ initialState: { available: true, openedAt: null, displayName: "Misty", candidates: participants } });
 assert.deepEqual(gate.props.candidates, participants, "player gate passes real candidate names to the letter");
+assert.equal(gate.props.displayName, "Misty", "player gate passes the recipient's own name");
 gate.props.onFinish();
 assert.deepEqual(destinations, ["/combates/raid-johto"], "player continuation navigates directly to the Johto raid");
 console.log("ok UI do convite: diálogo, envelope bilateral, abertura acessível e prévia isolada");

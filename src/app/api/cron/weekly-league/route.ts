@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { runWeeklyLeagueAutomation } from "@/app/(app)/combates/liga-semanal/actions";
+import { runJohtoLaunch } from "@/lib/johto-launch";
 
 export const runtime = "nodejs";
 export const maxDuration = 120;
@@ -11,6 +12,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
+    await runJohtoLaunch();
     const result = await runWeeklyLeagueAutomation(secret);
     return NextResponse.json(result, { status: "error" in result ? 500 : 200 });
   } catch (error) {

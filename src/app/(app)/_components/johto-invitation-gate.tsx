@@ -13,6 +13,7 @@ export function JohtoInvitationGate({ initialState }: { initialState: JohtoInvit
     <JohtoInvitationLetter
       mode="player"
       candidates={initialState.candidates}
+      displayName={initialState.displayName}
       onFinish={() => {
         setVisible(false);
         router.push("/combates/raid-johto");
