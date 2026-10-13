@@ -133,8 +133,8 @@ export function JohtoReplayList({ fights }: { fights: JohtoRecentFight[] }) {
   );
 }
 
-/** Recompensas pendentes (e já resgatadas) com o seletor de mascote do líder. */
-export function JohtoRewardPicker({ rewards }: { rewards: JohtoPendingReward[] }) {
+/** Recompensas pendentes (e já resgatadas) com o seletor de mascote do líder. Regra: UM único mascote em toda a raid. */
+export function JohtoRewardPicker({ rewards, choiceUsed }: { rewards: JohtoPendingReward[]; choiceUsed: { leaderName: string; pokemonId: number } | null }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [choice, setChoice] = useState<Record<string, number>>({});
@@ -142,7 +142,16 @@ export function JohtoRewardPicker({ rewards }: { rewards: JohtoPendingReward[] }
   function claim(reward: JohtoPendingReward) {
     const pokemonId = choice[reward.id];
     if (!pokemonId) { toast.error("Escolha um mascote primeiro."); return; }
-    if (!window.confirm(`Receber ${getPokemonName(pokemonId)} no nível ${reward.level}? A escolha não pode ser trocada.`)) return;
+    const ok = window.confirm(
+      `ATENÇÃO — ESCOLHA ÚNICA
+
+Você está prestes a escolher ${getPokemonName(pokemonId)} (Nv.${reward.level}) de ${reward.leaderName}.
+
+Você só pode escolher UM mascote em TODA a raid, de qualquer líder. Ao confirmar, você NÃO poderá escolher nenhum outro mascote, nem de líderes futuros. Esta escolha não pode ser desfeita.
+
+Confirmar a escolha?`,
+    );
+    if (!ok) return;
     start(async () => {
       const result = await claimJohtoMascotAction(reward.id, pokemonId);
       (result.ok ? toast.success : toast.error)(result.message);
@@ -152,36 +161,52 @@ export function JohtoRewardPicker({ rewards }: { rewards: JohtoPendingReward[] }
   return (
     <section className="space-y-3 rounded-2xl border border-emerald-500/30 bg-emerald-500/5 p-4">
       <h2 className="text-lg font-bold text-white">🎁 Suas recompensas dos líderes</h2>
-      {rewards.map((reward) => (
-        <div key={reward.id} className="rounded-xl border border-slate-800 bg-slate-950/60 p-3">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm font-black text-white">{reward.leaderName} <span className="text-[11px] font-semibold text-emerald-300">· {TIER_LABEL[reward.tier] ?? reward.tier}</span></p>
-            <p className="text-[11px] text-slate-400">{fmt(reward.zc)} ZC {reward.egg ? "+ ovo especial " : ""}(já na conta) · mascote Nv.{reward.level}</p>
-          </div>
-          {reward.claimed ? (
-            <p className="mt-2 flex items-center gap-2 text-xs text-emerald-200">
-              {reward.chosenPokemonId && <img src={getStaticSpriteUrl(reward.chosenPokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />}
-              Você escolheu {reward.chosenPokemonId ? getPokemonName(reward.chosenPokemonId) : "um mascote"}.
-            </p>
-          ) : (
-            <>
-              <p className="mb-2 mt-2 text-[11px] text-slate-400">Escolha 1 dos 6 mascotes de {reward.leaderName}:</p>
-              <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                {reward.options.map((pokemonId) => (
-                  <button key={pokemonId} type="button" onClick={() => setChoice((c) => ({ ...c, [reward.id]: pokemonId }))}
-                    className={`rounded-xl border p-2 text-center transition ${choice[reward.id] === pokemonId ? "border-[#FFCB05] bg-[#FFCB05]/15" : "border-slate-800 bg-slate-900/60 hover:border-slate-600"}`}>
-                    <img src={getStaticSpriteUrl(pokemonId)} alt="" className="mx-auto h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
-                    <p className="mt-1 truncate text-[10px] font-bold text-white">{getPokemonName(pokemonId)}</p>
-                  </button>
-                ))}
-              </div>
-              <button disabled={pending || !choice[reward.id]} onClick={() => claim(reward)} className="mt-3 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950 hover:brightness-110 disabled:opacity-50">
-                Receber mascote Nv.{reward.level}
-              </button>
-            </>
-          )}
+      <div className="rounded-xl border-2 border-amber-400/70 bg-amber-500/10 p-3 text-xs leading-5 text-amber-100">
+        <p className="text-sm font-black text-amber-300">⚠️ REGRA DO EVENTO: você só pode escolher UM mascote</p>
+        <p>Durante toda a raid, <b>apenas um mascote</b> pode ser escolhido por jogador, <b>independente da faixa de nível</b> (pódio ou participação). Escolher um mascote significa <b>não poder escolher nenhum outro</b>, <b>nem de líderes futuros</b>. Exemplo: se você escolher um mascote do Falkner, não poderá escolher mais nenhum durante o evento. Vale para todos os jogadores e todos os líderes. <b>Escolha com sabedoria!</b></p>
+        <p className="mt-1 text-amber-200/80">O ZC e o ovo especial de cada recompensa continuam sendo entregues normalmente. O mascote nasce de <b>ovo especial</b>: status sorteados e proporcionais ao nível da faixa, com <b>personalidade aleatória</b>.</p>
+      </div>
+      {choiceUsed && (
+        <div className="flex items-center gap-3 rounded-xl border border-emerald-500/40 bg-emerald-500/10 p-3 text-xs text-emerald-100">
+          <img src={getStaticSpriteUrl(choiceUsed.pokemonId)} alt="" className="h-12 w-12 object-contain" style={{ imageRendering: "pixelated" }} />
+          <p>Você já usou a sua escolha: <b>{getPokemonName(choiceUsed.pokemonId)}</b> ({choiceUsed.leaderName}). As demais recompensas não permitem outra escolha de mascote.</p>
         </div>
-      ))}
+      )}
+      {rewards.map((reward) => {
+        const locked = !reward.claimed && Boolean(choiceUsed);
+        return (
+          <div key={reward.id} className={`rounded-xl border border-slate-800 bg-slate-950/60 p-3 ${locked ? "opacity-60" : ""}`}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <p className="text-sm font-black text-white">{reward.leaderName} <span className="text-[11px] font-semibold text-emerald-300">· {TIER_LABEL[reward.tier] ?? (reward.tier.startsWith("TEST") ? "🧪 Teste (admin)" : reward.tier)}</span></p>
+              <p className="text-[11px] text-slate-400">{fmt(reward.zc)} ZC {reward.egg ? "+ ovo especial " : ""}(já na conta) · mascote Nv.{reward.level}</p>
+            </div>
+            {reward.claimed ? (
+              <p className="mt-2 flex items-center gap-2 text-xs text-emerald-200">
+                {reward.chosenPokemonId && <img src={getStaticSpriteUrl(reward.chosenPokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />}
+                Você escolheu {reward.chosenPokemonId ? getPokemonName(reward.chosenPokemonId) : "um mascote"}.
+              </p>
+            ) : locked ? (
+              <p className="mt-2 text-xs text-slate-400">🔒 Bloqueado: você já escolheu um mascote nesta raid (só é permitido UM em todo o evento).</p>
+            ) : (
+              <>
+                <p className="mb-2 mt-2 text-[11px] text-amber-200">Escolha 1 dos 6 mascotes de {reward.leaderName} — lembre-se: <b>será o único mascote que você poderá escolher em toda a raid</b>.</p>
+                <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
+                  {reward.options.map((pokemonId) => (
+                    <button key={pokemonId} type="button" onClick={() => setChoice((c) => ({ ...c, [reward.id]: pokemonId }))}
+                      className={`rounded-xl border p-2 text-center transition ${choice[reward.id] === pokemonId ? "border-[#FFCB05] bg-[#FFCB05]/15" : "border-slate-800 bg-slate-900/60 hover:border-slate-600"}`}>
+                      <img src={getStaticSpriteUrl(pokemonId)} alt="" className="mx-auto h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
+                      <p className="mt-1 truncate text-[10px] font-bold text-white">{getPokemonName(pokemonId)}</p>
+                    </button>
+                  ))}
+                </div>
+                <button disabled={pending || !choice[reward.id]} onClick={() => claim(reward)} className="mt-3 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-black text-slate-950 hover:brightness-110 disabled:opacity-50">
+                  Escolher este mascote (Nv.{reward.level}) — escolha única
+                </button>
+              </>
+            )}
+          </div>
+        );
+      })}
     </section>
   );
 }

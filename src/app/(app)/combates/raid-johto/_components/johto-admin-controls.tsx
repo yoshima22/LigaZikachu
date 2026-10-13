@@ -37,6 +37,8 @@ export function JohtoAdminControls({ summary, testMascots = [], invitationCandid
   const [extend, setExtend] = useState("24");
   const [hpLeader, setHpLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [hpValue, setHpValue] = useState("2500000");
+  const [testLevel, setTestLevel] = useState("55");
+  const [unlockName, setUnlockName] = useState("");
   const [rewardLeader, setRewardLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [testLeader, setTestLeader] = useState(summary.currentLeaderKey ?? JOHTO_LEADERS[0].key);
   const [runs, setRuns] = useState("20");
@@ -158,6 +160,20 @@ export function JohtoAdminControls({ summary, testMascots = [], invitationCandid
             <button disabled={pending} className={danger} onClick={() => run({ type: "resetProgress" }, "Zerar TODO o progresso (HP, prazos, ranking, ataques e recompensas)? ZC e mascotes já entregues não são desfeitos.")}>Zerar progresso</button>
             <button disabled={pending} className={danger} onClick={() => run({ type: "create", reset: true, hpPerLeader: Number(hp) || undefined }, "Apagar o evento e recriar do zero?")}>Recriar do zero</button>
             <label className="ml-auto text-[10px] text-slate-400">HP por líder (recriar)<input value={hp} onChange={(e) => setHp(e.target.value.replace(/\D/g, ""))} className={`${input} w-32`} /></label>
+          </div>
+
+          <div className="flex flex-wrap items-end gap-2 rounded-xl border border-slate-800 bg-slate-950/60 p-3">
+            <p className="w-full text-[10px] font-black uppercase tracking-wider text-slate-300">Escolha de mascote (regra: só UM por jogador em toda a raid)</p>
+            <label className="text-[10px] text-slate-400">Líder da recompensa de teste
+              <select value={rewardLeader} onChange={(e) => setRewardLeader(e.target.value)} className={`${input} w-36`}>
+                {JOHTO_LEADERS.map((l) => <option key={l.key} value={l.key}>{l.name}</option>)}
+              </select>
+            </label>
+            <label className="text-[10px] text-slate-400">Nível<input value={testLevel} onChange={(e) => setTestLevel(e.target.value.replace(/D/g, ""))} className={`${input} w-16`} /></label>
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "testReward", leaderKey: rewardLeader, level: Number(testLevel) || 55 })}>Criar recompensa de teste p/ mim</button>
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "resetMyChoice" }, "Apagar suas recompensas de teste e reabrir as suas escolhas? (mascotes já criados não são removidos)")}>Liberar minha escolha</button>
+            <label className="text-[10px] text-slate-400">Jogador (nome exato)<input value={unlockName} onChange={(e) => setUnlockName(e.target.value)} className={`${input} w-40`} /></label>
+            <button disabled={pending || unlockName.trim().length < 2} className={danger} onClick={() => run({ type: "unlockPlayer", playerName: unlockName }, `Reabrir a escolha de mascote de "${unlockName}"? Ele poderá escolher de novo (o mascote já criado continua na conta).`)}>Liberar escolha do jogador</button>
           </div>
 
           {prizes && (

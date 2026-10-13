@@ -139,7 +139,7 @@ export default async function JohtoRaidPage() {
         </section>
       )}
 
-      <JohtoRewardPicker rewards={pendingRewards} />
+      <JohtoRewardPicker rewards={pendingRewards} choiceUsed={state.choiceUsed} />
 
       {injured.length > 0 && (
         <section id="sus" className="rounded-2xl border border-orange-500/25 bg-slate-900/60 p-4">
@@ -233,6 +233,8 @@ export default async function JohtoRaidPage() {
               <li><b className="text-slate-200">🥈 2º em dano:</b> {fmt(rewards.top[1].zc)} ZC + mascote no nível {rewards.top[1].level}.</li>
               <li><b className="text-slate-200">🥉 3º em dano:</b> {fmt(rewards.top[2].zc)} ZC + mascote no nível {rewards.top[2].level}.</li>
               <li>Quem fica no pódio recebe o prêmio do pódio no lugar do de participante.</li>
+              <li className="font-bold text-amber-300">⚠️ Só dá para escolher UM mascote em toda a raid, de qualquer líder e faixa. Escolher um impede de escolher qualquer outro, inclusive de líderes futuros. Escolha com sabedoria!</li>
+              <li>O mascote nasce de ovo especial: status sorteados proporcionais ao nível e personalidade aleatória.</li>
               <li><b className="text-slate-200">🎯 Golpe final:</b> o bônus de participante + um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade.</li>
               <li>Se um líder não cair no prazo, ele vence e não há recompensa por ele.</li>
             </ul>

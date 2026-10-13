@@ -131,7 +131,16 @@ if (process.argv.includes("--db")) {
           const claim = await lib.claimJohtoMascotReward(A.user.id, mine.id, pick);
           assert.ok(claim.ok, claim.message);
           assert.equal((await lib.claimJohtoMascotReward(A.user.id, mine.id, pick)).ok, false, "só uma escolha por prêmio");
-          assert.ok(await prisma.mascot.findFirst({ where: { playerId: A.player.id, pokemonId: pick, level: mine.mascotLevel } }), "mascote criado no nível da faixa");
+          const created = await prisma.mascot.findFirst({ where: { playerId: A.player.id, pokemonId: pick, level: mine.mascotLevel } });
+          assert.ok(created, "mascote criado no nível da faixa");
+          assert.equal(created!.hatchedFromEggType, "SPECIAL", "origem de ovo especial");
+          // Regra: só UM mascote em toda a raid, mesmo em outro líder/faixa.
+          const other = await prisma.johtoRaidReward.create({ data: { eventId: event.id, leaderKey: "bugsy", playerId: A.player.id, tier: "TESTX", zc: 0, mascotLevel: 85, egg: false } });
+          const second = await lib.claimJohtoMascotReward(A.user.id, other.id, getJohtoLeader("bugsy")!.roster[0].pokemonId);
+          assert.equal(second.ok, false, "segunda escolha bloqueada");
+          assert.match(second.message, /UM/, "mensagem deixa a regra clara");
+          assert.equal(await prisma.johtoRaidReward.count({ where: { playerId: A.player.id, eventId: event.id, claimedAt: { not: null } } }), 1);
+          assert.equal((await lib.getJohtoRaidState(A.player.id)).choiceUsed?.pokemonId, pick);
           assert.equal((await lib.claimJohtoMascotReward(B.user.id, mine.id, pick)).ok, false, "prêmio de outro jogador");
         }
         assert.equal((await lib.grantLeaderRewards(falkner1.id)).granted, 0, "reentrega é idempotente");

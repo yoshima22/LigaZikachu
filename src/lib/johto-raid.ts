@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { toLeagueMascot } from "@/lib/league-combat";
 import { publishLeagueTicker } from "@/lib/league-ticker";
-import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, EGG_STAT_RANGES, getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import {
   COMBO_MAX_STACKS, COMBO_WINDOW_MS, comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
   JOHTO_DEFAULT_LEADER_DAYS, JOHTO_EVENT_SLUG, JOHTO_LEADER_HP, JOHTO_LEADERS, JOHTO_MASCOTS_PER_LEADER, JOHTO_REPLAY_HISTORY,
@@ -59,6 +59,8 @@ export type JohtoRaidState = {
   totalAttacks: number;
   me: { damageOnCurrent: number; attacksOnCurrent: number; rankOnCurrent: number | null; cooldownUntil: string | null } | null;
   myRewards: JohtoPendingReward[];
+  /** Regra do evento: só UM mascote pode ser escolhido em toda a raid. Preenchido quando o jogador já usou a escolha. */
+  choiceUsed: { leaderName: string; pokemonId: number } | null;
   /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 5 min). */
   combo: JohtoComboState;
 };
@@ -159,7 +161,7 @@ export async function getComboState(eventId: string, excludePlayerId?: string | 
 // ── Estado para a página ─────────────────────────────────────────────────────
 
 export async function getJohtoRaidState(playerId?: string | null): Promise<JohtoRaidState> {
-  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], combo: { stacks: 0, bonusPct: 0, nextDropAt: null } };
+  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null } };
   const event = await getJohtoEvent();
   if (!event) return empty;
   await ensureLeaderMascots(event.id).catch(() => undefined);
@@ -225,6 +227,10 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
       cooldownUntil: myLast ? new Date(myLast.createdAt.getTime() + fresh.cooldownMinutes * 60_000).toISOString() : null,
     } : null,
     combo,
+    choiceUsed: (() => {
+      const used = rewards.find((r) => r.claimedAt && r.chosenPokemonId);
+      return used ? { leaderName: getJohtoLeader(used.leaderKey)?.name ?? used.leaderKey, pokemonId: used.chosenPokemonId! } : null;
+    })(),
     myRewards: rewards.map((r) => ({
       id: r.id, leaderKey: r.leaderKey, leaderName: getJohtoLeader(r.leaderKey)?.name ?? r.leaderKey, tier: r.tier, zc: r.zc, level: r.mascotLevel, egg: r.egg,
       claimed: Boolean(r.claimedAt), chosenPokemonId: r.chosenPokemonId, options: getJohtoLeader(r.leaderKey)?.roster.map((e) => e.pokemonId) ?? [],
@@ -493,6 +499,8 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
   const reward = await prisma.johtoRaidReward.findUnique({ where: { id: rewardId } });
   if (!reward || reward.playerId !== player.id) return { ok: false, message: "Prêmio não encontrado." };
   if (reward.claimedAt) return { ok: false, message: "Você já escolheu o mascote deste prêmio." };
+  const earlier = await prisma.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, claimedAt: { not: null } }, select: { leaderKey: true, chosenPokemonId: true } });
+  if (earlier) return { ok: false, message: `Você já escolheu ${earlier.chosenPokemonId ? getPokemonName(earlier.chosenPokemonId) : "um mascote"} (${getJohtoLeader(earlier.leaderKey)?.name ?? earlier.leaderKey}). Só é possível escolher UM mascote em toda a raid.` };
   const def = getJohtoLeader(reward.leaderKey);
   if (!def || !def.roster.some((entry) => entry.pokemonId === pokemonId)) return { ok: false, message: "Esse mascote não faz parte do time do líder." };
   const { computeProceduralStats } = await import("@/lib/mascot");
@@ -500,15 +508,22 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
   const { registerPokemonDiscovery } = await import("@/lib/pokemon-dex");
   const personalities = Object.values(MascotPersonality);
   const personality = personalities[Math.floor(Math.random() * personalities.length)];
-  const stats = computeProceduralStats(pokemonId, reward.mascotLevel, personality, [17, 26]);
+  // Origem de ovo ESPECIAL: status sorteados na faixa do ovo especial e crescidos proporcionalmente até o nível da faixa; personalidade aleatória.
+  const range = EGG_STAT_RANGES.SPECIAL ?? [13, 20];
+  const stats = computeProceduralStats(pokemonId, reward.mascotLevel, personality, range);
+  const isShiny = Math.random() < (EGG_SHINY_CHANCE.SPECIAL ?? 1 / 500);
   try {
     await prisma.$transaction(async (tx) => {
+      // Trava por jogador: duas escolhas simultâneas (ou em líderes diferentes) não passam.
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`johto-claim:${player.id}`}))`);
+      const other = await tx.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, claimedAt: { not: null } }, select: { id: true } });
+      if (other) throw new Error("ONE_ONLY");
       const claim = await tx.johtoRaidReward.updateMany({ where: { id: reward.id, playerId: player.id, claimedAt: null }, data: { claimedAt: new Date(), chosenPokemonId: pokemonId } });
       if (claim.count === 0) throw new Error("ALREADY");
       const mascot = await tx.mascot.create({
         data: {
           playerId: player.id, pokemonId, ...(await getSpeciesSnapshot(pokemonId, tx)), hatchedPokemonId: pokemonId, personality, level: reward.mascotLevel,
-          hatchedFromEggType: "EVENT", hatchedFromEggOrigin: "Raid dos Líderes de Johto", happiness: 80, ...stats,
+          hatchedFromEggType: "SPECIAL", hatchedFromEggOrigin: "Raid dos Líderes de Johto", isShiny, happiness: 80, ...stats,
         },
       });
       await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🎁", description: `Recompensa da Raid de Johto: ${getPokemonName(pokemonId)} do líder ${def.name} (Nv.${reward.mascotLevel}).` } });
@@ -516,6 +531,7 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
     }, { timeout: 20000 });
   } catch (error) {
     if (error instanceof Error && error.message === "ALREADY") return { ok: false, message: "Você já escolheu o mascote deste prêmio." };
+    if (error instanceof Error && error.message === "ONE_ONLY") return { ok: false, message: "Você já escolheu um mascote nesta raid. Só é possível escolher UM em todo o evento." };
     throw error;
   }
   return { ok: true, message: `${getPokemonName(pokemonId)} (Nv.${reward.mascotLevel}) entrou para a sua coleção!` };

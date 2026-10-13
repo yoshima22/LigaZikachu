@@ -74,6 +74,9 @@ export async function johtoAdminAction(
     | { type: "active"; value: boolean }
     | { type: "settings"; cooldownMinutes: number; damageScale: number; leaderDays: number }
     | { type: "extend"; hours: number }
+    | { type: "testReward"; leaderKey: string; level: number }
+    | { type: "resetMyChoice" }
+    | { type: "unlockPlayer"; playerName: string }
     | { type: "leaderHp"; leaderKey: string; hp: number }
     | { type: "damage"; amount: number }
     | { type: "healCurrent" }
@@ -152,6 +155,29 @@ export async function johtoAdminAction(
         const rows = await prisma.johtoRaidLeaderMascot.findMany({ where: { leaderId: leader.id } });
         await prisma.johtoRaidLeader.update({ where: { id: leader.id }, data: { hpMax: mascotHp * 6, hpCurrent: rows.reduce((sum, m) => sum + m.hpCurrent, 0) } });
         return done(`${leader.key}: vida total ajustada para ${(mascotHp * 6).toLocaleString("pt-BR")} (${mascotHp.toLocaleString("pt-BR")} por mascote).`);
+      }
+      case "testReward": {
+        // Debug: cria uma recompensa de teste (sem ZC/ovo) para a conta do admin poder testar o seletor.
+        const me = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (!me) return fail("Perfil não encontrado.");
+        const level = Math.max(1, Math.min(100, Math.floor(command.level) || 55));
+        await prisma.johtoRaidReward.create({ data: { eventId: event.id, leaderKey: command.leaderKey, playerId: me.id, tier: "TEST" + Date.now().toString(36).slice(-4).toUpperCase(), zc: 0, mascotLevel: level, egg: false } });
+        return done(`Recompensa de teste criada para você (${command.leaderKey}, Nv.${level}). Ela aparece em "Suas recompensas dos líderes".`);
+      }
+      case "resetMyChoice": {
+        const me = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (!me) return fail("Perfil não encontrado.");
+        const removed = await prisma.johtoRaidReward.deleteMany({ where: { eventId: event.id, playerId: me.id, tier: { startsWith: "TEST" } } });
+        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: me.id, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
+        return done(`Sua escolha foi liberada: ${removed.count} recompensa(s) de teste apagada(s), ${reopened.count} reaberta(s). Mascotes já criados não são removidos.`);
+      }
+      case "unlockPlayer": {
+        const name = String(command.playerName ?? "").trim();
+        if (name.length < 2) return fail("Digite o nome do jogador.");
+        const matches = await prisma.player.findMany({ where: { displayName: { equals: name, mode: "insensitive" } }, select: { id: true, displayName: true }, take: 2 });
+        if (matches.length !== 1) return fail(matches.length === 0 ? "Jogador não encontrado (use o nome exato)." : "Mais de um jogador com esse nome.");
+        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: matches[0].id, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
+        return done(`${matches[0].displayName}: ${reopened.count} escolha(s) liberada(s). O mascote já criado continua na conta dele (remova pelo painel de mascotes se necessário).`);
       }
       case "extend": {
         if (!current?.expiresAt) return fail("Nenhum líder com prazo aberto.");

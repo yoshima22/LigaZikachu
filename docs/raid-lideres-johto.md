@@ -32,6 +32,9 @@ Cada treinador (não admin) que atacou nos últimos **5 minutos** vale **+2%** e
 - **Golpe final:** bônus de participante + **ovo especial (+15% de raridade)**. Se já era só participante, o ovo vem no mesmo prêmio; se estava no pódio, ganha também uma linha `FINAL_BLOW` (participante + ovo).
 - ZC e ovo caem na hora (idempotente por jogador/faixa); o **mascote é escolhido** na página (seletor com os 6 do líder, escolha única e confirmada). Notificação "o líder foi derrotado" com o aviso de escolher.
 - Contas de admin não entram em ranking nem prêmios.
+- **Regra da escolha única:** cada jogador só pode escolher **UM** mascote em toda a raid, de qualquer líder/faixa; escolher um bloqueia todas as demais escolhas, inclusive de líderes futuros (ZC e ovo continuam sendo entregues). Aplicada no servidor (trava por jogador + checagem na transação) e explicada em destaque na página e na confirmação.
+- **O mascote escolhido** nasce com origem de **ovo especial**: status sorteados na faixa do ovo especial e crescidos proporcionalmente até o nível da faixa, **personalidade aleatória** e chance de brilhante do ovo especial.
+- **Debug (admin):** criar recompensa de teste para si, liberar a própria escolha e liberar a escolha de um jogador pelo nome exato.
 
 ## Professor Enguiça
 A cada mascote do líder derrubado (e a cada líder vencido), a faixa de avisos do topo recebe uma mensagem do Professor Enguiça com o nome de quem derrotou e chamando todos a continuar o ataque. Só é publicada se a página estiver **liberada** e o autor não for admin.
