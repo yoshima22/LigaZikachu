@@ -178,7 +178,7 @@ export function JohtoInvitationLetter({
               <div>
                 <span className="johto-letter-eyebrow">LIGA ZIKACHU TCG · EDIÇÃO JOHTO</span>
                 <h2 id="johto-invitation-title" ref={headingRef} tabIndex={-1}>
-                  {stage === "reading" ? ("heading" in JOHTO_INVITATION_COPY.pages[page] ? JOHTO_INVITATION_COPY.pages[page].heading : JOHTO_INVITATION_COPY.title) : stage === "voting" ? JOHTO_INVITATION_COPY.voting.title : "Voto enviado!"}
+                  {stage === "reading" ? ("heading" in JOHTO_INVITATION_COPY.pages[page] ? JOHTO_INVITATION_COPY.pages[page].heading : JOHTO_INVITATION_COPY.title) : stage === "voting" ? JOHTO_INVITATION_COPY.voting.title : mode === "preview" ? "Prévia concluída" : "Voto enviado!"}
                 </h2>
               </div>
             </div>
@@ -242,7 +242,7 @@ export function JohtoInvitationLetter({
 
             {stage === "submitted" && (
               <div className="johto-letter-submitted">
-                <p>Obrigado por participar. Seus votos foram registrados em segredo.</p>
+                <p>{mode === "preview" ? "Este é o encerramento da votação. Nenhum voto foi registrado nesta prévia." : "Obrigado por participar. Seus votos foram registrados em segredo."}</p>
                 <button type="button" className="johto-letter-primary" onClick={mode === "preview" ? onClose : onFinish}>{JOHTO_INVITATION_COPY.voting.continueLabel}</button>
               </div>
             )}

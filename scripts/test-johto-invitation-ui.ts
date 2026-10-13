@@ -71,6 +71,9 @@ assert.match(finalPage, /Participar da votação/, "last letter page offers the 
 assert.match(finalPage, /Continuar para os Ginásios/, "last letter page lets the player skip the vote");
 await findButton(finalTree, "Continuar para os Ginásios")!.props.onClick();
 assert.equal(previewCloses, 1, "preview continuation closes without calling the player skip action");
+const previewSubmitted = render("preview", { 0: "submitted" }).html;
+assert.match(previewSubmitted, /Prévia concluída/, "preview completion is clearly illustrative");
+assert.doesNotMatch(previewSubmitted, /votos foram registrados/, "preview never claims to have saved votes");
 (globalThis as unknown as { window: unknown }).window = {
   matchMedia: () => ({ matches: true }),
   setTimeout: (callback: () => void) => { callback(); return 1; },
