@@ -91,10 +91,22 @@ export async function useJohtoRaidShield(userId: string, targetMascotId: string)
       if (!target || target.playerId === player.id) throw new Error("O escudo só pode reviver o mascote de outro jogador.");
       if (target.arenaState !== "INJURED") throw new Error("Esse mascote não está mais ferido.");
       const now = new Date();
-      const existing = await tx.johtoRaidShield.findUnique({ where: { eventId_playerId: { eventId: event.id, playerId: player.id } }, select: { available: true } });
-      if (existing && !existing.available) throw new Error("Seu escudo recarrega após seu próximo ataque na raid.");
-      if (existing) await tx.johtoRaidShield.update({ where: { eventId_playerId: { eventId: event.id, playerId: player.id } }, data: { available: false, usedAt: now } });
-      else await tx.johtoRaidShield.create({ data: { eventId: event.id, playerId: player.id, available: false, usedAt: now } });
+      const spent = await tx.johtoRaidShield.updateMany({
+        where: { eventId: event.id, playerId: player.id, available: true },
+        data: { available: false, usedAt: now },
+      });
+      if (spent.count === 0) {
+        const existing = await tx.johtoRaidShield.findUnique({ where: { eventId_playerId: { eventId: event.id, playerId: player.id } }, select: { id: true } });
+        if (existing) throw new Error("Seu escudo recarrega após seu próximo ataque na raid.");
+        try {
+          await tx.johtoRaidShield.create({ data: { eventId: event.id, playerId: player.id, available: false, usedAt: now } });
+        } catch (error) {
+          if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002") {
+            throw new Error("Seu escudo já foi usado. Ataque novamente na raid para recarregar.");
+          }
+          throw error;
+        }
+      }
       const revived = await tx.mascot.updateMany({ where: { id: target.id, arenaState: "INJURED", playerId: { not: player.id } }, data: { arenaState: "FREE", injuredAt: null, restingUntil: null, susRestBonusMinutes: 0 } });
       if (revived.count !== 1) throw new Error("Esse mascote não está mais ferido.");
     });

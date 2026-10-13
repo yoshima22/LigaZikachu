@@ -1,9 +1,9 @@
 import { redirect } from "next/navigation";
-import { AlertTriangle, Crown, Flame, Swords, Trophy } from "lucide-react";
+import { Crown, Flame, Swords, Trophy } from "lucide-react";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
+import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, type JohtoLeaderState } from "@/lib/johto-raid";
 import { getJohtoInvitationForPlayer, getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
 import type { RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
@@ -11,8 +11,9 @@ import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoTeamSelector } from "./_components/johto-team-selector";
 import { JohtoInvitationReviewButton } from "./_components/johto-invitation-review-button";
 import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
-import { attackJohtoRaidAction, healAllJohtoMascotsSusAction, healJohtoMascotSusAction, useJohtoRaidShieldAction } from "./actions";
+import { attackJohtoRaidAction } from "./actions";
 import { JohtoCooldownRefresh } from "./_components/johto-cooldown-refresh";
+import { JohtoSusPanel } from "./_components/johto-sus-panel";
 
 export const dynamic = "force-dynamic";
 
@@ -71,7 +72,11 @@ function LeaderCard({ leader, days }: { leader: JohtoLeaderState; days: number }
   );
 }
 
-export default async function JohtoRaidPage() {
+export default async function JohtoRaidPage({ searchParams }: { searchParams: Promise<{ susPage?: string; allySusPage?: string }> }) {
+  const query = await searchParams;
+  const susPage = Math.max(1, Number.parseInt(query.susPage ?? "1", 10) || 1);
+  const allySusPage = Math.max(1, Number.parseInt(query.allySusPage ?? "1", 10) || 1);
+  const SUS_PAGE_SIZE = 5;
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
   const admin = isAdmin(session.user.role);
@@ -85,12 +90,13 @@ export default async function JohtoRaidPage() {
 
   const mascotSelect = { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true } as const;
   const freeWhere = player ? { playerId: player.id, arenaState: "FREE" as const, expeditions: { none: { status: "ACTIVE" as const } } } : null;
-  const [freeMascots, injured] = player && freeWhere
+  const [freeMascots, injured, injuredTotal] = player && freeWhere
     ? await Promise.all([
       prisma.mascot.findMany({ where: freeWhere, select: mascotSelect, orderBy: [{ level: "desc" }], take: 250 }),
-      prisma.mascot.findMany({ where: { playerId: player.id, arenaState: "INJURED" }, select: { id: true, pokemonId: true, nickname: true, level: true }, orderBy: { injuredAt: "desc" }, take: 12 }),
+      prisma.mascot.findMany({ where: { playerId: player.id, arenaState: "INJURED" }, select: { id: true, pokemonId: true, nickname: true, level: true }, orderBy: { injuredAt: "desc" }, skip: (susPage - 1) * SUS_PAGE_SIZE, take: SUS_PAGE_SIZE }),
+      prisma.mascot.count({ where: { playerId: player.id, arenaState: "INJURED" } }),
     ])
-    : [[], []];
+    : [[], [], 0];
 
   const adminBox = admin ? <JohtoAdminControls summary={await getJohtoAdminSummary(state)} testMascots={freeMascots} invitationCandidates={await getJohtoInvitationPreviewCandidates()} /> : null;
   if (!state.event) {
@@ -102,7 +108,10 @@ export default async function JohtoRaidPage() {
   const canAttack = event.active && !event.defeatedAt && Boolean(current);
   const cooldownUntil = state.me?.cooldownUntil ? new Date(state.me.cooldownUntil) : null;
   const onCooldown = Boolean(cooldownUntil && cooldownUntil > new Date());
-  const alliedInjured = player ? await prisma.mascot.findMany({ where: { playerId: { not: player.id }, arenaState: "INJURED" }, select: { id: true, pokemonId: true, nickname: true, level: true, player: { select: { displayName: true } } }, orderBy: { injuredAt: "desc" }, take: 12 }) : [];
+  const [alliedInjured, alliedInjuredTotal] = player ? await Promise.all([
+    prisma.mascot.findMany({ where: { playerId: { not: player.id }, arenaState: "INJURED" }, select: { id: true, pokemonId: true, nickname: true, level: true, player: { select: { displayName: true } } }, orderBy: { injuredAt: "desc" }, skip: (allySusPage - 1) * SUS_PAGE_SIZE, take: SUS_PAGE_SIZE }),
+    prisma.mascot.count({ where: { playerId: { not: player.id }, arenaState: "INJURED" } }),
+  ]) : [[], 0];
   const currentType = current ? TYPE_STYLE[current.type] : null;
   const rewards = event.rewards;
   const pendingRewards = state.myRewards;
@@ -168,30 +177,11 @@ export default async function JohtoRaidPage() {
 
       <JohtoRewardPicker rewards={pendingRewards} choiceUsed={state.choiceUsed} />
 
-      {injured.length > 0 && (
-        <section id="sus" className="rounded-2xl border border-orange-500/25 bg-slate-900/60 p-4">
-          <h2 className="mb-2 flex items-center gap-2 text-base font-bold text-white"><AlertTriangle size={16} className="text-orange-300" /> Atendimento SUS</h2>
-          <form action={healAllJohtoMascotsSusAction} className="mb-3">{injured.map((mascot) => <input key={mascot.id} type="hidden" name="mascotId" value={mascot.id} />)}<button className="rounded-lg bg-orange-400 px-3 py-2 text-xs font-black text-slate-950">Recuperar todos · {injured.length * 10} ZC</button></form>
-          <div className="space-y-2">
-            {injured.map((mascot) => (
-              <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-orange-500/20 bg-orange-500/10 p-2.5">
-                <img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} />
-                <p className="min-w-0 flex-1 truncate text-sm font-bold text-orange-100">{mascot.nickname ?? getPokemonName(mascot.pokemonId)} <span className="text-[10px] font-normal text-orange-200/70">Nv.{mascot.level}</span></p>
-                <form action={healJohtoMascotSusAction}>
-                  <input type="hidden" name="mascotId" value={mascot.id} />
-                  <button className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-[10px] font-black text-slate-950 hover:brightness-110">Atendimento SUS · 10 ZC</button>
-                </form>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
-      <section className="rounded-2xl border border-cyan-500/25 bg-slate-900/60 p-4">
-        <h2 className="text-base font-bold text-white">🛡️ Escudo Cooperativo de Johto</h2>
-        <p className="mt-1 text-xs text-slate-400">Exclusivo de Johto: revive um aliado e volta após seu próximo ataque — diferente do escudo diário da Arena Z.</p>
-        <p className={`mt-2 text-xs font-bold ${state.shield?.available ? "text-emerald-300" : "text-amber-300"}`}>{state.shield?.available ? "Escudo pronto para resgatar um aliado." : "Escudo gasto: ataque novamente na raid para recarregar."}</p>
-        <div className="mt-3 space-y-2">{alliedInjured.length ? alliedInjured.map((mascot) => <div key={mascot.id} className="flex items-center gap-3 rounded-xl border border-cyan-500/15 bg-cyan-500/5 p-2"><img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} /><p className="min-w-0 flex-1 truncate text-xs font-bold text-cyan-100">{mascot.nickname ?? getPokemonName(mascot.pokemonId)} · {mascot.player.displayName}</p><form action={useJohtoRaidShieldAction}><input type="hidden" name="mascotId" value={mascot.id} /><button disabled={!state.shield?.available} className="rounded-lg bg-cyan-300 px-3 py-1.5 text-[10px] font-black text-slate-950 disabled:opacity-40">Reviver aliado</button></form></div>) : <p className="text-xs text-slate-500">Nenhum aliado ferido no momento.</p>}</div>
-      </section>
+      <JohtoSusPanel
+        mine={{ items: injured, page: susPage, totalPages: Math.max(1, Math.ceil(injuredTotal / SUS_PAGE_SIZE)), total: injuredTotal }}
+        allies={{ items: alliedInjured.map((mascot) => ({ ...mascot, playerName: mascot.player.displayName })), page: allySusPage, totalPages: Math.max(1, Math.ceil(alliedInjuredTotal / SUS_PAGE_SIZE)), total: alliedInjuredTotal }}
+        shieldAvailable={state.shield?.available ?? false}
+      />
 
 
       {current && (

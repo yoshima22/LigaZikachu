@@ -254,24 +254,30 @@ export async function johtoAdminAction(
 }
 
 /** Atendimento SUS dos mascotes derrotados na raid (mesmo da Arena Z). */
-export async function healJohtoMascotSusAction(formData: FormData): Promise<void> {
+export async function healJohtoMascotSusAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
   const user = await getSessionUser();
-  if (!user) return;
+  if (!user) return { ok: false, message: "Faça login novamente." };
   const mascotId = String(formData.get("mascotId") ?? "");
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
-  if (!player || !mascotId) return;
+  if (!player || !mascotId) return { ok: false, message: "Mascote inválido." };
   const { healMascotSus } = await import("@/lib/arena-z");
-  await healMascotSus(player.id, mascotId);
-  refresh();
+  try {
+    await healMascotSus(player.id, mascotId);
+    refresh();
+    return { ok: true, message: "Mascote recuperado no SUS." };
+  } catch (error) {
+    return { ok: false, message: error instanceof Error ? error.message : "Não foi possível recuperar o mascote." };
+  }
 }
 
 /** Atendimento único para todos os mascotes que caíram na investida da Raid. */
-export async function healAllJohtoMascotsSusAction(formData: FormData): Promise<{ ok: boolean; message?: string }> {
+export async function healAllJohtoMascotsSusAction(): Promise<{ ok: boolean; message?: string }> {
   const user = await getSessionUser();
   if (!user) return { ok: false, message: "Faça login novamente." };
-  const mascotIds = formData.getAll("mascotId").map(String).filter(Boolean);
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
-  if (!player || mascotIds.length === 0) return { ok: false, message: "Nenhum mascote ferido foi selecionado." };
+  if (!player) return { ok: false, message: "Jogador não encontrado." };
+  const mascotIds = (await prisma.mascot.findMany({ where: { playerId: player.id, arenaState: "INJURED" }, select: { id: true } })).map(({ id }) => id);
+  if (mascotIds.length === 0) return { ok: false, message: "Nenhum mascote ferido para recuperar." };
   const { healMascotsSus } = await import("@/lib/arena-z");
   try {
     await healMascotsSus(player.id, mascotIds);
