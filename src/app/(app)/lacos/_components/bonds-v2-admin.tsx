@@ -85,7 +85,10 @@ export async function BondsV2Admin({ playerId }: { playerId: string }) {
     prisma.mascotRelation.findMany({
       where: { mascotA: { playerId, player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, mascotB: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } }, isActive: true },
       orderBy: [{ isActive: "desc" }, { updatedAt: "desc" }],
-      take: 100,
+      // Teto alto: cada mascote tem no máx. 10 vínculos, então o total do jogador
+      // é limitado naturalmente. O antigo take:100 escondia vínculos de quem tinha
+      // muitos mascotes (o card, que carrega por mascote, mostrava e o menu não).
+      take: 1000,
       select: {
         id: true, mascotAId: true, relationshipScore: true, isActive: true, dormantAt: true, interactionCount: true, updatedAt: true, distanceStartedByPlayerId: true, promiseCharmResolvesAt: true, promiseShielded: true,
         mascotA: { select: { pokemonId: true, nickname: true, player: { select: { displayName: true } } } },

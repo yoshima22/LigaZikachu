@@ -177,7 +177,10 @@ async function fetchMascotPageData(playerId: string) {
 
   const featuredRelationsAll = featuredIds.length > 0 ? await retryMascotLoad(() =>
     prisma.mascotRelation.findMany({
-      where: { mascotAId: { in: featuredIds } },
+      // Mesmo critério do menu de /lacos (fonte da verdade): relações ativas,
+      // parceiro não-admin. Evita o card exibir vínculo que o menu não mostra.
+      where: { mascotAId: { in: featuredIds }, isActive: true, mascotB: { player: { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] } } } } },
+      orderBy: { updatedAt: "desc" },
       select: {
         mascotAId: true, type: true, interactionCount: true, relationshipScore: true, specialBondType: true,
         mascotB: {
