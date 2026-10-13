@@ -351,6 +351,8 @@ model Player {
   johtoRaidRankings           JohtoRaidRanking[]
   johtoRaidLeaderStats        JohtoRaidLeaderStat[]
   johtoRaidRewards            JohtoRaidReward[]
+  johtoInvitationRecipients   JohtoInvitationRecipient[]
+  johtoInvitationVotes        JohtoInvitationVote[]      @relation("JohtoInvitationVoteCandidate")
   discoveredRaidClues         RaidClue[]                     @relation("RaidClueDiscoverer")
   notifications               PlayerNotification[]
   mascotInteractionJobs       MascotInteractionJob[]
@@ -5128,4 +5130,64 @@ model JohtoRaidReward {
   @@unique([eventId, leaderKey, playerId, tier], map: "johto_raid_rewards_event_leader_player_tier_key")
   @@index([playerId])
   @@map("johto_raid_rewards")
+}
+
+model JohtoInvitationCampaign {
+  id             String   @id @default(cuid())
+  slug           String   @unique
+  launchAt       DateTime
+  publishedAt    DateTime?
+  pushStartedAt  DateTime?
+  pushSentAt     DateTime?
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  recipients JohtoInvitationRecipient[]
+  votes      JohtoInvitationVote[]
+
+  @@index([publishedAt, launchAt])
+  @@map("johto_invitation_campaigns")
+}
+
+model JohtoInvitationRecipient {
+  id              String    @id @default(cuid())
+  campaignId      String
+  playerId        String
+  availableAt     DateTime?
+  openedAt        DateTime?
+  votingSkippedAt DateTime?
+  voteSubmittedAt DateTime?
+  pushSentAt      DateTime?
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+  campaign        JohtoInvitationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  player          Player    @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  votes           JohtoInvitationVote[]
+
+  @@unique([campaignId, playerId])
+  @@index([campaignId, availableAt])
+  @@index([playerId])
+  @@index([campaignId, openedAt])
+  @@index([campaignId, votingSkippedAt])
+  @@index([campaignId, voteSubmittedAt])
+  @@index([campaignId, pushSentAt])
+  @@map("johto_invitation_recipients")
+}
+
+model JohtoInvitationVote {
+  id                   String   @id @default(cuid())
+  campaignId           String
+  recipientId          String
+  questionKey          String
+  candidatePlayerId    String
+  candidateDisplayName String
+  createdAt            DateTime @default(now())
+  campaign             JohtoInvitationCampaign @relation(fields: [campaignId], references: [id], onDelete: Cascade)
+  recipient            JohtoInvitationRecipient @relation(fields: [recipientId], references: [id], onDelete: Cascade)
+  candidatePlayer      Player   @relation("JohtoInvitationVoteCandidate", fields: [candidatePlayerId], references: [id], onDelete: Cascade)
+
+  @@unique([campaignId, recipientId, questionKey])
+  @@index([campaignId, questionKey, candidatePlayerId])
+  @@index([recipientId])
+  @@map("johto_invitation_votes")
 }
