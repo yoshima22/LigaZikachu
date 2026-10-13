@@ -275,7 +275,7 @@ export default async function AppLayout({
 
   return (
     <>
-      {johtoInvitation?.available && !johtoInvitation.openedAt && <JohtoInvitationGate initialState={johtoInvitation} />}
+      {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <Toaster
         position="top-right"
         theme="dark"
