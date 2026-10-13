@@ -33,7 +33,8 @@ import {
   XANDINHO,
 } from "./exclusive-mascots";
 import { resolveTowerTalents } from "./talents";
-import { isExpeditionV2 } from "./expedition-state";
+import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
+import { groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction } from "./room-resolver";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -44,6 +45,119 @@ export type TowerVolatile = {
   roomIndex?: number;
   exploration?: TowerExplorationState;
 };
+
+type V2RunInput = {
+  id: string;
+  seed: string;
+  currentFloor: number;
+  globalTurn: number;
+  members: Array<{
+    userId: string;
+    expeditionRole: string;
+    mascots: Array<{ mascotId: string; currentHp: number; currentStance: string }>;
+  }>;
+};
+
+/** One DB read for the party, then a separate deterministic battle per occupied room. */
+async function resolveV2RoomFronts(
+  tx: Prisma.TransactionClient,
+  run: V2RunInput,
+  state: TowerExpeditionV2,
+  submissions: NonNullable<TowerVolatile["submissions"]>,
+): Promise<{ state: TowerExpeditionV2; log: string[] }> {
+  const snapshots = run.members.flatMap((member) => member.mascots.map((mascot) => ({ ...mascot, member })));
+  const rows = await tx.mascot.findMany({ where: { id: { in: snapshots.map((mascot) => mascot.mascotId) } } });
+  const mascotById = new Map(rows.map((mascot) => [mascot.id, mascot]));
+  const talentRows = await tx.towerCommunityProgress.findMany({
+    where: { floorId: 1, metricKey: { startsWith: "TALENT:" } },
+  });
+  const talentValue = (key: string) => talentRows.find((entry) => entry.metricKey === `TALENT:${key}`)?.value ?? 0;
+  const talentFx = resolveTowerTalents(talentValue);
+  let next = state;
+  const log: string[] = [];
+  for (const roomId of groupActiveMembersByRoom(state).keys()) {
+    const actions: RoomFrontAction[] = Object.entries(submissions).map(([memberId, submission]) => {
+      const payload = (submission.actions ?? {}) as { action?: string; puzzleChoice?: string };
+      return { memberId, action: payload.action, puzzleChoice: payload.puzzleChoice };
+    });
+    const result = resolveRoomFront(next, roomId, actions, ({ room, memberIds }) => {
+      const local = snapshots.filter((snapshot) => memberIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
+      const allies = local.flatMap((snapshot, index) => {
+        const mascot = mascotById.get(snapshot.mascotId);
+        if (!mascot) return [];
+        const fighter = toLeagueMascot(mascot, index + 1, snapshot.currentStance);
+        fighter.hp = snapshot.currentHp;
+        const role = snapshot.member.expeditionRole;
+        if (role === "INVESTIGADOR") fighter.instinct = Math.round(fighter.instinct * 1.08);
+        if (role === "NAVEGADOR") fighter.agility = Math.round(fighter.agility * 1.03);
+        if (role === "PROTETOR") fighter.vitality = Math.round(fighter.vitality * 1.06);
+        if (role === "ARTIFICE") fighter.force = Math.round(fighter.force * 1.04);
+        if (role === "RITUALISTA") fighter.charisma = Math.round(fighter.charisma * 1.1);
+        if (role === "BATEDOR") fighter.agility = Math.round(fighter.agility * 1.07);
+        const talentMult = 1 + talentValue("COMBAT") * 0.02 + (room.kind === "BOSS" ? talentValue("BOSS") * 0.03 : 0);
+        const bossMult = room.kind === "BOSS" ? talentFx.bossMult : 1;
+        fighter.force = Math.round(fighter.force * talentMult * talentFx.forceMult * bossMult);
+        fighter.agility = Math.round(fighter.agility * talentMult * talentFx.agilityMult * bossMult);
+        fighter.instinct = Math.round(fighter.instinct * talentMult * talentFx.instinctMult * bossMult);
+        fighter.vitality = Math.round(fighter.vitality * talentMult * talentFx.vitalityMult * bossMult);
+        return [fighter];
+      });
+      if (!allies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
+      const averageLevel = Math.max(1, Math.round(allies.reduce((sum, mascot) => sum + mascot.level, 0) / allies.length));
+      const preview = (next.rooms[roomId].encounter?.enemies ?? towerEncounterPreview(room, averageLevel, allies.length))
+        .map((enemy) => ({ ...enemy }));
+      if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
+      const pressureMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.enemyMultiplier, 1) *
+        (1 + next.pressure * talentFx.enemyPressureScale);
+      const enemies: LeagueMascot[] = preview.map((enemy, index) => {
+        const base = Math.max(12, Math.round((averageLevel * 0.72 + 18 + room.index * 2) * pressureMult));
+        const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
+        return {
+          id: `tower:${run.id}:${room.id}:${index}`,
+          ownerId: "TORRE",
+          pokemonId: enemy.pokemonId,
+          types: exclusive
+            ? ([exclusive.primaryType, "secondaryType" in exclusive ? exclusive.secondaryType : null].filter(Boolean) as string[])
+            : getPokemonTypes(enemy.pokemonId),
+          name: enemy.name || exclusive?.name || getPokemonName(enemy.pokemonId),
+          level: Math.max(1, enemy.level),
+          force: base, agility: base, instinct: base, vitality: base, charisma: base,
+          hp: 55 + Math.max(1, enemy.level) * 6 + base * 4,
+          combatRole: normalizeCombatRole(index % 2 ? "DEFENDER" : "ATTACKER"),
+          slot: index + 1,
+        };
+      });
+      const battle = runLeagueCombat(allies, enemies);
+      const hp = finalHp(allies, battle.log);
+      const enemyHp = finalHp(enemies, battle.log);
+      const replay = {
+        winner: battle.winner,
+        log: battle.log,
+        lineupA: battle.lineupA,
+        lineupB: battle.lineupB,
+        teamASurvivors: battle.teamASurvivors,
+        teamBSurvivors: battle.teamBSurvivors,
+        title: room.title,
+      };
+      return {
+        won: battle.winner === "A",
+        hpByMascotId: Object.fromEntries(allies.map((ally) => [ally.id, hp.get(ally.id) ?? 0])),
+        events: [battle.winner === "A" ? `${room.title} foi vencida.` : `${room.title}: a frente caiu.`],
+        kos: enemies.filter((enemy) => (enemyHp.get(enemy.id) ?? 0) <= 0).map((enemy) => enemy.id),
+        replay,
+      };
+    });
+    next = result.state;
+    log.push(...result.events);
+    if (result.blockedBy.length) log.push(`Chefe bloqueado: aguardando ${result.blockedBy.join(", ")}.`);
+    for (const [mascotId, hp] of Object.entries(result.hpByMascotId))
+      await tx.towerRunMascot.updateMany({
+        where: { mascotId, member: { runId: run.id } },
+        data: { currentHp: hp, state: hp <= 0 ? "DEFEATED" : "IN_TOWER" },
+      });
+  }
+  return { state: next, log };
+}
 
 function finalHp(
   lineup: LeagueMascot[],
@@ -645,9 +759,27 @@ export async function resolveTowerTurnLocked(runId: string): Promise<void> {
       if (!run || run.status !== "ACTIVE") return;
 
       const vol = (run.volatileState ?? {}) as TowerVolatile;
-      // V2 is resolved by its own turn engine. Until that engine is wired in
-      // Task 4, never feed individual positions to the majority-route V1 engine.
-      if (isExpeditionV2(vol.exploration)) return;
+      if (isExpeditionV2(vol.exploration)) {
+        const submissions = vol.submissions ?? {};
+        if (!Object.keys(submissions).length && (!run.nextDeadline || run.nextDeadline > new Date())) return;
+        const resolved = await resolveV2RoomFronts(tx, run, vol.exploration, submissions);
+        const nextTurn = run.globalTurn + 1;
+        await tx.towerRun.update({
+          where: { id: runId },
+          data: {
+            globalTurn: nextTurn,
+            nextDeadline: new Date(Date.now() + windowMsFor(run.pace)),
+            volatileState: {
+              ...vol,
+              exploration: { ...resolved.state, globalTurn: nextTurn },
+              submissions: {},
+              lastResolvedTurn: run.globalTurn,
+              log: [...(vol.log ?? []), ...resolved.log, `Turno ${run.globalTurn} resolvido.`].slice(-50),
+            } as unknown as Prisma.InputJsonValue,
+          },
+        });
+        return;
+      }
       const submissions = vol.submissions ?? {};
       const active = run.members.filter(
         (m) =>

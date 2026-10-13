@@ -13,6 +13,12 @@ export type TowerExpeditionMember = {
 export type TowerExpeditionRoom = {
   cleared: boolean;
   visitedBy: string[];
+  encounter?: {
+    preparationTurns: number;
+    enemies: { pokemonId: number; name: string; level: number }[];
+  };
+  replay?: unknown;
+  lastOutcome?: string;
 };
 
 /** Persisted only for runs started after the V2 cutover. V1 JSON is never upgraded in place. */
