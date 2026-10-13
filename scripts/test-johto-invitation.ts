@@ -1,7 +1,9 @@
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { runInThisContext } from "node:vm";
 import { Prisma } from "@prisma/client";
+import ts from "typescript";
 import {
   JOHTO_INVITATION_COPY,
   JOHTO_INVITATION_LAUNCH_AT,
@@ -146,12 +148,25 @@ if (process.argv.includes("--service")) {
         .map((row) => ({ ...row, player: players.find((player) => player.id === row.playerId) })),
     },
     johtoInvitationCampaign: {
-      findUnique: async ({ where }: Row) => campaigns.find((row) => row.slug === where.slug) ?? null,
+      findUnique: async ({ where }: Row) => {
+        const row = campaigns.find((item) => item.slug === where.slug);
+        return row ? { ...row } : null;
+      },
+      findUniqueOrThrow: async ({ where }: Row) => {
+        const row = campaigns.find((item) => item.id === where.id);
+        assert.ok(row);
+        return { ...row };
+      },
       upsert: async ({ where, create, update }: Row) => {
         let row = campaigns.find((item) => item.slug === where.slug);
         if (row) Object.assign(row, update);
         else { row = { id: `campaign-${campaigns.length + 1}`, publishedAt: null, ...create }; campaigns.push(row as Row); }
         return row;
+      },
+      updateMany: async ({ where, data }: Row) => {
+        const rows = campaigns.filter((row) => row.slug === where.slug && row.publishedAt === where.publishedAt);
+        rows.forEach((row) => Object.assign(row, data));
+        return { count: rows.length };
       },
     },
     johtoInvitationRecipient: {
@@ -243,6 +258,93 @@ if (process.argv.includes("--service")) {
   assert.equal((await service.getJohtoInvitationAdminSummary()).results.most_creative[0].count, 2, "deleted candidates group by stored name");
   tournamentAvailable = false;
   assert.equal(await service.canPlayerAccessJohtoRaid("voter", after), true, "access depends on the opened invitation, not the later tournament lookup");
+  tournamentAvailable = true;
+  campaigns[0].publishedAt = null;
+  await Promise.all([
+    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-14T11:00:01.000Z") }),
+    service.prepareJohtoInvitationCampaign({ publish: true, now: new Date("2026-10-14T11:00:02.000Z") }),
+  ]);
+  assert.equal(campaigns[0].publishedAt.toISOString(), "2026-10-14T11:00:01.000Z", "concurrent publication must preserve the first timestamp");
   console.log("ok serviço de convite: lançamento, elegibilidade, abertura, acesso, voto único e resumo");
+}
+if (process.argv.includes("--actions")) {
+  type Row = Record<string, any>;
+  let session: Row | null = null;
+  const calls: { method: string; playerId?: string; answers?: Row; publish?: boolean }[] = [];
+  const revalidated: string[] = [];
+  const state = { available: true, openedAt: null, votingSkippedAt: null, voteSubmittedAt: null, candidates: [] };
+  const summary = { campaign: null, counts: { recipients: 0, delivered: 0, pushSent: 0, opened: 0, skipped: 0, voted: 0 }, results: {} };
+  const service = {
+    getJohtoInvitationForPlayer: async (playerId: string) => { calls.push({ method: "get", playerId }); return state; },
+    openJohtoInvitation: async (playerId: string) => { calls.push({ method: "open", playerId }); return { ...state, openedAt: "opened" }; },
+    skipJohtoInvitationVote: async (playerId: string) => { calls.push({ method: "skip", playerId }); return { ...state, votingSkippedAt: "skipped" }; },
+    submitJohtoInvitationVote: async (playerId: string, answers: Row) => { calls.push({ method: "vote", playerId, answers }); return { ...state, voteSubmittedAt: "voted" }; },
+    prepareJohtoInvitationCampaign: async ({ publish }: { publish: boolean }) => { calls.push({ method: "prepare", publish }); return {}; },
+    getJohtoInvitationAdminSummary: async () => { calls.push({ method: "summary" }); return summary; },
+  };
+  const mocks: Row = {
+    "@/lib/auth/permissions": { getSessionUser: async () => session, isAdmin: (role: string) => role === "ADMIN" || role === "SUPER_ADMIN" },
+    "@/lib/prisma": { prisma: { player: { findUnique: async ({ where }: Row) => where.userId === "user-1" ? { id: "player-1" } : where.userId === "admin-user" ? { id: "admin-player" } : null } } },
+    "@/lib/johto-invitation": service,
+    "@/lib/johto-raid": { getJohtoEvent: async () => null },
+    "next/cache": { revalidatePath: (path: string, type?: string) => revalidated.push(`${path}:${type ?? "page"}`) },
+  };
+  function loadAction(file: string): Row {
+    const source = readFileSync(join(process.cwd(), file), "utf8");
+    const code = ts.transpileModule(source, { compilerOptions: { module: ts.ModuleKind.CommonJS, target: ts.ScriptTarget.ES2022, esModuleInterop: true } }).outputText;
+    const loaded = { exports: {} as Row };
+    const localRequire = (name: string) => {
+      if (name in mocks) return mocks[name];
+      if (name === "@/lib/johto-invitation-copy") return { JOHTO_VOTE_QUESTIONS };
+      throw new Error(`Unexpected action dependency: ${name}`);
+    };
+    runInThisContext(`(function(require,module,exports){${code}\n})`, { filename: file })(localRequire, loaded, loaded.exports);
+    return loaded.exports;
+  }
+  const playerActions = loadAction("src/app/(app)/combates/raid-johto/invitation-actions.ts");
+  const raidActions = loadAction("src/app/(app)/combates/raid-johto/actions.ts");
+  const emptyForm = new FormData();
+  assert.equal(await playerActions.getJohtoInvitationAction(), null, "anonymous reader gets no state");
+  assert.equal((await playerActions.openJohtoInvitationAction()).ok, false, "anonymous opener cannot transition");
+  assert.equal((await raidActions.johtoAdminAction({ type: "getInvitationAdminSummary" })).ok, false, "anonymous summary is blocked");
+  assert.equal(calls.length, 0, "anonymous requests never reach invitation service");
+
+  session = { id: "user-1", role: "PLAYER" };
+  assert.equal(await playerActions.getJohtoInvitationAction(), state);
+  assert.equal((await raidActions.johtoAdminAction({ type: "getInvitationAdminSummary" })).ok, false, "player summary is blocked");
+  assert.equal((await raidActions.johtoAdminAction({ type: "prepareInvitation" })).ok, false, "player campaign preparation is blocked");
+  assert.equal((await raidActions.johtoAdminAction({ type: "publishInvitation" })).ok, false, "player publication is blocked");
+  assert.equal((await raidActions.johtoAdminAction({ type: "sendInvitationTestPush" })).ok, false, "player test push is blocked");
+  assert.deepEqual(calls.map(({ method, playerId }) => ({ method, playerId })), [{ method: "get", playerId: "player-1" }]);
+
+  emptyForm.set("playerId", "other-player");
+  await playerActions.openJohtoInvitationAction(emptyForm);
+  await playerActions.skipJohtoInvitationVoteAction(emptyForm);
+  const voteForm = new FormData();
+  voteForm.set("playerId", "other-player");
+  for (const { key } of JOHTO_VOTE_QUESTIONS) voteForm.set(key, `candidate-${key}`);
+  voteForm.set("unrecognized", "intruder");
+  assert.equal((await playerActions.submitJohtoInvitationVoteAction(voteForm)).ok, true);
+  const submittedAnswers = calls.at(-1)?.answers;
+  assert.deepEqual(calls.slice(1).map(({ method, playerId }) => ({ method, playerId })), [
+    { method: "open", playerId: "player-1" }, { method: "skip", playerId: "player-1" }, { method: "vote", playerId: "player-1" },
+  ], "all transitions use the authenticated player's ID");
+  assert.deepEqual(submittedAnswers, Object.fromEntries(JOHTO_VOTE_QUESTIONS.map(({ key }) => [key, `candidate-${key}`])), "vote action forwards exactly six named answers");
+  assert.ok(revalidated.includes("/combates/raid-johto:page"));
+  assert.ok(revalidated.includes("/:layout"), "state changes refresh the authenticated layout");
+
+  session = { id: "admin-user", role: "ADMIN" };
+  const beforePreview = calls.length;
+  const adminSummary = await raidActions.johtoAdminAction({ type: "getInvitationAdminSummary" });
+  assert.equal(adminSummary.invitationSummary, summary);
+  assert.deepEqual(calls.slice(beforePreview), [{ method: "summary" }], "admin summary/preview does not create recipients or publish");
+  await raidActions.johtoAdminAction({ type: "prepareInvitation" });
+  await raidActions.johtoAdminAction({ type: "publishInvitation" });
+  assert.deepEqual(calls.slice(beforePreview + 1), [{ method: "prepare", publish: false }, { method: "prepare", publish: true }]);
+  const beforePush = calls.length;
+  const push = await raidActions.johtoAdminAction({ type: "sendInvitationTestPush" });
+  assert.equal(push.ok, false, "test push is unavailable until its transport is wired");
+  assert.equal(calls.length, beforePush, "test push cannot publish or transition invitation state");
+  console.log("ok ações do convite: sessão, escopo individual, admin e prévia sem persistência");
 }
 })().catch((error) => { console.error(error); process.exitCode = 1; });

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
+import { getJohtoInvitationAdminSummary, prepareJohtoInvitationCampaign } from "@/lib/johto-invitation";
 import {
   claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
   previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest,
@@ -78,11 +79,27 @@ export async function johtoAdminAction(
     | { type: "skipCurrent" }
     | { type: "resetProgress" }
     | { type: "resetMyCooldown" }
-    | { type: "rewards"; leaderKey: string; deliver: boolean },
-): Promise<AdminResult & { preview?: Awaited<ReturnType<typeof previewLeaderRewards>> }> {
+    | { type: "rewards"; leaderKey: string; deliver: boolean }
+    | { type: "prepareInvitation" }
+    | { type: "publishInvitation" }
+    | { type: "sendInvitationTestPush" }
+    | { type: "getInvitationAdminSummary" },
+): Promise<AdminResult & { preview?: Awaited<ReturnType<typeof previewLeaderRewards>>; invitationSummary?: Awaited<ReturnType<typeof getJohtoInvitationAdminSummary>> }> {
   const user = await requireAdminUser();
   if (!user) return fail("Apenas administradores.");
   try {
+    if (command.type === "getInvitationAdminSummary") {
+      const invitationSummary = await getJohtoInvitationAdminSummary();
+      return { ok: true, message: "Resumo do convite carregado.", invitationSummary };
+    }
+    if (command.type === "prepareInvitation" || command.type === "publishInvitation") {
+      const publish = command.type === "publishInvitation";
+      await prepareJohtoInvitationCampaign({ publish });
+      return done(publish ? "Convite de Johto publicado." : "Convite de Johto preparado.");
+    }
+    if (command.type === "sendInvitationTestPush") {
+      return fail("O envio de teste estará disponível com a integração de push.");
+    }
     if (command.type === "create") {
       const event = await getJohtoEvent();
       if (event && !command.reset) return fail("O evento já existe. Use 'Recriar do zero' para apagá-lo.");

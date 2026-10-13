@@ -63,16 +63,24 @@ function isLive(campaign: { publishedAt: Date | null; launchAt: Date }, now: Dat
 export async function prepareJohtoInvitationCampaign(input: { publish?: boolean; now?: Date } = {}) {
   await findTournament();
   const now = input.now ?? new Date();
-  const existing = await prisma.johtoInvitationCampaign.findUnique({ where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG } });
-  const campaign = await prisma.johtoInvitationCampaign.upsert({
+  const prepared = await prisma.johtoInvitationCampaign.upsert({
     where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG },
     create: {
       slug: JOHTO_INVITATION_CAMPAIGN_SLUG,
       launchAt: JOHTO_INVITATION_LAUNCH_AT,
-      publishedAt: input.publish ? now : null,
+      publishedAt: null,
     },
-    update: input.publish && !existing?.publishedAt ? { publishedAt: now } : {},
+    update: {},
   });
+  if (input.publish) {
+    await prisma.johtoInvitationCampaign.updateMany({
+      where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG, publishedAt: null },
+      data: { publishedAt: now },
+    });
+  }
+  const campaign = input.publish
+    ? await prisma.johtoInvitationCampaign.findUniqueOrThrow({ where: { id: prepared.id } })
+    : prepared;
   if (isLive(campaign, now)) {
     const players = await prisma.player.findMany({
       where: { active: true, user: { status: "ACTIVE", role: { notIn: [...ADMIN_ROLES] } } },
