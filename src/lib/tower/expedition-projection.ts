@@ -1,7 +1,7 @@
 import type { TowerExpeditionV2 } from "./expedition-state";
 import { canUseRecoveryRoom } from "./recovery-rules";
 import { canStartBoss } from "./room-resolver";
-import { shortestKnownPath } from "./route-rules";
+import { shortestKnownPath, towerCanLeaveRoom, towerKnownExits } from "./route-rules";
 import { towerRouteKey, type TowerRoomKind } from "./rooms";
 
 export type TowerRunProjection = ReturnType<typeof projectExpeditionForMember>;
@@ -30,13 +30,13 @@ export function projectExpeditionForMember(
       role: room.id === current.id ? "CURRENT" as const : known ? "KNOWN" as const : "HIDDEN" as const,
     };
   });
-  const routes = current.connections.map((id) => {
+  const routes = towerKnownExits(state, current.id).map((id) => {
     const destination = state.graph.find((room) => room.id === id)!;
     const known = revealed.has(id) || Boolean(state.countermeasures?.includes("MAP"));
     const traversable = current.connections.includes(id) || state.openedEdges.includes(towerRouteKey(current.id, id));
     const blockedReason = mine.status !== "ACTIVE" ? "Você não pode se mover neste turno."
       : mine.availableFromTurn > state.globalTurn ? "Aguarde o próximo turno após a recuperação."
-      : !roomState?.cleared ? "Resolva a sala atual antes de sair."
+      : !towerCanLeaveRoom(state, current.id) ? "Resolva a sala atual antes de sair."
       : !traversable ? "Passagem ainda fechada." : null;
     return {
       id, title: known ? destination.title : "Rota desconhecida",

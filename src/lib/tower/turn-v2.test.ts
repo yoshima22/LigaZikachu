@@ -85,3 +85,19 @@ test("confirmed routes move each trainer independently during one global turn", 
   assert.equal(result.state.members.caio.roomId, "entrance");
   assert.equal(result.state.globalTurn, 2);
 });
+
+test("boss arrival cannot invalidate another trainer's confirmed return", () => {
+  const current = state();
+  const approach = current.graph.find((room) => room.connections.includes("boss"))!;
+  current.members.ana.roomId = approach.id;
+  current.members.bruno.roomId = "boss";
+  current.members.caio.status = "DOWNED";
+  current.rooms[approach.id].cleared = true;
+  current.openedEdges.push([approach.id, "boss"].sort().join("::"));
+  const result = advanceV2Turn(current, {
+    ana: { ...submission("ana", 1, approach.id), actions: { routeId: "boss" } },
+    bruno: { ...submission("bruno", 1, "boss"), actions: { routeId: approach.id } },
+  }, 1, false)!;
+  assert.equal(result.state.members.ana.roomId, "boss");
+  assert.equal(result.state.members.bruno.roomId, approach.id);
+});

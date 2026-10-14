@@ -2203,6 +2203,14 @@ export async function getTowerRunStateAction(
     }));
   }
 
+  const captiveRows = ["FINISHED", "FAILED", "ABANDONED"].includes(run.status)
+    ? await prisma.towerLostMascot.findMany({ where: { lostRunId: runId, recoveredAt: null }, select: { mascotId: true, ownerUserId: true, floor: true } })
+    : [];
+  const captiveNames = new Map((captiveRows.length ? await prisma.mascot.findMany({
+    where: { id: { in: captiveRows.map((row) => row.mascotId) } },
+    select: { id: true, pokemonId: true, nickname: true },
+  }) : []).map((mascot) => [mascot.id, { pokemonId: mascot.pokemonId, name: mascot.nickname ?? getPokemonName(mascot.pokemonId) }]));
+
   return {
     ok: true as const,
     unchanged: false as const,
@@ -2213,6 +2221,11 @@ export async function getTowerRunStateAction(
     lobbyTicketCounts: lobbyConfig
       ? run.members.map((member) => ({ userId: member.userId, count: lobbySupplyCounts?.get(member.userId)?.ticketCount ?? 0 }))
       : [],
+    captiveMascots: captiveRows.map((row) => ({
+      id: row.mascotId, owner: userNames.get(row.ownerUserId) ?? "Jogador", floor: row.floor,
+      pokemonId: captiveNames.get(row.mascotId)?.pokemonId ?? 0,
+      name: captiveNames.get(row.mascotId)?.name ?? "Mascote",
+    })),
     run: {
       id: run.id,
       status: run.status,
@@ -2349,7 +2362,7 @@ export async function getTowerRunStateAction(
                   : "Pode esconder um encontro, mecanismo, descanso, resgate ou descoberta.",
               };
             }),
-            routes: room.connections
+            routes: (expedition?.routes.map((entry) => entry.id) ?? room.connections)
               .map((id) => {
                 const projectedRoute = expedition?.routes.find((entry) => entry.id === id);
                 const node = exploration.graph.find(

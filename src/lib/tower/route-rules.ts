@@ -1,6 +1,25 @@
 import type { TowerExpeditionV2 } from "./expedition-state";
 import { towerRouteKey } from "./rooms";
 
+export function towerKnownExits(state: TowerExpeditionV2, roomId: string): string[] {
+  const room = state.graph.find((entry) => entry.id === roomId);
+  if (!room) return [];
+  const returnRoutes = state.openedEdges.flatMap((edge) => {
+    const [first, second] = edge.split("::");
+    return first === roomId ? [second] : second === roomId ? [first] : [];
+  });
+  return [...new Set([...room.connections, ...returnRoutes])];
+}
+
+export function towerCanLeaveRoom(state: TowerExpeditionV2, roomId: string): boolean {
+  if (state.rooms[roomId]?.cleared) return true;
+  const room = state.graph.find((entry) => entry.id === roomId);
+  // Returning from the boss chamber is always legal. Boss eligibility may
+  // change as other simultaneous submissions move, so it cannot gate a
+  // previously confirmed route choice.
+  return room?.kind === "BOSS";
+}
+
 export type TowerRouteErrorCode =
   | "INVALID_MEMBER"
   | "INACTIVE_MEMBER"
@@ -28,7 +47,7 @@ export function moveMember(
   const destination = state.graph.find((room) => room.id === destinationId);
   if (!current || !destination || !state.rooms[destinationId])
     throw new TowerRouteError("UNKNOWN_ROOM", "Sala desconhecida no mapa.");
-  if (!state.rooms[current.id]?.cleared)
+  if (!towerCanLeaveRoom(state, current.id))
     throw new TowerRouteError("ROOM_UNCLEARED", "Conclua o encontro desta sala antes de sair.");
   const edge = towerRouteKey(current.id, destinationId);
   if (!current.connections.includes(destinationId) && !state.openedEdges.includes(edge))

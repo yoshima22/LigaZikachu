@@ -64,3 +64,15 @@ test("known shortest path points a distant trainer to the boss", () => {
   assert.deepEqual(shortestKnownPath(current, rightId, "boss"), [rightId, "entrance", leftId, "boss"]);
   assert.equal(shortestKnownPath(current, rightId, "unknown"), null);
 });
+
+test("a trainer waiting at a blocked boss can retrace an opened corridor to help", () => {
+  const { state, leftId, rightId } = splitMap();
+  let current = moveMember(state, "ana", leftId);
+  current.rooms[leftId].cleared = true;
+  current = moveMember(current, "ana", "boss");
+  current = moveMember(current, "bruno", rightId);
+  current.rooms[rightId].encounter = { preparationTurns: 1, enemies: [] };
+  assert.equal(current.rooms.boss.cleared, false);
+  const returned = moveMember(current, "ana", leftId);
+  assert.equal(returned.members.ana.roomId, leftId);
+});

@@ -68,3 +68,15 @@ test("a distant trainer sees a known next corridor toward the waiting boss", () 
   assert.equal(view.rendezvous?.waitingAtBoss, "Bruno");
   assert.equal(view.rendezvous?.nextRoomId, path[1]);
 });
+
+test("a blocked boss offers the previously opened return route", () => {
+  const { state, entrance, next } = sample();
+  const boss = state.graph.find((room) => room.kind === "BOSS")!;
+  state.members.ana.roomId = boss.id;
+  state.openedEdges = [[boss.id, next.id].sort().join("::")];
+  state.rooms[next.id].encounter = { preparationTurns: 1, enemies: [] };
+  const view = projectExpeditionForMember(state, "ana");
+  assert.equal(view.bossGate?.allowed, false);
+  assert.equal(view.routes.find((route) => route.id === next.id)?.available, true);
+  assert.equal(view.routes.find((route) => route.id === entrance.id)?.available, undefined);
+});

@@ -35,6 +35,7 @@ import {
 import { resolveTowerTalents, towerLuckCoins, towerRescueCapacity } from "./talents";
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
+import { addCombatToRunReport, recordRecoveryInReport, recordRoomClearedInReport } from "./run-report";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
 import {
   applyPressureToExpedition,
@@ -106,7 +107,7 @@ async function resolveV2Recoveries(
           where: { mascotId, member: { runId: run.id, userId: payload.targetMemberId } },
           data: { currentHp, state: "IN_TOWER" },
         });
-      next = revived.state;
+      next = { ...revived.state, runReport: recordRecoveryInReport(revived.state.runReport) };
       log.push(`${actorId} reanimou ${payload.targetMemberId}: os dois mascotes voltaram com 50% do HP.`);
     } catch (error) {
       if (!(error instanceof TowerRecoveryError)) throw error;
@@ -173,6 +174,8 @@ async function resolveV2RoomFronts(
       const payload = (submission.actions ?? {}) as { action?: string; puzzleChoice?: string };
       return { memberId, action: payload.action, puzzleChoice: payload.puzzleChoice };
     });
+    let combatForReport: { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean } | null = null;
+    const wasCleared = Boolean(next.rooms[roomId]?.cleared);
     const result = resolveRoomFront(next, roomId, actions, ({ room, memberIds }) => {
       const local = snapshots.filter((snapshot) => memberIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
       const allies = local.flatMap((snapshot, index) => {
@@ -223,6 +226,7 @@ async function resolveV2RoomFronts(
         };
       });
       const battle = runLeagueCombat(allies, enemies);
+      combatForReport = { allies, enemies, log: battle.log, won: battle.winner === "A", boss: room.kind === "BOSS" };
       const hp = finalHp(allies, battle.log);
       const enemyHp = finalHp(enemies, battle.log);
       const replay = {
@@ -243,6 +247,12 @@ async function resolveV2RoomFronts(
       };
     });
     next = result.state;
+    if (combatForReport) {
+      const combat = combatForReport as { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean };
+      next = { ...next, runReport: addCombatToRunReport(next.runReport, combat.allies, combat.enemies, combat.log, combat.boss, combat.won) };
+    } else if (!wasCleared && result.state.rooms[roomId]?.cleared) {
+      next = { ...next, runReport: recordRoomClearedInReport(next.runReport) };
+    }
     fronts.push(result);
     log.push(...result.events);
     if (result.interaction === "REST") {
@@ -318,46 +328,6 @@ function finalHp(
     }
   }
   return hp;
-}
-
-function addCombatToRunReport(
-  report: TowerRunReport | undefined,
-  allies: LeagueMascot[],
-  enemies: LeagueMascot[],
-  log: Array<{ actorId: string; actorOwnerId: string | null; actorName: string; actorPokemonId?: number; actorLevel?: number; targetId: string; targetOwnerId: string | null; action: string; damage: number }>,
-  isBoss: boolean,
-  won: boolean,
-): TowerRunReport {
-  const next: TowerRunReport = report ?? { mascots: {}, monstersDefeated: 0, bossesDefeated: 0, alliesRecovered: 0, talentPoints: 0, roomsCleared: 0 };
-  const hp = new Map([...allies, ...enemies].map((mascot) => [mascot.id, mascot.hp]));
-  const defeated = new Set<string>();
-  for (const ally of allies) if (!next.mascots[ally.id]) next.mascots[ally.id] = {
-    mascotId: ally.id, ownerUserId: ally.ownerId, name: ally.name, pokemonId: ally.pokemonId,
-    level: ally.level, damageDealt: 0, damageReceived: 0, healing: 0, kos: 0,
-  };
-  for (const event of log) {
-    const actor = next.mascots[event.actorId];
-    const target = next.mascots[event.targetId];
-    if (event.action === "HEAL" && actor) actor.healing += Math.max(0, event.damage);
-    if (event.action !== "ATTACK") continue;
-    const damage = Math.max(0, event.damage);
-    if (actor) actor.damageDealt += damage;
-    if (target) {
-      const before = hp.get(event.targetId) ?? 0;
-      const applied = Math.min(before, damage);
-      target.damageReceived += applied;
-      hp.set(event.targetId, Math.max(0, before - damage));
-    }
-    if (actor && event.targetOwnerId === "TORRE" && !defeated.has(event.targetId) && (hp.get(event.targetId) ?? 0) <= 0) {
-      actor.kos += 1; defeated.add(event.targetId);
-    }
-  }
-  if (won) {
-    next.roomsCleared += 1;
-    next.monstersDefeated += defeated.size;
-    if (isBoss) { next.bossesDefeated += 1; next.talentPoints += 1; }
-  }
-  return next;
 }
 
 async function resolveRoom(
@@ -992,6 +962,11 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
               await tx.towerRunMascot.updateMany({
                 where: { memberId: member.id, mascotId: mascot.mascotId },
                 data: terminalMascotDisposition("AFK_ABANDONED", false, mascot.currentHp),
+              });
+            if (turn.abandonedMemberIds.includes(member.userId))
+              await tx.towerFeat.deleteMany({
+                where: { runId, userId: member.userId,
+                  featKey: { in: ["TOWER_RELIC_SHARD", "TOWER_TALENT_CONTRIBUTION"] } },
               });
           }
           await tx.towerRunMember.update({
