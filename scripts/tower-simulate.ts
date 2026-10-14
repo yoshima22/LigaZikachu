@@ -1,5 +1,6 @@
 /** Offline Tower balance matrix. Example: npx tsx scripts/tower-simulate.ts --seeds 20 --format csv */
 import { simulateTower, type BuildTier, type TowerSimulationReport } from "../src/lib/tower/simulation";
+import type { TowerBalance } from "../src/lib/tower/balance-rules";
 
 function argument(name: string, fallback: string) {
   const index = process.argv.indexOf(`--${name}`);
@@ -9,9 +10,16 @@ function argument(name: string, fallback: string) {
 const seedCount = Number(argument("seeds", "20"));
 const format = argument("format", "json");
 const afkRates = argument("afk-rates", "0").split(",").map(Number);
-if (!Number.isInteger(seedCount) || seedCount < 1 || seedCount > 100 || !["csv", "json"].includes(format) ||
+const seedPrefix = argument("seed-prefix", "matrix");
+const balance = argument("balance", "current");
+const firstBossCaptive = argument("first-boss-captive", "none") === "synthetic";
+const summaryOnly = process.argv.includes("--summary-only");
+const previousBalance: TowerBalance = { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1 };
+if (!Number.isInteger(seedCount) || seedCount < 1 || seedCount > 200 || !["csv", "json"].includes(format) ||
+    !seedPrefix || !["current", "before"].includes(balance) ||
+    !["none", "synthetic"].includes(argument("first-boss-captive", "none")) ||
     !afkRates.length || afkRates.some((rate) => !Number.isFinite(rate) || rate < 0 || rate > 1)) {
-  process.stderr.write("Uso: --seeds 1..100 --format json|csv --afk-rates 0,0.05,0.15\n");
+  process.stderr.write("Uso: --seeds 1..200 --seed-prefix validate --balance current|before --first-boss-captive none|synthetic --format json|csv [--summary-only] --afk-rates 0,0.05,0.15\n");
   process.exitCode = 1;
 } else {
   const reports: TowerSimulationReport[] = [];
@@ -21,7 +29,8 @@ if (!Number.isInteger(seedCount) || seedCount < 1 || seedCount > 100 || !["csv",
         for (const routePolicy of ["UNITED", "SPLIT"] as const)
           for (const pace of ["ONLINE", "SLOW"] as const)
             for (const afkRate of afkRates)
-              reports.push(simulateTower(`matrix-${seed}`, partySize, buildTier, pace, routePolicy, afkRate));
+              reports.push(simulateTower(`${seedPrefix}-${seed}`, partySize, buildTier, pace, routePolicy, afkRate,
+                balance === "before" ? previousBalance : undefined, firstBossCaptive));
 
   if (format === "csv") {
     const columns = Object.keys(reports[0]) as (keyof TowerSimulationReport)[];
@@ -37,6 +46,8 @@ if (!Number.isInteger(seedCount) || seedCount < 1 || seedCount > 100 || !["csv",
         (["UNITED", "SPLIT"] as const).map((routePolicy) => {
           const samples = reports.filter((report) => report.partySize === partySize && report.buildTier === buildTier && report.routePolicy === routePolicy && report.pace === "ONLINE" && report.afkRate === afkRate);
           return { afkRate, partySize, buildTier, routePolicy, samples: samples.length,
+            boss1: samples.filter((report) => report.bossesDefeated >= 1).length,
+            boss2: samples.filter((report) => report.bossesDefeated >= 2).length,
             wins: samples.filter((report) => report.outcome === "WIN").length,
             turnLimits: samples.filter((report) => report.outcome === "TURN_LIMIT").length,
             meanFloor: Number((samples.reduce((sum, report) => sum + report.floorReached, 0) / samples.length).toFixed(2)),
@@ -48,6 +59,7 @@ if (!Number.isInteger(seedCount) || seedCount < 1 || seedCount > 100 || !["csv",
                 samples.flatMap((report) => report.preBossPressure).length).toFixed(2)) : null,
           };
         }))));
-    process.stdout.write(JSON.stringify({ model: "offline-v2-seeded", seedCount, groups, reports }, null, 2) + "\n");
+    process.stdout.write(JSON.stringify({ model: "offline-v2-seeded", seedCount, seedPrefix, balance,
+      firstBossCaptive, groups, ...(summaryOnly ? {} : { reports }) }, null, 2) + "\n");
   }
 }

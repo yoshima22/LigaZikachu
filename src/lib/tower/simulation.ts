@@ -2,6 +2,7 @@
  * combat engine still consumes Math.random, which we scope to each synchronous fight. */
 import { getPokemonTypes } from "@/lib/mascot-data";
 import { runLeagueCombat, type LeagueMascot } from "@/lib/league-combat";
+import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat, type TowerBalance } from "./balance-rules";
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
 import { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
@@ -20,6 +21,10 @@ export type TowerSimulationReport = {
   routePolicy: "UNITED" | "SPLIT"; outcome: "WIN" | "LOSS" | "TURN_LIMIT";
   floorReached: number; bossesDefeated: number; turns: number; pressurePeak: number;
   preBossPressure: number[]; afkRate: number; missedWindows: number; afkAbandoned: number;
+  bossDefenderCounts: number[];
+  bossCaptiveCounts: number[];
+  bossArrivalTurns: number[]; bossFightTurns: number[];
+  bossWaitTurns: number[];
   hpRemaining: number; hpMaximum: number; downedCount: number; recoveries: number;
   recoveryTimings: { memberId: string; downedTurn: number; recoveredTurn: number }[];
   securedRewards: number; lostRewards: number; duplicateRewardIds: number; relicShards: number;
@@ -72,6 +77,10 @@ function remainingHp(lineup: LeagueMascot[], log: { action: string; targetId: st
   return hp;
 }
 
+export function simulatedAllyStat(base: number, classMult: number, talentMult: number): number {
+  return Math.round(Math.round(base * classMult) * talentMult);
+}
+
 function nextRoom(room: TowerRoomNode, memberIndex: number, floor: number, policy: "UNITED" | "SPLIT") {
   if (!room.connections.length) return null;
   return room.connections[policy === "UNITED" ? 0 : (memberIndex + floor) % room.connections.length];
@@ -80,6 +89,8 @@ function nextRoom(room: TowerRoomNode, memberIndex: number, floor: number, polic
 export function simulateTower(
   seed: string, partySize: 1 | 2 | 3, buildTier: BuildTier,
   pace: "ONLINE" | "SLOW", routePolicy: "UNITED" | "SPLIT", afkRate = 0,
+  balance?: Readonly<TowerBalance>,
+  firstBossCaptive = false,
 ): TowerSimulationReport {
   if (!seed || ![1, 2, 3].includes(partySize) || !Number.isFinite(afkRate) || afkRate < 0 || afkRate > 1)
     throw new Error("Parâmetros da simulação inválidos.");
@@ -103,6 +114,11 @@ export function simulateTower(
   const downedAt = new Map<string, number>();
   const recoveryTimings: TowerSimulationReport["recoveryTimings"] = [];
   const preBossPressure: number[] = [];
+  const bossDefenderCounts: number[] = [];
+  const bossCaptiveCounts: number[] = [];
+  const bossArrivalTurns: number[] = [];
+  const bossFightTurns: number[] = [];
+  const bossWaitTurns: number[] = [];
   let missedWindows = 0, afkAbandoned = 0;
   const relicShardsByPlayer = Object.fromEntries(memberIds.map((id) => [id, 0]));
   let regroupTarget: string | null = null;
@@ -149,39 +165,58 @@ export function simulateTower(
     if (regroupTarget && state.rooms[regroupTarget]?.cleared) regroupTarget = null;
     if (!regroupTarget && Object.values(state.members).some((member) => member.status === "ACTIVE" && state.graph.find((room) => room.id === member.roomId)?.kind === "BOSS"))
       regroupTarget = Object.entries(state.rooms).find(([roomId, saved]) => roomId !== "boss" && !saved.cleared && saved.encounter)?.[0] ?? null;
+    const movedThisTurn = new Set<string>();
     for (const [index, memberId] of memberIds.entries()) {
       const member = state.members[memberId];
       if (member.status !== "ACTIVE" || member.availableFromTurn > turns || memberId === recoveryActorUsed || missingThisTurn.has(memberId) || !towerCanLeaveRoom(state, member.roomId)) continue;
       const room = state.graph.find((entry) => entry.id === member.roomId)!;
       const returnPath = regroupTarget && room.id !== regroupTarget ? shortestKnownPath(state, room.id, regroupTarget) : null;
       const destination = returnPath?.[1] ?? nextRoom(room, index, floor, routePolicy);
-      if (destination) state = moveMember(state, memberId, destination);
+      if (destination) {
+        state = moveMember(state, memberId, destination);
+        movedThisTurn.add(memberId);
+      }
     }
     const activeFrontCount = groupActiveMembersByRoom(state).size;
     const fronts = [];
     let waits = 0;
     for (const [roomId, memberGroup] of groupActiveMembersByRoom(state)) {
       const room = state.graph.find((entry) => entry.id === roomId)!;
-      if (room.kind === "BOSS" && memberIds.some((id) => state.members[id].status === "ACTIVE" && state.members[id].roomId !== roomId)) waits++;
+      if (room.kind === "BOSS" && bossArrivalTurns[floor - 1] === undefined)
+        bossArrivalTurns[floor - 1] = turns;
+      const bossMissingAlly = room.kind === "BOSS" && memberIds.some((id) => state.members[id].status === "ACTIVE" && state.members[id].roomId !== roomId);
       if (state.rooms[roomId].cleared) continue;
       if ((room.kind === "COMBAT" || room.kind === "BOSS") && !state.rooms[roomId].encounter) {
         const local = mascots.filter((mascot) => memberGroup.includes(mascot.ownerId) && mascot.hp > 0);
         const averageLevel = Math.round(local.reduce((sum, mascot) => sum + mascot.level, 0) / Math.max(1, local.length));
-        const preview = towerEncounterPreview(room, averageLevel, local.length);
+        const allyCount = room.kind === "BOSS"
+          ? mascots.filter((mascot) => state.members[mascot.ownerId]?.status === "ACTIVE" && mascot.hp > 0).length
+          : local.length;
+        let preview = towerEncounterPreview(room, averageLevel, allyCount);
+        if (room.kind === "BOSS") {
+          preview.length = towerBossDefenderCount(allyCount, floor, balance);
+          if (floor === 1 && firstBossCaptive) preview = towerAddCaptive(preview,
+            { pokemonId: 448, name: "Cativo sintético", level: averageLevel }, "BOSS", floor, allyCount, balance);
+          bossDefenderCounts.push(preview.length);
+          bossCaptiveCounts.push(floor === 1 && firstBossCaptive ? 1 : 0);
+        }
         if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = BOSS_POKEMON_IDS[floor - 1];
         state = freezeRoomEncounter(state, roomId, preview, room.kind === "BOSS" ? 2 : 1);
       }
-      const actions = memberGroup.filter((memberId) => !missingThisTurn.has(memberId)).map((memberId) => ({ memberId, action: room.kind === "COMBAT" || room.kind === "BOSS" ? "FIGHT" : "INTERACT", puzzleChoice: room.puzzle?.answer }));
+      const actions = memberGroup.filter((memberId) => !missingThisTurn.has(memberId) && !movedThisTurn.has(memberId))
+        .map((memberId) => ({ memberId, action: bossMissingAlly ? "WAIT" : room.kind === "COMBAT" || room.kind === "BOSS" ? "FIGHT" : "INTERACT", puzzleChoice: room.puzzle?.answer }));
+      if (actions.some((entry) => entry.action === "WAIT")) { waits++; bossWaitTurns.push(turns); }
       if (room.kind === "BOSS" && actions.length && memberIds.every((id) => state.members[id].status !== "ACTIVE" || state.members[id].roomId === roomId))
         preBossPressure.push(state.pressure);
       const result = resolveRoomFront(state, roomId, actions, ({ room: combatRoom, memberIds: presentIds }) => {
+        if (combatRoom.kind === "BOSS" && bossFightTurns[floor - 1] === undefined) bossFightTurns[floor - 1] = turns;
         const locals = mascots.filter((mascot) => presentIds.includes(mascot.ownerId) && mascot.hp > 0);
         const allies: LeagueMascot[] = locals.map((mascot, index) => {
           const role = ROLES[memberIds.indexOf(mascot.ownerId)];
           const classFx = resolveTowerClassEffects(role, { kind: "COMBAT" });
           const bossMult = combatRoom.kind === "BOSS" ? talentFx.bossMult : 1;
           const combatMult = 1 + talentValue("COMBAT") * 0.02 + (combatRoom.kind === "BOSS" ? talentValue("BOSS") * 0.03 : 0);
-          const value = (mult: number, talent: number) => Math.round(mascot.stat * mult * talent * combatMult * bossMult);
+          const value = (mult: number, talent: number) => simulatedAllyStat(mascot.stat, mult, talent * combatMult * bossMult);
           return { id: mascot.id, ownerId: mascot.ownerId, pokemonId: mascot.pokemonId,
             types: getPokemonTypes(mascot.pokemonId), name: mascot.id, level: mascot.level,
             force: value(classFx.forceMult, talentFx.forceMult), agility: value(classFx.agilityMult, talentFx.agilityMult),
@@ -195,7 +230,7 @@ export function simulateTower(
           (1 + state.pressure * talentFx.enemyPressureScale) *
           (1 - (state.overload && state.overload.expiresAfterTurn >= turns ? state.overload.value : 0));
         const enemies: LeagueMascot[] = (state.rooms[roomId].encounter?.enemies ?? []).map((enemy, index) => {
-          const base = Math.max(12, Math.round((averageLevel * 0.72 + 18 + combatRoom.index * 2) * pressureMult));
+          const base = towerEnemyBaseStat(averageLevel, combatRoom.index, pressureMult, floor, balance);
           const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
           return { id: `enemy-${roomId}-${index}`, ownerId: "TORRE", pokemonId: enemy.pokemonId,
             types: exclusive ? [exclusive.primaryType, "secondaryType" in exclusive ? exclusive.secondaryType : null].filter(Boolean) as string[] : getPokemonTypes(enemy.pokemonId),
@@ -254,7 +289,8 @@ export function simulateTower(
   const grants = planRewardSettlement(state, `offline:${seed}`);
   const dropsByPlayer = Object.fromEntries(memberIds.map((id) => [id, grants.filter((grant) => grant.userId === id).length]));
   return { seed, partySize, buildTier, pace, routePolicy, outcome, floorReached: floor, bossesDefeated, turns,
-    pressurePeak, preBossPressure, afkRate, missedWindows, afkAbandoned,
+    pressurePeak, preBossPressure, bossDefenderCounts, bossCaptiveCounts, bossArrivalTurns, bossFightTurns, bossWaitTurns,
+    afkRate, missedWindows, afkAbandoned,
     hpRemaining: mascots.reduce((sum, mascot) => sum + mascot.hp, 0),
     hpMaximum: mascots.reduce((sum, mascot) => sum + mascot.maxHp, 0), downedCount, recoveries, recoveryTimings,
     securedRewards: state.rewardLedger.filter((entry) => entry.status === "SECURED").length,

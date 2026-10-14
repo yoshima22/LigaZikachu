@@ -2,7 +2,14 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { newExpeditionState } from "./expedition-state";
 import { generateTowerRoomGraph } from "./rooms";
-import { canUseRecoveryRoom, releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError } from "./recovery-rules";
+import { canUseRecoveryRoom, mergeRecoveredHp, releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError } from "./recovery-rules";
+
+test("recovered HP replaces stale run snapshots before boss sizing and combat", () => {
+  const before = [{ mascotId: "fallen", currentHp: 0 }, { mascotId: "ready", currentHp: 40 }];
+  const after = mergeRecoveredHp(before, { fallen: 51 });
+  assert.deepEqual(after, [{ mascotId: "fallen", currentHp: 51 }, { mascotId: "ready", currentHp: 40 }]);
+  assert.equal(before[0].currentHp, 0);
+});
 
 function fallenParty() {
   const source = generateTowerRoomGraph("recovery");

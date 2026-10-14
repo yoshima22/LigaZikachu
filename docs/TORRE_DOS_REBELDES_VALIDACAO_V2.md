@@ -5,19 +5,20 @@ Estado em 14/10/2026: **teste fechado; não abrir ao público ainda**. Este docu
 ## Reproduzir as verificações
 
 ```powershell
-npx tsx --test src/lib/tower/*.test.ts
+npx tsx --test src/lib/tower/*.test.ts scripts/tower-balance-check.test.ts
 npm run typecheck
 npm run build
-npx tsx scripts/tower-simulate.ts --seeds 20 --format json
-npx tsx scripts/tower-simulate.ts --seeds 20 --format csv
-npx tsx scripts/tower-simulate.ts --seeds 20 --format json --afk-rates 0.05,0.15
+npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance before --summary-only --format json
+npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance current --summary-only --format json
+npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance current --first-boss-captive synthetic --summary-only --format json
+npx tsx scripts/tower-simulate.ts --seeds 20 --seed-prefix afk-validation --balance current --afk-rates 0.05,0.15 --summary-only --format json
 ```
 
 O simulador não escreve no banco nem entrega recompensas. JSON traz amostras e resumo por tamanho da party, build e política de rota; CSV traz uma linha por tentativa. A semente fixa permite comparar mudanças sem ruído aleatório. Online e Lento têm o mesmo combate, mas Online concede dois fragmentos de relíquia por chefe elegível, enquanto Lento concede um. Suas janelas reais são 5 minutos e 4 horas por ação; o simulador mede turnos, não horas de calendário.
 
 ## O que o modelo mede — e o que não mede
 
-`simulateTower(seed, partySize, buildTier, pace, routePolicy, afkRate = 0)` percorre o grafo V2 com movimento individual, encontros por sala, combate convencional, Pressão, Sobrecarga, recuperação por andar, transição de andares e espólio pendente/garantido/perdido. Registra pressão antes de cada tentativa de chefe, recuperações com seus turnos, faltas/abandonos e concessões planejadas por jogador. A chamada síncrona fixa temporariamente a fonte de aleatoriedade do combate e a restaura depois; este código é somente para CLI/testes, nunca para uma requisição do site.
+`simulateTower(seed, partySize, buildTier, pace, routePolicy, afkRate = 0, balance?, firstBossCaptive = false)` percorre o grafo V2 com movimento individual, encontros por sala, combate convencional, Pressão, Sobrecarga, recuperação por andar, transição de andares e espólio pendente/garantido/perdido. O parâmetro opcional de balanceamento permite comparar variantes **somente offline**; sem ele, o simulador usa os mesmos valores da resolução V2 persistida. O modelo agora separa o turno de entrada do turno de ação, dimensiona o primeiro chefe com todos os mascotes vivos dos membros ativos e cobra espera no chefe apenas quando simula a decisão `WAIT`. Registra pressão antes de cada tentativa de chefe, recuperações com seus turnos, faltas/abandonos e concessões planejadas por jogador. A chamada síncrona fixa temporariamente a fonte de aleatoriedade do combate e a restaura depois; este código é somente para CLI/testes, nunca para uma requisição do site.
 
 Perfis sintéticos atuais (dois mascotes por treinador):
 
@@ -27,27 +28,33 @@ Perfis sintéticos atuais (dois mascotes por treinador):
 | INTERMEDIATE | 70 | 225 | 2 ranks em COMBAT, PRESSURE, VIGOR, BULWARK, COMPOSURE e PATHFINDER |
 | PREPARED | 70 | 240 | COMBAT/PRESSURE/VIGOR/BULWARK/COMPOSURE/PATHFINDER 4; BOSS/FORCE/VITALITY 3 |
 
-Os participantes usam Artífice, Ritualista e Protetor nessa ordem. A política `UNITED` percorre a primeira rota em cada sala; `SPLIT` escolhe ramos diferentes e retorna a encontros pendentes antes do chefe. Ambas acertam enigmas, interagem com descobertas e acionam a sala de recuperação quando alcançada, consumindo uma decisão e reanimando somente em turno posterior à queda. Uma taxa AFK opcional sorteia ausências com fonte aleatória independente e reproduz aviso/defesa na primeira falta e abandono na segunda consecutiva. **Isso não equivale à distribuição real de mascotes, inventários, itens, escolhas humanas ou comportamento AFK.** Não é uma estimativa de taxa de vitória de jogadores reais. Os testes isolados cobrem cativos e liquidação idempotente, mas o simulador ainda não modela a captura/libertação em combate nem a persistência real.
+Os participantes usam Artífice, Ritualista e Protetor nessa ordem. A política `UNITED` percorre a primeira rota em cada sala; `SPLIT` escolhe ramos diferentes e retorna a encontros pendentes antes do chefe. Ambas acertam enigmas, interagem com descobertas e acionam a sala de recuperação quando alcançada, consumindo uma decisão posterior à chegada e reanimando somente em turno posterior à queda. Uma taxa AFK opcional sorteia ausências com fonte aleatória independente e reproduz aviso/defesa na primeira falta e abandono na segunda consecutiva. **Isso não equivale à distribuição real de mascotes, inventários, itens, escolhas humanas ou comportamento AFK.** Não é uma estimativa de taxa de vitória de jogadores reais. O parâmetro de cativo adiciona apenas um adversário sintético ao primeiro chefe, com espécie e nível fixados pelo modelo; não simula cativos em salas comuns nem a captura/libertação ou persistência real.
 
-## Amostra inicial de 20 sementes (720 tentativas incluindo os dois ritmos)
+## Ajuste controlado de dificuldade — 14/10/2026
 
-Vitórias abaixo usam somente Online; Lento reproduz o mesmo caminho de combate da mesma semente e difere nos fragmentos. Cada célula representa 20 tentativas.
+A primeira matriz de 20 sementes do checkpoint `52500b8c` foi **desconsiderada para balanceamento**: o simulador deixava agir no mesmo turno da entrada e, na rota separada, dimensionava o chefe apenas com os mascotes já presentes. Isso não reproduzia o motor V2. A matriz abaixo foi refeita após as correções de paridade.
 
-| Party | Build | Juntos | Separados | Leitura |
-|---:|---|---:|---:|---|
-| 1 | ZERO | 0 | 0 | Queda no 1º andar em todas as amostras |
-| 1 | INTERMEDIATE | 0 | 0 | Queda no 1º andar em todas as amostras |
-| 1 | PREPARED | 0 | 0 | Média de andar 2,40 / 2,50 |
-| 2 | ZERO | 0 | 0 | Queda no 1º andar em todas as amostras |
-| 2 | INTERMEDIATE | 0 | 0 | Média de andar 1,00 / 1,65 |
-| 2 | PREPARED | 0 | 0 | Média de andar 3,25 / 4,45 |
-| 3 | ZERO | 0 | 0 | Queda no 1º andar em todas as amostras |
-| 3 | INTERMEDIATE | 0 | 0 | Média de andar 1,00 / 2,40 |
-| 3 | PREPARED | 19 | 20 | A recuperação em turno posterior revelou uma derrota adicional na rota unida |
+Regra V2 escolhida para o teste fechado: defensores do 1º andar com **95%** do atributo calculado; primeiro chefe com **duas escoltas a menos**, mínimo de dois defensores no total. Se houver um cativo no primeiro chefe, ele **substitui** uma escolta gerada em vez de exceder o limite; em combate comum continua sendo um inimigo adicional. Andares 2–7, Pressão, cura, Sobrecarga, duração e prêmios ficaram sem alterações. O reforço proposto para os andares finais foi testado e **rejeitado** porque a rota separada já apresentava baixa conclusão com a sequência de turnos correta. V1 não foi alterada.
 
-Nenhuma das 720 tentativas atingiu o teto de segurança de 1.200 turnos após o conserto do retorno do chefe; o espólio não apresentou IDs duplicados. A curva sintética está **excessivamente polarizada**: os perfis sem Legado são punidos cedo e o trio preparado vence quase sempre. Isso não autoriza mudar atributos reais às cegas. O próximo balanceamento precisa usar distribuição de mascotes reais, builds representativas, estratégias de rota e partidas humanas. A separação parecer melhor em algumas amostras reflete também as salas escolhidas, não prova que seu risco/recompensa esteja correto.
+Comparação pareada de **100 sementes** (`validate-0` a `validate-99`) por célula, sem AFK nem cativo, ritmo Online. Cada entrada é *vitórias no 1º chefe / conclusões dos sete andares*, antes → agora. Os comandos `--balance before` e `--balance current` acima reproduzem a tabela.
 
-Com as mesmas 20 sementes e trio preparado, taxa sintética de falta de 5% deu 16/20 vitórias na rota unida e 12/20 na dividida; 15% deu 1/20 e 0/20. Esses números mostram sensibilidade à ausência, **não** predizem AFK real. `dropsByPlayer` conta as concessões que a liquidação planejaria, não prova entrega no banco. `relicShardsByPlayer` conta fragmentos no momento de cada vitória, somente para membros elegíveis naquele chefe. No motor persistido, a transição para abandono agora remove os registros pessoais de fragmentos e contribuição de talentos obtidos anteriormente na mesma run. **Ainda falta demonstrar essa revogação em teste de banco** antes de abrir o modo.
+| Party | Build | Unidos antes → agora | Separados antes → agora |
+|---:|---|---:|---:|
+| 1 | ZERO | 0/0 → 0/0 | 0/0 → 0/0 |
+| 1 | INTERMEDIATE | 3/0 → 10/0 | 4/0 → 5/0 |
+| 1 | PREPARED | 75/0 → 83/0 | 59/0 → 72/0 |
+| 2 | ZERO | 0/0 → 11/0 | 0/0 → 0/0 |
+| 2 | INTERMEDIATE | 0/0 → 15/0 | 2/0 → 31/0 |
+| 2 | PREPARED | 97/0 → 100/0 | 74/0 → 93/0 |
+| 3 | ZERO | 0/0 → 20/0 | 0/0 → 12/0 |
+| 3 | INTERMEDIATE | 0/0 → 99/0 | 2/0 → 60/0 |
+| 3 | PREPARED | 100/98 → 100/100 | 100/11 → 100/9 |
+
+Com um **cativo sintético somente no primeiro chefe**, o trio ZERO venceu esse chefe em 43/100 unidos e 12/100 separados; INTERMEDIATE em 99/100 e 61/100; PREPARED continuou em 100/100 nas duas rotas. Os 100 casos de cativo usam uma única espécie (`448`) e nível igual à média dos aliados, não a distribuição real dos cativos. A troca de espécie e ordem de alvos pode inclusive favorecer alguns confrontos; o cativo não é automaticamente um aumento de dificuldade. Combates comuns com cativos continuam fora do modelo.
+
+Em 20 sementes adicionais de AFK (`afk-validation-0` a `afk-validation-19`), o trio PREPARED concluiu 15/20 unidos e 2/20 separados com 5% de ausência sintética por janela; com 15%, não concluiu nenhuma run. Não houve teto de 1.200 turnos nesse lote. Online e Lento mantêm o mesmo combate por semente, com fragmentos diferentes. `dropsByPlayer` representa concessões planejadas, não entrega confirmada no banco; a revogação de fragmentos pessoais após AFK tardio ainda exige teste persistido.
+
+**Leitura de game design:** a primeira vitória sem Legado deixou de ser virtualmente bloqueada para trios, mas o segundo chefe continua 0/100 para ZERO e INTERMEDIATE nesta amostra, e o trio PREPARED unido conclui 100/100 enquanto o separado conclui 9/100. Portanto, a curva completa **não está balanceada**. Rota, salas encontradas e tempo de reunião confundem essa comparação. Antes de ajustar os andares 2–7, são necessários dados de mascotes/builds reais, testes humanos das duas rotas e runs autenticadas com cativos. Nenhum percentual acima deve ser tratado como taxa prevista para jogadores reais.
 
 O teste de navegação revelou um deadlock: chegar à câmara do chefe com encontro pendente em outra frente bloqueava o chefe e também impedia sair da sala. A revisão encontrou outro: a chegada de um aliado ao chefe invalidava o retorno que outro já havia confirmado. Agora o retorno por corredor aberto é sempre permitido na câmara, mesmo quando o chefe poderia começar; a rota aparece no mapa e tem testes de regressão. O motor V2 também passou a preencher dano, cura, K.O., salas resolvidas sem combate e reanimações no relatório, e o encerramento lista os mascotes ainda cativos daquela tentativa.
 

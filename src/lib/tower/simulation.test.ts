@@ -1,11 +1,34 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { simulateTower } from "./simulation";
+import { simulateTower, simulatedAllyStat } from "./simulation";
+
+test("synthetic ally attributes round class and talent phases like live V2", () => {
+  assert.equal(simulatedAllyStat(225, 1.1, 1.18), 293);
+});
 
 test("same seed and expedition configuration reproduce the entire report", () => {
   const first = simulateTower("repro-42", 2, "INTERMEDIATE", "ONLINE", "SPLIT");
   const second = simulateTower("repro-42", 2, "INTERMEDIATE", "ONLINE", "SPLIT");
   assert.deepEqual(first, second);
+});
+
+test("split first boss freezes an encounter sized for all living active trainers", () => {
+  const report = simulateTower("validate-1", 3, "PREPARED", "ONLINE", "SPLIT");
+  assert.equal(report.bossDefenderCounts[0], 4);
+  const withCaptive = simulateTower("validate-1", 3, "PREPARED", "ONLINE", "SPLIT", 0, undefined, true);
+  assert.equal(withCaptive.bossDefenderCounts[0], 4);
+  assert.equal(withCaptive.bossCaptiveCounts[0], 1);
+});
+
+test("a trainer cannot enter and fight the boss in one confirmed window", () => {
+  const report = simulateTower("validate-1", 3, "PREPARED", "ONLINE", "UNITED");
+  assert.ok(report.bossFightTurns[0] > report.bossArrivalTurns[0]);
+});
+
+test("boss pressure for waiting is charged only after a trainer submits WAIT", () => {
+  const report = simulateTower("validate-1", 3, "PREPARED", "ONLINE", "SPLIT");
+  assert.ok(report.bossWaitTurns.length > 0);
+  assert.ok(report.bossWaitTurns.every((turn) => turn > report.bossArrivalTurns[0]));
 });
 
 test("solo, duo and trio across build tiers expose complete bounded metrics without duplicate loot", () => {
@@ -43,6 +66,23 @@ test("an offline prepared trio can complete all seven floors in both paces", () 
   }
 });
 
+test("the tuned V2 first floor opens a boss path for an unprepared trio", () => {
+  const previous = { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1 };
+  const zeroBefore = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED", 0, previous);
+  const zeroNow = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED");
+  assert.equal(zeroBefore.bossesDefeated, 0);
+  assert.equal(zeroNow.bossesDefeated, 1);
+});
+
+test("a small fixed cohort keeps first-boss progress possible on both routes", () => {
+  for (const route of ["UNITED", "SPLIT"] as const) {
+    const firstBossVictories = Array.from({ length: 20 }, (_, index) =>
+      simulateTower(`validate-${index}`, 3, "ZERO", "ONLINE", route))
+      .filter((report) => report.bossesDefeated >= 1).length;
+    assert.ok(firstBossVictories > 0, `${route} had no attainable first-boss victory`);
+  }
+});
+
 test("a recovery action never revives someone in the combat turn that downed them", () => {
   const report = simulateTower("matrix-0", 3, "PREPARED", "ONLINE", "SPLIT");
   assert.ok(report.recoveryTimings.length > 0);
@@ -62,7 +102,7 @@ test("deterministic AFK windows remove rewards from players who abandon", () => 
 });
 
 test("relic shards count only members eligible at each boss victory", () => {
-  const report = simulateTower("matrix-0", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
+  const report = simulateTower("afk-validation-0", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
   assert.ok(report.bossesDefeated > 0 && report.afkAbandoned > 0);
   assert.equal(report.relicShards, Object.values(report.relicShardsByPlayer).reduce((sum, count) => sum + count, 0));
   assert.ok(report.relicShards < report.bossesDefeated * report.partySize * 2);

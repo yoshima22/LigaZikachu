@@ -3,6 +3,13 @@ import type { TowerMascotVitals } from "./pressure-rules";
 
 export const TOWER_REVIVE_ITEM_ID = "tower-revival-kit";
 
+export function mergeRecoveredHp<T extends { mascotId: string; currentHp: number }>(
+  snapshots: readonly T[], hpByMascotId: Readonly<Record<string, number>>,
+): T[] {
+  return snapshots.map((snapshot) => hpByMascotId[snapshot.mascotId] === undefined ? snapshot :
+    { ...snapshot, currentHp: hpByMascotId[snapshot.mascotId] });
+}
+
 export function terminalMascotDisposition(
   memberStatus: TowerMemberState,
   wonRun: boolean,

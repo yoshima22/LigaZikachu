@@ -4,6 +4,7 @@
 
 import { EggType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat } from "./balance-rules";
 import {
   resolveEncounterTurn,
   type TowerBattleState,
@@ -44,7 +45,7 @@ import {
   transitionFloor,
   updateOverload,
 } from "./pressure-rules";
-import { releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
+import { mergeRecoveredHp, releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
 import { resolveTowerClassEffects } from "./config";
 import type { TowerNarrativeEvent } from "./narrative";
 import { discardPendingFloorDrops, planRewardSettlement, recordFloorDrop, secureFloorDrops, settleRunRewards, type TowerRewardEntry } from "./reward-ledger";
@@ -77,9 +78,10 @@ async function resolveV2Recoveries(
   run: V2RunInput,
   state: TowerExpeditionV2,
   submissions: NonNullable<TowerVolatile["submissions"]>,
-): Promise<{ state: TowerExpeditionV2; log: string[] }> {
+): Promise<{ state: TowerExpeditionV2; log: string[]; recoveredHpByMascotId: Record<string, number> }> {
   let next = state;
   const log: string[] = [];
+  const recoveredHpByMascotId: Record<string, number> = {};
   const vitals = await tx.towerRunMascot.findMany({
     where: { member: { runId: run.id } },
     select: { mascotId: true, ownerUserId: true, currentHp: true, maxHp: true },
@@ -107,6 +109,7 @@ async function resolveV2Recoveries(
           where: { mascotId, member: { runId: run.id, userId: payload.targetMemberId } },
           data: { currentHp, state: "IN_TOWER" },
         });
+      Object.assign(recoveredHpByMascotId, revived.hpByMascotId);
       next = { ...revived.state, runReport: recordRecoveryInReport(revived.state.runReport) };
       log.push(`${actorId} reanimou ${payload.targetMemberId}: os dois mascotes voltaram com 50% do HP.`);
     } catch (error) {
@@ -114,7 +117,7 @@ async function resolveV2Recoveries(
       log.push(`${actorId} não conseguiu reanimar ${payload.targetMemberId}: ${error.message}`);
     }
   }
-  return { state: next, log };
+  return { state: next, log, recoveredHpByMascotId };
 }
 
 /** One DB read for the party, then a separate deterministic battle per occupied room. */
@@ -146,7 +149,8 @@ async function resolveV2RoomFronts(
       const allyCount = currentRoom.kind === "BOSS"
         ? snapshots.filter((snapshot) => next.members[snapshot.member.userId]?.status === "ACTIVE" && snapshot.currentHp > 0).length
         : present.length;
-      const preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
+      let preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
+      if (currentRoom.kind === "BOSS") preview.length = towerBossDefenderCount(allyCount, run.currentFloor);
       if (currentRoom.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
       const reservedCaptives = new Set(Object.values(next.rooms).flatMap((savedRoom) =>
         savedRoom.encounter?.enemies.flatMap((enemy) => enemy.captiveMascotId ? [enemy.captiveMascotId] : []) ?? []));
@@ -160,12 +164,12 @@ async function resolveV2RoomFronts(
           where: { id: candidate.mascotId },
           select: { pokemonId: true, nickname: true, level: true },
         });
-        if (captive) preview.push({
+        if (captive) preview = towerAddCaptive(preview, {
           pokemonId: captive.pokemonId,
           name: `${captive.nickname ?? getPokemonName(captive.pokemonId)} · cativo da Torre`,
           level: captive.level,
           captiveMascotId: candidate.mascotId,
-        } as typeof preview[number]);
+        } as typeof preview[number], currentRoom.kind, run.currentFloor, allyCount);
       }
       next = freezeRoomEncounter(next, roomId, preview, currentRoom.kind === "BOSS" ? 2 : 1);
     }
@@ -208,7 +212,7 @@ async function resolveV2RoomFronts(
         (1 + next.pressure * talentFx.enemyPressureScale) *
         (1 - (next.overload && next.overload.expiresAfterTurn >= next.globalTurn ? next.overload.value : 0));
       const enemies: LeagueMascot[] = preview.map((enemy, index) => {
-        const base = Math.max(12, Math.round((averageLevel * 0.72 + 18 + room.index * 2) * pressureMult));
+        const base = towerEnemyBaseStat(averageLevel, room.index, pressureMult, run.currentFloor);
         const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
         return {
           id: `tower:${run.id}:${room.id}:${index}`,
@@ -952,7 +956,10 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         if (!turn) return;
         const activeState = { ...turn.state, globalTurn: run.globalTurn };
         const recovery = await resolveV2Recoveries(tx, run, activeState, submissions);
-        const resolved = await resolveV2RoomFronts(tx, run, recovery.state, submissions, turn.defensiveMemberIds);
+        const runAfterRecovery = { ...run, members: run.members.map((member) => ({
+          ...member, mascots: mergeRecoveredHp(member.mascots, recovery.recoveredHpByMascotId),
+        })) };
+        const resolved = await resolveV2RoomFronts(tx, runAfterRecovery, recovery.state, submissions, turn.defensiveMemberIds);
         const members = { ...resolved.state.members };
         for (const member of run.members) {
           const nextMember = members[member.userId];
