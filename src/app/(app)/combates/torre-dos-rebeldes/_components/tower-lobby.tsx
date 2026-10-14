@@ -16,6 +16,7 @@ import {
   claimTowerBossChoiceAction,
 } from "../actions";
 import { TowerRunPanel } from "./tower-run-panel";
+import { TowerEventDisclosure } from "./tower-event-disclosure";
 import {
   TowerKnowledge,
   TowerNarrative,
@@ -259,7 +260,9 @@ export function TowerLobby() {
             <div className="mt-4 space-y-2">
               {[
                 "Crie ou entre em uma sala e escolha classe, mascotes e posturas.",
-                "Todos marcam Pronto; o dono inicia e os tickets são consumidos.",
+                data.eventDisclosure.ticket.required
+                  ? "Todos marcam Pronto; o dono inicia e cada jogador gasta 1 ticket."
+                  : "Todos marcam Pronto; o dono inicia sem consumir tickets nesta configuração.",
                 "Cada jogador escolhe ações e caminhos no mapa conectado.",
                 "Encontros e mecanismos são resolvidos pela frente presente naquela sala.",
                 "Derrote o chefe para abrir o próximo andar e fortalecer o Legado.",
@@ -302,6 +305,7 @@ export function TowerLobby() {
           </article>
         </section>
       )}
+      {view === "OVERVIEW" && <TowerEventDisclosure disclosure={data.eventDisclosure} />}
       {view === "OVERVIEW" && <section className={card}>
         <p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-300">Recompensas dos regentes</p>
         <h2 className="mt-1 text-lg font-black text-white">Prêmios imediatos, mascote somente no topo</h2>
@@ -940,8 +944,7 @@ export function TowerLobby() {
             Salas aguardando jogadores
           </h2>
           <p className="mt-1 text-[11px] text-slate-500">
-            Escolha seus dois mascotes e entre em uma sala. O ticket só será
-            consumido quando o host iniciar.
+            Escolha seus dois mascotes e entre em uma sala. {data.eventDisclosure.ticket.explanation}
           </p>
           <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${picks.length === 2 && role ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}><b>{picks.length === 2 && role ? "✓ Configuração pronta" : "Prepare-se para entrar"}</b><span className="ml-2">Classe {role ? "selecionada" : "pendente"} · {picks.length}/2 mascotes</span></div>
           <div className="mt-4 space-y-5">
@@ -1301,16 +1304,7 @@ export function TowerLobby() {
             )}
           </section>
 
-          <div
-            className={`rounded-xl border p-3 text-xs ${!data.config.requireTicket || data.towerTicketQuantity > 0 ? "border-emerald-400/25 bg-emerald-400/10 text-emerald-200" : "border-red-400/30 bg-red-400/10 text-red-200"}`}
-          >
-            <b>Ticket da Torre: {data.towerTicketQuantity}</b>
-            <p className="mt-1 opacity-70">
-              {data.config.requireTicket
-                ? "O ticket não é gasto ao criar ou entrar na sala. Cada jogador gasta 1 somente quando o dono inicia a partida."
-                : "A exigência de ticket está desligada pelo administrador."}
-            </p>
-          </div>
+          <TowerEventDisclosure disclosure={data.eventDisclosure} compact />
           <button
             type="button"
             onClick={create}

@@ -22,6 +22,8 @@ import { TowerRoomView } from "./tower-room-view";
 import { LeagueBattleReplayModal, type TurnLog, type ReplayLineupFighter } from "../../liga-semanal/_components/league-battle-replay";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
+import { buildTowerEntryStatus } from "@/lib/tower/event-disclosure";
+import { TowerEventDisclosure } from "./tower-event-disclosure";
 
 type State = Extract<Awaited<ReturnType<typeof getTowerRunStateAction>>, { ok: true; unchanged: false }>;
 type Intent = "ADVANCE" | "DEFEND";
@@ -171,6 +173,8 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
         const amHost = state.lobby.hostId === state.mine.userId;
         const iReady = Boolean(state.lobby.ready[state.mine.userId]);
         const allReady = state.members.every((member) => state.lobby.ready[member.userId]);
+        const entryStatus = buildTowerEntryStatus(Boolean(state.eventDisclosure?.ticket.required), state.lobbyTicketCounts);
+        const missingTicketNames = state.members.filter((member) => entryStatus.missingUserIds.includes(member.userId)).map((member) => member.name);
         const roleLabel = (key: string) => state.roles.find((role) => role.key === key)?.label ?? key;
         return (
           <div className="mt-4 space-y-4">
@@ -181,6 +185,8 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
               </div>
               <span className="rounded-full border border-purple-300/30 px-3 py-1 text-[10px] font-black text-purple-200">{run.pace === "ONLINE" ? "ONLINE · 5 MIN" : "LENTO · 4 H"}</span>
             </div>
+            {state.eventDisclosure && <TowerEventDisclosure disclosure={state.eventDisclosure} compact />}
+            {missingTicketNames.length > 0 && <p role="status" className="rounded-xl border border-red-400/30 bg-red-950/15 p-3 text-xs font-semibold text-red-200">Ainda faltam tickets para iniciar: {missingTicketNames.join(", ")}. Ninguém será cobrado até a expedição começar.</p>}
 
             <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.15fr)]">
               {/* Equipe na sala */}
@@ -194,6 +200,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
                         <div className="min-w-0">
                           <b className="text-sm text-white">{member.name}{member.userId === state.mine.userId && <span className="ml-1 text-[9px] text-cyan-300">(você)</span>}{state.lobby.hostId === member.userId && <span className="ml-1 text-[8px] font-black uppercase text-[#FFCB05]">dono</span>}</b>
                           <p className="text-[10px] font-bold text-cyan-300">{roleLabel(member.expeditionRole)}</p>
+                          <p className={`text-[10px] ${entryStatus.required && entryStatus.missingUserIds.includes(member.userId) ? "text-red-300" : "text-slate-400"}`}>{entryStatus.required ? `Ticket: ${state.lobbyTicketCounts.find((entry) => entry.userId === member.userId)?.count ?? 0} · ${entryStatus.missingUserIds.includes(member.userId) ? "faltando" : "disponível"}` : "Ticket não exigido nesta sala"}</p>
                         </div>
                         <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${mReady ? "bg-emerald-400 text-emerald-950" : "bg-slate-800 text-slate-400"}`}>{mReady ? "✓ PRONTO" : "PREPARANDO"}</span>
                       </div>
@@ -273,7 +280,7 @@ export function TowerRunPanel({ runId, onLeft }: { runId: string; onLeft: () => 
                 <div className="grid gap-2">
                   <button type="button" disabled={pending} onClick={() => start(async () => { const next = !iReady; const res = await setTowerReadyAction(runId, next); if ("error" in res) toast.error(res.error); else void refresh(); })} className={`rounded-xl border py-2.5 text-sm font-black disabled:opacity-40 ${iReady ? "border-amber-400/40 bg-amber-400/10 text-amber-200" : "border-emerald-400/40 bg-emerald-400/10 text-emerald-200"}`}>{iReady ? "Cancelar pronto" : "✓ Estou pronto"}</button>
                   {amHost && (
-                    <button type="button" disabled={pending || !allReady} onClick={() => start(async () => { const res = await startTowerExpeditionAction(runId); if ("error" in res) { toast.error(res.error); return; } toast.success("Expedição iniciada!"); void refresh(); })} className="rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">{allReady ? "🗼 Iniciar — todos confirmaram" : "Aguardando todos ficarem prontos…"}</button>
+                    <button type="button" disabled={pending || !allReady || !entryStatus.canStart} onClick={() => start(async () => { const res = await startTowerExpeditionAction(runId); if ("error" in res) { toast.error(res.error); return; } toast.success("Expedição iniciada!"); void refresh(); })} className="rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-40">{!entryStatus.canStart ? "Aguardando tickets da equipe…" : allReady ? "🗼 Iniciar — todos confirmaram" : "Aguardando todos ficarem prontos…"}</button>
                   )}
                 </div>
               </div>

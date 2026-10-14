@@ -66,6 +66,7 @@ import { projectExpeditionForMember } from "@/lib/tower/expedition-projection";
 import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
 import { reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
+import { buildTowerEventDisclosure } from "@/lib/tower/event-disclosure";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -81,6 +82,17 @@ import {
 const PATH = "/combates/torre-dos-rebeldes";
 const TOWER_TICKET_ID = "tower-entry-ticket";
 const TOWER_TESTER_ACCESS_KEY = "tower_rebels_tester_user_ids";
+
+async function towerSupplyCounts(userIds: string[]) {
+  const rows = await prisma.playerInventory.findMany({
+    where: { player: { userId: { in: userIds } }, itemId: { in: [TOWER_TICKET_ID, TOWER_REVIVE_ITEM_ID] } },
+    select: { itemId: true, quantity: true, player: { select: { userId: true } } },
+  });
+  return new Map(userIds.map((userId) => [userId, {
+    ticketCount: rows.find((row) => row.player.userId === userId && row.itemId === TOWER_TICKET_ID)?.quantity ?? 0,
+    reviveKitCount: rows.find((row) => row.player.userId === userId && row.itemId === TOWER_REVIVE_ITEM_ID)?.quantity ?? 0,
+  }]));
+}
 
 async function towerTesterIds() {
   const row = await prisma.appSetting.findUnique({ where: { key: TOWER_TESTER_ACCESS_KEY }, select: { value: true } });
@@ -533,20 +545,7 @@ export async function getTowerLobbyDataAction() {
     ).map((row) => [row.id, row.name ?? "Jogador"]),
   );
   const active = await findActiveRunForUser(user.id);
-  const sessionPlayerForTicket = await getSessionPlayer(user.id);
-  const towerTicketQuantity = sessionPlayerForTicket
-    ? ((
-        await prisma.playerInventory.findUnique({
-          where: {
-            playerId_itemId: {
-              playerId: sessionPlayerForTicket.id,
-              itemId: TOWER_TICKET_ID,
-            },
-          },
-          select: { quantity: true },
-        })
-      )?.quantity ?? 0)
-    : 0;
+  const supplyCounts = (await towerSupplyCounts([user.id])).get(user.id) ?? { ticketCount: 0, reviveKitCount: 0 };
   const pendingMascotRewards = await prisma.towerFeat.findMany({
     where: {
       userId: user.id,
@@ -711,7 +710,8 @@ export async function getTowerLobbyDataAction() {
     exclusiveMascotCodes: TOWER_EXCLUSIVE_MASCOTS.map(
       ({ code, pokemonId, name }) => ({ code, pokemonId, name }),
     ),
-    towerTicketQuantity,
+    towerTicketQuantity: supplyCounts.ticketCount,
+    eventDisclosure: buildTowerEventDisclosure(config, supplyCounts),
     knowledge: unlockedTowerScenes(scenes, failures)
       .filter((scene) => narrativeUnlockedIds.has(scene.id) && scene.knowledgeTitle?.trim())
       .map((scene) => ({
@@ -1910,12 +1910,21 @@ export async function getTowerRunStateAction(
     if (!revisionProbe) return { error: "Expedição não encontrada." };
   }
 
+  const lobbyConfig = revisionProbe.status === "LOBBY" ? await getTowerConfig() : null;
+  const lobbySupplyCounts = lobbyConfig
+    ? await towerSupplyCounts(revisionProbe.members.map((member) => member.userId))
+    : null;
   const narrativeRevision = revisionProbe.status !== "LOBBY"
     ? await prisma.towerFeat.count({ where: { userId: user.id, runId, featKey: "TOWER_SCENE_UNLOCK" } })
     : 0;
   const revision = [
     revisionProbe.updatedAt.toISOString(),
     narrativeRevision,
+    lobbyConfig ? Number(lobbyConfig.requireTicket) : "",
+    ...revisionProbe.members.flatMap((member) => [
+      lobbySupplyCounts?.get(member.userId)?.ticketCount ?? 0,
+      member.userId === user.id ? lobbySupplyCounts?.get(member.userId)?.reviveKitCount ?? 0 : "",
+    ]),
     ...revisionProbe.members.flatMap((member) => [
       member.userId,
       member.expeditionRole,
@@ -2198,6 +2207,12 @@ export async function getTowerRunStateAction(
     ok: true as const,
     unchanged: false as const,
     revision,
+    eventDisclosure: lobbyConfig
+      ? buildTowerEventDisclosure(lobbyConfig, lobbySupplyCounts?.get(user.id) ?? { ticketCount: 0, reviveKitCount: 0 })
+      : null,
+    lobbyTicketCounts: lobbyConfig
+      ? run.members.map((member) => ({ userId: member.userId, count: lobbySupplyCounts?.get(member.userId)?.ticketCount ?? 0 }))
+      : [],
     run: {
       id: run.id,
       status: run.status,
