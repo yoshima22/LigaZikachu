@@ -156,10 +156,10 @@ function utcToLocalBR(date: Date): string {
 export function AdminLootPanel({ loots }: { loots: Loot[] }) {
   const [pending, startTransition] = useTransition();
   const [showCreate, setShowCreate] = useState(false);
-  const [form, setForm] = useState({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200 });
+  const [form, setForm] = useState({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200, maxPerPlayer: 0 });
   const [prizes, setPrizes] = useState<PrizeItem[]>([]);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [editForm, setEditForm] = useState({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200 });
+  const [editForm, setEditForm] = useState({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200, maxPerPlayer: 0 });
   const [editPrizes, setEditPrizes] = useState<PrizeItem[]>([]);
 
   const prizeSummary = (prizes: PrizeItem[]) => prizes.map((p) => {
@@ -178,7 +178,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
   const handleCreate = () => {
     startTransition(async () => {
       try {
-        const prizeConfig: PrizeConfig = { prizes, maxPicks: form.maxPicks };
+        const prizeConfig: PrizeConfig = { prizes, maxPicks: form.maxPicks, ...(form.maxPerPlayer > 0 ? { maxPicksPerPlayer: form.maxPerPlayer } : {}) };
         const result = await createZikaLoot({
           name: form.name,
           description: form.description || undefined,
@@ -188,7 +188,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
         });
         if (result.error) { toast.error(result.error); return; }
         toast.success("Loteria criada!"); setShowCreate(false);
-        setForm({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200 }); setPrizes([]);
+        setForm({ name: "", description: "", prize: "", drawAt: "", maxPicks: 200, maxPerPlayer: 0 }); setPrizes([]);
       } catch { toast.error("Erro ao criar."); }
     });
   };
@@ -197,7 +197,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
     setEditingId(l.id);
     const local = utcToLocalBR(new Date(l.drawAt));
     const cfg = l.prizeConfig as PrizeConfig | null | undefined;
-    setEditForm({ name: l.name, description: l.description ?? "", prize: l.prize, drawAt: local, maxPicks: cfg?.maxPicks ?? 200 });
+    setEditForm({ name: l.name, description: l.description ?? "", prize: l.prize, drawAt: local, maxPicks: cfg?.maxPicks ?? 200, maxPerPlayer: cfg?.maxPicksPerPlayer ?? 0 });
     setEditPrizes(cfg?.prizes ?? []);
   };
 
@@ -205,7 +205,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
     if (!editingId) return;
     startTransition(async () => {
       try {
-        const prizeConfig: PrizeConfig = { prizes: editPrizes, maxPicks: editForm.maxPicks };
+        const prizeConfig: PrizeConfig = { prizes: editPrizes, maxPicks: editForm.maxPicks, ...(editForm.maxPerPlayer > 0 ? { maxPicksPerPlayer: editForm.maxPerPlayer } : {}) };
         const result = await updateZikaLoot(editingId, {
           name: editForm.name,
           description: editForm.description || undefined,
@@ -298,6 +298,11 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
             <input type="number" min={10} max={1000} value={form.maxPicks} onChange={(e) => setForm({ ...form, maxPicks: Number(e.target.value) })}
               className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
           </label>
+          <label className="space-y-1 text-xs text-slate-400">
+            <span>Máx. de números por jogador (0 = sem limite)</span>
+            <input type="number" min={0} max={1000} value={form.maxPerPlayer} onChange={(e) => setForm({ ...form, maxPerPlayer: Math.max(0, Number(e.target.value) || 0) })}
+              className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+          </label>
           <PrizeList prizes={prizes} onChange={setPrizes} />
           <div className="flex gap-2 sm:col-span-2">
             <Button type="button" disabled={!form.name || !form.drawAt || pending} onClick={handleCreate}
@@ -315,7 +320,7 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
             <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
               <div>
                 <p className="font-medium text-slate-200">{l.name}</p>
-                <p className="text-xs text-slate-500">{l.picksCount}/{maxPicks} números · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}</p>
+                <p className="text-xs text-slate-500">{l.picksCount}/{maxPicks} números{cfg?.maxPicksPerPlayer ? ` · máx. ${cfg.maxPicksPerPlayer}/jogador` : ""} · Sorteio: {new Date(l.drawAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "short", timeStyle: "short" })}</p>
               </div>
               <div className="flex gap-2">
                 <button type="button" disabled={pending} onClick={() => openEdit(l)}
@@ -379,7 +384,12 @@ export function AdminLootPanel({ loots }: { loots: Loot[] }) {
                     onChange={(e) => setEditForm({ ...editForm, maxPicks: Number(e.target.value) })}
                     className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
                 </label>
-                <PrizeList prizes={editPrizes} onChange={setEditPrizes} />
+                <label className="space-y-1 text-xs text-slate-400">
+                  <span>Máx. de números por jogador (0 = sem limite)</span>
+                  <input type="number" min={0} max={1000} value={editForm.maxPerPlayer} onChange={(e) => setEditForm({ ...editForm, maxPerPlayer: Math.max(0, Number(e.target.value) || 0) })}
+                    className="w-full rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+                </label>
+                      <PrizeList prizes={editPrizes} onChange={setEditPrizes} />
                 <div className="flex gap-2 sm:col-span-2">
                   <Button type="button" disabled={!editForm.name || !editForm.drawAt || pending} onClick={handleUpdate}
                     className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">Salvar</Button>

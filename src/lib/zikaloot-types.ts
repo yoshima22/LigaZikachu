@@ -11,7 +11,8 @@ export type PrizeItem =
   | { type: "STICKER_PACK"; packName: string };
 
 // prizeConfig stored as { prizes: PrizeItem[], maxPicks?: number }
-export type PrizeConfig = { prizes: PrizeItem[]; maxPicks?: number };
+/** maxPicksPerPlayer: teto de números por jogador nesta loteria (vale mesmo com tickets sobrando); ausente/0 = sem limite. */
+export type PrizeConfig = { prizes: PrizeItem[]; maxPicks?: number; maxPicksPerPlayer?: number };
 
 // backwards compat for old single-prize format
 export type LegacyPrizeConfig = PrizeItem;

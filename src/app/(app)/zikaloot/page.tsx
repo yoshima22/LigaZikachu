@@ -260,7 +260,7 @@ export default async function ZikaLootPage() {
             <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
             <h1 className="font-pixel text-base text-[#FFCB05]">ZikaLoot</h1>
             <p className="mt-1 text-sm text-slate-400">
-              {activeLoot ? ((activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200) : 200} números. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
+              {activeLoot ? ((activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200) : 200} números{(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number } | null)?.maxPicksPerPlayer ? `, com limite de ${(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number }).maxPicksPerPlayer} por jogador` : ""}. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
             </p>
           </div>
           <div className="flex items-center gap-3">

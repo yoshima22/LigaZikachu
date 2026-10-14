@@ -54,6 +54,7 @@ export async function pickLootNumber(
     if (!actor) return { error: "Não autenticado." };
     const lootForValidation = await prisma.zikaLoot.findUnique({ where: { id: lootId }, select: { prizeConfig: true } });
     const maxPicksForValidation = (lootForValidation?.prizeConfig as PrizeConfig | null)?.maxPicks ?? 200;
+    const maxPerPlayer = (lootForValidation?.prizeConfig as PrizeConfig | null)?.maxPicksPerPlayer ?? 0;
     if (number < 1 || number > maxPicksForValidation) return { error: `Número deve ser entre 1 e ${maxPicksForValidation}.` };
 
     const player = await getSessionPlayer(actor.id);
@@ -85,6 +86,9 @@ export async function pickLootNumber(
     if (existingPicks.some(p => p.number === number)) {
       return { error: `Você já escolheu o número ${number} nesta loteria.` };
     }
+    if (maxPerPlayer > 0 && existingPicks.length >= maxPerPlayer) {
+      return { error: `Limite desta loteria: no máximo ${maxPerPlayer} número${maxPerPlayer > 1 ? "s" : ""} por jogador.` };
+    }
 
     // Verificar se número já foi pego
     const taken = await prisma.zikaLootPick.findUnique({
@@ -93,6 +97,10 @@ export async function pickLootNumber(
     if (taken) return { error: "Este número já foi escolhido por outro jogador." };
 
     await prisma.$transaction(async (tx) => {
+      if (maxPerPlayer > 0) {
+        await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`zikaloot-pick:${lootId}:${player.id}`}))`);
+        if (await tx.zikaLootPick.count({ where: { lootId, playerId: player.id } }) >= maxPerPlayer) throw new Error(`Limite desta loteria: no máximo ${maxPerPlayer} número${maxPerPlayer > 1 ? "s" : ""} por jogador.`);
+      }
       // Decrementar ticket
       if (ticket.quantity > 1) {
         await tx.playerInventory.update({ where: { id: ticket.id }, data: { quantity: { decrement: 1 } } });
