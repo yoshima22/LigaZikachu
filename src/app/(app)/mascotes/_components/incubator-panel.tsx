@@ -16,6 +16,7 @@ import {
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import { getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { CELESTIAL_EGG_IMAGE, EVENT_EGG_IMAGE, LAB_EGG_IMAGE, eggImageUrl } from "@/lib/egg-origin";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 interface IncubatorData {
   id: string;
@@ -58,12 +59,7 @@ const EGG_COLORS: Record<string, string> = {
 const EGG_LABEL: Record<string, string> = {
   COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "🧪 Ovo de Laboratório", EVENT: "Ovo de Evento"
 };
-const TYPE_LABEL: Record<string, string> = {
-  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico", grass: "Planta",
-  ice: "Gelo", fighting: "Lutador", poison: "Veneno", ground: "Terra", flying: "Voador",
-  psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão",
-  dark: "Sombrio", steel: "Aço", fairy: "Fada",
-};
+const TYPE_LABEL: Record<string, string> = TYPE_LABELS_PT;
 
 function formatDropChance(value: number) {
   if (value >= 10) return `${value.toFixed(1)}%`;

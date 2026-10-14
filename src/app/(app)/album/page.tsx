@@ -6,6 +6,7 @@ import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
 import { BookOpen, Coins, Search, Settings } from "lucide-react";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 import { AlbumCollection } from "./_components/album-collection";
 import { PackShelf } from "./_components/pack-shelf";
 import type { Prisma } from "@prisma/client";
@@ -16,22 +17,22 @@ const PAGE_SIZE = 100;
 
 const TYPE_OPTIONS = [
   ["", "Todos os tipos"],
-  ["normal", "Normal"],
-  ["fire", "Fogo"],
-  ["water", "Agua"],
-  ["grass", "Grama"],
-  ["electric", "Eletrico"],
-  ["psychic", "Psiquico"],
-  ["fighting", "Lutador"],
-  ["dark", "Noturno"],
-  ["steel", "Metal"],
-  ["dragon", "Dragao"],
-  ["fairy", "Fada"],
-  ["ghost", "Fantasma"],
-  ["poison", "Venenoso"],
-  ["ground", "Terra"],
-  ["rock", "Pedra"],
-  ["flying", "Voador"],
+  ["normal", TYPE_LABELS_PT.normal],
+  ["fire", TYPE_LABELS_PT.fire],
+  ["water", TYPE_LABELS_PT.water],
+  ["grass", TYPE_LABELS_PT.grass],
+  ["electric", TYPE_LABELS_PT.electric],
+  ["psychic", TYPE_LABELS_PT.psychic],
+  ["fighting", TYPE_LABELS_PT.fighting],
+  ["dark", TYPE_LABELS_PT.dark],
+  ["steel", TYPE_LABELS_PT.steel],
+  ["dragon", TYPE_LABELS_PT.dragon],
+  ["fairy", TYPE_LABELS_PT.fairy],
+  ["ghost", TYPE_LABELS_PT.ghost],
+  ["poison", TYPE_LABELS_PT.poison],
+  ["ground", TYPE_LABELS_PT.ground],
+  ["rock", TYPE_LABELS_PT.rock],
+  ["flying", TYPE_LABELS_PT.flying],
   ["bug", "Inseto"],
   ["ice", "Gelo"],
 ] as const;

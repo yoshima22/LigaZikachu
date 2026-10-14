@@ -7,6 +7,7 @@ import { ChevronLeft, ChevronRight, Search, X } from "lucide-react";
 import { getPokemonName, getSpriteUrl, mascotPrimaryType, MOOD_EMOJI } from "@/lib/mascot-data";
 import { addExpAdminAction, adminCancelExpeditionAction, adminClaimExpeditionAction, adminStartExpeditionAction } from "@/app/(app)/mascotes/actions";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 type PublicMascot = {
   id: string;
@@ -44,26 +45,7 @@ const TYPE_OPTIONS = [
   "flying", "bug", "ice",
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  normal: "Normal",
-  fire: "Fogo",
-  water: "Agua",
-  grass: "Grama",
-  electric: "Eletrico",
-  psychic: "Psiquico",
-  fighting: "Lutador",
-  dark: "Noturno",
-  steel: "Metal",
-  dragon: "Dragao",
-  fairy: "Fada",
-  ghost: "Fantasma",
-  poison: "Venenoso",
-  ground: "Terra",
-  rock: "Pedra",
-  flying: "Voador",
-  bug: "Inseto",
-  ice: "Gelo",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 const PAGE_SIZE = 12;
 

@@ -22,6 +22,7 @@ import {
   type CombatRole,
 } from "@/lib/combat-roles";
 import { tacticalBiomeAt, tacticalFogState } from "@/lib/tactical-arena";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 const FORMATIONS: Array<{
   id: TacticalFormation;
@@ -123,26 +124,7 @@ const EVENT_LABELS: Record<string, string> = {
   FOG: "NÉVOA",
   SECRET_EVENT: "EVENTO SECRETO",
 };
-const TYPE_LABELS: Record<string, string> = {
-  fire: "Fogo",
-  water: "Água",
-  grass: "Planta",
-  bug: "Inseto",
-  ice: "Gelo",
-  rock: "Pedra",
-  ground: "Terra",
-  electric: "Elétrico",
-  psychic: "Psíquico",
-  fairy: "Fada",
-  ghost: "Fantasma",
-  dark: "Sombrio",
-  dragon: "Dragão",
-  steel: "Aço",
-  normal: "Normal",
-  fighting: "Lutador",
-  poison: "Veneno",
-  flying: "Voador",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 const SUPPORT_EFFECT_TEXT: Partial<Record<CombatRole, string>> = {
   ENCOURAGER: "Aura de impulso aumenta o dano dos aliados próximos.",
   SCOUT: "Revela alvos e abre bônus de dano para aliados próximos.",

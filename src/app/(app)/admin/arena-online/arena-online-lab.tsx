@@ -8,6 +8,7 @@ import { loadLivePvpMovesAction, resolveLivePvpTurnAction } from "./actions";
 import { ArenaOnlinePregame } from "./arena-online-pregame";
 import { closeLivePvpMatchAction } from "../../combates/arena-online/matchmaking-actions";
 import { ArenaOnlineSyncedBattle } from "./arena-online-synced-battle";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 type Side = "A" | "B";
 export type MascotOption = {
@@ -68,26 +69,7 @@ const TYPE_ICONS: Record<string, string> = {
   steel: "⚙️",
   fairy: "✨",
 };
-const TYPE_LABELS: Record<string, string> = {
-  normal: "Normal",
-  fire: "Fogo",
-  water: "Água",
-  electric: "Elétrico",
-  grass: "Planta",
-  ice: "Gelo",
-  fighting: "Lutador",
-  poison: "Veneno",
-  ground: "Terra",
-  flying: "Voador",
-  psychic: "Psíquico",
-  bug: "Inseto",
-  rock: "Pedra",
-  ghost: "Fantasma",
-  dragon: "Dragão",
-  dark: "Sombrio",
-  steel: "Aço",
-  fairy: "Fada",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 const TYPE_ADVANTAGE: Record<string, string[]> = {
   fire: ["grass", "ice", "bug", "steel"],
   water: ["fire", "ground", "rock"],

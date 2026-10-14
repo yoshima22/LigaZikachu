@@ -8,6 +8,7 @@ import { TypeBadges } from "@/components/mascot/type-badges";
 import { getMascotDetailAction } from "../actions";
 import { MascotCard, clearPetted, clearPlayed, markPetted, markPlayed } from "./mascot-card";
 import { queueMascotInteraction } from "./interaction-request-queue";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 export type BankMascot = {
   id: string;
@@ -62,12 +63,7 @@ function statNameColor(m: Pick<BankMascot, "statForce"|"statAgility"|"statCharis
 
 // ── Tipo → cor de badge ─────────────────────────────────────────────────────
 
-const TYPE_LABELS: Record<string, string> = {
-  normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama", electric:"Elétrico",
-  psychic:"Psíquico", fighting:"Lutador", dark:"Noturno", steel:"Metal",
-  dragon:"Dragão", fairy:"Fada", ghost:"Fantasma", poison:"Venenoso",
-  ground:"Terra", rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 // ── Ocupação ────────────────────────────────────────────────────────────────
 type OcupFilter = "all" | "free" | "busy" | "expedition" | "bazar" | "arena" | "resting" | "injured" | "buff";

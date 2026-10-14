@@ -10,6 +10,7 @@ import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 import type { JohtoBattlePayload, JohtoLeaderState, JohtoPendingReward, JohtoRecentFight } from "@/lib/johto-raid";
 import { claimJohtoMascotAction, getJohtoReplayAction } from "../actions";
 import { JohtoReplay } from "./johto-battle-view";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 const fmt = (n: number) => n.toLocaleString("pt-BR");
 
@@ -55,10 +56,7 @@ export function ComboMeter({ stacks, bonusPct, nextDropAt }: { stacks: number; b
 }
 const TIER_LABEL: Record<string, string> = { TOP1: "🥇 1º em dano", TOP2: "🥈 2º em dano", TOP3: "🥉 3º em dano", PARTICIPANT: "Participação", FINAL_BLOW: "🎯 Golpe final", MOST_ATTACKS: "⚔️ Mais ataques" };
 
-const TYPE_PT: Record<string, string> = {
-  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico", grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno", ground: "Terra",
-  flying: "Voador", psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio", steel: "Aço", fairy: "Fada",
-};
+const TYPE_PT: Record<string, string> = TYPE_LABELS_PT;
 
 /** Botão "Ver time": abre a UI com os 6 mascotes do líder (espécie, tipos, postura, personalidade e vida atual). */
 export function LeaderTeamButton({ leader, compact = false }: { leader: Pick<JohtoLeaderState, "name" | "image" | "city" | "badge" | "mascots" | "hpCurrent" | "hpMax">; compact?: boolean }) {

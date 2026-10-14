@@ -22,6 +22,7 @@ import { setHideLeagueResultsAction } from "@/app/(app)/combates/liga-semanal/ac
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import { COMBAT_ROLE_OPTIONS, COMBAT_ROLE_DESCRIPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 // Monta os 3 jogos do dia do jogador (uma linha por rodada) para o card resumido.
 function playerDayGames(matches: Match[], playerId: string|undefined, names: Record<string,string>, today: string, battleTimes: string[]): PlayerDayGame[] {
@@ -51,7 +52,7 @@ type UpcomingLeague = Omit<League,"dailyTeams"|"matches">;
 type Data = { league:League|null; isAdmin:boolean; playerId?:string; joined?:boolean; names?:Record<string,string>; mascots?:Mascot[]; today?:string; rewards?:RushRewardBundle[]; rewardPlan?:RushRewardPlan; rewardPlans?:RushRewardPlan[]; presets?:Preset[]; weekHighlights?:Highlight[]; bannedMascots?:BannedMascot[]; previousPodium?:{weekKey:string;participants:Participant[];names:Record<string,string>}|null; cancellation?:{name:string;weekKey:string;ruleJson?:Record<string,unknown>;updatedAt:string}|null;upcomingRegistration?:UpcomingLeague|null;upcomingJoined?:boolean;hideResults?:boolean;blockedFromRush?:boolean;rushTimes?:{battleTimes:string[];rewardTime:string};resultVisibleUntil?:string|null };
 type RushTimes={battle:string[];reward:string};
 
-const TYPE_LABEL: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" };
+const TYPE_LABEL: Record<string,string> = TYPE_LABELS_PT;
 const PERSONALITY_LABEL:Record<string,string>={LOYAL:"Leal",PROUD:"Orgulhoso",MISCHIEVOUS:"Travesso",LAZY:"Preguiçoso",COMPETITIVE:"Competitivo",DRAMATIC:"Dramático",PLAYFUL:"Brincalhão",ELECTRIC:"Elétrico",TIMID:"Tímido",CHAOTIC:"Caótico"};
 const STATUS_LABEL:Record<string,string>={REGISTRATION:"Registro",ACTIVE:"Em andamento",FINISHED:"Finalizada",CANCELLED:"Cancelada"};
 const inputClass = "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-xs text-white";

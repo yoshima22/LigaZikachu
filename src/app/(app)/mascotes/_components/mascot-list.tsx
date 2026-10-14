@@ -16,6 +16,7 @@ import { MascotBankList } from "./mascot-bank-list-demand";
 import type { BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard, getOrderClueStepLabel, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 interface MascotData {
   id: string; pokemonId: number; nickname: string | null;
@@ -63,26 +64,7 @@ const TYPE_OPTIONS = [
   "flying", "bug", "ice",
 ];
 
-const TYPE_LABELS: Record<string, string> = {
-  normal: "Normal",
-  fire: "Fogo",
-  water: "Agua",
-  grass: "Grama",
-  electric: "Eletrico",
-  psychic: "Psiquico",
-  fighting: "Lutador",
-  dark: "Noturno",
-  steel: "Metal",
-  dragon: "Dragao",
-  fairy: "Fada",
-  ghost: "Fantasma",
-  poison: "Venenoso",
-  ground: "Terra",
-  rock: "Pedra",
-  flying: "Voador",
-  bug: "Inseto",
-  ice: "Gelo",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 const PAGE_SIZE = 12;
 

@@ -5,12 +5,13 @@ import { Dna, Search, Sparkles, UserRoundSearch } from "lucide-react";
 import { PlayerSearchInput } from "@/components/player-search-input";
 import { createCustomSpeciesAdminAction, getPlayerMascotEditorData, searchSpeciesAdminAction, updateMascotAdminAction, updateSpeciesTypesAdminAction } from "./actions";
 import { SpeciesTypeEditor as SpeciesSection } from "./species-type-editor";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 type Mascot = Awaited<ReturnType<typeof getPlayerMascotEditorData>>[number];
 type Species = Awaited<ReturnType<typeof searchSpeciesAdminAction>>[number];
 const PERSONALITIES = ["LOYAL","PROUD","MISCHIEVOUS","LAZY","COMPETITIVE","DRAMATIC","PLAYFUL","ELECTRIC","TIMID","CHAOTIC"];
 const TYPES = ["normal","fire","water","electric","grass","ice","fighting","poison","ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
-const TYPE_LABEL: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Grama",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" };
+const TYPE_LABEL: Record<string,string> = TYPE_LABELS_PT;
 
 function Field({ label, value, onChange, type="number" }: { label:string; value:string|number; onChange:(value:string)=>void; type?:string }) {
   return <label className="space-y-1 text-[10px] font-bold uppercase tracking-wide text-slate-500"><span>{label}</span><input type={type} value={value} onChange={(e)=>onChange(e.target.value)} className="w-full rounded-lg border border-border bg-slate-950 px-2 py-2 text-xs text-white outline-none focus:border-cyan-400" /></label>;

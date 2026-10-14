@@ -3,10 +3,11 @@
 import { useEffect, useState, useTransition } from "react";
 import { Search } from "lucide-react";
 import { searchSpeciesAdminAction, updateSpeciesTypesAdminAction } from "./actions";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 type Species = Awaited<ReturnType<typeof searchSpeciesAdminAction>>[number];
 const TYPES = ["normal","fire","water","electric","grass","ice","fighting","poison","ground","flying","psychic","bug","rock","ghost","dragon","dark","steel","fairy"];
-const LABELS: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Grama",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" };
+const LABELS: Record<string,string> = TYPE_LABELS_PT;
 
 export function SpeciesTypeEditor() {
   const [query, setQuery] = useState("");

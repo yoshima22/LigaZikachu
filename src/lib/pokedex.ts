@@ -1,3 +1,4 @@
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 const POKE_API_BASE_URL = "https://pokeapi.co/api/v2";
 
 type PokemonListResponse = {
@@ -66,26 +67,7 @@ export const generationOptions = [
   { value: "9", label: "Geracao 9", min: 906, max: 1025 }
 ];
 
-export const pokemonTypeLabels: Record<string, string> = {
-  normal: "Incolor",
-  fire: "Fogo",
-  water: "Agua",
-  electric: "Eletrico",
-  grass: "Grama",
-  ice: "Gelo",
-  fighting: "Lutador",
-  poison: "Veneno",
-  ground: "Terra",
-  flying: "Voador",
-  psychic: "Psiquico",
-  bug: "Inseto",
-  rock: "Pedra",
-  ghost: "Fantasma",
-  dragon: "Dragao",
-  dark: "Noturno",
-  steel: "Metalico",
-  fairy: "Fada"
-};
+export const pokemonTypeLabels: Record<string, string> = TYPE_LABELS_PT;
 
 export const pokemonTypeOptions = Object.entries(pokemonTypeLabels).map(([value, label]) => ({
   value,

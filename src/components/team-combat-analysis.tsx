@@ -12,6 +12,7 @@ import {
   type CombatRole,
 } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 export type TeamAnalysisMascot = {
   id: string;
@@ -30,13 +31,7 @@ export type TeamAnalysisMascot = {
 
 type CombatMode = "ARENA" | "LEAGUE" | "RAID";
 
-const TYPE_LABELS: Record<string, string> = {
-  normal: "Normal", fire: "Fogo", water: "Água", electric: "Elétrico",
-  grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno",
-  ground: "Terra", flying: "Voador", psychic: "Psíquico", bug: "Inseto",
-  rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio",
-  steel: "Aço", fairy: "Fada",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 const pct = (value: number) => `${Math.round(value * 100)}%`;
 const cap = (value: number, max: number) => Math.min(value, max);

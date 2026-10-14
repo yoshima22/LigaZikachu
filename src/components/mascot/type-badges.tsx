@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Swords, ShieldAlert, Info } from "lucide-react";
 import { TYPE_ADVANTAGE } from "@/lib/mascot-data";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 const TYPE_COLORS: Record<string, string> = {
   normal:"bg-slate-500/25 text-slate-300 border-slate-500/30", fire:"bg-orange-500/20 text-orange-300 border-orange-500/30",
@@ -16,12 +17,7 @@ const TYPE_COLORS: Record<string, string> = {
   rock:"bg-stone-500/20 text-stone-300 border-stone-500/30", flying:"bg-sky-500/20 text-sky-300 border-sky-500/30",
   bug:"bg-lime-500/20 text-lime-300 border-lime-500/30", ice:"bg-cyan-400/20 text-cyan-300 border-cyan-400/30",
 };
-const TYPE_LABELS: Record<string, string> = {
-  normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama", electric:"Elétrico",
-  psychic:"Psíquico", fighting:"Lutador", dark:"Noturno", steel:"Metal",
-  dragon:"Dragão", fairy:"Fada", ghost:"Fantasma", poison:"Venenoso",
-  ground:"Terra", rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 const fallbackChip = "bg-slate-500/20 text-slate-400 border-slate-500/20";
 const label = (t: string) => TYPE_LABELS[t] ?? t;
 

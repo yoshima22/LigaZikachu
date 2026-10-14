@@ -6,6 +6,7 @@ import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../con
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 // Monta os 3 jogos do dia do jogador (uma linha por rodada) na Liga Semanal.
 function semanalDayGames(todayMatches: any[], playerId: string): PlayerDayGame[] {
@@ -67,12 +68,7 @@ export type OpponentAnalysis = {
   recentMatches: Array<{ id: string; weekKey: string; opponentName: string; result: "W" | "L" | "D"; damage: number; resolvedAt: string | Date | null }>;
 };
 
-const SCOUTING_TYPE_LABELS: Record<string, string> = {
-  normal: "Normal", fire: "Fogo", water: "Água", grass: "Planta", electric: "Elétrico",
-  ice: "Gelo", fighting: "Lutador", poison: "Venenoso", ground: "Terrestre", flying: "Voador",
-  psychic: "Psíquico", bug: "Inseto", rock: "Pedra", ghost: "Fantasma", dragon: "Dragão",
-  dark: "Sombrio", steel: "Aço", fairy: "Fada",
-};
+const SCOUTING_TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 type PageData = {
   player: { id: string; displayName: string; walletBalance: number; isAdmin: boolean };

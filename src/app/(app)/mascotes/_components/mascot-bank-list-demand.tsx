@@ -25,6 +25,7 @@ import {
 import { queueMascotInteraction } from "./interaction-request-queue";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
 type OcupFilter = "all" | "free" | "busy" | "expedition" | "refuge" | "bazar" | "arena" | "resting" | "injured" | "diseased" | "buff";
@@ -43,12 +44,7 @@ const IV_RATING_STYLE: Record<string, string> = {
   E:   "text-red-300 border-red-400/40 bg-red-500/10",
 };
 
-const TYPE_LABELS: Record<string, string> = {
-  normal: "Normal", fire: "Fogo", water: "Agua", grass: "Grama", electric: "Eletrico",
-  psychic: "Psiquico", fighting: "Lutador", dark: "Noturno", steel: "Metal",
-  dragon: "Dragao", fairy: "Fada", ghost: "Fantasma", poison: "Venenoso",
-  ground: "Terra", rock: "Pedra", flying: "Voador", bug: "Inseto", ice: "Gelo",
-};
+const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
 
 
 const BANK_TYPE_OPTIONS = [

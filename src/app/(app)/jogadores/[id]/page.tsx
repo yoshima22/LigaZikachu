@@ -34,6 +34,7 @@ import { getProfileCollectionProgress } from "@/lib/profile-collection-progress"
 import { getActiveRaidSabotages, getOrderPasswordStampForUser } from "@/lib/raid-event";
 import { getStandbyUntilFromNotes } from "@/lib/account-standby";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 export default async function PlayerDetailPage({
   params
@@ -851,13 +852,7 @@ export default async function PlayerDetailPage({
             }>).map((m) => {
               const element = mascotPrimaryType(m);
               const name = m.nickname ?? getPokemonName(m.pokemonId);
-              const TYPE_LABELS: Record<string, string> = {
-                normal:"Normal", fire:"Fogo", water:"Água", grass:"Grama",
-                electric:"Elétrico", psychic:"Psíquico", fighting:"Lutador",
-                dark:"Noturno", steel:"Metal", dragon:"Dragão", fairy:"Fada",
-                ghost:"Fantasma", poison:"Venenoso", ground:"Terra",
-                rock:"Pedra", flying:"Voador", bug:"Inseto", ice:"Gelo",
-              };
+              const TYPE_LABELS: Record<string, string> = TYPE_LABELS_PT;
               return (
                 <div key={m.id} className="flex flex-col items-center gap-1.5 rounded-xl border border-border/60 bg-slate-900/50 p-2.5 text-center">
                   {/* Static sprite — sem GIF */}
