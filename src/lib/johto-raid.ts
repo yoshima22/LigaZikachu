@@ -12,6 +12,7 @@ import {
   JOHTO_VISIBLE_KEY, JOHTO_HP_STEP, JOHTO_REWARD_ZC_STEP, JOHTO_CLAIR_KEY, JOHTO_CLAIR_ITEM_TIER, readRewardConfig, runJohtoBattle, toReplayLineup, type JohtoLeaderDef, type JohtoBattleOutcome,
 } from "@/lib/johto-raid-sim";
 
+const CLAIR_STAT_KEYS = ["statForce", "statAgility", "statCharisma", "statInstinct", "statVitality"] as const;
 const NON_ADMIN = { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] as ("ADMIN" | "SUPER_ADMIN")[] } } };
 const isAdminRole = (role: string | null | undefined) => role === "ADMIN" || role === "SUPER_ADMIN";
 const HREF = "/combates/raid-johto";
@@ -577,7 +578,7 @@ export async function grantLeaderRewards(leaderId: string) {
       await prisma.playerNotification.createMany({
         data: items.map((item) => ({
           playerId: item.playerId, category: "EVENT", type: "JOHTO_RAID_REWARD", title: "Item da Clair liberado!",
-          body: "Você ganhou o Selo do Dragão: escolha a personalidade e o atributo principal de um dos seus mascotes. Use na página da raid.",
+          body: "Você ganhou o Selo do Dragão: ao escolher seu mascote da raid, use-o para escolher o mascote de qualquer líder, a personalidade e o atributo principal.",
           href: HREF, entityId: item.id, eventKey: `johto-raid-reward:${item.id}`,
         })),
         skipDuplicates: true,
@@ -589,7 +590,7 @@ export async function grantLeaderRewards(leaderId: string) {
 }
 
 /** Jogador escolhe o mascote do prêmio (uma vez). O mascote nasce no nível da faixa, com a origem da raid. */
-export async function claimJohtoMascotReward(userId: string, rewardId: string, pokemonId: number): Promise<{ ok: boolean; message: string }> {
+export async function claimJohtoMascotReward(userId: string, rewardId: string, pokemonId: number, custom?: { personality: string; statKey: string }): Promise<{ ok: boolean; message: string }> {
   const player = await prisma.player.findUnique({ where: { userId }, select: { id: true } });
   if (!player) return { ok: false, message: "Perfil não encontrado." };
   const reward = await prisma.johtoRaidReward.findUnique({ where: { id: rewardId } });
@@ -599,15 +600,25 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
   const earlier = await prisma.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, tier: { not: JOHTO_CLAIR_ITEM_TIER }, claimedAt: { not: null } }, select: { leaderKey: true, chosenPokemonId: true } });
   if (earlier) return { ok: false, message: `Você já escolheu ${earlier.chosenPokemonId ? getPokemonName(earlier.chosenPokemonId) : "um mascote"} (${getJohtoLeader(earlier.leaderKey)?.name ?? earlier.leaderKey}). Só é possível escolher UM mascote em toda a raid.` };
   const def = getJohtoLeader(reward.leaderKey);
-  if (!def || !def.roster.some((entry) => entry.pokemonId === pokemonId)) return { ok: false, message: "Esse mascote não faz parte do time do líder." };
+  // Com o Selo do Dragão: mascote de QUALQUER líder + personalidade e atributo principal à escolha (o item é gasto nesta escolha).
+  const pickedFrom = custom ? JOHTO_LEADERS.find((l) => l.roster.some((entry) => entry.pokemonId === pokemonId)) : def;
+  if (!def || !pickedFrom || !pickedFrom.roster.some((entry) => entry.pokemonId === pokemonId)) return { ok: false, message: "Esse mascote não faz parte do time do líder." };
+  if (custom && !Object.values(MascotPersonality).includes(custom.personality as MascotPersonality)) return { ok: false, message: "Personalidade inválida." };
+  if (custom && !CLAIR_STAT_KEYS.includes(custom.statKey as (typeof CLAIR_STAT_KEYS)[number])) return { ok: false, message: "Atributo inválido." };
   const { computeProceduralStats } = await import("@/lib/mascot");
   const { getSpeciesSnapshot } = await import("@/lib/species-registry");
   const { registerPokemonDiscovery } = await import("@/lib/pokemon-dex");
   const personalities = Object.values(MascotPersonality);
-  const personality = personalities[Math.floor(Math.random() * personalities.length)];
+  const personality = custom ? (custom.personality as MascotPersonality) : personalities[Math.floor(Math.random() * personalities.length)];
   // Origem de ovo ESPECIAL: status sorteados na faixa do ovo especial e crescidos proporcionalmente até o nível da faixa; personalidade aleatória.
   const range = EGG_STAT_RANGES.SPECIAL ?? [13, 20];
   const stats = computeProceduralStats(pokemonId, reward.mascotLevel, personality, range);
+  if (custom) {
+    // Atributo principal: o escolhido passa a ser o maior (troca de valor com o maior atual; o total não muda).
+    const key = custom.statKey as (typeof CLAIR_STAT_KEYS)[number];
+    const top = CLAIR_STAT_KEYS.reduce((best, k) => (stats[k] > stats[best] ? k : best), CLAIR_STAT_KEYS[0]);
+    if (stats[key] < stats[top]) { const keep = stats[key]; stats[key] = stats[top]; stats[top] = keep; }
+  }
   const isShiny = Math.random() < (EGG_SHINY_CHANCE.SPECIAL ?? 1 / 500);
   try {
     await prisma.$transaction(async (tx) => {
@@ -617,46 +628,26 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
       if (other) throw new Error("ONE_ONLY");
       const claim = await tx.johtoRaidReward.updateMany({ where: { id: reward.id, playerId: player.id, claimedAt: null }, data: { claimedAt: new Date(), chosenPokemonId: pokemonId } });
       if (claim.count === 0) throw new Error("ALREADY");
+      if (custom) {
+        const spent = await tx.johtoRaidReward.updateMany({ where: { eventId: reward.eventId, playerId: player.id, tier: JOHTO_CLAIR_ITEM_TIER, claimedAt: null }, data: { claimedAt: new Date(), chosenPokemonId: pokemonId } });
+        if (spent.count === 0) throw new Error("NO_ITEM");
+      }
       const mascot = await tx.mascot.create({
         data: {
           playerId: player.id, pokemonId, ...(await getSpeciesSnapshot(pokemonId, tx)), hatchedPokemonId: pokemonId, personality, level: reward.mascotLevel,
           hatchedFromEggType: "SPECIAL", hatchedFromEggOrigin: "Raid dos Líderes de Johto", isShiny, happiness: 80, ...stats,
         },
       });
-      await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🎁", description: `Recompensa da Raid de Johto: ${getPokemonName(pokemonId)} do líder ${def.name} (Nv.${reward.mascotLevel}).` } });
+      await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🎁", description: `Recompensa da Raid de Johto: ${getPokemonName(pokemonId)} do líder ${pickedFrom.name} (Nv.${reward.mascotLevel})${custom ? " com o Selo do Dragão" : ""}.` } });
       await registerPokemonDiscovery({ playerId: player.id, pokemonId, source: "JOHTO_RAID" }, tx);
     }, { timeout: 20000 });
   } catch (error) {
     if (error instanceof Error && error.message === "ALREADY") return { ok: false, message: "Você já escolheu o mascote deste prêmio." };
+    if (error instanceof Error && error.message === "NO_ITEM") return { ok: false, message: "Você não tem o Selo do Dragão disponível." };
     if (error instanceof Error && error.message === "ONE_ONLY") return { ok: false, message: "Você já escolheu um mascote nesta raid. Só é possível escolher UM em todo o evento." };
     throw error;
   }
   return { ok: true, message: `${getPokemonName(pokemonId)} (Nv.${reward.mascotLevel}) entrou para a sua coleção!` };
-}
-
-/** Selo do Dragão (Clair): uso único, só nesta página. Define a personalidade e deixa o atributo escolhido como o maior (troca de valor com o maior atual, sem inflar o total). */
-const CLAIR_STAT_KEYS = ["statForce", "statAgility", "statCharisma", "statInstinct", "statVitality"] as const;
-export async function useClairItem(userId: string, mascotId: string, personality: string, statKey: string): Promise<{ ok: boolean; message: string }> {
-  const player = await prisma.player.findUnique({ where: { userId }, select: { id: true } });
-  if (!player) return { ok: false, message: "Perfil não encontrado." };
-  if (!Object.values(MascotPersonality).includes(personality as MascotPersonality)) return { ok: false, message: "Personalidade inválida." };
-  const key = CLAIR_STAT_KEYS.find((k) => k === statKey);
-  if (!key) return { ok: false, message: "Atributo inválido." };
-  try {
-    return await prisma.$transaction(async (tx) => {
-      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`johto-clair-item:${player.id}`}))`);
-      const spent = await tx.johtoRaidReward.updateMany({ where: { playerId: player.id, tier: JOHTO_CLAIR_ITEM_TIER, claimedAt: null }, data: { claimedAt: new Date() } });
-      if (spent.count === 0) throw new Error("Você não tem o Selo do Dragão disponível.");
-      const mascot = await tx.mascot.findFirst({ where: { id: mascotId, playerId: player.id }, select: { id: true, pokemonId: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true } });
-      if (!mascot) throw new Error("Mascote não encontrado.");
-      const top = CLAIR_STAT_KEYS.reduce((best, k) => (mascot[k] > mascot[best] ? k : best), CLAIR_STAT_KEYS[0]);
-      const data: Prisma.MascotUpdateInput = { personality: personality as MascotPersonality };
-      if (mascot[key] < mascot[top]) { data[key] = mascot[top]; data[top] = mascot[key]; }
-      await tx.mascot.update({ where: { id: mascot.id }, data });
-      await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🐉", description: "Selo do Dragão (Raid de Johto): personalidade e atributo principal ajustados." } });
-      return { ok: true, message: `${getPokemonName(mascot.pokemonId)} foi ajustado com o Selo do Dragão!` };
-    });
-  } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Não foi possível usar o item." }; }
 }
 
 // ── Replays ──────────────────────────────────────────────────────────────────

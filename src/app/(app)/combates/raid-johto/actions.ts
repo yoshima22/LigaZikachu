@@ -7,7 +7,7 @@ import { getJohtoInvitationAdminSummary, JOHTO_INVITATION_PUSH, prepareJohtoInvi
 import { sendNotificationToUsers } from "@/lib/notifications";
 import {
   claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
-  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest, useClairItem, useJohtoRaidShield,
+  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest, useJohtoRaidShield,
 } from "@/lib/johto-raid";
 
 const PATH = "/combates/raid-johto";
@@ -45,19 +45,10 @@ export async function getJohtoReplayAction(attemptId: string) {
 }
 
 /** Escolha do mascote de recompensa entre os seis do líder. */
-export async function claimJohtoMascotAction(rewardId: string, pokemonId: number) {
+export async function claimJohtoMascotAction(rewardId: string, pokemonId: number, custom?: { personality: string; statKey: string }) {
   const user = await getSessionUser();
   if (!user) return { ok: false, message: "Faça login novamente." };
-  const result = await claimJohtoMascotReward(user.id, String(rewardId).slice(0, 60), Math.floor(Number(pokemonId)));
-  refresh();
-  return result;
-}
-
-/** Selo do Dragão da Clair: personalidade + atributo principal de um mascote do jogador. */
-export async function useClairItemAction(mascotId: string, personality: string, statKey: string) {
-  const user = await getSessionUser();
-  if (!user) return { ok: false, message: "Faça login novamente." };
-  const result = await useClairItem(user.id, String(mascotId).slice(0, 60), String(personality), String(statKey));
+  const result = await claimJohtoMascotReward(user.id, String(rewardId).slice(0, 60), Math.floor(Number(pokemonId)), custom ? { personality: String(custom.personality), statKey: String(custom.statKey) } : undefined);
   refresh();
   return result;
 }
@@ -84,6 +75,7 @@ export async function johtoAdminAction(
     | { type: "settings"; cooldownMinutes: number; damageScale: number; leaderDays: number }
     | { type: "extend"; hours: number }
     | { type: "testReward"; leaderKey: string; level: number }
+    | { type: "testClairItem"; give: boolean }
     | { type: "resetMyChoice" }
     | { type: "unlockPlayer"; playerName: string }
     | { type: "leaderHp"; leaderKey: string; hp: number }
@@ -172,6 +164,19 @@ export async function johtoAdminAction(
         const level = Math.max(1, Math.min(100, Math.floor(command.level) || 55));
         await prisma.johtoRaidReward.create({ data: { eventId: event.id, leaderKey: command.leaderKey, playerId: me.id, tier: "TEST" + Date.now().toString(36).slice(-4).toUpperCase(), zc: 0, mascotLevel: level, egg: false } });
         return done(`Recompensa de teste criada para você (${command.leaderKey}, Nv.${level}). Ela aparece em "Suas recompensas dos líderes".`);
+      }
+      case "testClairItem": {
+        // Debug: dá (ou tira) o Selo do Dragão da própria conta de admin, para testar a escolha com e sem o item.
+        const me = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
+        if (!me) return fail("Perfil não encontrado.");
+        const where = { eventId: event.id, playerId: me.id, tier: "CLAIR_ITEM" };
+        if (!command.give) {
+          const removed = await prisma.johtoRaidReward.deleteMany({ where: { ...where, leaderKey: "clair" } });
+          return done(removed.count ? "Selo do Dragão removido da sua conta." : "Você não tinha o Selo do Dragão.");
+        }
+        await prisma.johtoRaidReward.deleteMany({ where: { ...where, leaderKey: "clair" } });
+        await prisma.johtoRaidReward.create({ data: { ...where, leaderKey: "clair", zc: 0, mascotLevel: 0, egg: false } });
+        return done("Selo do Dragão (novo, não usado) na sua conta. Crie também uma recompensa de teste para escolher com ele; sem o item, a escolha segue a regra normal.");
       }
       case "resetMyChoice": {
         const me = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });

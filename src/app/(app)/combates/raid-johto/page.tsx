@@ -10,7 +10,7 @@ import type { RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team
 import { JohtoAdminControls } from "./_components/johto-admin-controls";
 import { JohtoTeamSelector } from "./_components/johto-team-selector";
 import { JohtoInvitationReviewButton } from "./_components/johto-invitation-review-button";
-import { ComboMeter, Countdown, ClairItemPanel, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
+import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamButton } from "./_components/johto-extras";
 import { attackJohtoRaidAction } from "./actions";
 import { JohtoCooldownRefresh } from "./_components/johto-cooldown-refresh";
 import { JohtoSusPanel } from "./_components/johto-sus-panel";
@@ -175,8 +175,7 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
         </section>
       )}
 
-      <JohtoRewardPicker rewards={pendingRewards} choiceUsed={state.choiceUsed} />
-      {state.clairItem && <ClairItemPanel item={state.clairItem} mascots={freeMascots} />}
+      <JohtoRewardPicker rewards={pendingRewards} choiceUsed={state.choiceUsed} clairItem={state.clairItem} allLeaders={state.leaders.map((l) => ({ name: l.name, pokemonIds: l.rosterPokemonIds }))} />
 
       <JohtoSusPanel
         mine={{ items: injured, page: susPage, totalPages: Math.max(1, Math.ceil(injuredTotal / SUS_PAGE_SIZE)), total: injuredTotal }}
@@ -264,7 +263,7 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
               <li><b className="text-slate-200">🎯 Golpe final:</b> o bônus de participante + um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade.</li>
               <li><b className="text-slate-200">⚔️ Maior número de ataques:</b> um ovo especial com +{rewards.finalBlowEggBonusPct}% de chance de raridade. Em empate de dano, mais ataques decide a posição.</li>
               <li>A cada líder derrotado, o próximo entra com +300 mil de vida (dividida entre os 6 mascotes) e +950 ZC em cada prêmio de ZC.</li>
-              <li className="font-bold text-indigo-200">🐉 Derrotar a Clair libera o Selo do Dragão para todos que lutaram contra ela: escolha a personalidade e o atributo principal de um mascote (item exclusivo desta página).</li>
+              <li className="font-bold text-indigo-200">🐉 Derrotar a Clair libera o Selo do Dragão para todos que lutaram contra ela: gasto ao escolher o mascote: permite pegar o mascote de qualquer líder e definir personalidade e atributo principal (item exclusivo desta página).</li>
 <li>Se um líder não cair no prazo, ele vence e não há recompensa por ele.</li>
             </ul>
           </div>

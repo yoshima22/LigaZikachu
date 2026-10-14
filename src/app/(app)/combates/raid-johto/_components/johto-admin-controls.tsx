@@ -170,6 +170,8 @@ export function JohtoAdminControls({ summary, testMascots = [], invitationCandid
               </select>
             </label>
             <label className="text-[10px] text-slate-400">Nível<input value={testLevel} onChange={(e) => setTestLevel(e.target.value.replace(/D/g, ""))} className={`${input} w-16`} /></label>
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "testClairItem", give: true })}>Dar Selo do Dragão p/ mim</button>
+            <button disabled={pending} className={neutral} onClick={() => run({ type: "testClairItem", give: false })}>Tirar Selo do Dragão</button>
             <button disabled={pending} className={neutral} onClick={() => run({ type: "testReward", leaderKey: rewardLeader, level: Number(testLevel) || 55 })}>Criar recompensa de teste p/ mim</button>
             <button disabled={pending} className={neutral} onClick={() => run({ type: "resetMyChoice" }, "Apagar suas recompensas de teste e reabrir as suas escolhas? (mascotes já criados não são removidos)")}>Liberar minha escolha</button>
             <label className="text-[10px] text-slate-400">Jogador (nome exato)<input value={unlockName} onChange={(e) => setUnlockName(e.target.value)} className={`${input} w-40`} /></label>
