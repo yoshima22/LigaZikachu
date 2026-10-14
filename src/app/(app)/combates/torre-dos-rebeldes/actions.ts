@@ -59,6 +59,7 @@ import {
 import { TOWER_OBJECTS } from "@/lib/tower/objects";
 import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from "@/lib/tower/rooms";
 import { isExpeditionV2, newExpeditionState } from "@/lib/tower/expedition-state";
+import { projectExpeditionForMember } from "@/lib/tower/expedition-projection";
 import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
 import { reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
@@ -2134,7 +2135,12 @@ export async function getTowerRunStateAction(
 
   const exploration = vol.exploration;
   const expeditionV2 = isExpeditionV2(exploration) ? exploration : null;
-  const room = exploration ? currentTowerRoom(exploration) : null;
+  const expedition = expeditionV2
+    ? projectExpeditionForMember(expeditionV2, user.id, Object.fromEntries(userNames), run.currentFloor)
+    : null;
+  const room = expeditionV2
+    ? expeditionV2.graph.find((node) => node.id === expedition?.mine.roomId) ?? null
+    : exploration ? currentTowerRoom(exploration) : null;
   const communityDiscoveries = exploration
     ? await prisma.towerCodexEntry.findMany({
         where: { userId: null, subjectType: "PUZZLE" },
@@ -2177,6 +2183,7 @@ export async function getTowerRunStateAction(
       nextDeadline: run.nextDeadline?.toISOString() ?? null,
       roomIndex: vol.roomIndex ?? 1,
     },
+    expedition,
     rewards: expeditionV2 ? {
       entries: (expeditionV2.rewardLedger ?? []).map((entry) => ({
         id: entry.id, floor: entry.floor, label: entry.label, kind: entry.kind,
@@ -2246,6 +2253,7 @@ export async function getTowerRunStateAction(
         ? {
             currentRoom: {
               ...room,
+              cleared: expedition?.currentRoom.cleared ?? room.cleared,
               puzzle: room.puzzle
                 ? {
                     id: room.puzzle.id,
@@ -2260,16 +2268,17 @@ export async function getTowerRunStateAction(
                 : undefined,
             },
             rooms: exploration.graph.map((node) => {
-              const known =
-                exploration.visited.includes(node.id) ||
-                exploration.countermeasures?.includes("MAP");
+              const projectedNode = expedition?.rooms.find((entry) => entry.id === node.id);
+              const known = projectedNode
+                ? projectedNode.kind !== "UNKNOWN"
+                : exploration.visited.includes(node.id) || exploration.countermeasures?.includes("MAP");
               return {
                 id: node.id,
                 title: known ? node.title : "Sala desconhecida",
                 kind: known ? node.kind : "UNKNOWN",
-                visited: exploration.visited.includes(node.id),
+                visited: projectedNode?.visited ?? exploration.visited.includes(node.id),
                 current: node.id === room.id,
-                cleared: node.cleared,
+                cleared: projectedNode?.cleared ?? node.cleared,
                 x: node.x,
                 y: node.y,
                 connections: node.connections,
@@ -2290,10 +2299,11 @@ export async function getTowerRunStateAction(
             }),
             routes: room.connections
               .map((id) => {
+                const projectedRoute = expedition?.routes.find((entry) => entry.id === id);
                 const node = exploration.graph.find(
                   (candidate) => candidate.id === id,
                 );
-                const blockedReason = exploration.encounter
+                const blockedReason = projectedRoute ? projectedRoute.blockedReason : exploration.encounter
                   ? "Inimigos bloqueiam a passagem. Lute ou espere reforços."
                   : !room.cleared && room.kind === "PUZZLE"
                     ? "Uma porta trancada depende do enigma desta sala."
@@ -2303,15 +2313,15 @@ export async function getTowerRunStateAction(
                 return node
                   ? {
                       id: node.id,
-                      title: exploration.countermeasures?.includes("MAP")
+                      title: projectedRoute ? projectedRoute.title : exploration.countermeasures?.includes("MAP")
                         ? node.title
                         : "Rota desconhecida",
-                      kind: exploration.countermeasures?.includes("MAP") ||
+                      kind: projectedRoute ? projectedRoute.kind : exploration.countermeasures?.includes("MAP") ||
                         exploration.countermeasures?.includes("SCOUT")
                         ? node.kind
                         : "UNKNOWN",
-                      visited: exploration.visited.includes(node.id),
-                      cleared: node.cleared,
+                      visited: projectedRoute?.visited ?? exploration.visited.includes(node.id),
+                      cleared: projectedRoute?.cleared ?? node.cleared,
                       available: !blockedReason,
                       blockedReason,
                     }
@@ -2322,10 +2332,10 @@ export async function getTowerRunStateAction(
             modifiers: exploration.activeModifiers,
             countermeasures: exploration.countermeasures ?? [],
             pressureShield: exploration.pressureShield ?? 0,
-            encounter: exploration.encounter ?? null,
+            encounter: expedition?.currentRoom.encounter ?? exploration.encounter ?? null,
             relics: exploration.relics ?? [],
-            lastOutcome: exploration.lastOutcome ?? null,
-            replay: exploration.pendingReplay ?? null,
+            lastOutcome: expedition?.currentRoom.lastOutcome ?? exploration.lastOutcome ?? null,
+            replay: (expedition?.currentRoom.replay as typeof exploration.pendingReplay) ?? exploration.pendingReplay ?? null,
             runReport: exploration.runReport ?? null,
             communityDiscoveries,
             votes: run.members.map((member) => {

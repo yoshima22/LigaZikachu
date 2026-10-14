@@ -10,11 +10,15 @@ type Exploration = NonNullable<
     { ok: true }
   >["exploration"]
 >;
+type Expedition = NonNullable<
+  Extract<Awaited<ReturnType<typeof import("../actions").getTowerRunStateAction>>, { ok: true; unchanged: false }>["expedition"]
+>;
 const kindLabel: Record<string, string> = {
   ENTRANCE: "Entrada",
   PUZZLE: "Enigma",
   COMBAT: "Combate",
   REST: "Descanso",
+  RECOVERY: "Recuperação",
   EVENT: "Evento",
   RESCUE: "Resgate",
   LUCK: "Sorte",
@@ -24,6 +28,7 @@ const kindLabel: Record<string, string> = {
 
 export function TowerRoomView({
   exploration,
+  expedition,
   routeId,
   puzzleChoice,
   roomAction,
@@ -34,6 +39,7 @@ export function TowerRoomView({
   decisionFooter,
 }: {
   exploration: Exploration;
+  expedition?: Expedition | null;
   routeId?: string;
   puzzleChoice?: string;
   roomAction?: string;
@@ -61,10 +67,14 @@ export function TowerRoomView({
       )
       .map((node) => node.id),
   );
+  const visibleY = exploration.rooms.filter((node) => visibleIds.has(node.id)).map((node) => node.y);
+  const minY = Math.min(...visibleY);
+  const maxY = Math.max(...visibleY);
+  const mapHeight = expedition ? Math.min(1280, Math.max(320, (maxY - minY) * 14 + 220)) : 1280;
   const positions = Object.fromEntries(
     exploration.rooms.map((node) => [
       node.id,
-      [node.x, node.y] as [number, number],
+      [node.x, expedition ? 15 + (node.y - minY) / Math.max(1, maxY - minY) * 70 : node.y] as [number, number],
     ]),
   );
   // Só desenha corredores já percorridos ou que saem da sala atual. As conexões
@@ -79,7 +89,13 @@ export function TowerRoomView({
   const connectedIds = new Set(edges.flat());
   return (
     <div className="space-y-4">
-      {exploration.votes.some((vote) => vote.confirmed) && (
+      {expedition && <section className="rounded-2xl border border-cyan-300/30 bg-cyan-950/15 p-3 sm:p-4" aria-label="Posição dos aliados">
+        <div className="flex flex-wrap items-center justify-between gap-2"><h3 className="text-xs font-black uppercase tracking-widest text-cyan-200">Sua frente e seus aliados</h3><span className="text-[10px] text-slate-400">{expedition.pressureExplanation.activeFronts} frente(s) ativa(s)</span></div>
+        <div className="mt-3 grid gap-2 sm:grid-cols-3">{expedition.members.map((member) => <div key={member.id} className={`min-w-0 rounded-xl border p-2.5 ${member.roomId === expedition.mine.roomId ? "border-amber-300/45 bg-amber-300/10" : member.status === "ACTIVE" ? "border-cyan-300/35 bg-cyan-300/5" : "border-slate-700 bg-slate-900/60"}`}><b className="block truncate text-sm text-white">{member.name}</b><p className="mt-1 text-[11px] text-slate-300">{member.status === "AFK_ABANDONED" ? "Abandonou por AFK" : member.status === "DOWNED" ? "Caído · aguardando resgate" : member.separated ? `Separado · ${member.roomTitle}` : "Na sua sala"}</p><p className={`mt-1 text-[10px] font-bold ${member.confirmed ? "text-emerald-300" : member.misses > 0 ? "text-amber-300" : "text-slate-400"}`}>{member.status === "ACTIVE" ? member.confirmed ? "✓ Ação confirmada" : member.misses > 0 ? `Aguardando · ${member.misses}/2 janela sem confirmação` : "Aguardando decisão" : "Sem ação nesta janela"}</p></div>)}</div>
+        {expedition.bossGate && !expedition.bossGate.allowed && <p className="mt-3 rounded-lg border border-amber-300/30 bg-amber-300/10 p-2 text-xs text-amber-100">Chefe bloqueado: aguardando {expedition.bossGate.missingNames.length ? expedition.bossGate.missingNames.join(", ") : "uma frente concluir o encontro pendente"}. Reunir o grupo custa turnos e pode aumentar a Pressão.</p>}
+        {expedition.rendezvous && <p className="mt-3 rounded-lg border border-cyan-300/30 bg-cyan-300/10 p-2 text-xs text-cyan-100">{expedition.rendezvous.waitingAtBoss} já espera no chefe. Siga pela passagem {exploration.routes.find((route) => route?.id === expedition.rendezvous?.nextRoomId)?.title ?? "indicada no mapa"} ({expedition.rendezvous.steps} movimento(s) conhecidos) para reunir o grupo.</p>}
+      </section>}
+      {!expedition && exploration.votes.some((vote) => vote.confirmed) && (
         <div className="rounded-2xl border border-cyan-400/25 bg-cyan-950/10 p-4">
           <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
             Votação do grupo
@@ -162,11 +178,15 @@ export function TowerRoomView({
           Mapa vivo do andar
         </p>
         <p className="mb-3 text-[11px] text-slate-500">
-          A subida acontece de cima para baixo. Linhas iluminadas são passagens
-          conhecidas; nomes em ciano mostram escolhas dos aliados.
+          {expedition ? "Você escolhe sua própria rota. Atual: sua sala; Próxima: passagem disponível; Bloqueada: resolva a sala antes de sair." : "A subida acontece de cima para baixo. Linhas iluminadas são passagens conhecidas; nomes em ciano mostram escolhas dos aliados."}
         </p>
-        <div className="rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)]">
-          <div className="relative h-[1280px] w-full min-w-0">
+        {expedition && <div className="space-y-2 sm:hidden" aria-label="Mapa em lista para celular">
+          <div className="rounded-xl border border-amber-300/50 bg-amber-300/10 p-3"><span className="text-[10px] font-black uppercase text-amber-200">● Você está aqui · {kindLabel[room.kind] ?? room.kind}</span><b className="mt-1 block text-sm text-white">{room.title}</b><p className="mt-1 text-xs text-slate-300">{room.cleared ? "Sala resolvida; escolha uma passagem." : "Resolva esta sala antes de seguir."}</p></div>
+          {exploration.routes.map((route) => route && <button type="button" key={route.id} disabled={disabled || !route.available} onClick={() => route.available && onRoute(route.id)} className={`w-full rounded-xl border p-3 text-left ${routeId === route.id ? "border-cyan-200 bg-cyan-200/15" : route.available ? "border-purple-300/40 bg-purple-950/30" : "border-red-400/35 bg-red-950/20"}`}><span className={`text-[10px] font-black uppercase ${route.available ? "text-cyan-200" : "text-red-200"}`}>{route.available ? routeId === route.id ? "✓ Próxima rota escolhida" : "→ Próxima rota disponível" : "🔒 Rota bloqueada"}</span><b className="mt-1 block text-sm text-white">{route.title}</b>{route.blockedReason && <span className="mt-1 block text-xs text-red-200">{route.blockedReason}</span>}</button>)}
+          <p className="text-[10px] text-slate-400">O mapa completo está disponível em telas maiores; esta lista mostra apenas passagens da sua sala.</p>
+        </div>}
+        <div className={`rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)] ${expedition ? "hidden sm:block" : ""}`}>
+          <div className="relative w-full min-w-0" style={{ height: mapHeight }}>
             <svg
               className="absolute inset-0 h-full w-full"
               viewBox="0 0 100 100"
@@ -225,7 +245,7 @@ export function TowerRoomView({
                 >
                   <span className="block text-[9px] font-black uppercase">
                     {node.current
-                      ? "● Equipe nesta sala"
+                      ? expedition ? "● Você nesta sala" : "● Equipe nesta sala"
                       : selectable
                         ? "→ Ir para"
                         : blockedReason
@@ -242,7 +262,7 @@ export function TowerRoomView({
                   )}
                   {node.current && (
                     <span className="mt-1 block truncate text-[8px] font-bold text-amber-100">
-                      {exploration.votes.map((vote) => vote.name).join(", ")}
+                      {expedition ? expedition.members.filter((member) => member.roomId === node.id && member.status !== "AFK_ABANDONED").map((member) => member.name).join(", ") : exploration.votes.map((vote) => vote.name).join(", ")}
                     </span>
                   )}
                   {voters.length > 0 && (
@@ -286,8 +306,7 @@ export function TowerRoomView({
             ))}
           </div>
           <p className="mt-2 text-[11px] text-slate-500">
-            Cada ação confirmada por um jogador adiciona Pressão. Esperar
-            inimigos adiciona mais 1 além do custo normal.
+            {expedition ? `Último turno: ${expedition.pressureExplanation.lastChange >= 0 ? "+" : ""}${expedition.pressureExplanation.lastChange} Pressão. ${expedition.pressureExplanation.reasons.join("; ") || "Uma frente reunida sofre o custo base; frentes separadas geram custo adicional limitado."}` : "Cada ação confirmada por um jogador adiciona Pressão. Esperar inimigos adiciona mais 1 além do custo normal."}
           </p>
         </div>
       )}
@@ -432,8 +451,7 @@ export function TowerRoomView({
       {!room.cleared && (room.kind === "EVENT" || room.kind === "LUCK") && (
         <div className="border-b border-fuchsia-400/25 bg-slate-950 p-4">
           <p className="text-sm text-fuchsia-100">
-            Um objeto ativável foi encontrado. Interagir pode conceder uma
-            relíquia ou acionar uma sabotagem; ignorar preserva o estado atual.
+            {expedition ? "Um achado da Torre está à vista. Interagir reserva ZC para a equipe; o achado só fica garantido ao vencer o chefe deste andar. Ignorar preserva o estado atual." : "Um objeto ativável foi encontrado. Interagir pode conceder uma relíquia ou acionar uma sabotagem; ignorar preserva o estado atual."}
           </p>
           <div className="mt-3 grid grid-cols-2 gap-2">
             <button
