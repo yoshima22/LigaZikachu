@@ -214,6 +214,11 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isFirstAidKit) return true;
     if (isAbilityTm) return Boolean(abilityTmDef?.pokemonIds.includes(mascot.pokemonId)) && mascot.hiddenAbilityUnlocked !== true;
     if (isAntidote) return Boolean(mascot.diseasedAt);
+    if (selectedBuffItem?.type === "VACATION_TICKET") {
+      // Férias só para mascote livre (repouso já vencido conta como livre): evita escolher quem o servidor vai recusar.
+      const restingActive = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
+      return (!mascot.arenaState || mascot.arenaState === "FREE" || mascot.arenaState === "RESTING") && !restingActive;
+    }
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
       return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;

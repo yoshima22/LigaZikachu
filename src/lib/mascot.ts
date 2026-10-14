@@ -3149,8 +3149,13 @@ export async function applyVacationTicket(playerId: string, mascotId: string) {
     include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
   });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
-  if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para ir de férias.");
-  if (mascot.expeditions.length > 0) throw new Error("Mascote está em expedição. Conclua antes das férias.");
+  const name = mascot.nickname ?? getPokemonName(mascot.pokemonId);
+  const restingMs = mascot.restingUntil ? mascot.restingUntil.getTime() - Date.now() : 0;
+  if (mascot.arenaState === "RESTING" && restingMs > 0) throw new Error(`${name} está em repouso por mais ${Math.ceil(restingMs / 60_000)} min (descanso depois da Arena/atividade). Espere o repouso terminar ou use uma Política de Fraqueza antes de enviá-lo de férias.`);
+  if (mascot.arenaState === "INJURED") throw new Error(`${name} está ferido. Passe pelo Atendimento SUS antes de enviá-lo de férias.`);
+  if (mascot.arenaState === "ARENA") throw new Error(`${name} está em uma equipe da Arena Z. Retire-o da equipe antes de enviá-lo de férias.`);
+  if (mascot.arenaState !== "FREE" && !(mascot.arenaState === "RESTING" && restingMs <= 0)) throw new Error(`${name} não está livre para ir de férias no momento (${mascot.arenaState}).`);
+  if (mascot.expeditions.length > 0) throw new Error(`${name} está em expedição. Conclua antes das férias.`);
   await assertNoXpShareToLeave(mascot, "ir de férias");
   const shopItem = await prisma.shopItem.findFirst({ where: { type: "VACATION_TICKET", active: true } });
   const meta = (shopItem?.metadata ?? {}) as Record<string, number>;
