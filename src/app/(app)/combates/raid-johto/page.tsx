@@ -268,6 +268,29 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
         </div>
       </section>
 
+      {state.defeatedRankings.length > 0 && (
+        <section className="rounded-2xl border border-border bg-slate-900/60 p-4">
+          <h2 className="mb-3 flex items-center gap-2 text-lg font-bold text-white"><Trophy size={17} className="text-emerald-300" /> Ranking dos líderes derrotados</h2>
+          <div className="space-y-2">
+            {state.defeatedRankings.map((d) => (
+              <details key={d.leaderId} className="rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2">
+                <summary className="cursor-pointer text-sm font-bold text-white">✅ {d.leaderName} <span className="text-[10px] font-normal text-slate-500">· {d.ranking.length} treinador(es)</span></summary>
+                <ol className="mt-2 space-y-1.5">
+                  {d.ranking.map((row, index) => (
+                    <li key={row.playerId} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
+                      <span className="w-6 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
+                      <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
+                      <span className="text-[10px] text-slate-500">{row.attackCount} atq · maior {fmt(row.highestSingleDamage)}</span>
+                      <span className="font-black text-red-200">{fmt(row.damage)}</span>
+                    </li>
+                  ))}
+                </ol>
+              </details>
+            ))}
+          </div>
+        </section>
+      )}
+
       <section className="rounded-2xl border border-border bg-slate-900/60 p-4">
         <h2 className="mb-1 text-lg font-bold text-white">Replays dos últimos {state.recent.length || 20} combates</h2>
         <p className="mb-3 text-xs text-slate-500">Assista às lutas de qualquer treinador e veja como os mascotes do líder estão caindo.</p>

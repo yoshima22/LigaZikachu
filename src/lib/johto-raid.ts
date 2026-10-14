@@ -54,6 +54,7 @@ export type JohtoRaidState = {
   totalHpMax: number;
   totalHpCurrent: number;
   currentRanking: JohtoLeaderRankingEntry[];
+  defeatedRankings: Array<{ leaderId: string; leaderName: string; ranking: JohtoLeaderRankingEntry[] }>;
   recent: JohtoRecentFight[];
   participants: number;
   totalAttacks: number;
@@ -198,7 +199,7 @@ export async function getComboState(eventId: string, now = new Date()): Promise<
 // ── Estado para a página ─────────────────────────────────────────────────────
 
 export async function getJohtoRaidState(playerId?: string | null): Promise<JohtoRaidState> {
-  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null }, shield: null };
+  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], defeatedRankings: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null }, shield: null };
   const event = await getJohtoEvent();
   if (!event) return empty;
   await ensureLeaderMascots(event.id).catch(() => undefined);
@@ -225,7 +226,8 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     }];
   });
   const current = leaders.find((l) => l.status === "CURRENT") ?? null;
-  const [stats, recent, attackCount, participants, myLast, rewards, combo, shield] = await Promise.all([
+  const defeated = leaders.filter((l) => l.status === "DEFEATED");
+  const [stats, recent, attackCount, participants, myLast, rewards, combo, shield, defeatedStats] = await Promise.all([
     current ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: current.id, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { id: "asc" }], take: 15, select: { playerId: true, damage: true, damageReceived: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
     prisma.johtoRaidAttempt.findMany({
       where: { eventId: event.id, replayJson: { not: Prisma.DbNull }, player: NON_ADMIN }, orderBy: { createdAt: "desc" }, take: JOHTO_REPLAY_HISTORY,
@@ -237,7 +239,12 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     playerId ? prisma.johtoRaidReward.findMany({ where: { eventId: event.id, playerId }, orderBy: { createdAt: "desc" } }) : [],
     getComboState(event.id),
     playerId ? getJohtoShieldState(event.id, playerId) : Promise.resolve(null),
+    defeated.length ? prisma.johtoRaidLeaderStat.findMany({ where: { leaderId: { in: defeated.map((l) => l.id) }, player: NON_ADMIN }, orderBy: [{ damage: "desc" }, { attackCount: "desc" }, { id: "asc" }], select: { leaderId: true, playerId: true, damage: true, damageReceived: true, attackCount: true, highestSingleDamage: true, player: { select: { displayName: true } } } }) : [],
   ]);
+  const defeatedRankings = defeated.map((l) => ({
+    leaderId: l.id, leaderName: l.name,
+    ranking: defeatedStats.filter((s) => s.leaderId === l.id).slice(0, 15).map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, damageReceived: s.damageReceived, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage })),
+  }));
   const ranking = stats
     .map((s): JohtoLeaderRankingEntry => ({ playerId: s.playerId, playerName: s.player.displayName, damage: s.damage, damageReceived: s.damageReceived, attackCount: s.attackCount, highestSingleDamage: s.highestSingleDamage }))
     .sort((a, b) => b.damage - a.damage || b.attackCount - a.attackCount || a.playerId.localeCompare(b.playerId));
@@ -256,6 +263,7 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     totalHpMax: leaders.reduce((sum, l) => sum + l.hpMax, 0),
     totalHpCurrent: leaders.reduce((sum, l) => sum + l.hpCurrent, 0),
     currentRanking: ranking,
+    defeatedRankings,
     recent: recent.map((a) => ({
       id: a.id, playerName: a.player.displayName, leaderName: getJohtoLeader(a.leaderKey)?.name ?? a.leaderKey, damage: a.damage,
       win: Boolean((a.summaryJson as { win?: boolean } | null)?.win), createdAt: a.createdAt.toISOString(), hasReplay: true,
