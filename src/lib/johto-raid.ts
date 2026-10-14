@@ -9,7 +9,7 @@ import { EGG_SHINY_CHANCE, EGG_STAT_RANGES, getPokemonName, getPokemonTypes } fr
 import {
   comboBonusPct, computeLeaderRewards, DEFAULT_JOHTO_REWARDS, getComboWindowState, getJohtoLeader, JOHTO_DEFAULT_COOLDOWN_MIN, JOHTO_DEFAULT_DAMAGE_SCALE,
   JOHTO_DEFAULT_LEADER_DAYS, JOHTO_EVENT_SLUG, JOHTO_LEADER_HP, JOHTO_LEADERS, JOHTO_MASCOTS_PER_LEADER, JOHTO_REPLAY_HISTORY,
-  JOHTO_VISIBLE_KEY, readRewardConfig, runJohtoBattle, toReplayLineup, type JohtoLeaderDef, type JohtoBattleOutcome,
+  JOHTO_VISIBLE_KEY, JOHTO_HP_STEP, JOHTO_REWARD_ZC_STEP, JOHTO_CLAIR_KEY, JOHTO_CLAIR_ITEM_TIER, readRewardConfig, runJohtoBattle, toReplayLineup, type JohtoLeaderDef, type JohtoBattleOutcome,
 } from "@/lib/johto-raid-sim";
 
 const NON_ADMIN = { user: { role: { notIn: ["ADMIN", "SUPER_ADMIN"] as ("ADMIN" | "SUPER_ADMIN")[] } } };
@@ -60,6 +60,8 @@ export type JohtoRaidState = {
   totalAttacks: number;
   me: { damageOnCurrent: number; attacksOnCurrent: number; rankOnCurrent: number | null; cooldownUntil: string | null } | null;
   myRewards: JohtoPendingReward[];
+  /** Selo do Dragão (Clair): item exclusivo da raid; null se o jogador não ganhou. */
+  clairItem: { id: string; used: boolean } | null;
   /** Regra do evento: só UM mascote pode ser escolhido em toda a raid. Preenchido quando o jogador já usou a escolha. */
   choiceUsed: { leaderName: string; pokemonId: number } | null;
   /** Combo de ataque em grupo para o próximo ataque de quem está vendo (treinadores que atacaram nos últimos 30 min). */
@@ -158,7 +160,18 @@ export async function openNextLeaderWindow(eventId: string, now = new Date()) {
   if (leaders.some((l) => l.startedAt && !l.defeatedAt && !l.escapedAt)) return null;
   const next = leaders.find((l) => !l.startedAt && !l.defeatedAt && !l.escapedAt);
   if (!next) return null;
-  const opened = await prisma.johtoRaidLeader.updateMany({
+  // Líder anterior derrotado: este entra com +300 mil de vida (se o anterior fugiu, herda a vida dele, sem aumento).
+  const prev = leaders.find((l) => l.position === next.position - 1);
+  if (prev && (prev.defeatedAt || prev.escapedAt) && next.hpCurrent === next.hpMax) {
+    const per = Math.floor((prev.hpMax + (prev.defeatedAt ? JOHTO_HP_STEP : 0)) / JOHTO_MASCOTS_PER_LEADER);
+    if (per * JOHTO_MASCOTS_PER_LEADER !== next.hpMax) {
+      await prisma.$transaction([
+        prisma.johtoRaidLeaderMascot.updateMany({ where: { leaderId: next.id }, data: { hpMax: per, hpCurrent: per } }),
+        prisma.johtoRaidLeader.update({ where: { id: next.id }, data: { hpMax: per * JOHTO_MASCOTS_PER_LEADER, hpCurrent: per * JOHTO_MASCOTS_PER_LEADER } }),
+      ]);
+    }
+  }
+  const opened =await prisma.johtoRaidLeader.updateMany({
     where: { id: next.id, startedAt: null, defeatedAt: null, escapedAt: null },
     data: { startedAt: now, expiresAt: new Date(now.getTime() + event.leaderDays * DAY_MS) },
   });
@@ -199,7 +212,7 @@ export async function getComboState(eventId: string, now = new Date()): Promise<
 // ── Estado para a página ─────────────────────────────────────────────────────
 
 export async function getJohtoRaidState(playerId?: string | null): Promise<JohtoRaidState> {
-  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], defeatedRankings: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null }, shield: null };
+  const empty: JohtoRaidState = { event: null, leaders: [], current: null, totalHpMax: 0, totalHpCurrent: 0, currentRanking: [], defeatedRankings: [], recent: [], participants: 0, totalAttacks: 0, me: null, myRewards: [], clairItem: null, choiceUsed: null, combo: { stacks: 0, bonusPct: 0, nextDropAt: null }, shield: null };
   const event = await getJohtoEvent();
   if (!event) return empty;
   await ensureLeaderMascots(event.id).catch(() => undefined);
@@ -276,10 +289,11 @@ export async function getJohtoRaidState(playerId?: string | null): Promise<Johto
     } : null,
     combo, shield,
     choiceUsed: (() => {
-      const used = rewards.find((r) => r.tier !== "MOST_ATTACKS" && r.claimedAt && r.chosenPokemonId);
+      const used = rewards.find((r) => r.tier !== "MOST_ATTACKS" && r.tier !== JOHTO_CLAIR_ITEM_TIER && r.claimedAt && r.chosenPokemonId);
       return used ? { leaderName: getJohtoLeader(used.leaderKey)?.name ?? used.leaderKey, pokemonId: used.chosenPokemonId! } : null;
     })(),
-    myRewards: rewards.filter((r) => r.tier !== "MOST_ATTACKS").map((r) => ({
+    clairItem: (() => { const item = rewards.find((r) => r.tier === JOHTO_CLAIR_ITEM_TIER); return item ? { id: item.id, used: Boolean(item.claimedAt) } : null; })(),
+    myRewards: rewards.filter((r) => r.tier !== "MOST_ATTACKS" && r.tier !== JOHTO_CLAIR_ITEM_TIER).map((r) => ({
       id: r.id, leaderKey: r.leaderKey, leaderName: getJohtoLeader(r.leaderKey)?.name ?? r.leaderKey, tier: r.tier, zc: r.zc, level: r.mascotLevel, egg: r.egg,
       claimed: Boolean(r.claimedAt), chosenPokemonId: r.chosenPokemonId, options: getJohtoLeader(r.leaderKey)?.roster.map((e) => e.pokemonId) ?? [],
     })),
@@ -497,12 +511,19 @@ async function thankParticipants(eventId: string) {
   });
 }
 
+/** ZC extra por prêmio: +950 por cada degrau de vida (+300 mil) que o líder tem sobre o primeiro da raid. */
+async function leaderRewardBonusZc(eventId: string, hpMax: number) {
+  const first = await prisma.johtoRaidLeader.findFirst({ where: { eventId, position: 0 }, select: { hpMax: true } });
+  const steps = first ? Math.max(0, Math.round((hpMax - first.hpMax) / JOHTO_HP_STEP)) : 0;
+  return steps * JOHTO_REWARD_ZC_STEP;
+}
+
 /** Prévia dos prêmios de um líder com as estatísticas atuais (sem entregar nada). */
 export async function previewLeaderRewards(leaderId: string) {
   const leader = await prisma.johtoRaidLeader.findUnique({ where: { id: leaderId }, include: { event: true } });
   if (!leader) return [];
   const stats = await prisma.johtoRaidLeaderStat.findMany({ where: { leaderId, player: NON_ADMIN }, select: { playerId: true, damage: true, attackCount: true, player: { select: { displayName: true } } } });
-  const rows = computeLeaderRewards(stats, leader.finalBlowPlayerId, readRewardConfig(leader.event.rewardConfigJson));
+  const rows = computeLeaderRewards(stats, leader.finalBlowPlayerId, readRewardConfig(leader.event.rewardConfigJson), await leaderRewardBonusZc(leader.eventId, leader.hpMax));
   const names = new Map(stats.map((s) => [s.playerId, s.player.displayName]));
   return rows.map((r) => ({ ...r, playerName: names.get(r.playerId) ?? "Jogador", leaderName: getJohtoLeader(leader.key)?.name ?? leader.key }));
 }
@@ -514,7 +535,7 @@ export async function grantLeaderRewards(leaderId: string) {
   const def = getJohtoLeader(leader.key);
   const config = readRewardConfig(leader.event.rewardConfigJson);
   const stats = await prisma.johtoRaidLeaderStat.findMany({ where: { leaderId, player: NON_ADMIN }, select: { playerId: true, damage: true, attackCount: true } });
-  const rows = computeLeaderRewards(stats, leader.finalBlowPlayerId, config);
+  const rows = computeLeaderRewards(stats, leader.finalBlowPlayerId, config, await leaderRewardBonusZc(leader.eventId, leader.hpMax));
   let granted = 0;
   for (const row of rows) {
     try {
@@ -544,6 +565,25 @@ export async function grantLeaderRewards(leaderId: string) {
       if (!(error instanceof Prisma.PrismaClientKnownRequestError && error.code === "P2002")) throw error; // P2002 = já entregue
     }
   }
+  if (leader.key === JOHTO_CLAIR_KEY) {
+    // Item exclusivo da raid: todo participante de algum combate contra a Clair (idempotente pelo índice único).
+    const playerIds = [...new Set(stats.filter((s) => s.attackCount > 0).map((s) => s.playerId))];
+    const created = await prisma.johtoRaidReward.createMany({
+      data: playerIds.map((playerId) => ({ eventId: leader.eventId, leaderKey: leader.key, playerId, tier: JOHTO_CLAIR_ITEM_TIER, zc: 0, mascotLevel: 0, egg: false })),
+      skipDuplicates: true,
+    });
+    if (created.count > 0) {
+      const items = await prisma.johtoRaidReward.findMany({ where: { eventId: leader.eventId, leaderKey: leader.key, tier: JOHTO_CLAIR_ITEM_TIER, playerId: { in: playerIds } }, select: { id: true, playerId: true } });
+      await prisma.playerNotification.createMany({
+        data: items.map((item) => ({
+          playerId: item.playerId, category: "EVENT", type: "JOHTO_RAID_REWARD", title: "Item da Clair liberado!",
+          body: "Você ganhou o Selo do Dragão: escolha a personalidade e o atributo principal de um dos seus mascotes. Use na página da raid.",
+          href: HREF, entityId: item.id, eventKey: `johto-raid-reward:${item.id}`,
+        })),
+        skipDuplicates: true,
+      });
+    }
+  }
   await prisma.johtoRaidLeader.update({ where: { id: leaderId }, data: { rewardsGrantedAt: new Date() } });
   return { granted, total: rows.length };
 }
@@ -556,7 +596,7 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
   if (!reward || reward.playerId !== player.id) return { ok: false, message: "Prêmio não encontrado." };
   if (reward.tier === "MOST_ATTACKS") return { ok: false, message: "O ovo por maior número de ataques já foi enviado para sua conta." };
   if (reward.claimedAt) return { ok: false, message: "Você já escolheu o mascote deste prêmio." };
-  const earlier = await prisma.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, claimedAt: { not: null } }, select: { leaderKey: true, chosenPokemonId: true } });
+  const earlier = await prisma.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, tier: { not: JOHTO_CLAIR_ITEM_TIER }, claimedAt: { not: null } }, select: { leaderKey: true, chosenPokemonId: true } });
   if (earlier) return { ok: false, message: `Você já escolheu ${earlier.chosenPokemonId ? getPokemonName(earlier.chosenPokemonId) : "um mascote"} (${getJohtoLeader(earlier.leaderKey)?.name ?? earlier.leaderKey}). Só é possível escolher UM mascote em toda a raid.` };
   const def = getJohtoLeader(reward.leaderKey);
   if (!def || !def.roster.some((entry) => entry.pokemonId === pokemonId)) return { ok: false, message: "Esse mascote não faz parte do time do líder." };
@@ -573,7 +613,7 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
     await prisma.$transaction(async (tx) => {
       // Trava por jogador: duas escolhas simultâneas (ou em líderes diferentes) não passam.
       await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`johto-claim:${player.id}`}))`);
-      const other = await tx.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, claimedAt: { not: null } }, select: { id: true } });
+      const other = await tx.johtoRaidReward.findFirst({ where: { eventId: reward.eventId, playerId: player.id, tier: { not: JOHTO_CLAIR_ITEM_TIER }, claimedAt: { not: null } }, select: { id: true } });
       if (other) throw new Error("ONE_ONLY");
       const claim = await tx.johtoRaidReward.updateMany({ where: { id: reward.id, playerId: player.id, claimedAt: null }, data: { claimedAt: new Date(), chosenPokemonId: pokemonId } });
       if (claim.count === 0) throw new Error("ALREADY");
@@ -592,6 +632,31 @@ export async function claimJohtoMascotReward(userId: string, rewardId: string, p
     throw error;
   }
   return { ok: true, message: `${getPokemonName(pokemonId)} (Nv.${reward.mascotLevel}) entrou para a sua coleção!` };
+}
+
+/** Selo do Dragão (Clair): uso único, só nesta página. Define a personalidade e deixa o atributo escolhido como o maior (troca de valor com o maior atual, sem inflar o total). */
+const CLAIR_STAT_KEYS = ["statForce", "statAgility", "statCharisma", "statInstinct", "statVitality"] as const;
+export async function useClairItem(userId: string, mascotId: string, personality: string, statKey: string): Promise<{ ok: boolean; message: string }> {
+  const player = await prisma.player.findUnique({ where: { userId }, select: { id: true } });
+  if (!player) return { ok: false, message: "Perfil não encontrado." };
+  if (!Object.values(MascotPersonality).includes(personality as MascotPersonality)) return { ok: false, message: "Personalidade inválida." };
+  const key = CLAIR_STAT_KEYS.find((k) => k === statKey);
+  if (!key) return { ok: false, message: "Atributo inválido." };
+  try {
+    return await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw(Prisma.sql`SELECT pg_advisory_xact_lock(hashtext(${`johto-clair-item:${player.id}`}))`);
+      const spent = await tx.johtoRaidReward.updateMany({ where: { playerId: player.id, tier: JOHTO_CLAIR_ITEM_TIER, claimedAt: null }, data: { claimedAt: new Date() } });
+      if (spent.count === 0) throw new Error("Você não tem o Selo do Dragão disponível.");
+      const mascot = await tx.mascot.findFirst({ where: { id: mascotId, playerId: player.id }, select: { id: true, pokemonId: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true } });
+      if (!mascot) throw new Error("Mascote não encontrado.");
+      const top = CLAIR_STAT_KEYS.reduce((best, k) => (mascot[k] > mascot[best] ? k : best), CLAIR_STAT_KEYS[0]);
+      const data: Prisma.MascotUpdateInput = { personality: personality as MascotPersonality };
+      if (mascot[key] < mascot[top]) { data[key] = mascot[top]; data[top] = mascot[key]; }
+      await tx.mascot.update({ where: { id: mascot.id }, data });
+      await tx.mascotEvent.create({ data: { mascotId: mascot.id, emoji: "🐉", description: "Selo do Dragão (Raid de Johto): personalidade e atributo principal ajustados." } });
+      return { ok: true, message: `${getPokemonName(mascot.pokemonId)} foi ajustado com o Selo do Dragão!` };
+    });
+  } catch (error) { return { ok: false, message: error instanceof Error ? error.message : "Não foi possível usar o item." }; }
 }
 
 // ── Replays ──────────────────────────────────────────────────────────────────

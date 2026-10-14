@@ -6,6 +6,11 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 export const JOHTO_EVENT_SLUG = "raid-lideres-johto";
 export const JOHTO_VISIBLE_KEY = "johto_raid_visible";
 export const JOHTO_LEADER_HP = 2_500_000;
+/** Cada líder que entra depois de um derrotado ganha +300 mil de vida (dividida entre os 6 mascotes) e +950 ZC em cada prêmio. */
+export const JOHTO_HP_STEP = 300_000;
+export const JOHTO_REWARD_ZC_STEP = 950;
+export const JOHTO_CLAIR_KEY = "clair";
+export const JOHTO_CLAIR_ITEM_TIER = "CLAIR_ITEM";
 export const JOHTO_MASCOTS_PER_LEADER = 6;
 export const JOHTO_DEFAULT_COOLDOWN_MIN = 20;
 export const JOHTO_DEFAULT_DAMAGE_SCALE = 1;
@@ -130,7 +135,8 @@ export type RewardRow = { playerId: string; tier: RewardTier; zc: number; mascot
  * Quem deu o golpe final ganha o bônus de participante + ovo especial: se já era só participante, o ovo vem
  * no mesmo prêmio; se estava no pódio, recebe também uma linha FINAL_BLOW com o bônus de participante.
  */
-export function computeLeaderRewards(stats: LeaderStatRow[], finalBlowPlayerId: string | null, config: JohtoRewardConfig): RewardRow[] {
+export function computeLeaderRewards(stats: LeaderStatRow[], finalBlowPlayerId: string | null, config: JohtoRewardConfig, bonusZc = 0): RewardRow[] {
+  if (bonusZc > 0) config = { ...config, participantZc: config.participantZc + bonusZc, top: config.top.map((t) => ({ ...t, zc: t.zc + bonusZc })) as JohtoRewardConfig["top"] };
   const active = stats.filter((s) => s.attackCount > 0)
     .sort((a, b) => b.damage - a.damage || b.attackCount - a.attackCount || a.playerId.localeCompare(b.playerId));
   const rows: RewardRow[] = [];

@@ -8,7 +8,7 @@ import { getPokemonName, getStaticSpriteUrl } from "@/lib/mascot-data";
 import { COMBAT_ROLE_LABELS } from "@/lib/combat-roles";
 import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 import type { JohtoBattlePayload, JohtoLeaderState, JohtoPendingReward, JohtoRecentFight } from "@/lib/johto-raid";
-import { claimJohtoMascotAction, getJohtoReplayAction } from "../actions";
+import { claimJohtoMascotAction, getJohtoReplayAction, useClairItemAction } from "../actions";
 import { JohtoReplay } from "./johto-battle-view";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
@@ -207,6 +207,53 @@ Confirmar a escolha?`,
           </div>
         );
       })}
+    </section>
+  );
+}
+
+const CLAIR_STATS: Array<[string, string]> = [["statForce", "Força"], ["statAgility", "Agilidade"], ["statCharisma", "Carisma"], ["statInstinct", "Instinto"], ["statVitality", "Vitalidade"]];
+
+/** Selo do Dragão (recompensa da Clair): personalidade + atributo principal de um mascote. Só existe nesta página. */
+export function ClairItemPanel({ item, mascots }: { item: { id: string; used: boolean }; mascots: Array<{ id: string; pokemonId: number; nickname: string | null; level: number }> }) {
+  const router = useRouter();
+  const [pending, start] = useTransition();
+  const [mascotId, setMascotId] = useState("");
+  const [personality, setPersonality] = useState("");
+  const [stat, setStat] = useState("");
+  function use() {
+    const mascot = mascots.find((m) => m.id === mascotId);
+    if (!mascot || !personality || !stat) { toast.error("Escolha o mascote, a personalidade e o atributo principal."); return; }
+    if (!window.confirm(`Usar o Selo do Dragão em ${mascot.nickname ?? getPokemonName(mascot.pokemonId)}? Personalidade: ${PERSONALITY_LABEL[personality] ?? personality}. Atributo principal: ${CLAIR_STATS.find(([k]) => k === stat)?.[1]}. O item é de uso único.`)) return;
+    start(async () => {
+      const result = await useClairItemAction(mascotId, personality, stat);
+      (result.ok ? toast.success : toast.error)(result.message);
+      router.refresh();
+    });
+  }
+  const select = "w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white";
+  return (
+    <section className="rounded-2xl border border-indigo-400/40 bg-indigo-500/10 p-4">
+      <h2 className="text-lg font-bold text-white">🐉 Selo do Dragão <span className="text-xs font-semibold text-indigo-200">· recompensa da Clair</span></h2>
+      {item.used ? <p className="mt-2 text-xs text-indigo-100/80">Você já usou o Selo do Dragão.</p> : (
+        <>
+          <p className="mt-1 text-xs text-indigo-100/80">Item de uso único, válido só nesta raid. Escolha a personalidade de um mascote e o atributo principal: o atributo escolhido passa a ser o maior dele (troca de valor com o maior atual; o total não muda).</p>
+          <div className="mt-3 grid gap-2 sm:grid-cols-3">
+            <select className={select} value={mascotId} onChange={(e) => setMascotId(e.target.value)}>
+              <option value="">Mascote…</option>
+              {mascots.map((m) => <option key={m.id} value={m.id}>{m.nickname ?? getPokemonName(m.pokemonId)} · Nv.{m.level}</option>)}
+            </select>
+            <select className={select} value={personality} onChange={(e) => setPersonality(e.target.value)}>
+              <option value="">Personalidade…</option>
+              {Object.entries(PERSONALITY_LABEL).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+            <select className={select} value={stat} onChange={(e) => setStat(e.target.value)}>
+              <option value="">Atributo principal…</option>
+              {CLAIR_STATS.map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+            </select>
+          </div>
+          <button disabled={pending} onClick={use} className="mt-3 rounded-xl bg-indigo-400 px-4 py-2 text-xs font-black text-slate-950 hover:brightness-110 disabled:opacity-50">Usar Selo do Dragão</button>
+        </>
+      )}
     </section>
   );
 }

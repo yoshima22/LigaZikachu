@@ -7,7 +7,7 @@ import { getJohtoInvitationAdminSummary, JOHTO_INVITATION_PUSH, prepareJohtoInvi
 import { sendNotificationToUsers } from "@/lib/notifications";
 import {
   claimJohtoMascotReward, createJohtoEvent, getJohtoEvent, getJohtoReplay, grantLeaderRewards, isJohtoRaidVisibleToPlayers, openNextLeaderWindow,
-  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest, useJohtoRaidShield,
+  previewLeaderRewards, runJohtoRaidAttack, setJohtoRaidVisible, simulateJohtoTest, useClairItem, useJohtoRaidShield,
 } from "@/lib/johto-raid";
 
 const PATH = "/combates/raid-johto";
@@ -49,6 +49,15 @@ export async function claimJohtoMascotAction(rewardId: string, pokemonId: number
   const user = await getSessionUser();
   if (!user) return { ok: false, message: "Faça login novamente." };
   const result = await claimJohtoMascotReward(user.id, String(rewardId).slice(0, 60), Math.floor(Number(pokemonId)));
+  refresh();
+  return result;
+}
+
+/** Selo do Dragão da Clair: personalidade + atributo principal de um mascote do jogador. */
+export async function useClairItemAction(mascotId: string, personality: string, statKey: string) {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, message: "Faça login novamente." };
+  const result = await useClairItem(user.id, String(mascotId).slice(0, 60), String(personality), String(statKey));
   refresh();
   return result;
 }
@@ -168,7 +177,7 @@ export async function johtoAdminAction(
         const me = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
         if (!me) return fail("Perfil não encontrado.");
         const removed = await prisma.johtoRaidReward.deleteMany({ where: { eventId: event.id, playerId: me.id, tier: { startsWith: "TEST" } } });
-        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: me.id, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
+        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: me.id, tier: { not: "CLAIR_ITEM" }, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
         return done(`Sua escolha foi liberada: ${removed.count} recompensa(s) de teste apagada(s), ${reopened.count} reaberta(s). Mascotes já criados não são removidos.`);
       }
       case "unlockPlayer": {
@@ -176,7 +185,7 @@ export async function johtoAdminAction(
         if (name.length < 2) return fail("Digite o nome do jogador.");
         const matches = await prisma.player.findMany({ where: { displayName: { equals: name, mode: "insensitive" } }, select: { id: true, displayName: true }, take: 2 });
         if (matches.length !== 1) return fail(matches.length === 0 ? "Jogador não encontrado (use o nome exato)." : "Mais de um jogador com esse nome.");
-        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: matches[0].id, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
+        const reopened = await prisma.johtoRaidReward.updateMany({ where: { eventId: event.id, playerId: matches[0].id, tier: { not: "CLAIR_ITEM" }, claimedAt: { not: null } }, data: { claimedAt: null, chosenPokemonId: null } });
         return done(`${matches[0].displayName}: ${reopened.count} escolha(s) liberada(s). O mascote já criado continua na conta dele (remova pelo painel de mascotes se necessário).`);
       }
       case "extend": {
