@@ -89,7 +89,8 @@ function CreateListingForm() {
     try {
       const res = await fetch("/api/bazar/inventory", { cache: "no-store" });
       if (res.ok) setInventory(await res.json());
-    } catch { /* ignore */ }
+      else toast.error("Não foi possível carregar o seu inventário agora. Recarregue a página e tente de novo.");
+    } catch { toast.error("Falha de conexão ao carregar o seu inventário. Recarregue a página e tente de novo."); }
     setLoadingInventory(false);
   };
 

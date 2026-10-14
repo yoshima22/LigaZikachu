@@ -109,6 +109,8 @@ interface Props {
 export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMascot = {} }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
+  // Erro fixo na tela (além do toast): nada de falha silenciosa ao usar um item.
+  const [inlineError, setInlineError] = useState<string | null>(null);
   const [selectedBuff, setSelectedBuff] = useState<string>("");
   // Task: só considera um mascote quando ele é escolhido de fato no campo de busca.
   const [selectedMascot, setSelectedMascot] = useState<string>("");
@@ -214,11 +216,6 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isFirstAidKit) return true;
     if (isAbilityTm) return Boolean(abilityTmDef?.pokemonIds.includes(mascot.pokemonId)) && mascot.hiddenAbilityUnlocked !== true;
     if (isAntidote) return Boolean(mascot.diseasedAt);
-    if (selectedBuffItem?.type === "VACATION_TICKET") {
-      // Férias só para mascote livre (repouso já vencido conta como livre): evita escolher quem o servidor vai recusar.
-      const restingActive = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
-      return (!mascot.arenaState || mascot.arenaState === "FREE" || mascot.arenaState === "RESTING") && !restingActive;
-    }
     if (isWeaknessPolicy) {
       const hasActiveRest = Boolean(mascot.restingUntil && new Date(mascot.restingUntil) > new Date());
       return mascot.arenaState === "INJURED" || mascot.arenaState === "RESTING" || hasActiveRest;
@@ -259,6 +256,22 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
 
   // Verifica se o mascote selecionado já tem EXP_BOOST ativo
   const selectedMascotActiveBuffs = selectedMascotObj?.activeBuffTypes ?? [];
+  useEffect(() => { setInlineError(null); }, [selectedMascot, selectedBuff]);
+  // Motivos conhecidos pelos quais o Ticket de Férias será recusado: mostrados ANTES de clicar, com o que fazer.
+  const blockReason: string | null = (() => {
+    if (selectedBuffItem?.type !== "VACATION_TICKET" || !selectedMascotObj) return null;
+    const m = selectedMascotObj;
+    const name = m.name;
+    if ((m.activeBuffTypes ?? []).some((t) => t === "XP_SHARE" || t === "XP_SHARE_TEAM")) {
+      return `${name} está com o Compartilhador de XP equipado e não pode ir de férias. Abra o card do mascote, desequipe o Compartilhador (ele volta para o seu inventário) e tente de novo.`;
+    }
+    const restMs = m.restingUntil ? new Date(m.restingUntil).getTime() - Date.now() : 0;
+    if (restMs > 0) return `${name} está em repouso por mais ${Math.ceil(restMs / 60_000)} min. Espere terminar ou use uma Política de Fraqueza.`;
+    if (m.arenaState === "INJURED") return `${name} está ferido. Passe pelo Atendimento SUS antes de enviá-lo de férias.`;
+    if (m.arenaState === "ARENA") return `${name} está em uma equipe da Arena Z. Retire-o da equipe antes de enviá-lo de férias.`;
+    if (m.arenaState && m.arenaState !== "FREE" && m.arenaState !== "RESTING") return `${name} não está livre para ir de férias no momento (${m.arenaState}).`;
+    return null;
+  })();
   const mascotHasExpBoost = selectedMascotActiveBuffs.includes("EXP_BOOST");
 
   const pickMascot = (mascot: MascotOption) => {
@@ -319,10 +332,12 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
 
   const handleUse = () => {
     if (!selectedBuffItem) return;
+    setInlineError(null);
+    if (blockReason) { setInlineError(blockReason); toast.error(blockReason, { duration: 12000 }); return; }
     const isPlayerLevel = PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type);
     const isDestructive = DESTRUCTIVE_ITEMS.has(selectedBuffItem.type);
 
-    if (!isPlayerLevel && !selectedMascot) { toast.error("Selecione um mascote."); return; }
+    if (!isPlayerLevel && !selectedMascot) { setInlineError("Selecione um mascote."); toast.error("Selecione um mascote."); return; }
     if (!isPlayerLevel && selectedMascotObj && !isEligible(selectedMascotObj)) {
       toast.error(isMegaStone && selectedMegaStone
         ? `Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`
@@ -381,12 +396,14 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       } catch (error) {
         // Falha de rede/servidor (ex.: página aberta antes de uma atualização): antes ficava silenciosa.
         console.error("[BuffPanel] falha ao usar o item", error);
+        setInlineError("Não foi possível concluir agora (falha de comunicação com o servidor). Recarregue a página e tente de novo; o item não foi gasto.");
         toast.error("Não foi possível concluir agora (falha de comunicação com o servidor). Recarregue a página e tente de novo; o item não foi gasto.", { duration: 10000 });
         return;
       }
 
-      if (r.error) toast.error(r.error, { duration: 10000 });
+      if (r.error) { setInlineError(r.error); toast.error(r.error, { duration: 12000 }); }
       else {
+        setInlineError(null);
         if (r.replacedExistingBuff) {
           toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
         } else if (t === "PICNIC_BASKET") {
@@ -720,6 +737,13 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
                   ⚠️ {featherWarning}
                 </p>
               )}
+            </div>
+          )}
+
+          {(blockReason || inlineError) && (
+            <div role="alert" className="w-full rounded-xl border border-red-500/50 bg-red-500/10 px-3 py-2 text-xs font-semibold text-red-200">
+              <p>🚫 {blockReason ?? inlineError}</p>
+              {inlineError && !blockReason && <button type="button" onClick={() => setInlineError(null)} className="mt-1 text-[10px] text-red-300 underline">Dispensar</button>}
             </div>
           )}
 
