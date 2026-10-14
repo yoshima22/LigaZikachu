@@ -18,6 +18,7 @@ export type TowerTalent = {
   agility?: number;    // +% Agilidade
   instinct?: number;   // +% Instinto
   vitality?: number;   // +% Vitalidade
+  charisma?: number;   // +% Carisma
   boss?: number;       // +% em todos os atributos SÓ contra chefes
   shield?: number;     // +escudo de Pressão no início da run
   scaleRed?: number;   // reduz o fator de crescimento inimigo por Pressão (base 0.02)
@@ -33,7 +34,7 @@ export const TOWER_TALENTS: TowerTalent[] = [
   { key: "AGILITY",     name: "Reflexos afiados",   category: "STATUS", maxRank: 5, agility: 0.025,   description: "+2,5% de Agilidade por rank (mais iniciativa nos encontros)." },
   { key: "VITALITY",    name: "Couro rúnico",       category: "STATUS", maxRank: 5, vitality: 0.025,  description: "+2,5% de Vitalidade por rank (mais fôlego contra a Pressão alta)." },
   { key: "INSTINCT",    name: "Faro para o perigo", category: "STATUS", maxRank: 5, instinct: 0.025,  description: "+2,5% de Instinto por rank." },
-  { key: "VIGOR",       name: "Vigor comunitário",  category: "STATUS", maxRank: 5, force: 0.015, agility: 0.015, instinct: 0.015, vitality: 0.015, description: "+1,5% em TODOS os atributos por rank." },
+  { key: "VIGOR",       name: "Vigor comunitário",  category: "STATUS", maxRank: 5, force: 0.015, agility: 0.015, instinct: 0.015, vitality: 0.015, charisma: 0.015, description: "+1,5% em todos os cinco atributos por rank." },
   { key: "FEROCITY",    name: "Caça aos regentes",  category: "STATUS", maxRank: 5, boss: 0.02,       description: "+2% em todos os atributos por rank SÓ nas batalhas contra chefes de andar." },
   // ── Pressão ─────────────────────────────────────────────────────────────
   { key: "BULWARK",     name: "Muralha rebelde",    category: "PRESSAO", maxRank: 5, shield: 1,        description: "+1 de escudo de Pressão no início de cada run por rank (absorve os primeiros pontos)." },
@@ -44,18 +45,33 @@ export const TOWER_TALENTS: TowerTalent[] = [
   // ── Movimento / mapa ────────────────────────────────────────────────────
   { key: "PATHFINDER",  name: "Desbravador",        category: "MOVIMENTO", maxRank: 5, splitRed: 0.4,  description: "Dividir a equipe pesa menos: −0,4 por rank na Pressão extra de seguir rotas diferentes (mínimo 1)." },
   { key: "SURVEYOR",    name: "Topógrafo",          category: "MOVIMENTO", maxRank: 5, splitRed: 0.3,  description: "−0,3 por rank na penalidade de dividir a equipe pelo mapa." },
-  { key: "VANGUARD",    name: "Vanguarda",          category: "MOVIMENTO", maxRank: 5, agility: 0.02,  description: "+2% de Agilidade por rank — ajuda a agir e alcançar aliados primeiro." },
+  { key: "VANGUARD",    name: "Vanguarda",          category: "MOVIMENTO", maxRank: 5, agility: 0.02,  description: "+2% de Agilidade por rank nos combates; não altera a quantidade de movimentos." },
   { key: "WARDEN",      name: "Sentinela",          category: "MOVIMENTO", maxRank: 5, shield: 1, scaleRed: 0.002, description: "+1 de escudo inicial e −0,2% no bônus da Pressão aos inimigos, por rank." },
 ];
 
 export const TOWER_TALENT_KEYS = TOWER_TALENTS.map((t) => t.key);
 export const TOWER_TALENT_BY_KEY = Object.fromEntries(TOWER_TALENTS.map((t) => [t.key, t])) as Record<string, TowerTalent>;
 
+function boundedLegacyRank(rank: number): number {
+  return Math.max(0, Math.min(5, Math.floor(Number.isFinite(rank) ? rank : 0)));
+}
+
+/** Coins found in a Luck room remain pending until its floor boss falls. */
+export function towerLuckCoins(rank: number): number {
+  return 25 + boundedLegacyRank(rank) * 5;
+}
+
+/** Maximum captive mascots one anti-psychosis room may release. */
+export function towerRescueCapacity(rank: number): number {
+  return 2 + boundedLegacyRank(rank);
+}
+
 export type TowerTalentEffects = {
   forceMult: number;
   agilityMult: number;
   instinctMult: number;
   vitalityMult: number;
+  charismaMult: number;
   /** Multiplicador extra aplicado SÓ contra chefes. */
   bossMult: number;
   /** Escudo de Pressão somado no início da run. */
@@ -68,7 +84,7 @@ export type TowerTalentEffects = {
 
 /** Agrega os efeitos dos 15 talentos novos a partir dos ranks atuais. */
 export function resolveTowerTalents(rankOf: (key: string) => number): TowerTalentEffects {
-  let force = 0, agility = 0, instinct = 0, vitality = 0, boss = 0;
+  let force = 0, agility = 0, instinct = 0, vitality = 0, charisma = 0, boss = 0;
   let shield = 0, scaleRed = 0, splitRed = 0;
   for (const talent of TOWER_TALENTS) {
     const rank = Math.max(0, Math.min(talent.maxRank, rankOf(talent.key) || 0));
@@ -77,6 +93,7 @@ export function resolveTowerTalents(rankOf: (key: string) => number): TowerTalen
     agility += (talent.agility ?? 0) * rank;
     instinct += (talent.instinct ?? 0) * rank;
     vitality += (talent.vitality ?? 0) * rank;
+    charisma += (talent.charisma ?? 0) * rank;
     boss += (talent.boss ?? 0) * rank;
     shield += (talent.shield ?? 0) * rank;
     scaleRed += (talent.scaleRed ?? 0) * rank;
@@ -87,6 +104,7 @@ export function resolveTowerTalents(rankOf: (key: string) => number): TowerTalen
     agilityMult: 1 + agility,
     instinctMult: 1 + instinct,
     vitalityMult: 1 + vitality,
+    charismaMult: 1 + charisma,
     bossMult: 1 + boss,
     pressureShieldStart: Math.round(shield),
     enemyPressureScale: Math.max(0.01, 0.02 - scaleRed),

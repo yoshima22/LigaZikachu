@@ -261,7 +261,7 @@ export function TowerLobby() {
                 "Crie ou entre em uma sala e escolha classe, mascotes e posturas.",
                 "Todos marcam Pronto; o dono inicia e os tickets são consumidos.",
                 "Cada jogador escolhe ações e caminhos no mapa conectado.",
-                "Encontros, mecanismos e votações são resolvidos antes do avanço.",
+                "Encontros e mecanismos são resolvidos pela frente presente naquela sala.",
                 "Derrote o chefe para abrir o próximo andar e fortalecer o Legado.",
               ].map((text, index) => (
                 <div
@@ -284,10 +284,10 @@ export function TowerLobby() {
               Toda decisão tem um custo
             </h2>
             <p className="mt-3 text-xs leading-6 text-slate-300">
-              Cada ação confirmada aumenta a Pressão e fortalece os inimigos.
-              Esperar por reforços também custa 1 ponto. Se aliados escolherem
-              caminhos diferentes, a Torre acompanha frentes separadas e a
-              Pressão cresce em dobro.
+              Cada turno global tem um custo base de Pressão. Esperar por
+              reforços e errar mecanismos pode acrescentar 1 ponto. Frentes
+              separadas aumentam o custo de forma limitada; o valor final
+              fortalece os inimigos.
             </p>
             <div className="mt-4 grid grid-cols-2 gap-2 text-center text-[10px]">
               <span className="rounded-xl border border-emerald-400/20 bg-emerald-400/10 p-3 text-emerald-200">
@@ -296,7 +296,7 @@ export function TowerLobby() {
               </span>
               <span className="rounded-xl border border-amber-400/20 bg-amber-400/10 p-3 text-amber-200">
                 <b className="block text-sm">Separados</b>Mais exploração e
-                pressão dobrada
+                pressão adicional limitada
               </span>
             </div>
           </article>
@@ -782,12 +782,12 @@ export function TowerLobby() {
                   [
                     "LUCK",
                     "Destino dobrado",
-                    "Melhora futuras rerrolagens de sorte.",
+                    "+5 ZC por rank nos achados das salas de Sorte (selados ao vencer o chefe).",
                   ],
                   [
                     "RESCUE",
                     "Equipe de resgate",
-                    "Melhora salas Anti-Psicose.",
+                    "+1 mascote cativo libertado por rank nas salas Anti-Psicose, se houver cativos.",
                   ],
                 ] as const
               ).map(([key, title, text]) => {
@@ -1067,12 +1067,9 @@ export function TowerLobby() {
               Ritmo
             </h2>
             <p className="mt-1 text-[11px] text-slate-500">
-              O <strong className="text-[#FFCB05]">Online</strong> é mais
-              intenso e{" "}
-              <strong className="text-[#FFCB05]">rende mais recompensas</strong>{" "}
-              (Legado e prêmios maiores); o{" "}
-              <strong className="text-slate-300">Lento</strong> é confortável,
-              com janelas longas, porém com recompensas menores.
+              O <strong className="text-[#FFCB05]">Online</strong> exige decisão em 5 minutos; o{" "}
+              <strong className="text-slate-300">Lento</strong> dá 4 horas por janela.
+              Ao vencer um chefe, Online concede 2 fragmentos de relíquia por participante elegível; Lento concede 1. Os demais prêmios do chefe são iguais.
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-2">
               {(
@@ -1080,9 +1077,9 @@ export function TowerLobby() {
                   [
                     "ONLINE",
                     "Online · 5 minutos por ação",
-                    "Recompensas maiores",
+                    "2 fragmentos por chefe",
                   ],
-                  ["SLOW", "Lento · 4h por ação", "Recompensas menores"],
+                  ["SLOW", "Lento · 4h por ação", "1 fragmento por chefe"],
                 ] as const
               ).map(([value, label, note]) => (
                 <button

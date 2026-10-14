@@ -15,6 +15,7 @@ import {
   TOWER_EXPEDITION_ROLES,
   TOWER_ROLE_BY_KEY,
   initialStanceFor,
+  resolveTowerClassEffects,
   towerMaxHp,
   TOWER_SETTINGS_KEY,
   type TowerConfig,
@@ -50,6 +51,8 @@ import {
   getTowerNarrativeScenes,
   groupTowerScenes,
   nextTowerSceneFor,
+  nextFreshTowerSceneFor,
+  sceneTriggersForTowerEvent,
   recordTowerSceneUnlock,
   unlockedTowerScenes,
   TOWER_NARRATIVE_KEY,
@@ -1705,6 +1708,7 @@ export async function startTowerExpeditionAction(
           roomIndex: 1,
           log: ["A porta se fechou. O mapa da Torre começou a se desenhar."],
           exploration,
+          narrativeEvents: [{ kind: "RUN_STARTED", floor: 1, turn: 1 }, { kind: "FLOOR_ENTERED", floor: 1, turn: 1 }],
         } as unknown as Prisma.InputJsonValue,
       },
     });
@@ -1906,8 +1910,12 @@ export async function getTowerRunStateAction(
     if (!revisionProbe) return { error: "Expedição não encontrada." };
   }
 
+  const narrativeRevision = revisionProbe.status !== "LOBBY"
+    ? await prisma.towerFeat.count({ where: { userId: user.id, runId, featKey: "TOWER_SCENE_UNLOCK" } })
+    : 0;
   const revision = [
     revisionProbe.updatedAt.toISOString(),
+    narrativeRevision,
     ...revisionProbe.members.flatMap((member) => [
       member.userId,
       member.expeditionRole,
@@ -1949,6 +1957,7 @@ export async function getTowerRunStateAction(
       run: { status: { in: ["FAILED", "ABANDONED"] }, id: { not: run.id } },
     },
   });
+  const narrativeFailures = priorFailures + (run.status === "FAILED" || run.status === "ABANDONED" ? 1 : 0);
   const unlockedNarrative = new Set(
     (
       await prisma.towerFeat.findMany({
@@ -1967,15 +1976,25 @@ export async function getTowerRunStateAction(
           : run.globalTurn <= 1
             ? ["RUN_START", "FLOOR_ENTER"]
             : ["ROOM_ENTER", "ENCOUNTER"];
-  const currentScene = nextTowerSceneFor(
-    scenes,
-    sceneTriggers,
-    run.currentFloor,
-    priorFailures,
-    unlockedNarrative,
-  );
+  const deliveredNarrativeEvents = isExpeditionV2(vol.exploration)
+    ? new Set((await prisma.towerFeat.findMany({
+        where: { userId: user.id, runId, featKey: "TOWER_SCENE_EVENT" }, select: { data: true },
+      })).map((entry) => String((entry.data as { eventKey?: string } | null)?.eventKey ?? "")))
+    : new Set<string>();
+  const selectedNarrativeEvent = isExpeditionV2(vol.exploration)
+    ? (vol.narrativeEvents ?? []).map((event, index) => ({
+        key: `${event.turn}:${event.floor}:${index}:${event.kind}`,
+        scene: nextFreshTowerSceneFor(scenes, sceneTriggersForTowerEvent(event.kind), event.floor, narrativeFailures, unlockedNarrative),
+      })).find((entry) => entry.scene && !deliveredNarrativeEvents.has(entry.key))
+    : null;
+  const currentScene = isExpeditionV2(vol.exploration)
+    ? selectedNarrativeEvent?.scene ?? null
+    : nextTowerSceneFor(scenes, sceneTriggers, run.currentFloor, priorFailures, unlockedNarrative);
   if (currentScene && !unlockedNarrative.has(currentScene.id))
     await recordTowerSceneUnlock(currentScene, user.id, run.id);
+  if (selectedNarrativeEvent?.scene) await prisma.towerFeat.create({
+    data: { userId: user.id, runId: run.id, featKey: "TOWER_SCENE_EVENT", data: { eventKey: selectedNarrativeEvent.key, sceneId: selectedNarrativeEvent.scene.id } },
+  });
   const userNames = new Map(
     (
       await prisma.user.findMany({
@@ -2138,6 +2157,11 @@ export async function getTowerRunStateAction(
   const expedition = expeditionV2
     ? projectExpeditionForMember(expeditionV2, user.id, Object.fromEntries(userNames), run.currentFloor)
     : null;
+  const myRole = run.members.find((member) => member.userId === user.id)?.expeditionRole;
+  const myRoleInfo = myRole ? TOWER_ROLE_BY_KEY[myRole] : null;
+  const talentRowsForRun = expeditionV2 ? await prisma.towerCommunityProgress.findMany({
+    where: { floorId: 1, metricKey: { startsWith: "TALENT:" } }, select: { metricKey: true, value: true },
+  }) : [];
   const room = expeditionV2
     ? expeditionV2.graph.find((node) => node.id === expedition?.mine.roomId) ?? null
     : exploration ? currentTowerRoom(exploration) : null;
@@ -2184,6 +2208,14 @@ export async function getTowerRunStateAction(
       roomIndex: vol.roomIndex ?? 1,
     },
     expedition,
+    classGuide: myRoleInfo ? {
+      label: myRoleInfo.label, benefit: myRoleInfo.benefit, gameplayTip: myRoleInfo.gameplayTip,
+      combatReasons: resolveTowerClassEffects(myRole ?? "", { kind: "COMBAT" }).reasons,
+      activeTalents: TOWER_TALENTS.flatMap((talent) => {
+        const rank = talentRowsForRun.find((entry) => entry.metricKey === `TALENT:${talent.key}`)?.value ?? 0;
+        return rank > 0 ? [{ key: talent.key, name: talent.name, rank, description: talent.description }] : [];
+      }),
+    } : null,
     rewards: expeditionV2 ? {
       entries: (expeditionV2.rewardLedger ?? []).map((entry) => ({
         id: entry.id, floor: entry.floor, label: entry.label, kind: entry.kind,
@@ -2261,7 +2293,12 @@ export async function getTowerRunStateAction(
                     options: room.puzzle.options,
                     hint:
                       exploration.countermeasures?.includes("INSIGHT") ||
-                      exploration.countermeasures?.includes("ROLE:INVESTIGADOR")
+                      (expeditionV2
+                        ? run.members.some((member) => member.expeditionRole === "INVESTIGADOR" &&
+                            expeditionV2.members[member.userId]?.roomId === room.id &&
+                            expeditionV2.members[member.userId]?.status === "ACTIVE" &&
+                            resolveTowerClassEffects(member.expeditionRole, { kind: "PUZZLE_HINT" }).revealsHint)
+                        : exploration.countermeasures?.includes("ROLE:INVESTIGADOR"))
                         ? "O Investigador e o Arquivo recomendam observar a sequência, não a intensidade."
                         : null,
                   }

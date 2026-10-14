@@ -19,7 +19,7 @@ const pages = [
     text: "A equipe prepara a sala, confirma os mascotes e avança por um mapa de salas conectadas. Em cada turno, cada jogador escolhe um caminho ou resolve o acontecimento da sala onde está.",
     points: [
       "Crie ou entre em uma sala e marque Pronto.",
-      "Explore rotas, vote em mecanismos e enfrente encontros.",
+      "Cada treinador escolhe sua própria rota ou resolve a sala em que está.",
       "Alcance o chefe do andar para abrir o próximo.",
       "A run termina na vitória, derrota ou abandono da equipe.",
     ],
@@ -30,19 +30,20 @@ const pages = [
     text: "Jogadores podem seguir rotas diferentes para investigar mais salas, mas a Torre reage a essa divisão. O mapa sempre mostra onde cada aliado está e qual caminho confirmou.",
     points: [
       "No mesmo caminho: progresso mais seguro e ajuda imediata.",
-      "Em caminhos diferentes: mais descobertas, porém a Pressão sobe em dobro.",
+      "Em caminhos diferentes: mais descobertas e sobrecarga ofensiva breve, mas cada frente extra aumenta a Pressão dentro de um limite.",
       "Aliados distantes precisam percorrer conexões abertas para ajudar em um encontro.",
+      "O chefe só começa quando todos os treinadores vivos estiverem reunidos.",
     ],
   },
   {
     eyebrow: "A ameaça cresce",
     title: "Pressão da Torre",
-    text: "Pressão mede quanto a Torre percebe e reage à expedição. Cada ação confirmada aumenta a Pressão; esperar diante de inimigos também custa 1 ponto e pode permitir que um aliado se aproxime.",
+    text: "Pressão mede quanto a Torre percebe e reage à expedição. Cada turno global tem um custo base; frentes separadas, erros e esperas podem acrescentar Pressão. O valor máximo é limitado.",
     points: [
       "Mais Pressão fortalece os inimigos encontrados.",
       "Dividir a equipe acelera esse crescimento.",
       "Contramedidas, classes e talentos podem conter parte da Pressão.",
-      "A interface mostra o valor atual e o bônus inimigo resultante.",
+      "A interface mostra o valor atual e explica a mudança do último turno.",
     ],
   },
   {
@@ -62,7 +63,7 @@ const pages = [
     points: [
       "Leia propósito e uso prático antes de escolher.",
       "A sala mostra classe, mascotes e posturas de todos.",
-      "Online tem ações de 5 minutos e Legado maior; Lento oferece janelas de 4 horas.",
+      "Online tem janelas de 5 minutos e 2 fragmentos por chefe; Lento oferece 4 horas e 1 fragmento por chefe.",
     ],
   },
 ] as const;

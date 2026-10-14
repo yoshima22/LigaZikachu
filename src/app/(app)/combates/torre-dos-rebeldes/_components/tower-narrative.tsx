@@ -7,9 +7,9 @@ import { saveTowerNarrativeScenesAction } from "../actions";
 
 export function TowerNarrative({scene}:{scene?:TowerNarrativeScene|null}) {
  if(!scene)return null;
- return <section className="relative min-h-64 overflow-hidden rounded-2xl border border-purple-400/30 bg-black">
+ return <section aria-label={`Diálogo descoberto: ${scene.title}`} className="relative min-h-64 overflow-hidden rounded-2xl border border-purple-400/30 bg-black">
   <Image src={scene.backgroundUrl} alt="Cenário" fill priority className="object-cover opacity-55"/><div className="absolute inset-0 bg-gradient-to-t from-black via-black/25 to-transparent"/>
-  <div className={`relative flex min-h-64 items-end gap-3 p-5 ${scene.characterSide==="RIGHT"?"flex-row-reverse":""}`}><Image src={scene.characterUrl} alt={scene.speaker} width={220} height={260} className="max-h-56 w-auto max-w-[35%] object-contain drop-shadow-[0_0_18px_rgba(168,85,247,.65)]"/><div className="mb-3 flex-1 rounded-2xl border border-purple-300/40 bg-slate-950/90 p-4 shadow-xl"><p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">{scene.speaker}</p><h3 className="mt-1 font-black text-white">{scene.title}</h3><p className="mt-2 text-sm leading-relaxed text-slate-200">{scene.text}</p></div></div>
+  <div className={`relative flex min-h-64 flex-col items-center justify-end gap-2 p-4 sm:items-end sm:gap-3 sm:p-5 ${scene.characterSide==="RIGHT"?"sm:flex-row-reverse":"sm:flex-row"}`}><Image src={scene.characterUrl} alt={scene.speaker} width={220} height={260} className="max-h-32 w-auto max-w-[45%] object-contain drop-shadow-[0_0_18px_rgba(168,85,247,.65)] sm:max-h-56 sm:max-w-[35%]"/><div className="w-full min-w-0 flex-1 rounded-2xl border border-purple-300/40 bg-slate-950/90 p-4 shadow-xl"><p className="text-[10px] font-black uppercase tracking-[.2em] text-purple-300">{scene.floor > 0 ? `Andar ${scene.floor} · ` : ""}{scene.speaker}</p><h3 className="mt-1 font-black text-white">{scene.title}</h3><p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-200">{scene.text}</p>{scene.followup && <p className="mt-3 whitespace-pre-line border-t border-white/10 pt-3 text-sm leading-relaxed text-purple-100">{scene.followup}</p>}</div></div>
  </section>
 }
 

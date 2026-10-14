@@ -14,6 +14,29 @@ export type TowerSceneTrigger =
   | "LEGACY_MILESTONE" | "COMMUNITY_MILESTONE" | "LEADER_AS_ALLY"
   | "VICTORY" | "FINAL_VICTORY" | "POSTGAME";
 
+export type TowerNarrativeEvent =
+  | "RUN_STARTED" | "FLOOR_ENTERED" | "ROOM_ENTERED" | "ENCOUNTER_FOUND"
+  | "PUZZLE_SUCCESS" | "PUZZLE_FAILURE" | "EVENT_FOUND" | "LUCK_FOUND"
+  | "REST_USED" | "ALLY_RESCUED" | "CAPTIVE_FOUND" | "CAPTIVE_RESCUED"
+  | "WAITED" | "PRESSURE_HIGH" | "BOSS_APPROACHED" | "BOSS_VICTORY" | "FLOOR_CLEARED"
+  | "RUN_DEFEAT" | "RUN_VICTORY";
+
+const EVENT_SCENE_TRIGGERS: Record<TowerNarrativeEvent, TowerSceneTrigger[]> = {
+  RUN_STARTED: ["RUN_START"], FLOOR_ENTERED: ["FLOOR_ENTER"], ROOM_ENTERED: ["ROOM_ENTER"],
+  ENCOUNTER_FOUND: ["ENCOUNTER_PREVIEW"], PUZZLE_SUCCESS: ["PUZZLE_SUCCESS"],
+  PUZZLE_FAILURE: ["PUZZLE_FAILURE"], EVENT_FOUND: ["EVENT_POSITIVE"],
+  LUCK_FOUND: ["LUCK_POSITIVE"], REST_USED: ["REST"], ALLY_RESCUED: ["RESCUE"],
+  CAPTIVE_FOUND: ["CORRUPTED_MASCOT_ENCOUNTER"],
+  CAPTIVE_RESCUED: ["CORRUPTED_MASCOT_RESCUED", "RESCUE"],
+  WAITED: ["WAIT"], PRESSURE_HIGH: ["PRESSURE_MILESTONE"],
+  BOSS_APPROACHED: ["BOSS_INTRO"], BOSS_VICTORY: ["BOSS_DEFEAT"], FLOOR_CLEARED: ["FLOOR_VICTORY"],
+  RUN_DEFEAT: ["RUN_FAILURE", "MASCOT_LOST"], RUN_VICTORY: ["FINAL_VICTORY", "VICTORY"],
+};
+
+export function sceneTriggersForTowerEvent(event: TowerNarrativeEvent): TowerSceneTrigger[] {
+  return [...EVENT_SCENE_TRIGGERS[event]];
+}
+
 export type TowerNarrativeScene = {
   id: string; groupId: string; groupTitle: string; trigger: TowerSceneTrigger;
   floor: number; title: string; speaker: string; secondarySpeaker?: string | null;
@@ -55,6 +78,12 @@ export function nextTowerSceneFor(scenes: TowerNarrativeScene[], triggers: Tower
   const candidates = unlockedTowerScenes(scenes, failures).filter((scene) => triggers.includes(scene.trigger) && (scene.floor === 0 || scene.floor === floor));
   return candidates.find((scene) => !alreadyUnlocked.has(scene.id))
     ?? [...candidates].reverse().find((scene) => alreadyUnlocked.has(scene.id)) ?? null;
+}
+
+export function nextFreshTowerSceneFor(scenes: TowerNarrativeScene[], triggers: TowerSceneTrigger[], floor: number, failures: number, alreadyUnlocked: Set<string>) {
+  return unlockedTowerScenes(scenes, failures)
+    .filter((scene) => (scene.floor === 0 || scene.floor === floor) && triggers.includes(scene.trigger))
+    .find((scene) => !alreadyUnlocked.has(scene.id)) ?? null;
 }
 
 export async function recordTowerSceneUnlock(scene: TowerNarrativeScene | null, userId: string, runId?: string) {

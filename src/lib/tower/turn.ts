@@ -32,7 +32,7 @@ import {
   towerRewardForFloor,
   XANDINHO,
 } from "./exclusive-mascots";
-import { resolveTowerTalents } from "./talents";
+import { resolveTowerTalents, towerLuckCoins, towerRescueCapacity } from "./talents";
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
@@ -44,6 +44,8 @@ import {
   updateOverload,
 } from "./pressure-rules";
 import { releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
+import { resolveTowerClassEffects } from "./config";
+import type { TowerNarrativeEvent } from "./narrative";
 import { discardPendingFloorDrops, planRewardSettlement, recordFloorDrop, secureFloorDrops, settleRunRewards, type TowerRewardEntry } from "./reward-ledger";
 
 export type TowerVolatile = {
@@ -54,6 +56,7 @@ export type TowerVolatile = {
   lastResolvedTurn?: number;
   roomIndex?: number;
   exploration?: TowerExplorationState;
+  narrativeEvents?: { kind: TowerNarrativeEvent; floor: number; turn: number }[];
 };
 
 type V2RunInput = {
@@ -178,19 +181,19 @@ async function resolveV2RoomFronts(
         const fighter = toLeagueMascot(mascot, index + 1, snapshot.currentStance);
         fighter.hp = snapshot.currentHp;
         if (defensiveMemberIds.includes(snapshot.member.userId)) fighter.combatRole = normalizeCombatRole("DEFENDER");
-        const role = snapshot.member.expeditionRole;
-        if (role === "INVESTIGADOR") fighter.instinct = Math.round(fighter.instinct * 1.08);
-        if (role === "NAVEGADOR") fighter.agility = Math.round(fighter.agility * 1.03);
-        if (role === "PROTETOR") fighter.vitality = Math.round(fighter.vitality * 1.06);
-        if (role === "ARTIFICE") fighter.force = Math.round(fighter.force * 1.04);
-        if (role === "RITUALISTA") fighter.charisma = Math.round(fighter.charisma * 1.1);
-        if (role === "BATEDOR") fighter.agility = Math.round(fighter.agility * 1.07);
+        const classFx = resolveTowerClassEffects(snapshot.member.expeditionRole, { kind: "COMBAT" });
+        fighter.force = Math.round(fighter.force * classFx.forceMult);
+        fighter.agility = Math.round(fighter.agility * classFx.agilityMult);
+        fighter.instinct = Math.round(fighter.instinct * classFx.instinctMult);
+        fighter.vitality = Math.round(fighter.vitality * classFx.vitalityMult);
+        fighter.charisma = Math.round(fighter.charisma * classFx.charismaMult);
         const talentMult = 1 + talentValue("COMBAT") * 0.02 + (room.kind === "BOSS" ? talentValue("BOSS") * 0.03 : 0);
         const bossMult = room.kind === "BOSS" ? talentFx.bossMult : 1;
         fighter.force = Math.round(fighter.force * talentMult * talentFx.forceMult * bossMult);
         fighter.agility = Math.round(fighter.agility * talentMult * talentFx.agilityMult * bossMult);
         fighter.instinct = Math.round(fighter.instinct * talentMult * talentFx.instinctMult * bossMult);
         fighter.vitality = Math.round(fighter.vitality * talentMult * talentFx.vitalityMult * bossMult);
+        fighter.charisma = Math.round(fighter.charisma * talentMult * talentFx.charismaMult * bossMult);
         return [fighter];
       });
       if (!allies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
@@ -244,8 +247,9 @@ async function resolveV2RoomFronts(
     log.push(...result.events);
     if (result.interaction === "REST") {
       const healMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.healingMultiplier, 1);
+      const ritual = run.members.some((member) => result.participantIds.includes(member.userId) &&
+        resolveTowerClassEffects(member.expeditionRole, { kind: "REST" }).healingMult > 1) ? 1.1 : 1;
       for (const snapshot of snapshots.filter((entry) => result.participantIds.includes(entry.member.userId) && entry.currentHp > 0)) {
-        const ritual = snapshot.member.expeditionRole === "RITUALISTA" ? 1.1 : 1;
         const currentHp = Math.min(snapshot.maxHp, snapshot.currentHp + Math.round(snapshot.maxHp * 0.2 * healMult * ritual));
         await tx.towerRunMascot.updateMany({ where: { mascotId: snapshot.mascotId, member: { runId: run.id } }, data: { currentHp } });
       }
@@ -271,7 +275,7 @@ async function resolveV2RoomFronts(
     };
     if (result.interaction === "RESCUE") {
       const captives = await tx.towerLostMascot.findMany({
-        where: { recoveredAt: null }, orderBy: { createdAt: "asc" }, take: 2,
+        where: { recoveredAt: null }, orderBy: { createdAt: "asc" }, take: towerRescueCapacity(talentValue("RESCUE")),
         select: { mascotId: true },
       });
       for (const captive of captives) {
@@ -782,6 +786,7 @@ async function resolveRoom(
       ally.vitality = Math.round(
         ally.vitality * allyTalentMult * talentFx.vitalityMult * bossFx,
       );
+      ally.charisma = Math.round(ally.charisma * allyTalentMult * talentFx.charismaMult * bossFx);
     }
     const pressureMult =
       state.activeModifiers.reduce((m, mod) => m * mod.enemyMultiplier, 1) *
@@ -1009,18 +1014,28 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
             members[memberId] = { ...member, status: "DOWNED" };
           }
         }
-        const waits = new Set(Object.entries(submissions)
+        const waitingRooms = new Set(Object.entries(submissions)
           .filter(([, submission]) => (submission.actions as { action?: string } | null)?.action === "WAIT")
           .map(([memberId]) => activeState.members[memberId]?.roomId)
-          .filter((roomId): roomId is string => Boolean(roomId))).size;
+          .filter((roomId): roomId is string => Boolean(roomId)));
+        const navigatorUsed = activeState.countermeasures?.includes("ROLE:NAVEGADOR:USED") ?? false;
+        const navigatorDiscount = !navigatorUsed && [...waitingRooms].some((roomId) => run.members.some((member) =>
+          member.expeditionRole === "NAVEGADOR" && activeState.members[member.userId]?.roomId === roomId &&
+          activeState.members[member.userId]?.status === "ACTIVE")) ? 1 : 0;
+        const rawMistakes = resolved.fronts.reduce((sum, front) => sum + front.mistakes, 0);
+        const artificeDiscount = resolved.fronts.reduce((sum, front) => sum + (front.mistakes > 0 && run.members.some((member) =>
+          member.expeditionRole === "ARTIFICE" && front.participantIds.includes(member.userId)) ? 1 : 0), 0);
         const pressureChange = pressureDelta({
           activeFronts: groupActiveMembersByRoom(activeState).size,
-          mistakes: resolved.fronts.reduce((sum, front) => sum + front.mistakes, 0),
-          waits,
+          mistakes: Math.max(0, rawMistakes - artificeDiscount),
+          waits: Math.max(0, waitingRooms.size - navigatorDiscount),
           shield: resolved.state.pressureShield ?? 0,
           splitPenalty: resolved.splitPenalty,
         });
+        if (navigatorDiscount) pressureChange.reasons.push(...resolveTowerClassEffects("NAVEGADOR", { kind: "WAIT", firstWait: true }).reasons);
+        if (artificeDiscount) pressureChange.reasons.push(...resolveTowerClassEffects("ARTIFICE", { kind: "PUZZLE_MISTAKE" }).reasons);
         let nextState = applyPressureToExpedition({ ...resolved.state, members }, pressureChange);
+        if (navigatorDiscount) nextState = { ...nextState, countermeasures: [...(nextState.countermeasures ?? []), "ROLE:NAVEGADOR:USED"] };
         const appliedPressure = nextState.lastPressureChange?.applied ?? 0;
         nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts));
         for (const front of resolved.fronts) {
@@ -1029,7 +1044,11 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
           if (!room) continue;
           // Small deterministic room finds. The event-only drop table remains a separate economy decision.
           if (front.interaction === "EVENT" || front.interaction === "LUCK") {
-            const amount = front.interaction === "LUCK" ? 25 : 15;
+            const luckRank = front.interaction === "LUCK"
+              ? (await tx.towerCommunityProgress.findUnique({
+                  where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT:LUCK" } }, select: { value: true },
+                }))?.value ?? 0 : 0;
+            const amount = front.interaction === "LUCK" ? towerLuckCoins(luckRank) : 15;
             nextState = recordFloorDrop(nextState, run.currentFloor, {
               id: `room:${run.currentFloor}:${front.roomId}`,
               kind: "COINS", quantity: amount, label: `${amount} ZC · ${room.title}`,
@@ -1048,6 +1067,29 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         }
         const bossVictory = resolved.fronts.some((front) =>
           front.success && nextState.graph.find((room) => room.id === front.roomId)?.kind === "BOSS");
+        if (bossVictory) {
+          const contributed = await tx.towerFeat.findFirst({
+            where: { runId, featKey: "TOWER_TALENT_CONTRIBUTION", data: { path: ["floor"], equals: run.currentFloor } },
+            select: { id: true },
+          });
+          if (!contributed) {
+            await tx.towerCommunityProgress.upsert({
+              where: { floorId_metricKey: { floorId: 1, metricKey: "TALENT_POINTS" } },
+              create: { floorId: 1, metricKey: "TALENT_POINTS", value: 1 },
+              update: { value: { increment: 1 } },
+            });
+            for (const member of run.members.filter((entry) => members[entry.userId]?.status !== "AFK_ABANDONED")) {
+              await tx.towerFeat.create({
+                data: { userId: member.userId, runId, featKey: "TOWER_TALENT_CONTRIBUTION",
+                  data: { floor: run.currentFloor, source: "BOSS", spectator: members[member.userId]?.status === "DOWNED" } },
+              });
+              for (let shard = 0; shard < (run.pace === "ONLINE" ? 2 : 1); shard++)
+                await tx.towerFeat.create({
+                  data: { userId: member.userId, runId, featKey: "TOWER_RELIC_SHARD", data: { floor: run.currentFloor, pace: run.pace } },
+                });
+            }
+          }
+        }
         let nextFloor = run.currentFloor;
         if (bossVictory && run.currentFloor < 7) {
           nextFloor = run.currentFloor + 1;
@@ -1068,6 +1110,34 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         const allAbandoned = Object.values(members).every((member) => member.status === "AFK_ABANDONED");
         const wonRun = bossVictory && run.currentFloor === 7;
         const ended = !hasActive || wonRun;
+        const narrativeKinds: { kind: TowerNarrativeEvent; floor: number; turn: number }[] = [];
+        const addNarrativeEvent = (kind: TowerNarrativeEvent, floor = run.currentFloor) => {
+          if (!narrativeKinds.some((event) => event.kind === kind && event.floor === floor))
+            narrativeKinds.push({ kind, floor, turn: run.globalTurn });
+        };
+        if (Object.entries(activeState.members).some(([id, member]) => vol.exploration &&
+          isExpeditionV2(vol.exploration) && vol.exploration.members[id]?.roomId !== member.roomId)) addNarrativeEvent("ROOM_ENTERED");
+        for (const front of resolved.fronts) {
+          const frontRoom = resolved.state.graph.find((room) => room.id === front.roomId);
+          if (frontRoom?.kind === "PUZZLE" && front.mistakes) addNarrativeEvent("PUZZLE_FAILURE");
+          else if (frontRoom?.kind === "PUZZLE" && front.success) addNarrativeEvent("PUZZLE_SUCCESS");
+          if (front.interaction === "EVENT") addNarrativeEvent("EVENT_FOUND");
+          if (front.interaction === "LUCK") addNarrativeEvent("LUCK_FOUND");
+          if (front.interaction === "REST") addNarrativeEvent("REST_USED");
+          if (frontRoom?.kind === "COMBAT" && resolved.state.rooms[front.roomId]?.encounter) addNarrativeEvent("ENCOUNTER_FOUND");
+          if (resolved.state.rooms[front.roomId]?.encounter?.enemies.some((enemy) => enemy.captiveMascotId))
+            addNarrativeEvent("CAPTIVE_FOUND");
+          if (frontRoom?.kind === "BOSS" && !front.success) addNarrativeEvent("BOSS_APPROACHED");
+        }
+        if (waitingRooms.size) addNarrativeEvent("WAITED");
+        if (recovery.log.some((entry) => entry.includes(" reanimou "))) addNarrativeEvent("ALLY_RESCUED");
+        if (resolved.log.some((entry) => entry.includes("foi libertado"))) addNarrativeEvent("CAPTIVE_RESCUED");
+        if (resolved.state.pressure < 6 && nextState.pressure >= 6) addNarrativeEvent("PRESSURE_HIGH");
+        if (bossVictory) addNarrativeEvent("BOSS_VICTORY");
+        if (bossVictory) addNarrativeEvent("FLOOR_CLEARED");
+        if (bossVictory && !wonRun) addNarrativeEvent("FLOOR_ENTERED", nextFloor);
+        if (wonRun) addNarrativeEvent("RUN_VICTORY");
+        else if (ended) addNarrativeEvent("RUN_DEFEAT");
         if (ended) {
           if (!wonRun) nextState = discardPendingFloorDrops(nextState, run.currentFloor);
           const settlement = await settleRunRewards({
@@ -1110,6 +1180,7 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
             volatileState: {
               ...vol,
               exploration: { ...nextState, globalTurn: turn.state.globalTurn },
+              narrativeEvents: [...(vol.narrativeEvents ?? []), ...narrativeKinds],
               submissions: {},
               lastResolvedTurn: run.globalTurn,
               log: [
