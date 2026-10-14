@@ -1756,8 +1756,16 @@ export async function useVacationTicketAction(mascotId: string): Promise<{ error
     if (!shopItem) return { error: "Item nao encontrado na loja." };
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Ticket de Férias no inventário." };
-    await applyVacationTicket(player.id, mascotId);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    // Consome o ticket ANTES, com guarda de saldo: dois usos simultâneos (mascotes diferentes) não passam com 1 ticket só,
+    // e o estoque nunca fica negativo. Se as férias não puderem começar, devolve o ticket.
+    const consumed = await prisma.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: { quantity: { decrement: 1 } } });
+    if (consumed.count !== 1) return { error: "Você não tem Ticket de Férias no inventário." };
+    try {
+      await applyVacationTicket(player.id, mascotId);
+    } catch (err) {
+      await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { increment: 1 } } });
+      throw err;
+    }
     revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
