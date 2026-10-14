@@ -992,6 +992,17 @@ function runArenaCombatInternal(
         if (opponents.length === 0) break;
         if ((hp.get(actor.id) ?? 0) <= 0) break; // caiu no meio da própria rodada (reflexo)
 
+        // Habilidades: estados alterados (queimadura, sono, paralisia, confusão) e efeitos do início da ação.
+        if (abilityEngine) {
+          const start = abilityEngine.onActionStart(actor, actionIndex);
+          flushAbilityLog();
+          if ((hp.get(actor.id) ?? 0) <= 0) break; // caiu por queimadura/confusão
+          if (start.skip) {
+            turn++;
+            continue;
+          }
+        }
+
         // HEALER: may heal instead of attacking
         const healResult = tryHealerAction(
           actor,
@@ -1038,9 +1049,13 @@ function runArenaCombatInternal(
           duelistLock.set(actor.id, target.id);
 
         // PROVOKER: may redirect attacker to self
-        const provoked = tryProvokerRedirect(actor, target, opponents, hp);
+        let provoked = tryProvokerRedirect(actor, target, opponents, hp);
+        // Habilidades: Hélice/Valente ignoram o Provocador (chance).
+        const ignoredProvoker = provoked && abilityEngine ? abilityEngine.ignoresProvoker(actor) : null;
+        if (ignoredProvoker) provoked = null;
         if (provoked) target = provoked;
         const abilityNotes: string[] = [];
+        if (ignoredProvoker) abilityNotes.push(ignoredProvoker);
 
         const attackerType = arenaElement(actor);
         let defenderType = arenaElement(target);
@@ -1219,7 +1234,7 @@ function runArenaCombatInternal(
             (m) => m.id === guardianIntercept.guardianId,
           );
           if (abilityEngine && guardianMascot) {
-            const ge = abilityEngine.guardianExtra(guardianMascot, damage);
+            const ge = abilityEngine.guardianExtra(guardianMascot, damage, target);
             damage = ge.damage;
             if (ge.note) abilityNotes.push(ge.note);
           }

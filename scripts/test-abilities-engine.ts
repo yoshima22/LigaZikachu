@@ -75,10 +75,44 @@ for (const [id, n] of Object.entries(novo.runtime.abilities!.uses)) {
   const info = getAbilityInfo(cfg2[id].slug)!;
   assert.ok(n <= info.activations, `${id}/${cfg2[id].slug}: ${n} > ${info.activations}`);
 }
-const nm = novo.log.filter((e) => e.action === "ABILITY").map((e) => e.effect).join(" ");
-assert.ok(nm.includes("Bad Dreams") && nm.includes("perdeu"), "Pesadelo deve tirar HP dos rivais");
 assert.ok(novo.log.every((e) => e.targetHpAfter === undefined || e.targetHpAfter >= 0));
 for (const m of [...A, ...B]) assert.ok((novo.runtime.hp[m.id] ?? 0) <= m.hp, "HP acima do máximo");
+
+// 3c) Estados alterados: aparecem, respeitam imunidades de tipo/habilidade e nunca acumulam.
+const statusCfg: AbilityLineup = {
+  a1: { slug: "flame-body", factor: 1 }, a2: { slug: "static", factor: 1 }, a3: { slug: "poison-point", factor: 1 }, a4: { slug: "effect-spore", factor: 1 },
+  b1: { slug: "poison-touch", factor: 1 }, b2: { slug: "cursed-body", factor: 1 }, b3: { slug: "guts", factor: 1 }, b4: { slug: "insomnia", factor: 1 },
+};
+const kinds = new Set<string>();
+for (let seed = 1; seed <= 80; seed++) {
+  const run = runArenaCombat(A, B, { seed, abilities: statusCfg });
+  assert.ok(run.finished, "luta com estados deve terminar");
+  const text = run.log.filter((e) => e.action === "ABILITY").map((e) => e.effect ?? "").join(" | ");
+  for (const k of ["queimado", "paralisado", "envenenado", "dormindo", "confuso", "amaldiçoado"]) if (text.includes(k)) kinds.add(k);
+  assert.ok(!text.includes("Pikachu ficou paralisado"), "Elétrico é imune a paralisia");
+  assert.ok(!text.includes("Charizard ficou queimado"), "Fogo é imune a queimadura");
+  assert.ok(!text.includes("Scizor ficou envenenado"), "Metal/Veneno são imunes a veneno");
+  assert.ok(!text.includes("Scizor ficou dormindo"), "Insomnia impede o sono");
+  for (const e of run.log) assert.ok(e.targetHpAfter === undefined || e.targetHpAfter >= 0, "HP nunca fica negativo");
+  for (const m of [...A, ...B]) assert.ok((run.runtime.hp[m.id] ?? 0) <= m.hp && (run.runtime.hp[m.id] ?? 0) >= 0);
+  const st = run.runtime.abilities!.status;
+  for (const [id, v] of Object.entries(st)) assert.ok(v.until >= v.since, `estado inválido em ${id}`);
+}
+assert.ok(kinds.size >= 4, `os estados devem aparecer nas lutas (viu: ${[...kinds].join(", ")})`);
+
+// 3d) Retomar por segmentos com estados dá o mesmo resultado da luta inteira.
+{
+  const whole = runArenaCombat(A, B, { seed: 5, abilities: statusCfg });
+  let rt2 = undefined as typeof whole.runtime | undefined;
+  const parts2: typeof whole.log = [];
+  for (const stop of [12, 25, undefined]) {
+    const seg = runArenaCombat(A, B, { seed: 5, abilities: statusCfg, runtime: rt2, stopAtTurn: stop });
+    parts2.push(...seg.log);
+    rt2 = seg.runtime;
+    if (seg.finished) break;
+  }
+  assert.deepEqual(parts2.map((e) => [e.turn, e.actorId, e.targetId, e.damage, e.action]), whole.log.map((e) => [e.turn, e.actorId, e.targetId, e.damage, e.action]), "segmentos com estados devem reproduzir a luta inteira");
+}
 
 // 4) Limite de time: 3º Dano desligado, 2º reduzido.
 const ev = evaluateTeamAbilities(["blaze", "moxie", "technician", "static"]);

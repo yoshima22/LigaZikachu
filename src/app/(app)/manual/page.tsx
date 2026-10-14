@@ -1454,6 +1454,23 @@ export default async function ManualPage() {
             O ícone só aparece em lutas novas.
           </p>
         </Sub>
+        <Sub title="Estados alterados">
+          <p className="mb-2 text-xs leading-6 text-slate-400">
+            Algumas habilidades aplicam <strong className="text-slate-200">estados alterados</strong>. Um mascote só tem <strong className="text-slate-200">um estado por vez</strong> (o novo não entra se já houver outro), exceto o Maldito, que acumula com os demais. Estados duram poucas rodadas, têm imunidades por tipo e por habilidade e aparecem no replay com um ícone no texto da ação.
+          </p>
+          <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
+            <li><strong className="text-slate-200">🔥 Queimado</strong> (2 rodadas): perde 7% do HP máximo no início do turno. Imune: tipo Fogo.</li>
+            <li><strong className="text-slate-200">☠️ Envenenado</strong> (3 rodadas): perde 5% do HP máximo no fim do turno. Imunes: tipos Veneno e Metal.</li>
+            <li><strong className="text-slate-200">⚡ Paralisado</strong> (1 rodada): 30% de chance de perder a ação. Imune: tipo Elétrico.</li>
+            <li><strong className="text-slate-200">💤 Dormindo</strong> (1 a 2 rodadas): 70% de chance de acordar; senão, perde a ação. Imune: habilidades como Insomnia.</li>
+            <li><strong className="text-slate-200">😵 Confuso</strong> (1 a 3 rodadas): 20% de chance de se ferir (5% do HP máximo) em vez de atacar e 80% de chance de se curar a cada ação. Imune: tipo Psíquico.</li>
+            <li><strong className="text-slate-200">❄️ Congelado</strong> (2 rodadas): Agilidade −20%. Imune: tipo Gelo.</li>
+            <li><strong className="text-slate-200">👻 Maldito</strong> (até quem o causou cair): quem ataca o autor da maldição perde 5% do HP máximo. Acumula com outros estados. Imunes: tipos Fantasma e Sombrio.</li>
+          </ul>
+          <p className="mt-2 text-xs leading-6 text-slate-400">
+            Habilidades como Static, Flame Body, Poison Point, Effect Spore e Cursed Body aplicam estados ao serem atingidas; Poison Touch e Toxic Chain, ao atacar. Immunity, Insomnia, Own Tempo, Water Veil, Limber e Magma Armor bloqueiam um estado. Guts, Toxic Boost e Flare Boost ficam mais fortes sob estado; Early Bird, Shed Skin, Natural Cure e Healer removem estados.
+          </p>
+        </Sub>
         <Sub title="Ambiente e Aura">
           <p className="text-xs leading-6 text-slate-400">
             <strong className="text-slate-200">Ambiente</strong> é o clima ou terreno criado por habilidades como Drought, Drizzle ou Electric Surge: nas 3 primeiras rodadas, aliados do tipo correspondente causam mais dano.{" "}

@@ -70,7 +70,7 @@ export function getAbilityInfo(slug: string | null | undefined): AbilityInfo | n
       category: (eff?.category as AbilityCategory | undefined) ?? null,
       trigger: eff?.trigger ?? null,
       activations: eff ? (o.activations ?? eff.activations) : 0,
-      scale: eff?.scale ? (STAT_BY_LABEL[eff.scale] ?? null) : null,
+      scale: (o.scale ?? eff?.scale) ? (STAT_BY_LABEL[(o.scale ?? eff?.scale)!] ?? null) : null,
       min: min == null ? null : min / 100,
       max: max == null ? null : max / 100,
       param: def.param ?? null,

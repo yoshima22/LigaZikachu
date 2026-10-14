@@ -47,9 +47,11 @@ for r in rows(wb['Habilidades']):
         base = effects[code]
         o = {}
         a, mn, mx = num(r['Ativações']), num(r['Mín (%)']), num(r['Máx (%)'])
+        sc = r.get('Atributo de escala')
         if a is not None and a != base['activations']: o['activations'] = a
         if mn is not None and mn != base['min']: o['min'] = mn
         if mx is not None and mx != base['max']: o['max'] = mx
+        if sc and sc != '-' and sc != base['scale']: o['scale'] = sc
         if o: ent['o'] = o
     abilities[slug] = ent
 
@@ -58,7 +60,7 @@ unknown = set()
 for r in rows(wb['Mascotes']):
     pid = int(r['ID'])
     normal = []
-    for key in ('Habilidade padrão', 'Habilidade 2'):
+    for key in ('Habilidade padrão', 'Habilidade 2', 'Habilidade 3'):
         n = r[key]
         if n:
             s = name_to_slug.get(n)
@@ -75,7 +77,7 @@ if unknown:
 def j(v): return json.dumps(v, ensure_ascii=False, separators=(',', ':'))
 lines = ['// GERADO por scripts/generate-ability-data.py a partir de docs/habilidades-passivas-mascotes.xlsx. Não editar à mão.',
          'export type AbilityEffectDef = { name: string; category: string; trigger: string; text: string; activations: number; scale: string | null; min: number | null; max: number | null };',
-         'export type AbilityDef = { name: string; dex?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number } };',
+         'export type AbilityDef = { name: string; dex?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number; scale?: string } };',
          '', 'export const ABILITY_EFFECTS: Record<string, AbilityEffectDef> = {']
 for k, v in effects.items(): lines.append(f'  {k}: {j(v)},')
 lines += ['};', '', 'export const ABILITIES: Record<string, AbilityDef> = {']
