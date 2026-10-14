@@ -1,4 +1,5 @@
 import type { TowerExplorationState } from "./rooms";
+import type { SettlementReport, TowerRewardEntry } from "./reward-ledger";
 
 export type TowerMemberState = "ACTIVE" | "DOWNED" | "AFK_ABANDONED";
 
@@ -31,6 +32,8 @@ export type TowerExpeditionV2 = TowerExplorationState & {
   lastRecoveryFloor: number | null;
   overload?: { value: number; expiresAfterTurn: number } | null;
   lastPressureChange?: { applied: number; reasons: string[] };
+  rewardLedger: TowerRewardEntry[];
+  rewardSettlement?: SettlementReport & { settledAt: string };
 };
 
 export function newExpeditionState(
@@ -68,6 +71,7 @@ export function newExpeditionState(
     openedEdges: [],
     lastRecoveryFloor: null,
     overload: null,
+    rewardLedger: [],
   };
 }
 

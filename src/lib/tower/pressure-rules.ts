@@ -143,6 +143,7 @@ export function transitionFloor(
       countermeasures: state.countermeasures,
       relics: state.relics,
       runReport: state.runReport,
+      rewardLedger: state.rewardLedger ?? [],
       lastRecoveryFloor: state.lastRecoveryFloor,
       overload: null,
       lastPressureChange: { applied: pressure - state.pressure, reasons: ["Transição de andar: alívio parcial da Pressão"] },

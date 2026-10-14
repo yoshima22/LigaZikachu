@@ -2133,6 +2133,7 @@ export async function getTowerRunStateAction(
   }
 
   const exploration = vol.exploration;
+  const expeditionV2 = isExpeditionV2(exploration) ? exploration : null;
   const room = exploration ? currentTowerRoom(exploration) : null;
   const communityDiscoveries = exploration
     ? await prisma.towerCodexEntry.findMany({
@@ -2176,6 +2177,14 @@ export async function getTowerRunStateAction(
       nextDeadline: run.nextDeadline?.toISOString() ?? null,
       roomIndex: vol.roomIndex ?? 1,
     },
+    rewards: expeditionV2 ? {
+      entries: (expeditionV2.rewardLedger ?? []).map((entry) => ({
+        id: entry.id, floor: entry.floor, label: entry.label, kind: entry.kind,
+        quantity: entry.quantity, status: entry.status,
+      })),
+      settlement: expeditionV2.rewardSettlement ?? null,
+      eligible: expeditionV2.members[user.id]?.status !== "AFK_ABANDONED",
+    } : null,
     order: Array.isArray(run.resolutionOrder)
       ? (run.resolutionOrder as string[])
       : [],

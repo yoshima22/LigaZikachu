@@ -44,6 +44,7 @@ import {
   updateOverload,
 } from "./pressure-rules";
 import { releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
+import { discardPendingFloorDrops, planRewardSettlement, recordFloorDrop, secureFloorDrops, settleRunRewards, type TowerRewardEntry } from "./reward-ledger";
 
 export type TowerVolatile = {
   submissions?: Record<string, { confirmedAt: string; actions: unknown }>;
@@ -876,6 +877,70 @@ export function runLockKey(runId: string): number {
   return h | 0; // int32 assinado, aceito por pg_advisory_xact_lock
 }
 
+/** Called only while holding the per-run advisory lock inside the same transaction. */
+async function grantV2RewardOnce(
+  tx: Prisma.TransactionClient,
+  runId: string,
+  userId: string,
+  rewardId: string,
+  reward: TowerRewardEntry,
+): Promise<boolean> {
+  const isBoss = reward.kind === "BOSS_BUNDLE";
+  const previous = await tx.towerFeat.findFirst({
+    where: isBoss
+      ? { userId, featKey: "TOWER_BOSS_PRIZE", data: { path: ["floor"], equals: reward.floor } }
+      : { userId, runId, featKey: "TOWER_REWARD_GRANTED", data: { path: ["rewardId"], equals: rewardId } },
+    select: { id: true },
+  });
+  if (previous) return false;
+  const player = await tx.player.findUnique({ where: { userId }, select: { id: true } });
+  if (!player) throw new Error(`Destinatário da Torre não encontrado: ${userId}`);
+  const coins = isBoss ? reward.coins ?? 0 : reward.kind === "COINS" ? reward.quantity : 0;
+  if (coins > 0) await tx.zikaCoinWallet.upsert({
+    where: { playerId: player.id },
+    create: { playerId: player.id, balance: coins, totalEarned: coins },
+    update: { balance: { increment: coins }, totalEarned: { increment: coins } },
+  });
+  const eggs = isBoss ? reward.eggs ?? [] : reward.kind === "EGG" && reward.eggType
+    ? [{ type: reward.eggType, quantity: reward.quantity }] : [];
+  for (const egg of eggs) {
+    if (!Object.values(EggType).includes(egg.type as EggType)) throw new Error(`Ovo da Torre inválido: ${egg.type}`);
+    await tx.mascotEgg.createMany({
+      data: Array.from({ length: egg.quantity }, () => ({
+        playerId: player.id,
+        type: egg.type as EggType,
+        origin: isBoss ? `Torre dos Rebeldes · ${reward.boss}` : "Torre dos Rebeldes · achado de andar",
+      })),
+    });
+  }
+  if (reward.kind === "ITEM") {
+    if (!reward.itemId) throw new Error("Item da Torre sem ID.");
+    await tx.playerInventory.upsert({
+      where: { playerId_itemId: { playerId: player.id, itemId: reward.itemId } },
+      create: { playerId: player.id, itemId: reward.itemId, quantity: reward.quantity, source: "TOWER" },
+      update: { quantity: { increment: reward.quantity } },
+    });
+  }
+  await tx.towerFeat.create({
+    data: {
+      userId, runId, featKey: isBoss ? "TOWER_BOSS_PRIZE" : "TOWER_REWARD_GRANTED",
+      data: isBoss
+        ? { floor: reward.floor, boss: reward.boss, label: reward.label, coins, eggs }
+        : { floor: reward.floor, rewardId, kind: reward.kind, label: reward.label, quantity: reward.quantity },
+    },
+  });
+  if (isBoss && reward.floor === 7) {
+    const priorChoice = await tx.towerFeat.findFirst({
+      where: { userId, featKey: { in: ["TOWER_BOSS_CHOICE_PENDING", "TOWER_BOSS_CHOICE_CLAIMED"] } },
+      select: { id: true },
+    });
+    if (!priorChoice) await tx.towerFeat.create({
+      data: { userId, runId, featKey: "TOWER_BOSS_CHOICE_PENDING", data: { unlockedAtFloor: 7, firstClearRunId: runId } },
+    });
+  }
+  return true;
+}
+
 /**
  * Resolve UMA passagem de turno (idempotente, sob lock). Aplica AFK, avança o
  * turno global, rotaciona a ordem, limpa submissões e reabre a janela.
@@ -958,6 +1023,29 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         let nextState = applyPressureToExpedition({ ...resolved.state, members }, pressureChange);
         const appliedPressure = nextState.lastPressureChange?.applied ?? 0;
         nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts));
+        for (const front of resolved.fronts) {
+          if (!front.success) continue;
+          const room = nextState.graph.find((entry) => entry.id === front.roomId);
+          if (!room) continue;
+          // Small deterministic room finds. The event-only drop table remains a separate economy decision.
+          if (front.interaction === "EVENT" || front.interaction === "LUCK") {
+            const amount = front.interaction === "LUCK" ? 25 : 15;
+            nextState = recordFloorDrop(nextState, run.currentFloor, {
+              id: `room:${run.currentFloor}:${front.roomId}`,
+              kind: "COINS", quantity: amount, label: `${amount} ZC · ${room.title}`,
+            });
+          }
+          if (room.kind === "BOSS") {
+            const prize = TOWER_BOSS_PRIZES[run.currentFloor - 1];
+            if (!prize) throw new Error(`Prêmio do chefe ausente no andar ${run.currentFloor}.`);
+            nextState = recordFloorDrop(nextState, run.currentFloor, {
+              id: `boss:${run.currentFloor}`, kind: "BOSS_BUNDLE", quantity: 1,
+              label: prize.label, boss: prize.boss, coins: prize.coins,
+              eggs: prize.eggs.map((egg) => ({ type: egg.type, quantity: egg.quantity })),
+            });
+            nextState = secureFloorDrops(nextState, run.currentFloor);
+          }
+        }
         const bossVictory = resolved.fronts.some((front) =>
           front.success && nextState.graph.find((room) => room.id === front.roomId)?.kind === "BOSS");
         let nextFloor = run.currentFloor;
@@ -981,6 +1069,17 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         const wonRun = bossVictory && run.currentFloor === 7;
         const ended = !hasActive || wonRun;
         if (ended) {
+          if (!wonRun) nextState = discardPendingFloorDrops(nextState, run.currentFloor);
+          const settlement = await settleRunRewards({
+            grantOnce: (grantRunId, userId, rewardId, reward) =>
+              grantV2RewardOnce(tx, grantRunId, userId, rewardId, reward),
+          }, planRewardSettlement(nextState, runId));
+          nextState = { ...nextState, rewardSettlement: { ...settlement, settledAt: new Date().toISOString() } };
+          if (wonRun) await tx.towerCommunityProgress.upsert({
+            where: { floorId_metricKey: { floorId: 7, metricKey: "FIRST_FINAL_CLEAR" } },
+            create: { floorId: 7, metricKey: "FIRST_FINAL_CLEAR", value: 1 },
+            update: {},
+          });
           for (const mascot of latestMascots) {
             const member = members[mascot.member.userId];
             if (member?.status === "AFK_ABANDONED") continue;
