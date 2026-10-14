@@ -363,15 +363,22 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       };
       const t = selectedBuffItem.type;
 
-      if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
-      else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
-      else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
-      else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
-      else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
-      else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
-      else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
-      else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
-      else r = await useMascotBuffAction(selectedMascot, selectedBuff);
+      try {
+        if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
+        else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
+        else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
+        else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
+        else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
+        else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
+        else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
+        else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
+        else r = await useMascotBuffAction(selectedMascot, selectedBuff);
+      } catch (error) {
+        // Falha de rede/servidor (ex.: página aberta antes de uma atualização): antes ficava silenciosa.
+        console.error("[BuffPanel] falha ao usar o item", error);
+        toast.error("Não foi possível concluir agora (falha de comunicação com o servidor). Recarregue a página e tente de novo; o item não foi gasto.", { duration: 10000 });
+        return;
+      }
 
       if (r.error) toast.error(r.error, { duration: 10000 });
       else {
