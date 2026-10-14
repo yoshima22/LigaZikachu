@@ -1201,7 +1201,7 @@ export function TowerLobby() {
                   "Fantasma",
                   "Dragão",
                   "Sombrio",
-                  "Aço",
+                  "Metal",
                   "Fada",
                 ].map((t) => (
                   <option key={t} value={t}>

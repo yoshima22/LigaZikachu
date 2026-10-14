@@ -19,7 +19,7 @@ export const dynamic = "force-dynamic";
 
 const TYPE_STYLE: Record<string, { label: string; color: string }> = {
   flying: { label: "Voador", color: "#8fa8ff" }, bug: { label: "Inseto", color: "#a8c93a" }, normal: { label: "Normal", color: "#c4b9a8" },
-  ghost: { label: "Fantasma", color: "#8a6fc0" }, fighting: { label: "Lutador", color: "#d05a4a" }, steel: { label: "Aço", color: "#9fb4c7" },
+  ghost: { label: "Fantasma", color: "#8a6fc0" }, fighting: { label: "Lutador", color: "#d05a4a" }, steel: { label: "Metal", color: "#9fb4c7" },
   ice: { label: "Gelo", color: "#7fd6e8" }, dragon: { label: "Dragão", color: "#6a5fe0" },
 };
 

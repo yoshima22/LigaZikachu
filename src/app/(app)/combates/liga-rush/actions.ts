@@ -171,7 +171,7 @@ function rushArchiveAt(league: { weekStart: Date }) {
   const nextMonday = addDaysDate(brtDate(league.weekStart), 7);
   return new Date(`${nextMonday}T08:00:00-03:00`);
 }
-function getPokemonTypeLabel(type?: string | null) { const labels: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Aço",fairy:"Fada" }; return type ? labels[type] ?? type : "Livre"; }
+function getPokemonTypeLabel(type?: string | null) { const labels: Record<string,string> = { normal:"Normal",fire:"Fogo",water:"Água",electric:"Elétrico",grass:"Planta",ice:"Gelo",fighting:"Lutador",poison:"Veneno",ground:"Terra",flying:"Voador",psychic:"Psíquico",bug:"Inseto",rock:"Pedra",ghost:"Fantasma",dragon:"Dragão",dark:"Sombrio",steel:"Metal",fairy:"Fada" }; return type ? labels[type] ?? type : "Livre"; }
 
 export async function getRushDataAction() {
   const { session, player } = await requireContext();

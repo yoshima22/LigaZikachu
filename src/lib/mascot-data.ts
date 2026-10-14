@@ -2424,7 +2424,7 @@ export const TYPE_LABELS_PT: Record<string, string> = {
   grass: "Planta", ice: "Gelo", fighting: "Lutador", poison: "Veneno",
   ground: "Terra", flying: "Voador", psychic: "Psíquico", bug: "Inseto",
   rock: "Pedra", ghost: "Fantasma", dragon: "Dragão", dark: "Sombrio",
-  steel: "Aço", fairy: "Fada",
+  steel: "Metal", fairy: "Fada",
 };
 
 export function getTypeLabelPt(type: string): string {

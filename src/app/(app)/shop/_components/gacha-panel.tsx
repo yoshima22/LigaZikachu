@@ -73,7 +73,7 @@ const EGG_TYPES = ["COMMON", "RARE", "EVENT", "SPECIAL", "LAB", "CELESTIAL"];
 const POKEMON_TYPES = [
   ["NORMAL", "Normal"], ["FIRE", "Fogo"], ["WATER", "Água"], ["ELECTRIC", "Elétrico"], ["GRASS", "Planta"], ["ICE", "Gelo"],
   ["FIGHTING", "Lutador"], ["POISON", "Veneno"], ["GROUND", "Terra"], ["FLYING", "Voador"], ["PSYCHIC", "Psíquico"], ["BUG", "Inseto"],
-  ["ROCK", "Pedra"], ["GHOST", "Fantasma"], ["DRAGON", "Dragão"], ["DARK", "Sombrio"], ["STEEL", "Aço"], ["FAIRY", "Fada"],
+  ["ROCK", "Pedra"], ["GHOST", "Fantasma"], ["DRAGON", "Dragão"], ["DARK", "Sombrio"], ["STEEL", "Metal"], ["FAIRY", "Fada"],
 ] as const;
 
 const OBJECTIVE_SOURCES: Array<{ key: string; label: string; metric: string }> = [

@@ -70,7 +70,7 @@ const TYPE_LABELS: Record<string, string> = {
   fire: "Fogo", water: "Água", grass: "Planta", electric: "Elétrico",
   psychic: "Psíquico", ghost: "Fantasma", dragon: "Dragão", fighting: "Lutador",
   ground: "Terra", rock: "Pedra", ice: "Gelo", poison: "Veneno",
-  bug: "Inseto", flying: "Voador", dark: "Sombrio", steel: "Aço",
+  bug: "Inseto", flying: "Voador", dark: "Sombrio", steel: "Metal",
   fairy: "Fada", normal: "Normal",
 };
 

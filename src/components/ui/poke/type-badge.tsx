@@ -25,7 +25,7 @@ const typeConfig: Record<PokeType, { label: string; bg: string; text: string; bo
   ice:      { label: "Gelo",     bg: "bg-[#96D9D6]/15", text: "text-[#96D9D6]", border: "border-[#96D9D6]/40", icon: <Snowflake size={11} /> },
   dragon:   { label: "Dragão",   bg: "bg-[#6F35FC]/15", text: "text-[#9B71FF]", border: "border-[#6F35FC]/40", icon: <Flame size={11} /> },
   dark:     { label: "Sombrio",  bg: "bg-[#705746]/15", text: "text-[#9E7B6A]", border: "border-[#705746]/40", icon: <Ghost size={11} /> },
-  steel:    { label: "Aço",       bg: "bg-[#B7B7CE]/15", text: "text-[#B7B7CE]", border: "border-[#B7B7CE]/40", icon: <Shield size={11} /> },
+  steel:    { label: "Metal",    bg: "bg-[#B7B7CE]/15", text: "text-[#B7B7CE]", border: "border-[#B7B7CE]/40", icon: <Shield size={11} /> },
   fairy:    { label: "Fada",     bg: "bg-[#D685AD]/15", text: "text-[#D685AD]", border: "border-[#D685AD]/40", icon: <Sparkles size={11} /> }
 };
 
