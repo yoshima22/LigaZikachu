@@ -26,8 +26,26 @@ function BoundTag({ className = "" }: { className?: string }) {
   );
 }
 
+const REBOUND_HELP = "Perdeu o slot? Compre 1 cópia do item esgotado com desconto um pouco menor. Só nos 25 min após a rotação, para quem não comprou slot. Gasta 1 compra diária, vale 2 por rotação e o item fica vinculado à conta (não pode ser trocado nem vendido).";
+
+function HelpHint() {
+  return (
+    <span className="group/help relative inline-flex">
+      <button
+        type="button"
+        aria-label="Como funciona o Rebote"
+        title={REBOUND_HELP}
+        className="flex h-5 w-5 items-center justify-center rounded-full border border-cyan-300/50 bg-cyan-400/10 text-[10px] font-black text-cyan-100 hover:bg-cyan-400/25 focus:bg-cyan-400/25"
+      >?</button>
+      <span role="tooltip" className="pointer-events-none invisible absolute right-0 top-6 z-40 w-64 rounded-lg border border-cyan-300/40 bg-slate-950 p-2.5 text-left text-[10px] font-medium leading-snug text-slate-200 opacity-0 shadow-xl transition group-hover/help:visible group-hover/help:opacity-100 group-focus-within/help:visible group-focus-within/help:opacity-100">
+        {REBOUND_HELP}
+      </span>
+    </span>
+  );
+}
+
 function ReboundCard({
-  offer, canBuy, reason, debug, pending, buying, balance, ligaCashBalance, priceLc, ligaCashEnabled, onBuy,
+  offer, canBuy, reason, debug, pending, buying, balance, ligaCashBalance, priceLc, ligaCashEnabled, onBuy, msLeft,
 }: {
   offer: ReboundOfferView;
   canBuy: boolean;
@@ -40,16 +58,24 @@ function ReboundCard({
   priceLc: number;
   ligaCashEnabled: boolean;
   onBuy: (index: number, currency: "ZC" | "LC") => void;
+  /** Tempo restante da janela do Rebote (null no preview de debug). */
+  msLeft: number | null;
 }) {
   const enabled = canBuy && !debug && !offer.alreadyBought;
   const cantAffordZc = balance < offer.finalPrice;
   const cantAffordLc = ligaCashBalance < priceLc;
   return (
     <div className="relative flex flex-col overflow-hidden rounded-xl border border-cyan-400/30 bg-gradient-to-b from-slate-900/90 to-slate-950 p-3 shadow-[0_0_24px_rgba(34,211,238,0.07)]">
-      {debug && (
-        <span className="absolute right-2 top-2 rounded-full bg-fuchsia-600 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Preview</span>
-      )}
-      <div className="flex items-center gap-3">
+      <div className="absolute right-2 top-2 z-10 flex items-center gap-1.5">
+        {debug && <span className="rounded-full bg-fuchsia-600 px-2 py-0.5 text-[8px] font-black uppercase tracking-wider text-white">Preview</span>}
+        {!debug && msLeft !== null && msLeft > 0 && (
+          <span className="inline-flex items-center gap-1 rounded-full border border-amber-400/40 bg-amber-400/10 px-1.5 py-0.5 text-[9px] font-black tabular-nums text-amber-200">
+            <Clock size={9} /> {windowLabel(msLeft)}
+          </span>
+        )}
+        <HelpHint />
+      </div>
+      <div className="flex items-center gap-3 pt-5">
         <div className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl border border-cyan-400/20 bg-slate-950">
           {offer.imageUrl
             // eslint-disable-next-line @next/next/no-img-element
@@ -97,7 +123,7 @@ function windowLabel(ms: number) {
 }
 
 export function MiauvadaoReboundSection({
-  rebound, reboundDebug, isPlatformAdmin, playerId, balance, ligaCashBalance, lcMult, lcRef, ligaCashEnabled, sabotagedOfferIndex,
+  rebound, reboundDebug,   isPlatformAdmin, playerId, balance, ligaCashBalance, lcMult, lcRef, ligaCashEnabled, sabotagedOfferIndex, hasPurchaseCharge, nextChargeLabel,
 }: {
   rebound: ReboundView | null;
   /** Visão com todos os slots (só admin de plataforma recebe; é apenas visual). */
@@ -110,6 +136,9 @@ export function MiauvadaoReboundSection({
   lcRef: number;
   ligaCashEnabled: boolean;
   sabotagedOfferIndex: number | null;
+  /** O jogador tem ao menos 1 das 2 cargas de compra diárias disponível. */
+  hasPurchaseCharge: boolean;
+  nextChargeLabel: string | null;
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
@@ -167,7 +196,7 @@ export function MiauvadaoReboundSection({
   }
 
   const blockMessage = view.block && view.block !== "window_closed" ? REBOUND_BLOCK_MESSAGE[view.block] : null;
-  const canBuyNow = showReal && !blockMessage && windowOpen && Boolean(playerId);
+  const canBuyNow = showReal && !blockMessage && windowOpen && Boolean(playerId) && hasPurchaseCharge;
 
   const handleBuy = (index: number, currency: "ZC" | "LC") => {
     const offer = view.offers.find((o) => o.index === index);
@@ -176,7 +205,7 @@ export function MiauvadaoReboundSection({
     const priceLabel = currency === "LC"
       ? `${suggestedLcClient(offer.finalPrice, lcMult, lcRef).toLocaleString("pt-BR")} LC`
       : `${offer.finalPrice.toLocaleString("pt-BR")} ZC`;
-    if (!confirm(`Comprar o Rebote de "${offer.name}" por ${priceLabel}?\n\nO item ficará VINCULADO À CONTA: não poderá ser vendido, trocado nem enviado a outros jogadores. Depois de 2 compras de Rebote você só poderá comprar de novo na próxima rotação.`)) return;
+    if (!confirm(`Comprar o Rebote de "${offer.name}" por ${priceLabel}?\n\nO item ficará VINCULADO À CONTA: não poderá ser vendido, trocado nem enviado a outros jogadores. Esta compra gasta 1 das suas compras diárias. Depois de 2 compras de Rebote você só poderá comprar de novo na próxima rotação.`)) return;
     setBuyingIdx(index);
     startTransition(async () => {
       const r = await buyMiauvadaoRebound(index, currency);
@@ -220,7 +249,7 @@ export function MiauvadaoReboundSection({
         {showReal && (
           <p className="mb-3 text-[11px] leading-snug text-slate-300">
             Você não comprou nenhum slot nesta rotação, então pode pegar <strong className="text-white">1 cópia</strong> de cada item esgotado com um desconto um pouco menor.
-            Os itens ficam <strong className="text-cyan-200">vinculados à conta</strong> (não podem ser vendidos nem trocados). Limite de <strong className="text-white">2 Rebotes</strong> por rotação.
+            Os itens ficam <strong className="text-cyan-200">vinculados à conta</strong> (não podem ser vendidos nem trocados). Cada Rebote gasta <strong className="text-white">1 das suas compras diárias</strong> e o limite é de <strong className="text-white">2 por rotação</strong>.
           </p>
         )}
         {showReal && blockMessage && (
@@ -235,8 +264,9 @@ export function MiauvadaoReboundSection({
               <ReboundCard
                 key={offer.key}
                 offer={offer}
+                msLeft={debug ? null : msLeft}
                 canBuy={canBuyNow && sabotagedOfferIndex !== offer.index}
-                reason={debug ? (offer.slotHasStock ? "Slot ainda tem estoque (só aparece no preview)." : null) : sabotagedOfferIndex === offer.index ? "Slot sabotado pela Ordem." : null}
+                reason={debug ? (offer.slotHasStock ? "Slot ainda tem estoque (só aparece no preview)." : null) : sabotagedOfferIndex === offer.index ? "Slot sabotado pela Ordem." : !hasPurchaseCharge && !offer.alreadyBought && !blockMessage ? `Suas compras diárias estão recarregando${nextChargeLabel ? ` (próxima em ${nextChargeLabel})` : ""}.` : null}
                 debug={debug}
                 pending={pending}
                 buying={buyingIdx === offer.index}
@@ -249,7 +279,7 @@ export function MiauvadaoReboundSection({
             ))}
           </div>
         )}
-        {showReal && real && <p className="mt-3 text-[9px] text-slate-500">O Rebote acompanha o item atual do slot e não consome o estoque do Miauvadão.</p>}
+        {showReal && real && <p className="mt-3 text-[9px] text-slate-500">O Rebote acompanha o item atual do slot e não consome o estoque do Miauvadão (mas usa uma das suas compras diárias).</p>}
       </div>
     </div>
   );

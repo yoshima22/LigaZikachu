@@ -517,6 +517,8 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
             lcRef={lcRef}
             ligaCashEnabled={ligaCashEnabled}
             sabotagedOfferIndex={sabotagedOfferIndex}
+            hasPurchaseCharge={purchaseCount > 0}
+            nextChargeLabel={nextPurchaseAt && purchaseCount < 1 ? nextPurchaseLabel : null}
           />
 
           {personalOffer && (() => {

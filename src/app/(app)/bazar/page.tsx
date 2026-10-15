@@ -218,6 +218,11 @@ export default async function BazarPage({
           </div>
 
           <div className="space-y-1">
+            <p className="font-semibold" style={{ color: "#c9a800" }}>↩️ Rebote do Miauvadão</p>
+            <p>Se os mais rápidos zerarem um slot e você <strong style={{ color: "#FFCB05" }}>não comprou nenhum slot</strong> naquela rotação, o <strong style={{ color: "#FFCB05" }}>Rebote</strong> libera <strong style={{ color: "#FFCB05" }}>1 cópia</strong> do item esgotado com desconto <strong style={{ color: "#FFCB05" }}>5 pontos menor</strong>. Só nos <strong style={{ color: "#FFCB05" }}>primeiros 25 min</strong> após a rotação (com timer), gasta <strong style={{ color: "#FFCB05" }}>1 das suas compras diárias</strong>, vale até <strong style={{ color: "#FFCB05" }}>2 por rotação</strong> e o item fica <strong style={{ color: "#FFCB05" }}>vinculado à conta</strong>: dá para usar, mas não vender nem trocar.</p>
+          </div>
+
+          <div className="space-y-1">
             <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
             <p>Aposte entre 50–2000 ZC. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 65%</strong> (ex: 100 ZC → 165 ZC). Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
           </div>

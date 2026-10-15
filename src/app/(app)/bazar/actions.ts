@@ -2620,7 +2620,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
     const rotationIso = rotation.start.toISOString();
     const result = await prisma.$transaction(async (tx) => {
       const now = new Date();
-      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true } });
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true, purchaseRechargeMinutes: true } });
       const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
       const offer = offers[offerIndex];
       if (!offer) throw new Error("Oferta não encontrada.");
@@ -2642,6 +2642,16 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
       if (!wallet || wallet.balance < price) {
         throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency} disponíveis, o Rebote custa ${price} ${currency}).`);
       }
+      // O Rebote consome uma das 2 cargas de compra do jogador, como qualquer compra do Miauvadão.
+      const quota = await tx.miauvadaoPurchaseQuota.upsert({ where: { playerId: player.id }, update: {}, create: { playerId: player.id } });
+      const rechargeMs = normalizedRechargeMinutes(config.purchaseRechargeMinutes) * 60_000;
+      const chargeOneAvailable = !quota.chargeOneUsedAt || now.getTime() - quota.chargeOneUsedAt.getTime() >= rechargeMs;
+      const chargeTwoAvailable = !quota.chargeTwoUsedAt || now.getTime() - quota.chargeTwoUsedAt.getTime() >= rechargeMs;
+      if (!chargeOneAvailable && !chargeTwoAvailable) {
+        const status = purchaseStatusFromQuota(quota, now, config.purchaseRechargeMinutes);
+        throw new Error(`Suas duas compras estão recarregando. Próxima disponível às ${new Date(status.rechargeAt[0]).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}.`);
+      }
+      await tx.miauvadaoPurchaseQuota.update({ where: { playerId: player.id }, data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now } });
       const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
       if (currency === "ZC") {
         await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -price, description: `Miauvadão (Rebote): compra de ${offer.name}` });
