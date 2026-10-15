@@ -361,7 +361,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
       select: {
         id: true, pokemonId: true, nickname: true, level: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true,
-        megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
+        megaEvolvedAt: true, megaEvolvedFromPokemonId: true, preferredCombatRole: true,
       },
       orderBy: { level: "desc" },
     });

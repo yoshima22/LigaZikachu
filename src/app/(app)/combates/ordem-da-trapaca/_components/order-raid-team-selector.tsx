@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition, type ReactNode } from "rea
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, getSpriteUrl } from "@/lib/mascot-data";
 import { attackOrderRaidBossAction } from "../actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
@@ -20,6 +20,7 @@ type RaidMascot = {
   statInstinct: number;
   statVitality: number;
   statCharisma: number;
+  preferredCombatRole?: string | null;
 };
 
 type RaidResult = Awaited<ReturnType<typeof attackOrderRaidBossAction>>;
@@ -38,7 +39,7 @@ function total(mascot: RaidMascot) {
 }
 
 function recommended(mascot: RaidMascot): CombatRole {
-  return recommendCombatRole(mascot);
+  return defaultCombatRoleFor(mascot);
 }
 
 function RaidBattleModal({ result, onClose, labels }: { result: SuccessfulRaidResult; onClose: () => void; labels: RaidLabels }) {
@@ -302,7 +303,7 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-slate-100">{nameOf(mascot)}</p>
                     <p className="text-[10px] text-slate-500">Nv.{mascot.level} · For {mascot.statForce} · Agi {mascot.statAgility} · Ins {mascot.statInstinct} · Vit {mascot.statVitality} · Car {mascot.statCharisma}</p>
-                    <p className="text-[10px] text-[#FFCB05]">Recomendada: {getCombatRoleLabel(recommended(mascot))}</p>
+                    <p className="text-[10px] text-[#FFCB05]">Recomendada: {getCombatRoleLabel(recommendCombatRole(mascot))}</p>
                   </div>
                 </div>
               </button>

@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
@@ -830,7 +830,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     for (const id of ids) {
       if (!mergedRoles[id]) {
         const m = data.availableMascots.find((x: any) => x.id === id);
-        if (m) mergedRoles[id] = recommendCombatRole(m as any);
+        if (m) mergedRoles[id] = defaultCombatRoleFor(m as any);
       }
     }
     setRoles(mergedRoles);
@@ -847,7 +847,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       setSelected(prev => [...prev, id]);
       const m = data.availableMascots.find((x: any) => x.id === id);
       if (m) {
-        const rec = recommendCombatRole(m as any);
+        const rec = defaultCombatRoleFor(m as any);
         setRoles(prev => ({ ...prev, [id]: prev[id] ?? rec }));
       }
     }
@@ -1239,7 +1239,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
                   const types = mascotTypes(m);
-                  const role = teamRoles?.[id] || recommendCombatRole(m as any);
+                  const role = teamRoles?.[id] || defaultCombatRoleFor(m as any);
                   const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
                   const isMoving = movingMascot?.slot === slot && movingMascot.index === i;
                   const invalidReason = invalidInfo.get(id);

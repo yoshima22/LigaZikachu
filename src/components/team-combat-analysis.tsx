@@ -9,6 +9,7 @@ import {
   getFlankBypassChance,
   normalizeCombatRole,
   recommendCombatRole,
+  defaultCombatRoleFor,
   type CombatRole,
 } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
@@ -38,7 +39,7 @@ const cap = (value: number, max: number) => Math.min(value, max);
 const nameOf = (m: TeamAnalysisMascot) => m.nickname ?? m.name ?? getPokemonName(m.pokemonId);
 
 function roleOf(m: TeamAnalysisMascot, roles: Record<string, unknown>): CombatRole {
-  return normalizeCombatRole(roles[m.id] ?? recommendCombatRole(m));
+  return normalizeCombatRole(roles[m.id] ?? defaultCombatRoleFor(m));
 }
 
 function StatCard({ label, value, detail }: { label: string; value: string; detail: string }) {

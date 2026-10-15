@@ -109,6 +109,7 @@ export default async function OrdemDaTrapacaPage({
     statInstinct: number;
     statVitality: number;
     statCharisma: number;
+    preferredCombatRole?: string | null;
   };
   const emptyRaidMascots: RaidAvailableMascot[] = [];
   const [lastRaidAttempt, injuredMascots, raidAvailableMascots, recentRaidAttempts, freeMegaStoneClaim] = player && event?.id ? await Promise.all([
@@ -139,6 +140,7 @@ export default async function OrdemDaTrapacaPage({
         statInstinct: true,
         statVitality: true,
         statCharisma: true,
+        preferredCombatRole: true,
       },
       orderBy: [{ level: "desc" }, { statForce: "desc" }, { statInstinct: "desc" }],
       take: 120,

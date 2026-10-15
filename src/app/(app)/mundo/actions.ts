@@ -171,7 +171,7 @@ export async function getWorldPartyMascotsAction() {
     where: { playerId: player.id },
     orderBy: [{ isInParty: "desc" }, { level: "desc" }, { createdAt: "asc" }],
     take: 400,
-  }), prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true } })]);
+  }), prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true, preferredCombatRole: true } })]);
   return mascots.map((mascot) => ({
     id: mascot.id,
     speciesId: mascot.pokemonId,
@@ -183,7 +183,7 @@ export async function getWorldPartyMascotsAction() {
     mainMascotId: mascot.mainMascotId,
     baseOptions: mainMascots.filter((base) => base.pokemonId === mascot.pokemonId).map((base) => ({ id: base.id, label: `${base.nickname?.trim() || getPokemonName(base.pokemonId)} · Nv.${base.level}` })),
     posture: defaultCombatRoleFor({
-      preferredCombatRole: null,
+      preferredCombatRole: mainMascots.find((base) => base.id === mascot.mainMascotId)?.preferredCombatRole ?? null,
       statForce: mascot.statForce,
       statAgility: mascot.statAgility,
       statVitality: mascot.statVitality,

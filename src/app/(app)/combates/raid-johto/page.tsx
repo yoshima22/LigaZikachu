@@ -88,7 +88,7 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
   const invitation = !admin && player?.id ? await getJohtoInvitationForPlayer(player.id) : null;
   if (!state.event && !admin) redirect("/dashboard");
 
-  const mascotSelect = { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true } as const;
+  const mascotSelect = { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, preferredCombatRole: true } as const;
   const freeWhere = player ? { playerId: player.id, arenaState: "FREE" as const, expeditions: { none: { status: "ACTIVE" as const } } } : null;
   const [freeMascots, injured, injuredTotal] = player && freeWhere
     ? await Promise.all([
