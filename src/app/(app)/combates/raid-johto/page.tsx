@@ -4,6 +4,7 @@ import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { cleanupExpiredArenaResting } from "@/lib/arena-z";
 import { getJohtoAdminSummary, getJohtoRaidState, isJohtoRaidVisibleToPlayers, type JohtoLeaderState } from "@/lib/johto-raid";
 import { getJohtoInvitationForPlayer, getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
 import type { RaidLabels } from "../ordem-da-trapaca/_components/order-raid-team-selector";
@@ -84,6 +85,10 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
   if (!admin && !visible) redirect("/dashboard");
 
   const player = await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } });
+  // Recuperação preguiçosa do repouso: mascotes que terminaram o descanso ficam
+  // como RESTING no banco até a Arena ser aberta. Sem isto, mascotes já
+  // recuperados não apareciam na lista FREE do raid.
+  if (player?.id) await cleanupExpiredArenaResting(player.id).catch(() => null);
   const state = await getJohtoRaidState(player?.id);
   const invitation = !admin && player?.id ? await getJohtoInvitationForPlayer(player.id) : null;
   if (!state.event && !admin) redirect("/dashboard");

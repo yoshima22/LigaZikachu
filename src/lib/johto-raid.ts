@@ -4,6 +4,7 @@ import { MascotPersonality, Prisma, ZikaCoinTxType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { toLeagueMascot } from "@/lib/league-combat";
+import { cleanupExpiredArenaResting } from "@/lib/arena-z";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { EGG_SHINY_CHANCE, EGG_STAT_RANGES, getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import {
@@ -345,6 +346,9 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
 
   const player = await prisma.player.findUnique({ where: { userId }, select: { id: true, displayName: true, user: { select: { role: true } } } });
   if (!player) return { ok: false, message: "Perfil de jogador não encontrado." };
+  // Libera mascotes que terminaram o repouso (RESTING→FREE) antes de validar a
+  // equipe, senão um mascote já recuperado seria rejeitado como não-livre.
+  await cleanupExpiredArenaResting(player.id).catch(() => null);
   const admin = isAdminRole(player.user?.role);
   const cooldownMs = event.cooldownMinutes * 60_000;
   const last = await prisma.johtoRaidAttempt.findFirst({ where: { eventId: event.id, playerId: player.id }, orderBy: { createdAt: "desc" }, select: { createdAt: true } });
