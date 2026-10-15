@@ -32,3 +32,4 @@ scripts/export-egg-pools.ts
 
 # Grafo de conhecimento gerado localmente pelo graphify
 graphify-out/
+.worktrees/
