@@ -143,8 +143,20 @@ export function JohtoRewardPicker({ rewards, choiceUsed, clairItem, allLeaders }
   const [personality, setPersonality] = useState("");
   const [stat, setStat] = useState("");
   const [leaderPage, setLeaderPage] = useState(0);
+  const [rewardPage, setRewardPage] = useState(0);
   const itemAvailable = Boolean(clairItem && !clairItem.used) && !choiceUsed;
   if (rewards.length === 0) return null;
+  const REWARD_PAGE_SIZE = 2;
+  const rewardPages = Math.ceil(rewards.length / REWARD_PAGE_SIZE);
+  const safeRewardPage = Math.min(rewardPage, rewardPages - 1);
+  const pagedRewards = rewards.slice(safeRewardPage * REWARD_PAGE_SIZE, (safeRewardPage + 1) * REWARD_PAGE_SIZE);
+  const pager = rewardPages > 1 && (
+    <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
+      <button type="button" disabled={safeRewardPage <= 0} onClick={() => setRewardPage(safeRewardPage - 1)} className="rounded-md border border-slate-700 px-3 py-1 text-xs font-black text-white disabled:opacity-30">◀ Anterior</button>
+      <p className="text-xs font-bold text-slate-300">Recompensas {safeRewardPage * REWARD_PAGE_SIZE + 1}–{Math.min(rewards.length, (safeRewardPage + 1) * REWARD_PAGE_SIZE)} de {rewards.length} · página {safeRewardPage + 1}/{rewardPages}</p>
+      <button type="button" disabled={safeRewardPage >= rewardPages - 1} onClick={() => setRewardPage(safeRewardPage + 1)} className="rounded-md border border-slate-700 px-3 py-1 text-xs font-black text-white disabled:opacity-30">Próxima ▶</button>
+    </div>
+  );
   function claim(reward: JohtoPendingReward) {
     const pokemonId = choice[reward.id];
     if (!pokemonId) { toast.error("Escolha um mascote primeiro."); return; }
@@ -203,7 +215,8 @@ Confirmar a escolha?`,
           )}
         </div>
       )}
-      {rewards.map((reward) => {
+      {pager}
+      {pagedRewards.map((reward) => {
         const locked = !reward.claimed && Boolean(choiceUsed);
         return (
           <div key={reward.id} className={`rounded-xl border border-slate-800 bg-slate-950/60 p-3 ${locked ? "opacity-60" : ""}`}>
@@ -245,6 +258,7 @@ Confirmar a escolha?`,
           </div>
         );
       })}
+      {pager}
     </section>
   );
 }
