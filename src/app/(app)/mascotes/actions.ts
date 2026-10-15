@@ -2246,7 +2246,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     hiddenAbilityUnlocked: boolean; abilityChoice: string | null; pokedexLink: { url: string | null; note: string | null };
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
-    ivRating: string | null; ivScore: number | null; performanceTag: string;
+    ivRating: string | null; ivScore: number | null; performanceTag: string; preferredCombatRole: string | null;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -2303,6 +2303,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         evolutionLocked: m.evolutionLocked, expLocked: m.expLocked, operationsLocked: m.operationsLocked,
         primordialBoundPlayerId: m.primordialBoundPlayerId, isShiny: m.isShiny,
         ivRating: m.ivRating, ivScore: m.ivScore, performanceTag: m.performanceTag,
+        preferredCombatRole: m.preferredCombatRole,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,

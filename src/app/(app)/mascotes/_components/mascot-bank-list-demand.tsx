@@ -320,8 +320,9 @@ function BankRow({
       return;
     }
     setOpen(true);
-    if (!fullData) fetchFull();
-  }, [fetchFull, fullData, open]);
+    // Recarrega a cada abertura: postura/tag salvas no card não podem voltar ao valor antigo do cache local.
+    fetchFull();
+  }, [fetchFull, open]);
 
   const name = mascot.nickname ?? mascot.speciesNameOverride ?? getPokemonName(mascot.pokemonId);
   const types = mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId);
