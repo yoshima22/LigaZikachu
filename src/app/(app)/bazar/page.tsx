@@ -12,7 +12,7 @@ import { BazarListingCard } from "./_components/bazar-listing-card";
 import { BazarFeed } from "./_components/bazar-feed";
 import { BazarFiltersClient } from "./_components/bazar-filters-client";
 import { BazarPagination } from "./_components/bazar-pagination";
-import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus, getPersonalMiauvadaoOffer } from "./actions";
+import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus, getMiauvadaoRebound, getPersonalMiauvadaoOffer } from "./actions";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
 import { getCachedListings, getCachedPremiumAvailability, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
 import type { BazarItemCategory, BazarListingType } from "@prisma/client";
@@ -108,6 +108,13 @@ export default async function BazarPage({
 
   const purchaseStatus = await getMiauvadaoPurchaseStatus(playerId);
   const personalOffer = playerId ? await getPersonalMiauvadaoOffer().catch(() => null) : null;
+  const [rebound, reboundDebug] = playerId
+    ? await Promise.all([
+        getMiauvadaoRebound(dailyOffers as never).catch(() => null),
+        // Preview visual do Rebote: só contas admin de plataforma (GM não).
+        platformAdmin ? getMiauvadaoRebound(dailyOffers as never, true).catch(() => null) : Promise.resolve(null),
+      ])
+    : [null, null];
   const weeklyTmView = await getWeeklyTmView().catch(() => null);
   const rotation = getMiauvadaoRotation();
   const slotRefreshAvailable = !freshMiauvadao.slotRefreshUsedCycle
@@ -238,6 +245,9 @@ export default async function BazarPage({
         rotationEndsAt={rotation.next.toISOString()}
         sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
         personalOffer={personalOffer as never}
+        rebound={rebound}
+        reboundDebug={reboundDebug}
+        isPlatformAdmin={platformAdmin}
       />
 
       {/* TMs da Semana: 5 slots fixos, reset na segunda 00:00 */}

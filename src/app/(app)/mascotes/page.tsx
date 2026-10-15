@@ -117,7 +117,7 @@ async function fetchMascotPageData(playerId: string) {
     }),
     prisma.mascotEgg.findMany({
       where: { playerId, incubation: null, NOT: { origin: { startsWith: "bazar:" } } },
-      select: { id: true, type: true, obtainedAt: true, origin: true, hatchRarityBonusPct: true },
+      select: { id: true, type: true, obtainedAt: true, origin: true, hatchRarityBonusPct: true, accountBound: true },
       orderBy: { obtainedAt: "asc" }
     }),
     prisma.mascotIncubator.findUnique({
@@ -129,7 +129,7 @@ async function fetchMascotPageData(playerId: string) {
     }),
     prisma.mascotFoodItem.findMany({
       where: { playerId },
-      select: { type: true, quantity: true },
+      select: { type: true, quantity: true, boundQuantity: true },
     }),
     prisma.arenaTeam.findFirst({
       where: { playerId, status: "RETIRED", retiredAt: { gt: new Date(Date.now() - RETIRE_COOLDOWN_MS) } },
@@ -140,6 +140,7 @@ async function fetchMascotPageData(playerId: string) {
       where: { playerId, quantity: { gt: 0 }, item: { type: { in: BUFF_TYPES_LIST as unknown as import("@prisma/client").ShopItemType[] } } },
       select: {
         quantity: true,
+        boundQuantity: true,
         item: { select: { id: true, name: true, type: true, description: true, imageUrl: true, metadata: true, rarity: true } }
       },
     }),
@@ -351,6 +352,8 @@ export default async function MascotesPage() {
   const hasRareSweet = foods.some(f => f.type === "RARE_SWEET" && f.quantity > 0);
   const foodCount  = foods.find(f => f.type === "FOOD")?.quantity ?? 0;
   const sweetCount = foods.find(f => f.type === "SWEET")?.quantity ?? 0;
+  const foodBound = foods.find(f => f.type === "FOOD")?.boundQuantity ?? 0;
+  const sweetBound = foods.find(f => f.type === "SWEET")?.boundQuantity ?? 0;
   const rareSweetCount = foods.find(f => f.type === "RARE_SWEET")?.quantity ?? 0;
   const favoriteMascotCount = featuredMascots.filter(m => m.isFavorite).length;
   const [orderMascotAttack, orderMascotStepState] = await Promise.all([
@@ -449,14 +452,28 @@ export default async function MascotesPage() {
         <div className="flex items-center gap-3 flex-wrap">
           <div className="flex items-center gap-1.5 rounded-xl border border-border bg-slate-900/50 px-3 py-2 text-xs">
             <span>🍖</span>
-            <span className="font-semibold text-slate-300">{foodCount}</span>
+            <span className="font-semibold text-slate-300">{foodCount - foodBound}</span>
             <span className="text-slate-500">comida</span>
           </div>
+          {foodBound > 0 && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs" title="Vinculada à conta: pode ser usada, mas não vendida nem trocada.">
+              <span>🍖</span>
+              <span className="font-semibold text-cyan-100">{foodBound}</span>
+              <span className="text-cyan-200">🔒 vinculada à conta</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 rounded-xl border border-border bg-slate-900/50 px-3 py-2 text-xs">
             <span>🍬</span>
-            <span className="font-semibold text-slate-300">{sweetCount}</span>
+            <span className="font-semibold text-slate-300">{sweetCount - sweetBound}</span>
             <span className="text-slate-500">doces</span>
           </div>
+          {sweetBound > 0 && (
+            <div className="flex items-center gap-1.5 rounded-xl border border-cyan-400/40 bg-cyan-400/10 px-3 py-2 text-xs" title="Vinculado à conta: pode ser usado, mas não vendido nem trocado.">
+              <span>🍬</span>
+              <span className="font-semibold text-cyan-100">{sweetBound}</span>
+              <span className="text-cyan-200">🔒 vinculado à conta</span>
+            </div>
+          )}
           <div className="flex items-center gap-1.5 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2 text-xs">
             <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-4 w-4 object-contain" />
             <span className="font-semibold text-[#FFCB05]">{rareSweetCount}</span>
@@ -636,11 +653,13 @@ export default async function MascotesPage() {
       {/* Itens especiais (buffs) */}
       {buffInventory.length > 0 && (
        <BuffPanel
-  buffs={buffInventory.map(b => ({
-    id: b.item.id,
+  buffs={buffInventory.flatMap(b => [{ bound: false, qty: b.quantity - b.boundQuantity }, { bound: true, qty: b.boundQuantity }].filter(part => part.qty > 0).map(part => ({
+    // Itens vinculados à conta nunca empilham com os comuns: entram como card separado.
+    id: part.bound ? `${b.item.id}~bound` : b.item.id,
     name: b.item.name,
     type: b.item.type,
-    quantity: b.quantity,
+    quantity: part.qty,
+    bound: part.bound,
     description: b.item.description ?? undefined,
     imageUrl: b.item.imageUrl ?? undefined,
     metadata: (b.item.metadata as { eggTier?: string; adminLabOriginOverride?: boolean } | null) ?? (
@@ -653,7 +672,7 @@ export default async function MascotesPage() {
           }
         : null
     ),
-  }))}
+  })))}
   mascots={[...new Map([...mascotData, ...weaknessPolicyMascots].map(m => [m.id, {
     id: m.id,
     name: m.nickname ?? getPokemonName(m.pokemonId),
@@ -684,7 +703,7 @@ export default async function MascotesPage() {
           finishAt: incubator.finishAt,
           hatched: incubator.hatched,
         } : null}
-        eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin, hatchRarityBonusPct: e.hatchRarityBonusPct }))}
+        eggs={eggs.map(e => ({ id: e.id, type: e.type, obtainedAt: e.obtainedAt, origin: e.origin, hatchRarityBonusPct: e.hatchRarityBonusPct, accountBound: e.accountBound }))}
         canSkipIncubation={admin}
         eggImages={eggImageByType}
         eventRarityBonusPct={eventRarityBonusPct}

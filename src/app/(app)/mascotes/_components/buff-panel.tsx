@@ -9,8 +9,12 @@ import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 
+const realBuffId = (id: string) => id.replace(/~bound$/, "");
+
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
+  /** Cópia vinculada à conta (id termina em "~bound"); nunca empilha com a comum. */
+  bound?: boolean;
   description?: string; imageUrl?: string;
   metadata?: { eggTier?: string; adminLabOriginOverride?: boolean; kind?: string; abilityKey?: string } | null;
 }
@@ -388,11 +392,11 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
         else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
         else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
-        else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
-        else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
-        else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
-        else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
-        else r = await useMascotBuffAction(selectedMascot, selectedBuff);
+        else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, realBuffId(selectedBuff));
+        else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, realBuffId(selectedBuff));
+        else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, realBuffId(selectedBuff));
+        else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, realBuffId(selectedBuff));
+        else r = await useMascotBuffAction(selectedMascot, realBuffId(selectedBuff));
       } catch (error) {
         // Falha de rede/servidor (ex.: página aberta antes de uma atualização): antes ficava silenciosa.
         console.error("[BuffPanel] falha ao usar o item", error);
@@ -500,7 +504,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
                     <span className="shrink-0 text-xl">{emoji}</span>
                   )}
                   <div className="min-w-0 flex-1">
-                    <p className="truncate text-xs font-semibold text-white">{buff.name}</p>
+                    <p className="truncate text-xs font-semibold text-white">{buff.name}{buff.bound && (<span className="ml-1 inline-flex items-center gap-0.5 rounded-full border border-cyan-300/50 bg-cyan-400/15 px-1.5 py-0.5 align-middle text-[8px] font-black uppercase tracking-wide text-cyan-100" title="Vinculado à conta: não pode ser vendido nem trocado">🔒 Vinculado à conta</span>)}</p>
                     <p className="text-[10px] text-[#FFCB05]">×{buff.quantity} · #{globalIndex + 1}</p>
                   </div>
                   <div className="flex shrink-0 flex-col">
@@ -551,7 +555,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
                 <span className="text-2xl shrink-0">{emoji}</span>
               )}
               <div className="min-w-0 flex-1">
-                <p className="text-xs font-semibold text-white truncate">{buff.name}</p>
+                <p className="text-xs font-semibold text-white">{buff.name}{buff.bound && (<span className="ml-1 inline-flex items-center gap-0.5 rounded-full border border-cyan-300/50 bg-cyan-400/15 px-1.5 py-0.5 align-middle text-[8px] font-black uppercase tracking-wide text-cyan-100" title="Vinculado à conta: não pode ser vendido nem trocado">🔒 Vinculado à conta</span>)}</p>
                 {buff.description && (
                   <p className="text-[10px] leading-relaxed text-slate-500">{buff.description}</p>
                 )}

@@ -28,7 +28,7 @@ interface IncubatorData {
   hatched: boolean;
 }
 
-interface EggItem { id: string; type: string; obtainedAt: Date | string; origin: string | null; hatchRarityBonusPct?: number }
+interface EggItem { id: string; type: string; obtainedAt: Date | string; origin: string | null; hatchRarityBonusPct?: number; accountBound?: boolean }
 
 function eggObtainedAtMs(value: Date | string): number {
   const timestamp = value instanceof Date ? value.getTime() : Date.parse(value);
@@ -929,6 +929,9 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 </span>
                 <div className="min-w-0 flex-1">
                   <p className="text-sm font-semibold text-white">{getEggLabel(egg.type, egg.origin ?? undefined)}</p>
+                  {egg.accountBound && (
+                    <p className="mt-0.5"><span className="inline-flex items-center gap-1 rounded-full border border-cyan-300/50 bg-cyan-400/15 px-2 py-0.5 text-[9px] font-black uppercase tracking-wide text-cyan-100" title="Vinculado à conta: pode ser incubado, mas não vendido nem trocado.">🔒 Vinculado à conta</span></p>
+                  )}
                   {!!egg.hatchRarityBonusPct && (
                     <p className="text-[10px] font-semibold text-purple-300">
                       +{egg.hatchRarityBonusPct} pontos percentuais de chance de mascote de raridade elevada

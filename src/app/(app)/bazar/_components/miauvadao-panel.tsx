@@ -6,6 +6,8 @@ import { toast } from "sonner";
 import { Zap, ShoppingCart, Clock, RefreshCw, Sparkles, Gift } from "lucide-react";
 import { buyMiauvadaoOffer, refreshMiauvadaoOfferSlot, buyPersonalMiauvadaoSlot } from "../actions";
 import type { MiauvadaoOffer, MiauvadaoPurchaseStatus } from "../actions";
+import type { ReboundView } from "@/lib/miauvadao-rebound";
+import { MiauvadaoReboundSection, suggestedLcClient } from "./miauvadao-rebound-section";
 import { getShopItemEmoji } from "@/lib/shop-config";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
@@ -254,17 +256,12 @@ interface Props {
   rotationEndsAt: string;
   sabotagedOfferIndex?: number | null;
   personalOffer?: { offer: MiauvadaoOffer; sold: number } | null;
+  rebound?: ReboundView | null;
+  reboundDebug?: ReboundView | null;
+  isPlatformAdmin?: boolean;
 }
 
-// Mesma proporção da ZikaShop (economia central). Espelha suggestedLigaCashPrice.
-function suggestedLcClient(zcPrice: number, mult: number, zcPerLc: number) {
-  const raw = zcPrice / (zcPerLc * mult);
-  if (raw < 100) return Math.max(1, Math.round(raw));
-  if (raw < 500) return Math.max(5, Math.round(raw / 5) * 5);
-  return Math.max(10, Math.round(raw / 10) * 10);
-}
-
-export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance = 0, lcMult = 1.1, lcRef = 10, ligaCashEnabled = false, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null, personalOffer = null }: Props) {
+export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance = 0, lcMult = 1.1, lcRef = 10, ligaCashEnabled = false, playerId, lastNpcMessage, slotRefreshAvailable = false, purchaseStatus: initialPurchaseStatus, rotationEndsAt, sabotagedOfferIndex = null, personalOffer = null, rebound = null, reboundDebug = null, isPlatformAdmin = false }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [buyingIdx, setBuyingIdx] = useState<number | null>(null);
@@ -508,6 +505,19 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
               ))}
             </div>
           )}
+
+          <MiauvadaoReboundSection
+            rebound={rebound}
+            reboundDebug={reboundDebug}
+            isPlatformAdmin={isPlatformAdmin}
+            playerId={playerId}
+            balance={balance}
+            ligaCashBalance={ligaCashBalance}
+            lcMult={lcMult}
+            lcRef={lcRef}
+            ligaCashEnabled={ligaCashEnabled}
+            sabotagedOfferIndex={sabotagedOfferIndex}
+          />
 
           {personalOffer && (() => {
             const { offer, sold } = personalOffer;

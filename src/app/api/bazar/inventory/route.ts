@@ -42,6 +42,7 @@ export async function GET() {
 
     const weeklyLeagueLockedIds = await getWeeklyLeagueLockedMascotIds(prisma, player.id);
 
+    const boundEggCount = await prisma.mascotEgg.count({ where: { playerId: player.id, accountBound: true, incubation: null } });
     const [mascots, eggs, foods, inventoryItems, wallet, config, premiumCounts] = await Promise.all([
       // Mascotes disponíveis (não feridos, não em expedição, não no bazar, não em equipe de arena)
       prisma.mascot.findMany({
@@ -69,6 +70,8 @@ export async function GET() {
         where: {
           playerId: player.id,
           incubation: null,
+          // Ovos vinculados à conta (Rebote do Miauvadão) não podem ser negociados.
+          accountBound: false,
           NOT: { origin: { startsWith: "bazar:" } }
         },
         select: { id: true, type: true, hatchRarityBonusPct: true, origin: true },
@@ -109,9 +112,10 @@ export async function GET() {
       // Doce Raro fora: nao e negociavel no Bazar (so troca no Laboratorio).
       foods: foods
         .filter(f => f.type !== "RARE_SWEET")
-        .map(f => ({ type: f.type, quantity: f.quantity })),
+        .map(f => ({ type: f.type, quantity: f.quantity - f.boundQuantity }))
+        .filter(f => f.quantity > 0),
       // Todos os itens do inventário com info completa do shop
-      inventoryItems: inventoryItems.map(inv => ({
+      inventoryItems: inventoryItems.filter(inv => inv.quantity - inv.boundQuantity > 0).map(inv => ({
         inventoryId: inv.id,
         shopItemId: inv.itemId,
         type: inv.item.type,
@@ -120,9 +124,14 @@ export async function GET() {
         imageUrl: inv.item.imageUrl ?? null,
         rarity: inv.item.rarity,
         shopPrice: inv.item.price,
-        quantity: inv.quantity,
+        // Só a parte negociável: unidades vinculadas à conta ficam de fora.
+        quantity: inv.quantity - inv.boundQuantity,
         equipped: inv.equipped,
       })),
+      // Unidades vinculadas à conta (não aparecem acima): usado só para avisar o jogador.
+      boundCount: inventoryItems.reduce((sum, inv) => sum + inv.boundQuantity, 0)
+        + foods.reduce((sum, food) => sum + food.boundQuantity, 0)
+        + boundEggCount,
       balance: wallet.balance,
       listingFee: config?.listingFee ?? 10,
       premiumFee: PREMIUM_LISTING_FEE,

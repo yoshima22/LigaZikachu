@@ -2269,6 +2269,8 @@ model PlayerInventory {
   purchasedAt DateTime @default(now())
   // "SHOP" | "VIP_PASS" | "ADMIN_GRANT" | null
   source      String?
+  // Unidades vinculadas à conta (Rebote do Miauvadão): subconjunto de quantity, não negociável.
+  boundQuantity Int    @default(0)
   player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
   item        ShopItem @relation(fields: [itemId], references: [id], onDelete: Cascade)
 
@@ -2678,6 +2680,8 @@ model MascotEgg {
   // Se vier de uma conquista/evento, guarda a origem
   origin              String?
   hatchRarityBonusPct Float            @default(0)
+  // Vinculado à conta (Rebote do Miauvadão): não pode ser negociado nem fundido.
+  accountBound        Boolean          @default(false)
   player              Player           @relation(fields: [playerId], references: [id], onDelete: Cascade)
   incubation          MascotIncubator?
 
@@ -3155,6 +3159,8 @@ model MascotFoodItem {
   playerId String
   type     FoodType
   quantity Int      @default(1)
+  // Unidades vinculadas à conta (subconjunto de quantity, não negociável).
+  boundQuantity Int @default(0)
   player   Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@unique([playerId, type])

@@ -36,6 +36,7 @@ interface InventoryData {
   eggs: Array<{ id: string; type: string; hatchRarityBonusPct?: number; origin?: string | null }>;
   foods: Array<{ type: string; quantity: number }>;
   inventoryItems: InventoryItem[];
+  boundCount?: number;
   listingFee: number;
   balance: number;
   premiumFee: number;
@@ -386,6 +387,12 @@ function CreateListingForm() {
         {!isDirectNegotiation && category === "ITEM" && (
           <div className="space-y-3">
             <label className="text-sm font-semibold text-slate-200">Escolha o item</label>
+            {(inventory?.boundCount ?? 0) > 0 && (
+              <p className="flex items-start gap-2 rounded-lg border border-cyan-400/30 bg-cyan-400/5 px-3 py-2 text-[11px] leading-snug text-cyan-100">
+                <span aria-hidden>🔒</span>
+                <span>Você tem <strong>{inventory!.boundCount}</strong> unidade(s) <strong>vinculada(s) à conta</strong> (compradas no Rebote do Miauvadão). Elas não aparecem nesta lista porque não podem ser anunciadas nem trocadas.</span>
+              </p>
+            )}
             {!inventory ? (
               <button onClick={() => loadInventory()} className="text-xs text-[#FFCB05] underline">Carregar meus itens</button>
             ) : (() => {

@@ -1677,6 +1677,21 @@ export default async function ManualPage() {
         <Sub title="Miauvadão — Ofertas especiais">
           {ET("bazar.miauvadao", "text-xs text-slate-400")}
         </Sub>
+
+        <Sub title="Rebote do Miauvadão">
+          <p className="text-xs leading-6 text-slate-400">
+            Quando os jogadores mais rápidos zeram o estoque de um slot, quem ficou de fora ganha uma segunda chance: o <strong className="text-slate-200">Rebote</strong>.
+            Ele aparece logo abaixo das 3 ofertas, com um cartão para cada slot esgotado, e espelha sempre o item atual do slot (se o slot for trocado, o Rebote acompanha).
+          </p>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
+            <li><strong className="text-slate-200">Quando:</strong> só nos <strong className="text-slate-200">primeiros 25 minutos</strong> depois de cada rotação do Bazar (04:00, 10:00, 16:00 e 22:00). Passou esse tempo, os Rebotes desaparecem até a próxima rotação.</li>
+            <li><strong className="text-slate-200">Quem pode:</strong> quem <strong className="text-slate-200">não comprou nenhum slot do Miauvadão</strong> naquela rotação. Comprar em qualquer um dos 3 slots (inclusive pela carga de compra) tira o direito ao Rebote. O slot exclusivo &quot;Só pra você&quot; e as TMs da Semana não contam.</li>
+            <li><strong className="text-slate-200">Quanto custa:</strong> o mesmo item do slot com um desconto <strong className="text-slate-200">5 pontos percentuais menor</strong> que o do slot original. Dá para pagar em ZC ou LigaCash, e o desconto sai do cofre como nas compras normais.</li>
+            <li><strong className="text-slate-200">Limites:</strong> só <strong className="text-slate-200">1 cópia</strong> de cada item e no máximo <strong className="text-slate-200">2 Rebotes por rotação</strong>. Depois disso, só na próxima rotação. O Rebote não gasta o estoque do Miauvadão nem as suas cargas de compra: o limite extra existe só para jogadores elegíveis.</li>
+            <li><strong className="text-slate-200">Vinculado à conta:</strong> o item comprado no Rebote traz a etiqueta <strong className="text-cyan-200">🔒 Vinculado à conta</strong>. Você pode usá-lo normalmente, mas ele <strong className="text-slate-200">não pode ser vendido, anunciado, leiloado, oferecido em proposta ou troca</strong> nem entrar na fusão de ovos.</li>
+            <li><strong className="text-slate-200">Inventário:</strong> itens vinculados nunca se misturam com os comuns. Eles aparecem em um cartão separado (Itens Especiais), a comida e os doces têm um contador próprio e os ovos mostram a etiqueta. Se você tem unidades comuns e vinculadas do mesmo item, ao usar o item as comuns são gastas primeiro.</li>
+          </ul>
+        </Sub>
       </Section>
 
       {/* ── 9. TCG ────────────────────────────────────────────────────────── */}

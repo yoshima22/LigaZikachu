@@ -18,6 +18,7 @@ import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
 import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
+import { computeRebound, REBOUND_BLOCK_MESSAGE, type ReboundPlayerState, type ReboundView } from "@/lib/miauvadao-rebound";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import {
   MIAUVADAO_FUSION_EGG_TYPES,
@@ -206,6 +207,8 @@ function getListingQuantity(payload: Record<string, unknown>): number {
   }
   return quantity;
 }
+
+const BOUND_TRADE_ERROR = "Itens vinculados à conta (comprados no Rebote do Miauvadão) não podem ser anunciados nem trocados.";
 
 const HIDDEN_BAZAR_ITEM_TYPES = new Set([
   // Doce Raro so se obtem trocando 20 doces no Laboratorio — nao e negociavel.
@@ -938,7 +941,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
           const food = await tx.mascotFoodItem.findUnique({
             where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } },
           });
-          if (!food || food.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          if (!food || food.quantity - food.boundQuantity < qty) throw new Error(food && food.quantity >= qty ? BOUND_TRADE_ERROR : "Itens insuficientes no inventário.");
           await tx.mascotFoodItem.update({
             where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } },
             data: { quantity: { decrement: qty } },
@@ -953,6 +956,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
               playerId: player.id,
               type: input.itemType as never,
               incubation: null,
+              accountBound: false,
               NOT: { origin: { startsWith: "bazar:" } },
               ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}),
             },
@@ -991,7 +995,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
                 where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } },
                 include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } },
               });
-          if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          if (!inv || inv.quantity - inv.boundQuantity < qty) throw new Error(inv && inv.quantity >= qty ? BOUND_TRADE_ERROR : "Itens insuficientes no inventário.");
           if (inv.itemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser negociado.");
           // Desconta do inventário imediatamente (escrow — não pode usar durante o anúncio)
           await tx.playerInventory.update({
@@ -2008,7 +2012,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
               if (delivered.count !== quantity) throw new Error("NÃ£o foi possÃ­vel entregar todos os ovos da proposta.");
             } else {
               const eggs = await tx.mascotEgg.findMany({
-                where: { playerId: proposal.proposerId, type: item.type as never, incubation: null },
+                where: { playerId: proposal.proposerId, type: item.type as never, incubation: null, accountBound: false },
                 take: quantity,
               });
               if (eggs.length < quantity) throw new Error(`Proposer doesn't have enough eggs`);
@@ -2376,6 +2380,7 @@ export async function fuseMiauvadaoEggsAction(eggIds: string[]): Promise<{
           playerId: player.id,
           type: { in: MIAUVADAO_FUSION_EGG_TYPES as unknown as EggType[] },
           incubation: null,
+          accountBound: false,
           NOT: { origin: { startsWith: "bazar:" } },
         },
         select: { id: true, type: true },
@@ -2535,6 +2540,8 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
 
       // Entregar item (mesmo esquema da shop)
       await _deliverMiauvadaoItem(tx, player.id, offer);
+      // Quem compra qualquer slot global perde o direito ao Rebote nesta rotação.
+      await _mergePlayerRefreshEntry(tx, player.id, { globalBuyCycle: getMiauvadaoRotation().start.toISOString() });
       await recordPlayerActivity(tx, {
         playerId: player.id,
         actorUserId: user.id,
@@ -2561,6 +2568,109 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
   }
 }
 
+/** Mescla campos no estado do jogador em playerRefreshData sem tocar nas chaves dos outros jogadores. */
+async function _mergePlayerRefreshEntry(tx: Prisma.TransactionClient, playerId: string, patch: ReboundPlayerState & Record<string, unknown>) {
+  await tx.$executeRaw(Prisma.sql`
+    UPDATE miauvadao_config
+    SET "playerRefreshData" = jsonb_set(
+      COALESCE("playerRefreshData", '{}'::jsonb),
+      ARRAY[${playerId}],
+      COALESCE("playerRefreshData" -> ${playerId}, '{}'::jsonb) || ${JSON.stringify(patch)}::jsonb,
+      true
+    )
+    WHERE id = 'singleton'
+  `);
+}
+
+/** Só a entrada deste jogador (o JSON inteiro passa de 270 kB). */
+async function _readPlayerRefreshEntry(db: Prisma.TransactionClient | typeof prisma, playerId: string): Promise<ReboundPlayerState | null> {
+  const rows = await db.$queryRaw<{ entry: ReboundPlayerState | null }[]>(Prisma.sql`
+    SELECT "playerRefreshData" -> ${playerId} AS entry FROM miauvadao_config WHERE id = 'singleton'
+  `);
+  return rows[0]?.entry ?? null;
+}
+
+/** Rebote do jogador logado. `debugAll` só deve ser usado por conta admin (preview visual, não compra). */
+export async function getMiauvadaoRebound(offers: MiauvadaoOffer[], debugAll = false): Promise<ReboundView | null> {
+  const user = await getSessionUser(); if (!user) return null;
+  const player = await getSessionPlayer(user.id); if (!player) return null;
+  const entry = await _readPlayerRefreshEntry(prisma, player.id);
+  return computeRebound({ offers, entry, rotationStart: getMiauvadaoRotation().start, includeAll: debugAll });
+}
+
+/** Compra o item de Rebote de um slot esgotado. A cópia fica vinculada à conta. */
+export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "LC" = "ZC"): Promise<{ error?: string; price?: number }> {
+  try {
+    if (!Number.isInteger(offerIndex) || offerIndex < 0 || offerIndex > 2) return { error: "Slot inválido." };
+    if (offerIndex === 1) {
+      const [sabotages, stepState] = await Promise.all([
+        getActiveRaidSabotages("BAZAR"),
+        getOrderStepUnlockState("BAZAR_SLOT_SIX_CLICKS"),
+      ]);
+      const bazarSabotaged = sabotages.some((s) => s.sabotageType === "BLOCK_BAZAR_SLOT") || (stepState.active && stepState.unlocked && !stepState.resolved);
+      if (bazarSabotaged) return { error: "O slot do meio foi sabotado pela Ordem da Trapaca." };
+    }
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    await autoRefreshMiauvadaoIfNeeded();
+    const rotation = getMiauvadaoRotation();
+    const rotationIso = rotation.start.toISOString();
+    const result = await prisma.$transaction(async (tx) => {
+      const now = new Date();
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true } });
+      const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
+      const offer = offers[offerIndex];
+      if (!offer) throw new Error("Oferta não encontrada.");
+      if (offer.sold < offer.stock) throw new Error("Este slot ainda tem estoque no Miauvadão: compre pelo slot normal.");
+      const entry = await _readPlayerRefreshEntry(tx, player.id);
+      const view = computeRebound({ offers, entry, rotationStart: rotation.start, now });
+      if (view.block) throw new Error(REBOUND_BLOCK_MESSAGE[view.block]);
+      const reb = view.offers.find((o) => o.index === offerIndex);
+      if (!reb) throw new Error("Oferta de Rebote indisponível.");
+      if (reb.alreadyBought) throw new Error("Você já comprou o Rebote deste item (só há 1 cópia por jogador).");
+
+      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
+      const priceLc = suggestedLigaCashPrice(reb.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
+      const price = currency === "LC" ? priceLc : reb.finalPrice;
+      const wallet = currency === "LC"
+        ? await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
+        : await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
+      if (!wallet || wallet.balance < price) {
+        throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency} disponíveis, o Rebote custa ${price} ${currency}).`);
+      }
+      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      if (currency === "ZC") {
+        await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -price, description: `Miauvadão (Rebote): compra de ${offer.name}` });
+      } else {
+        await changeLigaCash(tx, {
+          playerId: player.id, amount: -price, reason: "SHOP_PURCHASE", referenceType: "MiauvadaoRebound",
+          referenceId: offer.shopItemId ?? offer.itemType, spentDelta: price, metadata: { offerIndex, name: offer.name },
+        });
+      }
+      await settleVaultForPurchase(tx, { coinsToVault, discountZc: offer.originalPrice - reb.finalPrice });
+      await _deliverMiauvadaoItem(tx, player.id, offer, true);
+      const keep = entry?.reboundCycle === rotationIso ? entry.reboundBought ?? [] : [];
+      await _mergePlayerRefreshEntry(tx, player.id, { reboundCycle: rotationIso, reboundBought: [...keep, reb.key] });
+      await recordPlayerActivity(tx, {
+        playerId: player.id, actorUserId: user.id, category: "BAZAR", action: "MIAUVADAO_REBOUND_PURCHASE",
+        summary: `Comprou ${offer.name} no Rebote do Miauvadão por ${price} ${currency} (vinculado à conta)`,
+        source: "MIAUVADAO_REBOUND", entityType: "shopItem", entityId: offer.shopItemId ?? offer.itemType, amount: 1, unit: "ITEM",
+        metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency, bound: true },
+      });
+      return { price };
+    }, { isolationLevel: "Serializable" });
+    revalidateTag("miauvadao-config");
+    revalidatePath("/bazar");
+    return result;
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao comprar o Rebote." };
+  }
+}
+
 export interface MiauvadaoOffer {
   itemType: string;
   shopItemId?: string;
@@ -2578,17 +2688,18 @@ export interface MiauvadaoOffer {
 }
 
 // Entrega 1 unidade do item de uma oferta do Miauvadão ao jogador.
-async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: string, offer: MiauvadaoOffer) {
+async function _deliverMiauvadaoItem(tx: Prisma.TransactionClient, playerId: string, offer: MiauvadaoOffer, bound = false) {
+  const boundInc = bound ? 1 : 0;
   if (offer.itemType.startsWith("EGG_") || ["EGG_COMMON", "EGG_RARE", "EGG_SPECIAL"].includes(offer.itemType)) {
     const eggType = EGG_SHOP_TO_EGG_TYPE[offer.itemType];
     if (!eggType) throw new Error(`Tipo de ovo não suportado pelo Miauvadão: ${offer.itemType}`);
-    await tx.mascotEgg.create({ data: { playerId, type: eggType as never, origin: "Miauvadão" } });
+    await tx.mascotEgg.create({ data: { playerId, type: eggType as never, origin: "Miauvadão", accountBound: bound } });
   } else if (offer.itemType === "MASCOT_FOOD") {
-    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "FOOD", quantity: 1 } });
+    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "FOOD" } }, update: { quantity: { increment: 1 }, boundQuantity: { increment: boundInc } }, create: { playerId, type: "FOOD", quantity: 1, boundQuantity: boundInc } });
   } else if (offer.itemType === "MASCOT_SWEET") {
-    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 } }, create: { playerId, type: "SWEET", quantity: 1 } });
+    await tx.mascotFoodItem.upsert({ where: { playerId_type: { playerId, type: "SWEET" } }, update: { quantity: { increment: 1 }, boundQuantity: { increment: boundInc } }, create: { playerId, type: "SWEET", quantity: 1, boundQuantity: boundInc } });
   } else if (offer.shopItemId) {
-    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 } }, create: { playerId, itemId: offer.shopItemId, quantity: 1, source: "MIAUVADAO" } });
+    await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId, itemId: offer.shopItemId } }, update: { quantity: { increment: 1 }, boundQuantity: { increment: boundInc } }, create: { playerId, itemId: offer.shopItemId, quantity: 1, boundQuantity: boundInc, source: bound ? "MIAUVADAO_REBOTE" : "MIAUVADAO" } });
   } else {
     // Nunca cobre uma oferta que o sistema não sabe entregar.
     throw new Error(`Item do Miauvadão sem regra de entrega: ${offer.itemType}`);
@@ -3147,8 +3258,8 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
       const food = await tx.mascotFoodItem.findUnique({
         where: { playerId_type: { playerId, type: foodType } },
       });
-      if (!food || food.quantity < quantity) {
-        throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
+      if (!food || food.quantity - food.boundQuantity < quantity) {
+        throw new Error(food && food.quantity >= quantity ? BOUND_TRADE_ERROR : `Você não tem ${normalized.displayName} suficiente para esta proposta.`);
       }
       await tx.mascotFoodItem.update({
         where: { playerId_type: { playerId, type: foodType } },
@@ -3166,6 +3277,7 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
           playerId,
           type: item.type as never,
           incubation: null,
+          accountBound: false,
           NOT: { origin: { startsWith: "bazar:" } },
           ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}),
         },
@@ -3195,16 +3307,17 @@ async function _reserveProposalOffers(tx: TxClient, playerId: string, items: Pro
     }
 
     if (!item.mascotId) {
-      const inv = await tx.playerInventory.findFirst({
+      const invRows = await tx.playerInventory.findMany({
         where: {
           playerId,
           ...(item.shopItemId ? { itemId: item.shopItemId } : { item: { type: item.type as never } }),
           quantity: { gte: quantity },
         },
-        select: { itemId: true },
+        select: { itemId: true, quantity: true, boundQuantity: true },
       });
+      const inv = invRows.find((row) => row.quantity - row.boundQuantity >= quantity);
       if (!inv) {
-        throw new Error(`Você não tem ${normalized.displayName} suficiente para esta proposta.`);
+        throw new Error(invRows.length > 0 ? BOUND_TRADE_ERROR : `Você não tem ${normalized.displayName} suficiente para esta proposta.`);
       }
       await tx.playerInventory.update({
         where: { playerId_itemId: { playerId, itemId: inv.itemId } },
@@ -3945,12 +4058,12 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
         let canonicalDisplayName = canonicalBazarItemName(input.itemType);
         if (input.itemType === "FOOD" || input.itemType === "SWEET") {
           const food = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } } });
-          if (!food || food.quantity < qty) throw new Error("Itens insuficientes.");
+          if (!food || food.quantity - food.boundQuantity < qty) throw new Error(food && food.quantity >= qty ? BOUND_TRADE_ERROR : "Itens insuficientes.");
           await tx.mascotFoodItem.update({ where: { playerId_type: { playerId: player.id, type: input.itemType as "FOOD" | "SWEET" } }, data: { quantity: { decrement: qty } } });
         } else if (isEggOfferType(input.itemType)) {
           const bonusPct = typeof input.eggBonusPct === "number" ? input.eggBonusPct : null;
           const eggs = await tx.mascotEgg.findMany({
-            where: { playerId: player.id, type: input.itemType as never, incubation: null, NOT: { origin: { startsWith: "bazar:" } }, ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}) },
+            where: { playerId: player.id, type: input.itemType as never, incubation: null, accountBound: false, NOT: { origin: { startsWith: "bazar:" } }, ...(bonusPct !== null ? { hatchRarityBonusPct: bonusPct } : {}) },
             orderBy: { hatchRarityBonusPct: "desc" },
           });
           if (eggs.length < qty) throw new Error("Ovos insuficientes para o ovo escolhido.");
@@ -3963,7 +4076,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
           const inv = input.shopItemId
             ? await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: input.shopItemId } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } })
             : await tx.playerInventory.findFirst({ where: { playerId: player.id, item: { type: input.itemType as never }, quantity: { gt: 0 } }, include: { item: { select: { id: true, name: true, type: true, imageUrl: true } } } });
-          if (!inv || inv.quantity < qty) throw new Error("Itens insuficientes no inventário.");
+          if (!inv || inv.quantity - inv.boundQuantity < qty) throw new Error(inv && inv.quantity >= qty ? BOUND_TRADE_ERROR : "Itens insuficientes no inventário.");
           if (inv.itemId === ADMIN_LAB_RAINBOW_FEATHER_ID) throw new Error("Este item administrativo não pode ser leiloado.");
           await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: qty } } });
           payload = { ...payload, shopItemId: inv.itemId, imageUrl: sanitizePayloadImageUrl(inv.item.imageUrl ?? input.imageUrl) };
