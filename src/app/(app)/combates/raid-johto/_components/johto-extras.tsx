@@ -142,6 +142,7 @@ export function JohtoRewardPicker({ rewards, choiceUsed, clairItem, allLeaders }
   const [useItem, setUseItem] = useState(false);
   const [personality, setPersonality] = useState("");
   const [stat, setStat] = useState("");
+  const [leaderPage, setLeaderPage] = useState(0);
   const itemAvailable = Boolean(clairItem && !clairItem.used) && !choiceUsed;
   if (rewards.length === 0) return null;
   function claim(reward: JohtoPendingReward) {
@@ -220,8 +221,15 @@ Confirmar a escolha?`,
             ) : (
               <>
                 <p className="mb-2 mt-2 text-[11px] text-amber-200">Escolha 1 dos 6 mascotes de {reward.leaderName} — lembre-se: <b>será o único mascote que você poderá escolher em toda a raid</b>.</p>
+                {itemAvailable && useItem && allLeaders.length > 1 && (
+                  <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1.5">
+                    <button type="button" disabled={leaderPage <= 0} onClick={() => setLeaderPage((p) => Math.max(0, p - 1))} className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-black text-white disabled:opacity-30">◀</button>
+                    <p className="text-center text-xs font-black text-white">{allLeaders[Math.min(leaderPage, allLeaders.length - 1)].name} <span className="font-semibold text-slate-400">· {Math.min(leaderPage, allLeaders.length - 1) + 1}/{allLeaders.length}</span></p>
+                    <button type="button" disabled={leaderPage >= allLeaders.length - 1} onClick={() => setLeaderPage((p) => Math.min(allLeaders.length - 1, p + 1))} className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-black text-white disabled:opacity-30">▶</button>
+                  </div>
+                )}
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {(itemAvailable && useItem ? allLeaders.flatMap((l) => l.pokemonIds) : reward.options).map((pokemonId) => (
+                  {(itemAvailable && useItem ? (allLeaders[Math.min(leaderPage, allLeaders.length - 1)]?.pokemonIds ?? []) : reward.options).map((pokemonId) => (
                     <button key={pokemonId} type="button" onClick={() => setChoice((c) => ({ ...c, [reward.id]: pokemonId }))}
                       className={`rounded-xl border p-2 text-center transition ${choice[reward.id] === pokemonId ? "border-[#FFCB05] bg-[#FFCB05]/15" : "border-slate-800 bg-slate-900/60 hover:border-slate-600"}`}>
                       <img src={getStaticSpriteUrl(pokemonId)} alt="" className="mx-auto h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
