@@ -462,7 +462,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
         playerId: player.id,
         status: GiftStatus.UNCLAIMED,
       },
-      select: { id: true, status: true, type: true, title: true, payload: true },
+      select: { id: true },
       take: GIFT_CLAIM_BATCH_SIZE,
       orderBy: { createdAt: "asc" },
     });
@@ -483,17 +483,15 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
       try {
         let autoSold: { itemName: string; coins: number } | undefined;
         const wasClaimed = await prisma.$transaction(async (tx) => {
-          const current = await tx.playerGift.findFirst({
-            where: { id: gift.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
-            select: { id: true, type: true, title: true, payload: true }
-          });
+          // Claim and read the authoritative reward in one round trip. Concurrent
+          // attempts return no row; reward failures roll this update back too.
+          const [current] = await tx.$queryRaw<ClaimableGift[]>`
+            UPDATE public.player_gifts
+            SET status = 'CLAIMED', "claimedAt" = ${now}
+            WHERE id = ${gift.id} AND "playerId" = ${player.id} AND status = 'UNCLAIMED'
+            RETURNING id, type::text AS type, title, payload
+          `;
           if (!current) return false;
-
-          const claimed = await tx.playerGift.updateMany({
-            where: { id: current.id, playerId: player.id, status: GiftStatus.UNCLAIMED },
-            data: { status: GiftStatus.CLAIMED, claimedAt: now },
-          });
-          if (claimed.count !== 1) return false;
           const result = await applyGiftReward(tx, player.id, current);
           autoSold = result.autoSold;
           await tx.auditLog.create({

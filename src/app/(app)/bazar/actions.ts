@@ -1275,18 +1275,30 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
     const sellerName = listing.player.displayName;
 
     await prisma.$transaction(async (tx) => {
-      // Marcar como vendido
-      await tx.bazarListing.update({ where: { id: listingId }, data: { status: "SOLD" } });
+      // Serialize against proposal/auction actions for this listing only.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${listingId}))`;
+      const claimed = await tx.bazarListing.updateMany({
+        where: {
+          id: listingId, status: "ACTIVE", playerId: listing.playerId,
+          listingType: listing.listingType, updatedAt: listing.updatedAt,
+          priceCoins: listing.priceCoins, priceLigaCash: listing.priceLigaCash,
+        },
+        data: { status: "SOLD" },
+      });
+      if (claimed.count !== 1) throw new Error("O anúncio foi alterado ou vendido. Atualize a página.");
 
       // Transferir coins: comprador → vendedor
       if (currency === "ZC") {
-        await tx.zikaCoinWallet.update({ where: { playerId: player.id }, data: { balance: { decrement: price } } });
+        const debited = await tx.zikaCoinWallet.updateMany({
+          where: { playerId: player.id, balance: { gte: price } },
+          data: { balance: { decrement: price } },
+        });
+        if (debited.count !== 1) throw new Error("Saldo insuficiente de ZikaCoins.");
         await tx.zikaCoinWallet.upsert({
           where: { playerId: listing.playerId },
           update: { balance: { increment: price } },
           create: { playerId: listing.playerId, balance: price, totalEarned: price },
         });
-        await creditMiauvadaoVaultFromPlayerTransaction(tx, price);
       } else {
         await changeLigaCash(tx, { playerId: player.id, amount: -price, reason: "BAZAR_PURCHASE", referenceType: "BazarListing", referenceId: listingId, spentDelta: price });
         await changeLigaCash(tx, { playerId: listing.playerId, amount: price, reason: "BAZAR_SALE", referenceType: "BazarListing", referenceId: listingId });
@@ -1359,6 +1371,9 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
         entityId: listingId,
         eventKey: `bazar:sold:${listingId}`,
       });
+      // Keep the shared vault row locked only until the imminent commit.
+      // The credit remains atomic with payment and delivery.
+      if (currency === "ZC") await creditMiauvadaoVaultFromPlayerTransaction(tx, price);
     });
 
     revalidateBazar();

@@ -43,9 +43,6 @@ export async function openStickerPackByName(playerId: string, packName: string, 
     byRarity.set(card.rarity, list);
   }
 
-  const owned = await db.playerSticker.findMany({ where: { playerId }, select: { cardId: true, quantity: true } });
-  const ownedMap = new Map(owned.map(o => [o.cardId, o.quantity]));
-
   const drawn: typeof allCards[number][] = [];
   const drawnIds = new Set<string>();
   for (let i = 0; i < pack.cardCount; i++) {
@@ -59,6 +56,12 @@ export async function openStickerPackByName(playerId: string, packName: string, 
   const resultCards: PackOpenResult["cards"] = [];
 
   const grant = async (tx: Prisma.TransactionClient) => {
+    // A pack only needs ownership of the cards actually drawn, not the album.
+    const owned = drawn.length ? await tx.playerSticker.findMany({
+      where: { playerId, cardId: { in: [...drawnIds] } },
+      select: { cardId: true, quantity: true },
+    }) : [];
+    const ownedMap = new Map(owned.map(o => [o.cardId, o.quantity]));
     for (const card of drawn) {
       const isDuplicate = ownedMap.has(card.id);
       const coinsEarned = isDuplicate ? (DUPLICATE_COINS[card.rarity as keyof typeof DUPLICATE_COINS] ?? 5) : 0;

@@ -81,26 +81,28 @@ const getNavData = (userId: string) =>
           unreadNews: 0,
         };
 
-      const giftCount = await prisma.playerGift
+      const [giftCount, wallet, ligaWallet, latestNews] = await Promise.all([
+        prisma.playerGift
         .count({ where: { playerId: player.id, status: "UNCLAIMED" } })
-        .catch(() => 0);
-      const wallet = await prisma.zikaCoinWallet
+        .catch(() => 0),
+        prisma.zikaCoinWallet
         .findUnique({
           where: { playerId: player.id },
           select: { balance: true },
         })
-        .catch(() => null);
-      const ligaWallet = await prisma.ligaCoinWallet
+        .catch(() => null),
+        prisma.ligaCoinWallet
         .findUnique({ where: { playerId: player.id }, select: { balance: true } })
-        .catch(() => null);
-      const latestNews = await prisma.newsPost
+        .catch(() => null),
+        prisma.newsPost
         .findMany({
           where: { published: true },
           orderBy: { publishedAt: "desc" },
           take: 5,
           select: { id: true },
         })
-        .catch(() => []);
+        .catch(() => []),
+      ]);
       const latestNewsIds = latestNews.map((news) => news.id);
       const readNews =
         latestNewsIds.length > 0
