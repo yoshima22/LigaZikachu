@@ -30,9 +30,9 @@ export const TOWER_BALANCE_GROUP_V2: Readonly<TowerBalance> = {
   firstFloorEnemyScale: 0.88,
   firstBossEscortReduction: 2,
   middleFloorEnemyScale: 1,
-  lateFloorEnemyScale: 1.05,
-  groupSizeSlope: 0.215,
-  firstFloorGroupSizeSlope: 0.215,
+  lateFloorEnemyScale: 1.02,
+  groupSizeSlope: 0.2,
+  firstFloorGroupSizeSlope: 0.19,
   floorHealingFraction: 0.18,
   floorPressureRelief: 4,
 };

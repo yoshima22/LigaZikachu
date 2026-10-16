@@ -37,7 +37,7 @@ import { resolveTowerTalents, towerLuckCoins, towerRescueCapacity } from "./tale
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
 import { addCombatToRunReport, recordRecoveryInReport, recordRoomClearedInReport } from "./run-report";
-import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
+import { resolveTowerBattle, selectTowerBattleWaves, towerEncounterLevel } from "./battle-waves";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
 import {
   applyPressureToExpedition,
@@ -199,7 +199,8 @@ async function resolveV2RoomFronts(
       const payload = (submission.actions ?? {}) as { action?: string; puzzleChoice?: string };
       return { memberId, action: payload.action, puzzleChoice: payload.puzzleChoice };
     });
-    let combatForReport: { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean } | null = null;
+    type CombatForReport = { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean; ownerUserIdByMascotId: Record<string, string> };
+    let combatForReport: CombatForReport | null = null;
     const wasCleared = Boolean(next.rooms[roomId]?.cleared);
     let bossFightStarted = false;
     const result = resolveRoomFront(next, roomId, actions, ({ room, memberIds }) => {
@@ -228,8 +229,12 @@ async function resolveV2RoomFronts(
       });
       const fightingAllies = allies.filter((mascot) => mascot.hp > 0);
       if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
+      const slotByMascotId = new Map(local.map((snapshot) => [snapshot.mascotId, snapshot.formationSlot]));
+      const { active, reserves } = selectTowerBattleWaves(run.partyProfile, run.balanceVersion,
+        allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })));
+      if (!active.some((mascot) => mascot.hp > 0)) return { won: false, hpByMascotId: {}, events: ["Reorganize uma dupla ativa viva antes do combate."], kos: [] };
       if (room.kind === "BOSS") bossFightStarted = true;
-      const averageLevel = Math.max(1, Math.round(fightingAllies.reduce((sum, mascot) => sum + mascot.level, 0) / fightingAllies.length));
+      const averageLevel = towerEncounterLevel(active);
       const preview = (next.rooms[roomId].encounter?.enemies ?? towerEncounterPreview(room, averageLevel, allies.length))
         .map((enemy) => ({ ...enemy }));
       if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
@@ -257,12 +262,10 @@ async function resolveV2RoomFronts(
           slot: index + 1,
         };
       });
-      const slotByMascotId = new Map(local.map((snapshot) => [snapshot.mascotId, snapshot.formationSlot]));
-      const { active, reserves } = selectTowerBattleWaves(run.partyProfile, run.balanceVersion,
-        allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })));
       const resolved = resolveTowerBattle({ active, reserves, enemies });
       const battle = resolved.battle;
-      combatForReport = { allies, enemies, log: battle.log, won: battle.winner === "A", boss: room.kind === "BOSS" };
+      combatForReport = { allies, enemies, log: battle.log, won: battle.winner === "A", boss: room.kind === "BOSS",
+        ownerUserIdByMascotId: Object.fromEntries(local.map((snapshot) => [snapshot.mascotId, snapshot.member.userId])) };
       const replay = {
         winner: battle.winner,
         log: battle.log,
@@ -288,8 +291,9 @@ async function resolveV2RoomFronts(
       next = consumeBossOverloadCharge(next);
     }
     if (combatForReport) {
-      const combat = combatForReport as { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean };
-      next = { ...next, runReport: addCombatToRunReport(next.runReport, combat.allies, combat.enemies, combat.log, combat.boss, combat.won) };
+      const combat = combatForReport as CombatForReport;
+      next = { ...next, runReport: addCombatToRunReport(next.runReport, combat.allies, combat.enemies, combat.log, combat.boss, combat.won,
+        combat.ownerUserIdByMascotId) };
     } else if (!wasCleared && result.state.rooms[roomId]?.cleared) {
       next = { ...next, runReport: recordRoomClearedInReport(next.runReport) };
     }
@@ -347,28 +351,6 @@ async function resolveV2RoomFronts(
       });
   }
   return { state: next, log, fronts, splitPenalty: talentFx.splitPenalty };
-}
-
-function finalHp(
-  lineup: LeagueMascot[],
-  log: { action: string; targetId: string; damage: number }[],
-) {
-  const hp = new Map(lineup.map((m) => [m.id, m.hp]));
-  for (const event of log) {
-    if (event.action === "ATTACK")
-      hp.set(
-        event.targetId,
-        Math.max(0, (hp.get(event.targetId) ?? 0) - event.damage),
-      );
-    if (event.action === "HEAL" && (hp.get(event.targetId) ?? 0) > 0) {
-      const max = lineup.find((m) => m.id === event.targetId)?.hp ?? 0;
-      hp.set(
-        event.targetId,
-        Math.min(max, (hp.get(event.targetId) ?? 0) + event.damage),
-      );
-    }
-  }
-  return hp;
 }
 
 async function resolveRoom(
@@ -839,8 +821,8 @@ async function resolveRoom(
         slot: index + 1,
       };
     });
-    const result = runLeagueCombat(allies, enemies);
-    const hp = finalHp(allies, result.log);
+    const result = runLeagueCombat(allies, enemies, null, [], [], { includeFinalHp: true });
+    const hp = new Map(allies.map((ally) => [ally.id, result.finalHpById?.[ally.id] ?? ally.hp]));
     for (const ally of allies)
       await tx.towerRunMascot.updateMany({
         where: { mascotId: ally.id, member: { runId: run.id } },
@@ -850,7 +832,8 @@ async function resolveRoom(
         },
       });
     const won = result.winner === "A";
-    const runReport = addCombatToRunReport(state.runReport, allies, enemies, result.log, room.kind === "BOSS", won);
+    const runReport = addCombatToRunReport(state.runReport, allies, enemies, result.log, room.kind === "BOSS", won,
+      Object.fromEntries(snapshots.map((snapshot) => [snapshot.mascotId, snapshot.member.userId])));
     room.cleared = won;
     state = {
       ...state,

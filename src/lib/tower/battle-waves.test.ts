@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { LeagueMascot } from "../league-combat";
-import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
+import { resolveTowerBattle, selectTowerBattleWaves, towerEncounterLevel } from "./battle-waves";
 import { addCombatToRunReport } from "./run-report";
 
 function fighter(id: string, ownerId: string, stats: Partial<LeagueMascot> = {}): LeagueMascot {
@@ -49,4 +49,27 @@ test("V2 solo, group and legacy select only their own present formation", () => 
   const legacy = selectTowerBattleWaves(null, null, entries.slice(0, 2).map((entry) => ({ ...entry, formationSlot: null })));
   assert.deepEqual(legacy.active.map((entry) => entry.id), ["a2"]);
   assert.deepEqual(legacy.reserves, []);
+});
+
+test("solo enemy level follows only living active mascots, never low-level reserves", () => {
+  const waves = selectTowerBattleWaves("SOLO", 2, [
+    { fighter: fighter("a1", "owner", { level: 70 }), formationSlot: 1 },
+    { fighter: fighter("a2", "owner", { level: 70 }), formationSlot: 2 },
+    { fighter: fighter("r1", "owner", { level: 1 }), formationSlot: 3 },
+    { fighter: fighter("r2", "owner", { level: 1 }), formationSlot: 4 },
+  ]);
+  assert.equal(towerEncounterLevel(waves.active), 70);
+  assert.equal(towerEncounterLevel([fighter("a1", "owner", { level: 50 }), fighter("a2", "owner", { level: 70 })]), 60);
+});
+
+test("Guardian interception changes authoritative HP between Tower rooms", () => {
+  const active = [fighter("guard", "owner", { name: "Guardião", hp: 240, combatRole: "GUARDIAN", vitality: 95, charisma: 95 }),
+    fighter("ally", "owner", { hp: 240, force: 60, slot: 2 })];
+  const enemies = [fighter("enemy", "TORRE", { hp: 900, force: 95, agility: 90 })];
+  const resolved = resolveTowerBattle({ active, reserves: [], enemies, random: () => 0.5 });
+  assert.ok(resolved.battle.log.some((entry) => entry.effect?.includes("Guardião Guardião absorveu")));
+  assert.ok(resolved.battle.log.some((entry) => entry.guardianIntercept?.mascotId === "guard"));
+  assert.ok(resolved.battle.finalHpById);
+  assert.equal(resolved.hpByMascotId.guard, resolved.battle.finalHpById.guard);
+  assert.equal(resolved.enemyHpById.enemy, resolved.battle.finalHpById.enemy);
 });

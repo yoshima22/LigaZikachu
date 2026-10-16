@@ -98,7 +98,7 @@ test("pace affects reward shards, not the same-seed combat path", () => {
 
 test("an offline prepared trio can complete all seven floors in both paces", () => {
   for (const pace of ["ONLINE", "SLOW"] as const) {
-    const report = simulateTower("validate-11", 3, "PREPARED", pace, "UNITED");
+    const report = simulateTower("validate-9", 3, "PREPARED", pace, "UNITED");
     assert.equal(report.outcome, "WIN");
     assert.equal(report.bossesDefeated, 7);
     assert.equal(report.floorReached, 7);
@@ -107,8 +107,8 @@ test("an offline prepared trio can complete all seven floors in both paces", () 
 
 test("the tuned V2 first floor opens a boss path for an unprepared trio", () => {
   const previous = { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1 };
-  const zeroBefore = simulateTower("validate-0", 3, "ZERO", "ONLINE", "UNITED", 0, previous);
-  const zeroNow = simulateTower("validate-0", 3, "ZERO", "ONLINE", "UNITED");
+  const zeroBefore = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED", 0, previous);
+  const zeroNow = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED");
   assert.equal(zeroBefore.bossesDefeated, 0);
   assert.equal(zeroNow.bossesDefeated, 1);
 });
@@ -141,7 +141,7 @@ test("deterministic AFK windows remove rewards from players who abandon", () => 
 });
 
 test("relic shards count only members eligible at each boss victory", () => {
-  const report = simulateTower("afk-validation-3", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
+  const report = simulateTower("afk-validation-12", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
   assert.ok(report.bossesDefeated > 0 && report.afkAbandoned > 0);
   assert.equal(report.relicShards, Object.values(report.relicShardsByPlayer).reduce((sum, count) => sum + count, 0));
   assert.ok(report.relicShards < report.bossesDefeated * report.partySize * 2);

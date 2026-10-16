@@ -356,6 +356,8 @@ export type ArenaTurnLog = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  /** Dano indireto absorvido por um Guardião, identificado sem depender do texto do replay. */
+  guardianIntercept?: { mascotId: string; damage: number };
   /** Debuffs aplicados/removidos neste evento (origem e valores), para o ícone do replay. */
   debuffEvents?: DebuffEvent[];
 };

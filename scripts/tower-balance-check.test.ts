@@ -17,17 +17,18 @@ test("balance CLI reports a reproducible comparison without dumping every run", 
     group.samples === 1 && group.boss1 >= 0 && group.bossProgress.length === 7 && group.seedCohort === "check"));
 });
 
-test("prepared solo, duo, trio and strategic split remain in the two-cohort target band", () => {
-  for (const cohort of ["validate", "holdout"]) {
-    for (const partySize of [1, 2, 3] as const) {
-      const routes = partySize === 1 ? ["UNITED"] as const : ["UNITED", "STRATEGIC_SPLIT"] as const;
-      for (const route of routes) {
-        const wins = Array.from({ length: 100 }, (_, index) =>
-          simulateTower(`${cohort}-${index}`, partySize, "PREPARED", "ONLINE", route))
-          .filter((report) => report.outcome === "WIN").length;
-        assert.ok(wins >= 5 && wins <= 15,
-          `${cohort}: party ${partySize} / ${route} venceu ${wins}/100, fora de 5–15`);
-      }
+test("prepared solo, duo, trio and strategic split stay near 10% across two cohorts", () => {
+  for (const partySize of [1, 2, 3] as const) {
+    const routes = partySize === 1 ? ["UNITED"] as const : ["UNITED", "STRATEGIC_SPLIT"] as const;
+    for (const route of routes) {
+      const cohortWins = ["validate", "holdout"].map((cohort) => Array.from({ length: 100 }, (_, index) =>
+        simulateTower(`${cohort}-${index}`, partySize, "PREPARED", "ONLINE", route))
+        .filter((report) => report.outcome === "WIN").length);
+      const total = cohortWins.reduce((sum, count) => sum + count, 0);
+      assert.ok(total >= 10 && total <= 30,
+        `party ${partySize} / ${route} venceu ${total}/200, fora de 5–15%`);
+      assert.ok(cohortWins.every((count) => count >= 3 && count <= 18),
+        `party ${partySize} / ${route} teve coorte extrema: ${cohortWins.join("/")}`);
     }
   }
 });

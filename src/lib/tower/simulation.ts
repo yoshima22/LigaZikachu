@@ -2,7 +2,7 @@
  * combat engine still consumes Math.random, which we scope to each synchronous fight. */
 import { getPokemonTypes } from "@/lib/mascot-data";
 import { type LeagueMascot } from "@/lib/league-combat";
-import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
+import { resolveTowerBattle, selectTowerBattleWaves, towerEncounterLevel } from "./battle-waves";
 import { towerAddCaptive, towerBalanceFor, towerBossDefenderCount, towerEnemyBaseStat, type TowerBalance } from "./balance-rules";
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
@@ -286,8 +286,14 @@ export function simulateTower(
         });
         const fightingAllies = allies.filter((ally) => ally.hp > 0);
         if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto."], kos: [] };
+        const slotByMascotId = new Map(locals.map((mascot) => [mascot.id, mascot.formationSlot]));
+        const { active, reserves } = selectTowerBattleWaves(
+          partySize === 1 ? "SOLO" : "GROUP", 2,
+          allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })),
+        );
+        if (!active.some((mascot) => mascot.hp > 0)) return { won: false, hpByMascotId: {}, events: ["Ativos indisponíveis."], kos: [] };
         if (combatRoom.kind === "BOSS") bossFightStarted = true;
-        const averageLevel = Math.round(fightingAllies.reduce((sum, ally) => sum + ally.level, 0) / fightingAllies.length);
+        const averageLevel = towerEncounterLevel(active);
         const temporaryOverload = state.overload && state.overload.expiresAfterTurn >= turns ? state.overload.value : 0;
         const bankedOverload = combatRoom.kind === "BOSS" && partySize > 1 ? bossOverloadValue(state) : 0;
         const pressureMult = state.activeModifiers.reduce((product, modifier) => product * modifier.enemyMultiplier, 1) *
@@ -302,11 +308,6 @@ export function simulateTower(
             force: base, agility: base, instinct: base, vitality: base, charisma: base,
             hp: 55 + enemy.level * 6 + base * 4, combatRole: index % 2 ? "DEFENDER" : "ATTACKER", slot: index + 1 };
         });
-        const slotByMascotId = new Map(locals.map((mascot) => [mascot.id, mascot.formationSlot]));
-        const { active, reserves } = selectTowerBattleWaves(
-          partySize === 1 ? "SOLO" : "GROUP", 2,
-          allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })),
-        );
         const battle = resolveTowerBattle({
           active,
           reserves,

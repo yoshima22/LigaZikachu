@@ -4,6 +4,7 @@ import type { TowerRunReport } from "./rooms";
 export type TowerCombatLogLine = {
   actorId: string; actorOwnerId: string | null; actorName: string;
   targetId: string; targetOwnerId: string | null; action: string; damage: number;
+  guardianIntercept?: { mascotId: string; damage: number };
 };
 
 function emptyReport(): TowerRunReport {
@@ -22,6 +23,7 @@ export function addCombatToRunReport(
   report: TowerRunReport | undefined,
   allies: LeagueMascot[], enemies: LeagueMascot[], log: TowerCombatLogLine[],
   isBoss: boolean, won: boolean,
+  ownerUserIdByMascotId: Readonly<Record<string, string>> = {},
 ): TowerRunReport {
   const next: TowerRunReport = report
     ? { ...report, mascots: Object.fromEntries(Object.entries(report.mascots).map(([id, mascot]) => [id, { ...mascot }])) }
@@ -29,9 +31,11 @@ export function addCombatToRunReport(
   const hp = new Map([...allies, ...enemies].map((mascot) => [mascot.id, mascot.hp]));
   const defeated = new Set<string>();
   for (const ally of allies) if (!next.mascots[ally.id]) next.mascots[ally.id] = {
-    mascotId: ally.id, ownerUserId: ally.ownerId, name: ally.name, pokemonId: ally.pokemonId,
+    mascotId: ally.id, ownerUserId: ownerUserIdByMascotId[ally.id] ?? ally.ownerId, name: ally.name, pokemonId: ally.pokemonId,
     level: ally.level, damageDealt: 0, damageReceived: 0, healing: 0, kos: 0,
   };
+  for (const ally of allies) if (ownerUserIdByMascotId[ally.id] && next.mascots[ally.id])
+    next.mascots[ally.id].ownerUserId = ownerUserIdByMascotId[ally.id];
   for (const event of log) {
     const actor = next.mascots[event.actorId];
     const target = next.mascots[event.targetId];
@@ -46,6 +50,14 @@ export function addCombatToRunReport(
     if (event.action !== "ATTACK") continue;
     const damage = Math.max(0, event.damage);
     if (actor) actor.damageDealt += damage;
+    if (event.guardianIntercept) {
+      const intercepted = Math.max(0, event.guardianIntercept.damage);
+      if (actor) actor.damageDealt += intercepted;
+      const guardian = next.mascots[event.guardianIntercept.mascotId];
+      const before = hp.get(event.guardianIntercept.mascotId);
+      if (guardian && before !== undefined) guardian.damageReceived += Math.min(before, intercepted);
+      if (before !== undefined) hp.set(event.guardianIntercept.mascotId, Math.max(0, before - intercepted));
+    }
     if (target) {
       const before = hp.get(event.targetId) ?? 0;
       target.damageReceived += Math.min(before, damage);

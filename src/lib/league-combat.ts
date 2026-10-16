@@ -41,6 +41,8 @@ export type LeagueBattleResult = {
   lineupB: LeagueMascot[];
   reserveLineupA?: LeagueMascot[];
   reserveEntered?: boolean;
+  /** Opt-in authoritative HP after all indirect effects (e.g. Guardian interception). */
+  finalHpById?: Record<string, number>;
 };
 
 export type LeagueCombatOptions = {
@@ -60,6 +62,7 @@ export type LeagueCombatOptions = {
   opposingBondEffects?: OpposingBondCombatEffect[];
   /** Torre solo: segunda dupla entra no mesmo encontro após a queda dos ativos. */
   reserveTeamA?: LeagueMascot[];
+  includeFinalHp?: boolean;
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -666,12 +669,14 @@ export function runLeagueCombat(
       // GUARDIAN intercept
       const guardians = (entry.side === "A" ? b : a).filter(m => m.combatRole === "GUARDIAN" && m.id !== target.id && (hp.get(m.id) ?? 0) > 0);
       let guardianEffect: string | null = null;
+      let guardianIntercept: { mascotId: string; damage: number } | undefined;
       let guardianKnockedOut = false;
       if (guardians.length > 0) {
         const g = guardians[0];
         const absorbPct = getGuardianIntercept(g.vitality, g.charisma);
         const absorbed = Math.round(damage * absorbPct);
         damage -= absorbed;
+        guardianIntercept = { mascotId: g.id, damage: Math.min(hp.get(g.id) ?? 0, absorbed) };
         hp.set(g.id, Math.max(0, (hp.get(g.id) ?? 0) - absorbed));
         guardianKnockedOut = (hp.get(g.id) ?? 0) === 0;
         guardianEffect = `Guardião ${g.name} absorveu ${absorbed} de dano.`;
@@ -762,6 +767,7 @@ export function runLeagueCombat(
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
         effect: effects,
+        ...(guardianIntercept ? { guardianIntercept } : {}),
       });
       actionNum++;
       }
@@ -784,6 +790,7 @@ export function runLeagueCombat(
     teamADamageTaken: totalDmgB,
     teamBDamageTaken: totalDmgA,
     log,
+    ...(options.includeFinalHp ? { finalHpById: Object.fromEntries(hp) } : {}),
     rounds: round - 1,
     // Cópias já com modificador semanal, sabotagem e itens aplicados. O replay
     // precisa deste snapshot para não tentar deduzir HP a partir do dano total.

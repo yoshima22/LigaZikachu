@@ -24,21 +24,11 @@ export function selectTowerBattleWaves(
   return { active: entries.filter((entry) => entry.fighter.hp > 0).map((entry) => entry.fighter), reserves: [] };
 }
 
-function finalHpById(
-  lineup: readonly LeagueMascot[],
-  log: LeagueBattleResult["log"],
-): Record<string, number> {
-  const hp = new Map(lineup.map((mascot) => [mascot.id, mascot.hp]));
-  const maximum = new Map(lineup.map((mascot) => [mascot.id, mascot.hp]));
-  for (const entry of log) {
-    const current = hp.get(entry.targetId);
-    if (current === undefined) continue;
-    if (entry.action === "ATTACK")
-      hp.set(entry.targetId, Math.max(0, current - Math.max(0, entry.damage)));
-    else if (entry.action === "HEAL" && current > 0)
-      hp.set(entry.targetId, Math.min(maximum.get(entry.targetId)!, current + Math.max(0, entry.damage)));
-  }
-  return Object.fromEntries(hp);
+/** Reserves do Solo não alteram a média antes de realmente entrar no encontro. */
+export function towerEncounterLevel(active: readonly LeagueMascot[]): number {
+  const living = active.filter((mascot) => mascot.hp > 0);
+  if (!living.length) throw new Error("Nenhum mascote ativo apto para dimensionar o encontro.");
+  return Math.max(1, Math.round(living.reduce((sum, mascot) => sum + mascot.level, 0) / living.length));
 }
 
 export function resolveTowerBattle(input: TowerBattleInput): {
@@ -54,13 +44,17 @@ export function resolveTowerBattle(input: TowerBattleInput): {
   let battle: LeagueBattleResult;
   try {
     battle = runLeagueCombat(input.active, input.enemies, null, [], [],
-      input.reserves.length ? { reserveTeamA: input.reserves } : {});
+      { includeFinalHp: true, ...(input.reserves.length ? { reserveTeamA: input.reserves } : {}) });
   } finally {
     if (input.random) Math.random = previousRandom;
   }
+  const finalHp = battle.finalHpById;
+  if (!finalHp) throw new Error("Resultado de HP do combate indisponível.");
   return {
     battle,
-    hpByMascotId: finalHpById([...input.active, ...input.reserves], battle.log),
-    enemyHpById: finalHpById(input.enemies, battle.log),
+    hpByMascotId: Object.fromEntries([...input.active, ...input.reserves].map((mascot) =>
+      [mascot.id, finalHp[mascot.id] ?? mascot.hp])),
+    enemyHpById: Object.fromEntries(input.enemies.map((mascot) =>
+      [mascot.id, finalHp[mascot.id] ?? mascot.hp])),
   };
 }

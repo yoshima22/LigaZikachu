@@ -51,3 +51,26 @@ test("a reserve receives one report entry even when it never attacks", () => {
   assert.equal(report.mascots.reserve.damageDealt, 0);
   assert.equal(report.mascots.reserve.kos, 0);
 });
+
+test("run report stores the trainer user ID rather than the combat player ID", () => {
+  const report = addCombatToRunReport(undefined, [ally], [enemy], [], false, false,
+    { ally: "user-ana" });
+  assert.equal(report.mascots.ally.ownerUserId, "user-ana");
+  const olderReport = addCombatToRunReport(undefined, [ally], [enemy], [], false, false);
+  assert.equal(addCombatToRunReport(olderReport, [ally], [enemy], [], false, false,
+    { ally: "user-ana" }).mascots.ally.ownerUserId, "user-ana");
+});
+
+test("intercepted damage counts for the Guardian and the attacking mascot", () => {
+  const guardian = { ...ally, id: "guardian", name: "Guardião", hp: 100 };
+  const attack = [{ actorId: "enemy", actorOwnerId: "TORRE", actorName: "Defensor",
+    targetId: "ally", targetOwnerId: "ana", action: "ATTACK", damage: 35,
+    guardianIntercept: { mascotId: "guardian", damage: 25 } },
+  { actorId: "ally", actorOwnerId: "ana", actorName: "Pikachu",
+    targetId: "enemy", targetOwnerId: "TORRE", action: "ATTACK", damage: 35,
+    guardianIntercept: { mascotId: "enemy-guardian", damage: 25 } }];
+  const report = addCombatToRunReport(undefined, [ally, guardian], [enemy], attack, false, false);
+  assert.equal(report.mascots.ally.damageReceived, 35);
+  assert.equal(report.mascots.guardian.damageReceived, 25);
+  assert.equal(report.mascots.ally.damageDealt, 60);
+});

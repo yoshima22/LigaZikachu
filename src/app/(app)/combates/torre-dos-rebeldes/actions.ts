@@ -1172,6 +1172,19 @@ export async function createTowerRunAction(input: {
   const seed = randomBytes(12).toString("base64url");
   const allowedStances = TOWER_ROLE_BY_KEY[input.expeditionRole].stances;
   const run = await prisma.$transaction(async (tx) => {
+    // Serializa criações/entradas da mesma conta; a verificação fora da transação
+    // é apenas feedback rápido e não protege contra duas requisições simultâneas.
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`tower-user:${user.id}`}))`;
+    const existing = await tx.towerRunMember.findFirst({
+      where: { userId: user.id, afkRemoved: false, run: { status: { in: ["LOBBY", "ACTIVE"] } } },
+      select: { id: true },
+    });
+    if (existing) return null;
+    const stillAvailable = await tx.mascot.count({
+      where: { id: { in: ids }, playerId: player.id, arenaState: "FREE", bazarListed: false,
+        expeditions: { none: { status: "ACTIVE" } } },
+    });
+    if (stillAvailable !== ids.length) return null;
     const created = await tx.towerRun.create({
       data: {
         pace: input.pace,
@@ -1220,6 +1233,7 @@ export async function createTowerRunAction(input: {
     }
     return created;
   });
+  if (!run) return { error: "Você já está em uma expedição ou um mascote deixou de estar disponível." };
   revalidatePath(PATH);
   return { ok: true as const, runId: run.id };
 }
@@ -1260,8 +1274,19 @@ export async function joinTowerRoomAction(input: {
   if (mascots.length !== 2)
     return { error: "Um dos mascotes não está disponível." };
   const mascotById = new Map(mascots.map((mascot) => [mascot.id, mascot]));
-  await prisma.$transaction(async (tx) => {
+  const joined = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`tower-user:${user.id}`}))`;
     await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(input.runId)})`;
+    const existing = await tx.towerRunMember.findFirst({
+      where: { userId: user.id, afkRemoved: false, run: { status: { in: ["LOBBY", "ACTIVE"] } } },
+      select: { id: true },
+    });
+    if (existing) return false;
+    const stillAvailable = await tx.mascot.count({
+      where: { id: { in: ids }, playerId: player.id, arenaState: "FREE", bazarListed: false,
+        expeditions: { none: { status: "ACTIVE" } } },
+    });
+    if (stillAvailable !== ids.length) return false;
     const run = await tx.towerRun.findUnique({
       where: { id: input.runId },
       include: { members: true },
@@ -1317,7 +1342,9 @@ export async function joinTowerRoomAction(input: {
         } as Prisma.InputJsonValue,
       },
     });
+    return true;
   });
+  if (!joined) return { error: "Você já está em uma expedição ou um mascote deixou de estar disponível." };
   revalidatePath(PATH);
   return { ok: true as const, runId: input.runId };
 }
