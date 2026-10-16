@@ -80,3 +80,13 @@ test("a blocked boss offers the previously opened return route", () => {
   assert.equal(view.routes.find((route) => route.id === next.id)?.available, true);
   assert.equal(view.routes.find((route) => route.id === entrance.id)?.available, undefined);
 });
+
+test("banked boss advantage is projected without exposing hidden rooms", () => {
+  const { state } = sample();
+  state.bossOverloadCharge = 0.08;
+  const view = projectExpeditionForMember(state, "ana");
+  assert.equal(view.bossAdvantage.percent, 8);
+  assert.equal(view.bossAdvantage.available, true);
+  state.bossOverloadCharge = 0;
+  assert.equal(projectExpeditionForMember(state, "ana").bossAdvantage.available, false);
+});

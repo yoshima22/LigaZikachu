@@ -47,6 +47,8 @@ export type TowerExplorationState = {
     log: unknown[];
     lineupA: unknown[];
     lineupB: unknown[];
+    reserveLineupA?: unknown[];
+    reserveEntered?: boolean;
     teamASurvivors: number;
     teamBSurvivors: number;
     title: string;

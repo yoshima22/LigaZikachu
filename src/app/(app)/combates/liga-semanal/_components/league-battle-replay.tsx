@@ -4,6 +4,7 @@ import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { EffectChips } from "@/components/replay-effect-chips";
+import { towerReserveVisible } from "@/lib/tower/ui-formation";
 
 export type TurnLog = {
   turn: number;
@@ -240,6 +241,7 @@ export function LeagueBattleReplayModal({
   specialRuleDetails = [],
   lineupA = EMPTY_LINEUP,
   lineupB = EMPTY_LINEUP,
+  reserveLineupA = EMPTY_LINEUP,
   onFinish,
 }: {
   playerAName: string;
@@ -255,6 +257,8 @@ export function LeagueBattleReplayModal({
   specialRuleDetails?: string[];
   lineupA?: ReplayLineupFighter[];
   lineupB?: ReplayLineupFighter[];
+  /** Optional Tower-only second formation; ordinary league replays remain unchanged. */
+  reserveLineupA?: ReplayLineupFighter[];
   onFinish: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
@@ -262,6 +266,9 @@ export function LeagueBattleReplayModal({
   const [speed, setSpeed] = useState(1);
   const [showBondIntro, setShowBondIntro] = useState(false);
   const [showBondDetails, setShowBondDetails] = useState(false);
+  useEffect(() => {
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) setAutoPlay(false);
+  }, []);
   const onFinishRef = useRef(onFinish);
   const cinematicReplay = useMemo(() => buildCinematicReplay(replay), [replay]);
   const bondEvents = useMemo(() => replay.filter((turn) => turn.effect?.startsWith("LAÇO:")), [replay]);
@@ -271,8 +278,8 @@ export function LeagueBattleReplayModal({
   // baseFighters é DERIVADO — recomputar não reinicia a reprodução. Isso evita que
   // uma simples mudança de referência de lineup/props reinicie o replay no meio.
   const baseFighters = useMemo(
-    () => buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB),
-    [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, lineupB],
+    () => buildFighters(cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, [...lineupA, ...reserveLineupA], lineupB),
+    [cinematicReplay, playerAId, playerASurvivors, playerBSurvivors, lineupA, reserveLineupA, lineupB],
   );
   // Só volta ao início quando o replay em si muda (outra partida), não a cada render.
   useEffect(() => { setTurnIdx(-1); }, [cinematicReplay]);
@@ -319,7 +326,9 @@ export function LeagueBattleReplayModal({
   const finished = turnIdx >= cinematicReplay.length;
   const progress = cinematicReplay.length > 0 ? Math.round(((turnIdx + 1) / cinematicReplay.length) * 100) : 0;
 
-  const teamA = fighters.filter(c => c.side === "A");
+  const reserveIds = new Set(reserveLineupA.map((mascot) => mascot.id));
+  const reservesDeployed = towerReserveVisible(cinematicReplay, turnIdx);
+  const teamA = fighters.filter(c => c.side === "A" && (reservesDeployed || !reserveIds.has(c.id)));
   const teamB = fighters.filter(c => c.side === "B");
   const aliveA = teamA.filter(c => c.hp > 0).length;
   const aliveB = teamB.filter(c => c.hp > 0).length;
@@ -338,10 +347,11 @@ export function LeagueBattleReplayModal({
       <style>{`
         @keyframes leagueAttack { 0%,100%{transform:translateX(0)} 50%{transform:translateX(10px)} }
         @keyframes leagueShake { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-5px)} 75%{transform:translateX(5px)} }
+        @media (prefers-reduced-motion: reduce) { .league-replay-modal * { animation-duration: 0.01ms !important; transition-duration: 0.01ms !important; } }
       `}</style>
 
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 p-2" onClick={onFinish}>
-        <div className="relative w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="league-replay-modal relative w-full max-w-2xl max-h-[95vh] overflow-y-auto rounded-2xl border border-[#FFCB05]/30 bg-slate-950 shadow-2xl" onClick={e => e.stopPropagation()}>
           {showBondIntro && <div className="absolute inset-0 z-50 flex flex-col items-center justify-center gap-3 bg-slate-950/95 p-5 backdrop-blur-md"><p className="text-[10px] font-black uppercase tracking-[.28em] text-fuchsia-300">Laços ativos neste combate</p>{bondIntros.map((bond, index) => { const parts = bond.effect?.split(":") ?? []; return <div key={`${bond.actorId}-${bond.targetId}-${index}`} className="w-full max-w-lg rounded-2xl border border-fuchsia-300/25 bg-fuchsia-300/[.06] p-3"><div className="grid grid-cols-[1fr_80px_1fr] items-center gap-2"><div className="text-center"><img src={getSpriteUrl(bond.actorPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.actorName, bond.actorPokemonId)}</p></div><div><div className="h-1 rounded-full bg-gradient-to-r from-cyan-300 via-fuchsia-400 to-rose-300 shadow-[0_0_18px_rgba(217,70,239,.8)]" /><p className="mt-1 text-center text-[8px] font-black uppercase text-fuchsia-200">{parts[2] ?? "Laço ativo"}</p></div><div className="text-center"><img src={getSpriteUrl(bond.targetPokemonId ?? 0)} alt="" className="mx-auto h-14 w-14 object-contain" /><p className="truncate text-xs font-bold text-white">{resolveName(bond.targetName, bond.targetPokemonId)}</p></div></div><p className="mt-2 text-center text-[10px] text-slate-300">{parts.slice(3).join(":")}</p></div>; })}<p className="text-[9px] text-slate-500">O replay começa em instantes…</p></div>}
           {/* Header */}
           <div className="flex items-center justify-between px-5 pt-5 pb-2">
@@ -385,6 +395,8 @@ export function LeagueBattleReplayModal({
               )}
             </div>
           )}
+
+          {reserveLineupA.length > 0 && <p role="status" className={`mx-5 mb-3 rounded-xl border p-2.5 text-xs font-bold ${reservesDeployed ? "border-violet-300/40 bg-violet-300/10 text-violet-100" : "border-slate-700 bg-slate-900/70 text-slate-400"}`}>{reservesDeployed ? "⚡ Segunda formação em campo: as reservas entraram após o K.O. dos ativos, sem reiniciar o combate." : "Segunda formação na reserva · entra somente se os dois ativos caírem."}</p>}
 
           {orderSabotage && (
             <div className="mx-5 mb-3 rounded-xl border border-red-500/45 bg-red-500/10 px-4 py-2 text-xs text-red-100">

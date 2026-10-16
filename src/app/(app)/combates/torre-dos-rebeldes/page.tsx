@@ -5,9 +5,7 @@ import { requireTowerAccess } from "./actions";
 
 export const dynamic = "force-dynamic";
 
-// Torre dos Rebeldes — Fase 1: shell admin-only.
-// Guard server-side com requirePlatformAdmin (ADMIN/SUPER_ADMIN). GM e USER são
-// redirecionados — a segurança NÃO depende de esconder o link no frontend.
+// Guard server-side: apenas admins e contas de teste liberadas explicitamente.
 export default async function TorreDosRebeldesPage() {
   const user = await requireTowerAccess();
   if (!user) redirect("/combates");
@@ -28,7 +26,7 @@ export default async function TorreDosRebeldesPage() {
           </span>
         </div>
         <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
-          Uma expedição cooperativa para 1–3 jogadores. Escolha dois mascotes, atravesse
+          Uma expedição Solo com quatro mascotes ou cooperativa para 2–3 jogadores com dois mascotes por pessoa. Atravesse
           salas cobertas pela névoa, neutralize mecanismos e enfrente os rebeldes em
           confrontos apresentados rodada por rodada. O progresso de vida permanece entre os andares.
         </p>

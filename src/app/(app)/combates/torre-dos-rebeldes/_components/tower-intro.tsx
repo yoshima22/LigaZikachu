@@ -8,8 +8,8 @@ const pages = [
     title: "A Torre despertou",
     text: "O Barão Pikachuque e seus sete regentes prometem libertar os mascotes dos treinadores — mesmo que para isso precisem transformar outros mascotes em soldados da Torre.",
     points: [
-      "Monte uma expedição de 1 a 3 jogadores.",
-      "Cada treinador leva 2 mascotes e escolhe uma classe.",
+      "Escolha Solo (1 treinador, 4 mascotes) ou Grupo (2–3 treinadores, 2 mascotes por pessoa).",
+      "No Solo, dois mascotes são ativos e dois aguardam na reserva; cada treinador também escolhe uma classe.",
       "Vida, derrotas e descobertas continuam valendo durante toda a run.",
     ],
   },
@@ -30,9 +30,20 @@ const pages = [
     text: "Jogadores podem seguir rotas diferentes para investigar mais salas, mas a Torre reage a essa divisão. O mapa sempre mostra onde cada aliado está e qual caminho confirmou.",
     points: [
       "No mesmo caminho: progresso mais seguro e ajuda imediata.",
-      "Em caminhos diferentes: mais descobertas e sobrecarga ofensiva breve, mas cada frente extra aumenta a Pressão dentro de um limite.",
+      "Em caminhos diferentes: duas ou três frentes que vencem salas no mesmo turno guardam 8% ou 16% de redução inimiga para o próximo chefe; cada frente extra também aumenta a Pressão.",
       "Aliados distantes precisam percorrer conexões abertas para ajudar em um encontro.",
       "O chefe só começa quando todos os treinadores vivos estiverem reunidos.",
+    ],
+  },
+  {
+    eyebrow: "Formação",
+    title: "Dois ativos, duas reservas no Solo",
+    text: "As reservas não são uma segunda tentativa: elas entram no mesmo encontro somente após a queda dos dois ativos, sem restaurar o inimigo nem reiniciar efeitos. O combate tem um limite de rodadas.",
+    points: [
+      "Escolha a ordem 1–4 antes de criar a sala; os slots 1–2 começam lutando.",
+      "Entre salas, reorganize a dupla ativa antes de confirmar a ação, desde que ela esteja viva.",
+      "Salas de recuperação e kits devolvem mascotes caídos com metade do HP; a sala recarrega a cada dois andares.",
+      "O replay só revela a segunda formação quando ela realmente entrar.",
     ],
   },
   {
@@ -77,11 +88,11 @@ export function TowerIntro({ forceKey = 0 }: { forceKey?: number }) {
       setOpen(true);
       return;
     }
-    if (!localStorage.getItem("tower-intro-seen-v5")) setOpen(true);
+    if (!localStorage.getItem("tower-intro-seen-v6")) setOpen(true);
   }, [forceKey]);
   if (!open) return null;
   const close = () => {
-    localStorage.setItem("tower-intro-seen-v5", "1");
+    localStorage.setItem("tower-intro-seen-v6", "1");
     setOpen(false);
   };
   const current = pages[page];

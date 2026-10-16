@@ -1,8 +1,7 @@
 "use server";
 
-// Torre dos Rebeldes — Fase 1 (shell admin-only).
-// Segurança real no servidor: TODA action verifica isAdmin (ADMIN/SUPER_ADMIN).
-// GM é explicitamente NEGADO — nunca usar isStaff aqui.
+// Teste fechado da Torre: ações de jogo exigem admin ou conta liberada no servidor.
+// As ações administrativas continuam exigindo ADMIN/SUPER_ADMIN.
 
 import { randomBytes } from "crypto";
 import { revalidatePath } from "next/cache";
@@ -69,6 +68,7 @@ import { recoverSoloMascots, reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM
 import { buildTowerEventDisclosure } from "@/lib/tower/event-disclosure";
 import { switchSoloFormation, validateTowerFormation, type TowerPartyProfile } from "@/lib/tower/formation";
 import { canJoinTowerLobby, canEditTowerFormation } from "@/lib/tower/lobby-rules";
+import { canAccessTower } from "@/lib/tower/access-rules";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -186,7 +186,7 @@ export async function requireTowerAccess() {
   const user = await getSessionUser();
   if (!user) return null;
   if (isAdmin(user.role)) return user;
-  return (await towerTesterIds()).includes(user.id) ? user : null;
+  return canAccessTower(user.role, user.id, await towerTesterIds()) ? user : null;
 }
 
 export async function adminAddTowerTesterAction(query: string) {
@@ -1935,6 +1935,7 @@ export async function getTowerRunStateAction(
               mascotId: true,
               currentHp: true,
               currentStance: true,
+              formationSlot: true,
               state: true,
             },
           },
@@ -1970,6 +1971,7 @@ export async function getTowerRunStateAction(
                 mascotId: true,
                 currentHp: true,
                 currentStance: true,
+                formationSlot: true,
                 state: true,
               },
             },
@@ -2005,6 +2007,7 @@ export async function getTowerRunStateAction(
         mascot.mascotId,
         mascot.currentHp,
         mascot.currentStance,
+        mascot.formationSlot ?? "",
         mascot.state,
       ]),
     ]),

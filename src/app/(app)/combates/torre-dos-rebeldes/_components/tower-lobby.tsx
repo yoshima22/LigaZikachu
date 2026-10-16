@@ -62,6 +62,7 @@ export function TowerLobby() {
   const [pending, start] = useTransition();
 
   const [pace, setPace] = useState<"ONLINE" | "SLOW">("ONLINE");
+  const [partyProfile, setPartyProfile] = useState<"SOLO" | "GROUP">("GROUP");
   const [role, setRole] = useState<Role["key"] | null>(null);
   const [picks, setPicks] = useState<string[]>([]);
   const [stances, setStances] = useState<Record<string, string>>({});
@@ -184,11 +185,12 @@ export function TowerLobby() {
     (mascotPage - 1) * 16,
     mascotPage * 16,
   );
+  const requiredMascots = partyProfile === "SOLO" ? 4 : 2;
   const toggle = (id: string) =>
     setPicks((cur) =>
       cur.includes(id)
         ? cur.filter((x) => x !== id)
-        : cur.length >= 2
+        : cur.length >= requiredMascots
           ? cur
           : [...cur, id],
     );
@@ -198,13 +200,14 @@ export function TowerLobby() {
       toast.error("Escolha uma Função de Expedição.");
       return;
     }
-    if (picks.length !== 2) {
-      toast.error("Selecione exatamente 2 mascotes.");
+    if (picks.length !== requiredMascots) {
+      toast.error(`Selecione exatamente ${requiredMascots} mascotes.`);
       return;
     }
     start(async () => {
       const res = await createTowerRunAction({
         pace,
+        partyProfile,
         expeditionRole: role,
         mascotIds: picks,
         stanceByMascot: stances,
@@ -259,7 +262,7 @@ export function TowerLobby() {
             </h2>
             <div className="mt-4 space-y-2">
               {[
-                "Crie ou entre em uma sala e escolha classe, mascotes e posturas.",
+                "Escolha Solo (4 mascotes em 2+2) ou Grupo (2–3 treinadores, 2 mascotes cada), classe e posturas.",
                 data.eventDisclosure.ticket.required
                   ? "Todos marcam Pronto; o dono inicia e cada jogador gasta 1 ticket."
                   : "Todos marcam Pronto; o dono inicia sem consumir tickets nesta configuração.",
@@ -931,8 +934,9 @@ export function TowerLobby() {
             Salas, classe e equipe em um só lugar
           </h2>
           <p className="mt-2 text-xs leading-6 text-slate-300">
-            Prepare sua classe, dois mascotes e suas posturas logo abaixo. A
-            mesma seleção serve para criar uma sala ou entrar em uma já aberta.
+            Prepare sua classe, o perfil da run e as posturas logo abaixo. Em
+            Solo, seus dois primeiros mascotes são ativos e os outros dois ficam
+            na reserva. Para entrar em sala de grupo, usamos os dois primeiros.
             Os cards mostram quem está dentro, a classe escolhida, os mascotes
             levados e o estado de Pronto de cada jogador.
           </p>
@@ -944,9 +948,9 @@ export function TowerLobby() {
             Salas aguardando jogadores
           </h2>
           <p className="mt-1 text-[11px] text-slate-500">
-            Escolha seus dois mascotes e entre em uma sala. {data.eventDisclosure.ticket.explanation}
+            Escolha seus dois primeiros mascotes e entre em uma sala de grupo. {data.eventDisclosure.ticket.explanation}
           </p>
-          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${picks.length === 2 && role ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}><b>{picks.length === 2 && role ? "✓ Configuração pronta" : "Prepare-se para entrar"}</b><span className="ml-2">Classe {role ? "selecionada" : "pendente"} · {picks.length}/2 mascotes</span></div>
+          <div className={`mt-3 rounded-xl border px-3 py-2 text-xs ${picks.length >= 2 && role ? "border-emerald-400/30 bg-emerald-400/10 text-emerald-200" : "border-amber-400/30 bg-amber-400/10 text-amber-100"}`}><b>{picks.length >= 2 && role ? "✓ Configuração pronta" : "Prepare-se para entrar"}</b><span className="ml-2">Classe {role ? "selecionada" : "pendente"} · {Math.min(picks.length, 2)}/2 mascotes para o grupo</span></div>
           <div className="mt-4 space-y-5">
             {(["ONLINE", "SLOW"] as const).map((roomPace) => {
               const rooms = data.rooms.filter((room) => room.pace === roomPace);
@@ -1032,15 +1036,15 @@ export function TowerLobby() {
                   disabled={pending || room.members.length >= 3}
                   onClick={() =>
                     start(async () => {
-                      if (!role || picks.length !== 2) {
-                        document.getElementById("tower-room-setup")?.scrollIntoView({ behavior: "smooth", block: "start" });
+                      if (!role || picks.length < 2) {
+                        document.getElementById(!role ? "tower-role-setup" : "tower-mascots-setup")?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
                         toast.info("Escolha a classe e dois mascotes para entrar nesta sala.");
                         return;
                       }
                       const res = await joinTowerRoomAction({
                         runId: room.id,
                         expeditionRole: role,
-                        mascotIds: picks,
+                        mascotIds: picks.slice(0, 2),
                         stanceByMascot: stances,
                       });
                       if ("error" in res) toast.error(res.error);
@@ -1052,7 +1056,7 @@ export function TowerLobby() {
                   }
                   className="mt-3 w-full rounded-lg border border-purple-400/40 bg-purple-400/10 py-2 text-xs font-black text-purple-200 disabled:opacity-40"
                 >
-                  {picks.length === 2 && role ? "Entrar nesta sala" : "Configurar equipe para entrar"}
+                  {picks.length >= 2 && role ? "Entrar nesta sala com os 2 ativos" : "Configurar equipe para entrar"}
                 </button>
               </article>
                 ))}</div>}
@@ -1064,6 +1068,17 @@ export function TowerLobby() {
 
       {view === "ROOMS" && (
         <>
+          <section className={card} aria-label="Perfil da expedição">
+            <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">Formato da expedição</h2>
+            <p className="mt-1 text-xs leading-5 text-slate-400">O perfil fica fixo ao criar a sala. O combate e a recuperação seguem regras próprias para Solo e Grupo; ambos percorrem os sete andares.</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              {([[
+                "SOLO", "Solo · 1 treinador", "4 mascotes: 2 ativos + 2 reservas. As reservas entram no mesmo combate se os dois ativos caírem.",
+              ], [
+                "GROUP", "Grupo · 2 ou 3 treinadores", "2 mascotes por pessoa. Frentes podem se separar e, se cumprirem objetivos simultâneos, guardar vantagem para o chefe.",
+              ]] as const).map(([value, title, description]) => <button key={value} type="button" aria-pressed={partyProfile === value} onClick={() => { setPartyProfile(value); setPicks((current) => value === "GROUP" ? current.slice(0, 2) : current); }} className={`rounded-xl border p-3 text-left transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-cyan-300 ${partyProfile === value ? "border-cyan-300 bg-cyan-300/10 text-cyan-100" : "border-slate-700 bg-black/20 text-slate-300 hover:border-cyan-300/40"}`}><b className="block text-sm">{title}</b><span className="mt-1 block text-xs leading-5">{description}</span></button>)}
+            </div>
+          </section>
           {/* Ritmo */}
           <section id="tower-room-setup" className={`${card} scroll-mt-28`}>
             <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
@@ -1103,7 +1118,7 @@ export function TowerLobby() {
           </section>
 
           {/* Função de Expedição */}
-          <section className={card}>
+          <section id="tower-role-setup" className={`${card} scroll-mt-28`}>
             <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
               Função de Expedição
             </h2>
@@ -1150,20 +1165,19 @@ export function TowerLobby() {
           </section>
 
           {/* Mascotes */}
-          <section className={card}>
+          <section id="tower-mascots-setup" className={`${card} scroll-mt-28`}>
             <div className="flex items-center justify-between">
               <h2 className="text-sm font-black uppercase tracking-widest text-[#FFCB05]">
-                Seus 2 mascotes
+                {partyProfile === "SOLO" ? "Seus 4 mascotes · formação 2+2" : "Seus 2 mascotes"}
               </h2>
               <span
-                className={`text-xs font-bold ${picks.length === 2 ? "text-[#FFCB05]" : "text-slate-500"}`}
+                className={`text-xs font-bold ${picks.length === requiredMascots ? "text-[#FFCB05]" : "text-slate-500"}`}
               >
-                {picks.length}/2
+                {picks.length}/{requiredMascots}
               </span>
             </div>
             <p className="mt-1 text-[11px] text-slate-500">
-              Eles entram em Survivor e carregam o estado entre combates dentro
-              da Torre.
+              {partyProfile === "SOLO" ? "A ordem importa: slots 1–2 lutam primeiro; slots 3–4 aguardam na reserva. HP e K.O. persistem na run." : "Os dois lutam juntos e carregam HP e K.O. entre combates."}
             </p>
             <div className="mt-3 grid gap-2 sm:grid-cols-[1fr_220px]">
               <input
@@ -1256,31 +1270,13 @@ export function TowerLobby() {
                             C{m.statCharisma}
                           </span>
                         </span>
-                        {checked && selectedRole && (
-                          <select
-                            value={stances[m.id] ?? selectedRole.stances[0]}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={(e) =>
-                              setStances((cur) => ({
-                                ...cur,
-                                [m.id]: e.target.value,
-                              }))
-                            }
-                            className="mt-1 w-full rounded border border-cyan-400/30 bg-slate-950 p-1 text-[9px] text-cyan-200"
-                          >
-                            {selectedRole.stances.map((s) => (
-                              <option key={s} value={s}>
-                                {getCombatRoleLabel(s)}
-                              </option>
-                            ))}
-                          </select>
-                        )}
                       </span>
                     </button>
                   );
                 })}
               </div>
             )}
+            {picks.length > 0 && <div className="mt-4 grid gap-2 sm:grid-cols-2" aria-label="Ordem da formação">{picks.map((id, index) => { const mascot = data.mascots.find((entry) => entry.id === id); if (!mascot) return null; return <div key={id} className={`min-w-0 rounded-xl border p-2 ${index < 2 ? "border-cyan-300/35 bg-cyan-300/5" : "border-violet-300/35 bg-violet-300/5"}`}><div className="flex items-center gap-2"><span className="grid h-7 w-7 shrink-0 place-items-center rounded-full bg-slate-800 text-xs font-black text-white">{index + 1}</span><img src={getStaticSpriteUrl(mascot.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]"/><div className="min-w-0 flex-1"><b className="block truncate text-xs text-white">{mascot.name}</b><small className="text-[10px] text-slate-400">{index < 2 ? "Ativo" : "Reserva"}</small></div><button type="button" aria-label={`Mover ${mascot.name} para cima`} disabled={index === 0} onClick={() => setPicks((current) => { const next = [...current]; [next[index - 1], next[index]] = [next[index], next[index - 1]]; return next; })} className="rounded border border-slate-600 px-2 py-1 text-xs text-white disabled:opacity-30">↑</button><button type="button" aria-label={`Remover ${mascot.name}`} onClick={() => toggle(id)} className="rounded border border-red-400/30 px-2 py-1 text-xs text-red-200">×</button></div>{selectedRole && <label className="mt-2 block text-[10px] text-slate-400">Postura<select value={stances[id] ?? selectedRole.stances[0]} onChange={(event) => setStances((current) => ({ ...current, [id]: event.target.value }))} className="mt-1 w-full rounded-lg border border-cyan-300/25 bg-slate-950 p-1.5 text-xs text-cyan-100">{selectedRole.stances.map((stance) => <option key={stance} value={stance}>{getCombatRoleLabel(stance)}</option>)}</select></label>}</div>; })}</div>}
             {filteredMascots.length > 16 && (
               <div className="mt-3 flex items-center justify-center gap-3">
                 <button
@@ -1310,7 +1306,7 @@ export function TowerLobby() {
             onClick={create}
             disabled={
               pending ||
-              picks.length !== 2 ||
+              picks.length !== requiredMascots ||
               !role ||
               Boolean(data.nextEntryAt)
             }

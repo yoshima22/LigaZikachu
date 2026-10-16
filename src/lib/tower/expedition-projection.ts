@@ -1,5 +1,6 @@
 import type { TowerExpeditionV2 } from "./expedition-state";
 import { canUseRecoveryRoom } from "./recovery-rules";
+import { bossOverloadValue } from "./pressure-rules";
 import { canStartBoss } from "./room-resolver";
 import { shortestKnownPath, towerCanLeaveRoom, towerKnownExits } from "./route-rules";
 import { towerRouteKey, type TowerRoomKind } from "./rooms";
@@ -82,6 +83,7 @@ export function projectExpeditionForMember(
     },
     pressureExplanation: { value: state.pressure, lastChange: state.lastPressureChange?.applied ?? 0,
       reasons: state.lastPressureChange?.reasons ?? [], activeFronts: new Set(members.filter((member) => member.status === "ACTIVE").map((member) => member.roomId)).size },
+    bossAdvantage: { percent: Math.round(bossOverloadValue(state) * 100), available: bossOverloadValue(state) > 0 },
     floorLoot: (state.rewardLedger ?? []).map((entry) => ({ id: entry.id, floor: entry.floor, label: entry.label, status: entry.status })),
   };
 }
