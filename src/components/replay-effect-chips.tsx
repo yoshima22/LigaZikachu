@@ -3,9 +3,10 @@
 // Verde: buff · Vermelho: debuff · Azul: proteção · Roxo: personalidade · Amarelo: item.
 // Combates antigos sem notas simplesmente não geram chips.
 
-type EffectKind = "buff" | "debuff" | "protection" | "personality" | "item" | "neutral";
+type EffectKind = "ability" | "buff" | "debuff" | "protection" | "personality" | "item" | "neutral";
 
 const KIND_STYLE: Record<EffectKind, { emoji: string; cls: string }> = {
+  ability:     { emoji: "", cls: "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200 font-semibold" },
   buff:        { emoji: "🟢", cls: "border-green-500/30 bg-green-500/10 text-green-300" },
   debuff:      { emoji: "🔴", cls: "border-red-500/30 bg-red-500/10 text-red-300" },
   protection:  { emoji: "🔵", cls: "border-blue-500/30 bg-blue-500/10 text-blue-300" },
@@ -16,6 +17,7 @@ const KIND_STYLE: Record<EffectKind, { emoji: string; cls: string }> = {
 
 // Ordem importa: a primeira regra que casar define a categoria da frase.
 const RULES: Array<{ kind: EffectKind; re: RegExp }> = [
+  { kind: "ability",     re: /^✨/ },
   { kind: "personality", re: /personalidade|instinto confuso|último ato|dramático .*(sobreviv|hp)|volatilidade|leal .*(protege|defende)/i },
   { kind: "debuff",      re: /travessura|reduziu|resistência aplicada|sabotador|bloqueou|debuff|menos \d/i },
   { kind: "protection",  re: /guardião|absorveu|protegeu|sobrevivente|desviou|preparou defesa|interceptou|resistiu ao golpe/i },

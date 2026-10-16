@@ -3,6 +3,8 @@
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { EffectChips } from "@/components/replay-effect-chips";
+import { AbilityStateChip } from "@/components/ability-lineup";
+import { getAbilityInfo } from "@/lib/abilities";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { X, Timer, Zap, Shield, Skull, ChevronRight, Sparkles, Pause, Play } from "lucide-react";
@@ -91,7 +93,8 @@ type AnimTurn = {
   effect?: string;
 };
 
-type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number };
+type MascotAbility = { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null };
+type MascotInfo = { id: string; pokemonId: number; name: string; level: number; maxHp: number; slot?: number; ability?: MascotAbility | null };
 
 // ── Animação de combate ───────────────────────────────────────────────────────
 function HpBar({ current, max, playbackRate = 1 }: { current: number; max: number; playbackRate?: number }) {
@@ -126,7 +129,9 @@ function MascotPanel({
   isPlayer,
   playbackRate,
   isPaused,
+  abilityFlash = false,
 }: {
+  abilityFlash?: boolean;
   mascot: MascotInfo;
   currentHp: number;
   isActive: boolean;
@@ -142,10 +147,15 @@ function MascotPanel({
     <div className={`min-w-0 rounded-xl border p-1.5 sm:p-2 transition-all duration-200 ${
       dead
         ? "border-slate-800 bg-slate-950/40 opacity-30 grayscale"
-        : isActive
-          ? "border-[#FFCB05]/70 bg-[#FFCB05]/10 shadow-[0_0_18px_rgba(255,203,5,0.18)]"
-          : "border-border/60 bg-slate-950/60 opacity-80"
+        : abilityFlash
+          ? "border-fuchsia-400/80 bg-fuchsia-500/15 shadow-[0_0_22px_rgba(217,70,239,0.45)] animate-pulse"
+          : isActive
+            ? "border-[#FFCB05]/70 bg-[#FFCB05]/10 shadow-[0_0_18px_rgba(255,203,5,0.18)]"
+            : "border-border/60 bg-slate-950/60 opacity-80"
     }`}>
+      {abilityFlash && mascot.ability && (
+        <span className="mb-0.5 block truncate text-center text-[8px] font-black text-fuchsia-200">✨ {getAbilityInfo(mascot.ability.slug)?.name}</span>
+      )}
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
         key={`${mascot.id}-hit-${isHit}`}
@@ -167,6 +177,12 @@ function MascotPanel({
       <span className={`block truncate text-center text-[8px] font-semibold sm:text-[9px] ${isPlayer ? "text-blue-300" : "text-red-300"}`}>
         {mascot.name} - Nv.{mascot.level}
       </span>
+      {mascot.ability && (
+        <div className="text-center">
+          {mascot.slot !== undefined && <span className="text-[7px] font-bold text-slate-500">slot {mascot.slot} </span>}
+          <AbilityStateChip slug={mascot.ability.slug} state={mascot.ability.state} reason={mascot.ability.reason} compact />
+        </div>
+      )}
       <div className="mt-1 w-full">
         <HpBar current={currentHp} max={mascot.maxHp} playbackRate={playbackRate} />
       </div>
@@ -273,6 +289,12 @@ function BattleAnimationModal({
   const defenderLevel = turn ? allReplayMascots.find(m => m.id === turn.defenderId)?.level : undefined;
   const progress = turns.length > 0 ? Math.round((currentIdx / turns.length) * 100) : 100;
   const showDamage = phase === "hit";
+  const abilityFlashFor = (m: MascotInfo) =>
+    !!turn && phase !== "wait" && !!m.ability && (
+      turn.action === "ABILITY"
+        ? turn.attackerId === m.id
+        : !!turn.effect && turn.effect.split(/(?<=[.!])\s+/).some(sentence => sentence.startsWith("✨") && sentence.includes(` de ${m.name}`))
+    );
 
   return (
     <>
@@ -359,6 +381,7 @@ function BattleAnimationModal({
                     isPlayer
                     playbackRate={playbackRate}
                     isPaused={isPaused}
+                    abilityFlash={abilityFlashFor(m)}
                   />
                 ))}
               </div>
@@ -401,6 +424,7 @@ function BattleAnimationModal({
                     isPlayer={false}
                     playbackRate={playbackRate}
                     isPaused={isPaused}
+                    abilityFlash={abilityFlashFor(m)}
                   />
                 ))}
               </div>

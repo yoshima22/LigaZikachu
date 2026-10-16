@@ -10,6 +10,8 @@ import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TRAINING_ABILITY_ROOM } from "@/lib/arena-z-training";
+import { resolveAbilitySlug } from "@/lib/abilities";
+import { AbilityLineupPanel } from "@/components/ability-lineup";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
 export interface ValidMascot {
@@ -25,6 +27,8 @@ export interface ValidMascot {
   statInstinct: number;
   statCharisma: number;
   preferredCombatRole?: string | null;
+  abilityChoice?: string | null;
+  hiddenAbilityUnlocked?: boolean;
   arenaState: string;
   restingUntil: string | null;
   arenaEntryCooldownUntil: string | null;
@@ -349,6 +353,15 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
   const [isTraining, setIsTraining] = useState(false);
   const [abilityTraining, setAbilityTraining] = useState(false);
+  const moveSelected = useCallback((index: number, delta: number) => {
+    setSelected(prev => {
+      const ids = [...prev];
+      const target = index + delta;
+      if (target < 0 || target >= ids.length) return prev;
+      [ids[index], ids[target]] = [ids[target], ids[index]];
+      return new Set(ids);
+    });
+  }, []);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
@@ -557,7 +570,25 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
 
       {/* ── Barra de seleção ── */}
       {selected.size > 0 && (
+        <>
         <SelectedBar mascots={mascots} selected={selected} roles={roles} onRoleChange={changeRole} onRemove={toggle} roomLevel={isTraining ? 100 : roomLevel} />
+        {isTraining && abilityTraining && (
+          <AbilityLineupPanel
+            onMove={moveSelected}
+            mascots={[...selected].flatMap(id => {
+              const m = mascots.find(x => x.id === id);
+              if (!m) return [];
+              return [{
+                id: m.id,
+                name: displayName(m),
+                pokemonId: m.pokemonId,
+                ability: resolveAbilitySlug({ pokemonId: m.pokemonId, choice: m.abilityChoice, hiddenUnlocked: Boolean(m.hiddenAbilityUnlocked), mode: "REAL" }),
+                stats: { force: m.statForce, agility: m.statAgility, charisma: m.statCharisma, instinct: m.statInstinct, vitality: m.statVitality },
+              }];
+            })}
+          />
+        )}
+        </>
       )}
 
       {/* ── Configurações fixas (nome + sala) ── */}
@@ -599,7 +630,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             ))}
           </div>
           {isTraining && abilityTraining
-            ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Usa a habilidade escolhida no mascote; a oculta é livre para teste. Só enfrenta equipes da mesma sala ou o bot.</p>
+            ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Usa a habilidade escolhida no mascote (a oculta só vale se o mascote usou o TM). Só enfrenta equipes da mesma sala ou o bot.</p>
             : isTraining
             ? <p className="mt-1.5 text-[9px] text-sky-500">Treino: sem limite de nível, sem loot, sem lesões, sem impacto no ranking.</p>
             : <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>

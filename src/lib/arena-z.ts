@@ -58,7 +58,7 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type AbilityRuntime, type DebuffEvent } from "@/lib/abilities/combat";
 import { TRAINING_ABILITY_ROOM, isAbilityTrainingTeam } from "@/lib/arena-z-training";
-import { buildTrainingAbilityLineup } from "@/lib/arena-z-training-abilities";
+import { buildTrainingAbilityPlan } from "@/lib/arena-z-training-abilities";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -3016,6 +3016,7 @@ export async function runBotBattle(
               arenaState: true,
               restingUntil: true,
               abilityChoice: true,
+              hiddenAbilityUnlocked: true,
             },
           },
         },
@@ -3131,12 +3132,13 @@ export async function runBotBattle(
       toArenaMascot({ ...m.mascot, combatRole: m.combatRole }),
     );
     const bot = buildBotOpponent(attackers, difficulty);
+    const abilityPlan = isAbilityTrainingTeam(team)
+      ? buildTrainingAbilityPlan(team.members.map((m) => m.mascot))
+      : null;
     const combat = runArenaCombat(
       attackers,
       bot.defenders,
-      isAbilityTrainingTeam(team)
-        ? { abilities: buildTrainingAbilityLineup(team.members.map((m) => m.mascot)) }
-        : undefined,
+      abilityPlan ? { abilities: abilityPlan.lineup } : undefined,
     );
     const won = combat.result === "ATTACKER_WIN";
     const allMascots = new Map(
@@ -3156,12 +3158,14 @@ export async function runBotBattle(
       stolenByBotLoot: null,
       injuredMascotIds: [],
       injuredMascots: [],
-      playerMascots: attackers.map((m) => ({
+      playerMascots: attackers.map((m, i) => ({
         id: m.id,
         pokemonId: m.pokemonId,
         name: m.name,
         level: m.level,
         maxHp: m.hp,
+        slot: i + 1,
+        ability: abilityPlan?.states[m.id] ?? null,
       })),
       botMascots: bot.defenders.map((m) => ({
         id: m.id,
@@ -4078,6 +4082,7 @@ export async function runPvpBattle(
     arenaState: true,
     restingUntil: true,
     abilityChoice: true,
+    hiddenAbilityUnlocked: true,
   } as const;
   const [attackTeam, defenseTeam] = await Promise.all([
     prisma.arenaTeam.findUnique({
@@ -4220,16 +4225,13 @@ export async function runPvpBattle(
     defenders,
     await getBondCombatModifier(defenders.map((m) => m.id)),
   );
+  const attackPlan = isAbilityTraining ? buildTrainingAbilityPlan(attackTeam.members.map((m) => m.mascot)) : null;
+  const defensePlan = isAbilityTraining ? buildTrainingAbilityPlan(defenseTeam.members.map((m) => m.mascot)) : null;
   const combat = runArenaCombat(
     attackers,
     defenders,
-    isAbilityTraining
-      ? {
-          abilities: {
-            ...buildTrainingAbilityLineup(attackTeam.members.map((m) => m.mascot)),
-            ...buildTrainingAbilityLineup(defenseTeam.members.map((m) => m.mascot)),
-          },
-        }
+    attackPlan && defensePlan
+      ? { abilities: { ...attackPlan.lineup, ...defensePlan.lineup } }
       : undefined,
   );
   const attackerWon = combat.result === "ATTACKER_WIN";
@@ -4611,19 +4613,23 @@ export async function runPvpBattle(
     loserTeamDefeated: isTrainingBattle ? false : loserTeamDefeated,
     playerTeamName: attackTeam.player.displayName,
     botName: defenseTeam.player.displayName,
-    playerMascots: attackers.map((m) => ({
+    playerMascots: attackers.map((m, i) => ({
       id: m.id,
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
       maxHp: m.hp,
+      slot: i + 1,
+      ability: attackPlan?.states[m.id] ?? null,
     })),
-    botMascots: defenders.map((m) => ({
+    botMascots: defenders.map((m, i) => ({
       id: m.id,
       pokemonId: m.pokemonId,
       name: m.name,
       level: m.level,
       maxHp: m.hp,
+      slot: i + 1,
+      ability: defensePlan?.states[m.id] ?? null,
     })),
     // Cada alvo só aparece uma vez: o golpe que zera o HP dele. Esta lista é
     // consumida por objetivos como “consiga um KO contra mascote do tipo Água”.

@@ -192,6 +192,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             primaryTypeOverride: true, secondaryTypeOverride: true,
             arenaState: true, restingUntil: true, injuredAt: true,
             bazarListed: true, happiness: true, preferredCombatRole: true,
+            abilityChoice: true, hiddenAbilityUnlocked: true,
             statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
             expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true } },
             routine: { select: { status: true } },
@@ -566,7 +567,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
               <div className="border-t border-sky-500/20 px-5 py-4 space-y-4">
                 <p className="text-xs leading-relaxed text-sky-100/70">
                   Combates de treino não geram cofre (ZC ou EXP), não afetam ranking, não lesionam mascotes e não os expulsam da equipe. Um jogador pode atacar suas próprias equipes. Equipes de treino contam no limite de equipes simultâneas.
-                  {ability && " Aqui as habilidades passivas dos mascotes valem (a oculta é livre para teste) — só nesta sala. Enfrenta apenas equipes desta mesma sala ou o bot."}
+                  {ability && " Aqui as habilidades passivas dos mascotes valem (a oculta só vale com o TM) — só nesta sala. Enfrenta apenas equipes desta mesma sala ou o bot."}
                 </p>
                 {room.teams.length === 0 ? (
                   <p className="text-xs text-sky-400/60">Nenhuma equipe de treinamento na arena.</p>
@@ -1220,6 +1221,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                 statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
                 preferredCombatRole: m.preferredCombatRole,
+                abilityChoice: m.abilityChoice, hiddenAbilityUnlocked: m.hiddenAbilityUnlocked,
                 arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                 arenaEntryCooldownUntil: null,
               }))} />
