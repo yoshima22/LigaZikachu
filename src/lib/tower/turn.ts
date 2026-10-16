@@ -4,7 +4,7 @@
 
 import { EggType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat } from "./balance-rules";
+import { towerAddCaptive, towerBalanceFor, towerBossDefenderCount, towerEnemyBaseStat } from "./balance-rules";
 import {
   resolveEncounterTurn,
   type TowerBattleState,
@@ -149,6 +149,7 @@ async function resolveV2RoomFronts(
   const talentValue = (key: string) => talentRows.find((entry) => entry.metricKey === `TALENT:${key}`)?.value ?? 0;
   const talentFx = resolveTowerTalents(talentValue);
   const soloWaves = run.partyProfile === "SOLO" && run.balanceVersion === 2;
+  const balance = towerBalanceFor(run.partyProfile, run.balanceVersion);
   let next = state;
   const log: string[] = [];
   const fronts: RoomFrontResult[] = [];
@@ -170,7 +171,7 @@ async function resolveV2RoomFronts(
         ? snapshots.filter((snapshot) => next.members[snapshot.member.userId]?.status === "ACTIVE" && snapshot.currentHp > 0).length
         : 0);
       let preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
-      if (currentRoom.kind === "BOSS") preview.length = towerBossDefenderCount(allyCount, run.currentFloor);
+      if (currentRoom.kind === "BOSS") preview.length = towerBossDefenderCount(allyCount, run.currentFloor, balance);
       if (currentRoom.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
       const reservedCaptives = new Set(Object.values(next.rooms).flatMap((savedRoom) =>
         savedRoom.encounter?.enemies.flatMap((enemy) => enemy.captiveMascotId ? [enemy.captiveMascotId] : []) ?? []));
@@ -189,7 +190,7 @@ async function resolveV2RoomFronts(
           name: `${captive.nickname ?? getPokemonName(captive.pokemonId)} · cativo da Torre`,
           level: captive.level,
           captiveMascotId: candidate.mascotId,
-        } as typeof preview[number], currentRoom.kind, run.currentFloor, allyCount);
+        } as typeof preview[number], currentRoom.kind, run.currentFloor, allyCount, balance);
       }
       next = freezeRoomEncounter(next, roomId, preview, currentRoom.kind === "BOSS" ? 2 : 1);
     }
@@ -239,7 +240,7 @@ async function resolveV2RoomFronts(
         (1 + next.pressure * talentFx.enemyPressureScale) *
         (1 - Math.max(temporaryOverload, bankedOverload));
       const enemies: LeagueMascot[] = preview.map((enemy, index) => {
-        const base = towerEnemyBaseStat(averageLevel, room.index, pressureMult, run.currentFloor);
+        const base = towerEnemyBaseStat(averageLevel, room.index, pressureMult, run.currentFloor, balance, run.members.length);
         const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
         return {
           id: `tower:${run.id}:${room.id}:${index}`,
@@ -1123,7 +1124,7 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
             ownerUserId: mascot.ownerUserId,
             currentHp: mascot.currentHp,
             maxHp: mascot.maxHp,
-          })));
+          })), towerBalanceFor(run.partyProfile, run.balanceVersion));
           nextState = transition.state;
           for (const [mascotId, currentHp] of Object.entries(transition.healingByMascotId))
             await tx.towerRunMascot.updateMany({

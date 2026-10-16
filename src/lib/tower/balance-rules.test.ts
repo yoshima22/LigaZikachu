@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { TOWER_BALANCE, towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat } from "./balance-rules";
+import { TOWER_BALANCE, TOWER_BALANCE_GROUP_V2, TOWER_BALANCE_SOLO_V2, towerAddCaptive, towerBalanceFor, towerBossDefenderCount, towerEnemyBaseStat } from "./balance-rules";
 
 test("enemy stat tuning applies only to its intended floor band", () => {
   const experiment = { firstFloorEnemyScale: 0.95, firstBossEscortReduction: 0, lateFloorEnemyScale: 1.08 };
@@ -40,4 +40,15 @@ test("live V2 balance eases only the first floor", () => {
   assert.equal(TOWER_BALANCE.lateFloorEnemyScale, 1);
   assert.equal(towerBossDefenderCount(6, 1), 4);
   assert.equal(towerBossDefenderCount(6, 2), 6);
+});
+
+test("solo and group V2 have distinct curves while null profile stays legacy", () => {
+  assert.deepEqual(towerBalanceFor(null, null), TOWER_BALANCE);
+  assert.deepEqual(towerBalanceFor("SOLO", 2), TOWER_BALANCE_SOLO_V2);
+  assert.deepEqual(towerBalanceFor("GROUP", 2), TOWER_BALANCE_GROUP_V2);
+  assert.notDeepEqual(TOWER_BALANCE_SOLO_V2, TOWER_BALANCE_GROUP_V2);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 2),
+    towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 3));
+  assert.ok(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE_GROUP_V2, 2) <
+    towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE_GROUP_V2, 3));
 });

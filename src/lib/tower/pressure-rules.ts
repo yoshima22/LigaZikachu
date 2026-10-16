@@ -1,6 +1,7 @@
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import type { RoomFrontResult } from "./room-resolver";
 import { generateTowerRoomGraph, towerPressureModifiers } from "./rooms";
+import type { TowerBalance } from "./balance-rules";
 
 /** Initial design values; the simulator can change these before public opening. */
 export const TOWER_BALANCE_SEED = {
@@ -138,12 +139,13 @@ export function transitionFloor(
   nextFloor: number,
   seed: string,
   mascots: TowerMascotVitals[],
+  balance?: Readonly<TowerBalance>,
 ): { state: TowerExpeditionV2; healingByMascotId: Record<string, number> } {
   if (!Number.isInteger(nextFloor) || nextFloor < 2 || nextFloor > 7)
     throw new Error("Andar de destino inválido.");
   const fresh = newExpeditionState(generateTowerRoomGraph(seed, nextFloor), Object.keys(state.members));
   const entranceId = fresh.currentRoomId;
-  const pressure = Math.max(0, state.pressure - TOWER_BALANCE_SEED.floorPressureRelief);
+  const pressure = Math.max(0, state.pressure - (balance?.floorPressureRelief ?? TOWER_BALANCE_SEED.floorPressureRelief));
   const members = Object.fromEntries(Object.entries(state.members).map(([id, member]) => [id, {
     ...member,
     roomId: entranceId,
@@ -152,7 +154,7 @@ export function transitionFloor(
   const healingByMascotId: Record<string, number> = {};
   for (const mascot of mascots) {
     if (state.members[mascot.ownerUserId]?.status !== "ACTIVE" || mascot.currentHp <= 0) continue;
-    const nextHp = Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * TOWER_BALANCE_SEED.floorHealingFraction));
+    const nextHp = Math.min(mascot.maxHp, mascot.currentHp + Math.round(mascot.maxHp * (balance?.floorHealingFraction ?? TOWER_BALANCE_SEED.floorHealingFraction)));
     healingByMascotId[mascot.mascotId] = nextHp;
   }
   return {

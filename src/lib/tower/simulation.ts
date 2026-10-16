@@ -3,7 +3,7 @@
 import { getPokemonTypes } from "@/lib/mascot-data";
 import { type LeagueMascot } from "@/lib/league-combat";
 import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
-import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat, type TowerBalance } from "./balance-rules";
+import { towerAddCaptive, towerBalanceFor, towerBossDefenderCount, towerEnemyBaseStat, type TowerBalance } from "./balance-rules";
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
 import { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
@@ -18,9 +18,14 @@ import { moveMember, shortestKnownPath, towerCanLeaveRoom } from "./route-rules"
 import { resolveTowerTalents } from "./talents";
 
 export type BuildTier = "ZERO" | "INTERMEDIATE" | "PREPARED";
+export type TowerSimulationScenario = {
+  speciesIds?: readonly number[];
+  statOffset?: number;
+  roles?: readonly string[];
+};
 export type TowerSimulationReport = {
-  seed: string; partySize: 1 | 2 | 3; buildTier: BuildTier; pace: "ONLINE" | "SLOW";
-  routePolicy: "UNITED" | "SPLIT"; outcome: "WIN" | "LOSS" | "TURN_LIMIT";
+  seed: string; partySize: 1 | 2 | 3; partyProfile: "SOLO" | "GROUP"; balanceVersion: 2; buildTier: BuildTier; pace: "ONLINE" | "SLOW";
+  routePolicy: "UNITED" | "SPLIT" | "STRATEGIC_SPLIT"; outcome: "WIN" | "LOSS" | "TURN_LIMIT";
   floorReached: number; bossesDefeated: number; turns: number; pressurePeak: number;
   preBossPressure: number[]; afkRate: number; missedWindows: number; afkAbandoned: number;
   bossDefenderCounts: number[];
@@ -73,16 +78,52 @@ function nextRoom(room: TowerRoomNode, memberIndex: number, floor: number, polic
   return room.connections[policy === "UNITED" ? 0 : (memberIndex + floor) % room.connections.length];
 }
 
+function shortestForwardPath(state: TowerExpeditionV2, from: string, to: string): string[] | null {
+  const queue: string[][] = [[from]];
+  const visited = new Set([from]);
+  while (queue.length) {
+    const path = queue.shift()!;
+    const roomId = path[path.length - 1];
+    if (roomId === to) return path;
+    const room = state.graph.find((entry) => entry.id === roomId);
+    for (const next of room?.connections ?? []) {
+      if (visited.has(next)) continue;
+      visited.add(next);
+      queue.push([...path, next]);
+    }
+  }
+  return null;
+}
+
+/** Planejamento idealizado offline: convergir pela menor rota adiante já desenhada no mapa. */
+export function strategicReunionPaths(state: TowerExpeditionV2): Record<string, string[]> {
+  const active = Object.entries(state.members).filter(([, member]) => member.status === "ACTIVE");
+  if (active.length < 2 || new Set(active.map(([, member]) => member.roomId)).size < 2) return {};
+  const options = state.graph.flatMap((room) => {
+    const paths = active.map(([id, member]) => [id, shortestForwardPath(state, member.roomId, room.id)] as const);
+    if (paths.some(([, path]) => !path)) return [];
+    const valid = paths as [string, string[]][];
+    return [{ roomId: room.id, paths: Object.fromEntries(valid),
+      max: Math.max(...valid.map(([, path]) => path.length)),
+      sum: valid.reduce((total, [, path]) => total + path.length, 0) }];
+  }).sort((left, right) => left.max - right.max || left.sum - right.sum || left.roomId.localeCompare(right.roomId));
+  return options[0]?.paths ?? {};
+}
+
 export function simulateTower(
   seed: string, partySize: 1 | 2 | 3, buildTier: BuildTier,
-  pace: "ONLINE" | "SLOW", routePolicy: "UNITED" | "SPLIT", afkRate = 0,
+  pace: "ONLINE" | "SLOW", routePolicy: "UNITED" | "SPLIT" | "STRATEGIC_SPLIT", afkRate = 0,
   balance?: Readonly<TowerBalance>,
   firstBossCaptive = false,
+  scenario: TowerSimulationScenario = {},
 ): TowerSimulationReport {
   if (!seed || ![1, 2, 3].includes(partySize) || !Number.isFinite(afkRate) || afkRate < 0 || afkRate > 1)
     throw new Error("Parâmetros da simulação inválidos.");
   const tier = TIERS[buildTier];
+  const stat = Math.max(1, tier.stat + (scenario.statOffset ?? 0));
+  const effectiveBalance = balance ?? towerBalanceFor(partySize === 1 ? "SOLO" : "GROUP", 2);
   const memberIds = Array.from({ length: partySize }, (_, index) => `treinador-${index + 1}`);
+  const roleByMember = memberIds.map((_, index) => scenario.roles?.[index] ?? ROLES[index]);
   let state = newExpeditionState(generateTowerRoomGraph(seed), memberIds);
   const random = seededRandom(`${seed}:${partySize}:${buildTier}`);
   const afkRandom = seededRandom(`afk:${seed}:${partySize}:${buildTier}:${afkRate}`);
@@ -91,9 +132,9 @@ export function simulateTower(
   state.pressureShield = talentFx.pressureShieldStart;
   const mascots: SimMascot[] = memberIds.flatMap((ownerId, index) =>
     Array.from({ length: partySize === 1 ? 4 : 2 }, (_, slot) => {
-    const maxHp = 55 + tier.level * 6 + tier.stat * 4;
-    return { id: `${ownerId}-${slot}`, ownerId, pokemonId: [448, 196, 25, 94, 197, 609][index * 2 + slot],
-      level: tier.level, stat: tier.stat, maxHp, hp: maxHp,
+    const maxHp = 55 + tier.level * 6 + stat * 4;
+    return { id: `${ownerId}-${slot}`, ownerId, pokemonId: scenario.speciesIds?.[index * 2 + slot] ?? [448, 196, 25, 94, 197, 609][index * 2 + slot],
+      level: tier.level, stat, maxHp, hp: maxHp,
       formationSlot: slot + 1,
       combatRole: (partySize === 1 ? SOLO_STANCES[slot] : STANCES[index][slot]) as LeagueMascot["combatRole"] };
   }));
@@ -172,13 +213,18 @@ export function simulateTower(
     if (regroupTarget && state.rooms[regroupTarget]?.cleared) regroupTarget = null;
     if (!regroupTarget && Object.values(state.members).some((member) => member.status === "ACTIVE" && state.graph.find((room) => room.id === member.roomId)?.kind === "BOSS"))
       regroupTarget = Object.entries(state.rooms).find(([roomId, saved]) => roomId !== "boss" && !saved.cleared && saved.encounter)?.[0] ?? null;
+    const strategicPaths = routePolicy === "STRATEGIC_SPLIT" && state.bossOverloadAwarded
+      ? strategicReunionPaths(state) : {};
     const movedThisTurn = new Set<string>();
     for (const [index, memberId] of memberIds.entries()) {
       const member = state.members[memberId];
       if (member.status !== "ACTIVE" || member.availableFromTurn > turns || memberId === recoveryActorUsed || missingThisTurn.has(memberId) || !towerCanLeaveRoom(state, member.roomId)) continue;
       const room = state.graph.find((entry) => entry.id === member.roomId)!;
       const returnPath = regroupTarget && room.id !== regroupTarget ? shortestKnownPath(state, room.id, regroupTarget) : null;
-      const destination = returnPath?.[1] ?? nextRoom(room, index, floor, routePolicy);
+      const route = routePolicy === "STRATEGIC_SPLIT"
+        ? state.bossOverloadAwarded ? "UNITED" : "SPLIT"
+        : routePolicy;
+      const destination = returnPath?.[1] ?? strategicPaths[memberId]?.[1] ?? nextRoom(room, index, floor, route);
       if (destination) {
         state = moveMember(state, memberId, destination);
         movedThisTurn.add(memberId);
@@ -207,9 +253,9 @@ export function simulateTower(
           : 0);
         let preview = towerEncounterPreview(room, averageLevel, allyCount);
         if (room.kind === "BOSS") {
-          preview.length = towerBossDefenderCount(allyCount, floor, balance);
+          preview.length = towerBossDefenderCount(allyCount, floor, effectiveBalance);
           if (floor === 1 && firstBossCaptive) preview = towerAddCaptive(preview,
-            { pokemonId: 448, name: "Cativo sintético", level: averageLevel }, "BOSS", floor, allyCount, balance);
+            { pokemonId: 448, name: "Cativo sintético", level: averageLevel }, "BOSS", floor, allyCount, effectiveBalance);
           bossDefenderCounts.push(preview.length);
           bossCaptiveCounts.push(floor === 1 && firstBossCaptive ? 1 : 0);
         }
@@ -226,7 +272,7 @@ export function simulateTower(
         if (combatRoom.kind === "BOSS" && bossFightTurns[floor - 1] === undefined) bossFightTurns[floor - 1] = turns;
         const locals = mascots.filter((mascot) => presentIds.includes(mascot.ownerId) && (partySize === 1 || mascot.hp > 0));
         const allies: LeagueMascot[] = locals.map((mascot, index) => {
-          const role = ROLES[memberIds.indexOf(mascot.ownerId)];
+          const role = roleByMember[memberIds.indexOf(mascot.ownerId)];
           const classFx = resolveTowerClassEffects(role, { kind: "COMBAT" });
           const bossMult = combatRoom.kind === "BOSS" ? talentFx.bossMult : 1;
           const combatMult = 1 + talentValue("COMBAT") * 0.02 + (combatRoom.kind === "BOSS" ? talentValue("BOSS") * 0.03 : 0);
@@ -248,7 +294,7 @@ export function simulateTower(
           (1 + state.pressure * talentFx.enemyPressureScale) *
           (1 - Math.max(temporaryOverload, bankedOverload));
         const enemies: LeagueMascot[] = (state.rooms[roomId].encounter?.enemies ?? []).map((enemy, index) => {
-          const base = towerEnemyBaseStat(averageLevel, combatRoom.index, pressureMult, floor, balance);
+          const base = towerEnemyBaseStat(averageLevel, combatRoom.index, pressureMult, floor, effectiveBalance, partySize);
           const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
           return { id: `enemy-${roomId}-${index}`, ownerId: "TORRE", pokemonId: enemy.pokemonId,
             types: exclusive ? [exclusive.primaryType, "secondaryType" in exclusive ? exclusive.secondaryType : null].filter(Boolean) as string[] : getPokemonTypes(enemy.pokemonId),
@@ -278,7 +324,7 @@ export function simulateTower(
       fronts.push(result);
       for (const [id, hp] of Object.entries(result.hpByMascotId)) mascots.find((mascot) => mascot.id === id)!.hp = hp;
       if (result.interaction === "REST") {
-        const ritual = result.participantIds.some((id) => resolveTowerClassEffects(ROLES[memberIds.indexOf(id)], { kind: "REST" }).healingMult > 1) ? 1.1 : 1;
+        const ritual = result.participantIds.some((id) => resolveTowerClassEffects(roleByMember[memberIds.indexOf(id)], { kind: "REST" }).healingMult > 1) ? 1.1 : 1;
         for (const mascot of mascots.filter((entry) => result.participantIds.includes(entry.ownerId) && entry.hp > 0 &&
           (partySize !== 1 || entry.formationSlot <= 2)))
           mascot.hp = Math.min(mascot.maxHp, mascot.hp + Math.round(mascot.maxHp * 0.2 * ritual * state.activeModifiers.reduce((product, modifier) => product * modifier.healingMultiplier, 1)));
@@ -314,7 +360,7 @@ export function simulateTower(
       bossesDefeated++;
       if (floor === 7) { outcome = "WIN"; break; }
       floor++;
-      const transition = transitionFloor(state, floor, seed, mascots.map((mascot) => ({ mascotId: mascot.id, ownerUserId: mascot.ownerId, currentHp: mascot.hp, maxHp: mascot.maxHp })));
+      const transition = transitionFloor(state, floor, seed, mascots.map((mascot) => ({ mascotId: mascot.id, ownerUserId: mascot.ownerId, currentHp: mascot.hp, maxHp: mascot.maxHp })), effectiveBalance);
       state = transition.state;
       for (const [id, hp] of Object.entries(transition.healingByMascotId)) mascots.find((mascot) => mascot.id === id)!.hp = hp;
     }
@@ -324,7 +370,8 @@ export function simulateTower(
   const rewardIds = state.rewardLedger.map((entry) => entry.id);
   const grants = planRewardSettlement(state, `offline:${seed}`);
   const dropsByPlayer = Object.fromEntries(memberIds.map((id) => [id, grants.filter((grant) => grant.userId === id).length]));
-  return { seed, partySize, buildTier, pace, routePolicy, outcome, floorReached: floor, bossesDefeated, turns,
+  return { seed, partySize, partyProfile: partySize === 1 ? "SOLO" : "GROUP", balanceVersion: 2,
+    buildTier, pace, routePolicy, outcome, floorReached: floor, bossesDefeated, turns,
     pressurePeak, preBossPressure, bossDefenderCounts, bossCaptiveCounts, bossArrivalTurns, bossFightTurns, bossWaitTurns,
     bossOverloadEarnedTurns, bossOverloadConsumedTurns,
     afkRate, missedWindows, afkAbandoned,

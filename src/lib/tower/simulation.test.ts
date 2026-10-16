@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { simulateTower, simulatedAllyStat } from "./simulation";
+import { simulateTower, simulatedAllyStat, strategicReunionPaths } from "./simulation";
+import { newExpeditionState } from "./expedition-state";
+import { generateTowerRoomGraph } from "./rooms";
+import { moveMember } from "./route-rules";
 
 test("synthetic ally attributes round class and talent phases like live V2", () => {
   assert.equal(simulatedAllyStat(225, 1.1, 1.18), 293);
@@ -17,6 +20,16 @@ test("solo models four HP snapshots while a group has two per trainer", () => {
   const duo = simulateTower("formation-4", 2, "PREPARED", "ONLINE", "UNITED");
   assert.equal(solo.hpMaximum, duo.hpMaximum);
   assert.equal(solo.hpMaximum, 4 * (55 + 70 * 6 + 240 * 4));
+});
+
+test("alternate roster, stats and class order are reproducible offline", () => {
+  const scenario = { statOffset: -10, speciesIds: [25, 94, 197, 609, 448, 196],
+    roles: ["PROTETOR", "ARTIFICE", "RITUALISTA"] };
+  const first = simulateTower("alternate-1", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT", 0, undefined, false, scenario);
+  const second = simulateTower("alternate-1", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT", 0, undefined, false, scenario);
+  const baseline = simulateTower("alternate-1", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT");
+  assert.deepEqual(first, second);
+  assert.notEqual(first.hpMaximum, baseline.hpMaximum);
 });
 
 test("split first boss freezes an encounter sized for all living active trainers", () => {
@@ -44,6 +57,17 @@ test("strategic split carries a banked advantage through a long reunion", () => 
   assert.ok(report.bossOverloadConsumedTurns.length > 0);
   assert.ok(report.bossOverloadConsumedTurns[0] - report.bossOverloadEarnedTurns[0] >= 8);
   assert.ok(report.bossOverloadConsumedTurns[0] >= report.bossFightTurns[0]);
+});
+
+test("strategic reunion sends separated trainers to one reachable next room", () => {
+  const state = newExpeditionState(generateTowerRoomGraph("validate-0"), ["a", "b"]);
+  const entrance = state.graph.find((room) => room.kind === "ENTRANCE")!;
+  const left = moveMember(state, "a", entrance.connections[0]);
+  const split = moveMember(left, "b", entrance.connections[1]);
+  const routes = strategicReunionPaths(split);
+  assert.ok(routes.a?.length && routes.b?.length);
+  assert.equal(routes.a.at(-1), routes.b.at(-1));
+  assert.notEqual(routes.a[0], routes.b[0]);
 });
 
 test("solo, duo and trio across build tiers expose complete bounded metrics without duplicate loot", () => {
@@ -74,7 +98,7 @@ test("pace affects reward shards, not the same-seed combat path", () => {
 
 test("an offline prepared trio can complete all seven floors in both paces", () => {
   for (const pace of ["ONLINE", "SLOW"] as const) {
-    const report = simulateTower("matrix-0", 3, "PREPARED", pace, "UNITED");
+    const report = simulateTower("validate-11", 3, "PREPARED", pace, "UNITED");
     assert.equal(report.outcome, "WIN");
     assert.equal(report.bossesDefeated, 7);
     assert.equal(report.floorReached, 7);
@@ -83,8 +107,8 @@ test("an offline prepared trio can complete all seven floors in both paces", () 
 
 test("the tuned V2 first floor opens a boss path for an unprepared trio", () => {
   const previous = { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1 };
-  const zeroBefore = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED", 0, previous);
-  const zeroNow = simulateTower("validate-2", 3, "ZERO", "ONLINE", "UNITED");
+  const zeroBefore = simulateTower("validate-0", 3, "ZERO", "ONLINE", "UNITED", 0, previous);
+  const zeroNow = simulateTower("validate-0", 3, "ZERO", "ONLINE", "UNITED");
   assert.equal(zeroBefore.bossesDefeated, 0);
   assert.equal(zeroNow.bossesDefeated, 1);
 });
@@ -99,7 +123,7 @@ test("a small fixed cohort keeps first-boss progress possible on both routes", (
 });
 
 test("a recovery action never revives someone in the combat turn that downed them", () => {
-  const report = simulateTower("matrix-0", 3, "PREPARED", "ONLINE", "SPLIT");
+  const report = simulateTower("validate-36", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT");
   assert.ok(report.recoveryTimings.length > 0);
   for (const timing of report.recoveryTimings)
     assert.ok(timing.recoveredTurn > timing.downedTurn, JSON.stringify(timing));
@@ -117,7 +141,7 @@ test("deterministic AFK windows remove rewards from players who abandon", () => 
 });
 
 test("relic shards count only members eligible at each boss victory", () => {
-  const report = simulateTower("afk-validation-0", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
+  const report = simulateTower("afk-validation-3", 3, "PREPARED", "ONLINE", "UNITED", 0.05);
   assert.ok(report.bossesDefeated > 0 && report.afkAbandoned > 0);
   assert.equal(report.relicShards, Object.values(report.relicShardsByPlayer).reduce((sum, count) => sum + count, 0));
   assert.ok(report.relicShards < report.bossesDefeated * report.partySize * 2);

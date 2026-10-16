@@ -1,6 +1,23 @@
 # Torre dos Rebeldes V2 — validação e portão de abertura
 
-Estado em 14/10/2026: **teste fechado; não abrir ao público ainda**. Este documento complementa o retrato narrativo de agosto e descreve o motor V2. Runs V1 existentes não são convertidas silenciosamente.
+Estado em 16/10/2026: **teste fechado; não abrir ao público ainda**. Este documento complementa o retrato narrativo de agosto e descreve o motor V2. Runs V1 existentes não são convertidas silenciosamente.
+
+## Curvas Solo/Grupo — 16/10/2026
+
+Runs novas persistem perfil `SOLO` (um treinador, quatro mascotes em 2+2) ou `GROUP` (dois/três treinadores, dois mascotes cada), formação ordenada e versão de balanceamento 2. Runs sem perfil/versão mantêm a curva e a seleção de dois mascotes anteriores. O combate solo insere reservas no mesmo encontro após o K.O. dos dois ativos; HP, efeitos, replay e relatório continuam únicos. A sala de recuperação solo devolve os caídos a 50% do HP uma vez a cada dois andares, enquanto o grupo pode reanimar um aliado caído. O grupo ganha vantagem de reunião de 8% ou 16% quando resolve duas ou três salas distintas simultaneamente; ela fica guardada até o próximo combate de chefe e é consumida uma vez. A política offline `STRATEGIC_SPLIT` busca isso uma vez por andar e converge no menor caminho comum adiante.
+
+Parâmetros efetivos do modelo V2: Solo: primeiro andar `0,95`, andares 2–4 `1,00`, andares 5–7 `1,15`; Grupo: `0,88`, `1,00`, `1,05`, com escala contínua por tamanho da party de `−10,75%` para dupla e `+10,75%` para trio sobre a base inimiga. Em ambos, primeiro chefe tem duas escoltas a menos (mínimo dois defensores), transição cura 18% do HP máximo dos vivos e alivia quatro pontos de Pressão. A escala de grupo não é um terceiro perfil: é uma regra adaptativa dentro de `GROUP`. As classes/talentos e a Sobrecarga temporária seguem suas regras anteriores.
+
+Vitórias do modelo `PREPARED`, 100 sementes independentes por coorte, sem AFK nem cativo; ordem das colunas: unido / separado estrategicamente. O solo só possui rota unida.
+
+| Coorte | Solo | Dupla | Trio |
+|---|---:|---:|---:|
+| `validate-0..99` | 8/100 | 9/100 · 9/100 | 7/100 · 6/100 |
+| `holdout-0..99` | 11/100 | 7/100 · 8/100 | 6/100 · 6/100 |
+
+O `ZERO` trio venceu o primeiro chefe em 10/100 (`validate`) e 11/100 (`holdout`), mas não concluiu regularmente; `INTERMEDIATE` dupla alcançou ao menos o segundo chefe em 22/100 na validação. Isso verifica a faixa-alvo **apenas para a composição sintética preparada**, não a taxa real. Online e Lento usam o mesmo combate para a mesma semente; a diferença de ritmo é a janela e o fragmento de relíquia.
+
+Teste de sensibilidade na coorte `holdout`, em ordem Solo unido, Dupla unida/separada, Trio unido/separado: −10 em cada atributo deu `0, 0/0, 0/0`; +10 deu `33, 12/25, 91/28`; trocar espécies deu `6, 15/18, 1/1`; reordenar classes deu `24, 99/70, 8/3`. Um cativo sintético no primeiro chefe deu `10, 7/5, 10/10`; 5% de ausência por janela deu `7, 9/4, 3/2`. **A sensibilidade a composição e atributos é alta**: a calibração central não basta para liberar o evento. Precisamos amostrar mascotes/builds reais, itens e classes escolhidos pelos jogadores e observar runs humanas fechadas antes de ajustar a curva final. Não converter esses números em promessa de vitória real.
 
 ## Reproduzir as verificações
 
@@ -12,6 +29,7 @@ npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance b
 npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance current --summary-only --format json
 npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix validate --balance current --first-boss-captive synthetic --summary-only --format json
 npx tsx scripts/tower-simulate.ts --seeds 20 --seed-prefix afk-validation --balance current --afk-rates 0.05,0.15 --summary-only --format json
+npx tsx scripts/tower-simulate.ts --seeds 100 --seed-prefix holdout --balance current --routes UNITED,STRATEGIC_SPLIT --summary-only --format json
 ```
 
 O simulador não escreve no banco nem entrega recompensas. JSON traz amostras e resumo por tamanho da party, build e política de rota; CSV traz uma linha por tentativa. A semente fixa permite comparar mudanças sem ruído aleatório. Online e Lento têm o mesmo combate, mas Online concede dois fragmentos de relíquia por chefe elegível, enquanto Lento concede um. Suas janelas reais são 5 minutos e 4 horas por ação; o simulador mede turnos, não horas de calendário.
@@ -20,7 +38,7 @@ O simulador não escreve no banco nem entrega recompensas. JSON traz amostras e 
 
 `simulateTower(seed, partySize, buildTier, pace, routePolicy, afkRate = 0, balance?, firstBossCaptive = false)` percorre o grafo V2 com movimento individual, encontros por sala, combate convencional, Pressão, Sobrecarga, recuperação por andar, transição de andares e espólio pendente/garantido/perdido. O parâmetro opcional de balanceamento permite comparar variantes **somente offline**; sem ele, o simulador usa os mesmos valores da resolução V2 persistida. O modelo agora separa o turno de entrada do turno de ação, dimensiona o primeiro chefe com todos os mascotes vivos dos membros ativos e cobra espera no chefe apenas quando simula a decisão `WAIT`. Registra pressão antes de cada tentativa de chefe, recuperações com seus turnos, faltas/abandonos e concessões planejadas por jogador. A chamada síncrona fixa temporariamente a fonte de aleatoriedade do combate e a restaura depois; este código é somente para CLI/testes, nunca para uma requisição do site.
 
-Perfis sintéticos atuais (dois mascotes por treinador):
+Perfis sintéticos atuais (quatro mascotes no Solo, dois por treinador no Grupo):
 
 | Perfil | Nível | Cada atributo | Legado simulado |
 |---|---:|---:|---|
@@ -30,7 +48,7 @@ Perfis sintéticos atuais (dois mascotes por treinador):
 
 Os participantes usam Artífice, Ritualista e Protetor nessa ordem. A política `UNITED` percorre a primeira rota em cada sala; `SPLIT` escolhe ramos diferentes e retorna a encontros pendentes antes do chefe. Ambas acertam enigmas, interagem com descobertas e acionam a sala de recuperação quando alcançada, consumindo uma decisão posterior à chegada e reanimando somente em turno posterior à queda. Uma taxa AFK opcional sorteia ausências com fonte aleatória independente e reproduz aviso/defesa na primeira falta e abandono na segunda consecutiva. **Isso não equivale à distribuição real de mascotes, inventários, itens, escolhas humanas ou comportamento AFK.** Não é uma estimativa de taxa de vitória de jogadores reais. O parâmetro de cativo adiciona apenas um adversário sintético ao primeiro chefe, com espécie e nível fixados pelo modelo; não simula cativos em salas comuns nem a captura/libertação ou persistência real.
 
-## Ajuste controlado de dificuldade — 14/10/2026
+## Ajuste controlado de dificuldade — 14/10/2026 (histórico anterior à formação 2+2)
 
 A primeira matriz de 20 sementes do checkpoint `52500b8c` foi **desconsiderada para balanceamento**: o simulador deixava agir no mesmo turno da entrada e, na rota separada, dimensionava o chefe apenas com os mascotes já presentes. Isso não reproduzia o motor V2. A matriz abaixo foi refeita após as correções de paridade.
 

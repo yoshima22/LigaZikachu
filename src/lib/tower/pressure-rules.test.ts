@@ -44,6 +44,20 @@ test("next floor moderately heals living mascots and relieves pressure without r
   assert.equal(result.state.rooms.boss.cleared, false);
 });
 
+test("V2 transition options apply without changing the legacy defaults", () => {
+  const state = newExpeditionState(generateTowerRoomGraph("transition-profile"), ["ana"]);
+  state.pressure = 10;
+  const mascot = [{ mascotId: "a1", ownerUserId: "ana", currentHp: 20, maxHp: 100 }];
+  const legacy = transitionFloor(state, 2, "transition-profile", mascot);
+  const configured = transitionFloor(state, 2, "transition-profile", mascot,
+    { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1,
+      floorHealingFraction: 0.24, floorPressureRelief: 6 });
+  assert.equal(legacy.state.pressure, 6);
+  assert.equal(configured.state.pressure, 4);
+  assert.equal(legacy.healingByMascotId.a1, 38);
+  assert.equal(configured.healingByMascotId.a1, 44);
+});
+
 test("pressure saturates at its cap and explains the actual change", () => {
   const state = newExpeditionState(generateTowerRoomGraph("pressure-cap"), ["ana"]);
   state.pressure = 11.5;
