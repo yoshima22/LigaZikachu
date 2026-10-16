@@ -206,18 +206,16 @@ export async function advancePostseason(tournamentId: string, rawStage: "TITLE_S
     }));
     await mk(roundMatches[0].winnerPlayerId!, roundMatches[1].winnerPlayerId!, 3, "CUP_FINAL", "Copa Johto — Final");
   } else {
-    // Final da Copa → Campeão/Vice + classificação final 5º–11º.
-    // Ordem: Campeão, Vice, Semifinalistas, Eliminados 1ª rodada; desempate por seed
-    // (quem foi melhor na fase regular leva a posição melhor dentro do mesmo nível).
+    // Final da Copa. A POSIÇÃO FINAL permanece a de entrada (seed): a chave decide
+    // apenas o resultado (Campeão/Vice/Semifinalista/Eliminado) para as RECOMPENSAS,
+    // não muda a classificação 5º–11º da fase regular.
     const championId = roundMatches[0].winnerPlayerId!;
     const viceId = loserOf(roundMatches[0])!;
-    const tier = (label: string) => ({ CAMPEAO_COPA: 0, VICE_COPA: 1, QUINTO_SEMIFINALISTA: 2, SEMIFINALISTA_COPA: 2, ELIMINADO_PRIMEIRA_RODADA: 3 }[label] ?? 9);
     const labelOf = (e: (typeof entries)[number]) => e.playerId === championId ? "CAMPEAO_COPA" : e.playerId === viceId ? "VICE_COPA" : (e.resultLabel ?? "ELIMINADO_PRIMEIRA_RODADA");
-    const ranked = [...entries].sort((x, y) => tier(labelOf(x)) - tier(labelOf(y)) || x.seed - y.seed);
-    await prisma.$transaction(ranked.map((e, index) => prisma.tournamentPostseasonEntry.update({
+    await prisma.$transaction(entries.map((e) => prisma.tournamentPostseasonEntry.update({
       where: { id: e.id },
       data: {
-        finalPlacement: 5 + index,
+        finalPlacement: e.seed,
         resultLabel: labelOf(e),
         status: e.playerId === championId ? TournamentPostseasonStatus.CHAMPION : TournamentPostseasonStatus.ELIMINATED,
       },
