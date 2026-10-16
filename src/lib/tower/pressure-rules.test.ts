@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { newExpeditionState } from "./expedition-state";
 import type { RoomFrontResult } from "./room-resolver";
 import { generateTowerRoomGraph } from "./rooms";
-import { applyPressureToExpedition, updateOverload, overloadFromResults, pressureDelta, transitionFloor } from "./pressure-rules";
+import { applyPressureToExpedition, bossOverloadValue, consumeBossOverloadCharge, earnBossOverloadCharge, updateOverload, overloadFromResults, pressureDelta, transitionFloor } from "./pressure-rules";
 
 test("one united trio pays one base pressure, split fronts add capped pressure", () => {
   assert.equal(pressureDelta({ activeFronts: 1, mistakes: 0, waits: 0, shield: 0 }).applied, 1);
@@ -64,4 +64,22 @@ test("overload weakens following turns, is capped, then expires without success"
   assert.deepEqual(boosted.overload, { value: 0.16, expiresAfterTurn: 6 });
   assert.equal(updateOverload(boosted, 6, 0).overload?.value, 0.16);
   assert.equal(updateOverload(boosted, 7, 0).overload, null);
+});
+
+test("distinct successful group fronts bank one bounded boss advantage per floor", () => {
+  const state = newExpeditionState(generateTowerRoomGraph("boss-bank"), ["a", "b", "c"]);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(state, ["room-a"])), 0);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(state, ["room-a", "room-a"])), 0);
+  const earned = earnBossOverloadCharge(state, ["room-a", "room-b"]);
+  assert.equal(bossOverloadValue(earned), 0.08);
+  assert.equal(bossOverloadValue(updateOverload(earned, 20, 0)), 0.08);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(state, ["room-a", "room-b", "room-c"])), 0.16);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(earned, ["room-a", "room-b", "room-c"])), 0.08);
+  const spent = consumeBossOverloadCharge(earned);
+  assert.equal(bossOverloadValue(spent), 0);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(spent, ["room-a", "room-b"])), 0);
+  const next = transitionFloor(spent, 2, "boss-bank", []).state;
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(next, ["room-a", "room-b"])), 0.08);
+  const solo = newExpeditionState(generateTowerRoomGraph("boss-bank-solo"), ["a"]);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(solo, ["room-a", "room-b"])), 0);
 });

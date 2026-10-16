@@ -41,6 +41,9 @@ import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
 import {
   applyPressureToExpedition,
+  bossOverloadValue,
+  consumeBossOverloadCharge,
+  earnBossOverloadCharge,
   overloadFromResults,
   pressureDelta,
   transitionFloor,
@@ -197,6 +200,7 @@ async function resolveV2RoomFronts(
     });
     let combatForReport: { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean } | null = null;
     const wasCleared = Boolean(next.rooms[roomId]?.cleared);
+    let bossFightStarted = false;
     const result = resolveRoomFront(next, roomId, actions, ({ room, memberIds }) => {
       const local = snapshots.filter((snapshot) => memberIds.includes(snapshot.member.userId) &&
         (soloWaves || snapshot.currentHp > 0));
@@ -223,13 +227,17 @@ async function resolveV2RoomFronts(
       });
       const fightingAllies = allies.filter((mascot) => mascot.hp > 0);
       if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
+      if (room.kind === "BOSS") bossFightStarted = true;
       const averageLevel = Math.max(1, Math.round(fightingAllies.reduce((sum, mascot) => sum + mascot.level, 0) / fightingAllies.length));
       const preview = (next.rooms[roomId].encounter?.enemies ?? towerEncounterPreview(room, averageLevel, allies.length))
         .map((enemy) => ({ ...enemy }));
       if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
+      const temporaryOverload = next.overload && next.overload.expiresAfterTurn >= next.globalTurn ? next.overload.value : 0;
+      const bankedOverload = room.kind === "BOSS" && run.partyProfile === "GROUP" && run.balanceVersion === 2
+        ? bossOverloadValue(next) : 0;
       const pressureMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.enemyMultiplier, 1) *
         (1 + next.pressure * talentFx.enemyPressureScale) *
-        (1 - (next.overload && next.overload.expiresAfterTurn >= next.globalTurn ? next.overload.value : 0));
+        (1 - Math.max(temporaryOverload, bankedOverload));
       const enemies: LeagueMascot[] = preview.map((enemy, index) => {
         const base = towerEnemyBaseStat(averageLevel, room.index, pressureMult, run.currentFloor);
         const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
@@ -274,6 +282,10 @@ async function resolveV2RoomFronts(
       };
     });
     next = result.state;
+    if (bossFightStarted && bossOverloadValue(next) > 0) {
+      log.push(`Vantagem de reunião consumida no chefe: ${Math.round(bossOverloadValue(next) * 100)}% de redução inimiga.`);
+      next = consumeBossOverloadCharge(next);
+    }
     if (combatForReport) {
       const combat = combatForReport as { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean };
       next = { ...next, runReport: addCombatToRunReport(next.runReport, combat.allies, combat.enemies, combat.log, combat.boss, combat.won) };
@@ -1044,6 +1056,13 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         if (navigatorDiscount) nextState = { ...nextState, countermeasures: [...(nextState.countermeasures ?? []), "ROLE:NAVEGADOR:USED"] };
         const appliedPressure = nextState.lastPressureChange?.applied ?? 0;
         nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts));
+        if (run.partyProfile === "GROUP" && run.balanceVersion === 2) {
+          const previousBank = bossOverloadValue(nextState);
+          nextState = earnBossOverloadCharge(nextState,
+            resolved.fronts.filter((front) => front.success).map((front) => front.roomId));
+          if (bossOverloadValue(nextState) > previousBank)
+            resolved.log.push(`Frentes independentes garantiram ${Math.round(bossOverloadValue(nextState) * 100)}% de vantagem de reunião para o próximo chefe deste andar.`);
+        }
         for (const front of resolved.fronts) {
           if (!front.success) continue;
           const room = nextState.graph.find((entry) => entry.id === front.roomId);

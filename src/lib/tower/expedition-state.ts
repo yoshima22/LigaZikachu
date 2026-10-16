@@ -31,6 +31,8 @@ export type TowerExpeditionV2 = TowerExplorationState & {
   openedEdges: string[];
   lastRecoveryFloor: number | null;
   overload?: { value: number; expiresAfterTurn: number } | null;
+  bossOverloadCharge?: number;
+  bossOverloadAwarded?: boolean;
   lastPressureChange?: { applied: number; reasons: string[] };
   rewardLedger: TowerRewardEntry[];
   rewardSettlement?: SettlementReport & { settledAt: string };
@@ -71,6 +73,8 @@ export function newExpeditionState(
     openedEdges: [],
     lastRecoveryFloor: null,
     overload: null,
+    bossOverloadCharge: 0,
+    bossOverloadAwarded: false,
     rewardLedger: [],
   };
 }

@@ -38,6 +38,14 @@ test("boss pressure for waiting is charged only after a trainer submits WAIT", (
   assert.ok(report.bossWaitTurns.every((turn) => turn > report.bossArrivalTurns[0]));
 });
 
+test("strategic split carries a banked advantage through a long reunion", () => {
+  const report = simulateTower("validate-0", 3, "PREPARED", "ONLINE", "SPLIT");
+  assert.ok(report.bossOverloadEarnedTurns.length > 0);
+  assert.ok(report.bossOverloadConsumedTurns.length > 0);
+  assert.ok(report.bossOverloadConsumedTurns[0] - report.bossOverloadEarnedTurns[0] >= 8);
+  assert.ok(report.bossOverloadConsumedTurns[0] >= report.bossFightTurns[0]);
+});
+
 test("solo, duo and trio across build tiers expose complete bounded metrics without duplicate loot", () => {
   for (const partySize of [1, 2, 3] as const) {
     for (const buildTier of ["ZERO", "INTERMEDIATE", "PREPARED"] as const) {

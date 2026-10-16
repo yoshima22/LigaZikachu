@@ -7,7 +7,7 @@ import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat, type Tower
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
 import { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
-import { applyPressureToExpedition, overloadFromResults, pressureDelta, transitionFloor, updateOverload } from "./pressure-rules";
+import { applyPressureToExpedition, bossOverloadValue, consumeBossOverloadCharge, earnBossOverloadCharge, overloadFromResults, pressureDelta, transitionFloor, updateOverload } from "./pressure-rules";
 import { canUseRecoveryRoom, recoverSoloMascots, reviveMember } from "./recovery-rules";
 import { switchSoloFormation } from "./formation";
 import { recordFloorDrop, secureFloorDrops, discardPendingFloorDrops } from "./reward-ledger";
@@ -27,6 +27,8 @@ export type TowerSimulationReport = {
   bossCaptiveCounts: number[];
   bossArrivalTurns: number[]; bossFightTurns: number[];
   bossWaitTurns: number[];
+  bossOverloadEarnedTurns: number[];
+  bossOverloadConsumedTurns: number[];
   hpRemaining: number; hpMaximum: number; downedCount: number; recoveries: number;
   recoveryTimings: { memberId: string; downedTurn: number; recoveredTurn: number }[];
   securedRewards: number; lostRewards: number; duplicateRewardIds: number; relicShards: number;
@@ -101,6 +103,8 @@ export function simulateTower(
   const downedAt = new Map<string, number>();
   const recoveryTimings: TowerSimulationReport["recoveryTimings"] = [];
   const preBossPressure: number[] = [];
+  const bossOverloadEarnedTurns: number[] = [];
+  const bossOverloadConsumedTurns: number[] = [];
   const bossDefenderCounts: number[] = [];
   const bossCaptiveCounts: number[] = [];
   const bossArrivalTurns: number[] = [];
@@ -217,6 +221,7 @@ export function simulateTower(
       if (actions.some((entry) => entry.action === "WAIT")) { waits++; bossWaitTurns.push(turns); }
       if (room.kind === "BOSS" && actions.length && memberIds.every((id) => state.members[id].status !== "ACTIVE" || state.members[id].roomId === roomId))
         preBossPressure.push(state.pressure);
+      let bossFightStarted = false;
       const result = resolveRoomFront(state, roomId, actions, ({ room: combatRoom, memberIds: presentIds }) => {
         if (combatRoom.kind === "BOSS" && bossFightTurns[floor - 1] === undefined) bossFightTurns[floor - 1] = turns;
         const locals = mascots.filter((mascot) => presentIds.includes(mascot.ownerId) && (partySize === 1 || mascot.hp > 0));
@@ -235,10 +240,13 @@ export function simulateTower(
         });
         const fightingAllies = allies.filter((ally) => ally.hp > 0);
         if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto."], kos: [] };
+        if (combatRoom.kind === "BOSS") bossFightStarted = true;
         const averageLevel = Math.round(fightingAllies.reduce((sum, ally) => sum + ally.level, 0) / fightingAllies.length);
+        const temporaryOverload = state.overload && state.overload.expiresAfterTurn >= turns ? state.overload.value : 0;
+        const bankedOverload = combatRoom.kind === "BOSS" && partySize > 1 ? bossOverloadValue(state) : 0;
         const pressureMult = state.activeModifiers.reduce((product, modifier) => product * modifier.enemyMultiplier, 1) *
           (1 + state.pressure * talentFx.enemyPressureScale) *
-          (1 - (state.overload && state.overload.expiresAfterTurn >= turns ? state.overload.value : 0));
+          (1 - Math.max(temporaryOverload, bankedOverload));
         const enemies: LeagueMascot[] = (state.rooms[roomId].encounter?.enemies ?? []).map((enemy, index) => {
           const base = towerEnemyBaseStat(averageLevel, combatRoom.index, pressureMult, floor, balance);
           const exclusive = TOWER_EXCLUSIVE_MASCOTS.find((entry) => entry.pokemonId === enemy.pokemonId);
@@ -263,6 +271,10 @@ export function simulateTower(
           events: [], kos: enemies.filter((enemy) => (battle.enemyHpById[enemy.id] ?? 0) <= 0).map((enemy) => enemy.id) };
       });
       state = result.state;
+      if (bossFightStarted && bossOverloadValue(state) > 0) {
+        bossOverloadConsumedTurns.push(turns);
+        state = consumeBossOverloadCharge(state);
+      }
       fronts.push(result);
       for (const [id, hp] of Object.entries(result.hpByMascotId)) mascots.find((mascot) => mascot.id === id)!.hp = hp;
       if (result.interaction === "REST") {
@@ -285,6 +297,11 @@ export function simulateTower(
     }
     const pressureChange = pressureDelta({ activeFronts: activeFrontCount, mistakes: fronts.reduce((sum, front) => sum + front.mistakes, 0), waits, shield: state.pressureShield ?? 0, splitPenalty: talentFx.splitPenalty });
     state = updateOverload(applyPressureToExpedition(state, pressureChange), turns, overloadFromResults(fronts));
+    if (partySize > 1) {
+      const previousCharge = bossOverloadValue(state);
+      state = earnBossOverloadCharge(state, fronts.filter((front) => front.success).map((front) => front.roomId));
+      if (bossOverloadValue(state) > previousCharge) bossOverloadEarnedTurns.push(turns);
+    }
     pressurePeak = Math.max(pressurePeak, state.pressure);
     const bossWon = fronts.some((front) => front.success && state.graph.find((room) => room.id === front.roomId)?.kind === "BOSS");
     if (bossWon) {
@@ -309,6 +326,7 @@ export function simulateTower(
   const dropsByPlayer = Object.fromEntries(memberIds.map((id) => [id, grants.filter((grant) => grant.userId === id).length]));
   return { seed, partySize, buildTier, pace, routePolicy, outcome, floorReached: floor, bossesDefeated, turns,
     pressurePeak, preBossPressure, bossDefenderCounts, bossCaptiveCounts, bossArrivalTurns, bossFightTurns, bossWaitTurns,
+    bossOverloadEarnedTurns, bossOverloadConsumedTurns,
     afkRate, missedWindows, afkAbandoned,
     hpRemaining: mascots.reduce((sum, mascot) => sum + mascot.hp, 0),
     hpMaximum: mascots.reduce((sum, mascot) => sum + mascot.maxHp, 0), downedCount, recoveries, recoveryTimings,

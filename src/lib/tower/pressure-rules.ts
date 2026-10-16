@@ -68,6 +68,29 @@ export function overloadFromResults(results: RoomFrontResult[]): number {
   );
 }
 
+export function bossOverloadValue(state: TowerExpeditionV2): number {
+  return Math.min(TOWER_BALANCE_SEED.maxOverload, Math.max(0, state.bossOverloadCharge ?? 0));
+}
+
+export function earnBossOverloadCharge(
+  state: TowerExpeditionV2,
+  successfulRoomIds: readonly string[],
+): TowerExpeditionV2 {
+  if (Object.keys(state.members).length < 2 || state.bossOverloadAwarded) return state;
+  const distinct = new Set(successfulRoomIds);
+  if (distinct.size < 2) return state;
+  return {
+    ...state,
+    bossOverloadCharge: Math.min(TOWER_BALANCE_SEED.maxOverload,
+      (distinct.size - 1) * TOWER_BALANCE_SEED.overloadPerExtraSuccessfulFront),
+    bossOverloadAwarded: true,
+  };
+}
+
+export function consumeBossOverloadCharge(state: TowerExpeditionV2): TowerExpeditionV2 {
+  return bossOverloadValue(state) > 0 ? { ...state, bossOverloadCharge: 0 } : state;
+}
+
 export function applyPressureToExpedition(
   state: TowerExpeditionV2,
   change: PressureResult,
@@ -146,6 +169,8 @@ export function transitionFloor(
       rewardLedger: state.rewardLedger ?? [],
       lastRecoveryFloor: state.lastRecoveryFloor,
       overload: null,
+      bossOverloadCharge: 0,
+      bossOverloadAwarded: false,
       lastPressureChange: { applied: pressure - state.pressure, reasons: ["Transição de andar: alívio parcial da Pressão"] },
     },
     healingByMascotId,
