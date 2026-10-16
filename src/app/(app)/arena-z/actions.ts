@@ -90,7 +90,7 @@ async function checkTeamStaleFromIncomingAttack(
   };
 }
 
-export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>, isTraining = false): Promise<{ error?: string }> {
+export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>, isTraining = false, abilityPicks?: Record<string, string>): Promise<{ error?: string }> {
   try {
     const playerId = await getCurrentPlayerId();
     const { ARENA_ROOMS } = await import("@/lib/arena-z");
@@ -99,6 +99,16 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, r
     const [division, mascots] = await Promise.all([getBattleModeDivision("ARENA_Z"), prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true } })]);
     const divisionCheck = validateBattleDivision(mascots, division); if (!divisionCheck.valid) return { error: divisionCheck.message };
     await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number] | -1, combatRoles, isTraining);
+    if (isTraining && abilityPicks) {
+      const { availableAbilities } = await import("@/lib/abilities");
+      const owned = await prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, pokemonId: true, hiddenAbilityUnlocked: true } });
+      for (const m of owned) {
+        const slug = abilityPicks[m.id];
+        if (slug && availableAbilities(m.pokemonId, m.hiddenAbilityUnlocked, "REAL").includes(slug)) {
+          await prisma.mascot.update({ where: { id: m.id }, data: { abilityChoice: slug } });
+        }
+      }
+    }
     revalidateTag("arena-active-teams");
     return {};
   } catch (err) {

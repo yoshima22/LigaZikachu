@@ -47,12 +47,21 @@ export type LineupMascot = {
   /** Slug da habilidade em uso (já resolvida: escolha, TM e padrão). */
   ability: string | null;
   stats?: Stats;
+  /** Habilidades que o mascote pode usar; com mais de uma, aparece o seletor. */
+  options?: string[];
+  /** Habilidade salva como preferida no mascote (marcada no seletor). */
+  preferred?: string | null;
 };
 
 /** Ordem dos slots no time e o que ela faz com cada habilidade (limite por categoria). */
 export function AbilityLineupPanel({
-  mascots, onMove, locked = false,
-}: { mascots: LineupMascot[]; onMove?: (index: number, delta: number) => void; locked?: boolean }) {
+  mascots, onMove, onChangeAbility, locked = false,
+}: {
+  mascots: LineupMascot[];
+  onMove?: (index: number, delta: number) => void;
+  onChangeAbility?: (id: string, slug: string) => void;
+  locked?: boolean;
+}) {
   const slots = evaluateTeamAbilities(mascots.map((m) => m.ability));
   const warnings = mascots
     .map((m, i) => ({ m, i, slot: slots[i] }))
@@ -69,7 +78,7 @@ export function AbilityLineupPanel({
         A <b>ordem do time</b> decide quanto cada habilidade rende. Dentro de cada categoria: o <b>1º</b> mascote usa a habilidade com{" "}
         <b className="text-emerald-300">100%</b> do efeito, o <b>2º</b> com <b className="text-amber-300">{Math.round(ABILITY_REDUCED_FACTOR * 100)}%</b> e do{" "}
         <b>3º em diante</b> ela fica <b className="text-rose-300">desligada</b>. <b>Sobrevivência</b>: só o 1º vale. Mude a posição para escolher quem fica ligado.
-        A habilidade oculta só vale se o mascote usou o TM.
+        A habilidade oculta só vale se o mascote usou o TM.{onChangeAbility && " Escolha outra habilidade no seletor de cada slot; ao criar a equipe ela passa a ser a preferida do mascote."}
       </p>
 
       {usage.length > 0 && (
@@ -97,6 +106,22 @@ export function AbilityLineupPanel({
                 <img src={getSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
                 <div className="min-w-0 flex-1">
                   <b className="block truncate text-[11px] text-white">{m.name}</b>
+                  {onChangeAbility && m.options && m.options.length > 1 && (
+                    <select
+                      value={m.ability ?? ""}
+                      onChange={(e) => onChangeAbility(m.id, e.target.value)}
+                      className="mt-0.5 w-full rounded border border-fuchsia-400/30 bg-slate-900 px-1 py-0.5 text-[10px] text-fuchsia-100"
+                    >
+                      {m.options.map((slug) => {
+                        const opt = getAbilityInfo(slug);
+                        return (
+                          <option key={slug} value={slug}>
+                            {opt?.name ?? slug}{opt && !opt.hasEffect ? " (sem efeito)" : ""}{slug === m.preferred ? " ★ preferida" : ""}
+                          </option>
+                        );
+                      })}
+                    </select>
+                  )}
                   {info ? (
                     <>
                       <div className="flex justify-start">

@@ -10,7 +10,7 @@ import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TRAINING_ABILITY_ROOM } from "@/lib/arena-z-training";
-import { resolveAbilitySlug } from "@/lib/abilities";
+import { availableAbilities, resolveAbilitySlug } from "@/lib/abilities";
 import { AbilityLineupPanel } from "@/components/ability-lineup";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
@@ -353,6 +353,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
   const [isTraining, setIsTraining] = useState(false);
   const [abilityTraining, setAbilityTraining] = useState(false);
+  const [abilityPicks, setAbilityPicks] = useState<Record<string, string>>({});
   const moveSelected = useCallback((index: number, delta: number) => {
     setSelected(prev => {
       const ids = [...prev];
@@ -510,7 +511,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         const mascot = mascots.find(m => m.id === id);
         return [id, roles[id] ?? (mascot ? defaultRoleForMascot(mascot) : "ATTACKER")];
       }));
-      const r = await createArenaTeamAction([...selected], name.trim(), isTraining && abilityTraining ? TRAINING_ABILITY_ROOM : roomLevel, rolePayload, isTraining);
+      const r = await createArenaTeamAction([...selected], name.trim(), isTraining && abilityTraining ? TRAINING_ABILITY_ROOM : roomLevel, rolePayload, isTraining, isTraining && abilityTraining ? Object.fromEntries([...selected].flatMap(id => abilityPicks[id] ? [[id, abilityPicks[id]]] : [])) : undefined);
       if (r.error) toast.error(r.error);
       else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setRoles({}); setName(""); }
     });
@@ -575,6 +576,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         {isTraining && abilityTraining && (
           <AbilityLineupPanel
             onMove={moveSelected}
+            onChangeAbility={(id, slug) => setAbilityPicks(prev => ({ ...prev, [id]: slug }))}
             mascots={[...selected].flatMap(id => {
               const m = mascots.find(x => x.id === id);
               if (!m) return [];
@@ -582,7 +584,9 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                 id: m.id,
                 name: displayName(m),
                 pokemonId: m.pokemonId,
-                ability: resolveAbilitySlug({ pokemonId: m.pokemonId, choice: m.abilityChoice, hiddenUnlocked: Boolean(m.hiddenAbilityUnlocked), mode: "REAL" }),
+                ability: resolveAbilitySlug({ pokemonId: m.pokemonId, choice: abilityPicks[m.id] ?? m.abilityChoice, hiddenUnlocked: Boolean(m.hiddenAbilityUnlocked), mode: "REAL" }),
+                options: availableAbilities(m.pokemonId, Boolean(m.hiddenAbilityUnlocked), "REAL"),
+                preferred: resolveAbilitySlug({ pokemonId: m.pokemonId, choice: m.abilityChoice, hiddenUnlocked: Boolean(m.hiddenAbilityUnlocked), mode: "REAL" }),
                 stats: { force: m.statForce, agility: m.statAgility, charisma: m.statCharisma, instinct: m.statInstinct, vitality: m.statVitality },
               }];
             })}
@@ -630,7 +634,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
             ))}
           </div>
           {isTraining && abilityTraining
-            ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Usa a habilidade escolhida no mascote (a oculta só vale se o mascote usou o TM). Só enfrenta equipes da mesma sala ou o bot.</p>
+            ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Mostra a habilidade preferida do mascote, que pode ser trocada por slot (a oculta só vale se o mascote usou o TM). Só enfrenta equipes da mesma sala ou o bot.</p>
             : isTraining
             ? <p className="mt-1.5 text-[9px] text-sky-500">Treino: sem limite de nível, sem loot, sem lesões, sem impacto no ranking.</p>
             : <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
