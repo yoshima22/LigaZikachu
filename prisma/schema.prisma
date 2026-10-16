@@ -3244,6 +3244,9 @@ model ArenaBattle {
   @@index([type, createdAt])
   @@index([attackerPlayerId])
   @@index([defenderPlayerId])
+  @@index([attackTeamId, type, createdAt])
+  @@index([defenseTeamId])
+  @@index([status, type])
   @@map("arena_battles")
 }
 
