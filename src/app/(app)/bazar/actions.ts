@@ -2479,8 +2479,14 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
 
     await autoRefreshMiauvadaoIfNeeded();
     const result = await prisma.$transaction(async (tx) => {
+      // Serializa só os compradores do Miauvadão com um lock dedicado, em vez de
+      // SERIALIZABLE global: sob a rajada pós-reset, o SERIALIZABLE gerava falhas
+      // de serialização + transações longas que esgotavam o pool e travavam o
+      // site inteiro. O lock garante o controle de estoque sem esse custo.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const now = new Date();
-      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
+      // Lê só o necessário — a linha inteira tem ~270 kB (playerRefreshData).
+      const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true, purchaseRechargeMinutes: true } });
       const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
       const offer = offers[offerIndex];
       if (!offer) throw new Error("Oferta não encontrada.");
@@ -2572,7 +2578,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
       });
       const updatedQuota = await tx.miauvadaoPurchaseQuota.findUniqueOrThrow({ where: { playerId: player.id } });
       return { purchaseStatus: purchaseStatusFromQuota(updatedQuota, now, config.purchaseRechargeMinutes), price };
-    }, { isolationLevel: "Serializable" });
+    });
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
@@ -2634,6 +2640,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
     const rotation = getMiauvadaoRotation();
     const rotationIso = rotation.start.toISOString();
     const result = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const now = new Date();
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true, purchaseRechargeMinutes: true } });
       const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
@@ -2687,7 +2694,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
         metadata: { offerIndex, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency, bound: true },
       });
       return { price };
-    }, { isolationLevel: "Serializable" });
+    });
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     return result;
@@ -2845,6 +2852,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
     if (!prepared) return { error: "Você não tem oferta pessoal disponível agora." };
     let soldAfter = 0;
     await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
       const offer = _storedPersonalOffer(config.playerRefreshData, player.id, rotationIso);
       if (!offer) throw new Error("Você não tem oferta pessoal disponível agora.");
@@ -2906,7 +2914,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
         unit: "ITEM",
         metadata: { cycle: rotationIso, itemType: offer.itemType, shopItemId: offer.shopItemId ?? null, price, currency },
       });
-    }, { isolationLevel: "Serializable" });
+    });
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
     after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: 3 }));
