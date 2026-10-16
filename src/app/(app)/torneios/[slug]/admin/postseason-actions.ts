@@ -128,24 +128,11 @@ export async function advancePostseason(tournamentId: string, rawStage: "TITLE_S
     throw new Error("Confirme todos os resultados desta rodada antes de avançar.");
   }
 
-  // Processa a rodada confirmada. Na Chave Z (vidas), cada derrota tira 1 vida do
-  // perdedor e quem zera é eliminado — as posições saem da ordem de eliminação.
-  // A Copa é mata-mata (melhor de 1) e trata suas eliminações explicitamente.
+  // Marca as partidas da rodada como processadas. A perda de vida na Chave Z é
+  // aplicada explicitamente na Final (série por vidas), não por rodada.
   await prisma.$transaction(async (tx) => {
     for (const match of roundMatches) {
-      if (match.postseasonProcessedAt) continue;
-      if (stage === TournamentPostseasonStage.TITLE_SURVIVAL) {
-        const loserId = match.loserPlayerId ?? (match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId);
-        if (loserId) {
-          const loser = await tx.tournamentPostseasonEntry.findUniqueOrThrow({ where: { tournamentId_playerId: { tournamentId, playerId: loserId } } });
-          const lives = Math.max(0, loser.lives - 1);
-          await tx.tournamentPostseasonEntry.update({
-            where: { id: loser.id },
-            data: { lives, ...(lives === 0 ? { status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: pendingRound } : {}) },
-          });
-        }
-      }
-      await tx.match.update({ where: { id: match.id }, data: { postseasonProcessedAt: new Date() } });
+      if (!match.postseasonProcessedAt) await tx.match.update({ where: { id: match.id }, data: { postseasonProcessedAt: new Date() } });
     }
   });
 
@@ -158,32 +145,44 @@ export async function advancePostseason(tournamentId: string, rawStage: "TITLE_S
     createPostseasonMatch({ tournamentId, finalWeekId, seasonId: tournament.seasonId, createdById: admin.id, playerAId, playerBId, stage, round, slot, label });
 
   if (stage === TournamentPostseasonStage.TITLE_SURVIVAL) {
-    // Chave de Sobrevivência por VIDAS: quem perde um jogo perde 1 vida; quem zera
-    // as vidas é eliminado (vira "perdedor"). Sobra 1 com vida → Campeão. As
-    // posições 1º–4º saem da ordem de eliminação (quem cai por último fica melhor;
-    // desempate por seed).
-    const active = entries.filter((entry) => entry.status === TournamentPostseasonStatus.ACTIVE && entry.lives > 0);
-    const nextRound = pendingRound + 1;
-    if (active.length === 1) {
-      const ordered = [...entries].sort((a, b) => {
-        if (a.id === active[0].id) return -1;
-        if (b.id === active[0].id) return 1;
-        return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0) || a.seed - b.seed;
-      });
-      await prisma.$transaction(ordered.map((entry, index) => prisma.tournamentPostseasonEntry.update({
-        where: { id: entry.id },
-        data: { finalPlacement: index + 1, resultLabel: ["CAMPEAO_LIGA", "VICE_LIGA", "TERCEIRO_LUGAR", "QUARTO_LUGAR"][index], status: index === 0 ? TournamentPostseasonStatus.CHAMPION : TournamentPostseasonStatus.ELIMINATED },
-      })));
+    // Top 4: R1 (1º×4º, 2º×3º). Os 2 perdedores disputam o 3º lugar em JOGO ÚNICO
+    // (vencedor 3º, perdedor 4º). Os 2 vencedores jogam a Final levando as vidas
+    // restantes: cada derrota tira 1 vida e quem ZERAR fica em 2º, o outro em 1º
+    // — assim o seed melhor (mais vidas) tem mais fôlego na final.
+    const setEntry = (playerId: string, data: Prisma.TournamentPostseasonEntryUpdateInput) =>
+      prisma.tournamentPostseasonEntry.update({ where: { tournamentId_playerId: { tournamentId, playerId } }, data });
+    if (pendingRound === 1) {
+      const a = bySlot("TITLE_R1_A"); const b = bySlot("TITLE_R1_B");
+      if (!a?.winnerPlayerId || !b?.winnerPlayerId) throw new Error("Confirme os dois jogos da 1ª rodada da Chave Z antes de avançar.");
+      await mk(loserOf(a)!, loserOf(b)!, 2, "TITLE_THIRD", "Disputa de 3º lugar");
+      await mk(a.winnerPlayerId, b.winnerPlayerId, 2, "TITLE_FINAL", "Final — 1º e 2º lugar");
     } else {
-      let playing = [...active].sort((a, b) => b.lives - a.lives || a.seed - b.seed);
-      if (playing.length === 3) {
-        const bye = playing.find((entry) => entry.lastByeRound !== pendingRound) ?? playing[0];
-        await prisma.tournamentPostseasonEntry.update({ where: { id: bye.id }, data: { byeCount: { increment: 1 }, lastByeRound: nextRound } });
-        playing = playing.filter((entry) => entry.id !== bye.id);
+      const third = bySlot("TITLE_THIRD");
+      const fin = bySlot("TITLE_FINAL");
+      const ops: ReturnType<typeof setEntry>[] = [];
+      if (third) {
+        if (!third.winnerPlayerId) throw new Error("Confirme a Disputa de 3º lugar antes de avançar.");
+        ops.push(setEntry(third.winnerPlayerId, { finalPlacement: 3, resultLabel: "TERCEIRO_LUGAR", status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: pendingRound }));
+        ops.push(setEntry(loserOf(third)!, { finalPlacement: 4, resultLabel: "QUARTO_LUGAR", status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: pendingRound }));
       }
-      const pairs = playing.length === 4 ? [[playing[0], playing[3]], [playing[1], playing[2]]] : [[playing[0], playing[1]]];
-      for (const [index, pair] of pairs.entries()) {
-        await mk(pair[0].playerId, pair[1].playerId, nextRound, `TITLE_R${nextRound}_${index + 1}`, `Sobrevivência — rodada ${nextRound}`);
+      let finalContinues = false;
+      if (fin) {
+        if (!fin.winnerPlayerId) throw new Error("Confirme a Final antes de avançar.");
+        const finalLoserId = loserOf(fin)!;
+        const loserEntry = entries.find((e) => e.playerId === finalLoserId)!;
+        const newLives = Math.max(0, loserEntry.lives - 1);
+        ops.push(setEntry(finalLoserId, { lives: newLives }));
+        if (newLives === 0) {
+          ops.push(setEntry(fin.winnerPlayerId, { finalPlacement: 1, resultLabel: "CAMPEAO_LIGA", status: TournamentPostseasonStatus.CHAMPION, eliminatedRound: null }));
+          ops.push(setEntry(finalLoserId, { finalPlacement: 2, resultLabel: "VICE_LIGA", status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: pendingRound }));
+        } else {
+          finalContinues = true;
+        }
+      }
+      if (ops.length) await prisma.$transaction(ops);
+      // Final não terminou (perdedor ainda tem vida) → cria o próximo jogo da série.
+      if (fin?.winnerPlayerId && finalContinues) {
+        await mk(fin.winnerPlayerId, loserOf(fin)!, pendingRound + 1, "TITLE_FINAL", "Final — 1º e 2º lugar (próxima vida)");
       }
     }
   } else if (pendingRound === 1) {
