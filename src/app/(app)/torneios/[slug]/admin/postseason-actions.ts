@@ -128,65 +128,83 @@ export async function advancePostseason(tournamentId: string, rawStage: "TITLE_S
     throw new Error("Confirme todos os resultados desta rodada antes de avançar.");
   }
 
+  // Marca as partidas da rodada como processadas. As posições saem do resultado
+  // dos jogos (chave clássica / mata-mata), não mais de vidas.
   await prisma.$transaction(async (tx) => {
     for (const match of roundMatches) {
       if (match.postseasonProcessedAt) continue;
-      const loserId = match.loserPlayerId ?? (match.winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId);
-      if (!loserId) continue;
-      const loser = await tx.tournamentPostseasonEntry.findUniqueOrThrow({ where: { tournamentId_playerId: { tournamentId, playerId: loserId } } });
-      const lives = Math.max(0, loser.lives - 1);
-      await tx.tournamentPostseasonEntry.update({
-        where: { id: loser.id },
-        data: {
-          lives,
-          ...(lives === 0 ? { status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: pendingRound } : {}),
-          ...(stage === TournamentPostseasonStage.CUP_JOHTO && pendingRound === 1 ? { resultLabel: "ELIMINADO_PRIMEIRA_RODADA" } : {}),
-          ...(stage === TournamentPostseasonStage.CUP_JOHTO && pendingRound === 2 ? { resultLabel: loser.seed === 5 ? "QUINTO_SEMIFINALISTA" : "SEMIFINALISTA_COPA" } : {}),
-          ...(stage === TournamentPostseasonStage.CUP_JOHTO && pendingRound === 3 ? { resultLabel: "VICE_COPA" } : {}),
-        },
-      });
       await tx.match.update({ where: { id: match.id }, data: { postseasonProcessedAt: new Date() } });
     }
   });
 
+  const finalWeekId = tournament.weeks[0].id;
   const entries = await prisma.tournamentPostseasonEntry.findMany({ where: { tournamentId, stage }, orderBy: { seed: "asc" } });
-  const active = entries.filter((entry) => entry.status === TournamentPostseasonStatus.ACTIVE && entry.lives > 0);
-  const nextRound = pendingRound + 1;
+  const seedOf = new Map(entries.map((e) => [e.playerId, e.seed]));
+  const loserOf = (m: (typeof roundMatches)[number]) => m.loserPlayerId ?? (m.winnerPlayerId === m.playerAId ? m.playerBId : m.playerAId);
+  const bySlot = (slot: string) => roundMatches.find((m) => m.postseasonSlot === slot);
+  const mk = (playerAId: string, playerBId: string, round: number, slot: string, label: string) =>
+    createPostseasonMatch({ tournamentId, finalWeekId, seasonId: tournament.seasonId, createdById: admin.id, playerAId, playerBId, stage, round, slot, label });
 
   if (stage === TournamentPostseasonStage.TITLE_SURVIVAL) {
-    if (active.length === 1) {
-      const ordered = [...entries].sort((a, b) => {
-        if (a.id === active[0].id) return -1;
-        if (b.id === active[0].id) return 1;
-        return (b.eliminatedRound ?? 0) - (a.eliminatedRound ?? 0) || a.seed - b.seed;
-      });
-      await prisma.$transaction(ordered.map((entry, index) => prisma.tournamentPostseasonEntry.update({
-        where: { id: entry.id },
-        data: { finalPlacement: index + 1, resultLabel: ["CAMPEAO_LIGA", "VICE_LIGA", "TERCEIRO_LUGAR", "QUARTO_LUGAR"][index], status: index === 0 ? TournamentPostseasonStatus.CHAMPION : TournamentPostseasonStatus.ELIMINATED },
-      })));
+    // Chave clássica: R1 (1º×4º, 2º×3º) → vencedores disputam a Final (1º/2º) e os
+    // perdedores a Disputa de 3º lugar (3º/4º). O seed vale como vantagem no
+    // chaveamento (1º enfrenta o 4º, 2º enfrenta o 3º).
+    if (pendingRound === 1) {
+      const a = bySlot("TITLE_R1_A"); const b = bySlot("TITLE_R1_B");
+      if (!a?.winnerPlayerId || !b?.winnerPlayerId) throw new Error("Confirme os dois jogos da 1ª rodada da Chave Z antes de avançar.");
+      await mk(a.winnerPlayerId, b.winnerPlayerId, 2, "TITLE_FINAL", "Final — 1º e 2º lugar");
+      await mk(loserOf(a)!, loserOf(b)!, 2, "TITLE_THIRD", "Disputa de 3º lugar");
     } else {
-      let playing = [...active].sort((a, b) => b.lives - a.lives || a.seed - b.seed);
-      if (playing.length === 3) {
-        const bye = playing.find((entry) => entry.lastByeRound !== pendingRound) ?? playing[0];
-        await prisma.tournamentPostseasonEntry.update({ where: { id: bye.id }, data: { byeCount: { increment: 1 }, lastByeRound: nextRound } });
-        playing = playing.filter((entry) => entry.id !== bye.id);
-      }
-      const pairs = playing.length === 4 ? [[playing[0], playing[3]], [playing[1], playing[2]]] : [[playing[0], playing[1]]];
-      for (const [index, pair] of pairs.entries()) {
-        await createPostseasonMatch({ tournamentId, finalWeekId: tournament.weeks[0].id, seasonId: tournament.seasonId, createdById: admin.id, playerAId: pair[0].playerId, playerBId: pair[1].playerId, stage, round: nextRound, slot: `TITLE_R${nextRound}_${index + 1}`, label: `Sobrevivência — rodada ${nextRound}` });
-      }
+      const fin = bySlot("TITLE_FINAL"); const third = bySlot("TITLE_THIRD");
+      if (!fin?.winnerPlayerId || !third?.winnerPlayerId) throw new Error("Confirme a Final e a Disputa de 3º lugar antes de avançar.");
+      const placements = [
+        { playerId: fin.winnerPlayerId, pos: 1, label: "CAMPEAO_LIGA", champ: true },
+        { playerId: loserOf(fin)!, pos: 2, label: "VICE_LIGA", champ: false },
+        { playerId: third.winnerPlayerId, pos: 3, label: "TERCEIRO_LUGAR", champ: false },
+        { playerId: loserOf(third)!, pos: 4, label: "QUARTO_LUGAR", champ: false },
+      ];
+      await prisma.$transaction(placements.map((p) => prisma.tournamentPostseasonEntry.update({
+        where: { tournamentId_playerId: { tournamentId, playerId: p.playerId } },
+        data: { finalPlacement: p.pos, resultLabel: p.label, status: p.champ ? TournamentPostseasonStatus.CHAMPION : TournamentPostseasonStatus.ELIMINATED, eliminatedRound: p.champ ? null : pendingRound },
+      })));
     }
   } else if (pendingRound === 1) {
-    const winner = (slot: string) => roundMatches.find((match) => match.postseasonSlot === slot)?.winnerPlayerId;
+    // Copa (melhor de 1): o 5º seed tem bye direto na semifinal (vantagem do seed).
+    // Perdedores da 1ª rodada eliminados; cria as semifinais.
+    const winner = (slot: string) => bySlot(slot)?.winnerPlayerId;
     const seedFive = entries.find((entry) => entry.seed === 5)?.playerId;
-    if (!seedFive || !winner("CUP_A") || !winner("CUP_B") || !winner("CUP_C")) throw new Error("Resultados incompletos na primeira rodada da Copa.");
-    await createPostseasonMatch({ tournamentId, finalWeekId: tournament.weeks[0].id, seasonId: tournament.seasonId, createdById: admin.id, playerAId: seedFive, playerBId: winner("CUP_A")!, stage, round: 2, slot: "CUP_SF1", label: "Copa — Semifinal 1" });
-    await createPostseasonMatch({ tournamentId, finalWeekId: tournament.weeks[0].id, seasonId: tournament.seasonId, createdById: admin.id, playerAId: winner("CUP_B")!, playerBId: winner("CUP_C")!, stage, round: 2, slot: "CUP_SF2", label: "Copa — Semifinal 2" });
+    if (!seedFive || !winner("CUP_A") || !winner("CUP_B") || !winner("CUP_C")) throw new Error("Confirme os três jogos da 1ª rodada da Copa antes de avançar.");
+    await prisma.$transaction(roundMatches.map((m) => prisma.tournamentPostseasonEntry.update({
+      where: { tournamentId_playerId: { tournamentId, playerId: loserOf(m)! } },
+      data: { status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: 1, resultLabel: "ELIMINADO_PRIMEIRA_RODADA" },
+    })));
+    await mk(seedFive, winner("CUP_A")!, 2, "CUP_SF1", "Copa — Semifinal 1");
+    await mk(winner("CUP_B")!, winner("CUP_C")!, 2, "CUP_SF2", "Copa — Semifinal 2");
   } else if (pendingRound === 2) {
-    await createPostseasonMatch({ tournamentId, finalWeekId: tournament.weeks[0].id, seasonId: tournament.seasonId, createdById: admin.id, playerAId: roundMatches[0].winnerPlayerId!, playerBId: roundMatches[1].winnerPlayerId!, stage, round: 3, slot: "CUP_FINAL", label: "Copa Johto — Final" });
+    // Perdedores das semis viram semifinalistas; cria a final.
+    await prisma.$transaction(roundMatches.map((m) => {
+      const loserId = loserOf(m)!;
+      const label = seedOf.get(loserId) === 5 ? "QUINTO_SEMIFINALISTA" : "SEMIFINALISTA_COPA";
+      return prisma.tournamentPostseasonEntry.update({ where: { tournamentId_playerId: { tournamentId, playerId: loserId } }, data: { status: TournamentPostseasonStatus.ELIMINATED, eliminatedRound: 2, resultLabel: label } });
+    }));
+    await mk(roundMatches[0].winnerPlayerId!, roundMatches[1].winnerPlayerId!, 3, "CUP_FINAL", "Copa Johto — Final");
   } else {
+    // Final da Copa → Campeão/Vice + classificação final 5º–11º.
+    // Ordem: Campeão, Vice, Semifinalistas, Eliminados 1ª rodada; desempate por seed
+    // (quem foi melhor na fase regular leva a posição melhor dentro do mesmo nível).
     const championId = roundMatches[0].winnerPlayerId!;
-    await prisma.tournamentPostseasonEntry.update({ where: { tournamentId_playerId: { tournamentId, playerId: championId } }, data: { status: TournamentPostseasonStatus.CHAMPION, resultLabel: "CAMPEAO_COPA" } });
+    const viceId = loserOf(roundMatches[0])!;
+    const tier = (label: string) => ({ CAMPEAO_COPA: 0, VICE_COPA: 1, QUINTO_SEMIFINALISTA: 2, SEMIFINALISTA_COPA: 2, ELIMINADO_PRIMEIRA_RODADA: 3 }[label] ?? 9);
+    const labelOf = (e: (typeof entries)[number]) => e.playerId === championId ? "CAMPEAO_COPA" : e.playerId === viceId ? "VICE_COPA" : (e.resultLabel ?? "ELIMINADO_PRIMEIRA_RODADA");
+    const ranked = [...entries].sort((x, y) => tier(labelOf(x)) - tier(labelOf(y)) || x.seed - y.seed);
+    await prisma.$transaction(ranked.map((e, index) => prisma.tournamentPostseasonEntry.update({
+      where: { id: e.id },
+      data: {
+        finalPlacement: 5 + index,
+        resultLabel: labelOf(e),
+        status: e.playerId === championId ? TournamentPostseasonStatus.CHAMPION : TournamentPostseasonStatus.ELIMINATED,
+      },
+    })));
   }
 
   await prisma.auditLog.create({ data: { actorUserId: admin.id, entityType: "tournament", entityId: tournamentId, action: "postseason.advanced", after: { stage, processedRound: pendingRound } } });
@@ -255,33 +273,24 @@ export async function distributePostseasonRewards(tournamentId: string) {
   const titleChampion = tournament.postseasonEntries.find((entry) => entry.stage === TournamentPostseasonStage.TITLE_SURVIVAL && entry.status === TournamentPostseasonStatus.CHAMPION);
   const cupChampion = tournament.postseasonEntries.find((entry) => entry.stage === TournamentPostseasonStage.CUP_JOHTO && entry.status === TournamentPostseasonStatus.CHAMPION);
   if (!titleChampion || !cupChampion) throw new Error("Conclua a Chave Z e a Copa Johto antes de distribuir a premiação final.");
-  const config = parsePostseasonConfig(tournament.postseasonConfig);
   const pendingEntries = tournament.postseasonEntries.filter((entry) => !entry.rewardedAt);
   if (pendingEntries.length === 0) return { success: true, alreadyDistributed: true };
 
   await prisma.$transaction(async (tx) => {
     for (const entry of pendingEntries) {
-      const placement = entry.stage === TournamentPostseasonStage.TITLE_SURVIVAL ? entry.finalPlacement : entry.seed;
-      const coins = Number(config.finalRewards.zcByPlacement[String(placement ?? 0)] ?? 0);
-      const eggs: Array<{ type: EggType; quantity: number }> = [{ type: EggType.RARE, quantity: config.finalRewards.participationEggs.rare }];
-      if (entry.finalPlacement === 1) eggs.push({ type: EggType.LAB, quantity: config.finalRewards.champion.lab }, { type: EggType.SPECIAL, quantity: config.finalRewards.champion.special }, { type: EggType.EVENT, quantity: config.finalRewards.champion.event });
-      if (entry.finalPlacement === 2) eggs.push({ type: EggType.LAB, quantity: config.finalRewards.runnerUp.lab }, { type: EggType.SPECIAL, quantity: config.finalRewards.runnerUp.special }, { type: EggType.EVENT, quantity: config.finalRewards.runnerUp.event });
-      if (entry.finalPlacement === 3) eggs.push({ type: EggType.LAB, quantity: config.finalRewards.third.lab }, { type: EggType.SPECIAL, quantity: config.finalRewards.third.special }, { type: EggType.EVENT, quantity: config.finalRewards.third.event });
-      if (entry.finalPlacement === 4) eggs.push({ type: EggType.LAB, quantity: config.finalRewards.fourth.lab }, { type: EggType.EVENT, quantity: config.finalRewards.fourth.event }, { type: EggType.RARE, quantity: config.finalRewards.fourth.rare });
-      const payload = {
-        rewardKind: "TOURNAMENT_BOX",
-        rewardLabel: `Premiação final Johto${coins > 0 ? ` · ${coins} ZC` : ""}`,
-        origin: `postseason:${tournament.id}`,
-        coins,
-        eggs,
-      } satisfies Record<string, unknown>;
+      // Sem prêmios automáticos: a organização define e entrega os prêmios depois.
+      // Aqui só registramos/anunciamos a posição final (sem ZC nem ovos).
+      const placement = entry.finalPlacement ?? entry.seed;
+      const title = entry.stage === TournamentPostseasonStage.TITLE_SURVIVAL
+        ? `${placement}º lugar — Chave de Sobrevivência Z`
+        : `${placement}º lugar — Copa Johto de Recompensas`;
       await tx.playerGift.create({
         data: {
           playerId: entry.playerId,
           type: "CUSTOM",
-          title: entry.finalPlacement ? `${entry.finalPlacement}º lugar — Liga Zikachu` : "Participação — Liga Zikachu: Rumo a Johto",
-          description: "Premiação final validada pela organização. Cosméticos e lotes temáticos são administrados separadamente.",
-          payload: payload as Prisma.InputJsonValue,
+          title,
+          description: "Posição final confirmada na Liga Zikachu: Rumo a Johto. Os prêmios serão definidos e entregues pela organização.",
+          payload: { announcement: true, stage: entry.stage, placement, resultLabel: entry.resultLabel } as Prisma.InputJsonValue,
         },
       });
       await tx.tournamentPostseasonEntry.update({ where: { id: entry.id }, data: { rewardedAt: new Date() } });
