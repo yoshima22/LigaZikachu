@@ -67,6 +67,8 @@ import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
 import { reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
 import { buildTowerEventDisclosure } from "@/lib/tower/event-disclosure";
+import { validateTowerFormation, type TowerPartyProfile } from "@/lib/tower/formation";
+import { canJoinTowerLobby, canEditTowerFormation } from "@/lib/tower/lobby-rules";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
   ensureTowerExclusiveSpecies,
@@ -567,7 +569,7 @@ export async function getTowerLobbyDataAction() {
         select: {
           userId: true,
           expeditionRole: true,
-          mascots: { select: { mascotId: true, currentStance: true } },
+          mascots: { select: { mascotId: true, currentStance: true, formationSlot: true } },
         },
       },
     },
@@ -736,7 +738,7 @@ export async function getTowerLobbyDataAction() {
       name: m.nickname ?? getPokemonName(m.pokemonId),
     })),
     rooms: openRuns
-      .filter((run) => run.members.length < 3)
+      .filter((run) => canJoinTowerLobby(run.partyProfile, run.members.length))
       .map((run) => {
         const lobby = (
           (run.volatileState ?? {}) as {
@@ -754,6 +756,7 @@ export async function getTowerLobbyDataAction() {
           id: run.id,
           code: lobby?.code ?? run.id.slice(-6).toUpperCase(),
           pace: run.pace,
+          partyProfile: run.partyProfile,
           hostId: host?.userId ?? null,
           host: roomUsers.get(host?.userId ?? "") ?? "Jogador",
           hostSetup: host
@@ -769,7 +772,7 @@ export async function getTowerLobbyDataAction() {
             expeditionRole: m.expeditionRole,
             roleLabel:
               TOWER_ROLE_BY_KEY[m.expeditionRole]?.label ?? m.expeditionRole,
-            mascots: m.mascots.map((mascot) => {
+            mascots: [...m.mascots].sort((a, b) => (a.formationSlot ?? 0) - (b.formationSlot ?? 0)).map((mascot) => {
               const detail = roomMascotById.get(mascot.mascotId);
               return {
                 pokemonId: detail?.pokemonId ?? 0,
@@ -778,6 +781,7 @@ export async function getTowerLobbyDataAction() {
                   (detail ? getPokemonName(detail.pokemonId) : "Mascote"),
                 level: detail?.level ?? 0,
                 stance: mascot.currentStance,
+                formationSlot: mascot.formationSlot,
               };
             }),
           })),
@@ -1104,10 +1108,11 @@ export async function saveTowerNarrativeScenesAction(
   return { ok: true as const, scenes };
 }
 
-/** Cria a expedição (host/solo). Valida cooldown, run única e 2 mascotes elegíveis. */
+/** Cria a expedição. A formação é ordenada: slots 1–2 ativos, 3–4 reservas solo. */
 export async function createTowerRunAction(input: {
   pace: TowerPaceMode;
   expeditionRole: TowerExpeditionRole;
+  partyProfile?: TowerPartyProfile;
   mascotIds: string[];
   stanceByMascot?: Record<string, string>;
 }): Promise<{ error: string } | { ok: true; runId: string }> {
@@ -1121,8 +1126,13 @@ export async function createTowerRunAction(input: {
     return { error: "Ritmo inválido." };
   if (!TOWER_ROLE_BY_KEY[input.expeditionRole])
     return { error: "Função de Expedição inválida." };
-  const ids = [...new Set(input.mascotIds ?? [])];
-  if (ids.length !== 2) return { error: "Selecione exatamente 2 mascotes." };
+  // Compatibilidade com o cliente anterior até a interface oferecer a escolha explícita.
+  const profile = input.partyProfile ?? "GROUP";
+  if (profile !== "SOLO" && profile !== "GROUP")
+    return { error: "Perfil de expedição inválido." };
+  const formation = validateTowerFormation(profile, input.mascotIds ?? []);
+  if (!formation.ok) return { error: formation.reason };
+  const ids = formation.slots.map((slot) => slot.mascotId);
 
   if (await findActiveRunForUser(user.id))
     return { error: "Você já possui uma expedição ativa na Torre." };
@@ -1152,8 +1162,9 @@ export async function createTowerRunAction(input: {
       preferredCombatRole: true,
     },
   });
-  if (mascots.length !== 2)
+  if (mascots.length !== ids.length)
     return { error: "Um ou mais mascotes não estão disponíveis." };
+  const mascotById = new Map(mascots.map((mascot) => [mascot.id, mascot]));
 
   // Ticket da Torre: exigência configurável — desligada em desenvolvimento.
   // if (config.requireTicket) { /* consumir Ticket da Torre do inventário */ }
@@ -1164,6 +1175,8 @@ export async function createTowerRunAction(input: {
     const created = await tx.towerRun.create({
       data: {
         pace: input.pace,
+        partyProfile: profile,
+        balanceVersion: 2,
         seed,
         status: "LOBBY",
         resolutionOrder: [user.id],
@@ -1184,12 +1197,14 @@ export async function createTowerRunAction(input: {
         resolutionIndex: 0,
       },
     });
-    for (const m of mascots) {
+    for (const slot of formation.slots) {
+      const m = mascotById.get(slot.mascotId)!;
       const maxHp = towerMaxHp(m.level, m.statVitality);
       await tx.towerRunMascot.create({
         data: {
           memberId: member.id,
           mascotId: m.id,
+          formationSlot: slot.formationSlot,
           ownerUserId: user.id,
           currentHp: maxHp,
           maxHp,
@@ -1224,8 +1239,9 @@ export async function joinTowerRoomAction(input: {
     return { error: "Você já participa de uma expedição ativa." };
   const role = TOWER_ROLE_BY_KEY[input.expeditionRole];
   if (!role) return { error: "Classe inválida." };
-  const ids = [...new Set(input.mascotIds ?? [])];
-  if (ids.length !== 2) return { error: "Selecione exatamente 2 mascotes." };
+  const formation = validateTowerFormation("GROUP", input.mascotIds ?? []);
+  if (!formation.ok) return { error: formation.reason };
+  const ids = formation.slots.map((slot) => slot.mascotId);
   const mascots = await prisma.mascot.findMany({
     where: {
       id: { in: ids },
@@ -1243,12 +1259,14 @@ export async function joinTowerRoomAction(input: {
   });
   if (mascots.length !== 2)
     return { error: "Um dos mascotes não está disponível." };
+  const mascotById = new Map(mascots.map((mascot) => [mascot.id, mascot]));
   await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(input.runId)})`;
     const run = await tx.towerRun.findUnique({
       where: { id: input.runId },
       include: { members: true },
     });
-    if (!run || run.status !== "LOBBY" || run.members.length >= 3)
+    if (!run || run.status !== "LOBBY" || !canJoinTowerLobby(run.partyProfile, run.members.length))
       throw new Error("Sala indisponível ou cheia.");
     const member = await tx.towerRunMember.create({
       data: {
@@ -1258,13 +1276,15 @@ export async function joinTowerRoomAction(input: {
         resolutionIndex: run.members.length,
       },
     });
-    for (const m of mascots) {
+    for (const slot of formation.slots) {
+      const m = mascotById.get(slot.mascotId)!;
       const maxHp = towerMaxHp(m.level, m.statVitality);
       const requested = normalizeCombatRole(input.stanceByMascot?.[m.id]);
       await tx.towerRunMascot.create({
         data: {
           memberId: member.id,
           mascotId: m.id,
+          formationSlot: run.partyProfile === null ? null : slot.formationSlot,
           ownerUserId: user.id,
           currentHp: maxHp,
           maxHp,
@@ -1306,32 +1326,30 @@ export async function joinTowerRoomAction(input: {
 export async function setTowerReadyAction(runId: string, ready: boolean) {
   const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito." };
-  const run = await prisma.towerRun.findUnique({
-    where: { id: runId },
-    include: { members: true },
-  });
-  if (
-    !run ||
-    run.status !== "LOBBY" ||
-    !run.members.some((m) => m.userId === user.id)
-  )
-    return { error: "Sala não encontrada." };
-  const vol = (run.volatileState ?? {}) as {
-    lobby?: { code?: string; hostId?: string; ready?: Record<string, boolean> };
-  };
-  await prisma.towerRun.update({
-    where: { id: runId },
-    data: {
-      volatileState: {
+  const updated = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
+    const run = await tx.towerRun.findUnique({
+      where: { id: runId }, include: { members: true },
+    });
+    if (!run || run.status !== "LOBBY" || !run.members.some((m) => m.userId === user.id))
+      return false;
+    const vol = (run.volatileState ?? {}) as {
+      lobby?: { code?: string; hostId?: string; ready?: Record<string, boolean> };
+    };
+    await tx.towerRun.update({
+      where: { id: runId },
+      data: { volatileState: {
         ...vol,
         lobby: {
           ...vol.lobby,
           hostId: vol.lobby?.hostId ?? run.members[0]?.userId,
           ready: { ...(vol.lobby?.ready ?? {}), [user.id]: ready },
         },
-      } as Prisma.InputJsonValue,
-    },
+      } as Prisma.InputJsonValue },
+    });
+    return true;
   });
+  if (!updated) return { error: "Sala não encontrada." };
   revalidatePath(PATH);
   return { ok: true as const };
 }
@@ -1468,8 +1486,6 @@ export async function updateTowerLobbyMascotsAction(
   if (!user) return { error: "Acesso restrito." };
   const player = await getSessionPlayer(user.id);
   if (!player) return { error: "Jogador não encontrado." };
-  const ids = [...new Set(mascotIds)];
-  if (ids.length !== 2) return { error: "Selecione exatamente dois mascotes." };
   const run = await prisma.towerRun.findUnique({
     where: { id: runId },
     include: { members: { include: { mascots: true } } },
@@ -1477,10 +1493,14 @@ export async function updateTowerLobbyMascotsAction(
   const member = run?.members.find((entry) => entry.userId === user.id);
   if (!run || run.status !== "LOBBY" || !member)
     return { error: "Equipe só pode ser alterada no lobby." };
+  const profile = run.partyProfile ?? "GROUP";
+  const formation = validateTowerFormation(profile, mascotIds);
+  if (!formation.ok) return { error: formation.reason };
+  const ids = formation.slots.map((slot) => slot.mascotId);
   const lobby = (
     (run.volatileState ?? {}) as { lobby?: { ready?: Record<string, boolean> } }
   ).lobby;
-  if (lobby?.ready?.[user.id])
+  if (!canEditTowerFormation(run.status, Boolean(lobby?.ready?.[user.id])))
     return { error: "Cancele o Pronto antes de atualizar os mascotes." };
   const mascots = await prisma.mascot.findMany({
     where: {
@@ -1497,18 +1517,31 @@ export async function updateTowerLobbyMascotsAction(
       preferredCombatRole: true,
     },
   });
-  if (mascots.length !== 2)
+  if (mascots.length !== ids.length)
     return { error: "Um dos mascotes não está disponível." };
   const role = TOWER_ROLE_BY_KEY[member.expeditionRole];
+  const mascotById = new Map(mascots.map((mascot) => [mascot.id, mascot]));
   await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
+    const latest = await tx.towerRun.findUnique({
+      where: { id: runId },
+      select: { status: true, partyProfile: true, volatileState: true, members: { select: { id: true, userId: true } } },
+    });
+    const latestReady = ((latest?.volatileState ?? {}) as { lobby?: { ready?: Record<string, boolean> } }).lobby?.ready?.[user.id] ?? false;
+    if (!latest || latest.partyProfile !== run.partyProfile ||
+        !latest.members.some((entry) => entry.id === member.id && entry.userId === user.id) ||
+        !canEditTowerFormation(latest.status, latestReady))
+      throw new Error("Cancele o Pronto antes de atualizar os mascotes.");
     await tx.towerRunMascot.deleteMany({ where: { memberId: member.id } });
-    for (const mascot of mascots) {
+    for (const slot of formation.slots) {
+      const mascot = mascotById.get(slot.mascotId)!;
       const maxHp = towerMaxHp(mascot.level, mascot.statVitality);
       const requested = normalizeCombatRole(stanceByMascot[mascot.id]);
       await tx.towerRunMascot.create({
         data: {
           memberId: member.id,
           mascotId: mascot.id,
+          formationSlot: run.partyProfile === null ? null : slot.formationSlot,
           ownerUserId: user.id,
           currentHp: maxHp,
           maxHp,
@@ -1597,13 +1630,14 @@ export async function startTowerExpeditionAction(
       status: true,
       pace: true,
       seed: true,
+      partyProfile: true,
       volatileState: true,
       members: {
         select: {
           userId: true,
           resolutionIndex: true,
           expeditionRole: true,
-          mascots: { select: { mascotId: true, currentStance: true } },
+          mascots: { select: { mascotId: true, currentStance: true, formationSlot: true } },
         },
       },
     },
@@ -1622,6 +1656,18 @@ export async function startTowerExpeditionAction(
     return { error: "Somente o criador da sala pode iniciar." };
   if (!run.members.every((m) => lobby?.ready?.[m.userId]))
     return { error: "Todos os jogadores precisam marcar Pronto." };
+  if (run.partyProfile === "SOLO" && run.members.length !== 1)
+    return { error: "A expedição Solo exige um único treinador." };
+  if (run.partyProfile === "GROUP" && (run.members.length < 2 || run.members.length > 3))
+    return { error: "A expedição em Grupo exige dois ou três treinadores." };
+  if (run.partyProfile) {
+    for (const member of run.members) {
+      const ordered = [...member.mascots].sort((a, b) => (a.formationSlot ?? 0) - (b.formationSlot ?? 0));
+      const formation = validateTowerFormation(run.partyProfile, ordered.map((mascot) => mascot.mascotId));
+      if (!formation.ok || ordered.some((mascot, index) => mascot.formationSlot !== index + 1))
+        return { error: "Formação incompleta ou inválida no lobby." };
+    }
+  }
   const config = await getTowerConfig();
   await ensureTowerTicket();
   await ensureTowerReviveItem();
@@ -1676,6 +1722,30 @@ export async function startTowerExpeditionAction(
       talentFx.pressureShieldStart,
   }, order);
   await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
+    const latest = await tx.towerRun.findUnique({
+      where: { id: runId },
+      select: { status: true, partyProfile: true, volatileState: true, members: { select: { userId: true, mascots: { select: { mascotId: true, formationSlot: true } } } } },
+    });
+    const latestReady = ((latest?.volatileState ?? {}) as { lobby?: { ready?: Record<string, boolean> } }).lobby?.ready ?? {};
+    if (!latest || latest.status !== "LOBBY" || latest.partyProfile !== run.partyProfile ||
+      latest.members.length !== run.members.length ||
+      !latest.members.every((member) => latestReady[member.userId] &&
+        run.members.some((earlier) => earlier.userId === member.userId &&
+          earlier.mascots.length === member.mascots.length &&
+          earlier.mascots.every((mascot) => member.mascots.some((current) =>
+            current.mascotId === mascot.mascotId && current.formationSlot === mascot.formationSlot)))))
+      throw new Error("O lobby mudou durante o início da expedição. Tente novamente.");
+    if (latest.partyProfile === "SOLO" && latest.members.length !== 1)
+      throw new Error("Lobby Solo não pode ter convidados.");
+    if (latest.partyProfile === "GROUP" && (latest.members.length < 2 || latest.members.length > 3))
+      throw new Error("O grupo exige dois ou três treinadores.");
+    if (latest.partyProfile) for (const member of latest.members) {
+      const ordered = [...member.mascots].sort((a, b) => (a.formationSlot ?? 0) - (b.formationSlot ?? 0));
+      const valid = validateTowerFormation(latest.partyProfile, ordered.map((mascot) => mascot.mascotId));
+      if (!valid.ok || ordered.some((mascot, index) => mascot.formationSlot !== index + 1))
+        throw new Error("Formação alterada durante o início. Tente novamente.");
+    }
     if (config.requireTicket)
       for (const player of memberPlayers) {
         const inventory = await tx.playerInventory.findUnique({
@@ -2255,6 +2325,8 @@ export async function getTowerRunStateAction(
     order: Array.isArray(run.resolutionOrder)
       ? (run.resolutionOrder as string[])
       : [],
+    partyProfile: run.partyProfile,
+    balanceVersion: run.balanceVersion,
     members: run.members.map((m) => ({
       userId: m.userId,
       name: userNames.get(m.userId) ?? "Jogador",
@@ -2265,7 +2337,7 @@ export async function getTowerRunStateAction(
       spectator: !m.mascots.some(
         (mascot) => mascot.currentHp > 0 && mascot.state === "IN_TOWER",
       ),
-      mascots: m.mascots.map((snapshot) => {
+      mascots: [...m.mascots].sort((a, b) => (a.formationSlot ?? 0) - (b.formationSlot ?? 0)).map((snapshot) => {
         const mascot = setupMascots.get(snapshot.mascotId);
         return {
           id: snapshot.mascotId,
@@ -2275,6 +2347,7 @@ export async function getTowerRunStateAction(
             (mascot ? getPokemonName(mascot.pokemonId) : "Mascote"),
           level: mascot?.level ?? 1,
           stance: snapshot.currentStance,
+          formationSlot: snapshot.formationSlot,
           allowedStances: Array.isArray(snapshot.allowedStances)
             ? snapshot.allowedStances.map(String)
             : [],
