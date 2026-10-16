@@ -531,7 +531,7 @@ export default async function TournamentAdminPage({ params }: Props) {
           tournamentId={tournament.id}
           enabled={tournament.postseasonEnabled}
           entries={tournament.postseasonEntries.map((entry) => ({ id: entry.id, playerName: entry.player.displayName, stage: entry.stage, seed: entry.seed, initialLives: entry.initialLives, lives: entry.lives, status: entry.status, resultLabel: entry.resultLabel }))}
-          matches={postseasonMatches.map((match) => ({ id: match.id, stage: match.postseasonStage!, round: match.postseasonRound ?? 1, label: match.roundLabel ?? "Partida final", playerA: match.playerA.displayName, playerB: match.playerB?.displayName ?? "Bye", status: match.status, processed: Boolean(match.postseasonProcessedAt) }))}
+          matches={postseasonMatches.map((match) => ({ id: match.id, stage: match.postseasonStage!, round: match.postseasonRound ?? 1, label: match.roundLabel ?? "Partida final", playerA: match.playerA.displayName, playerB: match.playerB?.displayName ?? "Bye", playerAId: match.playerAId, playerBId: match.playerBId, winnerPlayerId: match.winnerPlayerId, winnerName: match.winnerPlayerId ? (match.winnerPlayerId === match.playerAId ? match.playerA.displayName : match.playerB?.displayName ?? null) : null, status: match.status, processed: Boolean(match.postseasonProcessedAt) }))}
         />
       </section>
 

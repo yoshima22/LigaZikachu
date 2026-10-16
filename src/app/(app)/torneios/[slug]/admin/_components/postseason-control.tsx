@@ -10,6 +10,7 @@ import {
   initializePostseason,
   resetPostseason,
   setPostseasonMatchState,
+  setPostseasonMatchWinner,
   setPostseasonEnabled,
 } from "../postseason-actions";
 
@@ -31,6 +32,10 @@ type FinalMatch = {
   label: string;
   playerA: string;
   playerB: string;
+  playerAId: string;
+  playerBId: string | null;
+  winnerPlayerId: string | null;
+  winnerName: string | null;
   status: string;
   processed: boolean;
 };
@@ -96,8 +101,8 @@ export function PostseasonControl({ tournamentId, enabled, entries, matches }: {
       {initialized && (
         <>
           <div className="grid gap-4 xl:grid-cols-2">
-            <StagePanel icon={<Crown size={17} />} title="Chave de Sobrevivência Z" entries={titleEntries} matches={matches.filter((match) => match.stage === "TITLE_SURVIVAL")} showLives onAdvance={() => run(() => advancePostseason(tournamentId, "TITLE_SURVIVAL"), "Rodada da Chave Z processada.")} onLives={(id, lives) => run(() => adjustPostseasonLives(id, lives), "Vidas ajustadas.")} onMatchState={(id, state) => run(() => setPostseasonMatchState(id, state), "Estado da partida atualizado.")} pending={pending} />
-            <StagePanel icon={<Shield size={17} />} title="Copa Johto de Recompensas" entries={cupEntries} matches={matches.filter((match) => match.stage === "CUP_JOHTO")} onAdvance={() => run(() => advancePostseason(tournamentId, "CUP_JOHTO"), "Rodada da Copa processada.")} onLives={() => undefined} onMatchState={(id, state) => run(() => setPostseasonMatchState(id, state), "Estado da partida atualizado.")} pending={pending} />
+            <StagePanel icon={<Crown size={17} />} title="Chave de Sobrevivência Z" entries={titleEntries} matches={matches.filter((match) => match.stage === "TITLE_SURVIVAL")} showLives onAdvance={() => run(() => advancePostseason(tournamentId, "TITLE_SURVIVAL"), "Rodada da Chave Z processada.")} onLives={(id, lives) => run(() => adjustPostseasonLives(id, lives), "Vidas ajustadas.")} onMatchState={(id, state) => run(() => setPostseasonMatchState(id, state), "Estado da partida atualizado.")} onSetWinner={(id, winnerId) => run(() => setPostseasonMatchWinner(id, winnerId), "Vencedor registrado.")} pending={pending} />
+            <StagePanel icon={<Shield size={17} />} title="Copa Johto de Recompensas" entries={cupEntries} matches={matches.filter((match) => match.stage === "CUP_JOHTO")} onAdvance={() => run(() => advancePostseason(tournamentId, "CUP_JOHTO"), "Rodada da Copa processada.")} onLives={() => undefined} onMatchState={(id, state) => run(() => setPostseasonMatchState(id, state), "Estado da partida atualizado.")} onSetWinner={(id, winnerId) => run(() => setPostseasonMatchWinner(id, winnerId), "Vencedor registrado.")} pending={pending} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-400/20 bg-red-500/5 p-3">
             <p className="text-xs text-red-200">Reiniciar remove apenas a Semana 9, suas partidas e os estados de vidas. A fase regular não é alterada.</p>
@@ -112,7 +117,7 @@ export function PostseasonControl({ tournamentId, enabled, entries, matches }: {
   );
 }
 
-function StagePanel({ icon, title, entries, matches, showLives = false, onAdvance, onLives, onMatchState, pending }: {
+function StagePanel({ icon, title, entries, matches, showLives = false, onAdvance, onLives, onMatchState, onSetWinner, pending }: {
   icon: React.ReactNode;
   title: string;
   entries: Entry[];
@@ -121,6 +126,7 @@ function StagePanel({ icon, title, entries, matches, showLives = false, onAdvanc
   onAdvance: () => void;
   onLives: (id: string, lives: number) => void;
   onMatchState: (id: string, state: "DRAFT" | "PENDING_CONFIRMATION" | "DISPUTED" | "CANCELED") => void;
+  onSetWinner: (id: string, winnerId: string) => void;
   pending: boolean;
 }) {
   return (
@@ -135,7 +141,7 @@ function StagePanel({ icon, title, entries, matches, showLives = false, onAdvanc
         ))}
       </div>
       <div className="space-y-1.5">
-        {matches.map((match) => <div key={match.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-[11px]"><Swords size={12} className="text-cyan-300" /><span className="min-w-[180px] flex-1 text-slate-200">R{match.round} · {match.playerA} × {match.playerB}</span>{match.processed ? <span className="text-emerald-300">PROCESSADA</span> : match.status === "CONFIRMED" ? <span className="text-emerald-300">CONFIRMADA</span> : <select value={match.status} disabled={pending} onChange={(event) => onMatchState(match.id, event.target.value as "DRAFT" | "PENDING_CONFIRMATION" | "DISPUTED" | "CANCELED")} className="rounded border border-slate-700 bg-slate-950 px-2 py-1 text-[10px] text-slate-200"><option value="DRAFT">Rascunho</option><option value="PENDING_CONFIRMATION">Aguardando resultado</option><option value="DISPUTED">Em disputa</option><option value="CANCELED">Cancelada</option></select>}</div>)}
+        {matches.map((match) => <div key={match.id} className="flex flex-wrap items-center gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-3 py-2 text-[11px]"><Swords size={12} className="text-cyan-300" /><span className="min-w-[180px] flex-1 text-slate-200">R{match.round} · {match.playerA} × {match.playerB}</span>{match.processed ? <span className="text-emerald-300">PROCESSADA · venceu {match.winnerName}</span> : match.winnerPlayerId ? <span className="flex items-center gap-2"><span className="font-semibold text-emerald-300">✓ venceu {match.winnerName}</span><button type="button" onClick={() => onMatchState(match.id, "PENDING_CONFIRMATION")} disabled={pending} className="rounded border border-slate-700 px-2 py-0.5 text-[10px] text-slate-400 hover:text-slate-200 disabled:opacity-40">trocar</button></span> : match.playerBId ? <span className="flex items-center gap-1"><span className="text-[10px] text-slate-500">Venceu:</span><button type="button" onClick={() => onSetWinner(match.id, match.playerAId)} disabled={pending} className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-200 disabled:opacity-40">{match.playerA}</button><button type="button" onClick={() => onSetWinner(match.id, match.playerBId!)} disabled={pending} className="rounded border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5 text-[10px] font-bold text-cyan-200 disabled:opacity-40">{match.playerB}</button></span> : <span className="text-[10px] text-slate-500">Bye</span>}</div>)}
       </div>
     </section>
   );

@@ -1,9 +1,9 @@
 "use server";
 
 import {
-  EggType,
   MatchStatus,
   type Prisma,
+  ResultSource,
   TournamentPostseasonStage,
   TournamentPostseasonStatus,
   WeekMode,
@@ -227,6 +227,33 @@ export async function advancePostseason(tournamentId: string, rawStage: "TITLE_S
 
   await prisma.auditLog.create({ data: { actorUserId: admin.id, entityType: "tournament", entityId: tournamentId, action: "postseason.advanced", after: { stage, processedRound: pendingRound } } });
   refresh(tournament.slug);
+  return { success: true };
+}
+
+/** Registra o vencedor de uma partida da fase final direto do painel (autoritativo). */
+export async function setPostseasonMatchWinner(matchId: string, winnerPlayerId: string) {
+  const admin = await requireAdmin();
+  const match = await prisma.match.findUnique({ where: { id: matchId }, include: { tournamentWeek: { include: { tournament: { select: { slug: true } } } } } });
+  if (!match?.postseasonStage || !match.tournamentWeek?.tournament) throw new Error("Partida da fase final não encontrada.");
+  if (match.postseasonProcessedAt) throw new Error("Uma partida já processada não pode mudar de vencedor.");
+  if (!match.playerBId) throw new Error("Partida sem adversário (Bye).");
+  if (winnerPlayerId !== match.playerAId && winnerPlayerId !== match.playerBId) throw new Error("Vencedor inválido para esta partida.");
+  const loserPlayerId = winnerPlayerId === match.playerAId ? match.playerBId : match.playerAId;
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.match.update({
+      where: { id: match.id },
+      data: {
+        winnerPlayerId, loserPlayerId,
+        playerAWins: winnerPlayerId === match.playerAId ? 1 : 0,
+        playerBWins: winnerPlayerId === match.playerBId ? 1 : 0,
+        status: MatchStatus.CONFIRMED, resultSource: ResultSource.ADMIN_ADJUSTMENT,
+        reportedById: admin.id, confirmedById: admin.id, reportedAt: now, confirmedAt: now, playedAt: match.playedAt ?? now,
+      },
+    }),
+    prisma.auditLog.create({ data: { actorUserId: admin.id, entityType: "match", entityId: match.id, action: "postseason.winner_set", after: { winnerPlayerId } } }),
+  ]);
+  refresh(match.tournamentWeek.tournament.slug);
   return { success: true };
 }
 
