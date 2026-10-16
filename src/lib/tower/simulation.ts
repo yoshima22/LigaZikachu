@@ -1,7 +1,8 @@
 /** Offline, seeded Tower model. Never call this from a request handler: the league
  * combat engine still consumes Math.random, which we scope to each synchronous fight. */
 import { getPokemonTypes } from "@/lib/mascot-data";
-import { runLeagueCombat, type LeagueMascot } from "@/lib/league-combat";
+import { type LeagueMascot } from "@/lib/league-combat";
+import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
 import { towerAddCaptive, towerBossDefenderCount, towerEnemyBaseStat, type TowerBalance } from "./balance-rules";
 import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
@@ -32,7 +33,7 @@ export type TowerSimulationReport = {
   unresolvedRooms: string[]; memberPositions: Record<string, string>;
 };
 
-type SimMascot = { id: string; ownerId: string; pokemonId: number; level: number; stat: number; maxHp: number; hp: number; combatRole: LeagueMascot["combatRole"] };
+type SimMascot = { id: string; ownerId: string; pokemonId: number; level: number; stat: number; maxHp: number; hp: number; combatRole: LeagueMascot["combatRole"]; formationSlot: number };
 const TIERS = {
   ZERO: { level: 70, stat: 220, ranks: {} as Record<string, number> },
   INTERMEDIATE: { level: 70, stat: 225, ranks: { COMBAT: 2, PRESSURE: 2, VIGOR: 2, BULWARK: 2, COMPOSURE: 2, PATHFINDER: 2 } as Record<string, number> },
@@ -40,6 +41,7 @@ const TIERS = {
 } as const;
 const ROLES = ["ARTIFICE", "RITUALISTA", "PROTETOR"] as const;
 const STANCES = [["ATTACKER", "SPECIALIST"], ["HEALER", "SURVIVOR"], ["DEFENDER", "GUARDIAN"]] as const;
+const SOLO_STANCES = ["ATTACKER", "SPECIALIST", "DEFENDER", "HEALER"] as const;
 const BOSS_POKEMON_IDS = [210006, 210005, 210003, 210004, 210002, 210007, 210001];
 
 function seedNumber(value: string) {
@@ -57,24 +59,6 @@ function seededRandom(seed: string) {
     value ^= value + Math.imul(value ^ (value >>> 7), value | 61);
     return ((value ^ (value >>> 14)) >>> 0) / 4294967296;
   };
-}
-
-function simulatedBattle(allies: LeagueMascot[], enemies: LeagueMascot[], random: () => number) {
-  const prior = Math.random;
-  Math.random = random;
-  try { return runLeagueCombat(allies, enemies); }
-  finally { Math.random = prior; }
-}
-
-function remainingHp(lineup: LeagueMascot[], log: { action: string; targetId: string; damage: number }[]) {
-  const hp = new Map(lineup.map((mascot) => [mascot.id, mascot.hp]));
-  for (const event of log) {
-    const current = hp.get(event.targetId);
-    if (current === undefined) continue;
-    if (event.action === "ATTACK") hp.set(event.targetId, Math.max(0, current - event.damage));
-    if (event.action === "HEAL" && current > 0) hp.set(event.targetId, Math.min(lineup.find((entry) => entry.id === event.targetId)!.hp, current + event.damage));
-  }
-  return hp;
 }
 
 export function simulatedAllyStat(base: number, classMult: number, talentMult: number): number {
@@ -102,11 +86,13 @@ export function simulateTower(
   const talentValue = (key: string) => tier.ranks[key] ?? 0;
   const talentFx = resolveTowerTalents(talentValue);
   state.pressureShield = talentFx.pressureShieldStart;
-  const mascots: SimMascot[] = memberIds.flatMap((ownerId, index) => [0, 1].map((slot) => {
+  const mascots: SimMascot[] = memberIds.flatMap((ownerId, index) =>
+    Array.from({ length: partySize === 1 ? 4 : 2 }, (_, slot) => {
     const maxHp = 55 + tier.level * 6 + tier.stat * 4;
     return { id: `${ownerId}-${slot}`, ownerId, pokemonId: [448, 196, 25, 94, 197, 609][index * 2 + slot],
       level: tier.level, stat: tier.stat, maxHp, hp: maxHp,
-      combatRole: STANCES[index][slot] as LeagueMascot["combatRole"] };
+      formationSlot: slot + 1,
+      combatRole: (partySize === 1 ? SOLO_STANCES[slot] : STANCES[index][slot]) as LeagueMascot["combatRole"] };
   }));
   let floor = 1, turns = 0, pressurePeak = 0, downedCount = 0, recoveries = 0, bossesDefeated = 0;
   let outcome: TowerSimulationReport["outcome"] = "TURN_LIMIT";
@@ -187,11 +173,17 @@ export function simulateTower(
       const bossMissingAlly = room.kind === "BOSS" && memberIds.some((id) => state.members[id].status === "ACTIVE" && state.members[id].roomId !== roomId);
       if (state.rooms[roomId].cleared) continue;
       if ((room.kind === "COMBAT" || room.kind === "BOSS") && !state.rooms[roomId].encounter) {
-        const local = mascots.filter((mascot) => memberGroup.includes(mascot.ownerId) && mascot.hp > 0);
+        const frontline = mascots.filter((mascot) => memberGroup.includes(mascot.ownerId) && mascot.hp > 0 &&
+          (partySize !== 1 || mascot.formationSlot <= 2));
+        const local = frontline.length ? frontline : mascots.filter((mascot) => memberGroup.includes(mascot.ownerId) && mascot.hp > 0);
         const averageLevel = Math.round(local.reduce((sum, mascot) => sum + mascot.level, 0) / Math.max(1, local.length));
-        const allyCount = room.kind === "BOSS"
-          ? mascots.filter((mascot) => state.members[mascot.ownerId]?.status === "ACTIVE" && mascot.hp > 0).length
+        const activeAllyCount = room.kind === "BOSS"
+          ? mascots.filter((mascot) => state.members[mascot.ownerId]?.status === "ACTIVE" && mascot.hp > 0 &&
+            (partySize !== 1 || mascot.formationSlot <= 2)).length
           : local.length;
+        const allyCount = activeAllyCount || (partySize === 1
+          ? mascots.filter((mascot) => state.members[mascot.ownerId]?.status === "ACTIVE" && mascot.hp > 0).length
+          : 0);
         let preview = towerEncounterPreview(room, averageLevel, allyCount);
         if (room.kind === "BOSS") {
           preview.length = towerBossDefenderCount(allyCount, floor, balance);
@@ -210,7 +202,7 @@ export function simulateTower(
         preBossPressure.push(state.pressure);
       const result = resolveRoomFront(state, roomId, actions, ({ room: combatRoom, memberIds: presentIds }) => {
         if (combatRoom.kind === "BOSS" && bossFightTurns[floor - 1] === undefined) bossFightTurns[floor - 1] = turns;
-        const locals = mascots.filter((mascot) => presentIds.includes(mascot.ownerId) && mascot.hp > 0);
+        const locals = mascots.filter((mascot) => presentIds.includes(mascot.ownerId) && (partySize === 1 || mascot.hp > 0));
         const allies: LeagueMascot[] = locals.map((mascot, index) => {
           const role = ROLES[memberIds.indexOf(mascot.ownerId)];
           const classFx = resolveTowerClassEffects(role, { kind: "COMBAT" });
@@ -224,8 +216,9 @@ export function simulateTower(
             charisma: value(classFx.charismaMult, talentFx.charismaMult), hp: mascot.hp,
             combatRole: missingThisTurn.has(mascot.ownerId) ? "DEFENDER" : mascot.combatRole, slot: index + 1 };
         });
-        if (!allies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto."], kos: [] };
-        const averageLevel = Math.round(allies.reduce((sum, ally) => sum + ally.level, 0) / allies.length);
+        const fightingAllies = allies.filter((ally) => ally.hp > 0);
+        if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto."], kos: [] };
+        const averageLevel = Math.round(fightingAllies.reduce((sum, ally) => sum + ally.level, 0) / fightingAllies.length);
         const pressureMult = state.activeModifiers.reduce((product, modifier) => product * modifier.enemyMultiplier, 1) *
           (1 + state.pressure * talentFx.enemyPressureScale) *
           (1 - (state.overload && state.overload.expiresAfterTurn >= turns ? state.overload.value : 0));
@@ -238,11 +231,19 @@ export function simulateTower(
             force: base, agility: base, instinct: base, vitality: base, charisma: base,
             hp: 55 + enemy.level * 6 + base * 4, combatRole: index % 2 ? "DEFENDER" : "ATTACKER", slot: index + 1 };
         });
-        const battle = simulatedBattle(allies, enemies, random);
-        const hp = remainingHp(allies, battle.log);
-        const enemyHp = remainingHp(enemies, battle.log);
-        return { won: battle.winner === "A", hpByMascotId: Object.fromEntries(allies.map((ally) => [ally.id, hp.get(ally.id) ?? 0])),
-          events: [], kos: enemies.filter((enemy) => (enemyHp.get(enemy.id) ?? 0) <= 0).map((enemy) => enemy.id) };
+        const slotByMascotId = new Map(locals.map((mascot) => [mascot.id, mascot.formationSlot]));
+        const { active, reserves } = selectTowerBattleWaves(
+          partySize === 1 ? "SOLO" : "GROUP", 2,
+          allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })),
+        );
+        const battle = resolveTowerBattle({
+          active,
+          reserves,
+          enemies,
+          random,
+        });
+        return { won: battle.battle.winner === "A", hpByMascotId: battle.hpByMascotId,
+          events: [], kos: enemies.filter((enemy) => (battle.enemyHpById[enemy.id] ?? 0) <= 0).map((enemy) => enemy.id) };
       });
       state = result.state;
       fronts.push(result);

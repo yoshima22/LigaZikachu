@@ -12,6 +12,13 @@ test("same seed and expedition configuration reproduce the entire report", () =>
   assert.deepEqual(first, second);
 });
 
+test("solo models four HP snapshots while a group has two per trainer", () => {
+  const solo = simulateTower("formation-4", 1, "PREPARED", "ONLINE", "UNITED");
+  const duo = simulateTower("formation-4", 2, "PREPARED", "ONLINE", "UNITED");
+  assert.equal(solo.hpMaximum, duo.hpMaximum);
+  assert.equal(solo.hpMaximum, 4 * (55 + 70 * 6 + 240 * 4));
+});
+
 test("split first boss freezes an encounter sized for all living active trainers", () => {
   const report = simulateTower("validate-1", 3, "PREPARED", "ONLINE", "SPLIT");
   assert.equal(report.bossDefenderCounts[0], 4);

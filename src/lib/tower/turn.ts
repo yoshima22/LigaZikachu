@@ -37,6 +37,7 @@ import { resolveTowerTalents, towerLuckCoins, towerRescueCapacity } from "./tale
 import { isExpeditionV2, type TowerExpeditionV2 } from "./expedition-state";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront, type RoomFrontAction, type RoomFrontResult } from "./room-resolver";
 import { addCombatToRunReport, recordRecoveryInReport, recordRoomClearedInReport } from "./run-report";
+import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
 import { advanceV2Turn, type V2Submission } from "./turn-v2-rules";
 import {
   applyPressureToExpedition,
@@ -64,12 +65,14 @@ export type TowerVolatile = {
 type V2RunInput = {
   id: string;
   seed: string;
+  partyProfile: "SOLO" | "GROUP" | null;
+  balanceVersion: number | null;
   currentFloor: number;
   globalTurn: number;
   members: Array<{
     userId: string;
     expeditionRole: string;
-    mascots: Array<{ mascotId: string; currentHp: number; maxHp: number; currentStance: string }>;
+    mascots: Array<{ mascotId: string; currentHp: number; maxHp: number; currentStance: string; formationSlot: number | null }>;
   }>;
 };
 
@@ -136,6 +139,7 @@ async function resolveV2RoomFronts(
   });
   const talentValue = (key: string) => talentRows.find((entry) => entry.metricKey === `TALENT:${key}`)?.value ?? 0;
   const talentFx = resolveTowerTalents(talentValue);
+  const soloWaves = run.partyProfile === "SOLO" && run.balanceVersion === 2;
   let next = state;
   const log: string[] = [];
   const fronts: RoomFrontResult[] = [];
@@ -143,12 +147,19 @@ async function resolveV2RoomFronts(
     const currentRoom = next.graph.find((room) => room.id === roomId);
     if (currentRoom && (currentRoom.kind === "COMBAT" || currentRoom.kind === "BOSS") && !next.rooms[roomId]?.encounter) {
       const presentIds = groupActiveMembersByRoom(next).get(roomId) ?? [];
-      const present = snapshots.filter((snapshot) => presentIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
-      const levels = present.map((snapshot) => mascotById.get(snapshot.mascotId)?.level ?? 1);
+      const present = snapshots.filter((snapshot) => presentIds.includes(snapshot.member.userId) && snapshot.currentHp > 0 &&
+        (!soloWaves || (snapshot.formationSlot ?? 0) <= 2));
+      const effectivePresent = present.length ? present : snapshots.filter((snapshot) =>
+        presentIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
+      const levels = effectivePresent.map((snapshot) => mascotById.get(snapshot.mascotId)?.level ?? 1);
       const averageLevel = Math.max(1, Math.round(levels.reduce((sum, level) => sum + level, 0) / Math.max(1, levels.length)));
-      const allyCount = currentRoom.kind === "BOSS"
+      const activeAllyCount = currentRoom.kind === "BOSS"
+        ? snapshots.filter((snapshot) => next.members[snapshot.member.userId]?.status === "ACTIVE" && snapshot.currentHp > 0 &&
+          (!soloWaves || (snapshot.formationSlot ?? 0) <= 2)).length
+        : effectivePresent.length;
+      const allyCount = activeAllyCount || (soloWaves
         ? snapshots.filter((snapshot) => next.members[snapshot.member.userId]?.status === "ACTIVE" && snapshot.currentHp > 0).length
-        : present.length;
+        : 0);
       let preview = towerEncounterPreview(currentRoom, averageLevel, allyCount);
       if (currentRoom.kind === "BOSS") preview.length = towerBossDefenderCount(allyCount, run.currentFloor);
       if (currentRoom.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
@@ -181,7 +192,8 @@ async function resolveV2RoomFronts(
     let combatForReport: { allies: LeagueMascot[]; enemies: LeagueMascot[]; log: Parameters<typeof addCombatToRunReport>[3]; won: boolean; boss: boolean } | null = null;
     const wasCleared = Boolean(next.rooms[roomId]?.cleared);
     const result = resolveRoomFront(next, roomId, actions, ({ room, memberIds }) => {
-      const local = snapshots.filter((snapshot) => memberIds.includes(snapshot.member.userId) && snapshot.currentHp > 0);
+      const local = snapshots.filter((snapshot) => memberIds.includes(snapshot.member.userId) &&
+        (soloWaves || snapshot.currentHp > 0));
       const allies = local.flatMap((snapshot, index) => {
         const mascot = mascotById.get(snapshot.mascotId);
         if (!mascot) return [];
@@ -203,8 +215,9 @@ async function resolveV2RoomFronts(
         fighter.charisma = Math.round(fighter.charisma * talentMult * talentFx.charismaMult * bossMult);
         return [fighter];
       });
-      if (!allies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
-      const averageLevel = Math.max(1, Math.round(allies.reduce((sum, mascot) => sum + mascot.level, 0) / allies.length));
+      const fightingAllies = allies.filter((mascot) => mascot.hp > 0);
+      if (!fightingAllies.length) return { won: false, hpByMascotId: {}, events: ["Nenhum mascote apto para lutar nesta sala."], kos: [] };
+      const averageLevel = Math.max(1, Math.round(fightingAllies.reduce((sum, mascot) => sum + mascot.level, 0) / fightingAllies.length));
       const preview = (next.rooms[roomId].encounter?.enemies ?? towerEncounterPreview(room, averageLevel, allies.length))
         .map((enemy) => ({ ...enemy }));
       if (room.kind === "BOSS" && preview[0]) preview[0].pokemonId = towerRewardForFloor(run.currentFloor).pokemonId;
@@ -229,24 +242,28 @@ async function resolveV2RoomFronts(
           slot: index + 1,
         };
       });
-      const battle = runLeagueCombat(allies, enemies);
+      const slotByMascotId = new Map(local.map((snapshot) => [snapshot.mascotId, snapshot.formationSlot]));
+      const { active, reserves } = selectTowerBattleWaves(run.partyProfile, run.balanceVersion,
+        allies.map((fighter) => ({ fighter, formationSlot: slotByMascotId.get(fighter.id) ?? null })));
+      const resolved = resolveTowerBattle({ active, reserves, enemies });
+      const battle = resolved.battle;
       combatForReport = { allies, enemies, log: battle.log, won: battle.winner === "A", boss: room.kind === "BOSS" };
-      const hp = finalHp(allies, battle.log);
-      const enemyHp = finalHp(enemies, battle.log);
       const replay = {
         winner: battle.winner,
         log: battle.log,
         lineupA: battle.lineupA,
         lineupB: battle.lineupB,
+        reserveLineupA: battle.reserveLineupA,
+        reserveEntered: battle.reserveEntered,
         teamASurvivors: battle.teamASurvivors,
         teamBSurvivors: battle.teamBSurvivors,
         title: room.title,
       };
       return {
         won: battle.winner === "A",
-        hpByMascotId: Object.fromEntries(allies.map((ally) => [ally.id, hp.get(ally.id) ?? 0])),
+        hpByMascotId: resolved.hpByMascotId,
         events: [battle.winner === "A" ? `${room.title} foi vencida.` : `${room.title}: a frente caiu.`],
-        kos: enemies.filter((enemy) => (enemyHp.get(enemy.id) ?? 0) <= 0).map((enemy) => enemy.id),
+        kos: enemies.filter((enemy) => (resolved.enemyHpById[enemy.id] ?? 0) <= 0).map((enemy) => enemy.id),
         replay,
       };
     });

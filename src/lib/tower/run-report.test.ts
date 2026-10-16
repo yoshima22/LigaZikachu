@@ -43,3 +43,11 @@ test("damage received accounts for health restored between attacks", () => {
   assert.equal(report.mascots.ally.damageReceived, 150);
   assert.equal(report.mascots.ally.healing, 50);
 });
+
+test("a reserve receives one report entry even when it never attacks", () => {
+  const reserve = { ...ally, id: "reserve", name: "Reserva", slot: 3 };
+  const report = addCombatToRunReport(undefined, [ally, reserve], [enemy], [], false, false);
+  assert.deepEqual(Object.keys(report.mascots).sort(), ["ally", "reserve"]);
+  assert.equal(report.mascots.reserve.damageDealt, 0);
+  assert.equal(report.mascots.reserve.kos, 0);
+});

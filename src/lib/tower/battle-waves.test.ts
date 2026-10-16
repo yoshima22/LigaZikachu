@@ -1,0 +1,52 @@
+import assert from "node:assert/strict";
+import test from "node:test";
+import type { LeagueMascot } from "../league-combat";
+import { resolveTowerBattle, selectTowerBattleWaves } from "./battle-waves";
+import { addCombatToRunReport } from "./run-report";
+
+function fighter(id: string, ownerId: string, stats: Partial<LeagueMascot> = {}): LeagueMascot {
+  return { id, ownerId, pokemonId: 25, types: ["NORMAL"], name: id, level: 20,
+    force: 30, agility: 30, instinct: 20, vitality: 20, charisma: 20,
+    hp: 100, combatRole: "ATTACKER", slot: 1, ...stats };
+}
+
+test("one solo battle resolves two waves and reports all four mascots once", () => {
+  const active = [fighter("a1", "owner", { hp: 8, force: 2, agility: 1 }), fighter("a2", "owner", { hp: 8, force: 2, agility: 1, slot: 2 })];
+  const reserves = [fighter("r1", "owner", { hp: 300, force: 120, agility: 50 }), fighter("r2", "owner", { hp: 300, force: 120, agility: 50, slot: 2 })];
+  const enemies = [fighter("enemy", "TORRE", { hp: 700, force: 50 })];
+  const result = resolveTowerBattle({ active, reserves, enemies, random: () => 0.5 });
+  assert.equal(result.battle.reserveEntered, true);
+  assert.deepEqual(result.battle.lineupA.map((entry) => entry.id), ["a1", "a2"]);
+  assert.deepEqual(result.battle.reserveLineupA?.map((entry) => entry.id), ["r1", "r2"]);
+  assert.deepEqual(Object.keys(result.hpByMascotId).sort(), ["a1", "a2", "r1", "r2"]);
+  assert.ok(result.enemyHpById.enemy < enemies[0].hp);
+  const report = addCombatToRunReport(undefined, [...active, ...reserves], enemies, result.battle.log, false, result.battle.winner === "A");
+  assert.deepEqual(Object.keys(report.mascots).sort(), ["a1", "a2", "r1", "r2"]);
+});
+
+test("group and legacy fights have no reserve stage", () => {
+  const active = [fighter("a1", "owner"), fighter("a2", "owner", { slot: 2 })];
+  const enemy = [fighter("enemy", "TORRE")];
+  const result = resolveTowerBattle({ active, reserves: [], enemies: enemy, random: () => 0.5 });
+  assert.equal(result.battle.reserveEntered, undefined);
+  assert.equal(result.battle.reserveLineupA, undefined);
+  assert.deepEqual(Object.keys(result.hpByMascotId).sort(), ["a1", "a2"]);
+});
+
+test("V2 solo, group and legacy select only their own present formation", () => {
+  const entries = [
+    { fighter: fighter("a1", "host", { hp: 0 }), formationSlot: 1 },
+    { fighter: fighter("a2", "host"), formationSlot: 2 },
+    { fighter: fighter("r1", "host"), formationSlot: 3 },
+    { fighter: fighter("r2", "host"), formationSlot: 4 },
+  ];
+  const solo = selectTowerBattleWaves("SOLO", 2, entries);
+  assert.deepEqual(solo.active.map((entry) => entry.id), ["a1", "a2"]);
+  assert.deepEqual(solo.reserves.map((entry) => entry.id), ["r1", "r2"]);
+  const group = selectTowerBattleWaves("GROUP", 2, entries.slice(0, 2));
+  assert.deepEqual(group.active.map((entry) => entry.id), ["a2"]);
+  assert.deepEqual(group.reserves, []);
+  const legacy = selectTowerBattleWaves(null, null, entries.slice(0, 2).map((entry) => ({ ...entry, formationSlot: null })));
+  assert.deepEqual(legacy.active.map((entry) => entry.id), ["a2"]);
+  assert.deepEqual(legacy.reserves, []);
+});
