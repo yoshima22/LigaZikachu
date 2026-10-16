@@ -50,6 +50,12 @@ import { LigaCashPanel } from "./_components/liga-cash-panel";
 
 const adminCards = [
   {
+    href: "/admin/ocorrencias",
+    title: "Ocorrências misteriosas",
+    description: "Afastar mascotes por um tempo com avisos misteriosos, acompanhar ativas e retornar.",
+    icon: AlertTriangle
+  },
+  {
     href: "/admin/mascotes",
     title: "Catálogo de mascotes",
     description: "Editar mascotes por jogador, corrigir tipos e cadastrar espécies customizadas.",

@@ -226,6 +226,7 @@ model UserTutorialProgress {
 
 model Player {
   id                          String                         @id @default(cuid())
+  mascotOccurrences           MascotOccurrence[]
   userId                      String                         @unique
   displayName                 String
   whatsapp                    String?
@@ -2704,6 +2705,7 @@ model MascotIncubator {
 
 model Mascot {
   id                        String                    @id @default(cuid())
+  occurrences               MascotOccurrence[]
   playerId                  String
   pokemonId                 Int // ID da PokéAPI
   nickname                  String?
@@ -5244,4 +5246,56 @@ model JohtoInvitationVote {
   @@index([campaignId, questionKey, candidatePlayerId])
   @@index([recipientId])
   @@map("johto_invitation_votes")
+}
+
+enum MascotOccurrenceTag {
+  MISSING
+  DISOBEDIENT
+  BUSY
+  BEWITCHED
+  UNDER_INVESTIGATION
+}
+
+enum MascotOccurrenceStatus {
+  SCHEDULED
+  ACTIVE
+  RETURNED
+  EXPIRED
+  CANCELLED
+}
+
+// Ocorrência misteriosa: afasta temporariamente um mascote (via repouso) sem perda permanente.
+// O estado original do mascote fica preservado em previousArenaState/previousRestingUntil.
+model MascotOccurrence {
+  id                  String                 @id @default(cuid())
+  batchId             String
+  playerId            String
+  mascotId            String
+  tag                 MascotOccurrenceTag
+  status              MascotOccurrenceStatus @default(SCHEDULED)
+  message             String                 @db.Text
+  returnMessage       String?                @db.Text
+  startsAt            DateTime
+  endsAt              DateTime?
+  showDeadline        Boolean                @default(true)
+  previousArenaState  String?
+  previousRestingUntil DateTime?
+  blockUntil          DateTime?
+  createdById         String
+  returnedById        String?
+  activatedAt         DateTime?
+  endedAt             DateTime?
+  noticeReadAt        DateTime?
+  returnNoticeReadAt  DateTime?
+  createdAt           DateTime               @default(now())
+
+  player Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+  mascot Mascot @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+
+  @@index([status, startsAt])
+  @@index([status, endsAt])
+  @@index([playerId, status])
+  @@index([mascotId, status])
+  @@index([batchId])
+  @@map("mascot_occurrences")
 }

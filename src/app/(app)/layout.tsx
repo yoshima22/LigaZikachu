@@ -55,6 +55,8 @@ import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-contr
 import { AccountAccessObserver } from "@/components/account-access-observer";
 import { getJohtoInvitationForPlayer } from "@/lib/johto-invitation";
 import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
+import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
+import { getOccurrenceNoticesForPlayer } from "@/lib/mascot-occurrences";
 
 const ACCESS_OBSERVATION_USER_IDS = new Set([
   "cmpkvjuf2000ajx04uoi89ypa", // Shira
@@ -275,9 +277,14 @@ export default async function AppLayout({
       })
     : null;
 
+  const occurrenceNotices = player?.id
+    ? await getOccurrenceNoticesForPlayer(player.id).catch(() => [])
+    : [];
+
   return (
     <>
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
+      <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
       <Toaster
         position="top-right"
         theme="dark"

@@ -37,6 +37,10 @@
       "schedule": "*/5 * * * *"
     },
     {
+      "path": "/api/cron/mascot-occurrences",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/sync-close",
       "schedule": "51 20 * * *"
     },
