@@ -39,6 +39,8 @@ export type LeagueBattleResult = {
   rounds: number;
   lineupA: LeagueMascot[];
   lineupB: LeagueMascot[];
+  reserveLineupA?: LeagueMascot[];
+  reserveEntered?: boolean;
 };
 
 export type LeagueCombatOptions = {
@@ -56,6 +58,8 @@ export type LeagueCombatOptions = {
   maxRounds?: number;
   bondLinks?: BondCombatLink[];
   opposingBondEffects?: OpposingBondCombatEffect[];
+  /** Torre solo: segunda dupla entra no mesmo encontro após a queda dos ativos. */
+  reserveTeamA?: LeagueMascot[];
 };
 
 // ── Helpers ────────────────────────────────────────────────────────────────
@@ -327,6 +331,19 @@ export function runLeagueCombat(
   b = appliedA.opponentTeam;
   const appliedB = applyItems(b, a, itemsB, itemsA);
   b = appliedB.team;
+  const initialA = a;
+  const reserveTeamA = options.reserveTeamA?.length
+    ? applyItems(
+        applyWeeklyLeagueSabotage(applyModifier(options.reserveTeamA, modifier), options.weeklySabotage),
+        b, itemsA, itemsB,
+      ).team
+    : null;
+  if (reserveTeamA) {
+    const occupied = new Set([...a, ...b].map((mascot) => mascot.id));
+    if (reserveTeamA.some((mascot) => occupied.has(mascot.id)) ||
+        new Set(reserveTeamA.map((mascot) => mascot.id)).size !== reserveTeamA.length)
+      throw new Error("Reservas repetidas na formação de combate.");
+  }
 
   const log: ArenaTurnLog[] = [];
   const bondLinks = options.bondLinks ?? [];
@@ -415,9 +432,44 @@ export function runLeagueCombat(
   let actionNum = 1;
   let totalDmgA = 0;
   let totalDmgB = 0;
+  let reserveEntered = false;
+  const availableReserve = () => reserveTeamA?.some((mascot) =>
+    (options.startingHp?.get(mascot.id) ?? mascot.hp) > 0) ?? false;
 
-  const roundCap = Math.max(1, Math.min(150, options.maxRounds ?? 150));
-  while (alive(a, hp).length > 0 && alive(b, hp).length > 0 && round <= roundCap) {
+  const roundCap = reserveTeamA
+    ? Math.max(1, Math.min(180, options.maxRounds ?? 180))
+    : Math.max(1, Math.min(150, options.maxRounds ?? 150));
+  while (alive(b, hp).length > 0 && round <= roundCap &&
+    (alive(a, hp).length > 0 || (!reserveEntered && availableReserve()))) {
+    if (alive(a, hp).length === 0 && reserveTeamA && !reserveEntered) {
+      reserveEntered = true;
+      a = reserveTeamA;
+      for (const mascot of a)
+        hp.set(mascot.id, options.startingHp
+          ? Math.max(0, Math.min(mascot.hp, options.startingHp.get(mascot.id) ?? mascot.hp))
+          : mascot.hp);
+      // Estado do inimigo, efeitos e contadores permanecem no mesmo combate.
+      playfulTeamBuff.A = playfulRoll(a);
+      for (const mascot of a) {
+        if (mascot.personality !== "LOYAL") continue;
+        const mate = a.filter((candidate) => candidate.id !== mascot.id)
+          .sort((left, right) => right.charisma - left.charisma)[0];
+        if (mate) loyalAlly.set(mascot.id, mate);
+      }
+      const herald = a.find((mascot) => (hp.get(mascot.id) ?? 0) > 0)!;
+      log.push({
+        turn: actionNum++, actorId: herald.id, actorName: herald.name,
+        actorOwnerId: herald.ownerId, actorPokemonId: herald.pokemonId,
+        actorLevel: herald.level, targetId: herald.id, targetName: herald.name,
+        targetOwnerId: herald.ownerId, targetPokemonId: herald.pokemonId,
+        targetLevel: herald.level, action: "DEFEND", damage: 0,
+        attackerType: elementOf(herald), defenderType: elementOf(herald),
+        multiplier: 1, advantageApplied: false,
+        actorRole: getCombatRoleLabel(herald.combatRole),
+        targetRole: getCombatRoleLabel(herald.combatRole),
+        effect: "Reservas da Torre entraram no mesmo combate após a queda dos dois ativos.",
+      });
+    }
     if (options.lastMascotVitalityBonus) {
       for (const [side, team] of [["A", a], ["B", b]] as const) {
         const standing = alive(team, hp);
@@ -735,8 +787,12 @@ export function runLeagueCombat(
     rounds: round - 1,
     // Cópias já com modificador semanal, sabotagem e itens aplicados. O replay
     // precisa deste snapshot para não tentar deduzir HP a partir do dano total.
-    lineupA: a.map((mascot) => ({ ...mascot })),
+    lineupA: initialA.map((mascot) => ({ ...mascot })),
     lineupB: b.map((mascot) => ({ ...mascot })),
+    ...(reserveTeamA ? {
+      reserveLineupA: reserveTeamA.map((mascot) => ({ ...mascot })),
+      reserveEntered,
+    } : {}),
   };
 }
 
