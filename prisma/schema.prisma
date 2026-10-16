@@ -4569,6 +4569,11 @@ enum TowerRunMode {
   RIVAL_EXPEDITION
 }
 
+enum TowerPartyProfile {
+  SOLO
+  GROUP
+}
+
 model SpecChatMessage {
   id        String   @id @default(cuid())
   streamId  String
@@ -4613,6 +4618,8 @@ enum TowerMascotState {
 model TowerRun {
   id              String           @id @default(cuid())
   mode            TowerRunMode     @default(EXPEDITION)
+  partyProfile    TowerPartyProfile?
+  balanceVersion  Int?
   pace            TowerPaceMode
   status          TowerRunStatus   @default(LOBBY)
   seed            String
@@ -4655,6 +4662,7 @@ model TowerRunMascot {
   id             String           @id @default(cuid())
   memberId       String
   mascotId       String
+  formationSlot  Int?
   ownerUserId    String
   currentHp      Int
   maxHp          Int
