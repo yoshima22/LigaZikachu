@@ -166,18 +166,18 @@ export type OccurrenceItemResult = { playerId: string; mascotId: string; ok: boo
 /** Cria as ocorrências da lista congelada pelo admin. Cada item é validado e processado em separado. */
 export async function createOccurrenceBatch(
   adminUserId: string,
-  items: Array<{ playerId: string; mascotId: string }>,
-  config: OccurrenceConfig,
+  items: Array<{ playerId: string; mascotId: string } & OccurrenceConfig>,
 ) {
   const now = new Date();
-  const startsAt = config.startsAt && config.startsAt > now ? config.startsAt : now;
-  if (config.endsAt && config.endsAt <= startsAt) throw new Error("O término precisa ser depois do início.");
   const batchId = randomUUID();
   const unique = new Map(items.map((i) => [i.mascotId, i]));
   const results: OccurrenceItemResult[] = [];
 
   for (const item of unique.values()) {
     try {
+      const config = item;
+      const startsAt = config.startsAt && config.startsAt > now ? config.startsAt : now;
+      if (config.endsAt && config.endsAt <= startsAt) throw new Error("O término precisa ser depois do início.");
       const id = await prisma.$transaction(async (tx) => {
         await lockMascot(tx, item.mascotId);
         const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId }, select: occurrenceMascotSelect });
@@ -203,14 +203,14 @@ export async function createOccurrenceBatch(
         await audit(tx, adminUserId, occ.id, "CREATED", { batchId, tag: config.tag, startsAt: startsAt.toISOString(), endsAt: config.endsAt?.toISOString() ?? null });
         return occ.id;
       });
-      results.push({ ...item, ok: true, id });
+      results.push({ playerId: item.playerId, mascotId: item.mascotId, ok: true, id });
     } catch (error) {
-      results.push({ ...item, ok: false, error: error instanceof Error ? error.message : "Falha ao criar ocorrência." });
+      results.push({ playerId: item.playerId, mascotId: item.mascotId, ok: false, error: error instanceof Error ? error.message : "Falha ao criar ocorrência." });
     }
   }
 
   await prisma.auditLog.create({
-    data: { actorUserId: adminUserId, entityType: "MascotOccurrenceBatch", entityId: batchId, action: "CREATED", after: { tag: config.tag, results } as unknown as Prisma.InputJsonValue },
+    data: { actorUserId: adminUserId, entityType: "MascotOccurrenceBatch", entityId: batchId, action: "CREATED", after: { count: items.length, results } as unknown as Prisma.InputJsonValue },
   }).catch(() => null);
 
   // Início imediato (ou já vencido): ativa agora; as agendadas ficam para o processamento periódico/on-access.

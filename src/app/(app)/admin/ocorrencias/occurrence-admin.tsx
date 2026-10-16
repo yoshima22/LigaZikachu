@@ -52,6 +52,8 @@ function Thumb({ pokemonId, isShiny, size = 44 }: { pokemonId: number; isShiny: 
 const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }) : "—";
 
+type PlanItem = { mascotId: string; tag: OccurrenceTag; message: string; returnMessage: string | null; startsAt: string | null; endsAt: string | null };
+
 export function OccurrenceAdmin() {
   const [tab, setTab] = useState<"new" | "active" | "history">("new");
   return (
@@ -115,6 +117,16 @@ function NewOccurrenceWizard({ onCreated }: { onCreated: () => void }) {
   const [startsLocal, setStartsLocal] = useState("");
   const [showDeadline, setShowDeadline] = useState(true);
   const [results, setResults] = useState<Array<{ playerId: string; mascotId: string; ok: boolean; error?: string }> | null>(null);
+
+  // Modo sortido: cada mascote recebe tag, frase, retorno, início e duração diferentes.
+  const [mix, setMix] = useState(false);
+  const [mixTags, setMixTags] = useState<Set<OccurrenceTag>>(new Set(OCCURRENCE_TAGS));
+  const [mixOff, setMixOff] = useState<Set<string>>(new Set());
+  const [mixReturns, setMixReturns] = useState<Set<number>>(new Set());
+  const [spreadValue, setSpreadValue] = useState("6");
+  const [spreadUnit, setSpreadUnit] = useState<"m" | "h" | "d">("h");
+  const [durMaxValue, setDurMaxValue] = useState("24");
+  const [plan, setPlan] = useState<PlanItem[]>([]);
 
   const load = useCallback((term: string, pg: number) => {
     startTransition(async () => {
@@ -198,6 +210,42 @@ function NewOccurrenceWizard({ onCreated }: { onCreated: () => void }) {
     setMessage(OCCURRENCE_PHRASES[next][0]);
   };
 
+  const toggleSet = <T,>(setter: (fn: (prev: Set<T>) => Set<T>) => void, value: T) =>
+    setter((prev) => {
+      const next = new Set(prev);
+      if (next.has(value)) next.delete(value); else next.add(value);
+      return next;
+    });
+
+  const generatePlan = () => {
+    const tags = [...mixTags];
+    if (tags.length === 0) return void toast.error("Marque ao menos uma tag.");
+    if (scheduled && !startsLocal) return void toast.error("Escolha a data-base de início.");
+    const unitMs = { m: 60_000, h: 3_600_000, d: 86_400_000 };
+    const durUnitMs = durUnit === "h" ? 3_600_000 : 86_400_000;
+    const durMin = Number(durValue) * durUnitMs;
+    const durMax = Number(durMaxValue) * durUnitMs;
+    if (!indefinite && !(durMin > 0 && durMax >= durMin)) return void toast.error("Duração: mínimo e máximo válidos (máx. ≥ mín.).");
+    const spreadMs = Math.max(0, Number(spreadValue) * unitMs[spreadUnit]) || 0;
+    const base = scheduled && startsLocal ? new Date(`${startsLocal}:00-03:00`).getTime() : Date.now();
+    const pick = <T,>(list: T[]) => list[Math.floor(Math.random() * list.length)];
+    setPlan(frozen.map((m) => {
+      const tag = pick(tags);
+      const allowed = OCCURRENCE_PHRASES[tag].map((_, i) => i).filter((i) => !mixOff.has(`${tag}:${i}`));
+      const idx = pick(allowed.length ? allowed : OCCURRENCE_PHRASES[tag].map((_, i) => i));
+      const start = base + Math.floor(Math.random() * spreadMs);
+      const dur = indefinite ? null : durMin + Math.floor(Math.random() * (durMax - durMin + 1));
+      return {
+        mascotId: m.id,
+        tag,
+        message: OCCURRENCE_PHRASES[tag][idx],
+        returnMessage: mixReturns.size ? OCCURRENCE_RETURN_PHRASES[pick([...mixReturns])] : null,
+        startsAt: scheduled || spreadMs > 0 ? new Date(start).toISOString() : null,
+        endsAt: dur === null ? null : new Date(start + dur).toISOString(),
+      };
+    }));
+  };
+
   const startsAtIso = scheduled && startsLocal ? new Date(`${startsLocal}:00-03:00`).toISOString() : null;
   const endsAtIso = useMemo(() => {
     if (indefinite) return null;
@@ -207,13 +255,28 @@ function NewOccurrenceWizard({ onCreated }: { onCreated: () => void }) {
   }, [indefinite, durValue, durUnit, startsAtIso]);
 
   const confirm = () => {
-    if (!indefinite && !endsAtIso) return void toast.error("Informe uma duração válida.");
-    if (scheduled && !startsLocal) return void toast.error("Escolha a data de início.");
+    if (mix) {
+      if (plan.length !== frozen.length || !frozen.every((m) => plan.some((p) => p.mascotId === m.id))) return void toast.error("Clique em “Sortear combinação” antes de confirmar.");
+    } else {
+      if (!indefinite && !endsAtIso) return void toast.error("Informe uma duração válida.");
+      if (scheduled && !startsLocal) return void toast.error("Escolha a data de início.");
+    }
     if (!window.confirm(`Afetar ${frozen.length} mascote(s) de ${new Set(frozen.map((m) => m.playerId)).size} jogador(es)? Os jogadores serão avisados.`)) return;
     startTransition(async () => {
       const res = await createOccurrencesAction({
-        items: frozen.map((m) => ({ playerId: m.playerId, mascotId: m.id })),
-        tag, message, returnMessage: returnMessage || null, startsAt: startsAtIso, endsAt: endsAtIso, showDeadline,
+        items: frozen.map((m) => {
+          const p = mix ? plan.find((x) => x.mascotId === m.id)! : null;
+          return {
+            playerId: m.playerId,
+            mascotId: m.id,
+            tag: p ? p.tag : tag,
+            message: p ? p.message : message,
+            returnMessage: p ? p.returnMessage : returnMessage || null,
+            startsAt: p ? p.startsAt : startsAtIso,
+            endsAt: p ? p.endsAt : endsAtIso,
+          };
+        }),
+        showDeadline,
       });
       if ("error" in res && res.error) return void toast.error(res.error);
       if ("results" in res && res.results) {
@@ -344,6 +407,77 @@ function NewOccurrenceWizard({ onCreated }: { onCreated: () => void }) {
       {step === 3 && (
         <div className="space-y-3">
           <div className={`${card} space-y-3`}>
+            <label className="flex items-center gap-2 rounded-lg border border-violet-400/30 bg-violet-500/5 px-3 py-2 text-xs font-semibold text-violet-200">
+              <input type="checkbox" checked={mix} onChange={(e) => { setMix(e.target.checked); setPlan([]); }} className="accent-[#FFCB05]" />
+              🎲 Sortido: cada mascote recebe tag, mensagem, horário e duração diferentes
+            </label>
+            {mix && (
+              <div className="space-y-3">
+                <div>
+                  <p className="mb-1 text-[11px] text-slate-400">Tags que podem sair</p>
+                  <div className="flex flex-wrap gap-2">
+                    {OCCURRENCE_TAGS.map((t) => (
+                      <button key={t} onClick={() => { toggleSet(setMixTags, t); setPlan([]); }} className={`${btn} ${mixTags.has(t) ? "border-violet-400/60 bg-violet-500/15 text-violet-200" : "border-border text-slate-500"}`}>{OCCURRENCE_TAG_LABEL[t]}</button>
+                    ))}
+                  </div>
+                </div>
+                {OCCURRENCE_TAGS.filter((t) => mixTags.has(t)).map((t) => (
+                  <details key={t} className="rounded-lg border border-border/60 bg-slate-950/40 px-3 py-2">
+                    <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                      Frases de {OCCURRENCE_TAG_LABEL[t]} ({OCCURRENCE_PHRASES[t].filter((_, i) => !mixOff.has(`${t}:${i}`)).length}/10)
+                    </summary>
+                    <ul className="mt-2 space-y-1">
+                      {OCCURRENCE_PHRASES[t].map((ph, i) => (
+                        <li key={i}>
+                          <label className="flex items-start gap-2 text-[11px] text-slate-400">
+                            <input type="checkbox" checked={!mixOff.has(`${t}:${i}`)} onChange={() => { toggleSet(setMixOff, `${t}:${i}`); setPlan([]); }} className="mt-0.5 accent-[#FFCB05]" />
+                            <span>{String(i + 1).padStart(2, "0")}. {ph}</span>
+                          </label>
+                        </li>
+                      ))}
+                    </ul>
+                  </details>
+                ))}
+                <details className="rounded-lg border border-border/60 bg-slate-950/40 px-3 py-2">
+                  <summary className="cursor-pointer text-xs font-semibold text-slate-300">
+                    Mensagens de retorno ({mixReturns.size === 0 ? "padrão para todos" : `${mixReturns.size} no sorteio`})
+                  </summary>
+                  <ul className="mt-2 space-y-1">
+                    {OCCURRENCE_RETURN_PHRASES.map((ph, i) => (
+                      <li key={i}>
+                        <label className="flex items-start gap-2 text-[11px] text-slate-400">
+                          <input type="checkbox" checked={mixReturns.has(i)} onChange={() => { toggleSet(setMixReturns, i); setPlan([]); }} className="mt-0.5 accent-[#FFCB05]" />
+                          <span>{String(i + 1).padStart(2, "0")}. {ph}</span>
+                        </label>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+                <div className="flex flex-wrap items-end gap-3 text-xs text-slate-300">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={scheduled} onChange={(e) => { setScheduled(e.target.checked); setPlan([]); }} className="accent-[#FFCB05]" /> Data-base de início (BRT)</label>
+                  {scheduled && <input type="datetime-local" value={startsLocal} onChange={(e) => { setStartsLocal(e.target.value); setPlan([]); }} className={input} />}
+                  <label className="text-[11px] text-slate-400">Espalhar inícios em até
+                    <span className="mt-1 flex gap-1">
+                      <input value={spreadValue} onChange={(e) => { setSpreadValue(e.target.value); setPlan([]); }} className={`${input} w-20`} />
+                      <select value={spreadUnit} onChange={(e) => { setSpreadUnit(e.target.value as "m" | "h" | "d"); setPlan([]); }} className={input}><option value="m">minutos</option><option value="h">horas</option><option value="d">dias</option></select>
+                    </span>
+                  </label>
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={indefinite} onChange={(e) => { setIndefinite(e.target.checked); setPlan([]); }} className="accent-[#FFCB05]" /> Duração indefinida</label>
+                  {!indefinite && (
+                    <label className="text-[11px] text-slate-400">Duração sorteada entre
+                      <span className="mt-1 flex items-center gap-1">
+                        <input value={durValue} onChange={(e) => { setDurValue(e.target.value); setPlan([]); }} className={`${input} w-16`} /> e
+                        <input value={durMaxValue} onChange={(e) => { setDurMaxValue(e.target.value); setPlan([]); }} className={`${input} w-16`} />
+                        <select value={durUnit} onChange={(e) => { setDurUnit(e.target.value as "h" | "d"); setPlan([]); }} className={input}><option value="h">horas</option><option value="d">dias</option></select>
+                      </span>
+                    </label>
+                  )}
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={showDeadline} onChange={(e) => setShowDeadline(e.target.checked)} className="accent-[#FFCB05]" /> Mostrar prazo ao jogador</label>
+                </div>
+                <button onClick={generatePlan} className={btnGold}>🎲 {plan.length ? "Sortear de novo" : "Sortear combinação"}</button>
+              </div>
+            )}
+            {!mix && (<>
             <div className="flex flex-wrap gap-2">
               {OCCURRENCE_TAGS.map((t) => (
                 <button key={t} onClick={() => onTagChange(t)} className={`${btn} ${tag === t ? "border-violet-400/60 bg-violet-500/15 text-violet-200" : "border-border text-slate-400"}`}>{OCCURRENCE_TAG_LABEL[t]}</button>
@@ -377,15 +511,47 @@ function NewOccurrenceWizard({ onCreated }: { onCreated: () => void }) {
               {scheduled && <input type="datetime-local" value={startsLocal} onChange={(e) => setStartsLocal(e.target.value)} className={input} />}
               <label className="flex items-center gap-2"><input type="checkbox" checked={showDeadline} onChange={(e) => setShowDeadline(e.target.checked)} className="accent-[#FFCB05]" /> Mostrar prazo ao jogador</label>
             </div>
+            </>)}
           </div>
 
           <div className={card}>
             <p className="text-xs font-bold uppercase tracking-widest text-slate-400">Revisão final — {frozen.length} mascote(s)</p>
-            <p className="mt-1 text-[11px] text-slate-500">
-              Tag: <b className="text-violet-200">{OCCURRENCE_TAG_LABEL[tag]}</b> · Início: {scheduled && startsLocal ? fmt(startsAtIso) : "imediato"} · Término: {indefinite ? "indefinido" : fmt(endsAtIso)} · Prazo {showDeadline ? "visível" : "oculto"}
-            </p>
-            <FrozenList list={frozen} />
-            {frozen[0] && <p className="mt-3 rounded-lg border border-violet-400/20 bg-violet-500/5 p-3 text-xs italic text-slate-300">“{renderOccurrenceText(message, frozen[0].name)}”</p>}
+            {mix ? (
+              plan.length === 0 ? (
+                <p className="mt-2 text-xs text-amber-300">Clique em “Sortear combinação” para ver exatamente o que cada mascote vai receber.</p>
+              ) : (
+                <div className="mt-2 max-h-96 overflow-auto rounded-xl border border-border">
+                  <table className="w-full min-w-[720px] text-xs">
+                    <thead><tr className="border-b border-border bg-slate-950/60 text-slate-400">
+                      <th className="p-2 text-left">Mascote</th><th className="p-2 text-left">Tag</th><th className="p-2 text-left">Início</th><th className="p-2 text-left">Término</th><th className="p-2 text-left">Mensagem</th>
+                    </tr></thead>
+                    <tbody>
+                      {frozen.map((m) => {
+                        const p = plan.find((x) => x.mascotId === m.id);
+                        if (!p) return null;
+                        return (
+                          <tr key={m.id} className="border-b border-border/50 align-top last:border-0">
+                            <td className="p-2 text-slate-200">{m.name}<span className="block text-[10px] text-slate-500">{m.playerName}</span></td>
+                            <td className="p-2 text-violet-200">{OCCURRENCE_TAG_LABEL[p.tag]}</td>
+                            <td className="p-2 text-slate-400">{p.startsAt ? fmt(p.startsAt) : "imediato"}</td>
+                            <td className="p-2 text-slate-400">{p.endsAt ? fmt(p.endsAt) : "indefinido"}</td>
+                            <td className="p-2 text-[11px] italic text-slate-400">“{renderOccurrenceText(p.message, m.name)}”</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )
+            ) : (
+              <>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Tag: <b className="text-violet-200">{OCCURRENCE_TAG_LABEL[tag]}</b> · Início: {scheduled && startsLocal ? fmt(startsAtIso) : "imediato"} · Término: {indefinite ? "indefinido" : fmt(endsAtIso)} · Prazo {showDeadline ? "visível" : "oculto"}
+                </p>
+                <FrozenList list={frozen} />
+                {frozen[0] && <p className="mt-3 rounded-lg border border-violet-400/20 bg-violet-500/5 p-3 text-xs italic text-slate-300">“{renderOccurrenceText(message, frozen[0].name)}”</p>}
+              </>
+            )}
           </div>
 
           {results && (

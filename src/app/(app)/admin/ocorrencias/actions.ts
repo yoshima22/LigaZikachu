@@ -157,36 +157,47 @@ export async function drawOccurrenceMascotsAction(input: {
 }
 
 export async function createOccurrencesAction(input: {
-  items: Array<{ playerId: string; mascotId: string }>;
-  tag: string;
-  message: string;
-  returnMessage?: string | null;
-  startsAt?: string | null;
-  endsAt?: string | null;
+  items: Array<{
+    playerId: string;
+    mascotId: string;
+    tag: string;
+    message: string;
+    returnMessage?: string | null;
+    startsAt?: string | null;
+    endsAt?: string | null;
+  }>;
   showDeadline: boolean;
 }) {
   try {
     const admin = await requireOccurrenceAdmin();
     const data = z.object({
-      items: z.array(z.object({ playerId: z.string().min(1), mascotId: z.string().min(1) })).min(1, "Nenhum mascote na lista.").max(2000),
-      tag: z.enum(OCCURRENCE_TAGS as [string, ...string[]]),
-      message: z.string().trim().min(5, "Escreva a mensagem.").max(1200),
-      returnMessage: z.string().trim().max(1200).nullish(),
-      startsAt: z.string().nullish(),
-      endsAt: z.string().nullish(),
+      items: z.array(z.object({
+        playerId: z.string().min(1),
+        mascotId: z.string().min(1),
+        tag: z.enum(OCCURRENCE_TAGS as [string, ...string[]]),
+        message: z.string().trim().min(5, "Escreva a mensagem.").max(1200),
+        returnMessage: z.string().trim().max(1200).nullish(),
+        startsAt: z.string().nullish(),
+        endsAt: z.string().nullish(),
+      })).min(1, "Nenhum mascote na lista.").max(2000),
       showDeadline: z.boolean(),
     }).parse(input);
-    const startsAt = data.startsAt ? new Date(data.startsAt) : null;
-    const endsAt = data.endsAt ? new Date(data.endsAt) : null;
-    if ((startsAt && Number.isNaN(startsAt.getTime())) || (endsAt && Number.isNaN(endsAt.getTime()))) throw new Error("Data inválida.");
-    const result = await createOccurrenceBatch(admin.id, data.items, {
-      tag: data.tag as (typeof OCCURRENCE_TAGS)[number],
-      message: data.message,
-      returnMessage: data.returnMessage,
-      startsAt,
-      endsAt,
+    const parseDate = (value?: string | null) => {
+      if (!value) return null;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) throw new Error("Data inválida.");
+      return date;
+    };
+    const result = await createOccurrenceBatch(admin.id, data.items.map((item) => ({
+      playerId: item.playerId,
+      mascotId: item.mascotId,
+      tag: item.tag as (typeof OCCURRENCE_TAGS)[number],
+      message: item.message,
+      returnMessage: item.returnMessage,
+      startsAt: parseDate(item.startsAt),
+      endsAt: parseDate(item.endsAt),
       showDeadline: data.showDeadline,
-    });
+    })));
     revalidatePath("/admin/ocorrencias");
     return result;
   } catch (error) {
