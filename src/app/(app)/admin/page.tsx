@@ -216,11 +216,18 @@ export default async function AdminPage() {
               Central para operar torneios, jogadores, resultados, codigos, rankings e auditoria.
             </p>
           </div>
-          <Link href="/torneios/novo">
-            <Button className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
-              Criar torneio
-            </Button>
-          </Link>
+          <div className="flex flex-wrap gap-2">
+            <Link href="/admin/replay-lab">
+              <Button variant="outline" className="border-cyan-400/40 text-cyan-200 hover:bg-cyan-500/10">
+                Lab de Replay
+              </Button>
+            </Link>
+            <Link href="/torneios/novo">
+              <Button className="bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]">
+                Criar torneio
+              </Button>
+            </Link>
+          </div>
         </div>
       </div>
 
