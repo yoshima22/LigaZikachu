@@ -9,6 +9,7 @@ import { getSpriteUrl, getPokemonName, mascotPrimaryType, mascotTypes, TYPE_ADVA
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
+import { TRAINING_ABILITY_ROOM } from "@/lib/arena-z-training";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
 export interface ValidMascot {
@@ -347,6 +348,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [name, setName] = useState("");
   const [roomLevel, setRoomLevel] = useState<ArenaRoomLevel>(100);
   const [isTraining, setIsTraining] = useState(false);
+  const [abilityTraining, setAbilityTraining] = useState(false);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
@@ -495,7 +497,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         const mascot = mascots.find(m => m.id === id);
         return [id, roles[id] ?? (mascot ? defaultRoleForMascot(mascot) : "ATTACKER")];
       }));
-      const r = await createArenaTeamAction([...selected], name.trim(), roomLevel, rolePayload, isTraining);
+      const r = await createArenaTeamAction([...selected], name.trim(), isTraining && abilityTraining ? TRAINING_ABILITY_ROOM : roomLevel, rolePayload, isTraining);
       if (r.error) toast.error(r.error);
       else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setRoles({}); setName(""); }
     });
@@ -569,16 +571,24 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         <div>
           <p className="mb-1.5 text-[10px] text-slate-500 font-semibold">Sala:</p>
           <div className="flex flex-wrap gap-1.5">
-            <button type="button" onClick={() => setIsTraining(true)}
+            <button type="button" onClick={() => { setIsTraining(true); setAbilityTraining(false); }}
               className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
-                isTraining
+                isTraining && !abilityTraining
                   ? "border-sky-400/50 bg-sky-400/10 text-sky-300"
                   : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
               }`}>
               🥊 Treino
             </button>
+            <button type="button" onClick={() => { setIsTraining(true); setAbilityTraining(true); }}
+              className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
+                isTraining && abilityTraining
+                  ? "border-fuchsia-400/50 bg-fuchsia-400/10 text-fuchsia-300"
+                  : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
+              }`}>
+              ✨ Treino c/ Habilidades
+            </button>
             {ARENA_ROOM_OPTIONS.map(lvl => (
-              <button key={lvl} type="button" onClick={() => { setIsTraining(false); setRoomLevel(lvl); }}
+              <button key={lvl} type="button" onClick={() => { setIsTraining(false); setAbilityTraining(false); setRoomLevel(lvl); }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
                   !isTraining && roomLevel === lvl
                     ? "border-[#FFCB05]/50 bg-[#FFCB05]/10 text-[#FFCB05]"
@@ -588,7 +598,9 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
               </button>
             ))}
           </div>
-          {isTraining
+          {isTraining && abilityTraining
+            ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Usa a habilidade escolhida no mascote; a oculta é livre para teste. Só enfrenta equipes da mesma sala ou o bot.</p>
+            : isTraining
             ? <p className="mt-1.5 text-[9px] text-sky-500">Treino: sem limite de nível, sem loot, sem lesões, sem impacto no ranking.</p>
             : <p className="mt-1.5 text-[9px] text-slate-600">Apenas mascotes com nível ≤ {roomLevel} podem entrar nesta sala.</p>
           }

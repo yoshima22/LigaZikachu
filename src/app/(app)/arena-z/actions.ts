@@ -98,7 +98,7 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, r
     const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
     const [division, mascots] = await Promise.all([getBattleModeDivision("ARENA_Z"), prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true } })]);
     const divisionCheck = validateBattleDivision(mascots, division); if (!divisionCheck.valid) return { error: divisionCheck.message };
-    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number], combatRoles, isTraining);
+    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number] | -1, combatRoles, isTraining);
     revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
@@ -335,7 +335,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       attackerId: string; attackerName: string; attackerPokemonId: number;
       defenderId: string; defenderName: string; defenderPokemonId: number;
       damage: number; advantageApplied: boolean; isPlayerAttacker: boolean;
-      actorRole?: string; targetRole?: string; effect?: string;
+      actorRole?: string; targetRole?: string; effect?: string; hpAfter?: number;
     }>;
     playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
     opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
@@ -402,7 +402,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           turn: number; action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
           actorId: string; actorName: string; actorOwnerId?: string | null; actorRole?: string;
           targetId: string; targetName: string; targetOwnerId?: string | null; targetRole?: string;
-          damage: number; advantageApplied?: boolean; effect?: string;
+          damage: number; advantageApplied?: boolean; effect?: string; targetHpAfter?: number;
         }>)
       : [];
     const turnLines = log.map(t =>
@@ -495,6 +495,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       actorRole: turn.actorRole,
       targetRole: turn.targetRole,
       effect: turn.effect,
+      hpAfter: turn.targetHpAfter,
     }));
 
     return {

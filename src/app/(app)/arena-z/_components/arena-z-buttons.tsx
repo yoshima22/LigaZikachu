@@ -75,7 +75,8 @@ type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["s
 
 type AnimTurn = {
   turn: number;
-  action?: "ATTACK" | "DEFEND" | "HEAL";
+  action?: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
+  hpAfter?: number;
   attackerId: string;
   attackerName: string;
   attackerPokemonId: number;
@@ -236,7 +237,10 @@ function BattleAnimationModal({
         return;
       }
       if (phase === "attack") {
-        if ((turn.action ?? "ATTACK") === "ATTACK") {
+        if (turn.hpAfter !== undefined && (turn.action ?? "ATTACK") !== "DEFEND") {
+          const hpAfter = turn.hpAfter;
+          setHpMap(prev => ({ ...prev, [turn.defenderId]: Math.max(0, hpAfter) }));
+        } else if ((turn.action ?? "ATTACK") === "ATTACK") {
           setHpMap(prev => ({
             ...prev,
             [turn.defenderId]: Math.max(0, (prev[turn.defenderId] ?? 0) - turn.damage),
@@ -366,11 +370,13 @@ function BattleAnimationModal({
               <div className="flex h-12 min-w-[74px] items-center justify-center rounded-2xl border border-border bg-slate-900/70 sm:h-20 sm:min-w-0 sm:w-full xl:h-24">
                 {showDamage && turn ? (
                   <div className="text-center">
-                    <div className={`text-2xl font-black sm:text-3xl ${(turn.action ?? "ATTACK") === "DEFEND" ? "text-blue-300" : turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
+                    <div className={`text-2xl font-black sm:text-3xl ${turn.action === "ABILITY" ? "text-fuchsia-300" : (turn.action ?? "ATTACK") === "DEFEND" ? "text-blue-300" : turn.advantageApplied ? "text-yellow-300" : "text-red-400"}`}
                       style={{ textShadow: "0 0 10px currentColor" }}>
-                      {(turn.action ?? "ATTACK") === "DEFEND" ? "DEF" : `-${turn.damage}`}
+                      {turn.action === "ABILITY" ? (turn.damage > 0 ? `+${turn.damage}` : "✨") : (turn.action ?? "ATTACK") === "DEFEND" ? "DEF" : `-${turn.damage}`}
                     </div>
-                    {(turn.action ?? "ATTACK") === "DEFEND" ? (
+                    {turn.action === "ABILITY" ? (
+                      <div className="text-[8px] text-fuchsia-300 font-bold">HABILIDADE</div>
+                    ) : (turn.action ?? "ATTACK") === "DEFEND" ? (
                       <div className="text-[8px] text-blue-300 font-bold">POSTURA</div>
                     ) : turn.advantageApplied && <div className="text-[8px] text-yellow-400 font-bold">SUPER EF.!</div>}
                   </div>
@@ -407,7 +413,11 @@ function BattleAnimationModal({
               <p className="text-[11px] text-slate-300">
                 <span className={turn.isPlayerAttacker ? "text-blue-300 font-semibold" : "text-red-300 font-semibold"}>{turn.attackerName}{attackerLevel ? ` - Nv.${attackerLevel}` : ""}</span>
                 {turn.actorRole && <span className="ml-1 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-1.5 py-0.5 text-[9px] font-bold text-[#FFCB05]">{turn.actorRole}</span>}
-                {(turn.action ?? "ATTACK") === "DEFEND" ? (
+                {turn.action === "ABILITY" ? (
+                  <span className="text-fuchsia-200">
+                    {turn.defenderId !== turn.attackerId && <> → <span className="font-semibold">{turn.defenderName}</span></>} ativou habilidade.
+                  </span>
+                ) : (turn.action ?? "ATTACK") === "DEFEND" ? (
                   <span className="text-blue-200"> preparou defesa.</span>
                 ) : (
                   <>

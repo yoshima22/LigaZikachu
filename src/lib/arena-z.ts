@@ -57,6 +57,8 @@ import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type AbilityRuntime, type DebuffEvent } from "@/lib/abilities/combat";
+import { TRAINING_ABILITY_ROOM, isAbilityTrainingTeam } from "@/lib/arena-z-training";
+import { buildTrainingAbilityLineup } from "@/lib/arena-z-training-abilities";
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -1789,16 +1791,23 @@ export async function getRoomsData(viewerPlayerId?: string) {
     };
   });
 
-  // Sala de Treinamento — separada das salas por nível
-  const trainingTeams = teams.filter((t) => t.isTraining);
+  // Salas de Treinamento — separadas das salas por nível; a de habilidades é à parte
+  const trainingTeams = teams.filter((t) => t.isTraining && !isAbilityTrainingTeam(t));
   const trainingRoom = {
     roomLevel: 0,
     isTraining: true,
     teamCount: trainingTeams.length,
     teams: trainingTeams.map((t) => mapTeam(t, viewerPlayerId)),
   };
+  const abilityTrainingTeams = teams.filter((t) => isAbilityTrainingTeam(t));
+  const abilityTrainingRoom = {
+    roomLevel: TRAINING_ABILITY_ROOM,
+    isTraining: true,
+    teamCount: abilityTrainingTeams.length,
+    teams: abilityTrainingTeams.map((t) => mapTeam(t, viewerPlayerId)),
+  };
 
-  return { rooms, trainingRoom };
+  return { rooms, trainingRoom, abilityTrainingRoom };
 }
 
 /** Top 2 jogadores — reutiliza o cache de times ativos, sem query extra */
@@ -2235,7 +2244,7 @@ export async function createArenaTeam(
   playerId: string,
   name: string,
   mascotIds: string[],
-  roomLevel: ArenaRoom = 100,
+  roomLevel: ArenaRoom | typeof TRAINING_ABILITY_ROOM = 100,
   combatRoles?: Record<string, string>,
   isTraining = false,
 ) {
@@ -2344,7 +2353,7 @@ export async function createArenaTeam(
         data: {
           playerId,
           name: teamName,
-          roomLevel: isTraining ? 0 : roomLevel,
+          roomLevel: isTraining ? (roomLevel === TRAINING_ABILITY_ROOM ? TRAINING_ABILITY_ROOM : 0) : roomLevel,
           isTraining,
           members: {
             create: mascots.map((m, index) => ({
@@ -3006,6 +3015,7 @@ export async function runBotBattle(
               happiness: true,
               arenaState: true,
               restingUntil: true,
+              abilityChoice: true,
             },
           },
         },
@@ -3121,7 +3131,13 @@ export async function runBotBattle(
       toArenaMascot({ ...m.mascot, combatRole: m.combatRole }),
     );
     const bot = buildBotOpponent(attackers, difficulty);
-    const combat = runArenaCombat(attackers, bot.defenders);
+    const combat = runArenaCombat(
+      attackers,
+      bot.defenders,
+      isAbilityTrainingTeam(team)
+        ? { abilities: buildTrainingAbilityLineup(team.members.map((m) => m.mascot)) }
+        : undefined,
+    );
     const won = combat.result === "ATTACKER_WIN";
     const allMascots = new Map(
       [...attackers, ...bot.defenders].map((m) => [m.id, m]),
@@ -3171,7 +3187,8 @@ export async function runBotBattle(
           (t) =>
             t.action === "ATTACK" ||
             t.action === "DEFEND" ||
-            t.action === "HEAL",
+            t.action === "HEAL" ||
+            t.action === "ABILITY",
         )
         .map((t) => ({
           turn: t.turn,
@@ -3187,6 +3204,7 @@ export async function runBotBattle(
           actorRole: t.actorRole,
           targetRole: t.targetRole,
           effect: t.effect,
+          hpAfter: t.targetHpAfter,
           isPlayerAttacker: t.actorOwnerId !== null,
         })),
       debugMode: true,
@@ -4059,6 +4077,7 @@ export async function runPvpBattle(
     happiness: true,
     arenaState: true,
     restingUntil: true,
+    abilityChoice: true,
   } as const;
   const [attackTeam, defenseTeam] = await Promise.all([
     prisma.arenaTeam.findUnique({
@@ -4089,6 +4108,12 @@ export async function runPvpBattle(
 
   // Treino: ambos os times devem ser de treinamento; pode atacar o próprio time
   const isTrainingBattle = attackTeam.isTraining && defenseTeam.isTraining;
+  const isAbilityTraining = isTrainingBattle && isAbilityTrainingTeam(attackTeam);
+  if (isTrainingBattle && isAbilityTrainingTeam(attackTeam) !== isAbilityTrainingTeam(defenseTeam)) {
+    throw new Error(
+      "A sala de treino com habilidades só enfrenta equipes da mesma sala (ambas com habilidades).",
+    );
+  }
   if (!isTrainingBattle) {
     // Fora do treino, ambos devem ser do modo normal E de jogadores diferentes
     if (attackTeam.isTraining || defenseTeam.isTraining) {
@@ -4195,7 +4220,18 @@ export async function runPvpBattle(
     defenders,
     await getBondCombatModifier(defenders.map((m) => m.id)),
   );
-  const combat = runArenaCombat(attackers, defenders);
+  const combat = runArenaCombat(
+    attackers,
+    defenders,
+    isAbilityTraining
+      ? {
+          abilities: {
+            ...buildTrainingAbilityLineup(attackTeam.members.map((m) => m.mascot)),
+            ...buildTrainingAbilityLineup(defenseTeam.members.map((m) => m.mascot)),
+          },
+        }
+      : undefined,
+  );
   const attackerWon = combat.result === "ATTACKER_WIN";
   const defenderWon = combat.result === "DEFENDER_WIN";
   const draw = combat.result === "DRAW";
@@ -4601,7 +4637,7 @@ export async function runPvpBattle(
     battleAnimation: combat.log
       .filter(
         (t) =>
-          t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL",
+          t.action === "ATTACK" || t.action === "DEFEND" || t.action === "HEAL" || t.action === "ABILITY",
       )
       .map((t) => ({
         turn: t.turn,
@@ -4617,6 +4653,7 @@ export async function runPvpBattle(
         actorRole: t.actorRole,
         targetRole: t.targetRole,
         effect: t.effect,
+        hpAfter: t.targetHpAfter,
         isPlayerAttacker: t.actorOwnerId === attackTeam.playerId,
       })),
   };
