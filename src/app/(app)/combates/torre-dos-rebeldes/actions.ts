@@ -65,9 +65,9 @@ import { isExpeditionV2, newExpeditionState } from "@/lib/tower/expedition-state
 import { projectExpeditionForMember } from "@/lib/tower/expedition-projection";
 import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
-import { reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
+import { recoverSoloMascots, reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
 import { buildTowerEventDisclosure } from "@/lib/tower/event-disclosure";
-import { validateTowerFormation, type TowerPartyProfile } from "@/lib/tower/formation";
+import { switchSoloFormation, validateTowerFormation, type TowerPartyProfile } from "@/lib/tower/formation";
 import { canJoinTowerLobby, canEditTowerFormation } from "@/lib/tower/lobby-rules";
 import { computeProceduralStats } from "@/lib/mascot";
 import {
@@ -2501,6 +2501,49 @@ export async function getTowerRunStateAction(
   };
 }
 
+/** Reordena os quatro mascotes solo antes da confirmação, sem gastar turno nem curar. */
+export async function switchTowerSoloFormationAction(
+  runId: string,
+  expectedTurn: number,
+  orderedIds: string[],
+): Promise<{ error: string } | { ok: true }> {
+  const user = await requireTowerAccess();
+  if (!user) return { error: "Acesso restrito." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(${runLockKey(runId)})`;
+      const run = await tx.towerRun.findUnique({
+        where: { id: runId },
+        include: { members: { include: { mascots: true } } },
+      });
+      if (!run || run.status !== "ACTIVE" || run.partyProfile !== "SOLO" || run.balanceVersion !== 2 ||
+          run.globalTurn !== expectedTurn)
+        throw new Error("A formação solo só pode ser alterada na janela atual da Torre.");
+      const member = run.members.find((entry) => entry.userId === user.id);
+      const vol = (run.volatileState ?? {}) as TowerVolatile;
+      if (!member || !isExpeditionV2(vol.exploration) ||
+          vol.exploration.members[user.id]?.status !== "ACTIVE" ||
+          vol.exploration.members[user.id]?.availableFromTurn > run.globalTurn ||
+          vol.exploration.members[user.id]?.confirmedTurn === run.globalTurn ||
+          vol.submissions?.[user.id])
+        throw new Error("A troca deve ser feita antes de confirmar a ação desta janela.");
+      const slots = switchSoloFormation(member.mascots.map((mascot) => ({
+        mascotId: mascot.mascotId, currentHp: mascot.currentHp,
+        formationSlot: mascot.formationSlot,
+      })), orderedIds);
+      for (const slot of slots)
+        await tx.towerRunMascot.updateMany({
+          where: { memberId: member.id, mascotId: slot.mascotId },
+          data: { formationSlot: slot.formationSlot },
+        });
+    });
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : "Não foi possível alterar a formação." };
+  }
+  revalidatePath(PATH);
+  return { ok: true };
+}
+
 /** Submete/confirma a ação do turno. Resolve na hora se todos os ativos confirmarem. */
 export async function submitTowerActionAction(
   runId: string,
@@ -2549,6 +2592,9 @@ export async function submitTowerActionAction(
           actions: payload,
         });
         if (!validation.ok) throw new Error(`Ação recusada (${validation.code}). Atualize a expedição e tente novamente.`);
+        if (run.partyProfile === "SOLO" && run.balanceVersion === 2 && payload.action === "FIGHT" &&
+            !me.mascots.some((mascot) => (mascot.formationSlot === 1 || mascot.formationSlot === 2) && mascot.currentHp > 0))
+          throw new Error("Os dois ativos estão caídos. Reorganize uma dupla viva ou recupere mascotes antes de lutar.");
         if (typeof payload.routeId === "string" && payload.routeId) {
           if (payload.action === "REVIVE_ITEM" || payload.action === "REVIVE_ROOM")
             throw new Error("Mover-se e reanimar exigem janelas diferentes.");
@@ -2559,7 +2605,8 @@ export async function submitTowerActionAction(
           }
         }
         if (payload.action === "REVIVE_ITEM" || payload.action === "REVIVE_ROOM") {
-          const targetId = typeof payload.targetMemberId === "string" ? payload.targetMemberId : "";
+          const solo = run.partyProfile === "SOLO" && run.balanceVersion === 2;
+          const targetId = solo ? user.id : typeof payload.targetMemberId === "string" ? payload.targetMemberId : "";
           const target = run.members.find((member) => member.userId === targetId);
           const vitals = target?.mascots.map((mascot) => ({
             mascotId: mascot.mascotId,
@@ -2568,7 +2615,9 @@ export async function submitTowerActionAction(
             maxHp: mascot.maxHp,
           })) ?? [];
           try {
-            reviveMember(v2, targetId, { kind: payload.action === "REVIVE_ITEM" ? "ITEM" : "ROOM", actorId: user.id }, run.currentFloor, vitals);
+            const kind = payload.action === "REVIVE_ITEM" ? "ITEM" : "ROOM";
+            if (solo) recoverSoloMascots(v2, user.id, kind, run.currentFloor, vitals);
+            else reviveMember(v2, targetId, { kind, actorId: user.id }, run.currentFloor, vitals);
           } catch (error) {
             if (error instanceof TowerRecoveryError) throw new Error(error.message);
             throw error;

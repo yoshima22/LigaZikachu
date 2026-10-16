@@ -28,3 +28,20 @@ export function activeTowerMascots<T extends { formationSlot: number | null; cur
       mascot.formationSlot === 1 || mascot.formationSlot === 2))
     .sort((a, b) => (a.formationSlot ?? 0) - (b.formationSlot ?? 0));
 }
+
+export function switchSoloFormation(
+  mascots: readonly { mascotId: string; currentHp: number; formationSlot: number | null }[],
+  orderedIds: readonly string[],
+): TowerFormationSlot[] {
+  if (mascots.length !== 4 || orderedIds.length !== 4 ||
+      new Set(mascots.map((mascot) => mascot.mascotId)).size !== 4 ||
+      ![1, 2, 3, 4].every((slot) => mascots.some((mascot) => mascot.formationSlot === slot)))
+    throw new Error("A formação solo atual está incompleta.");
+  const formation = validateTowerFormation("SOLO", orderedIds);
+  if (!formation.ok || formation.slots.some((slot) => !mascots.some((mascot) => mascot.mascotId === slot.mascotId)))
+    throw new Error("A troca deve usar os mesmos quatro mascotes, sem repetições.");
+  if (formation.slots.slice(0, 2).some((slot) =>
+    (mascots.find((mascot) => mascot.mascotId === slot.mascotId)?.currentHp ?? 0) <= 0))
+    throw new Error("Os dois mascotes ativos precisam estar vivos.");
+  return formation.slots;
+}

@@ -46,7 +46,7 @@ import {
   transitionFloor,
   updateOverload,
 } from "./pressure-rules";
-import { mergeRecoveredHp, releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
+import { mergeRecoveredHp, recoverSoloMascots, releaseCapturedMascot, reviveMember, terminalMascotDisposition, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "./recovery-rules";
 import { resolveTowerClassEffects } from "./config";
 import type { TowerNarrativeEvent } from "./narrative";
 import { discardPendingFloorDrops, planRewardSettlement, recordFloorDrop, secureFloorDrops, settleRunRewards, type TowerRewardEntry } from "./reward-ledger";
@@ -92,10 +92,14 @@ async function resolveV2Recoveries(
   for (const [actorId, submission] of Object.entries(submissions)) {
     const payload = (submission.actions ?? {}) as { action?: string; targetMemberId?: string };
     if (payload.action !== "REVIVE_ITEM" && payload.action !== "REVIVE_ROOM") continue;
-    if (!payload.targetMemberId) continue;
+    const solo = run.partyProfile === "SOLO" && run.balanceVersion === 2;
+    const targetMemberId = solo ? actorId : payload.targetMemberId;
+    if (!targetMemberId) continue;
     const kind = payload.action === "REVIVE_ITEM" ? "ITEM" : "ROOM";
     try {
-      const revived = reviveMember(next, payload.targetMemberId, { kind, actorId }, run.currentFloor, vitals);
+      const revived = solo
+        ? recoverSoloMascots(next, actorId, kind, run.currentFloor, vitals)
+        : reviveMember(next, targetMemberId, { kind, actorId }, run.currentFloor, vitals);
       if (kind === "ITEM") {
         const player = await tx.player.findUnique({ where: { userId: actorId }, select: { id: true } });
         const consumed = player ? await tx.playerInventory.updateMany({
@@ -109,12 +113,14 @@ async function resolveV2Recoveries(
       }
       for (const [mascotId, currentHp] of Object.entries(revived.hpByMascotId))
         await tx.towerRunMascot.updateMany({
-          where: { mascotId, member: { runId: run.id, userId: payload.targetMemberId } },
+          where: { mascotId, member: { runId: run.id, userId: targetMemberId } },
           data: { currentHp, state: "IN_TOWER" },
         });
       Object.assign(recoveredHpByMascotId, revived.hpByMascotId);
       next = { ...revived.state, runReport: recordRecoveryInReport(revived.state.runReport) };
-      log.push(`${actorId} reanimou ${payload.targetMemberId}: os dois mascotes voltaram com 50% do HP.`);
+      log.push(solo
+        ? `${actorId} recuperou seus mascotes caídos a 50% do HP.`
+        : `${actorId} reanimou ${targetMemberId}: os dois mascotes voltaram com 50% do HP.`);
     } catch (error) {
       if (!(error instanceof TowerRecoveryError)) throw error;
       log.push(`${actorId} não conseguiu reanimar ${payload.targetMemberId}: ${error.message}`);
@@ -280,7 +286,8 @@ async function resolveV2RoomFronts(
       const healMult = next.activeModifiers.reduce((mult, modifier) => mult * modifier.healingMultiplier, 1);
       const ritual = run.members.some((member) => result.participantIds.includes(member.userId) &&
         resolveTowerClassEffects(member.expeditionRole, { kind: "REST" }).healingMult > 1) ? 1.1 : 1;
-      for (const snapshot of snapshots.filter((entry) => result.participantIds.includes(entry.member.userId) && entry.currentHp > 0)) {
+      for (const snapshot of snapshots.filter((entry) => result.participantIds.includes(entry.member.userId) && entry.currentHp > 0 &&
+        (!soloWaves || (entry.formationSlot ?? 0) <= 2))) {
         const currentHp = Math.min(snapshot.maxHp, snapshot.currentHp + Math.round(snapshot.maxHp * 0.2 * healMult * ritual));
         await tx.towerRunMascot.updateMany({ where: { mascotId: snapshot.mascotId, member: { runId: run.id } }, data: { currentHp } });
       }

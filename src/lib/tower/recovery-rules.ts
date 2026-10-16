@@ -81,6 +81,37 @@ export function reviveMember(
   };
 }
 
+export function recoverSoloMascots(
+  state: TowerExpeditionV2,
+  actorId: string,
+  kind: "ITEM" | "ROOM",
+  floor: number,
+  vitals: TowerMascotVitals[],
+): { state: TowerExpeditionV2; hpByMascotId: Record<string, number> } {
+  const actor = state.members[actorId];
+  if (!actor || actor.status !== "ACTIVE" || actor.availableFromTurn > state.globalTurn)
+    throw new TowerRecoveryError("INVALID_ACTOR", "O treinador solo precisa estar ativo para se recuperar.");
+  const own = vitals.filter((mascot) => mascot.ownerUserId === actorId);
+  if (own.length !== 4 || new Set(own.map((mascot) => mascot.mascotId)).size !== 4)
+    throw new TowerRecoveryError("MISSING_MASCOTS", "A formação solo de quatro mascotes não foi encontrada.");
+  if (!own.some((mascot) => mascot.currentHp > 0))
+    throw new TowerRecoveryError("INVALID_ACTOR", "A tentativa terminou quando os quatro mascotes caíram.");
+  const fallen = own.filter((mascot) => mascot.currentHp <= 0);
+  if (!fallen.length)
+    throw new TowerRecoveryError("INVALID_TARGET", "Nenhum mascote da formação precisa ser reanimado.");
+  if (kind === "ROOM") {
+    if (state.graph.find((room) => room.id === actor.roomId)?.kind !== "RECOVERY")
+      throw new TowerRecoveryError("NOT_IN_RECOVERY_ROOM", "Vá até a Sala de Recuperação para usar este recurso.");
+    if (!canUseRecoveryRoom(floor, state.lastRecoveryFloor))
+      throw new TowerRecoveryError("RECOVERY_UNAVAILABLE", `Sala disponível novamente no andar ${(state.lastRecoveryFloor ?? floor) + 2}.`);
+  }
+  return {
+    state: { ...state, lastRecoveryFloor: kind === "ROOM" ? floor : state.lastRecoveryFloor },
+    hpByMascotId: Object.fromEntries(fallen.map((mascot) =>
+      [mascot.mascotId, Math.max(1, Math.round(mascot.maxHp * 0.5))])),
+  };
+}
+
 export type CaptiveReleaseStore = {
   /** Must be a conditional update (`recoveredAt IS NULL`) inside the caller's transaction. */
   markRecoveredIfCaptive(mascotId: string, encounterId: string, actorId: string): Promise<boolean>;

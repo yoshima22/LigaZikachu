@@ -8,7 +8,8 @@ import { newExpeditionState, type TowerExpeditionV2 } from "./expedition-state";
 import { resolveTowerClassEffects } from "./config";
 import { TOWER_BOSS_PRIZES, TOWER_EXCLUSIVE_MASCOTS } from "./exclusive-catalog";
 import { applyPressureToExpedition, overloadFromResults, pressureDelta, transitionFloor, updateOverload } from "./pressure-rules";
-import { canUseRecoveryRoom, reviveMember } from "./recovery-rules";
+import { canUseRecoveryRoom, recoverSoloMascots, reviveMember } from "./recovery-rules";
+import { switchSoloFormation } from "./formation";
 import { recordFloorDrop, secureFloorDrops, discardPendingFloorDrops } from "./reward-ledger";
 import { planRewardSettlement } from "./reward-ledger";
 import { freezeRoomEncounter, groupActiveMembersByRoom, resolveRoomFront } from "./room-resolver";
@@ -138,15 +139,31 @@ export function simulateTower(
       state.graph.find((room) => room.id === state.members[id].roomId)?.kind === "RECOVERY");
     const downed = memberIds.find((id) => state.members[id].status === "DOWNED");
     let recoveryActorUsed: string | null = null;
-    if (recoveryActor && downed && canUseRecoveryRoom(floor, state.lastRecoveryFloor)) {
-      const result = reviveMember(state, downed, { kind: "ROOM", actorId: recoveryActor }, floor,
-        mascots.map((mascot) => ({ mascotId: mascot.id, ownerUserId: mascot.ownerId, currentHp: mascot.hp, maxHp: mascot.maxHp })));
+    const soloNeedsRecovery = partySize === 1 && recoveryActor &&
+      mascots.some((mascot) => mascot.ownerId === recoveryActor && mascot.hp <= 0) &&
+      mascots.some((mascot) => mascot.ownerId === recoveryActor && mascot.hp > 0);
+    if (recoveryActor && (downed || soloNeedsRecovery) && canUseRecoveryRoom(floor, state.lastRecoveryFloor)) {
+      const vitals = mascots.map((mascot) => ({ mascotId: mascot.id, ownerUserId: mascot.ownerId, currentHp: mascot.hp, maxHp: mascot.maxHp }));
+      const result = partySize === 1
+        ? recoverSoloMascots(state, recoveryActor, "ROOM", floor, vitals)
+        : reviveMember(state, downed!, { kind: "ROOM", actorId: recoveryActor }, floor, vitals);
       state = result.state;
       for (const [id, hp] of Object.entries(result.hpByMascotId)) mascots.find((mascot) => mascot.id === id)!.hp = hp;
-      recoveryTimings.push({ memberId: downed, downedTurn: downedAt.get(downed) ?? turns - 1, recoveredTurn: turns });
-      downedAt.delete(downed);
+      if (downed) {
+        recoveryTimings.push({ memberId: downed, downedTurn: downedAt.get(downed) ?? turns - 1, recoveredTurn: turns });
+        downedAt.delete(downed);
+      }
       recoveryActorUsed = recoveryActor;
       recoveries++;
+    }
+    if (partySize === 1) {
+      const ordered = [...mascots].sort((left, right) => left.formationSlot - right.formationSlot);
+      const living = ordered.filter((mascot) => mascot.hp > 0);
+      if (living.length >= 2 && ordered.slice(0, 2).filter((mascot) => mascot.hp > 0).length < 2) {
+        const selection = [...living, ...ordered.filter((mascot) => mascot.hp <= 0)].map((mascot) => mascot.id);
+        for (const slot of switchSoloFormation(ordered.map((mascot) => ({ mascotId: mascot.id, currentHp: mascot.hp, formationSlot: mascot.formationSlot })), selection))
+          mascots.find((mascot) => mascot.id === slot.mascotId)!.formationSlot = slot.formationSlot;
+      }
     }
     if (regroupTarget && state.rooms[regroupTarget]?.cleared) regroupTarget = null;
     if (!regroupTarget && Object.values(state.members).some((member) => member.status === "ACTIVE" && state.graph.find((room) => room.id === member.roomId)?.kind === "BOSS"))
@@ -250,7 +267,8 @@ export function simulateTower(
       for (const [id, hp] of Object.entries(result.hpByMascotId)) mascots.find((mascot) => mascot.id === id)!.hp = hp;
       if (result.interaction === "REST") {
         const ritual = result.participantIds.some((id) => resolveTowerClassEffects(ROLES[memberIds.indexOf(id)], { kind: "REST" }).healingMult > 1) ? 1.1 : 1;
-        for (const mascot of mascots.filter((entry) => result.participantIds.includes(entry.ownerId) && entry.hp > 0))
+        for (const mascot of mascots.filter((entry) => result.participantIds.includes(entry.ownerId) && entry.hp > 0 &&
+          (partySize !== 1 || entry.formationSlot <= 2)))
           mascot.hp = Math.min(mascot.maxHp, mascot.hp + Math.round(mascot.maxHp * 0.2 * ritual * state.activeModifiers.reduce((product, modifier) => product * modifier.healingMultiplier, 1)));
       }
       if (result.interaction === "EVENT" || result.interaction === "LUCK") {
