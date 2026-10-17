@@ -190,7 +190,7 @@ type Actor = {
   fainted: boolean; faintT: number; shield: number; flash: number; wobble: number;
   rtx: number; rty: number; roamCd: number; // alvo de deriva + cooldown p/ repicar
 };
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; shape?: "circle" | "square" | "spark"; g?: number; spin?: number; rot?: number };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; shape?: "circle" | "spark" | "leaf" | "shard" | "chunk" | "star"; g?: number; spin?: number; rot?: number };
 type Pop = { x: number; y: number; text: string; color: string; life: number; vy: number };
 type Scene = { turn: ReplayTurn; phase: Phase; pt: number; fired: boolean; style: "beam" | "orb" | "melee" | "heal" | "support"; ox?: number; oy?: number };
 type St = {
@@ -263,7 +263,7 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
     }
     a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022);
     a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022);
-    a.face = a.rtx >= a.x ? 1 : -1;
+    a.face = a.c.side === "A" ? 1 : -1; // sempre encarando o lado inimigo
   }
 }
 
@@ -274,7 +274,13 @@ function runScene(st: St, dt: number) {
   const guardian = sc.turn.guardianInterceptId ? st.actors[sc.turn.guardianInterceptId] : null;
   const hitTarget = guardian ?? target; // quem efetivamente recebe o VFX
   if (!actor || !target) { st.scene = null; return; }
-  if (sc.ox === undefined) { sc.ox = actor.x; sc.oy = actor.y; } // origem ao iniciar a cena
+  if (sc.ox === undefined) {
+    sc.ox = actor.x; sc.oy = actor.y; // origem ao iniciar a cena
+    // atacante encara o alvo; alvo (e guardião) encaram o atacante
+    actor.face = hitTarget.x >= actor.x ? 1 : -1;
+    hitTarget.face = actor.x >= hitTarget.x ? 1 : -1;
+    if (target !== hitTarget) target.face = actor.x >= target.x ? 1 : -1;
+  }
   sc.pt += dt;
 
   if (sc.phase === "windup") {
@@ -322,11 +328,11 @@ const IMPACT: Record<string, ImpactCfg> = {
   fire: { cols: ["#F08030", "#FFD070", "#FF5020"], shape: "circle", g: 0.3, speed: 5, count: 24, size: [2, 5], life: 480, rise: 2 },
   water: { cols: ["#6890F0", "#B0D0FF", "#3060C0"], shape: "circle", g: 1.5, speed: 6, count: 24, size: [2, 4], life: 520 },
   electric: { cols: ["#F8D030", "#FFF8A0", "#FFFFFF"], shape: "spark", g: 0.1, speed: 12, count: 26, size: [1.5, 3], life: 320 },
-  grass: { cols: ["#78C850", "#B8E060", "#4A8020"], shape: "square", g: 0.3, speed: 4, count: 20, size: [2, 4], life: 650, spin: true, rise: 1 },
-  ice: { cols: ["#98D8D8", "#E0F8F8", "#60B0C0"], shape: "square", g: 0.6, speed: 7, count: 22, size: [1.5, 3.5], life: 440, spin: true },
-  rock: { cols: ["#B8A038", "#8A7020", "#D8C060"], shape: "square", g: 2.2, speed: 6, count: 20, size: [2, 5], life: 520, spin: true },
-  ground: { cols: ["#E0C068", "#B89040", "#F0E0A0"], shape: "square", g: 2.0, speed: 6, count: 20, size: [2, 5], life: 520, spin: true },
-  fighting: { cols: ["#FFFFFF", "#FFE0A0", "#C03028"], shape: "circle", g: 0.6, speed: 8, count: 22, size: [2, 4], life: 340 },
+  grass: { cols: ["#78C850", "#B8E060", "#4A8020"], shape: "leaf", g: 0.25, speed: 4.5, count: 22, size: [3, 6], life: 680, spin: true, rise: 1 },
+  ice: { cols: ["#A8E4E4", "#E8FBFB", "#5FB0C8"], shape: "shard", g: 0.6, speed: 7.5, count: 24, size: [3, 6], life: 460 },
+  rock: { cols: ["#B8A038", "#8A7020", "#D8C060"], shape: "chunk", g: 2.2, speed: 6, count: 22, size: [3, 6], life: 540, spin: true },
+  ground: { cols: ["#E0C068", "#B89040", "#F0E0A0"], shape: "chunk", g: 2.0, speed: 6, count: 22, size: [3, 6], life: 540, spin: true },
+  fighting: { cols: ["#FFFFFF", "#FFE0A0", "#C03028"], shape: "star", g: 0.5, speed: 8, count: 20, size: [3, 6], life: 360 },
   normal: { cols: ["#FFFFFF", "#FFE0A0", "#A8A878"], shape: "circle", g: 0.6, speed: 7, count: 18, size: [2, 4], life: 340 },
   steel: { cols: ["#D8D8E8", "#FFFFFF", "#8080A0"], shape: "spark", g: 0.6, speed: 9, count: 22, size: [1.5, 3], life: 360 },
   psychic: { cols: ["#F85888", "#FFB0D0", "#C03070"], shape: "circle", g: 0, speed: 5, count: 24, size: [2, 4], life: 560, rise: 1 },
@@ -469,16 +475,35 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   for (const p of st.particles) {
     ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.max)); ctx.fillStyle = p.color;
     ctx.shadowBlur = 8; ctx.shadowColor = p.color;
+    const vang = Math.atan2(p.vy, p.vx);
     if (p.shape === "spark") {
-      // risco na direção do movimento (faísca elétrica / investida)
+      // risco na direção do movimento (faísca elétrica / metálica)
       const len = 3 + p.size * 2;
       const n = Math.hypot(p.vx, p.vy) || 1;
-      ctx.strokeStyle = p.color; ctx.lineWidth = Math.max(1, p.size * 0.6);
+      ctx.strokeStyle = p.color; ctx.lineCap = "round"; ctx.lineWidth = Math.max(1, p.size * 0.6);
       ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - (p.vx / n) * len, p.y - (p.vy / n) * len); ctx.stroke();
-    } else if (p.shape === "square") {
-      // estilhaço/rochas
+    } else if (p.shape === "leaf") {
+      // folha: elipse pontuda girando e seguindo o movimento
+      ctx.translate(p.x, p.y); ctx.rotate(vang + (p.rot ?? 0));
+      ctx.beginPath(); ctx.ellipse(0, 0, p.size * 1.6, p.size * 0.7, 0, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = "rgba(0,0,0,0.25)"; ctx.lineWidth = 0.8;
+      ctx.beginPath(); ctx.moveTo(-p.size * 1.5, 0); ctx.lineTo(p.size * 1.5, 0); ctx.stroke();
+    } else if (p.shape === "shard") {
+      // estilhaço de gelo: losango fino alinhado ao movimento
+      ctx.translate(p.x, p.y); ctx.rotate(vang);
+      ctx.beginPath(); ctx.moveTo(p.size * 2, 0); ctx.lineTo(0, p.size * 0.75); ctx.lineTo(-p.size * 1.3, 0); ctx.lineTo(0, -p.size * 0.75); ctx.closePath(); ctx.fill();
+    } else if (p.shape === "chunk") {
+      // fragmento de rocha: pentágono irregular girando
       ctx.translate(p.x, p.y); ctx.rotate(p.rot ?? 0);
-      ctx.fillRect(-p.size, -p.size, p.size * 2, p.size * 2);
+      const s = p.size;
+      ctx.beginPath(); ctx.moveTo(-s, -s * 0.8); ctx.lineTo(s * 0.9, -s); ctx.lineTo(s, s * 0.6); ctx.lineTo(0, s); ctx.lineTo(-s * 0.9, s * 0.5); ctx.closePath(); ctx.fill();
+    } else if (p.shape === "star") {
+      // faísca de impacto físico: estrela de 4 pontas
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot ?? 0);
+      const s = p.size;
+      ctx.beginPath();
+      for (let i = 0; i < 8; i++) { const r = i % 2 ? s * 0.4 : s * 1.6; const a2 = (i / 8) * Math.PI * 2; ctx.lineTo(Math.cos(a2) * r, Math.sin(a2) * r); }
+      ctx.closePath(); ctx.fill();
     } else {
       ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
     }
@@ -499,10 +524,13 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 }
 
 const ARENA_W = 920;
+const ARENA_H = 440;
 const RECALL_MS = 760; // duração do retorno à Pokébola
 
 function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageElement) {
-  const S = 72;
+  // escala por profundidade: quem está mais à frente (y maior) aparece maior
+  const dz = 0.82 + (a.y / ARENA_H) * 0.26;
+  const S = 72 * dz;
 
   // ── Retorno à Pokébola (derrotado): feixe vermelho + silhueta sugada ──
   if (a.fainted) {
@@ -543,10 +571,12 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
   }
 
   const x = a.x + a.kx, y = a.y + a.ky;
-  const bob = Math.sin(a.wobble) * 2;
-  // sombra
-  ctx.save(); ctx.globalAlpha = 0.35; ctx.fillStyle = "#000";
-  ctx.beginPath(); ctx.ellipse(x, y + 26, 24, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  const bob = Math.sin(a.wobble) * 1.3;
+  const groundY = y + 30; // linha do chão sob os pés
+  // sombra (ancora o sprite; encolhe quando ele "sobe" no bob)
+  const lift = (bob + 1.3) / 2.6; // 0 = pisando, 1 = topo do bob
+  ctx.save(); ctx.globalAlpha = 0.42 - lift * 0.12; ctx.fillStyle = "#000";
+  ctx.beginPath(); ctx.ellipse(x, groundY, (26 - lift * 4) * dz, (7.5 - lift * 1.5) * dz, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 
   // escudo do Guardião
   if (a.shield > 0) {
@@ -556,7 +586,7 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
   }
 
   ctx.save();
-  ctx.translate(x, y - 6 + bob);
+  ctx.translate(x, groundY - S / 2 + bob); // pés ancorados na linha do chão
   if (a.face === -1) ctx.scale(-1, 1);
   if (img && img.complete && img.naturalWidth > 0) {
     if (a.flash > 0) { ctx.shadowBlur = 20 * a.flash; ctx.shadowColor = "#fff"; }
@@ -565,7 +595,7 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
     if (a.flash > 0) { ctx.globalAlpha = 0.5 * a.flash; ctx.globalCompositeOperation = "source-atop"; ctx.fillStyle = "#fff"; ctx.fillRect(-S / 2, -S / 2, S, S); }
   } else {
     // fallback: círculo com cor do tipo
-    ctx.fillStyle = hex(a.c.type); ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = hex(a.c.type); ctx.beginPath(); ctx.arc(0, 0, S * 0.36, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
 
