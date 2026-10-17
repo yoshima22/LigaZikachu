@@ -276,6 +276,14 @@ export function LeagueBattleReplayModal({
 }) {
   const [mode, setMode] = useState<ReplayStyle>(() => defaultStyle ?? preferredReplayStyle());
   const canModern = replay.length > 0 && lineupA.length > 0 && lineupB.length > 0;
+  const modernWinnerName = isDraw ? "Empate" : winnerId ? (winnerId === playerAId ? playerAName : playerBName) : null;
+  // Memoizado: NUNCA recriar o objeto a cada render — senão o canvas reinicia o
+  // replay do zero toda vez que o componente re-renderiza (bug "repete 2 ataques").
+  const modernData = useMemo(
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    () => (canModern ? buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName: modernWinnerName }) : null),
+    [canModern, lineupA, lineupB, replay, modernWinnerName],
+  );
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -331,11 +339,12 @@ export function LeagueBattleReplayModal({
   const delay = Math.round(baseDelay / speed);
 
   useEffect(() => {
+    if (mode === "modern") return; // no modo moderno o canvas controla o tempo
     if (!autoPlay || showBondIntro) return;
     if (turnIdx >= cinematicReplay.length) return;
     const t = setTimeout(() => setTurnIdx(prev => prev + 1), turnIdx < 0 ? 600 / speed : delay);
     return () => clearTimeout(t);
-  }, [turnIdx, autoPlay, cinematicReplay, delay, speed, showBondIntro]);
+  }, [turnIdx, autoPlay, cinematicReplay, delay, speed, showBondIntro, mode]);
 
   const current = turnIdx >= 0 && turnIdx < cinematicReplay.length ? cinematicReplay[turnIdx] : null;
   const finished = turnIdx >= cinematicReplay.length;
@@ -358,14 +367,12 @@ export function LeagueBattleReplayModal({
   const resolvedTargetName = current ? resolveName(current.targetName, current.targetPokemonId) : "";
 
   // Modo moderno (animado): mesma fonte de dados, renderização alternativa.
-  if (mode === "modern" && canModern) {
-    const winnerName = isDraw ? "Empate" : winnerId ? (winnerId === playerAId ? playerAName : playerBName) : null;
+  if (mode === "modern" && modernData) {
     return (
       <ModernReplayModal
         title={`${playerAName} × ${playerBName}`}
         subtitle="Replay animado"
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        data={buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName })}
+        data={modernData}
         onClose={onFinish}
         onUseClassic={() => setMode("classic")}
       />
