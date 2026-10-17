@@ -244,11 +244,13 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
           {state.currentRanking.length === 0 ? <p className="rounded-xl border border-dashed border-slate-800 p-4 text-sm text-slate-500">Ninguém atacou este líder ainda. Seja o primeiro!</p> : (
             <ol className="space-y-1.5">
               {state.currentRanking.map((row, index) => (
-                <li key={row.playerId} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
-                  <span className="w-6 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
-                  <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
-                  <span className="text-[10px] text-slate-500">{row.attackCount} atq · média {fmt(Math.round(row.damage / Math.max(1, row.attackCount)))} · recebido {fmt(row.damageReceived)} · maior {fmt(row.highestSingleDamage)}</span>
-                  <span className="font-black text-red-200">{fmt(row.damage)}</span>
+                <li key={row.playerId} className={`rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-6 shrink-0 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
+                    <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
+                    <span className="shrink-0 font-black text-red-200">{fmt(row.damage)}</span>
+                  </div>
+                  <p className="mt-0.5 pl-8 text-[10px] text-slate-500">{row.attackCount} atq · média {fmt(Math.round(row.damage / Math.max(1, row.attackCount)))} · recebido {fmt(row.damageReceived)} · maior {fmt(row.highestSingleDamage)}</p>
                 </li>
               ))}
             </ol>
@@ -284,11 +286,13 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
                 <summary className="cursor-pointer text-sm font-bold text-white">✅ {d.leaderName} <span className="text-[10px] font-normal text-slate-500">· {d.ranking.length} treinador(es)</span></summary>
                 <ol className="mt-2 space-y-1.5">
                   {d.ranking.map((row, index) => (
-                    <li key={row.playerId} className={`flex items-center gap-2 rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
-                      <span className="w-6 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
-                      <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
-                      <span className="text-[10px] text-slate-500">{row.attackCount} atq · maior {fmt(row.highestSingleDamage)}</span>
-                      <span className="font-black text-red-200">{fmt(row.damage)}</span>
+                    <li key={row.playerId} className={`rounded-xl border px-3 py-2 text-sm ${row.playerId === player?.id ? "border-[#FFCB05]/40 bg-[#FFCB05]/10" : "border-slate-800 bg-slate-950/50"}`}>
+                      <div className="flex items-center gap-2">
+                        <span className="w-6 shrink-0 text-center font-black text-slate-400">{["🥇", "🥈", "🥉"][index] ?? index + 1}</span>
+                        <span className="min-w-0 flex-1 truncate font-bold text-white">{row.playerName}</span>
+                        <span className="shrink-0 font-black text-red-200">{fmt(row.damage)}</span>
+                      </div>
+                      <p className="mt-0.5 pl-8 text-[10px] text-slate-500">{row.attackCount} atq · maior {fmt(row.highestSingleDamage)}</p>
                     </li>
                   ))}
                 </ol>

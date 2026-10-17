@@ -223,11 +223,12 @@ function FighterRow({ f, isActor, isTarget, action }: { f: Fighter; isActor: boo
         </div>
       )}
       <div className="min-w-0 flex-1">
-        <div className="flex items-center justify-between">
-          <p className={`text-[11px] font-semibold truncate ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>
-            {f.name}{f.level ? ` - Nv.${f.level}` : ""}
-          </p>
-          {f.role && <span className="text-[9px] text-yellow-400 shrink-0 ml-1">{f.role}</span>}
+        <div className="flex flex-wrap items-baseline gap-x-1 gap-y-0.5">
+          <span className={`text-[11px] font-semibold leading-tight break-words ${f.hp <= 0 ? "text-slate-600 line-through" : f.side === "A" ? "text-blue-300" : "text-red-300"}`}>
+            {f.name}
+          </span>
+          {f.level ? <span className="text-[9px] text-slate-400 shrink-0">Nv.{f.level}</span> : null}
+          {f.role && <span className="text-[9px] text-yellow-400 shrink-0">{f.role}</span>}
         </div>
         <HpBar hp={f.hp} maxHp={f.maxHp} />
       </div>

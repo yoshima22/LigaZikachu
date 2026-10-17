@@ -548,6 +548,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [localExp, setLocalExp]             = useState(mascot.exp);
   const [localLevel, setLocalLevel]         = useState(mascot.level);
   const [localLastFed, setLocalLastFed]     = useState(mascot.lastFedAt);
+  const [reaction, setReaction]             = useState<{ emoji: string; key: number } | null>(null);
   const confirmedFeedRef = useRef<number | null>(null);
   const [localIsFavorite, setLocalIsFavorite] = useState(mascot.isFavorite);
 
@@ -719,6 +720,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     });
   };
 
+  const REACTION_EMOJI: Record<string, string> = { PLAY: "⭐", PET: "💖", FEED_FOOD: "🍖", FEED_SWEET: "🍬", FEED_RARE_SWEET: "🍬✨" };
   const handleInteract = (type: "PLAY" | "PET" | "FEED_FOOD" | "FEED_SWEET" | "FEED_RARE_SWEET") => {
     startTransition(async () => {
       const r = await interactAction(mascot.id, type);
@@ -737,6 +739,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
           return;
         }
         toast.success(r.result.message);
+        // Confirmação visual no card: emoji sobe sobre o sprite (toda interação,
+        // inclusive comida/doce — antes parecia "clique sem efeito").
+        setReaction({ emoji: REACTION_EMOJI[type] ?? "✨", key: Date.now() });
         // Atualização otimista imediata — não espera re-render do servidor
         const happChange = r.result.happinessChange ?? 0;
         const expChange  = r.result.expGained ?? 0;
@@ -1054,6 +1059,18 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         {/* Sprite + Nome */}
         <div className="flex items-center gap-4">
           <div className={`group relative flex shrink-0 cursor-help items-center justify-center ${hasIllustratedSprite ? "h-24 w-24" : "h-[72px] w-[72px]"}`}>
+            {/* Confirmação visual de interação: emoji sobe e some sobre o sprite */}
+            {reaction && (
+              <span
+                key={reaction.key}
+                onAnimationEnd={() => setReaction(null)}
+                className="pointer-events-none absolute left-1/2 top-1/2 z-20 -translate-x-1/2 text-2xl drop-shadow-[0_2px_4px_rgba(0,0,0,0.6)]"
+                style={{ animation: "mascotReact 900ms ease-out forwards" }}
+              >
+                {reaction.emoji}
+              </span>
+            )}
+            <style>{`@keyframes mascotReact{0%{opacity:0;transform:translate(-50%,-20%) scale(.6)}20%{opacity:1;transform:translate(-50%,-70%) scale(1.15)}100%{opacity:0;transform:translate(-50%,-160%) scale(1)}}`}</style>
             {/* Speech bubble on hover */}
             <MascotSpeechBubble
               id={mascot.id}

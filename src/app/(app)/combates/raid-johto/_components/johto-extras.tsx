@@ -121,11 +121,11 @@ export function JohtoReplayList({ fights }: { fights: JohtoRecentFight[] }) {
     <>
       <div className="space-y-1.5">
         {fights.map((fight) => (
-          <div key={fight.id} className="flex items-center gap-2 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs">
-            <span className={`rounded-full px-2 py-0.5 text-[9px] font-black ${fight.win ? "bg-emerald-500/20 text-emerald-200" : "bg-red-500/15 text-red-200"}`}>{fight.win ? "VITÓRIA" : "DERROTA"}</span>
+          <div key={fight.id} className="flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-slate-800 bg-slate-950/50 px-3 py-2 text-xs">
+            <span className={`shrink-0 rounded-full px-2 py-0.5 text-[9px] font-black ${fight.win ? "bg-emerald-500/20 text-emerald-200" : "bg-red-500/15 text-red-200"}`}>{fight.win ? "VITÓRIA" : "DERROTA"}</span>
             <span className="min-w-0 flex-1 truncate text-slate-200"><b className="text-white">{fight.playerName}</b> → {fight.leaderName}</span>
-            <span className="font-black text-amber-300">{fmt(fight.damage)}</span>
-            <button disabled={pending} onClick={() => open(fight.id)} className="rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50">▶ Replay</button>
+            <span className="shrink-0 font-black text-amber-300">{fmt(fight.damage)}</span>
+            <button disabled={pending} onClick={() => open(fight.id)} className="shrink-0 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-bold text-[#FFCB05] hover:bg-[#FFCB05]/20 disabled:opacity-50">▶ Replay</button>
           </div>
         ))}
       </div>
