@@ -344,6 +344,7 @@ model Player {
   traceRoomsAsHunter          TraceRoom[]                    @relation("TraceRoomHunter")
   goldenPawTransactions       GoldenPawTransaction[]
   casualMode                  Boolean                        @default(false)
+  replayStyle                 String                         @default("classic") // "classic" | "modern"
   adminLabFeatherUsedAt       DateTime?
   auctionBids                 BazarAuctionBid[]
   newsReads                   NewsRead[]

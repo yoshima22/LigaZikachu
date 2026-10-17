@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
+import { prisma } from "@/lib/prisma";
 import { getLeaguePageData } from "./data";
 import { LeagueClient } from "./_components/league-client";
 
@@ -35,11 +36,12 @@ export default async function LigaSemanalPage() {
 
   // Serialize to strip Prisma Date objects and avoid client hydration issues
   const safeData = JSON.parse(JSON.stringify(data));
+  const pref = await prisma.player.findUnique({ where: { id: player.id }, select: { replayStyle: true } });
 
   return (
     <div className="mx-auto max-w-3xl space-y-6 px-4 py-8">
       {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
-      <LeagueClient initialData={safeData as any} />
+      <LeagueClient initialData={safeData as any} replayStyle={pref?.replayStyle === "modern" ? "modern" : "classic"} />
     </div>
   );
 }

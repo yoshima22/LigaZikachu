@@ -83,6 +83,16 @@ export async function updateNotificationSettings(input: unknown): Promise<{ ok?:
   return { ok: true };
 }
 
+export async function setReplayStyleAction(style: "classic" | "modern"): Promise<{ ok?: boolean; error?: string }> {
+  const user = await getSessionUser();
+  if (!user) return { error: "Não autenticado." };
+  const value = style === "modern" ? "modern" : "classic";
+  await prisma.player.update({ where: { userId: user.id }, data: { replayStyle: value } });
+  revalidatePath("/perfil");
+  revalidatePath("/combates/liga-semanal");
+  return { ok: true };
+}
+
 export async function setCasualModeAction(
   enabled: boolean,
   force?: boolean

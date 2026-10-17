@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
-import { type Combatant, type ReplayTurn } from "./_components/replay-canvas";
+import { type Combatant, type ReplayTurn } from "@/components/replay/replay-canvas";
 import { ReplayLabClient } from "./_components/replay-lab-client";
 import { listLeagueReplays } from "./actions";
 

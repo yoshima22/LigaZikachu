@@ -243,6 +243,7 @@ export function LeagueBattleReplayModal({
   lineupB = EMPTY_LINEUP,
   reserveLineupA = EMPTY_LINEUP,
   onFinish,
+  onUseModern,
 }: {
   playerAName: string;
   playerBName: string;
@@ -260,6 +261,7 @@ export function LeagueBattleReplayModal({
   /** Optional Tower-only second formation; ordinary league replays remain unchanged. */
   reserveLineupA?: ReplayLineupFighter[];
   onFinish: () => void;
+  onUseModern?: () => void;
 }) {
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);
@@ -367,6 +369,7 @@ export function LeagueBattleReplayModal({
                 }`}>
                 {speed}×
               </button>
+              {onUseModern && <button onClick={onUseModern} className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20" title="Assistir no modo animado">🎬 Moderno</button>}
               <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>

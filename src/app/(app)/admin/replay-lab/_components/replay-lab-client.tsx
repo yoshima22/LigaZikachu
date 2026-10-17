@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { ReplayCanvas, type ReplayData } from "./replay-canvas";
+import { ReplayCanvas, type ReplayData } from "@/components/replay/replay-canvas";
 import { getLeagueReplay, type LeagueReplayOption } from "../actions";
 
 export function ReplayLabClient({ sample, games }: { sample: ReplayData; games: LeagueReplayOption[] }) {

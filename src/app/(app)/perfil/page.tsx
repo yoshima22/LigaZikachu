@@ -15,6 +15,7 @@ import { SiteThemeSettings } from "@/components/site-theme-settings";
 import { InviteCodeCard } from "./_components/invite-code-card";
 import { BirthdayCard } from "./_components/birthday-card";
 import { NotificationSettingsCard } from "./_components/notification-settings-card";
+import { ReplayStyleCard } from "./_components/replay-style-card";
 import { ensurePlayerInviteCode } from "@/lib/invite-code";
 import { TutorialManager } from "@/components/tutorial/tutorial-manager";
 import { getPokemonName, getSpriteUrl, getWishlistPokemonOptions } from "@/lib/mascot-data";
@@ -203,6 +204,7 @@ export default async function PerfilPage() {
       nameChangeCount: true,
       disableProfileIntro: true,
       casualMode: true,
+      replayStyle: true,
       mascotSpritePreference: true,
       megaSpritePreference: true,
       notificationSettings: true,
@@ -514,6 +516,7 @@ export default async function PerfilPage() {
       </Card>
 
       <SiteThemeSettings />
+      <ReplayStyleCard initial={player.replayStyle} />
       <NotificationSettingsCard initial={player.notificationSettings} />
 
       <InviteCodeCard

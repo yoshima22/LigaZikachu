@@ -54,6 +54,8 @@ import {
   equipWeeklyPresetAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
+import { ModernReplayModal } from "@/components/replay/modern-replay-modal";
+import { buildModernReplay, type ReplayLogEntry } from "@/lib/replay-modern";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { BattleDivisionControl } from "@/components/battle-division-control";
 
@@ -120,7 +122,7 @@ type PageData = {
   exclusionNotice?: { weekKey: string; mascotCount: number; min: number } | null;
 };
 
-export function LeagueClient({ initialData }: { initialData: PageData }) {
+export function LeagueClient({ initialData, replayStyle = "classic" }: { initialData: PageData; replayStyle?: "classic" | "modern" }) {
   const [tab, setTab] = useState<Tab>("liga");
   const [data, setData] = useState(initialData);
   const [refreshing, startRefresh] = useTransition();
@@ -211,7 +213,7 @@ export function LeagueClient({ initialData }: { initialData: PageData }) {
       <div>
         {tab === "liga" && <LeagueTab data={data} />}
         {tab === "times" && <TeamsTab data={data} refresh={refresh} />}
-        {tab === "resultados" && <ResultsTab data={data} />}
+        {tab === "resultados" && <ResultsTab data={data} replayStyle={replayStyle} />}
         {tab === "colinha" && <ColinhaTab />}
         {tab === "itens" && <ItemsTab data={data} refresh={refresh} />}
         {tab === "admin" && data.player.isAdmin && <AdminTab data={data} refresh={refresh} />}
@@ -1457,7 +1459,8 @@ export function OpponentAnalysisModal({ analysis, myMascots, showRecommendations
   );
 }
 
-function ResultsTab({ data }: { data: PageData }) {
+function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "classic" | "modern" }) {
+  const [styleChoice, setStyleChoice] = useState<"classic" | "modern">(replayStyle);
   const [replayPending, startReplay] = useTransition();
   const [replayMatch, setReplayMatch] = useState<any>(null);
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
@@ -1653,7 +1656,16 @@ function ResultsTab({ data }: { data: PageData }) {
 
   return (
     <div className="space-y-4">
-      {replayMatch && replayMatch.replayJson && (
+      {replayMatch && replayMatch.replayJson && styleChoice === "modern" && (
+        <ModernReplayModal
+          title={`${replayMatch.playerAName} × ${replayMatch.playerBName ?? "???"}`}
+          subtitle="Replay animado"
+          data={buildModernReplay(replayMatch.replayLineupA ?? [], replayMatch.replayLineupB ?? [], replayMatch.replayJson as ReplayLogEntry[])}
+          onClose={() => setReplayMatch(null)}
+          onUseClassic={() => setStyleChoice("classic")}
+        />
+      )}
+      {replayMatch && replayMatch.replayJson && styleChoice === "classic" && (
         <LeagueBattleReplayModal
           playerAName={replayMatch.playerAName}
           playerBName={replayMatch.playerBName ?? "???"}
@@ -1667,6 +1679,7 @@ function ResultsTab({ data }: { data: PageData }) {
           playerBSurvivors={replayMatch.playerBSurvivors}
           orderSabotage={data.orderSabotage}
           onFinish={() => setReplayMatch(null)}
+          onUseModern={() => setStyleChoice("modern")}
         />
       )}
       {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}
