@@ -774,8 +774,8 @@ function drawTex(ctx: CanvasRenderingContext2D, f: Fx, tex: Record<string, HTMLI
   const img = tex[f.tex ?? ""]; if (!img || !img.complete || !img.naturalWidth) return; // ainda carregando → procedural cobre
   const p = Math.min(1, f.t / f.life);
   const alpha = Math.sin(Math.min(1, p / 0.25) * Math.PI / 2) * (1 - Math.max(0, (p - 0.4) / 0.6)); // sobe rápido, desce suave
-  const scale = (0.55 + ease(p) * 0.85) * (f.max || 1);
-  const w = 150 * scale, h = 150 * scale;
+  const scale = (0.45 + ease(p) * 0.5) * (f.max || 1);
+  const w = 78 * scale, h = 78 * scale;
   ctx.save();
   ctx.globalCompositeOperation = "lighter";
   ctx.translate(f.x, f.y);
@@ -848,48 +848,106 @@ function drawFx(ctx: CanvasRenderingContext2D, f: Fx) {
 
 const ARENA_W = 920;
 const ARENA_H = 440;
-const RECALL_MS = 760; // duração do retorno à Pokébola
+const RECALL_MS = 820; // duração do retorno à Pokébola
+
+// Desenha uma Pokébola (fechada ou abrindo). `open` 0..1 levanta a tampa e
+// acende a "boca" voltada para `dir` (+1 direita, -1 esquerda).
+function drawPokeball(ctx: CanvasRenderingContext2D, x: number, y: number, r: number, open: number, dir: number, wob: number) {
+  ctx.save();
+  ctx.translate(x, y); ctx.rotate(wob);
+  // metade de baixo (branca) e band/aro
+  ctx.fillStyle = "#f4f4f4"; ctx.beginPath(); ctx.arc(0, 0, r, 0, Math.PI * 2); ctx.fill();
+  // metade de cima (vermelha) — recua conforme abre
+  ctx.save();
+  ctx.beginPath(); ctx.rect(-r - 2, -r - 2 - open * r * 1.4, (r + 2) * 2, r + 2); ctx.clip();
+  ctx.fillStyle = "#e23b3b"; ctx.beginPath(); ctx.arc(0, -open * r * 1.4, r, 0, Math.PI * 2); ctx.fill();
+  ctx.restore();
+  // aro central + botão
+  ctx.strokeStyle = "#1c1c22"; ctx.lineWidth = r * 0.22; ctx.beginPath(); ctx.moveTo(-r, 0); ctx.lineTo(r, 0); ctx.stroke();
+  ctx.fillStyle = "#1c1c22"; ctx.beginPath(); ctx.arc(0, 0, r * 0.3, 0, Math.PI * 2); ctx.fill();
+  ctx.fillStyle = "#f4f4f4"; ctx.beginPath(); ctx.arc(0, 0, r * 0.15, 0, Math.PI * 2); ctx.fill();
+  // boca de luz (quando aberta) voltada p/ o alvo
+  if (open > 0.1) {
+    ctx.globalAlpha = open; ctx.fillStyle = "#fff4d6"; ctx.shadowBlur = 14; ctx.shadowColor = "#ff5a5a";
+    ctx.beginPath(); ctx.ellipse(dir * r * 0.5, -open * r * 0.6, r * 0.5, r * 0.8, 0, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, S: number) {
+  const p = Math.min(1, a.faintT / RECALL_MS);
+  const bx = a.c.side === "A" ? 46 : ARENA_W - 46; // Pokébola na borda do time
+  const by = a.hy + 20;
+  const dir = a.x >= bx ? 1 : -1;
+  const sx = a.x, sy = a.y - 6; // posição do mascote
+  // fases
+  const open = Math.min(1, p / 0.16) * (p < 0.82 ? 1 : Math.max(0, 1 - (p - 0.82) / 0.18));
+  const absorb = Math.max(0, Math.min(1, (p - 0.14) / 0.64)); // 0→1 enquanto é sugado
+  const closing = Math.max(0, (p - 0.82) / 0.18);
+  const wob = closing > 0 ? Math.sin(closing * Math.PI * 3) * 0.25 : 0;
+
+  // ponto atual da energia (do mascote em direção à bola)
+  const cx = sx + (bx - sx) * ease(absorb);
+  const cy = sy + (by - sy) * ease(absorb);
+
+  // feixe de luz bola → energia
+  if (open > 0.1 && absorb < 1) {
+    ctx.save();
+    ctx.globalAlpha = 0.85 * open * (1 - absorb * 0.4); ctx.lineCap = "round";
+    ctx.strokeStyle = "#ff5a5a"; ctx.lineWidth = 7; ctx.shadowBlur = 18; ctx.shadowColor = "#ff5a5a";
+    ctx.beginPath(); ctx.moveTo(bx + dir * 6, by - 4); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.strokeStyle = "#fff0f0"; ctx.lineWidth = 2.5;
+    ctx.beginPath(); ctx.moveTo(bx + dir * 6, by - 4); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.restore();
+  }
+
+  // mascote virando energia vermelha e encolhendo em direção à bola
+  if (p < 0.9) {
+    const scale = Math.max(0.05, 1 - absorb) ;
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(scale * (a.face === -1 ? -1 : 1), scale);
+    ctx.globalAlpha = 1 - absorb * 0.6;
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, -S / 2, -S / 2, S, S);
+      ctx.globalAlpha = (0.5 + absorb * 0.5) * (1 - absorb * 0.3); ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "#ff2d2d"; ctx.fillRect(-S / 2, -S / 2, S, S);
+    } else { ctx.fillStyle = "#ff2d2d"; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill(); }
+    ctx.restore();
+  }
+
+  // fluxo de energia fluindo para a bola (determinístico pelo tempo)
+  if (open > 0.1 && absorb > 0 && absorb < 1) {
+    ctx.save(); ctx.shadowBlur = 8; ctx.shadowColor = "#ff5a5a";
+    for (let k = 0; k < 7; k++) {
+      const frac = ((a.faintT * 0.0016 + k / 7) % 1);
+      const px = sx + (bx - sx) * frac, py = sy + (by - sy) * frac - Math.sin(frac * Math.PI) * 10;
+      ctx.globalAlpha = (1 - frac) * 0.9; ctx.fillStyle = k % 2 ? "#ffd6d6" : "#ff5a5a";
+      ctx.beginPath(); ctx.arc(px, py, 3.2, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // flash ao fechar
+  if (closing > 0 && closing < 0.6) {
+    ctx.save(); ctx.globalAlpha = (0.6 - closing) ; ctx.fillStyle = "#fff"; ctx.shadowBlur = 20; ctx.shadowColor = "#fff";
+    ctx.beginPath(); ctx.arc(bx, by - 4, 10 + closing * 16, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+
+  // a Pokébola por cima de tudo
+  drawPokeball(ctx, bx, by, 13, open, dir, wob);
+}
 
 function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageElement) {
   // escala por profundidade: quem está mais à frente (y maior) aparece maior
   const dz = 0.82 + (a.y / ARENA_H) * 0.26;
   const S = 72 * dz;
 
-  // ── Retorno à Pokébola (derrotado): feixe vermelho + silhueta sugada ──
+  // ── Retorno à Pokébola (derrotado) ──
   if (a.fainted) {
     const p = Math.min(1, a.faintT / RECALL_MS);
-    if (p >= 1) return; // já recolhido — não desenha mais
-    const ex = a.c.side === "A" ? 40 : ARENA_W - 40; // "treinador"/Pokébola na borda do time
-    const ey = a.hy - 6;
-    const beamIn = Math.min(1, p / 0.22);       // feixe surge primeiro
-    const pull = Math.max(0, (p - 0.22) / 0.78); // depois a energia é puxada p/ a borda
-    const cx = a.x + (ex - a.x) * ease(pull);
-    const cy = (a.y - 6) + (ey - (a.y - 6)) * ease(pull);
-    // feixe de luz
-    ctx.save();
-    ctx.globalAlpha = (1 - p) * 0.9; ctx.strokeStyle = "#ff3b3b"; ctx.lineWidth = 6;
-    ctx.shadowBlur = 20; ctx.shadowColor = "#ff3b3b";
-    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(cx, cy); ctx.stroke();
-    ctx.strokeStyle = "#ffd0d0"; ctx.lineWidth = 2;
-    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(cx, cy); ctx.stroke();
-    ctx.restore();
-    // silhueta vermelha encolhendo
-    const scale = Math.max(0, 1 - pull) * (0.6 + 0.4 * beamIn);
-    ctx.save();
-    ctx.translate(cx, cy); ctx.scale(scale * (a.face === -1 ? -1 : 1), scale);
-    ctx.globalAlpha = 1 - pull * 0.3;
-    if (img && img.complete && img.naturalWidth > 0) {
-      ctx.imageSmoothingEnabled = false;
-      ctx.drawImage(img, -S / 2, -S / 2, S, S);
-      ctx.globalAlpha = 0.65 + 0.35 * beamIn; ctx.globalCompositeOperation = "source-atop";
-      ctx.fillStyle = "#ff2d2d"; ctx.fillRect(-S / 2, -S / 2, S, S);
-    } else {
-      ctx.fillStyle = "#ff2d2d"; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
-    // brilho na ponta + fagulhas vermelhas
-    ctx.save(); ctx.globalAlpha = 1 - pull; ctx.fillStyle = "#ffdede"; ctx.shadowBlur = 14; ctx.shadowColor = "#ff3b3b";
-    ctx.beginPath(); ctx.arc(cx, cy, 5 + 4 * Math.sin(a.faintT * 0.02), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    if (p >= 1) return; // já recolhido
+    drawRecall(ctx, a, img, S);
     return;
   }
 
