@@ -263,7 +263,8 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
     }
     a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022);
     a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022);
-    a.face = a.c.side === "A" ? 1 : -1; // sempre encarando o lado inimigo
+    // sprite de frente olha p/ a esquerda por padrão: time A espelha (p/ direita), time B natural
+    a.face = a.c.side === "A" ? -1 : 1;
   }
 }
 
@@ -277,9 +278,10 @@ function runScene(st: St, dt: number) {
   if (sc.ox === undefined) {
     sc.ox = actor.x; sc.oy = actor.y; // origem ao iniciar a cena
     // atacante encara o alvo; alvo (e guardião) encaram o atacante
-    actor.face = hitTarget.x >= actor.x ? 1 : -1;
-    hitTarget.face = actor.x >= hitTarget.x ? 1 : -1;
-    if (target !== hitTarget) target.face = actor.x >= target.x ? 1 : -1;
+    // (face=-1 = espelhado = olhando p/ a direita)
+    actor.face = hitTarget.x >= actor.x ? -1 : 1;
+    hitTarget.face = actor.x >= hitTarget.x ? -1 : 1;
+    if (target !== hitTarget) target.face = actor.x >= target.x ? -1 : 1;
   }
   sc.pt += dt;
 
@@ -289,7 +291,7 @@ function runScene(st: St, dt: number) {
       const p = Math.min(1, sc.pt / DUR.windup);
       actor.x = sc.ox! + (hitTarget.x - sc.ox!) * 0.78 * ease(p);
       actor.y = sc.oy! + (hitTarget.y - sc.oy!) * 0.78 * ease(p);
-      actor.face = hitTarget.x >= actor.x ? 1 : -1;
+      actor.face = hitTarget.x >= actor.x ? -1 : 1;
     } else if (sc.style === "heal" || sc.style === "support") {
       const p = Math.min(1, sc.pt / DUR.windup);
       actor.y = sc.oy! - 8 * Math.sin(p * Math.PI);
@@ -351,8 +353,9 @@ function emitImpact(st: St, type: string | undefined, x: number, y: number, supa
   for (let i = 0; i < n; i++) {
     const ang = Math.random() * Math.PI * 2;
     const sp = p.speed * (0.5 + Math.random()) * mult;
-    const size = p.size[0] + Math.random() * (p.size[1] - p.size[0]);
-    const life = p.life * (0.7 + Math.random() * 0.5);
+    // maiores e mais duradouras p/ ficarem claramente visíveis
+    const size = (p.size[0] + Math.random() * (p.size[1] - p.size[0])) * 1.6;
+    const life = p.life * (0.9 + Math.random() * 0.5);
     st.particles.push({
       x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - (p.rise ?? 0),
       life, max: life, color: p.cols[(Math.random() * p.cols.length) | 0],
@@ -463,18 +466,23 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     if (b.t >= 1) { b.onHit(); st.bolt = null; }
   }
 
-  // anel de impacto
+  // anel de impacto (onda de choque na cor do tipo + flash branco interno)
   if (st.ring) {
     const r = st.ring; r.r += (r.max - r.r) * 0.2; r.life -= 16;
-    ctx.save(); ctx.globalAlpha = Math.max(0, r.life / 300); ctx.strokeStyle = r.color; ctx.lineWidth = 4;
-    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke(); ctx.restore();
+    const al = Math.max(0, r.life / 320);
+    ctx.save(); ctx.shadowBlur = 16; ctx.shadowColor = r.color;
+    ctx.globalAlpha = al; ctx.strokeStyle = r.color; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = al * 0.8; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(r.x, r.y, r.r * 0.72, 0, Math.PI * 2); ctx.stroke();
+    ctx.restore();
     if (r.life <= 0) st.ring = null;
   }
 
   // partículas (forma varia por tipo de efeito)
   for (const p of st.particles) {
     ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.max)); ctx.fillStyle = p.color;
-    ctx.shadowBlur = 8; ctx.shadowColor = p.color;
+    ctx.shadowBlur = 12; ctx.shadowColor = p.color;
     const vang = Math.atan2(p.vy, p.vx);
     if (p.shape === "spark") {
       // risco na direção do movimento (faísca elétrica / metálica)
@@ -586,7 +594,9 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
   }
 
   ctx.save();
-  ctx.translate(x, groundY - S / 2 + bob); // pés ancorados na linha do chão
+  // os sprites têm "ar" transparente embaixo; empurra p/ baixo p/ os pés
+  // visíveis encostarem na sombra (senão parecem flutuar).
+  ctx.translate(x, groundY - S / 2 + S * 0.12 + bob);
   if (a.face === -1) ctx.scale(-1, 1);
   if (img && img.complete && img.naturalWidth > 0) {
     if (a.flash > 0) { ctx.shadowBlur = 20 * a.flash; ctx.shadowColor = "#fff"; }
