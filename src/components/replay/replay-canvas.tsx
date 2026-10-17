@@ -134,7 +134,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       W, H, actors, t0: performance.now(), scene: null as Scene | null,
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
       shake: 0, done: false, doneT: 0, idleGap: 500, flashCol: "#ffffff", flashA: 0,
-      bolt: null, ring: null, fx: [],
+      koBanners: [], bolt: null, ring: null, fx: [],
     } as St;
   }
 
@@ -239,6 +239,7 @@ type St = {
   W: number; H: number; actors: Record<string, Actor>; t0: number;
   scene: Scene | null; sceneIdx: number; particles: Particle[]; pops: Pop[];
   shake: number; done: boolean; doneT: number; idleGap: number; flashCol: string; flashA: number;
+  koBanners: { id: string; t: number }[];
   bolt: Bolt | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
   fx: Fx[];
@@ -539,7 +540,7 @@ function applyOutcome(st: St, t: ReplayTurn, _o: { instant: boolean }) {
   victim.hp = Math.max(0, t.targetHpAfter);
   if (victim.hp <= 0 && !victim.fainted) {
     victim.fainted = true; victim.faintT = 0; victim.shield = 0;
-    if (!_o.instant) { st.shake = 12; st.pops.push({ x: victim.x, y: victim.y - 50, text: "NOCAUTE!", color: "#ff5252", life: 1100, vy: -0.6 }); }
+    if (!_o.instant) { st.shake = 12; st.pops.push({ x: victim.x, y: victim.y - 50, text: "NOCAUTE!", color: "#ff5252", life: 1100, vy: -0.6 }); st.koBanners.push({ id: victim.c.id, t: 0 }); }
   }
 }
 
@@ -655,6 +656,16 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.fillText(p.text, p.x, p.y); ctx.restore();
   }
 
+  // barras de NOCAUTE no topo (sprite + nome), empilhadas e temporárias
+  const KO_LIFE = 2100;
+  st.koBanners = st.koBanners.filter((k) => k.t < KO_LIFE);
+  const visibleKo = st.koBanners.slice(-3);
+  visibleKo.forEach((k, idx) => {
+    const a = st.actors[k.id];
+    if (a) drawKoBanner(ctx, W, a.c, sprites[k.id], k.t, KO_LIFE, idx);
+  });
+  st.koBanners.forEach((k) => { k.t += dt; });
+
   // banner animado do vencedor ao fim do combate
   if (st.done) {
     st.doneT += dt;
@@ -667,6 +678,42 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     st.flashA *= Math.pow(0.9, dt / 16);
   }
   ctx.restore();
+}
+
+// Barra de NOCAUTE no topo: desliza, mostra sprite + nome, e some.
+function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, img: HTMLImageElement | undefined, t: number, life: number, idx: number) {
+  const p = t / life;
+  const slide = Math.min(1, t / 220);          // entrada deslizando
+  const out = Math.max(0, (p - 0.78) / 0.22);  // saída
+  const alpha = Math.min(1, slide) * (1 - out);
+  if (alpha <= 0) return;
+  const bw = 230, bh = 40;
+  const x = (W - bw) / 2;
+  const y = 10 + idx * (bh + 6) - (1 - slide) * 16;
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  // fundo vermelho arredondado
+  ctx.fillStyle = "rgba(180,25,25,0.92)"; roundRect(ctx, x, y, bw, bh, 8); ctx.fill();
+  ctx.strokeStyle = "rgba(255,120,120,0.8)"; ctx.lineWidth = 1.5; roundRect(ctx, x, y, bw, bh, 8); ctx.stroke();
+  // sprite do mascote nocauteado (em cinza/vermelho)
+  const s = 34;
+  if (img && img.complete && img.naturalWidth > 0) {
+    ctx.save(); ctx.globalAlpha = alpha * 0.95; ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(img, x + 4, y + (bh - s) / 2, s, s); ctx.restore();
+  }
+  // textos
+  ctx.textAlign = "left"; ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
+  ctx.fillStyle = "#ffd7d7"; ctx.font = "bold 10px 'Jost', system-ui, sans-serif";
+  ctx.fillText("✖ NOCAUTE", x + s + 12, y + 16);
+  ctx.fillStyle = "#ffffff"; ctx.font = "bold 15px 'Jost', system-ui, sans-serif";
+  ctx.fillText(c.name, x + s + 12, y + 31);
+  ctx.restore();
+}
+
+function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number) {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y); ctx.arcTo(x + w, y, x + w, y + h, r); ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r); ctx.arcTo(x, y, x + w, y, r); ctx.closePath();
 }
 
 // Banner animado anunciando o treinador vencedor.
