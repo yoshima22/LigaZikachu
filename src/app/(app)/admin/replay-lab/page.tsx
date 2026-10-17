@@ -2,7 +2,9 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
-import { ReplayCanvas, type Combatant, type ReplayTurn } from "./_components/replay-canvas";
+import { type Combatant, type ReplayTurn } from "./_components/replay-canvas";
+import { ReplayLabClient } from "./_components/replay-lab-client";
+import { listLeagueReplays } from "./actions";
 
 // Preview ISOLADO do replay animado (admin-only). Usa sprites reais e uma
 // batalha roteirizada que demonstra: ataques por tipo (raio/projétil/corpo),
@@ -43,16 +45,17 @@ const ARENA_BG = "/replay-lab/arena.webp";
 
 export default async function ReplayLabPage() {
   await requirePlatformAdmin();
+  const games = await listLeagueReplays();
   return (
     <div className="mx-auto max-w-4xl space-y-5 px-4 py-6">
       <div>
         <Link href="/admin" className="inline-flex items-center gap-1 text-xs text-slate-400 hover:text-slate-200"><ArrowLeft size={14} /> Admin</Link>
         <h1 className="mt-2 text-xl font-bold text-white">Laboratório de Replay Animado</h1>
         <p className="mt-1 max-w-2xl text-sm text-slate-400">
-          Prévia isolada de como ficariam os replays de combate com sprites 2D se movendo pela arena, efeitos por tipo de ataque e feedback visual de Cuidador (cura), Oportunista (debuff) e Guardião (interceptação). Batalha de exemplo roteirizada — não altera nada real.
+          Prévia isolada de como ficariam os replays de combate com sprites 2D se movendo pela arena, efeitos por tipo de ataque e feedback visual de Cuidador (cura), Oportunista (debuff) e Guardião (interceptação). Escolha a batalha de exemplo ou um jogo real da Liga Semanal (inclusive 6×6 e modos sem habilidades).
         </p>
       </div>
-      <ReplayCanvas data={{ teams, turns, bgUrl: ARENA_BG }} />
+      <ReplayLabClient sample={{ teams, turns, bgUrl: ARENA_BG }} games={games} />
       <div className="grid gap-2 rounded-xl border border-slate-700 bg-slate-950/50 p-4 text-xs text-slate-400 sm:grid-cols-2">
         <p><span className="text-cyan-300">Raio</span> — elétrico, água, gelo, dragão, psíquico.</p>
         <p><span className="text-orange-300">Projétil</span> — fogo, grama, veneno, fantasma, fada, inseto.</p>

@@ -205,7 +205,8 @@ const DUR = { windup: 260, strike: 320, recover: 300 };
 
 function styleOf(t: ReplayTurn): Scene["style"] {
   if (t.action === "HEAL") return "heal";
-  if (t.debuff || t.action === "ABILITY") return "support";
+  if (t.action === "DEFEND") return "support";
+  if (t.debuff || (t.action === "ABILITY" && t.damage === 0)) return "support";
   const ty = t.attackerType ?? "normal";
   if (BEAM.has(ty)) return "beam";
   if (ORB.has(ty)) return "orb";
