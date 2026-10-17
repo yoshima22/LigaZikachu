@@ -3,7 +3,7 @@
 import { getStaticSpriteUrl, getPokemonTypes, getPokemonName } from "@/lib/mascot-data";
 import type { Combatant, ReplayTurn, ReplayData } from "@/components/replay/replay-canvas";
 
-export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null };
+export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null; role?: string | null };
 export type ReplayLogEntry = {
   turn: number;
   actorId: string;
@@ -12,6 +12,7 @@ export type ReplayLogEntry = {
   attackerType?: string;
   damage: number;
   advantageApplied?: boolean;
+  multiplier?: number;
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -24,8 +25,9 @@ export function buildModernReplay(
   lineupA: ReplayLineMon[],
   lineupB: ReplayLineMon[],
   log: ReplayLogEntry[],
-  bgUrl = "/replay-lab/arena.webp",
+  opts: { bgUrl?: string; winnerName?: string | null } = {},
 ): ReplayData {
+  const bgUrl = opts.bgUrl ?? "/replay-lab/arena.webp";
   const toCombatant = (mon: ReplayLineMon, side: "A" | "B"): Combatant => {
     const pokemonId = mon.pokemonId ?? 0;
     return {
@@ -36,6 +38,7 @@ export function buildModernReplay(
       sprite: getStaticSpriteUrl(pokemonId),
       maxHp: Math.max(1, mon.maxHp ?? mon.hp ?? 100),
       side,
+      role: mon.role ?? undefined,
     };
   };
   const teams: Combatant[] = [
@@ -75,6 +78,7 @@ export function buildModernReplay(
       attackerType: e.attackerType,
       damage: e.damage,
       advantageApplied: e.advantageApplied,
+      multiplier: e.multiplier,
       targetHpAfter,
       actorRole: e.actorRole,
       targetRole: e.targetRole,
@@ -85,5 +89,5 @@ export function buildModernReplay(
     });
   }
 
-  return { teams, turns, bgUrl };
+  return { teams, turns, bgUrl, winnerName: opts.winnerName ?? null };
 }

@@ -21,8 +21,8 @@ export async function listLeagueReplays(): Promise<LeagueReplayOption[]> {
     },
   });
   const ids = [...new Set(matches.flatMap((m) => [m.playerAId, m.playerBId].filter(Boolean) as string[]))];
-  const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { id: true, name: true } });
-  const nameOf = new Map(users.map((u) => [u.id, u.name ?? "?"]));
+  const players = await prisma.player.findMany({ where: { id: { in: ids } }, select: { id: true, displayName: true } });
+  const nameOf = new Map(players.map((p) => [p.id, p.displayName ?? "?"]));
   return matches.map((m) => {
     const a = nameOf.get(m.playerAId) ?? "?";
     const b = m.playerBId ? nameOf.get(m.playerBId) ?? "?" : "BYE";
@@ -35,12 +35,17 @@ export async function getLeagueReplay(matchId: string): Promise<ReplayData | nul
   await requirePlatformAdmin();
   const m = await prisma.weeklyMascotLeagueMatch.findUnique({
     where: { id: matchId },
-    select: { resultJson: true, replayJson: true },
+    select: { resultJson: true, replayJson: true, winnerId: true, isDraw: true },
   });
   if (!m?.resultJson || !m?.replayJson) return null;
   const res = m.resultJson as { lineupA?: ReplayLineMon[]; lineupB?: ReplayLineMon[] };
   const lineupA = res.lineupA ?? [], lineupB = res.lineupB ?? [];
   if (lineupA.length === 0 || lineupB.length === 0) return null;
   const log = m.replayJson as ReplayLogEntry[];
-  return buildModernReplay(lineupA, lineupB, log);
+  let winnerName: string | null = m.isDraw ? "Empate" : null;
+  if (m.winnerId) {
+    const p = await prisma.player.findUnique({ where: { id: m.winnerId }, select: { displayName: true } });
+    winnerName = p?.displayName ?? null;
+  }
+  return buildModernReplay(lineupA, lineupB, log, { winnerName });
 }

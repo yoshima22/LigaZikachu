@@ -1660,7 +1660,7 @@ function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "class
         <ModernReplayModal
           title={`${replayMatch.playerAName} × ${replayMatch.playerBName ?? "???"}`}
           subtitle="Replay animado"
-          data={buildModernReplay(replayMatch.replayLineupA ?? [], replayMatch.replayLineupB ?? [], replayMatch.replayJson as ReplayLogEntry[])}
+          data={buildModernReplay(replayMatch.replayLineupA ?? [], replayMatch.replayLineupB ?? [], replayMatch.replayJson as ReplayLogEntry[], { winnerName: replayMatch.isDraw ? "Empate" : replayMatch.winnerId === replayMatch.playerAId ? replayMatch.playerAName : (replayMatch.playerBName ?? null) })}
           onClose={() => setReplayMatch(null)}
           onUseClassic={() => setStyleChoice("classic")}
         />

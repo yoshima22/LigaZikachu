@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import { EffectChips } from "@/components/replay-effect-chips";
 
 // ── Tipos de dados (preview isolado; mesma forma que um turnLog normalizado) ──
 export type Combatant = {
@@ -11,6 +12,7 @@ export type Combatant = {
   sprite: string;
   maxHp: number;
   side: "A" | "B";
+  role?: string; // rótulo de postura (define frente/trás no campo)
 };
 export type ReplayTurn = {
   turn: number;
@@ -24,11 +26,22 @@ export type ReplayTurn = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  multiplier?: number; // multiplicador de dano (p/ "Super efetivo ×N" no log)
   abilityName?: string; // nome do golpe/habilidade exibido ao atacar
   guardianInterceptId?: string | null; // mascote que interceptou (Guardião)
   debuff?: boolean; // Oportunista aplicou debuff
 };
-export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string };
+export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null };
+
+// Postura → faixa do campo: "front" (perto do centro) ou "back" (perto da borda).
+const FRONT_ROLES = new Set(["Defensor", "Guardião", "Atacante", "Duelista", "Provocador", "Sobrevivente"]);
+const laneOf = (role?: string): "front" | "back" => (role && FRONT_ROLES.has(role) ? "front" : "back");
+
+// Texturas de efeito por tipo (PNG/WEBP com alpha; recoloridas no canvas).
+const TEX_FOR: Record<string, string> = {
+  fire: "fire", water: "water", electric: "electric", ice: "ice", ghost: "shadow", dark: "shadow",
+};
+const TEX_FILES = ["impact", "fire", "water", "electric", "ice", "shadow"];
 
 // Cores por tipo (hex p/ canvas — as classes Tailwind não servem aqui).
 const TYPE_HEX: Record<string, string> = {
@@ -56,6 +69,8 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
   // Refs mutáveis para o loop de animação (não disparam re-render).
   const spritesRef = useRef<Record<string, HTMLImageElement>>({});
   const bgRef = useRef<HTMLImageElement | null>(null);
+  const texRef = useRef<Record<string, HTMLImageElement>>({});
+  const tintRef = useRef<Record<string, HTMLCanvasElement>>({});
   const stateRef = useRef<ReturnType<typeof initState> | null>(null);
   const playRef = useRef(playing);
   const speedRef = useRef(speed);
@@ -77,6 +92,14 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       bg.onload = () => { bgRef.current = bg; };
       bg.onerror = () => { bgRef.current = null; };
     } else bgRef.current = null;
+    // texturas de efeito (opcional: se faltarem, cai no procedural)
+    if (Object.keys(texRef.current).length === 0) {
+      for (const name of TEX_FILES) {
+        const img = new Image();
+        img.src = `/replay-lab/fx/${name}.webp`;
+        img.onload = () => { texRef.current[name] = img; };
+      }
+    }
   }, [data]);
 
   // (Re)inicializa estado quando os dados mudam ou ao reiniciar.
@@ -84,24 +107,33 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
   function initState() {
     const W = 920, H = 440;
     const actors: Record<string, Actor> = {};
-    const left = data.teams.filter((c) => c.side === "A");
-    const right = data.teams.filter((c) => c.side === "B");
-    const place = (list: Combatant[], x: number) =>
-      list.forEach((c, i) => {
-        const y = H * (i + 1) / (list.length + 1);
-        actors[c.id] = {
-          c, hx: x, hy: y, x, y, hp: c.maxHp, shownHp: c.maxHp,
-          face: x < W / 2 ? 1 : -1, kx: 0, ky: 0, fainted: false, faintT: 0,
-          shield: 0, flash: 0, wobble: Math.random() * Math.PI * 2,
-          rtx: x, rty: y, roamCd: Math.random() * 600,
-        };
+    // Coloca cada time em 2 colunas pela postura: "front" perto do centro,
+    // "back" perto da borda — reduz sobreposição e reflete a formação.
+    const place = (list: Combatant[], side: "A" | "B") => {
+      const cols = {
+        front: side === "A" ? W * 0.34 : W * 0.66,
+        back: side === "A" ? W * 0.16 : W * 0.84,
+      };
+      const groups = { front: list.filter((c) => laneOf(c.role) === "front"), back: list.filter((c) => laneOf(c.role) === "back") };
+      (["front", "back"] as const).forEach((lane) => {
+        const g = groups[lane]; const x = cols[lane];
+        g.forEach((c, i) => {
+          const y = H * (i + 1) / (g.length + 1);
+          actors[c.id] = {
+            c, hx: x, hy: y, x, y, hp: c.maxHp, shownHp: c.maxHp,
+            face: side === "A" ? -1 : 1, kx: 0, ky: 0, fainted: false, faintT: 0,
+            shield: 0, flash: 0, wobble: Math.random() * Math.PI * 2,
+            rtx: x, rty: y, roamCd: Math.random() * 600,
+          };
+        });
       });
-    place(left, W * 0.2);
-    place(right, W * 0.8);
+    };
+    place(data.teams.filter((c) => c.side === "A"), "A");
+    place(data.teams.filter((c) => c.side === "B"), "B");
     return {
       W, H, actors, t0: performance.now(), scene: null as Scene | null,
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
-      shake: 0, done: false, idleGap: 500, flashCol: "#ffffff", flashA: 0,
+      shake: 0, done: false, doneT: 0, idleGap: 500, flashCol: "#ffffff", flashA: 0,
       bolt: null, ring: null, fx: [],
     } as St;
   }
@@ -120,7 +152,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
       if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
-      draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0);
+      draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -160,26 +192,31 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
           ))}
         </div>
       </div>
-      <TurnLogList turns={data.turns} teams={data.teams} current={currentLog} onPick={(i) => jump(i - (stateRef.current?.sceneIdx ?? 0))} />
+      <CurrentActionCaption turn={data.turns[currentLog]} teams={data.teams} />
     </div>
   );
 }
 
-function TurnLogList({ turns, teams, current, onPick }: { turns: ReplayTurn[]; teams: Combatant[]; current: number; onPick: (i: number) => void }) {
+// Legenda da ação atual — mesma leitura/visualização do replay clássico.
+function CurrentActionCaption({ turn, teams }: { turn?: ReplayTurn; teams: Combatant[] }) {
   const name = (id: string) => teams.find((c) => c.id === id)?.name ?? "?";
-  const desc = (t: ReplayTurn) => {
-    if (t.action === "HEAL") return `${name(t.actorId)} cura ${name(t.targetId)} (+${t.damage})`;
-    if (t.guardianInterceptId) return `${name(t.guardianInterceptId)} intercepta o golpe em ${name(t.targetId)}`;
-    if (t.debuff) return `${name(t.actorId)} debilita ${name(t.targetId)} (Oportunista)`;
-    return `${name(t.actorId)} → ${name(t.targetId)} • ${t.damage}${t.advantageApplied ? " ✦ super-eficaz" : ""}`;
-  };
+  if (!turn) return <div className="min-h-[60px] rounded-xl border border-border bg-slate-900/60 px-4 py-3 text-center text-sm text-slate-500 flex items-center justify-center">Preparando batalha…</div>;
+  const verb = turn.action === "ATTACK" ? " atacou " : turn.action === "HEAL" ? " curou " : turn.action === "DEFEND" ? " defendeu " : " usou habilidade em ";
   return (
-    <div className="max-h-44 overflow-y-auto rounded-xl border border-slate-700 bg-slate-950/60 p-2 text-xs">
-      {turns.map((t, i) => (
-        <button key={i} onClick={() => onPick(i)} className={`block w-full rounded px-2 py-1 text-left ${i === current ? "bg-cyan-500/15 text-cyan-100" : "text-slate-400 hover:bg-slate-800/60"}`}>
-          <span className="text-slate-600">T{t.turn}</span> {desc(t)}
-        </button>
-      ))}
+    <div className="min-h-[60px] rounded-xl border border-border bg-slate-900/60 px-4 py-3 text-center flex flex-col items-center justify-center">
+      <p className="text-sm text-slate-300">
+        <span className="font-bold text-[#FFCB05]">{name(turn.actorId)}</span>
+        {verb}
+        <span className="font-bold text-[#FFCB05]">{name(turn.targetId)}</span>
+      </p>
+      {turn.action === "ATTACK" && (
+        <p className="mt-0.5 text-xs">
+          <span className="font-bold text-red-400">-{turn.damage} HP</span>
+          {turn.advantageApplied && <span className="ml-1.5 text-[10px] text-green-400">Super efetivo!{turn.multiplier ? ` ×${turn.multiplier.toFixed(1)}` : ""}</span>}
+        </p>
+      )}
+      {turn.action === "HEAL" && <p className="mt-0.5 text-xs"><span className="font-bold text-emerald-400">+{turn.damage} HP</span></p>}
+      {turn.effect && <EffectChips effect={turn.effect} className="mt-1 justify-center" />}
     </div>
   );
 }
@@ -196,12 +233,12 @@ type Pop = { x: number; y: number; text: string; color: string; life: number; vy
 type Scene = { turn: ReplayTurn; phase: Phase; pt: number; fired: boolean; style: "beam" | "orb" | "melee" | "heal" | "support"; ox?: number; oy?: number };
 // Efeito visual transitório desenhado por cima da cena (anéis, raios, rachaduras,
 // chamas, aura de habilidade, etc). `t` sobe de 0→life.
-type Fx = { kind: string; x: number; y: number; t: number; life: number; color: string; seed: number; max: number; x2?: number; y2?: number };
+type Fx = { kind: string; x: number; y: number; t: number; life: number; color: string; seed: number; max: number; x2?: number; y2?: number; tex?: string };
 type Bolt = { x: number; y: number; tx: number; ty: number; color: string; kind: string; t: number; onHit: () => void };
 type St = {
   W: number; H: number; actors: Record<string, Actor>; t0: number;
   scene: Scene | null; sceneIdx: number; particles: Particle[]; pops: Pop[];
-  shake: number; done: boolean; idleGap: number; flashCol: string; flashA: number;
+  shake: number; done: boolean; doneT: number; idleGap: number; flashCol: string; flashA: number;
   bolt: Bolt | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
   fx: Fx[];
@@ -263,9 +300,9 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
     a.roamCd -= dt;
     const dx = a.rtx - a.x, dy = a.rty - a.y;
     if (a.roamCd <= 0 || dx * dx + dy * dy < 100) {
-      const left = a.c.side === "A";
-      a.rtx = (left ? 0.10 : 0.58) * W + Math.random() * 0.32 * W;
-      a.rty = 0.16 * H + Math.random() * 0.68 * H;
+      // vagueia perto da coluna da sua postura (hx), não por toda a metade
+      a.rtx = Math.max(24, Math.min(W - 24, a.hx + (Math.random() - 0.5) * 0.14 * W));
+      a.rty = 0.14 * H + Math.random() * 0.72 * H;
       a.roamCd = 700 + Math.random() * 900;
     }
     a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022);
@@ -387,6 +424,8 @@ function emitSignature(st: St, type: string | undefined, x: number, y: number, s
   const t = type ?? "normal";
   const big = supa ? 1.4 : 1;
   const col = hex(t);
+  // textura "herói" (glow central recolorido pelo tipo) — complementa o procedural
+  pushFx(st, "tex", x, y, 560, col, { tex: TEX_FOR[t] ?? "impact", max: supa ? 1.5 : 1 });
   switch (t) {
     case "fire":
       pushFx(st, "flame", x, y, 460 * big, "#ff7a18");
@@ -441,6 +480,7 @@ function emitSignature(st: St, type: string | undefined, x: number, y: number, s
 function castAbility(st: St, a: Actor, color: string) {
   pushFx(st, "aura", a.x, a.y - 4, 620, color);
   pushFx(st, "beamcol", a.x, a.y - 4, 520, color);
+  pushFx(st, "tex", a.x, a.y - 4, 640, color, { tex: "impact", max: 1.3 });
   for (let i = 0; i < 22; i++) { const ang = Math.random() * Math.PI * 2, r = 20 + Math.random() * 14; st.particles.push({ x: a.x + Math.cos(ang) * r, y: a.y + 6 + Math.random() * 10, vx: -Math.cos(ang) * 1.2, vy: -3 - Math.random() * 2.5, life: 620, max: 620, color: ["#ffffff", color][(Math.random() * 2) | 0], size: 2 + Math.random() * 2, g: -0.15 }); }
   st.flashCol = color; st.flashA = 0.22;
   a.flash = 0.8;
@@ -456,6 +496,7 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
   if (ability) st.pops.push({ x: actor.x, y: actor.y - 54, text: ability, color: color, life: 1100, vy: -0.5 });
   if (sc.style === "heal") {
     pushFx(st, "healring", target.x, target.y, 520, "#22c55e");
+    pushFx(st, "tex", target.x, target.y, 520, "#22c55e", { tex: "impact", max: 1 });
     for (let i = 0; i < 28; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 46, y: target.y + 24, vx: (Math.random() - 0.5) * 2, vy: -4 - Math.random() * 3, life: 620, max: 620, color: ["#4ade80", "#bbf7d0", "#16a34a"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2.5, g: -0.25 });
     st.pops.push({ x: target.x, y: target.y - 44, text: `+${sc.turn.damage}`, color: "#4ade80", life: 950, vy: -0.8 });
     target.flash = 0.6;
@@ -511,7 +552,7 @@ function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
 
 // ────────────────────────── desenho ──────────────────────────
-function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number) {
+function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>, winnerName: string | null) {
   const { W, H } = st;
   ctx.save();
   if (st.shake > 0) ctx.translate((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake);
@@ -545,7 +586,11 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 
   // efeitos elementais (anéis, raios, rachaduras, chamas, aura de habilidade…)
   st.fx = st.fx.filter((f) => f.t < f.life);
-  for (const f of st.fx) { drawFx(ctx, f); f.t += dt; }
+  for (const f of st.fx) {
+    if (f.kind === "tex") drawTex(ctx, f, tex, tintCache);
+    else drawFx(ctx, f);
+    f.t += dt;
+  }
 
   // anel de impacto simples (quando usado diretamente)
   if (st.ring) {
@@ -610,11 +655,49 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.fillText(p.text, p.x, p.y); ctx.restore();
   }
 
+  // banner animado do vencedor ao fim do combate
+  if (st.done) {
+    st.doneT += dt;
+    if (winnerName) drawWinnerBanner(ctx, W, H, winnerName, st.doneT);
+  }
+
   // flash de tela (super-eficaz / conjuração de habilidade)
   if (st.flashA > 0.01) {
     ctx.save(); ctx.globalAlpha = st.flashA; ctx.fillStyle = st.flashCol; ctx.fillRect(-20, -20, W + 40, H + 40); ctx.restore();
     st.flashA *= Math.pow(0.9, dt / 16);
   }
+  ctx.restore();
+}
+
+// Banner animado anunciando o treinador vencedor.
+function drawWinnerBanner(ctx: CanvasRenderingContext2D, W: number, H: number, name: string, t: number) {
+  const inp = Math.min(1, t / 520); // entrada
+  const e = 1 - Math.pow(1 - inp, 3);
+  const cy = H / 2;
+  ctx.save();
+  // escurece o fundo
+  ctx.globalAlpha = 0.5 * inp; ctx.fillStyle = "#05070f"; ctx.fillRect(-20, -20, W + 40, H + 40);
+  // faixa dourada
+  ctx.globalAlpha = inp; ctx.translate(W / 2, cy);
+  const bw = Math.min(W - 40, 560) * e, bh = 108;
+  const grad = ctx.createLinearGradient(-bw / 2, 0, bw / 2, 0);
+  grad.addColorStop(0, "rgba(255,203,5,0)"); grad.addColorStop(0.5, "rgba(255,203,5,0.18)"); grad.addColorStop(1, "rgba(255,203,5,0)");
+  ctx.fillStyle = grad; ctx.fillRect(-bw / 2, -bh / 2, bw, bh);
+  ctx.strokeStyle = "rgba(255,203,5,0.6)"; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.moveTo(-bw / 2, -bh / 2); ctx.lineTo(bw / 2, -bh / 2); ctx.moveTo(-bw / 2, bh / 2); ctx.lineTo(bw / 2, bh / 2); ctx.stroke();
+  // raios girando atrás
+  ctx.save(); ctx.globalAlpha = 0.25 * inp; ctx.rotate(t * 0.0006); ctx.strokeStyle = "#FFCB05"; ctx.lineWidth = 2;
+  for (let i = 0; i < 12; i++) { ctx.rotate(Math.PI / 6); ctx.beginPath(); ctx.moveTo(60, 0); ctx.lineTo(260, 0); ctx.stroke(); }
+  ctx.restore();
+  // textos
+  const pulse = 1 + Math.sin(t * 0.006) * 0.03;
+  ctx.textAlign = "center"; ctx.shadowColor = "#FFCB05"; ctx.shadowBlur = 18 * inp;
+  ctx.fillStyle = "#FFCB05"; ctx.font = "bold 13px 'Jost', system-ui, sans-serif";
+  ctx.fillText("🏆  V E N C E D O R", 0, -24);
+  ctx.save(); ctx.scale(pulse, pulse);
+  ctx.fillStyle = "#ffffff"; ctx.font = "bold 34px 'Jost', system-ui, sans-serif";
+  ctx.fillText(name, 0, 18 / pulse);
+  ctx.restore();
   ctx.restore();
 }
 
@@ -668,6 +751,39 @@ function drawStarPath(ctx: CanvasRenderingContext2D, x: number, y: number, outer
   ctx.beginPath();
   for (let i = 0; i < 8; i++) { const r = i % 2 ? inner : outer; const a = rot + (i / 8) * Math.PI * 2; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
   ctx.closePath();
+}
+
+// Recolore uma textura (preservando o alpha) e guarda em cache por cor.
+function getTinted(tex: Record<string, HTMLImageElement>, cache: Record<string, HTMLCanvasElement>, name: string, color: string): HTMLCanvasElement | null {
+  const key = `${name}|${color}`;
+  if (cache[key]) return cache[key];
+  const img = tex[name];
+  if (!img || !img.complete || !img.naturalWidth) return null;
+  const c = document.createElement("canvas");
+  c.width = img.naturalWidth; c.height = img.naturalHeight;
+  const g = c.getContext("2d"); if (!g) return null;
+  g.drawImage(img, 0, 0);
+  g.globalCompositeOperation = "source-in";
+  g.fillStyle = color; g.fillRect(0, 0, c.width, c.height);
+  cache[key] = c;
+  return c;
+}
+
+// Desenha a textura "herói" em blend aditivo: núcleo branco + brilho na cor do tipo.
+function drawTex(ctx: CanvasRenderingContext2D, f: Fx, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>) {
+  const img = tex[f.tex ?? ""]; if (!img || !img.complete || !img.naturalWidth) return; // ainda carregando → procedural cobre
+  const p = Math.min(1, f.t / f.life);
+  const alpha = Math.sin(Math.min(1, p / 0.25) * Math.PI / 2) * (1 - Math.max(0, (p - 0.4) / 0.6)); // sobe rápido, desce suave
+  const scale = (0.55 + ease(p) * 0.85) * (f.max || 1);
+  const w = 150 * scale, h = 150 * scale;
+  ctx.save();
+  ctx.globalCompositeOperation = "lighter";
+  ctx.translate(f.x, f.y);
+  ctx.globalAlpha = Math.max(0, alpha) * 0.55; // núcleo branco
+  ctx.drawImage(img, -w / 2, -h / 2, w, h);
+  const tinted = getTinted(tex, tintCache, f.tex!, f.color);
+  if (tinted) { ctx.globalAlpha = Math.max(0, alpha) * 0.95; ctx.drawImage(tinted, -w / 2, -h / 2, w, h); }
+  ctx.restore();
 }
 
 // ── efeitos elementais desenhados por cima ──
