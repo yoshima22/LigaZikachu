@@ -413,6 +413,8 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           actorId: string; actorName: string; actorOwnerId?: string | null; actorRole?: string;
           targetId: string; targetName: string; targetOwnerId?: string | null; targetRole?: string;
           damage: number; advantageApplied?: boolean; effect?: string; targetHpAfter?: number;
+          attackerType?: string; typeStep?: number; typeDelta?: number;
+          guardianIntercept?: { mascotId: string; damage: number } | null;
         }>)
       : [];
     const turnLines = log.map(t =>
@@ -506,6 +508,10 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       targetRole: turn.targetRole,
       effect: turn.effect,
       hpAfter: turn.targetHpAfter,
+      attackerType: turn.attackerType,
+      typeStep: turn.typeStep,
+      typeDelta: turn.typeDelta,
+      guardianIntercept: turn.guardianIntercept ?? undefined,
     }));
 
     return {

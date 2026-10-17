@@ -1,6 +1,8 @@
 "use client";
 
-import { useState, useTransition, useEffect, useRef } from "react";
+import { useState, useTransition, useEffect, useRef, useMemo } from "react";
+import { ModernReplayModal } from "@/components/replay/modern-replay-modal";
+import { buildModernReplay, type ReplayLogEntry } from "@/lib/replay-modern";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { EffectChips } from "@/components/replay-effect-chips";
 import { AbilityStateChip } from "@/components/ability-lineup";
@@ -91,6 +93,10 @@ type AnimTurn = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  attackerType?: string;
+  typeStep?: number;
+  typeDelta?: number;
+  guardianIntercept?: { mascotId: string; damage: number } | null;
 };
 
 type MascotAbility = { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null };
@@ -210,6 +216,33 @@ function BattleAnimationModal({
   const [phase, setPhase] = useState<"wait" | "attack" | "hit" | "recover">("wait");
   const [playbackRate, setPlaybackRate] = useState<1 | 2 | 4>(1);
   const [isPaused, setIsPaused] = useState(false);
+  const [mode, setMode] = useState<"classic" | "modern">(() => {
+    try { return localStorage.getItem("zc:replayStyle") === "modern" ? "modern" : "classic"; } catch { return "classic"; }
+  });
+  const canModern = turns.length > 0 && playerMascots.length > 0 && botMascots.length > 0;
+  // Vencedor por maior HP total restante (regra do motor), p/ o banner do moderno.
+  const winnerName = useMemo(() => {
+    const hp = new Map<string, number>();
+    [...playerMascots, ...botMascots].forEach((m) => hp.set(m.id, m.maxHp));
+    const pSide = new Set(playerMascots.map((m) => m.id));
+    for (const t of turns) {
+      if (t.action === "ATTACK" || !t.action) { hp.set(t.defenderId, Math.max(0, (hp.get(t.defenderId) ?? 0) - t.damage)); if (t.guardianIntercept) hp.set(t.guardianIntercept.mascotId, Math.max(0, (hp.get(t.guardianIntercept.mascotId) ?? 0) - t.guardianIntercept.damage)); }
+      else if (t.action === "HEAL") { const cur = hp.get(t.defenderId) ?? 0; if (cur > 0) hp.set(t.defenderId, cur + t.damage); }
+    }
+    let pHp = 0, bHp = 0; for (const [id, h] of hp) { if (pSide.has(id)) pHp += h; else bHp += h; }
+    return pHp === bHp ? "Empate" : pHp > bHp ? playerTeamName : botName;
+  }, [turns, playerMascots, botMascots, playerTeamName, botName]);
+  const modernData = useMemo(() => {
+    if (!canModern) return null;
+    const toLine = (m: MascotInfo) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, maxHp: m.maxHp });
+    const turnsOut: ReplayLogEntry[] = turns.map((t) => ({
+      turn: t.turn, actorId: t.attackerId, targetId: t.defenderId, action: t.action ?? "ATTACK",
+      attackerType: t.attackerType, damage: t.damage, advantageApplied: t.advantageApplied,
+      typeStep: t.typeStep, typeDelta: t.typeDelta, actorRole: t.actorRole, targetRole: t.targetRole,
+      effect: t.effect, guardianIntercept: t.guardianIntercept ?? null,
+    }));
+    return buildModernReplay(playerMascots.map(toLine), botMascots.map(toLine), turnsOut, { winnerName });
+  }, [turns, playerMascots, botMascots, winnerName, canModern]);
 
   // HP tracking keyed by stable mascot id; names can repeat.
   const [hpMap, setHpMap] = useState<Record<string, number>>(() => {
@@ -233,7 +266,7 @@ function BattleAnimationModal({
   botMascotsRef.current = botMascots;
 
   useEffect(() => {
-    if (isPaused) return;
+    if (mode === "modern" || isPaused) return;
     const turnsNow = turnsRef.current;
 
     if (currentIdx >= turnsNow.length) {
@@ -281,7 +314,7 @@ function BattleAnimationModal({
     }, phaseDuration / playbackRate);
 
     return () => clearTimeout(timer);
-  }, [currentIdx, isPaused, phase, playbackRate]);
+  }, [currentIdx, isPaused, phase, playbackRate, mode]);
 
   const turn = turns[currentIdx] ?? null;
   const allReplayMascots = [...playerMascots, ...botMascots];
@@ -295,6 +328,19 @@ function BattleAnimationModal({
         ? turn.attackerId === m.id
         : !!turn.effect && turn.effect.split(/(?<=[.!])\s+/).some(sentence => sentence.startsWith("✨") && sentence.includes(` de ${m.name}`))
     );
+
+  // Modo moderno (animado): mesma fonte de dados, renderização alternativa.
+  if (mode === "modern" && modernData) {
+    return (
+      <ModernReplayModal
+        title={`${playerTeamName} × ${botName}`}
+        subtitle="Replay animado"
+        data={modernData}
+        onClose={onFinish}
+        onUseClassic={() => setMode("classic")}
+      />
+    );
+  }
 
   return (
     <>
@@ -349,6 +395,12 @@ function BattleAnimationModal({
                   {rate}×
                 </button>
               ))}
+              {canModern && (
+                <button type="button" onClick={() => setMode("modern")} title="Assistir no modo animado"
+                  className="ml-1 h-7 shrink-0 rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2 text-[10px] font-bold text-cyan-200 hover:bg-cyan-500/20">
+                  🎬 Moderno
+                </button>
+              )}
               <button type="button" onClick={() => onFinishRef.current()}
                 className="ml-1 h-7 shrink-0 rounded-lg border border-border px-2 text-[10px] text-slate-400 hover:text-white">
                 Pular →
