@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 
 // ── Tipos de dados (preview isolado; mesma forma que um turnLog normalizado) ──
 export type Combatant = {
@@ -24,10 +24,11 @@ export type ReplayTurn = {
   actorRole?: string;
   targetRole?: string;
   effect?: string;
+  abilityName?: string; // nome do golpe/habilidade exibido ao atacar
   guardianInterceptId?: string | null; // mascote que interceptou (Guardião)
   debuff?: boolean; // Oportunista aplicou debuff
 };
-export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[] };
+export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string };
 
 // Cores por tipo (hex p/ canvas — as classes Tailwind não servem aqui).
 const TYPE_HEX: Record<string, string> = {
@@ -50,11 +51,11 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1);
-  const [turnIdx, setTurnIdx] = useState(0);
   const [currentLog, setCurrentLog] = useState(0);
 
   // Refs mutáveis para o loop de animação (não disparam re-render).
   const spritesRef = useRef<Record<string, HTMLImageElement>>({});
+  const bgRef = useRef<HTMLImageElement | null>(null);
   const stateRef = useRef<ReturnType<typeof initState> | null>(null);
   const playRef = useRef(playing);
   const speedRef = useRef(speed);
@@ -70,6 +71,12 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       map[c.id] = img;
     }
     spritesRef.current = map;
+    if (data.bgUrl) {
+      const bg = new Image();
+      bg.src = data.bgUrl;
+      bg.onload = () => { bgRef.current = bg; };
+      bg.onerror = () => { bgRef.current = null; };
+    } else bgRef.current = null;
   }, [data]);
 
   // (Re)inicializa estado quando os dados mudam ou ao reiniciar.
@@ -86,6 +93,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
           c, hx: x, hy: y, x, y, hp: c.maxHp, shownHp: c.maxHp,
           face: x < W / 2 ? 1 : -1, kx: 0, ky: 0, fainted: false,
           shield: 0, flash: 0, wobble: Math.random() * Math.PI * 2,
+          rtx: x, rty: y, roamCd: Math.random() * 600,
         };
       });
     place(left, W * 0.2);
@@ -93,13 +101,13 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     return {
       W, H, actors, t0: performance.now(), scene: null as Scene | null,
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
-      shake: 0, done: false, bolt: null, ring: null,
+      shake: 0, done: false, idleGap: 500, bolt: null, ring: null,
     } as St;
   }
 
   useEffect(() => {
     stateRef.current = initState();
-    setTurnIdx(0);
+
     setCurrentLog(0);
     const canvas = canvasRef.current!;
     const ctx = canvas.getContext("2d")!;
@@ -110,8 +118,8 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       const st = stateRef.current!;
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
-      if (playRef.current && !st.done) step(st, dt, data, (i) => { setTurnIdx(i); setCurrentLog(i); });
-      draw(ctx, st, spritesRef.current);
+      if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
+      draw(ctx, st, spritesRef.current, bgRef.current);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -129,7 +137,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     for (let i = 0; i <= target; i++) applyInstant(fresh, data.turns[i], data);
     fresh.sceneIdx = target;
     stateRef.current = fresh;
-    setTurnIdx(target); setCurrentLog(target);
+    setCurrentLog(target);
     setPlaying(false);
   };
 
@@ -180,14 +188,15 @@ type Actor = {
   c: Combatant; hx: number; hy: number; x: number; y: number;
   hp: number; shownHp: number; face: 1 | -1; kx: number; ky: number;
   fainted: boolean; shield: number; flash: number; wobble: number;
+  rtx: number; rty: number; roamCd: number; // alvo de deriva + cooldown p/ repicar
 };
-type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number };
+type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; shape?: "circle" | "square" | "spark"; g?: number; spin?: number; rot?: number };
 type Pop = { x: number; y: number; text: string; color: string; life: number; vy: number };
-type Scene = { turn: ReplayTurn; phase: Phase; pt: number; fired: boolean; style: "beam" | "orb" | "melee" | "heal" | "support" };
+type Scene = { turn: ReplayTurn; phase: Phase; pt: number; fired: boolean; style: "beam" | "orb" | "melee" | "heal" | "support"; ox?: number; oy?: number };
 type St = {
   W: number; H: number; actors: Record<string, Actor>; t0: number;
   scene: Scene | null; sceneIdx: number; particles: Particle[]; pops: Pop[];
-  shake: number; done: boolean;
+  shake: number; done: boolean; idleGap: number;
   bolt: { x: number; y: number; tx: number; ty: number; color: string; beam: boolean; t: number; onHit: () => void } | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
 };
@@ -213,30 +222,47 @@ function step(st: St, dt: number, data: ReplayData, onTurn: (i: number) => void)
     a.wobble += dt * 0.004;
   }
   st.particles = st.particles.filter((p) => (p.life -= dt) > 0);
-  st.particles.forEach((p) => { p.x += p.vx * dt * 0.06; p.y += p.vy * dt * 0.06; p.vy += dt * 0.002; });
+  st.particles.forEach((p) => { p.x += p.vx * dt * 0.06; p.y += p.vy * dt * 0.06; p.vy += dt * 0.002 * (p.g ?? 1); if (p.spin) p.rot = (p.rot ?? 0) + p.spin * dt; });
   st.pops = st.pops.filter((p) => (p.life -= dt) > 0);
   st.pops.forEach((p) => { p.y += p.vy * dt * 0.05; });
 
   if (!st.scene) {
-    // idle wandering + iniciar próxima cena
-    idle(st, dt);
+    // Intervalo entre turnos: todos vagueiam livremente pelo campo.
+    roam(st, dt, null);
+    if (st.idleGap > 0) { st.idleGap -= dt; return; }
     const next = st.sceneIdx + 1;
     if (next >= data.turns.length) { st.done = true; return; }
     st.sceneIdx = next;
     onTurn(next);
     st.scene = { turn: data.turns[next], phase: "windup", pt: 0, fired: false, style: styleOf(data.turns[next]) };
+    st.idleGap = 420 + Math.random() * 360; // próxima pausa de movimentação
     return;
   }
+  // Durante a cena, quem não participa continua andando pelo campo.
+  const sc = st.scene;
+  const busy = new Set([sc.turn.actorId, sc.turn.targetId, sc.turn.guardianInterceptId ?? ""]);
+  roam(st, dt, busy);
   runScene(st, dt);
 }
 
-function idle(st: St, dt: number) {
+// Deriva livre: cada ator caminha até um alvo aleatório dentro da sua metade
+// do campo; ao chegar (ou expirar o cooldown) sorteia outro. `exclude` pula
+// quem está animando um golpe.
+function roam(st: St, dt: number, exclude: Set<string> | null) {
+  const { W, H } = st;
   for (const a of Object.values(st.actors)) {
-    if (a.fainted) continue;
-    const tx = a.hx + Math.cos(a.wobble) * 16;
-    const ty = a.hy + Math.sin(a.wobble * 1.3) * 12;
-    a.x += (tx - a.x) * Math.min(1, dt * 0.004);
-    a.y += (ty - a.y) * Math.min(1, dt * 0.004);
+    if (a.fainted || (exclude && exclude.has(a.c.id))) continue;
+    a.roamCd -= dt;
+    const dx = a.rtx - a.x, dy = a.rty - a.y;
+    if (a.roamCd <= 0 || dx * dx + dy * dy < 100) {
+      const left = a.c.side === "A";
+      a.rtx = (left ? 0.10 : 0.58) * W + Math.random() * 0.32 * W;
+      a.rty = 0.16 * H + Math.random() * 0.68 * H;
+      a.roamCd = 700 + Math.random() * 900;
+    }
+    a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022);
+    a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022);
+    a.face = a.rtx >= a.x ? 1 : -1;
   }
 }
 
@@ -247,17 +273,19 @@ function runScene(st: St, dt: number) {
   const guardian = sc.turn.guardianInterceptId ? st.actors[sc.turn.guardianInterceptId] : null;
   const hitTarget = guardian ?? target; // quem efetivamente recebe o VFX
   if (!actor || !target) { st.scene = null; return; }
+  if (sc.ox === undefined) { sc.ox = actor.x; sc.oy = actor.y; } // origem ao iniciar a cena
   sc.pt += dt;
 
   if (sc.phase === "windup") {
     if (sc.style === "melee") {
-      // avança em direção ao alvo
+      // investe a partir de onde estava, parando junto ao alvo
       const p = Math.min(1, sc.pt / DUR.windup);
-      actor.x = actor.hx + (hitTarget.x - actor.hx) * 0.72 * ease(p);
-      actor.y = actor.hy + (hitTarget.y - actor.hy) * 0.72 * ease(p);
+      actor.x = sc.ox! + (hitTarget.x - sc.ox!) * 0.78 * ease(p);
+      actor.y = sc.oy! + (hitTarget.y - sc.oy!) * 0.78 * ease(p);
+      actor.face = hitTarget.x >= actor.x ? 1 : -1;
     } else if (sc.style === "heal" || sc.style === "support") {
       const p = Math.min(1, sc.pt / DUR.windup);
-      actor.y = actor.hy - 8 * Math.sin(p * Math.PI);
+      actor.y = sc.oy! - 8 * Math.sin(p * Math.PI);
     } else {
       // carregamento: partículas convergindo p/ o atacante
       if (Math.random() < 0.5) {
@@ -287,18 +315,61 @@ function runScene(st: St, dt: number) {
   if (p >= 1) st.scene = null;
 }
 
+// Parâmetros de impacto por tipo — dão "cara" a cada elemento.
+type ImpactCfg = { cols: string[]; shape: Particle["shape"]; g: number; speed: number; count: number; size: [number, number]; life: number; spin?: boolean; rise?: number };
+const IMPACT: Record<string, ImpactCfg> = {
+  fire: { cols: ["#F08030", "#FFD070", "#FF5020"], shape: "circle", g: 0.3, speed: 5, count: 24, size: [2, 5], life: 480, rise: 2 },
+  water: { cols: ["#6890F0", "#B0D0FF", "#3060C0"], shape: "circle", g: 1.5, speed: 6, count: 24, size: [2, 4], life: 520 },
+  electric: { cols: ["#F8D030", "#FFF8A0", "#FFFFFF"], shape: "spark", g: 0.1, speed: 12, count: 26, size: [1.5, 3], life: 320 },
+  grass: { cols: ["#78C850", "#B8E060", "#4A8020"], shape: "square", g: 0.3, speed: 4, count: 20, size: [2, 4], life: 650, spin: true, rise: 1 },
+  ice: { cols: ["#98D8D8", "#E0F8F8", "#60B0C0"], shape: "square", g: 0.6, speed: 7, count: 22, size: [1.5, 3.5], life: 440, spin: true },
+  rock: { cols: ["#B8A038", "#8A7020", "#D8C060"], shape: "square", g: 2.2, speed: 6, count: 20, size: [2, 5], life: 520, spin: true },
+  ground: { cols: ["#E0C068", "#B89040", "#F0E0A0"], shape: "square", g: 2.0, speed: 6, count: 20, size: [2, 5], life: 520, spin: true },
+  fighting: { cols: ["#FFFFFF", "#FFE0A0", "#C03028"], shape: "circle", g: 0.6, speed: 8, count: 22, size: [2, 4], life: 340 },
+  normal: { cols: ["#FFFFFF", "#FFE0A0", "#A8A878"], shape: "circle", g: 0.6, speed: 7, count: 18, size: [2, 4], life: 340 },
+  steel: { cols: ["#D8D8E8", "#FFFFFF", "#8080A0"], shape: "spark", g: 0.6, speed: 9, count: 22, size: [1.5, 3], life: 360 },
+  psychic: { cols: ["#F85888", "#FFB0D0", "#C03070"], shape: "circle", g: 0, speed: 5, count: 24, size: [2, 4], life: 560, rise: 1 },
+  ghost: { cols: ["#705898", "#B090E0", "#402868"], shape: "circle", g: -0.2, speed: 3.5, count: 22, size: [3, 6], life: 650, rise: 2 },
+  fairy: { cols: ["#EE99AC", "#FFD0E0", "#FFFFFF"], shape: "circle", g: -0.1, speed: 4, count: 24, size: [1.5, 3.5], life: 600, rise: 1 },
+  poison: { cols: ["#A040A0", "#D070D0", "#602060"], shape: "circle", g: -0.3, speed: 3.5, count: 22, size: [2, 5], life: 600, rise: 2 },
+  dark: { cols: ["#705848", "#A08870", "#2A2030"], shape: "circle", g: 0.3, speed: 6, count: 20, size: [2, 5], life: 480 },
+  dragon: { cols: ["#7038F8", "#B090FF", "#4020A0"], shape: "circle", g: 0, speed: 8, count: 28, size: [2, 4], life: 480 },
+  bug: { cols: ["#A8B820", "#D0E060", "#708010"], shape: "circle", g: 0.6, speed: 6, count: 18, size: [2, 4], life: 480 },
+  flying: { cols: ["#A890F0", "#D0C0FF", "#FFFFFF"], shape: "circle", g: -0.2, speed: 7, count: 18, size: [1.5, 3], life: 480, rise: 2 },
+};
+function emitImpact(st: St, type: string | undefined, x: number, y: number, supa: boolean) {
+  const p = IMPACT[type ?? "normal"] ?? IMPACT.normal;
+  const mult = supa ? 1.6 : 1;
+  const n = Math.round(p.count * mult);
+  for (let i = 0; i < n; i++) {
+    const ang = Math.random() * Math.PI * 2;
+    const sp = p.speed * (0.5 + Math.random()) * mult;
+    const size = p.size[0] + Math.random() * (p.size[1] - p.size[0]);
+    const life = p.life * (0.7 + Math.random() * 0.5);
+    st.particles.push({
+      x, y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - (p.rise ?? 0),
+      life, max: life, color: p.cols[(Math.random() * p.cols.length) | 0],
+      size, shape: p.shape, g: p.g, spin: p.spin ? (Math.random() - 0.5) * 0.02 : 0, rot: Math.random() * 6,
+    });
+  }
+}
+
 function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
   const color = hex(sc.turn.attackerType);
-  const supa = sc.turn.advantageApplied;
+  const supa = !!sc.turn.advantageApplied;
+  const ability = sc.turn.abilityName;
+  // Nome da habilidade/golpe sobe a partir do atacante ao conjurar.
+  if (ability) st.pops.push({ x: actor.x, y: actor.y - 54, text: ability, color: color, life: 1100, vy: -0.5 });
   if (sc.style === "heal") {
-    for (let i = 0; i < 18; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 40, y: target.y + 20, vx: (Math.random() - 0.5) * 2, vy: -4 - Math.random() * 3, life: 520, max: 520, color: "#4ade80", size: 3 });
-    st.pops.push({ x: target.x, y: target.y - 44, text: `+${sc.turn.damage}`, color: "#4ade80", life: 900, vy: -0.8 });
+    for (let i = 0; i < 24; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 44, y: target.y + 22, vx: (Math.random() - 0.5) * 2, vy: -4 - Math.random() * 3, life: 560, max: 560, color: ["#4ade80", "#bbf7d0", "#16a34a"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2, g: -0.2 });
+    st.pops.push({ x: target.x, y: target.y - 44, text: `+${sc.turn.damage}`, color: "#4ade80", life: 950, vy: -0.8 });
+    target.flash = 0.6;
     return;
   }
   if (sc.style === "support") {
-    // Oportunista: setas p/ baixo roxas sobre o alvo
-    for (let i = 0; i < 14; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 36, y: target.y - 30 - Math.random() * 20, vx: 0, vy: 3 + Math.random() * 2, life: 600, max: 600, color: "#c084fc", size: 4 });
-    st.pops.push({ x: target.x, y: target.y - 44, text: "DEBUFF", color: "#c084fc", life: 1000, vy: -0.6 });
+    // Oportunista: aura roxa descendo sobre o alvo (debuff).
+    for (let i = 0; i < 20; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 40, y: target.y - 34 - Math.random() * 22, vx: (Math.random() - 0.5) * 1.5, vy: 3 + Math.random() * 2.5, life: 650, max: 650, color: ["#c084fc", "#a855f7", "#e9d5ff"][(Math.random() * 3) | 0], size: 2 + Math.random() * 3, g: 0.2 });
+    st.pops.push({ x: target.x, y: target.y - 44, text: ability ?? "DEBUFF", color: "#c084fc", life: 1050, vy: -0.6 });
     return;
   }
   // golpes ofensivos → impacto no alvo
@@ -307,16 +378,12 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     const dx = Math.sign(target.x - actor.x) || target.face * -1;
     target.kx += dx * (supa ? 18 : 12);
     target.flash = 1;
-    // anel de impacto + faíscas
-    for (let i = 0; i < (supa ? 26 : 16); i++) {
-      const ang = Math.random() * Math.PI * 2, sp = 3 + Math.random() * (supa ? 9 : 6);
-      st.particles.push({ x: target.x, y: target.y, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp, life: 420, max: 420, color, size: 2 + Math.random() * 2 });
-    }
-    st.ring = { x: target.x, y: target.y, r: 6, max: supa ? 70 : 46, color, life: 300 };
+    emitImpact(st, sc.turn.attackerType, target.x, target.y, supa); // faíscas por tipo
+    st.ring = { x: target.x, y: target.y, r: 6, max: supa ? 74 : 46, color, life: 320 };
     st.pops.push({ x: target.x, y: target.y - 40, text: `${sc.turn.damage}`, color: supa ? "#fbbf24" : "#fff", life: 850, vy: -0.9 });
-    if (supa) { st.shake = 14; st.pops.push({ x: target.x, y: target.y - 60, text: "SUPER!", color: "#fbbf24", life: 950, vy: -0.7 }); }
+    if (supa) { st.shake = 15; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
     else st.shake = 6;
-    if (sc.turn.guardianInterceptId) { st.pops.push({ x: target.x, y: target.y + 30, text: "🛡 GUARDIÃO", color: "#38bdf8", life: 1000, vy: -0.4 }); target.shield = 1; }
+    if (sc.turn.guardianInterceptId) { st.pops.push({ x: target.x, y: target.y + 30, text: "🛡 GUARDIÃO", color: "#38bdf8", life: 1050, vy: -0.4 }); target.shield = 1; }
   };
   if (sc.style === "melee") {
     settle();
@@ -347,20 +414,27 @@ function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
 
 // ────────────────────────── desenho ──────────────────────────
-function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>) {
+function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null) {
   const { W, H } = st;
   ctx.save();
   if (st.shake > 0) ctx.translate((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake);
 
-  // arena
-  const g = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.7);
-  g.addColorStop(0, "#152044"); g.addColorStop(1, "#070b18");
-  ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
-  ctx.strokeStyle = "rgba(120,160,255,0.12)"; ctx.lineWidth = 1;
-  for (let x = 0; x <= W; x += 46) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
-  for (let y = 0; y <= H; y += 46) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
-  // linha central
-  ctx.strokeStyle = "rgba(255,203,5,0.18)"; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
+  if (bg && bg.complete && bg.naturalWidth > 0) {
+    // imagem de arena cobrindo o canvas (cover)
+    const s = Math.max((W + 40) / bg.naturalWidth, (H + 40) / bg.naturalHeight);
+    const iw = bg.naturalWidth * s, ih = bg.naturalHeight * s;
+    ctx.drawImage(bg, (W - iw) / 2, (H - ih) / 2, iw, ih);
+    ctx.fillStyle = "rgba(7,11,24,0.28)"; ctx.fillRect(-20, -20, W + 40, H + 40); // leve escurecida p/ contraste
+  } else {
+    // fallback: arena procedural
+    const g = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.7);
+    g.addColorStop(0, "#152044"); g.addColorStop(1, "#070b18");
+    ctx.fillStyle = g; ctx.fillRect(-20, -20, W + 40, H + 40);
+    ctx.strokeStyle = "rgba(120,160,255,0.12)"; ctx.lineWidth = 1;
+    for (let x = 0; x <= W; x += 46) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke(); }
+    for (let y = 0; y <= H; y += 46) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+    ctx.strokeStyle = "rgba(255,203,5,0.18)"; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
+  }
 
   // bolt (projétil/raio) em voo
   if (st.bolt) {
@@ -388,10 +462,24 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     if (r.life <= 0) st.ring = null;
   }
 
-  // partículas
+  // partículas (forma varia por tipo de efeito)
   for (const p of st.particles) {
-    ctx.save(); ctx.globalAlpha = Math.max(0, p.life / p.max); ctx.fillStyle = p.color;
-    ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / p.max)); ctx.fillStyle = p.color;
+    ctx.shadowBlur = 8; ctx.shadowColor = p.color;
+    if (p.shape === "spark") {
+      // risco na direção do movimento (faísca elétrica / investida)
+      const len = 3 + p.size * 2;
+      const n = Math.hypot(p.vx, p.vy) || 1;
+      ctx.strokeStyle = p.color; ctx.lineWidth = Math.max(1, p.size * 0.6);
+      ctx.beginPath(); ctx.moveTo(p.x, p.y); ctx.lineTo(p.x - (p.vx / n) * len, p.y - (p.vy / n) * len); ctx.stroke();
+    } else if (p.shape === "square") {
+      // estilhaço/rochas
+      ctx.translate(p.x, p.y); ctx.rotate(p.rot ?? 0);
+      ctx.fillRect(-p.size, -p.size, p.size * 2, p.size * 2);
+    } else {
+      ctx.beginPath(); ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
   }
 
   // atores
