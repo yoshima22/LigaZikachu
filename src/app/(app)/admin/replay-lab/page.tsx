@@ -38,6 +38,8 @@ const turns: ReplayTurn[] = [
   { turn: 10, actorId: "b2", targetId: "a2", action: "ATTACK", attackerType: "rock", damage: 16, targetHpAfter: 56, abilityName: "Deslizamento" },
   { turn: 11, actorId: "a3", targetId: "b3", action: "ATTACK", attackerType: "psychic", damage: 20, targetHpAfter: 62, abilityName: "Confusão" },
   { turn: 12, actorId: "b3", targetId: "a3", action: "ATTACK", attackerType: "ghost", damage: 30, advantageApplied: true, multiplier: 1.5, targetHpAfter: 70, abilityName: "Bola Sombria" },
+  { turn: 13, actorId: "b3", targetId: "a3", action: "ATTACK", attackerType: "ghost", damage: 69, advantageApplied: true, multiplier: 1.5, targetHpAfter: 1, effect: "Sobrevivente Alakazam resistiu ao golpe fatal!", abilityName: "Investida Sombria" },
+  { turn: 14, actorId: "a1", targetId: "b2", action: "ATTACK", attackerType: "fire", damage: 37, targetHpAfter: 1, effect: "Dramático Golem fez um último ato e sobreviveu com 1 HP!", abilityName: "Brasa" },
 ];
 
 // Troque este arquivo para ver a arena de fundo (fallback procedural se faltar).

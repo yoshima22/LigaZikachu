@@ -509,6 +509,17 @@ function castAbility(st: St, a: Actor, color: string) {
   a.flash = 0.8;
 }
 
+// Efeito de "resistiu ao golpe fatal" (Sobrevivente / Dramático sobrevive com 1 HP).
+function lastStand(st: St, a: Actor, color: string, label: string) {
+  st.shake = 15; st.flashCol = color; st.flashA = 0.3; a.flash = 1; a.shield = 1;
+  pushFx(st, "ring", a.x, a.y - 4, 440, color, { max: 92 });
+  pushFx(st, "aura", a.x, a.y - 4, 640, color);
+  pushFx(st, "tex", a.x, a.y - 4, 580, color, { tex: "impact", max: 1.5 });
+  for (let i = 0; i < 26; i++) { const ang = Math.random() * Math.PI * 2, sp = 4 + Math.random() * 5; st.particles.push({ x: a.x, y: a.y - 4, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 2, life: 640, max: 640, color: ["#ffffff", color][(Math.random() * 2) | 0], size: 2 + Math.random() * 2.5, g: -0.12 }); }
+  st.pops.push({ x: a.x, y: a.y - 60, text: label, color, life: 1300, vy: -0.55 });
+  st.pops.push({ x: a.x, y: a.y - 40, text: "AGUENTOU COM 1 HP!", color: "#ffffff", life: 1150, vy: -0.45 });
+}
+
 function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
   const color = hex(sc.turn.attackerType);
   const supa = !!sc.turn.advantageApplied;
@@ -542,6 +553,10 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     st.pops.push({ x: target.x, y: target.y - 40, text: `${sc.turn.damage}`, color: supa ? "#fbbf24" : "#fff", life: 850, vy: -0.9 });
     if (supa) { st.shake = 15; st.flashCol = color; st.flashA = 0.18; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
     else st.shake = 6;
+    // Último ato / Sobrevivente: resistiu a um golpe fatal (ficou com 1 HP).
+    const eff = sc.turn.effect ?? "";
+    if (/resistiu ao golpe fatal/i.test(eff)) lastStand(st, target, "#ffd166", "✦ SOBREVIVENTE");
+    else if (/último ato|ultimo ato|sobreviveu com 1 hp/i.test(eff)) lastStand(st, target, "#ff6ad5", "🎭 ÚLTIMO ATO");
     // Guardião: escudo + número absorvido sobre o PRÓPRIO guardião.
     if (sc.turn.guardianInterceptId) {
       const g = st.actors[sc.turn.guardianInterceptId];
