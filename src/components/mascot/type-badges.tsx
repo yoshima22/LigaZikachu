@@ -102,10 +102,12 @@ function MatchupModal({ type, onClose }: { type: string; onClose: () => void }) 
             )}
           </section>
 
-          <p className="flex items-start gap-1.5 rounded-lg border border-white/5 bg-white/5 p-2.5 text-[10px] leading-relaxed text-slate-400">
-            <Info size={12} className="mt-0.5 shrink-0" />
-            No combate, cada vantagem de tipo dá <strong className="text-amber-300">+20%</strong> de dano e cada resistência tira <strong className="text-sky-300">−20%</strong>, somando até <strong className="text-slate-200">±40%</strong> (uma fraqueza dupla causa <strong className="text-amber-300">+40%</strong> de uma vez). O replay e o log mostram quanto o tipo somou ou removeu do dano.
-          </p>
+          <div className="flex items-start gap-1.5 rounded-lg border border-white/5 bg-white/5 p-2.5">
+            <Info size={12} className="mt-0.5 shrink-0 text-slate-400" />
+            <p className="text-[10px] leading-relaxed text-slate-400">
+              No combate, cada vantagem de tipo dá <strong className="text-amber-300">+20%</strong> de dano e cada resistência tira <strong className="text-sky-300">−20%</strong>, somando até <strong className="text-slate-200">±40%</strong> (uma fraqueza dupla causa <strong className="text-amber-300">+40%</strong> de uma vez). O replay e o log mostram quanto o tipo somou ou removeu do dano.
+            </p>
+          </div>
         </div>
       </div>
     </div>,
