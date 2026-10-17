@@ -91,7 +91,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
         const y = H * (i + 1) / (list.length + 1);
         actors[c.id] = {
           c, hx: x, hy: y, x, y, hp: c.maxHp, shownHp: c.maxHp,
-          face: x < W / 2 ? 1 : -1, kx: 0, ky: 0, fainted: false,
+          face: x < W / 2 ? 1 : -1, kx: 0, ky: 0, fainted: false, faintT: 0,
           shield: 0, flash: 0, wobble: Math.random() * Math.PI * 2,
           rtx: x, rty: y, roamCd: Math.random() * 600,
         };
@@ -187,7 +187,7 @@ function TurnLogList({ turns, teams, current, onPick }: { turns: ReplayTurn[]; t
 type Actor = {
   c: Combatant; hx: number; hy: number; x: number; y: number;
   hp: number; shownHp: number; face: 1 | -1; kx: number; ky: number;
-  fainted: boolean; shield: number; flash: number; wobble: number;
+  fainted: boolean; faintT: number; shield: number; flash: number; wobble: number;
   rtx: number; rty: number; roamCd: number; // alvo de deriva + cooldown p/ repicar
 };
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; shape?: "circle" | "square" | "spark"; g?: number; spin?: number; rot?: number };
@@ -220,6 +220,7 @@ function step(st: St, dt: number, data: ReplayData, onTurn: (i: number) => void)
     if (a.shield > 0 && (!st.scene || st.scene.turn.guardianInterceptId !== a.c.id)) a.shield = Math.max(0, a.shield - dt * 0.002);
     a.shownHp += (a.hp - a.shownHp) * Math.min(1, dt * 0.01);
     a.wobble += dt * 0.004;
+    if (a.fainted) a.faintT += dt;
   }
   st.particles = st.particles.filter((p) => (p.life -= dt) > 0);
   st.particles.forEach((p) => { p.x += p.vx * dt * 0.06; p.y += p.vy * dt * 0.06; p.vy += dt * 0.002 * (p.g ?? 1); if (p.spin) p.rot = (p.rot ?? 0) + p.spin * dt; });
@@ -401,14 +402,16 @@ function applyOutcome(st: St, t: ReplayTurn, _o: { instant: boolean }) {
   const victim = st.actors[t.guardianInterceptId ?? t.targetId];
   if (!victim) return;
   victim.hp = Math.max(0, t.targetHpAfter);
-  if (victim.hp <= 0) victim.fainted = true;
+  if (victim.hp <= 0 && !victim.fainted) {
+    victim.fainted = true; victim.faintT = 0; victim.shield = 0;
+    if (!_o.instant) { st.shake = 12; st.pops.push({ x: victim.x, y: victim.y - 50, text: "NOCAUTE!", color: "#ff5252", life: 1100, vy: -0.6 }); }
+  }
 }
 
 // pulo imediato (seek por turno): sem animação, só estado final.
 function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
   applyOutcome(st, t, { instant: true });
-  const tgt = st.actors[t.targetId];
-  if (tgt) tgt.shownHp = tgt.hp;
+  for (const a of Object.values(st.actors)) { if (a.fainted) a.faintT = RECALL_MS; a.shownHp = a.hp; }
 }
 
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
@@ -495,12 +498,54 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   ctx.restore();
 }
 
+const ARENA_W = 920;
+const RECALL_MS = 760; // duração do retorno à Pokébola
+
 function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageElement) {
-  const x = a.x + a.kx, y = a.y + a.ky;
-  const bob = a.fainted ? 0 : Math.sin(a.wobble) * 2;
   const S = 72;
+
+  // ── Retorno à Pokébola (derrotado): feixe vermelho + silhueta sugada ──
+  if (a.fainted) {
+    const p = Math.min(1, a.faintT / RECALL_MS);
+    if (p >= 1) return; // já recolhido — não desenha mais
+    const ex = a.c.side === "A" ? 40 : ARENA_W - 40; // "treinador"/Pokébola na borda do time
+    const ey = a.hy - 6;
+    const beamIn = Math.min(1, p / 0.22);       // feixe surge primeiro
+    const pull = Math.max(0, (p - 0.22) / 0.78); // depois a energia é puxada p/ a borda
+    const cx = a.x + (ex - a.x) * ease(pull);
+    const cy = (a.y - 6) + (ey - (a.y - 6)) * ease(pull);
+    // feixe de luz
+    ctx.save();
+    ctx.globalAlpha = (1 - p) * 0.9; ctx.strokeStyle = "#ff3b3b"; ctx.lineWidth = 6;
+    ctx.shadowBlur = 20; ctx.shadowColor = "#ff3b3b";
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.strokeStyle = "#ffd0d0"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(ex, ey); ctx.lineTo(cx, cy); ctx.stroke();
+    ctx.restore();
+    // silhueta vermelha encolhendo
+    const scale = Math.max(0, 1 - pull) * (0.6 + 0.4 * beamIn);
+    ctx.save();
+    ctx.translate(cx, cy); ctx.scale(scale * (a.face === -1 ? -1 : 1), scale);
+    ctx.globalAlpha = 1 - pull * 0.3;
+    if (img && img.complete && img.naturalWidth > 0) {
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(img, -S / 2, -S / 2, S, S);
+      ctx.globalAlpha = 0.65 + 0.35 * beamIn; ctx.globalCompositeOperation = "source-atop";
+      ctx.fillStyle = "#ff2d2d"; ctx.fillRect(-S / 2, -S / 2, S, S);
+    } else {
+      ctx.fillStyle = "#ff2d2d"; ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
+    }
+    ctx.restore();
+    // brilho na ponta + fagulhas vermelhas
+    ctx.save(); ctx.globalAlpha = 1 - pull; ctx.fillStyle = "#ffdede"; ctx.shadowBlur = 14; ctx.shadowColor = "#ff3b3b";
+    ctx.beginPath(); ctx.arc(cx, cy, 5 + 4 * Math.sin(a.faintT * 0.02), 0, Math.PI * 2); ctx.fill(); ctx.restore();
+    return;
+  }
+
+  const x = a.x + a.kx, y = a.y + a.ky;
+  const bob = Math.sin(a.wobble) * 2;
   // sombra
-  ctx.save(); ctx.globalAlpha = a.fainted ? 0.15 : 0.35; ctx.fillStyle = "#000";
+  ctx.save(); ctx.globalAlpha = 0.35; ctx.fillStyle = "#000";
   ctx.beginPath(); ctx.ellipse(x, y + 26, 24, 7, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore();
 
   // escudo do Guardião
@@ -513,7 +558,6 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
   ctx.save();
   ctx.translate(x, y - 6 + bob);
   if (a.face === -1) ctx.scale(-1, 1);
-  ctx.globalAlpha = a.fainted ? 0.4 : 1;
   if (img && img.complete && img.naturalWidth > 0) {
     if (a.flash > 0) { ctx.shadowBlur = 20 * a.flash; ctx.shadowColor = "#fff"; }
     ctx.imageSmoothingEnabled = false;
@@ -524,11 +568,6 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
     ctx.fillStyle = hex(a.c.type); ctx.beginPath(); ctx.arc(0, 0, 26, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
-
-  if (a.fainted) {
-    ctx.save(); ctx.strokeStyle = "#ef4444"; ctx.lineWidth = 3;
-    ctx.beginPath(); ctx.moveTo(x - 12, y - 18); ctx.lineTo(x + 12, y + 6); ctx.moveTo(x + 12, y - 18); ctx.lineTo(x - 12, y + 6); ctx.stroke(); ctx.restore();
-  }
 
   // nome + barra de HP
   ctx.textAlign = "center";

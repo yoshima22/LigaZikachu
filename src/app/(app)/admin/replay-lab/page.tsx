@@ -39,7 +39,7 @@ const turns: ReplayTurn[] = [
 ];
 
 // Troque este arquivo para ver a arena de fundo (fallback procedural se faltar).
-const ARENA_BG = "/replay-lab/arena.png";
+const ARENA_BG = "/replay-lab/arena.webp";
 
 export default async function ReplayLabPage() {
   await requirePlatformAdmin();
