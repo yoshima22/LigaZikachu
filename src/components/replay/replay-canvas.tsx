@@ -193,8 +193,8 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
 
   return (
     <div className="space-y-3">
-      <div className="overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
-        <canvas ref={canvasRef} width={920} height={440} className="block w-full" />
+      <div className="flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
+        <canvas ref={canvasRef} width={920} height={440} className="block h-auto w-auto" style={{ maxWidth: "100%", maxHeight: "72vh" }} />
       </div>
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setPlaying((p) => !p)} className="rounded-lg bg-[#FFCB05] px-4 py-1.5 text-xs font-bold text-[#1A1A2E]">

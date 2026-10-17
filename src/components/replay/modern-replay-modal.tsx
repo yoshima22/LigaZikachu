@@ -13,8 +13,8 @@ export function ModernReplayModal({
   onUseClassic?: () => void;
 }) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 p-3" onClick={onClose}>
-      <div className="w-full max-w-4xl rounded-2xl border border-slate-700 bg-[#0b1020] p-4 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className="fixed inset-0 z-50 flex justify-center overflow-y-auto bg-black/80 p-2 sm:p-3" onClick={onClose}>
+      <div className="my-auto w-full max-w-4xl rounded-2xl border border-slate-700 bg-[#0b1020] p-3 shadow-2xl sm:p-4" onClick={(e) => e.stopPropagation()}>
         <div className="mb-3 flex items-center justify-between gap-2">
           <div>
             <p className="flex items-center gap-2 text-sm font-bold text-white"><Film size={16} className="text-[#FFCB05]" /> {title}</p>
