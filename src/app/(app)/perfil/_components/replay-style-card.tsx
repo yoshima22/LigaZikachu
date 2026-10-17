@@ -1,20 +1,26 @@
 "use client";
 
-import { useState, useTransition } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { Film, Clapperboard } from "lucide-react";
 import { toast } from "sonner";
 import { setReplayStyleAction } from "../actions";
+
+const saveLocal = (v: string) => { try { localStorage.setItem("zc:replayStyle", v); } catch { /* ignore */ } };
 
 export function ReplayStyleCard({ initial }: { initial: string }) {
   const [style, setStyle] = useState<"classic" | "modern">(initial === "modern" ? "modern" : "classic");
   const [pending, startTransition] = useTransition();
 
+  // Propaga a preferência (fonte: servidor) para o cache local que os modais de
+  // replay de todos os modos leem como padrão.
+  useEffect(() => { saveLocal(initial === "modern" ? "modern" : "classic"); }, [initial]);
+
   function choose(next: "classic" | "modern") {
     if (next === style) return;
-    setStyle(next);
+    setStyle(next); saveLocal(next);
     startTransition(async () => {
       const res = await setReplayStyleAction(next);
-      if (res?.error) { toast.error(res.error); setStyle(style); }
+      if (res?.error) { toast.error(res.error); setStyle(style); saveLocal(style); }
       else toast.success("Preferência de replay salva.");
     });
   }

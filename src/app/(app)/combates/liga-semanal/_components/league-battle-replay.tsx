@@ -5,6 +5,13 @@ import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { EffectChips } from "@/components/replay-effect-chips";
 import { towerReserveVisible } from "@/lib/tower/ui-formation";
+import { ModernReplayModal } from "@/components/replay/modern-replay-modal";
+import { buildModernReplay, type ReplayLogEntry } from "@/lib/replay-modern";
+
+export type ReplayStyle = "classic" | "modern";
+function preferredReplayStyle(): ReplayStyle {
+  try { return localStorage.getItem("zc:replayStyle") === "modern" ? "modern" : "classic"; } catch { return "classic"; }
+}
 
 export type TurnLog = {
   turn: number;
@@ -243,7 +250,7 @@ export function LeagueBattleReplayModal({
   lineupB = EMPTY_LINEUP,
   reserveLineupA = EMPTY_LINEUP,
   onFinish,
-  onUseModern,
+  defaultStyle,
 }: {
   playerAName: string;
   playerBName: string;
@@ -261,8 +268,11 @@ export function LeagueBattleReplayModal({
   /** Optional Tower-only second formation; ordinary league replays remain unchanged. */
   reserveLineupA?: ReplayLineupFighter[];
   onFinish: () => void;
-  onUseModern?: () => void;
+  /** Estilo inicial; se ausente, usa a preferência salva (localStorage) ou clássico. */
+  defaultStyle?: ReplayStyle;
 }) {
+  const [mode, setMode] = useState<ReplayStyle>(() => defaultStyle ?? preferredReplayStyle());
+  const canModern = replay.length > 0 && lineupA.length > 0 && lineupB.length > 0;
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);
   const [speed, setSpeed] = useState(1);
@@ -344,6 +354,21 @@ export function LeagueBattleReplayModal({
   const resolvedActorName = current ? resolveName(current.actorName, current.actorPokemonId) : "";
   const resolvedTargetName = current ? resolveName(current.targetName, current.targetPokemonId) : "";
 
+  // Modo moderno (animado): mesma fonte de dados, renderização alternativa.
+  if (mode === "modern" && canModern) {
+    const winnerName = isDraw ? "Empate" : winnerId ? (winnerId === playerAId ? playerAName : playerBName) : null;
+    return (
+      <ModernReplayModal
+        title={`${playerAName} × ${playerBName}`}
+        subtitle="Replay animado"
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        data={buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName })}
+        onClose={onFinish}
+        onUseClassic={() => setMode("classic")}
+      />
+    );
+  }
+
   return (
     <>
       <style>{`
@@ -369,7 +394,7 @@ export function LeagueBattleReplayModal({
                 }`}>
                 {speed}×
               </button>
-              {onUseModern && <button onClick={onUseModern} className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20" title="Assistir no modo animado">🎬 Moderno</button>}
+              {canModern && <button onClick={() => setMode("modern")} className="rounded-lg border border-cyan-400/40 bg-cyan-500/10 px-2.5 py-1.5 text-xs font-bold text-cyan-200 hover:bg-cyan-500/20" title="Assistir no modo animado">🎬 Moderno</button>}
               <button onClick={onFinish} className="rounded-lg border border-border px-2.5 py-1.5 text-xs text-slate-400 hover:text-white">✕</button>
             </div>
           </div>

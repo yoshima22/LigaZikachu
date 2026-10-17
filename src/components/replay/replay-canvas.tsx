@@ -117,6 +117,12 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
         back: side === "A" ? W * 0.16 : W * 0.84,
       };
       const groups = { front: list.filter((c) => laneOf(c.role) === "front"), back: list.filter((c) => laneOf(c.role) === "back") };
+      // Fallback: sem posturas (todos na mesma coluna) e time grande → divide por
+      // índice p/ não empilhar tudo numa coluna só.
+      if (list.length >= 4 && (groups.front.length === 0 || groups.back.length === 0)) {
+        const half = Math.ceil(list.length / 2);
+        groups.front = list.slice(0, half); groups.back = list.slice(half);
+      }
       (["front", "back"] as const).forEach((lane) => {
         const g = groups[lane]; const x = cols[lane];
         g.forEach((c, i) => {

@@ -54,8 +54,6 @@ import {
   equipWeeklyPresetAction,
 } from "../actions";
 import { LeagueBattleReplayModal, type TurnLog } from "./league-battle-replay";
-import { ModernReplayModal } from "@/components/replay/modern-replay-modal";
-import { buildModernReplay, type ReplayLogEntry } from "@/lib/replay-modern";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { BattleDivisionControl } from "@/components/battle-division-control";
 
@@ -1460,7 +1458,6 @@ export function OpponentAnalysisModal({ analysis, myMascots, showRecommendations
 }
 
 function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "classic" | "modern" }) {
-  const [styleChoice, setStyleChoice] = useState<"classic" | "modern">(replayStyle);
   const [replayPending, startReplay] = useTransition();
   const [replayMatch, setReplayMatch] = useState<any>(null);
   const [opponentAnalysis, setOpponentAnalysis] = useState<OpponentAnalysis | null>(null);
@@ -1656,16 +1653,7 @@ function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "class
 
   return (
     <div className="space-y-4">
-      {replayMatch && replayMatch.replayJson && styleChoice === "modern" && (
-        <ModernReplayModal
-          title={`${replayMatch.playerAName} × ${replayMatch.playerBName ?? "???"}`}
-          subtitle="Replay animado"
-          data={buildModernReplay(replayMatch.replayLineupA ?? [], replayMatch.replayLineupB ?? [], replayMatch.replayJson as ReplayLogEntry[], { winnerName: replayMatch.isDraw ? "Empate" : replayMatch.winnerId === replayMatch.playerAId ? replayMatch.playerAName : (replayMatch.playerBName ?? null) })}
-          onClose={() => setReplayMatch(null)}
-          onUseClassic={() => setStyleChoice("classic")}
-        />
-      )}
-      {replayMatch && replayMatch.replayJson && styleChoice === "classic" && (
+      {replayMatch && replayMatch.replayJson && (
         <LeagueBattleReplayModal
           playerAName={replayMatch.playerAName}
           playerBName={replayMatch.playerBName ?? "???"}
@@ -1679,7 +1667,7 @@ function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "class
           playerBSurvivors={replayMatch.playerBSurvivors}
           orderSabotage={data.orderSabotage}
           onFinish={() => setReplayMatch(null)}
-          onUseModern={() => setStyleChoice("modern")}
+          defaultStyle={replayStyle}
         />
       )}
       {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}
