@@ -51,23 +51,30 @@ export function buildModernReplay(
   const maxById = new Map(teams.map((c) => [c.id, c.maxHp]));
   const hp = new Map(teams.map((c) => [c.id, c.maxHp]));
 
+  const hpOf = (id: string) => hp.get(id) ?? maxById.get(id) ?? 1;
   const turns: ReplayTurn[] = [];
   for (const e of log) {
     const isHeal = e.action === "HEAL";
     const isSelfish = e.action === "DEFEND";
     const debuffOnly = e.action === "ABILITY" && e.damage === 0;
     const guardianId = e.guardianIntercept?.mascotId ?? null;
-    const victimId = guardianId ?? e.targetId;
+    const gDmg = e.guardianIntercept?.damage ?? 0;
 
-    let targetHpAfter = hp.get(victimId) ?? maxById.get(victimId) ?? 1;
+    // HP corrido espelhando o motor: no HEAL o alvo cura; num ataque o ALVO
+    // perde `damage` (já reduzido pela absorção) E o GUARDIÃO perde o que
+    // absorveu. O log não grava HP absoluto, então reconstruímos por subtração.
+    let targetHpAfter = hpOf(e.targetId);
+    let guardianHpAfter: number | undefined;
     if (isHeal) {
-      const max = maxById.get(e.targetId) ?? 1;
-      targetHpAfter = Math.min(max, (hp.get(e.targetId) ?? max) + e.damage);
+      targetHpAfter = Math.min(maxById.get(e.targetId) ?? 1, hpOf(e.targetId) + e.damage);
       hp.set(e.targetId, targetHpAfter);
     } else if (!isSelfish && !debuffOnly) {
-      const dmg = guardianId ? (e.guardianIntercept?.damage ?? e.damage) : e.damage;
-      targetHpAfter = Math.max(0, (hp.get(victimId) ?? maxById.get(victimId) ?? 1) - dmg);
-      hp.set(victimId, targetHpAfter);
+      targetHpAfter = Math.max(0, hpOf(e.targetId) - e.damage);
+      hp.set(e.targetId, targetHpAfter);
+      if (guardianId) {
+        guardianHpAfter = Math.max(0, hpOf(guardianId) - gDmg);
+        hp.set(guardianId, guardianHpAfter);
+      }
     }
 
     turns.push({
@@ -85,6 +92,8 @@ export function buildModernReplay(
       effect: e.effect,
       abilityName: isHeal ? "Cura" : isSelfish ? "Defesa" : debuffOnly ? (e.effect ?? "Efeito") : undefined,
       guardianInterceptId: guardianId,
+      guardianHpAfter,
+      guardianInterceptDamage: guardianId ? gDmg : undefined,
       debuff: debuffOnly,
     });
   }

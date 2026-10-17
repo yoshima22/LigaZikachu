@@ -28,7 +28,9 @@ export type ReplayTurn = {
   effect?: string;
   multiplier?: number; // multiplicador de dano (p/ "Super efetivo ×N" no log)
   abilityName?: string; // nome do golpe/habilidade exibido ao atacar
-  guardianInterceptId?: string | null; // mascote que interceptou (Guardião)
+  guardianInterceptId?: string | null; // mascote que interceptou parte do dano (Guardião)
+  guardianHpAfter?: number; // HP do guardião após absorver
+  guardianInterceptDamage?: number; // quanto o guardião absorveu
   debuff?: boolean; // Oportunista aplicou debuff
 };
 export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null };
@@ -152,9 +154,15 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       const st = stateRef.current!;
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
-      if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
-      if (st.requestPause) { st.requestPause = false; playRef.current = false; setPlaying(false); }
-      draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null);
+      try {
+        if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
+        if (st.requestPause) { st.requestPause = false; playRef.current = false; setPlaying(false); }
+        draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null);
+      } catch (err) {
+        // Nunca deixa um frame ruim matar o replay: descarta o transitório e segue.
+        console.error("[replay] frame error, pulando cena", err);
+        st.scene = null; st.bolt = null;
+      }
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -330,8 +338,10 @@ function runScene(st: St, dt: number) {
   const actor = st.actors[sc.turn.actorId];
   const target = st.actors[sc.turn.targetId];
   const guardian = sc.turn.guardianInterceptId ? st.actors[sc.turn.guardianInterceptId] : null;
-  const hitTarget = guardian ?? target; // quem efetivamente recebe o VFX
-  if (!actor || !target) { st.scene = null; return; }
+  const hitTarget = target; // o golpe é desferido contra o ALVO (o guardião só absorve parte)
+  // ator/alvo fora do lineup (ex.: reserva que entrou no meio): aplica o HP e
+  // segue rápido, sem animar nem travar.
+  if (!actor || !target) { applyOutcome(st, sc.turn, { instant: true }); st.scene = null; st.idleGap = 0; return; }
   if (sc.ox === undefined) {
     sc.ox = actor.x; sc.oy = actor.y; // origem ao iniciar a cena
     // atacante encara o alvo; alvo (e guardião) encaram o atacante
@@ -532,7 +542,15 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     st.pops.push({ x: target.x, y: target.y - 40, text: `${sc.turn.damage}`, color: supa ? "#fbbf24" : "#fff", life: 850, vy: -0.9 });
     if (supa) { st.shake = 15; st.flashCol = color; st.flashA = 0.18; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
     else st.shake = 6;
-    if (sc.turn.guardianInterceptId) { st.pops.push({ x: target.x, y: target.y + 30, text: "🛡 GUARDIÃO", color: "#38bdf8", life: 1050, vy: -0.4 }); target.shield = 1; }
+    // Guardião: escudo + número absorvido sobre o PRÓPRIO guardião.
+    if (sc.turn.guardianInterceptId) {
+      const g = st.actors[sc.turn.guardianInterceptId];
+      if (g) {
+        g.shield = 1; g.flash = 0.8;
+        pushFx(st, "ring", g.x, g.y - 6, 300, "#38bdf8", { max: 40 });
+        st.pops.push({ x: g.x, y: g.y - 40, text: `🛡 ${sc.turn.guardianInterceptDamage ?? 0}`, color: "#38bdf8", life: 1050, vy: -0.6 });
+      }
+    }
   };
   if (sc.style === "melee") {
     settle();
@@ -544,15 +562,20 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
 
 // aplica dano/cura ao estado de HP (visual).
 function applyOutcome(st: St, t: ReplayTurn, _o: { instant: boolean }) {
-  if (t.action === "HEAL") { const tgt = st.actors[t.targetId]; if (tgt) tgt.hp = t.targetHpAfter; return; }
-  if (t.action === "ABILITY" && t.debuff) return; // debuff não altera HP
-  // Se houve interceptação, quem perde HP é o Guardião; senão o alvo.
-  const victim = st.actors[t.guardianInterceptId ?? t.targetId];
-  if (!victim) return;
-  victim.hp = Math.max(0, t.targetHpAfter);
-  if (victim.hp <= 0 && !victim.fainted) {
+  const ko = (victim: Actor | undefined) => {
+    if (!victim || victim.hp > 0 || victim.fainted) return;
     victim.fainted = true; victim.faintT = 0; victim.shield = 0;
     if (!_o.instant) { st.shake = 12; st.pops.push({ x: victim.x, y: victim.y - 50, text: "NOCAUTE!", color: "#ff5252", life: 1100, vy: -0.6 }); st.koBanners.push({ id: victim.c.id, t: 0 }); }
+  };
+  if (t.action === "HEAL") { const tgt = st.actors[t.targetId]; if (tgt) tgt.hp = t.targetHpAfter; return; }
+  if (t.action === "ABILITY" && t.debuff) return; // debuff não altera HP
+  if (t.action === "DEFEND") return;
+  // O ALVO leva o dano (já reduzido pela absorção); o GUARDIÃO perde o que absorveu.
+  const target = st.actors[t.targetId];
+  if (target) { target.hp = Math.max(0, t.targetHpAfter); ko(target); }
+  if (t.guardianInterceptId && t.guardianHpAfter !== undefined) {
+    const g = st.actors[t.guardianInterceptId];
+    if (g) { g.hp = Math.max(0, t.guardianHpAfter); ko(g); }
   }
 }
 
@@ -715,10 +738,21 @@ function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, im
   }
   // textos
   ctx.textAlign = "left"; ctx.shadowColor = "rgba(0,0,0,0.6)"; ctx.shadowBlur = 4;
+  const tx = x + s + 12;
+  const avail = x + bw - 10 - tx; // largura útil p/ o texto
   ctx.fillStyle = "#ffd7d7"; ctx.font = "bold 10px 'Jost', system-ui, sans-serif";
-  ctx.fillText("✖ NOCAUTE", x + s + 12, y + 16);
-  ctx.fillStyle = "#ffffff"; ctx.font = "bold 15px 'Jost', system-ui, sans-serif";
-  ctx.fillText(c.name, x + s + 12, y + 31);
+  ctx.fillText("✖ NOCAUTE", tx, y + 16);
+  // nome: reduz a fonte até caber; trunca com reticências se ainda passar
+  ctx.fillStyle = "#ffffff";
+  let fs = 15;
+  ctx.font = `bold ${fs}px 'Jost', system-ui, sans-serif`;
+  while (ctx.measureText(c.name).width > avail && fs > 9) { fs -= 1; ctx.font = `bold ${fs}px 'Jost', system-ui, sans-serif`; }
+  let label = c.name;
+  if (ctx.measureText(label).width > avail) {
+    while (label.length > 1 && ctx.measureText(label + "…").width > avail) label = label.slice(0, -1);
+    label += "…";
+  }
+  ctx.fillText(label, tx, y + 31);
   ctx.restore();
 }
 
