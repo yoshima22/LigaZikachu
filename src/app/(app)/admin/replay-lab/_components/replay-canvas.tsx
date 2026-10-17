@@ -101,7 +101,8 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     return {
       W, H, actors, t0: performance.now(), scene: null as Scene | null,
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
-      shake: 0, done: false, idleGap: 500, bolt: null, ring: null,
+      shake: 0, done: false, idleGap: 500, flashCol: "#ffffff", flashA: 0,
+      bolt: null, ring: null, fx: [],
     } as St;
   }
 
@@ -119,7 +120,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
       if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
-      draw(ctx, st, spritesRef.current, bgRef.current);
+      draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0);
       raf = requestAnimationFrame(loop);
     };
     raf = requestAnimationFrame(loop);
@@ -193,15 +194,20 @@ type Actor = {
 type Particle = { x: number; y: number; vx: number; vy: number; life: number; max: number; color: string; size: number; shape?: "circle" | "spark" | "leaf" | "shard" | "chunk" | "star"; g?: number; spin?: number; rot?: number };
 type Pop = { x: number; y: number; text: string; color: string; life: number; vy: number };
 type Scene = { turn: ReplayTurn; phase: Phase; pt: number; fired: boolean; style: "beam" | "orb" | "melee" | "heal" | "support"; ox?: number; oy?: number };
+// Efeito visual transitório desenhado por cima da cena (anéis, raios, rachaduras,
+// chamas, aura de habilidade, etc). `t` sobe de 0→life.
+type Fx = { kind: string; x: number; y: number; t: number; life: number; color: string; seed: number; max: number; x2?: number; y2?: number };
+type Bolt = { x: number; y: number; tx: number; ty: number; color: string; kind: string; t: number; onHit: () => void };
 type St = {
   W: number; H: number; actors: Record<string, Actor>; t0: number;
   scene: Scene | null; sceneIdx: number; particles: Particle[]; pops: Pop[];
-  shake: number; done: boolean; idleGap: number;
-  bolt: { x: number; y: number; tx: number; ty: number; color: string; beam: boolean; t: number; onHit: () => void } | null;
+  shake: number; done: boolean; idleGap: number; flashCol: string; flashA: number;
+  bolt: Bolt | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
+  fx: Fx[];
 };
 
-const DUR = { windup: 260, strike: 320, recover: 300 };
+const DUR = { windup: 300, strike: 340, recover: 300 };
 
 function styleOf(t: ReplayTurn): Scene["style"] {
   if (t.action === "HEAL") return "heal";
@@ -365,42 +371,120 @@ function emitImpact(st: St, type: string | undefined, x: number, y: number, supa
   }
 }
 
+// Estilo do projétil por tipo (só vale p/ ataques à distância).
+const PROJ: Record<string, string> = {
+  fire: "comet", water: "droplet", grass: "leafspin", electric: "boltline", ice: "shardp",
+  psychic: "helix", dragon: "helix", ghost: "wisp", dark: "orb", fairy: "spark", poison: "glob", bug: "orb",
+};
+const projKind = (type?: string) => PROJ[type ?? ""] ?? "orb";
+
+const pushFx = (st: St, kind: string, x: number, y: number, life: number, color: string, extra: Partial<Fx> = {}) =>
+  st.fx.push({ kind, x, y, t: 0, life, color, seed: Math.random() * 1000, max: 0, ...extra });
+
+// Assinatura de impacto por elemento: efeitos desenhados por cima + partículas
+// extras, além das faíscas base de emitImpact().
+function emitSignature(st: St, type: string | undefined, x: number, y: number, supa: boolean) {
+  const t = type ?? "normal";
+  const big = supa ? 1.4 : 1;
+  const col = hex(t);
+  switch (t) {
+    case "fire":
+      pushFx(st, "flame", x, y, 460 * big, "#ff7a18");
+      for (let i = 0; i < 10; i++) st.particles.push({ x: x + (Math.random() - 0.5) * 24, y, vx: (Math.random() - 0.5) * 2, vy: -2 - Math.random() * 2, life: 700, max: 700, color: "rgba(60,40,40,0.7)", size: 4 + Math.random() * 4, g: -0.3 });
+      break;
+    case "water":
+      pushFx(st, "ripple", x, y + 10, 460, "#6fb0ff");
+      for (let i = 0; i < 16; i++) { const a = -Math.PI / 2 + (Math.random() - 0.5) * 1.8; const sp = 4 + Math.random() * 5; st.particles.push({ x, y, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp, life: 560, max: 560, color: ["#9fd0ff", "#dff0ff"][(Math.random() * 2) | 0], size: 2 + Math.random() * 2.5, g: 1.6 }); }
+      break;
+    case "grass":
+      pushFx(st, "petalring", x, y, 440, "#8fe060");
+      break;
+    case "electric":
+      pushFx(st, "bolts", x, y, 300 * big, "#ffe14d");
+      pushFx(st, "ring", x, y, 260, col, { max: supa ? 82 : 52 });
+      break;
+    case "ice":
+      pushFx(st, "frost", x, y, 500, "#bfefff");
+      pushFx(st, "star", x, y, 360, "#eaffff");
+      break;
+    case "rock": case "ground":
+      pushFx(st, "crack", x, y + 12, 540, t === "ground" ? "#e0c068" : "#caa94e");
+      for (let i = 0; i < 12; i++) st.particles.push({ x, y: y + 6, vx: (Math.random() - 0.5) * 3, vy: -1 - Math.random() * 1.5, life: 600, max: 600, color: "rgba(120,100,70,0.6)", size: 3 + Math.random() * 3, g: -0.1 });
+      break;
+    case "psychic":
+      pushFx(st, "ring", x, y, 340, col, { max: supa ? 90 : 60 });
+      pushFx(st, "runes", x, y, 540, "#ff79b0");
+      break;
+    case "ghost":
+      pushFx(st, "tendrils", x, y, 580, "#b090e0");
+      break;
+    case "dark":
+      pushFx(st, "implode", x, y, 440, "#2a1838");
+      break;
+    case "fairy":
+      pushFx(st, "sparkstar", x, y, 480, "#ffd6ef");
+      break;
+    case "dragon":
+      pushFx(st, "ring", x, y, 380, col, { max: supa ? 96 : 64 });
+      pushFx(st, "ring", x, y, 300, "#ffffff", { max: supa ? 70 : 46 });
+      break;
+    case "poison":
+      pushFx(st, "ripple", x, y + 8, 440, "#b060c0");
+      for (let i = 0; i < 12; i++) st.particles.push({ x: x + (Math.random() - 0.5) * 26, y, vx: (Math.random() - 0.5) * 1.5, vy: -2 - Math.random() * 2, life: 680, max: 680, color: ["#c879d8", "#8a3c9a"][(Math.random() * 2) | 0], size: 3 + Math.random() * 3, g: -0.3 });
+      break;
+    default:
+      pushFx(st, "ring", x, y, 300, col, { max: supa ? 70 : 46 });
+  }
+}
+
+// Efeito especial de CONJURAÇÃO de habilidade (no próprio mascote).
+function castAbility(st: St, a: Actor, color: string) {
+  pushFx(st, "aura", a.x, a.y - 4, 620, color);
+  pushFx(st, "beamcol", a.x, a.y - 4, 520, color);
+  for (let i = 0; i < 22; i++) { const ang = Math.random() * Math.PI * 2, r = 20 + Math.random() * 14; st.particles.push({ x: a.x + Math.cos(ang) * r, y: a.y + 6 + Math.random() * 10, vx: -Math.cos(ang) * 1.2, vy: -3 - Math.random() * 2.5, life: 620, max: 620, color: ["#ffffff", color][(Math.random() * 2) | 0], size: 2 + Math.random() * 2, g: -0.15 }); }
+  st.flashCol = color; st.flashA = 0.22;
+  a.flash = 0.8;
+}
+
 function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
   const color = hex(sc.turn.attackerType);
   const supa = !!sc.turn.advantageApplied;
   const ability = sc.turn.abilityName;
+  // Conjuração de habilidade ganha destaque próprio no atacante.
+  if (sc.turn.action === "ABILITY") castAbility(st, actor, color);
   // Nome da habilidade/golpe sobe a partir do atacante ao conjurar.
   if (ability) st.pops.push({ x: actor.x, y: actor.y - 54, text: ability, color: color, life: 1100, vy: -0.5 });
   if (sc.style === "heal") {
-    for (let i = 0; i < 24; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 44, y: target.y + 22, vx: (Math.random() - 0.5) * 2, vy: -4 - Math.random() * 3, life: 560, max: 560, color: ["#4ade80", "#bbf7d0", "#16a34a"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2, g: -0.2 });
+    pushFx(st, "healring", target.x, target.y, 520, "#22c55e");
+    for (let i = 0; i < 28; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 46, y: target.y + 24, vx: (Math.random() - 0.5) * 2, vy: -4 - Math.random() * 3, life: 620, max: 620, color: ["#4ade80", "#bbf7d0", "#16a34a"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2.5, g: -0.25 });
     st.pops.push({ x: target.x, y: target.y - 44, text: `+${sc.turn.damage}`, color: "#4ade80", life: 950, vy: -0.8 });
     target.flash = 0.6;
     return;
   }
   if (sc.style === "support") {
-    // Oportunista: aura roxa descendo sobre o alvo (debuff).
-    for (let i = 0; i < 20; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 40, y: target.y - 34 - Math.random() * 22, vx: (Math.random() - 0.5) * 1.5, vy: 3 + Math.random() * 2.5, life: 650, max: 650, color: ["#c084fc", "#a855f7", "#e9d5ff"][(Math.random() * 3) | 0], size: 2 + Math.random() * 3, g: 0.2 });
+    // Debuff/defesa: aura roxa descendo sobre o alvo.
+    pushFx(st, "runes", target.x, target.y, 520, "#c084fc");
+    for (let i = 0; i < 22; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 40, y: target.y - 34 - Math.random() * 22, vx: (Math.random() - 0.5) * 1.5, vy: 3 + Math.random() * 2.5, life: 680, max: 680, color: ["#c084fc", "#a855f7", "#e9d5ff"][(Math.random() * 3) | 0], size: 2 + Math.random() * 3, g: 0.2 });
     st.pops.push({ x: target.x, y: target.y - 44, text: ability ?? "DEBUFF", color: "#c084fc", life: 1050, vy: -0.6 });
     return;
   }
   // golpes ofensivos → impacto no alvo
   const settle = () => {
-    // knockback
     const dx = Math.sign(target.x - actor.x) || target.face * -1;
     target.kx += dx * (supa ? 18 : 12);
     target.flash = 1;
     emitImpact(st, sc.turn.attackerType, target.x, target.y, supa); // faíscas por tipo
-    st.ring = { x: target.x, y: target.y, r: 6, max: supa ? 74 : 46, color, life: 320 };
+    emitSignature(st, sc.turn.attackerType, target.x, target.y, supa); // assinatura elemental
     st.pops.push({ x: target.x, y: target.y - 40, text: `${sc.turn.damage}`, color: supa ? "#fbbf24" : "#fff", life: 850, vy: -0.9 });
-    if (supa) { st.shake = 15; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
+    if (supa) { st.shake = 15; st.flashCol = color; st.flashA = 0.18; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
     else st.shake = 6;
     if (sc.turn.guardianInterceptId) { st.pops.push({ x: target.x, y: target.y + 30, text: "🛡 GUARDIÃO", color: "#38bdf8", life: 1050, vy: -0.4 }); target.shield = 1; }
   };
   if (sc.style === "melee") {
     settle();
   } else {
-    // projétil/raio: cria bala viajando; impacto agendado ao chegar
-    st.bolt = { x: actor.x, y: actor.y, tx: target.x, ty: target.y, color, beam: sc.style === "beam", t: 0, onHit: settle };
+    // projétil elemental viajando; impacto agendado ao chegar
+    st.bolt = { x: actor.x, y: actor.y, tx: target.x, ty: target.y, color, kind: projKind(sc.turn.attackerType), t: 0, onHit: settle };
   }
 }
 
@@ -427,7 +511,7 @@ function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
 
 // ────────────────────────── desenho ──────────────────────────
-function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null) {
+function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number) {
   const { W, H } = st;
   ctx.save();
   if (st.shake > 0) ctx.translate((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake);
@@ -449,27 +533,23 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     ctx.strokeStyle = "rgba(255,203,5,0.18)"; ctx.setLineDash([6, 8]); ctx.beginPath(); ctx.moveTo(W / 2, 0); ctx.lineTo(W / 2, H); ctx.stroke(); ctx.setLineDash([]);
   }
 
-  // bolt (projétil/raio) em voo
+  // bolt (projétil elemental) em voo
   if (st.bolt) {
-    const b = st.bolt; b.t += 0.08;
-    const cx = b.x + (b.tx - b.x) * ease(Math.min(1, b.t));
-    const cy = b.y + (b.ty - b.y) * ease(Math.min(1, b.t));
-    ctx.save(); ctx.shadowBlur = 18; ctx.shadowColor = b.color;
-    if (b.beam) {
-      ctx.strokeStyle = b.color; ctx.lineWidth = 7; ctx.globalAlpha = 0.9;
-      ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(cx, cy); ctx.stroke();
-      ctx.lineWidth = 2; ctx.strokeStyle = "#fff"; ctx.beginPath(); ctx.moveTo(b.x, b.y); ctx.lineTo(cx, cy); ctx.stroke();
-    } else {
-      ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
-      ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.restore();
+    const b = st.bolt; b.t += dt * (b.kind === "boltline" ? 0.011 : 0.006);
+    const p = Math.min(1, b.t);
+    const cx = b.x + (b.tx - b.x) * ease(p);
+    const cy = b.y + (b.ty - b.y) * ease(p);
+    drawBolt(ctx, st, b, cx, cy);
     if (b.t >= 1) { b.onHit(); st.bolt = null; }
   }
 
-  // anel de impacto (onda de choque na cor do tipo + flash branco interno)
+  // efeitos elementais (anéis, raios, rachaduras, chamas, aura de habilidade…)
+  st.fx = st.fx.filter((f) => f.t < f.life);
+  for (const f of st.fx) { drawFx(ctx, f); f.t += dt; }
+
+  // anel de impacto simples (quando usado diretamente)
   if (st.ring) {
-    const r = st.ring; r.r += (r.max - r.r) * 0.2; r.life -= 16;
+    const r = st.ring; r.r += (r.max - r.r) * 0.2; r.life -= dt;
     const al = Math.max(0, r.life / 320);
     ctx.save(); ctx.shadowBlur = 16; ctx.shadowColor = r.color;
     ctx.globalAlpha = al; ctx.strokeStyle = r.color; ctx.lineWidth = 6;
@@ -528,6 +608,124 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   for (const p of st.pops) {
     ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 400)); ctx.fillStyle = p.color;
     ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.fillText(p.text, p.x, p.y); ctx.restore();
+  }
+
+  // flash de tela (super-eficaz / conjuração de habilidade)
+  if (st.flashA > 0.01) {
+    ctx.save(); ctx.globalAlpha = st.flashA; ctx.fillStyle = st.flashCol; ctx.fillRect(-20, -20, W + 40, H + 40); ctx.restore();
+    st.flashA *= Math.pow(0.9, dt / 16);
+  }
+  ctx.restore();
+}
+
+// ── projétil por tipo ──
+function drawBolt(ctx: CanvasRenderingContext2D, st: St, b: Bolt, cx: number, cy: number) {
+  const ang = Math.atan2(b.ty - b.y, b.tx - b.x);
+  ctx.save(); ctx.shadowBlur = 18; ctx.shadowColor = b.color; ctx.lineCap = "round";
+  if (b.kind === "boltline") {
+    // raio quebrado da origem ao alvo, com flicker
+    for (let pass = 0; pass < 2; pass++) {
+      ctx.strokeStyle = pass ? "#ffffff" : b.color; ctx.lineWidth = pass ? 2 : 6; ctx.globalAlpha = pass ? 1 : 0.85;
+      ctx.beginPath(); ctx.moveTo(b.x, b.y);
+      const seg = 7;
+      for (let i = 1; i <= seg; i++) { const t = i / seg; const lx = b.x + (b.tx - b.x) * t, ly = b.y + (b.ty - b.y) * t; const off = (i === seg ? 0 : (Math.random() - 0.5) * 26); ctx.lineTo(lx - Math.sin(ang) * off, ly + Math.cos(ang) * off); }
+      ctx.stroke();
+    }
+  } else if (b.kind === "comet") {
+    for (let i = 0; i < 2; i++) st.particles.push({ x: cx + (Math.random() - 0.5) * 6, y: cy + (Math.random() - 0.5) * 6, vx: -Math.cos(ang) * 2, vy: -Math.sin(ang) * 2 - 0.5, life: 360, max: 360, color: ["#ff7a18", "#ffd070"][(Math.random() * 2) | 0], size: 2 + Math.random() * 2, g: -0.1 });
+    ctx.fillStyle = "#ffd070"; ctx.beginPath(); ctx.arc(cx, cy, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff6d0"; ctx.beginPath(); ctx.arc(cx, cy, 4, 0, Math.PI * 2); ctx.fill();
+  } else if (b.kind === "droplet" || b.kind === "glob") {
+    const c = b.kind === "glob" ? "#b060c0" : b.color;
+    ctx.translate(cx, cy); ctx.rotate(ang);
+    ctx.fillStyle = c; ctx.beginPath(); ctx.moveTo(10, 0); ctx.quadraticCurveTo(-2, 6, -10, 0); ctx.quadraticCurveTo(-2, -6, 10, 0); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.8)"; ctx.beginPath(); ctx.arc(2, -1.5, 2, 0, Math.PI * 2); ctx.fill();
+  } else if (b.kind === "leafspin") {
+    ctx.translate(cx, cy); ctx.rotate(b.t * 16);
+    ctx.fillStyle = b.color; ctx.beginPath(); ctx.ellipse(0, 0, 11, 5, 0, 0, Math.PI * 2); ctx.fill();
+    ctx.strokeStyle = "rgba(0,0,0,0.3)"; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(-10, 0); ctx.lineTo(10, 0); ctx.stroke();
+  } else if (b.kind === "shardp") {
+    ctx.translate(cx, cy); ctx.rotate(ang);
+    ctx.fillStyle = b.color; ctx.beginPath(); ctx.moveTo(14, 0); ctx.lineTo(-4, 5); ctx.lineTo(-9, 0); ctx.lineTo(-4, -5); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = "rgba(255,255,255,0.7)"; ctx.fillRect(-2, -1, 8, 2);
+  } else if (b.kind === "helix") {
+    for (let s = -1; s <= 1; s += 2) { const off = Math.sin(b.t * 30) * 10 * s; const px = cx - Math.sin(ang) * off, py = cy + Math.cos(ang) * off; ctx.fillStyle = s < 0 ? b.color : "#ffffff"; ctx.beginPath(); ctx.arc(px, py, 6, 0, Math.PI * 2); ctx.fill(); }
+  } else if (b.kind === "wisp") {
+    const wob = Math.sin(b.t * 24) * 8; const px = cx - Math.sin(ang) * wob, py = cy + Math.cos(ang) * wob;
+    ctx.globalAlpha = 0.85; ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(px, py, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.globalAlpha = 0.5; ctx.fillStyle = "#e9d5ff"; ctx.beginPath(); ctx.arc(px, py, 5, 0, Math.PI * 2); ctx.fill();
+  } else if (b.kind === "spark") {
+    drawStarPath(ctx, cx, cy, 10, 4, b.t * 10); ctx.fillStyle = b.color; ctx.fill();
+    ctx.fillStyle = "#ffffff"; ctx.beginPath(); ctx.arc(cx, cy, 3, 0, Math.PI * 2); ctx.fill();
+  } else {
+    ctx.fillStyle = b.color; ctx.beginPath(); ctx.arc(cx, cy, 9, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(cx, cy, 3.5, 0, Math.PI * 2); ctx.fill();
+  }
+  ctx.restore();
+}
+
+function drawStarPath(ctx: CanvasRenderingContext2D, x: number, y: number, outer: number, inner: number, rot: number) {
+  ctx.beginPath();
+  for (let i = 0; i < 8; i++) { const r = i % 2 ? inner : outer; const a = rot + (i / 8) * Math.PI * 2; ctx.lineTo(x + Math.cos(a) * r, y + Math.sin(a) * r); }
+  ctx.closePath();
+}
+
+// ── efeitos elementais desenhados por cima ──
+function drawFx(ctx: CanvasRenderingContext2D, f: Fx) {
+  const p = Math.min(1, f.t / f.life);
+  const fade = 1 - p;
+  ctx.save(); ctx.shadowBlur = 14; ctx.shadowColor = f.color;
+  if (f.kind === "ring" || f.kind === "healring") {
+    const r = (f.max || 50) * ease(p);
+    ctx.globalAlpha = fade; ctx.strokeStyle = f.color; ctx.lineWidth = 6;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.globalAlpha = fade * 0.8; ctx.strokeStyle = "#ffffff"; ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.72, 0, Math.PI * 2); ctx.stroke();
+  } else if (f.kind === "ripple") {
+    ctx.globalAlpha = fade * 0.9; ctx.strokeStyle = f.color; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) { const rr = (18 + i * 16) + p * 46; ctx.globalAlpha = fade * (0.9 - i * 0.25); ctx.beginPath(); ctx.ellipse(f.x, f.y, rr, rr * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); }
+  } else if (f.kind === "flame") {
+    ctx.globalAlpha = fade; const h = 40 + p * 30;
+    for (let i = 0; i < 5; i++) { const fx = f.x + (i - 2) * 9; const fh = h * (0.6 + Math.random() * 0.4); ctx.fillStyle = ["#ff5020", "#ff9030", "#ffd050"][i % 3]; ctx.beginPath(); ctx.moveTo(fx - 6, f.y + 6); ctx.quadraticCurveTo(fx, f.y - fh, fx + 6, f.y + 6); ctx.fill(); }
+  } else if (f.kind === "bolts") {
+    ctx.globalAlpha = fade; ctx.strokeStyle = f.color; ctx.lineWidth = 2.5; ctx.lineCap = "round";
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + f.seed; ctx.beginPath(); ctx.moveTo(f.x, f.y); let lx = f.x, ly = f.y; for (let j = 1; j <= 3; j++) { lx += Math.cos(a) * 14 + (Math.random() - 0.5) * 10; ly += Math.sin(a) * 14 + (Math.random() - 0.5) * 10; ctx.lineTo(lx, ly); } ctx.stroke(); }
+  } else if (f.kind === "frost") {
+    ctx.globalAlpha = fade; ctx.strokeStyle = "#dffbff"; ctx.lineWidth = 2;
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 + f.seed; const len = 14 + p * 22; ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + Math.cos(a) * len, f.y + Math.sin(a) * len); ctx.stroke(); const mx = f.x + Math.cos(a) * len * 0.6, my = f.y + Math.sin(a) * len * 0.6; ctx.beginPath(); ctx.moveTo(mx, my); ctx.lineTo(mx + Math.cos(a + 0.6) * 6, my + Math.sin(a + 0.6) * 6); ctx.moveTo(mx, my); ctx.lineTo(mx + Math.cos(a - 0.6) * 6, my + Math.sin(a - 0.6) * 6); ctx.stroke(); }
+  } else if (f.kind === "star") {
+    ctx.globalAlpha = fade; ctx.fillStyle = f.color; drawStarPath(ctx, f.x, f.y, 10 + p * 24, 5 + p * 10, f.seed); ctx.fill();
+  } else if (f.kind === "crack") {
+    ctx.globalAlpha = fade; ctx.strokeStyle = f.color; ctx.lineWidth = 3; ctx.lineCap = "round";
+    for (let i = 0; i < 5; i++) { const a = (i / 5) * Math.PI * 2 + f.seed; const len = (20 + p * 34); ctx.beginPath(); ctx.moveTo(f.x, f.y); ctx.lineTo(f.x + Math.cos(a) * len, f.y + Math.sin(a) * len * 0.5); ctx.stroke(); }
+  } else if (f.kind === "runes") {
+    ctx.globalAlpha = fade * 0.9; ctx.strokeStyle = f.color; ctx.lineWidth = 2;
+    const r = 30 + Math.sin(p * Math.PI) * 10;
+    ctx.beginPath(); ctx.arc(f.x, f.y, r, 0, Math.PI * 2); ctx.stroke();
+    ctx.beginPath(); ctx.arc(f.x, f.y, r * 0.65, 0, Math.PI * 2); ctx.stroke();
+    for (let i = 0; i < 6; i++) { const a = (i / 6) * Math.PI * 2 - f.t * 0.004; const px = f.x + Math.cos(a) * r, py = f.y + Math.sin(a) * r; ctx.fillStyle = f.color; ctx.fillRect(px - 2, py - 2, 4, 4); }
+  } else if (f.kind === "tendrils") {
+    ctx.globalAlpha = fade * 0.85; ctx.strokeStyle = f.color; ctx.lineWidth = 5; ctx.lineCap = "round";
+    for (let i = 0; i < 5; i++) { const base = f.x + (i - 2) * 10; ctx.beginPath(); ctx.moveTo(base, f.y + 8); const sway = Math.sin(f.t * 0.01 + i) * 10; ctx.quadraticCurveTo(base + sway, f.y - 10 - p * 20, base + sway * 1.5, f.y - 30 - p * 36); ctx.stroke(); }
+  } else if (f.kind === "implode") {
+    const r = (60) * (1 - ease(p));
+    ctx.globalAlpha = fade; ctx.strokeStyle = "#7c3aed"; ctx.lineWidth = 4; ctx.beginPath(); ctx.arc(f.x, f.y, Math.max(2, r), 0, Math.PI * 2); ctx.stroke();
+    if (p > 0.7) { ctx.fillStyle = "#1e1030"; ctx.globalAlpha = (p - 0.7) / 0.3; ctx.beginPath(); ctx.arc(f.x, f.y, 24 * ((p - 0.7) / 0.3), 0, Math.PI * 2); ctx.fill(); }
+  } else if (f.kind === "sparkstar") {
+    ctx.globalAlpha = fade;
+    for (let i = 0; i < 7; i++) { const a = (i / 7) * Math.PI * 2 + f.seed; const d = 10 + p * 30; ctx.fillStyle = i % 2 ? "#ffffff" : f.color; drawStarPath(ctx, f.x + Math.cos(a) * d, f.y + Math.sin(a) * d, 5, 2, f.t * 0.01 + i); ctx.fill(); }
+  } else if (f.kind === "petalring") {
+    ctx.globalAlpha = fade; const r = 16 + p * 32;
+    for (let i = 0; i < 8; i++) { const a = (i / 8) * Math.PI * 2 + f.t * 0.004; const px = f.x + Math.cos(a) * r, py = f.y + Math.sin(a) * r; ctx.save(); ctx.translate(px, py); ctx.rotate(a); ctx.fillStyle = f.color; ctx.beginPath(); ctx.ellipse(0, 0, 7, 3, 0, 0, Math.PI * 2); ctx.fill(); ctx.restore(); }
+  } else if (f.kind === "aura") {
+    // conjuração: anéis concêntricos subindo + brilho
+    ctx.globalAlpha = fade; ctx.strokeStyle = f.color; ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) { const rr = 14 + i * 12 + p * 20; ctx.globalAlpha = fade * (0.9 - i * 0.2); ctx.beginPath(); ctx.ellipse(f.x, f.y + 20 - p * 24, rr, rr * 0.4, 0, 0, Math.PI * 2); ctx.stroke(); }
+  } else if (f.kind === "beamcol") {
+    // coluna de luz vertical no conjurador
+    ctx.globalAlpha = fade * 0.55; const g = ctx.createLinearGradient(f.x, f.y - 80, f.x, f.y + 20);
+    g.addColorStop(0, "rgba(255,255,255,0)"); g.addColorStop(1, f.color);
+    ctx.fillStyle = g; const w = 26 + Math.sin(p * Math.PI) * 10; ctx.fillRect(f.x - w / 2, f.y - 80, w, 100);
   }
   ctx.restore();
 }
