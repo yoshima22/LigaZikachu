@@ -41,7 +41,7 @@ const laneOf = (role?: string): "front" | "back" => (role && FRONT_ROLES.has(rol
 const TEX_FOR: Record<string, string> = {
   fire: "fire", water: "water", electric: "electric", ice: "ice", ghost: "shadow", dark: "shadow",
 };
-const TEX_FILES = ["impact", "fire", "water", "electric", "ice", "shadow"];
+const TEX_FILES = ["impact", "fire", "water", "electric", "ice", "shadow", "pokeball", "pokeball-open"];
 
 // Cores por tipo (hex p/ canvas — as classes Tailwind não servem aqui).
 const TYPE_HEX: Record<string, string> = {
@@ -134,6 +134,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       W, H, actors, t0: performance.now(), scene: null as Scene | null,
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
       shake: 0, done: false, doneT: 0, idleGap: 500, flashCol: "#ffffff", flashA: 0,
+      stepMode: false, requestPause: false,
       koBanners: [], bolt: null, ring: null, fx: [],
     } as St;
   }
@@ -152,6 +153,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
       if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
+      if (st.requestPause) { st.requestPause = false; playRef.current = false; setPlaying(false); }
       draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null);
       raf = requestAnimationFrame(loop);
     };
@@ -160,18 +162,25 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data, resetKey.current]);
 
-  const restart = () => { resetKey.current++; stateRef.current = initState(); setPlaying(true); };
-  const jump = (dir: number) => {
-    const st = stateRef.current;
-    if (!st) return;
-    const target = Math.max(0, Math.min(data.turns.length - 1, st.sceneIdx + dir));
-    // Avança/retrocede reconstruindo até o turno alvo (barato p/ preview).
+  const restart = () => { resetKey.current++; stateRef.current = initState(); playRef.current = true; setPlaying(true); };
+  // Vai para o turno T, aplicando instantaneamente os anteriores, e ANIMA o
+  // turno T, pausando ao fim (passo-a-passo). Evita snaps/dessincronia.
+  const playTurn = (T: number) => {
+    const n = data.turns.length;
+    if (n === 0) return;
+    T = Math.max(0, Math.min(n - 1, T));
     const fresh = initState();
-    for (let i = 0; i <= target; i++) applyInstant(fresh, data.turns[i], data);
-    fresh.sceneIdx = target;
+    for (let i = 0; i < T; i++) applyInstant(fresh, data.turns[i], data);
+    fresh.sceneIdx = T - 1; // próximo a animar = T
+    fresh.idleGap = 0;      // sem limbo antes de animar
+    fresh.stepMode = true;  // pausa automaticamente ao terminar o turno
     stateRef.current = fresh;
-    setCurrentLog(target);
-    setPlaying(false);
+    setCurrentLog(T);
+    playRef.current = true; setPlaying(true);
+  };
+  const jump = (dir: number) => {
+    const st = stateRef.current; if (!st) return;
+    playTurn(st.sceneIdx + dir);
   };
 
   return (
@@ -239,6 +248,7 @@ type St = {
   W: number; H: number; actors: Record<string, Actor>; t0: number;
   scene: Scene | null; sceneIdx: number; particles: Particle[]; pops: Pop[];
   shake: number; done: boolean; doneT: number; idleGap: number; flashCol: string; flashA: number;
+  stepMode: boolean; requestPause: boolean; // passo-a-passo: anima 1 turno e pausa
   koBanners: { id: string; t: number }[];
   bolt: Bolt | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
@@ -289,6 +299,8 @@ function step(st: St, dt: number, data: ReplayData, onTurn: (i: number) => void)
   const busy = new Set([sc.turn.actorId, sc.turn.targetId, sc.turn.guardianInterceptId ?? ""]);
   roam(st, dt, busy);
   runScene(st, dt);
+  // Passo-a-passo: ao terminar a cena animada, pausa automaticamente.
+  if (!st.scene && st.stepMode) { st.stepMode = false; st.requestPause = true; }
 }
 
 // Deriva livre: cada ator caminha até um alvo aleatório dentro da sua metade
@@ -647,7 +659,7 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 
   // atores
   const ordered = Object.values(st.actors).sort((a, b) => a.y - b.y);
-  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id]);
+  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex);
 
   // pops de dano/cura
   ctx.textAlign = "center"; ctx.font = "bold 20px 'Jost', system-ui, sans-serif";
@@ -921,7 +933,7 @@ function drawPokeball(ctx: CanvasRenderingContext2D, x: number, y: number, r: nu
   ctx.restore();
 }
 
-function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, S: number) {
+function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, S: number, tex: Record<string, HTMLImageElement>) {
   const p = Math.min(1, a.faintT / RECALL_MS);
   const bx = a.c.side === "A" ? 46 : ARENA_W - 46; // Pokébola na borda do time
   const by = a.hy + 20;
@@ -981,11 +993,21 @@ function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageEleme
     ctx.beginPath(); ctx.arc(bx, by - 4, 10 + closing * 16, 0, Math.PI * 2); ctx.fill(); ctx.restore();
   }
 
-  // a Pokébola por cima de tudo
-  drawPokeball(ctx, bx, by, 13, open, dir, wob);
+  // a Pokébola por cima de tudo — textura se disponível, senão procedural
+  const ballImg = open > 0.35 ? tex["pokeball-open"] : tex["pokeball"];
+  if (ballImg && ballImg.complete && ballImg.naturalWidth > 0) {
+    const d = 34;
+    ctx.save(); ctx.translate(bx, by); ctx.rotate(wob);
+    if (dir < 0) ctx.scale(-1, 1); // espelha p/ a "boca" apontar ao centro
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(ballImg, -d / 2, -d / 2, d, d);
+    ctx.restore();
+  } else {
+    drawPokeball(ctx, bx, by, 13, open, dir, wob);
+  }
 }
 
-function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageElement) {
+function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, tex: Record<string, HTMLImageElement>) {
   // escala por profundidade: quem está mais à frente (y maior) aparece maior
   const dz = 0.82 + (a.y / ARENA_H) * 0.26;
   const S = 72 * dz;
@@ -994,7 +1016,7 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img?: HTMLImageEleme
   if (a.fainted) {
     const p = Math.min(1, a.faintT / RECALL_MS);
     if (p >= 1) return; // já recolhido
-    drawRecall(ctx, a, img, S);
+    drawRecall(ctx, a, img, S, tex);
     return;
   }
 
