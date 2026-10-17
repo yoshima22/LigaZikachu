@@ -1,5 +1,5 @@
 import type { ArenaTurnLog } from "./arena-z";
-import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
+import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getTypeAdvantageStep, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
 import { PERSONALITY_AFFINITY } from "./personality-design";
 import { debuffResistanceFactor } from "./personality-combat";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, splitOpportunistDebuff, describeOpportunistSplit, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
@@ -599,7 +599,8 @@ export function runLeagueCombat(
 
       const attackerType = elementOf(actor);
       const defenderType = elementOf(target);
-      const multiplier = getTypeAdvantageMultiplier(typesOf(actor), typesOf(target));
+      const typeStep = getTypeAdvantageStep(typesOf(actor), typesOf(target));
+      const multiplier = 1 + typeStep * 0.2;
 
       const force = getStat(actor, debuffs, "force");
       const instinct = getStat(actor, debuffs, "instinct");
@@ -643,6 +644,9 @@ export function runLeagueCombat(
         * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
+      // Dano paralelo SEM vantagem/resistência de tipo, p/ medir quanto o tipo
+      // somou/removeu (mostrado entre parênteses no log/replay).
+      let damageNeutral = Math.max(1, Math.round((raw - mitigation) * survivorDef * persDef));
       const eligibleBondFamilies = (mascotId: string) => {
         const eligible = bondLinks.filter((link) => (link.mascotAId === mascotId || link.mascotBId === mascotId) && (hp.get(link.mascotAId === mascotId ? link.mascotBId : link.mascotAId) ?? 0) > 0);
         const friendship = eligible.filter((link) => ["COLLEAGUE", "FRIEND", "SUPER_FRIEND"].includes(link.kind)).sort((a, b) => (b.damagePct + b.defensePct) - (a.damagePct + a.defensePct))[0];
@@ -654,17 +658,19 @@ export function runLeagueCombat(
       // continuam registradas para consulta no replay.
       const offensiveBondPct = eligibleBondFamilies(actor.id).reduce((sum, link) => sum + link.damagePct, 0);
       const defensiveBondPct = eligibleBondFamilies(target.id).reduce((sum, link) => sum + link.defensePct, 0);
-      if (offensiveBondPct) damage = Math.max(1, Math.round(damage * (1 + offensiveBondPct / 100)));
-      if (defensiveBondPct) damage = Math.max(1, Math.round(damage * (1 - defensiveBondPct / 100)));
+      if (offensiveBondPct) { const f = 1 + offensiveBondPct / 100; damage = Math.max(1, Math.round(damage * f)); damageNeutral = Math.max(1, Math.round(damageNeutral * f)); }
+      if (defensiveBondPct) { const f = 1 - defensiveBondPct / 100; damage = Math.max(1, Math.round(damage * f)); damageNeutral = Math.max(1, Math.round(damageNeutral * f)); }
       const opposingBond = opposingBondEffects.find((effect) => effect.attackerId === actor.id && effect.targetId === target.id);
       if (opposingBond) {
         const key = `${actor.id}:${target.id}`;
         const hits = opposingBondHits.get(key) ?? 0;
-        if (opposingBond.directHitLimit === null || hits < opposingBond.directHitLimit) damage = Math.max(1, Math.round(damage * (1 + opposingBond.damagePct / 100)));
+        if (opposingBond.directHitLimit === null || hits < opposingBond.directHitLimit) { const f = 1 + opposingBond.damagePct / 100; damage = Math.max(1, Math.round(damage * f)); damageNeutral = Math.max(1, Math.round(damageNeutral * f)); }
         opposingBondHits.set(key, hits + 1);
       }
-      if (chaosCritical) damage = Math.max(1, Math.round(damage * 1.5));
-      if (provoked) damage = Math.round(damage * 0.92);
+      if (chaosCritical) { damage = Math.max(1, Math.round(damage * 1.5)); damageNeutral = Math.max(1, Math.round(damageNeutral * 1.5)); }
+      if (provoked) { damage = Math.round(damage * 0.92); damageNeutral = Math.round(damageNeutral * 0.92); }
+      // Quanto o tipo somou (+) ou removeu (−) do dano deste golpe.
+      const typeDelta = damage - damageNeutral;
 
       // GUARDIAN intercept
       const guardians = (entry.side === "A" ? b : a).filter(m => m.combatRole === "GUARDIAN" && m.id !== target.id && (hp.get(m.id) ?? 0) > 0);
@@ -749,7 +755,12 @@ export function runLeagueCombat(
         }
       }
 
+      const typeNote = typeStep === 0 ? null
+        : typeStep > 0
+          ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
+          : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;
       const effects = [
+        typeNote,
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador: +${Math.round(encourage * 100)}%.` : null,
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
@@ -764,7 +775,7 @@ export function runLeagueCombat(
       log.push({
         turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
         targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
-        action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: multiplier > 1,
+        action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: typeStep > 0, typeStep, typeDelta,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
         effect: effects,
         ...(guardianIntercept ? { guardianIntercept } : {}),

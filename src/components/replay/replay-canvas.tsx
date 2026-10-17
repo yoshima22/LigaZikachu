@@ -22,6 +22,8 @@ export type ReplayTurn = {
   attackerType?: string;
   damage: number;
   advantageApplied?: boolean;
+  typeStep?: number; // −2..+2 (vantagem/resistência de tipo)
+  typeDelta?: number; // pontos de dano somados(+)/removidos(−) pelo tipo
   targetHpAfter: number; // HP absoluto do alvo após o golpe
   actorRole?: string;
   targetRole?: string;
@@ -232,12 +234,21 @@ function CurrentActionCaption({ turn, teams }: { turn?: ReplayTurn; teams: Comba
         {verb}
         <span className="font-bold text-[#FFCB05]">{name(turn.targetId)}</span>
       </p>
-      {turn.action === "ATTACK" && (
-        <p className="mt-0.5 text-xs">
-          <span className="font-bold text-red-400">-{turn.damage} HP</span>
-          {turn.advantageApplied && <span className="ml-1.5 text-[10px] text-green-400">Super efetivo!{turn.multiplier ? ` ×${turn.multiplier.toFixed(1)}` : ""}</span>}
-        </p>
-      )}
+      {turn.action === "ATTACK" && (() => {
+        const step = turn.typeStep ?? (turn.advantageApplied ? 1 : 0);
+        const d = turn.typeDelta ?? 0;
+        return (
+          <p className="mt-0.5 text-xs">
+            <span className="font-bold text-red-400">-{turn.damage} HP</span>
+            {d > 0 && <span className="ml-1 text-[10px] text-amber-300">(+{d} por vantagem)</span>}
+            {d < 0 && <span className="ml-1 text-[10px] text-sky-300">({d} por resistência)</span>}
+            {step >= 2 && <span className="ml-1.5 text-[10px] font-bold text-amber-300">✦ Super efetivo! ×4</span>}
+            {step === 1 && <span className="ml-1.5 text-[10px] font-bold text-amber-300">✦ Super efetivo!</span>}
+            {step === -1 && <span className="ml-1.5 text-[10px] text-sky-300">Resistiu</span>}
+            {step <= -2 && <span className="ml-1.5 text-[10px] font-bold text-sky-300">Muito resistente</span>}
+          </p>
+        );
+      })()}
       {turn.action === "HEAL" && <p className="mt-0.5 text-xs"><span className="font-bold text-emerald-400">+{turn.damage} HP</span></p>}
       {turn.effect && <EffectChips effect={turn.effect} className="mt-1 justify-center" />}
     </div>
@@ -528,7 +539,10 @@ function lastStand(st: St, a: Actor, color: string, label: string) {
 
 function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
   const color = hex(sc.turn.attackerType);
-  const supa = !!sc.turn.advantageApplied;
+  const step = sc.turn.typeStep ?? (sc.turn.advantageApplied ? 1 : 0);
+  const supa = step > 0;
+  const resisted = step < 0;
+  const delta = sc.turn.typeDelta ?? 0;
   const ability = sc.turn.abilityName;
   // Conjuração de habilidade ganha destaque próprio no atacante.
   if (sc.turn.action === "ABILITY") castAbility(st, actor, color);
@@ -556,8 +570,13 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     target.flash = 1;
     emitImpact(st, sc.turn.attackerType, target.x, target.y, supa); // faíscas por tipo
     emitSignature(st, sc.turn.attackerType, target.x, target.y, supa); // assinatura elemental
-    st.pops.push({ x: target.x, y: target.y - 40, text: `${sc.turn.damage}`, color: supa ? "#fbbf24" : "#fff", life: 850, vy: -0.9 });
-    if (supa) { st.shake = 15; st.flashCol = color; st.flashA = 0.18; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
+    // dano + pontos somados/removidos pelo tipo (entre parênteses)
+    const dmgTxt = `${sc.turn.damage}` + (delta > 0 ? `  (+${delta})` : delta < 0 ? `  (${delta})` : "");
+    st.pops.push({ x: target.x, y: target.y - 40, text: dmgTxt, color: supa ? "#fbbf24" : resisted ? "#8fd3ff" : "#fff", life: 900, vy: -0.9 });
+    if (step >= 2) { st.shake = 18; st.flashCol = color; st.flashA = 0.26; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ! ×4", color: "#fbbf24", life: 1050, vy: -0.7 }); }
+    else if (step === 1) { st.shake = 15; st.flashCol = color; st.flashA = 0.18; st.pops.push({ x: target.x, y: target.y - 62, text: "SUPER EFICAZ!", color: "#fbbf24", life: 1000, vy: -0.7 }); }
+    else if (step <= -2) { st.shake = 5; pushFx(st, "ring", target.x, target.y - 4, 340, "#8fd3ff", { max: 46 }); st.pops.push({ x: target.x, y: target.y - 62, text: "MUITO RESISTENTE", color: "#8fd3ff", life: 1050, vy: -0.6 }); }
+    else if (step === -1) { st.shake = 5; st.pops.push({ x: target.x, y: target.y - 62, text: "RESISTIU", color: "#8fd3ff", life: 1000, vy: -0.6 }); }
     else st.shake = 6;
     // Último ato / Sobrevivente: resistiu a um golpe fatal (ficou com 1 HP).
     const eff = sc.turn.effect ?? "";

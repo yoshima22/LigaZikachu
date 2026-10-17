@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { createPortal } from "react-dom";
 import { X, Swords, ShieldAlert, Info } from "lucide-react";
-import { TYPE_ADVANTAGE } from "@/lib/mascot-data";
+import { TYPE_ADVANTAGE, getTypeDefenseProfile } from "@/lib/mascot-data";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 const TYPE_COLORS: Record<string, string> = {
@@ -44,7 +44,7 @@ function MatchupModal({ type, onClose }: { type: string; onClose: () => void }) 
   }, [onClose]);
 
   const strong = strongAgainst(type);
-  const weak = weakAgainst(type);
+  const def = getTypeDefenseProfile([type]); // perfil defensivo deste tipo
 
   return createPortal(
     <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/70 p-4" onClick={onClose}>
@@ -76,18 +76,35 @@ function MatchupModal({ type, onClose }: { type: string; onClose: () => void }) 
 
           <section>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-rose-300">
-              <ShieldAlert size={14} /> Vulnerável a
+              <ShieldAlert size={14} /> Vulnerável a <span className="text-[10px] font-normal text-rose-300/70">(recebe mais dano)</span>
             </div>
-            {weak.length ? (
-              <div className="flex flex-wrap gap-1.5">{weak.map((t) => <TypeChip key={t} type={t} size="md" />)}</div>
+            {def.superWeak.length === 0 && def.weak.length === 0 ? (
+              <p className="text-[11px] text-slate-500">Nenhum tipo leva vantagem contra ele.</p>
             ) : (
-              <p className="text-[11px] text-slate-500">Nenhum tipo recebe bônus de ataque contra ele.</p>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {def.superWeak.map((t) => <span key={t} className="inline-flex items-center gap-1">{<TypeChip type={t} size="md" />}<span className="text-[9px] font-bold text-amber-300">+40%</span></span>)}
+                {def.weak.map((t) => <span key={t} className="inline-flex items-center gap-1">{<TypeChip type={t} size="md" />}<span className="text-[9px] text-rose-300">+20%</span></span>)}
+              </div>
+            )}
+          </section>
+
+          <section>
+            <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-sky-300">
+              <ShieldAlert size={14} /> Resiste a <span className="text-[10px] font-normal text-sky-300/70">(recebe menos dano)</span>
+            </div>
+            {def.superResist.length === 0 && def.resist.length === 0 ? (
+              <p className="text-[11px] text-slate-500">Não resiste a nenhum tipo.</p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-1.5">
+                {def.superResist.map((t) => <span key={t} className="inline-flex items-center gap-1">{<TypeChip type={t} size="md" />}<span className="text-[9px] font-bold text-sky-300">−40%</span></span>)}
+                {def.resist.map((t) => <span key={t} className="inline-flex items-center gap-1">{<TypeChip type={t} size="md" />}<span className="text-[9px] text-sky-300/80">−20%</span></span>)}
+              </div>
             )}
           </section>
 
           <p className="flex items-start gap-1.5 rounded-lg border border-white/5 bg-white/5 p-2.5 text-[10px] leading-relaxed text-slate-400">
             <Info size={12} className="mt-0.5 shrink-0" />
-            No combate, quem ataca com um tipo <strong className="text-slate-200">forte contra</strong> o alvo recebe bônus de dano. Escolha equipes que exploram as fraquezas do adversário.
+            No combate, cada vantagem de tipo dá <strong className="text-amber-300">+20%</strong> de dano e cada resistência tira <strong className="text-sky-300">−20%</strong>, somando até <strong className="text-slate-200">±40%</strong> (uma fraqueza dupla causa <strong className="text-amber-300">+40%</strong> de uma vez). O replay e o log mostram quanto o tipo somou ou removeu do dano.
           </p>
         </div>
       </div>

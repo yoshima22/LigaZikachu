@@ -355,6 +355,10 @@ export type ArenaTurnLog = {
   defenderType: string;
   multiplier: number;
   advantageApplied: boolean;
+  /** Passo de tipo (−2..+2): +40%/+20%/0/−20%/−40%. Ausente em combates antigos. */
+  typeStep?: number;
+  /** Pontos de dano adicionados por vantagem (+) ou removidos por resistência (−). */
+  typeDelta?: number;
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -1208,22 +1212,20 @@ function runArenaCombatInternal(
           (vitality * 0.8 + target.level) * (1 - (abilityAtk?.ignore ?? 0));
         const guarded =
           guard && guard.team !== entry.side ? guard.reduction : 0;
-        let damage = Math.max(
-          1,
-          Math.round(
-            (raw * multiplier - mitigation) *
-              (1 - guarded) *
-              survivorDefBonus *
-              persDef *
-              (abilityDef?.factor ?? 1),
-          ),
-        );
+        const typeStep = Math.round((multiplier - 1) / 0.2); // −2..+2
+        const defBundle = (1 - guarded) * survivorDefBonus * persDef * (abilityDef?.factor ?? 1);
+        let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * defBundle));
+        // Dano paralelo SEM vantagem/resistência de tipo (p/ medir o delta).
+        let damageNeutral = Math.max(1, Math.round((raw - mitigation) * defBundle));
         // Habilidades: Golpe duplo soma um segundo impacto.
-        if (abilityAtk?.extraHit)
+        if (abilityAtk?.extraHit) {
           damage += Math.max(1, Math.round(damage * abilityAtk.extraHit));
+          damageNeutral += Math.max(1, Math.round(damageNeutral * abilityAtk.extraHit));
+        }
 
         // PROVOKER: attacker deals less damage when redirected
-        if (provoked) damage = Math.round(damage * 0.92);
+        if (provoked) { damage = Math.round(damage * 0.92); damageNeutral = Math.round(damageNeutral * 0.92); }
+        const typeDelta = damage - damageNeutral;
 
         // GUARDIAN: may intercept damage for target
         const guardianIntercept = tryGuardianIntercept(
@@ -1337,8 +1339,13 @@ function runArenaCombatInternal(
         const abilityAfter = abilityEngine
           ? abilityEngine.afterHit({ actor, target, damage })
           : [];
+        const typeNote = typeStep === 0 ? null
+          : typeStep > 0
+            ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
+            : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;
         const effects =
           [
+            typeNote,
             actionIndex > 0
               ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).`
               : null,
@@ -1383,7 +1390,9 @@ function runArenaCombatInternal(
           attackerType,
           defenderType,
           multiplier,
-          advantageApplied: multiplier > 1,
+          advantageApplied: typeStep > 0,
+          typeStep,
+          typeDelta,
           actorRole: getCombatRoleLabel(actor.combatRole),
           targetRole: getCombatRoleLabel(target.combatRole),
           effect: effects,

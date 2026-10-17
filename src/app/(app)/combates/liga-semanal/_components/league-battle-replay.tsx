@@ -29,6 +29,8 @@ export type TurnLog = {
   damage: number;
   multiplier: number;
   advantageApplied: boolean;
+  typeStep?: number;
+  typeDelta?: number;
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -478,12 +480,21 @@ export function LeagueBattleReplayModal({
                   {current.action === "ATTACK" ? " atacou " : current.action === "HEAL" ? " curou " : " defendeu "}
                   <span className="font-bold text-[#FFCB05]">{resolvedTargetName}{current.targetLevel ? ` - Nv.${current.targetLevel}` : ""}</span>
                 </p>
-                {current.action === "ATTACK" && (
-                  <p className="text-xs mt-0.5">
-                    <span className="font-bold text-red-400">-{current.damage} HP</span>
-                    {current.advantageApplied && <span className="ml-1.5 text-green-400 text-[10px]">Super efetivo! ×{current.multiplier.toFixed(1)}</span>}
-                  </p>
-                )}
+                {current.action === "ATTACK" && (() => {
+                  const step = current.typeStep ?? (current.advantageApplied ? 1 : 0);
+                  const d = current.typeDelta ?? 0;
+                  return (
+                    <p className="text-xs mt-0.5">
+                      <span className="font-bold text-red-400">-{current.damage} HP</span>
+                      {d > 0 && <span className="ml-1 text-[10px] text-amber-300">(+{d} por vantagem)</span>}
+                      {d < 0 && <span className="ml-1 text-[10px] text-sky-300">({d} por resistência)</span>}
+                      {step >= 2 && <span className="ml-1.5 text-amber-300 text-[10px] font-bold">✦ Super efetivo! ×4</span>}
+                      {step === 1 && <span className="ml-1.5 text-amber-300 text-[10px] font-bold">✦ Super efetivo!</span>}
+                      {step === -1 && <span className="ml-1.5 text-sky-300 text-[10px]">Resistiu</span>}
+                      {step <= -2 && <span className="ml-1.5 text-sky-300 text-[10px] font-bold">Muito resistente</span>}
+                    </p>
+                  );
+                })()}
                 {current.action === "HEAL" && (
                   <p className="mt-0.5 text-xs">
                     <span className="font-bold text-emerald-400">+{current.damage} HP</span>

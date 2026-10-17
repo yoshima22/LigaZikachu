@@ -2431,14 +2431,90 @@ export function getTypeLabelPt(type: string): string {
   return TYPE_LABELS_PT[type.toLowerCase()] ?? type;
 }
 
-export function getTypeAdvantageMultiplier(attackerTypes: string | string[], defenderTypes: string | string[]): number {
+// ── Efetividade de tipos (tabela oficial; usada por TODOS os modos) ──────────
+// TYPE_ADVANTAGE (acima) = relações 2x (super-eficaz). Abaixo, as 0,5x (resiste)
+// e as 0x (sem efeito). Regra do jogo: cada relação vale ±1 passo; o efeito
+// líquido é limitado a ±2 passos (±40%). NÃO há imunidade real — 0x conta como
+// resistência máxima (−40%). Cada passo = ±20% de dano.
+export const TYPE_NOT_EFFECTIVE: Record<string, string[]> = {
+  normal:   ["rock","steel"],
+  fire:     ["fire","water","rock","dragon"],
+  water:    ["water","grass","dragon"],
+  electric: ["electric","grass","dragon"],
+  grass:    ["fire","grass","poison","flying","bug","dragon","steel"],
+  ice:      ["fire","water","ice","steel"],
+  fighting: ["poison","flying","psychic","bug","fairy"],
+  poison:   ["poison","ground","rock","ghost"],
+  ground:   ["grass","bug"],
+  flying:   ["electric","rock","steel"],
+  psychic:  ["psychic","steel"],
+  bug:      ["fire","fighting","poison","flying","ghost","steel","fairy"],
+  rock:     ["fighting","ground","steel"],
+  ghost:    ["dark"],
+  dragon:   ["steel"],
+  dark:     ["fighting","dark","fairy"],
+  steel:    ["fire","water","electric","steel"],
+  fairy:    ["fire","poison","steel"],
+};
+export const TYPE_NO_EFFECT: Record<string, string[]> = {
+  normal:   ["ghost"],
+  electric: ["ground"],
+  fighting: ["ghost"],
+  poison:   ["steel"],
+  ground:   ["flying"],
+  psychic:  ["dark"],
+  ghost:    ["normal"],
+  dragon:   ["fairy"],
+};
+
+/** Efetividade oficial de UM tipo atacante contra UM defensor: 2 | 1 | 0.5 | 0. */
+function effOne(atk: string, def: string): number {
+  if ((TYPE_ADVANTAGE[atk] ?? []).includes(def)) return 2;
+  if ((TYPE_NO_EFFECT[atk] ?? []).includes(def)) return 0;
+  if ((TYPE_NOT_EFFECTIVE[atk] ?? []).includes(def)) return 0.5;
+  return 1;
+}
+/** Produto da efetividade de um tipo atacante contra os tipos do defensor. */
+function effOfType(atk: string, defTypes: string[]): number {
+  return defTypes.reduce((m, d) => m * effOne(atk, d), 1);
+}
+
+/**
+ * Passo de vantagem/resistência (−2..+2) do melhor tipo do atacante contra o
+ * defensor. 4x→+2, 2x→+1, 1x→0, 0,5x→−1, 0,25x/0x→−2. Teto ±2 (±40%).
+ */
+export function getTypeAdvantageStep(attackerTypes: string | string[], defenderTypes: string | string[]): number {
   const atk = Array.isArray(attackerTypes) ? attackerTypes : [attackerTypes];
   const def = Array.isArray(defenderTypes) ? defenderTypes : [defenderTypes];
-  for (const a of atk) {
-    const strong = TYPE_ADVANTAGE[a] ?? [];
-    if (def.some((d) => strong.includes(d))) return 1.3;
+  let best = 0;
+  for (const a of atk) best = Math.max(best, effOfType(a, def));
+  if (best === 0) return -2;        // sem efeito (0x) → resistência máxima
+  if (best >= 4) return 2;          // x4 (dupla vantagem)
+  if (best === 2) return 1;
+  if (best === 1) return 0;
+  if (best === 0.5) return -1;
+  return -2;                        // 0,25x (dupla resistência)
+}
+
+/** Multiplicador de dano por tipo: 0.6 | 0.8 | 1.0 | 1.2 | 1.4 (±20% por passo, teto ±40%). */
+export function getTypeAdvantageMultiplier(attackerTypes: string | string[], defenderTypes: string | string[]): number {
+  return 1 + getTypeAdvantageStep(attackerTypes, defenderTypes) * 0.2;
+}
+
+/**
+ * Perfil DEFENSIVO de um mascote: quais tipos atacantes recebem cada passo
+ * contra ele. Usado na janela de vantagens/resistências e no card de mascotes.
+ */
+export function getTypeDefenseProfile(defenderTypes: string[]): { superWeak: string[]; weak: string[]; resist: string[]; superResist: string[] } {
+  const res = { superWeak: [] as string[], weak: [] as string[], resist: [] as string[], superResist: [] as string[] };
+  for (const atk of Object.keys(TYPE_LABELS_PT)) {
+    const step = getTypeAdvantageStep(atk, defenderTypes);
+    if (step === 2) res.superWeak.push(atk);
+    else if (step === 1) res.weak.push(atk);
+    else if (step === -1) res.resist.push(atk);
+    else if (step === -2) res.superResist.push(atk);
   }
-  return 1.0;
+  return res;
 }
 
 // ── Explicações das personalidades ────────────────────────────────────────────

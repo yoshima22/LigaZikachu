@@ -828,7 +828,7 @@ export default async function ManualPage() {
               ["Dano bruto", "máx(1, Dano base - Defesa × 0,35)"],
               [
                 "Dano final",
-                "Dano bruto × vantagem de tipo × postura × variação aleatória de 0,85 a 1,15",
+                "Dano bruto × vantagem/resistência de tipo (±40%) × postura × variação aleatória de 0,85 a 1,15",
               ],
             ]}
           />
@@ -858,6 +858,31 @@ export default async function ManualPage() {
               ],
             ]}
           />
+        </Sub>
+
+        <Sub title="Vantagens e resistências de tipo">
+          <p className="text-sm leading-relaxed text-slate-300">
+            Seguimos a tabela de tipos oficial. Cada <strong className="text-amber-300">vantagem</strong> dá{" "}
+            <strong className="text-amber-300">+20%</strong> de dano e cada <strong className="text-sky-300">resistência</strong> tira{" "}
+            <strong className="text-sky-300">−20%</strong>, somando no máximo <strong className="text-slate-200">±40%</strong>.
+          </p>
+          <Table
+            headers={["Situação", "Efeito no dano"]}
+            rows={[
+              ["Vantagem simples (super efetivo)", "+20%"],
+              ["Vantagem dupla (ex.: tipo fraco por dois tipos / \"×4\")", "+40% de uma vez"],
+              ["Resistência simples", "−20%"],
+              ["Resistência dupla ou imunidade oficial", "−40% (não existe dano 0 no jogo)"],
+              ["Sem relação de tipo", "0%"],
+            ]}
+          />
+          <Note>
+            Mascotes de dois tipos atacam com o tipo mais vantajoso. A vantagem e a resistência
+            são sinalizadas como o super efetivo — nos efeitos visuais, no texto do replay moderno e nos logs —
+            e o dano mostra, entre parênteses, quanto o tipo somou (+) ou removeu (−). Abra a janela de tipos
+            (clique na tag de tipo do mascote) para ver suas vulnerabilidades e resistências. Vale apenas
+            para combates daqui em diante.
+          </Note>
         </Sub>
       </Section>
 
