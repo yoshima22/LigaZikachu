@@ -30,6 +30,7 @@ import {
   TOWER_STUDY_TARGET,
 } from "@/lib/tower/studies";
 import { TOWER_BOSS_PRIZES } from "@/lib/tower/exclusive-catalog";
+import { settleTowerLobbyLoad } from "@/lib/tower/lobby-load";
 
 type LobbyData = Extract<
   Awaited<ReturnType<typeof getTowerLobbyDataAction>>,
@@ -94,7 +95,13 @@ export function TowerLobby() {
   );
 
   const load = () => {
-    void getTowerLobbyDataAction().then((res) => {
+    setLoadError(null);
+    void settleTowerLobbyLoad(getTowerLobbyDataAction).then((result) => {
+      if (!result.ok) {
+        setLoadError(result.error);
+        return;
+      }
+      const res = result.value;
       if ("error" in res) {
         setLoadError(res.error ?? "Erro ao carregar o lobby.");
         return;
@@ -110,6 +117,7 @@ export function TowerLobby() {
     return (
       <section className={card}>
         <p className="text-sm text-red-300">{loadError}</p>
+        <button type="button" onClick={load} className="mt-3 rounded-lg border border-purple-400/40 px-3 py-2 text-xs font-bold text-purple-200 hover:bg-purple-400/10">Tentar novamente</button>
       </section>
     );
   if (!data)

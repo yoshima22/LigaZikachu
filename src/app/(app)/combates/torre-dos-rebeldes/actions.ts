@@ -423,26 +423,18 @@ export async function contributeTowerPreparationAction(
 export async function getTowerLobbyDataAction() {
   const user = await requireTowerAccess();
   if (!user) return { error: "Acesso restrito à equipe ADMIN." };
-  await ensureTowerExclusiveSpecies();
-  await ensureTowerTicket();
-  const player = await getSessionPlayer(user.id);
-  if (!player) return { error: "Jogador não encontrado." };
-
-  const config = await getTowerConfig();
   const adminView = isAdmin(user.role);
-  const allowedIds = adminView ? await towerTesterIds() : [];
-  const allowedPlayers = adminView && allowedIds.length > 0 ? await prisma.player.findMany({ where: { userId: { in: allowedIds } }, orderBy: { displayName: "asc" }, select: { userId: true, displayName: true, user: { select: { email: true } } } }) : [];
-  const scenes = await getTowerNarrativeScenes();
-  const failures = await prisma.towerRunMember.count({
-    where: {
-      userId: user.id,
-      run: { status: { in: ["FAILED", "ABANDONED"] } },
-    },
-  });
-  const [narrativeUnlockRows, narrativeFeatRows] = await Promise.all([
+  const [player, config, allowedIds, scenes, failures, narrativeUnlockRows, narrativeFeatRows] = await Promise.all([
+    getSessionPlayer(user.id),
+    getTowerConfig(),
+    adminView ? towerTesterIds() : Promise.resolve([] as string[]),
+    getTowerNarrativeScenes(),
+    prisma.towerRunMember.count({ where: { userId: user.id, run: { status: { in: ["FAILED", "ABANDONED"] } } } }),
     prisma.towerCodexEntry.findMany({ where: { userId: user.id, subjectType: "NARRATIVE_SCENE" }, select: { subjectKey: true } }),
     prisma.towerFeat.findMany({ where: { userId: user.id, featKey: "TOWER_SCENE_UNLOCK" }, select: { data: true } }),
   ]);
+  if (!player) return { error: "Jogador não encontrado." };
+  const allowedPlayers = adminView && allowedIds.length > 0 ? await prisma.player.findMany({ where: { userId: { in: allowedIds } }, orderBy: { displayName: "asc" }, select: { userId: true, displayName: true, user: { select: { email: true } } } }) : [];
   const narrativeUnlockedIds = new Set([
     ...narrativeUnlockRows.map((row) => row.subjectKey),
     ...narrativeFeatRows.map((row) => String((row.data as { sceneId?: string } | null)?.sceneId ?? "")).filter(Boolean),
@@ -458,7 +450,7 @@ export async function getTowerLobbyDataAction() {
     await recordTowerSceneUnlock(lobbyScene, user.id);
   if (lobbyScene) narrativeUnlockedIds.add(lobbyScene.id);
   const today = new Date().toISOString().slice(0, 10);
-  const [communityProgress, communityCodex, controlledEntries, dailyStudyContribution] =
+  const [communityProgress, communityCodex, controlledEntries, dailyStudyContribution, reachedFloorAggregate] =
     await Promise.all([
       prisma.towerCommunityProgress.findMany({
         where: { floorId: 1 },
@@ -478,10 +470,10 @@ export async function getTowerLobbyDataAction() {
         where: { userId: user.id, featKey: `TOWER_PREP:${today}` },
         select: { data: true },
       }),
+      prisma.towerRun.aggregate({ _max: { currentFloor: true } }),
     ]);
   const progressValue = (key: string) =>
     communityProgress.find((entry) => entry.metricKey === key)?.value ?? 0;
-  const reachedFloorAggregate = await prisma.towerRun.aggregate({ _max: { currentFloor: true } });
   const highestReachedFloor = Math.max(1, reachedFloorAggregate._max.currentFloor ?? 1, Math.floor(progressValue("ADMIN_UNLOCKED_FLOOR")));
   const talentRanks = Object.fromEntries(
     [
