@@ -65,10 +65,12 @@ function MatchupModal({ type, onClose }: { type: string; onClose: () => void }) 
         <div className="space-y-4 p-4">
           <section>
             <div className="mb-2 flex items-center gap-1.5 text-xs font-bold text-emerald-300">
-              <Swords size={14} /> Forte contra
+              <Swords size={14} /> Forte contra <span className="text-[10px] font-normal text-emerald-300/70">(causa mais dano)</span>
             </div>
             {strong.length ? (
-              <div className="flex flex-wrap gap-1.5">{strong.map((t) => <TypeChip key={t} type={t} size="md" />)}</div>
+              <div className="flex flex-wrap items-center gap-1.5">
+                {strong.map((t) => <span key={t} className="inline-flex items-center gap-1">{<TypeChip type={t} size="md" />}<span className="text-[9px] text-emerald-300">+20%</span></span>)}
+              </div>
             ) : (
               <p className="text-[11px] text-slate-500">Não recebe bônus de ataque contra nenhum tipo.</p>
             )}
