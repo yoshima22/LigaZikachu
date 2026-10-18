@@ -4,6 +4,8 @@ type TowerBattleInput = {
   active: LeagueMascot[];
   reserves: LeagueMascot[];
   enemies: LeagueMascot[];
+  /** Runs V2 exigem a derrota dos defensores para liberar a sala; legado mantém o julgamento antigo. */
+  requireEnemyKnockout?: boolean;
   /** Apenas para simulação offline e testes. Não usar em requisições concorrentes. */
   random?: () => number;
 };
@@ -47,6 +49,20 @@ export function resolveTowerBattle(input: TowerBattleInput): {
       { includeFinalHp: true, ...(input.reserves.length ? { reserveTeamA: input.reserves } : {}) });
   } finally {
     if (input.random) Math.random = previousRandom;
+  }
+  if (input.requireEnemyKnockout && battle.winner === "A" && input.enemies.some((enemy) =>
+    (battle.finalHpById?.[enemy.id] ?? enemy.hp) > 0)) {
+    const defender = input.enemies.find((enemy) => (battle.finalHpById?.[enemy.id] ?? enemy.hp) > 0)!;
+    battle = { ...battle, winner: "B", log: [...battle.log, {
+      turn: (battle.log.at(-1)?.turn ?? 0) + 1,
+      actorId: defender.id, actorName: defender.name, actorOwnerId: defender.ownerId,
+      actorPokemonId: defender.pokemonId, actorLevel: defender.level,
+      targetId: defender.id, targetName: defender.name, targetOwnerId: defender.ownerId,
+      targetPokemonId: defender.pokemonId, targetLevel: defender.level,
+      action: "DEFEND", damage: 0, attackerType: defender.types[0] ?? "normal",
+      defenderType: defender.types[0] ?? "normal", multiplier: 1, advantageApplied: false,
+      effect: "O tempo se esgotou; os defensores ainda resistem e a sala continua pendente.",
+    }] };
   }
   const finalHp = battle.finalHpById;
   if (!finalHp) throw new Error("Resultado de HP do combate indisponível.");

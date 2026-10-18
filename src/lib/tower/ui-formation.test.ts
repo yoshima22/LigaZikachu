@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { describeTowerFormation, towerReserveVisible } from "./ui-formation";
+import { describeTowerFormation, towerReplayCanUseModern, towerReserveVisible } from "./ui-formation";
 
 test("solo projects four ordered mascots as two actives and two reserves", () => {
   const mascots = [4, 2, 1, 3].map((slot) => ({ id: `m${slot}`, formationSlot: slot }));
@@ -24,4 +24,10 @@ test("replay reserves remain hidden until the actual deployment event", () => {
   assert.equal(towerReserveVisible(events, 1), true);
   assert.equal(towerReserveVisible(events, 2), true);
   assert.equal(towerReserveVisible([{ effect: "Outro efeito" }], 9), false);
+});
+
+test("reserve battles use classic replay until the modern canvas models deployment", () => {
+  assert.equal(towerReplayCanUseModern(3, 2, 2, 0), true);
+  assert.equal(towerReplayCanUseModern(3, 2, 2, 2), false);
+  assert.equal(towerReplayCanUseModern(0, 2, 2, 0), false);
 });

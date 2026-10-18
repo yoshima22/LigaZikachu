@@ -7,6 +7,7 @@ export type TowerBalance = {
   middleFloorEnemyScale?: number;
   groupSizeSlope?: number;
   firstFloorGroupSizeSlope?: number;
+  lateFloorGroupSizeSlope?: number;
   floorHealingFraction?: number;
   floorPressureRelief?: number;
 };
@@ -21,7 +22,7 @@ export const TOWER_BALANCE_SOLO_V2: Readonly<TowerBalance> = {
   firstFloorEnemyScale: 0.95,
   firstBossEscortReduction: 2,
   middleFloorEnemyScale: 1,
-  lateFloorEnemyScale: 1.15,
+  lateFloorEnemyScale: 1.162,
   floorHealingFraction: 0.18,
   floorPressureRelief: 4,
 };
@@ -29,10 +30,11 @@ export const TOWER_BALANCE_SOLO_V2: Readonly<TowerBalance> = {
 export const TOWER_BALANCE_GROUP_V2: Readonly<TowerBalance> = {
   firstFloorEnemyScale: 0.88,
   firstBossEscortReduction: 2,
-  middleFloorEnemyScale: 1,
-  lateFloorEnemyScale: 1.02,
-  groupSizeSlope: 0.2,
+  middleFloorEnemyScale: 0.961,
+  lateFloorEnemyScale: 0.98,
+  groupSizeSlope: 0.28,
   firstFloorGroupSizeSlope: 0.19,
+  lateFloorGroupSizeSlope: 0.2,
   floorHealingFraction: 0.18,
   floorPressureRelief: 4,
 };
@@ -69,7 +71,8 @@ export function towerEnemyBaseStat(
 ): number {
   const floorScale = floor === 1 ? balance.firstFloorEnemyScale : floor >= 5
     ? balance.lateFloorEnemyScale : (balance.middleFloorEnemyScale ?? 1);
-  const slope = floor === 1 ? (balance.firstFloorGroupSizeSlope ?? 0) : (balance.groupSizeSlope ?? 0);
+  const slope = floor === 1 ? (balance.firstFloorGroupSizeSlope ?? 0) : floor >= 5
+    ? (balance.lateFloorGroupSizeSlope ?? balance.groupSizeSlope ?? 0) : (balance.groupSizeSlope ?? 0);
   const groupScale = slope && partySize >= 2
     ? 1 + slope * (partySize - 2.5) : 1;
   return Math.max(12, Math.round((averageLevel * 0.72 + 18 + roomIndex * 2) * pressureMultiplier * floorScale * groupScale));

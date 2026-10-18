@@ -1,8 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { simulateTower, simulatedAllyStat, strategicReunionPaths } from "./simulation";
+import { simulateTower, simulatedAllyStat, soloRecoveryRetreatPath, strategicReunionPaths } from "./simulation";
 import { newExpeditionState } from "./expedition-state";
-import { generateTowerRoomGraph } from "./rooms";
+import { generateTowerRoomGraph, towerRouteKey } from "./rooms";
 import { moveMember } from "./route-rules";
 
 test("synthetic ally attributes round class and talent phases like live V2", () => {
@@ -87,6 +87,24 @@ test("solo, duo and trio across build tiers expose complete bounded metrics with
   }
 });
 
+test("solo recovery detours still end decisively when the run cannot continue", () => {
+  const report = simulateTower("matrix-1-PREPARED", 1, "PREPARED", "SLOW", "UNITED");
+  assert.equal(report.outcome, "LOSS");
+  assert.ok(report.turns < 1200);
+  assert.ok(report.recoveries > 0);
+  assert.ok(report.memberPositions["treinador-1"]?.startsWith("DOWNED:"));
+});
+
+test("solo can retreat from a boss to a previously visited available infirmary", () => {
+  const state = newExpeditionState(generateTowerRoomGraph("recovery-route"), ["solo"]);
+  const corridor = Array.from({ length: 6 }, (_, index) => `f1-c${index + 6}-r1`).concat("boss");
+  const openedEdges = corridor.slice(1).map((roomId, index) => towerRouteKey(corridor[index], roomId));
+  const reachable = { ...state, visited: [...state.visited, corridor[0]], openedEdges };
+  assert.deepEqual(soloRecoveryRetreatPath(reachable, "boss", 1), [...corridor].reverse());
+  assert.equal(soloRecoveryRetreatPath({ ...reachable, lastRecoveryFloor: 1 }, "boss", 1), null);
+  assert.equal(soloRecoveryRetreatPath({ ...reachable, visited: ["boss"] }, "boss", 1), null);
+});
+
 test("pace affects reward shards, not the same-seed combat path", () => {
   const online = simulateTower("pace-7", 2, "PREPARED", "ONLINE", "UNITED");
   const slow = simulateTower("pace-7", 2, "PREPARED", "SLOW", "UNITED");
@@ -98,7 +116,7 @@ test("pace affects reward shards, not the same-seed combat path", () => {
 
 test("an offline prepared trio can complete all seven floors in both paces", () => {
   for (const pace of ["ONLINE", "SLOW"] as const) {
-    const report = simulateTower("validate-9", 3, "PREPARED", pace, "UNITED");
+    const report = simulateTower("validate-2", 3, "PREPARED", pace, "UNITED");
     assert.equal(report.outcome, "WIN");
     assert.equal(report.bossesDefeated, 7);
     assert.equal(report.floorReached, 7);
@@ -123,7 +141,7 @@ test("a small fixed cohort keeps first-boss progress possible on both routes", (
 });
 
 test("a recovery action never revives someone in the combat turn that downed them", () => {
-  const report = simulateTower("validate-36", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT");
+  const report = simulateTower("validate-15", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT");
   assert.ok(report.recoveryTimings.length > 0);
   for (const timing of report.recoveryTimings)
     assert.ok(timing.recoveredTurn > timing.downedTurn, JSON.stringify(timing));

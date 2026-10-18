@@ -4,7 +4,7 @@ import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { useState, useEffect, useRef, useMemo } from "react";
 import { getSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { EffectChips } from "@/components/replay-effect-chips";
-import { towerReserveVisible } from "@/lib/tower/ui-formation";
+import { towerReplayCanUseModern, towerReserveVisible } from "@/lib/tower/ui-formation";
 import { ModernReplayModal } from "@/components/replay/modern-replay-modal";
 import { buildModernReplay, type ReplayLogEntry } from "@/lib/replay-modern";
 
@@ -275,7 +275,7 @@ export function LeagueBattleReplayModal({
   defaultStyle?: ReplayStyle;
 }) {
   const [mode, setMode] = useState<ReplayStyle>(() => defaultStyle ?? preferredReplayStyle());
-  const canModern = replay.length > 0 && lineupA.length > 0 && lineupB.length > 0;
+  const canModern = towerReplayCanUseModern(replay.length, lineupA.length, lineupB.length, reserveLineupA.length);
   const modernWinnerName = isDraw ? "Empate" : winnerId ? (winnerId === playerAId ? playerAName : playerBName) : null;
   // Memoizado: NUNCA recriar o objeto a cada render — senão o canvas reinicia o
   // replay do zero toda vez que o componente re-renderiza (bug "repete 2 ataques").
@@ -339,12 +339,12 @@ export function LeagueBattleReplayModal({
   const delay = Math.round(baseDelay / speed);
 
   useEffect(() => {
-    if (mode === "modern") return; // no modo moderno o canvas controla o tempo
+    if (mode === "modern" && canModern) return; // no modo moderno o canvas controla o tempo
     if (!autoPlay || showBondIntro) return;
     if (turnIdx >= cinematicReplay.length) return;
     const t = setTimeout(() => setTurnIdx(prev => prev + 1), turnIdx < 0 ? 600 / speed : delay);
     return () => clearTimeout(t);
-  }, [turnIdx, autoPlay, cinematicReplay, delay, speed, showBondIntro, mode]);
+  }, [turnIdx, autoPlay, cinematicReplay, delay, speed, showBondIntro, mode, canModern]);
 
   const current = turnIdx >= 0 && turnIdx < cinematicReplay.length ? cinematicReplay[turnIdx] : null;
   const finished = turnIdx >= cinematicReplay.length;
@@ -367,7 +367,7 @@ export function LeagueBattleReplayModal({
   const resolvedTargetName = current ? resolveName(current.targetName, current.targetPokemonId) : "";
 
   // Modo moderno (animado): mesma fonte de dados, renderização alternativa.
-  if (mode === "modern" && modernData) {
+  if (mode === "modern" && canModern && modernData) {
     return (
       <ModernReplayModal
         title={`${playerAName} × ${playerBName}`}

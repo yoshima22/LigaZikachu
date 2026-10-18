@@ -21,3 +21,13 @@ export function towerReserveVisible(
   return events.some((event, index) => index <= turnIndex &&
     event.effect?.startsWith("Reservas da Torre entraram no mesmo combate") === true);
 }
+
+/** The animated canvas currently knows only the initial lineup. */
+export function towerReplayCanUseModern(
+  eventCount: number,
+  activeCount: number,
+  enemyCount: number,
+  reserveCount: number,
+): boolean {
+  return eventCount > 0 && activeCount > 0 && enemyCount > 0 && reserveCount === 0;
+}

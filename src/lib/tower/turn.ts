@@ -262,7 +262,8 @@ async function resolveV2RoomFronts(
           slot: index + 1,
         };
       });
-      const resolved = resolveTowerBattle({ active, reserves, enemies });
+      const resolved = resolveTowerBattle({ active, reserves, enemies,
+        requireEnemyKnockout: run.balanceVersion === 2 && run.partyProfile !== null });
       const battle = resolved.battle;
       combatForReport = { allies, enemies, log: battle.log, won: battle.winner === "A", boss: room.kind === "BOSS",
         ownerUserIdByMascotId: Object.fromEntries(local.map((snapshot) => [snapshot.mascotId, snapshot.member.userId])) };

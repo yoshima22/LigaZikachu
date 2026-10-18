@@ -52,3 +52,14 @@ test("solo and group V2 have distinct curves while null profile stays legacy", (
   assert.ok(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE_GROUP_V2, 2) <
     towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE_GROUP_V2, 3));
 });
+
+test("late-floor group size tuning does not change the middle floors or legacy runs", () => {
+  const baseline = { firstFloorEnemyScale: 1, firstBossEscortReduction: 0, lateFloorEnemyScale: 1, groupSizeSlope: 0.2 };
+  const lateAdjusted = { ...baseline, lateFloorGroupSizeSlope: 0.4 };
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 4, lateAdjusted, 2),
+    towerEnemyBaseStat(70, 4, 1, 4, baseline, 2));
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 5, lateAdjusted, 2), 61);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 5, lateAdjusted, 3), 92);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 2),
+    towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 3));
+});

@@ -27,7 +27,7 @@ test("prepared solo, duo, trio and strategic split stay near 10% across two coho
       const total = cohortWins.reduce((sum, count) => sum + count, 0);
       assert.ok(total >= 10 && total <= 30,
         `party ${partySize} / ${route} venceu ${total}/200, fora de 5–15%`);
-      assert.ok(cohortWins.every((count) => count >= 3 && count <= 18),
+      assert.ok(cohortWins.every((count) => count >= 5 && count <= 15),
         `party ${partySize} / ${route} teve coorte extrema: ${cohortWins.join("/")}`);
     }
   }

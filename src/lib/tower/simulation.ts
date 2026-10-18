@@ -110,6 +110,16 @@ export function strategicReunionPaths(state: TowerExpeditionV2): Record<string, 
   return options[0]?.paths ?? {};
 }
 
+/** A solo trainer can only backtrack to an already reached, off-cooldown infirmary. */
+export function soloRecoveryRetreatPath(state: TowerExpeditionV2, fromRoomId: string, floor: number): string[] | null {
+  if (!towerCanLeaveRoom(state, fromRoomId) || !canUseRecoveryRoom(floor, state.lastRecoveryFloor)) return null;
+  const paths = state.graph
+    .filter((room) => room.kind === "RECOVERY" && state.visited.includes(room.id))
+    .map((room) => shortestKnownPath(state, fromRoomId, room.id))
+    .filter((path): path is string[] => path !== null);
+  return paths.sort((left, right) => left.length - right.length)[0] ?? null;
+}
+
 export function simulateTower(
   seed: string, partySize: 1 | 2 | 3, buildTier: BuildTier,
   pace: "ONLINE" | "SLOW", routePolicy: "UNITED" | "SPLIT" | "STRATEGIC_SPLIT", afkRate = 0,
@@ -154,6 +164,8 @@ export function simulateTower(
   let missedWindows = 0, afkAbandoned = 0;
   const relicShardsByPlayer = Object.fromEntries(memberIds.map((id) => [id, 0]));
   let regroupTarget: string | null = null;
+  let soloRecoveryTarget: string | null = null;
+  let soloReturnTarget: string | null = null;
 
   while (turns < 1200) {
     if (!Object.values(state.members).some((member) => member.status === "ACTIVE")) { outcome = "LOSS"; break; }
@@ -200,6 +212,21 @@ export function simulateTower(
       }
       recoveryActorUsed = recoveryActor;
       recoveries++;
+      if (partySize === 1 && soloRecoveryTarget === state.members[recoveryActor].roomId) {
+        soloRecoveryTarget = null;
+      }
+    }
+    // O modelo não concede itens de recuperação. Se a enfermaria já estiver
+    // acessível a partir do chefe, a formação solo pode voltar e tentar de novo.
+    if (partySize === 1 && mascots.filter((mascot) => mascot.hp > 0).length < 2) {
+      const occupied = state.members[memberIds[0]].roomId;
+      const kind = state.graph.find((room) => room.id === occupied)?.kind;
+      if (!state.rooms[occupied]?.cleared && (kind === "COMBAT" || kind === "BOSS")) {
+        const retreat = soloRecoveryRetreatPath(state, occupied, floor);
+        if (!retreat || retreat.length < 2) { outcome = "LOSS"; break; }
+        soloRecoveryTarget = retreat.at(-1)!;
+        soloReturnTarget = occupied;
+      }
     }
     if (partySize === 1) {
       const ordered = [...mascots].sort((left, right) => left.formationSlot - right.formationSlot);
@@ -220,11 +247,15 @@ export function simulateTower(
       const member = state.members[memberId];
       if (member.status !== "ACTIVE" || member.availableFromTurn > turns || memberId === recoveryActorUsed || missingThisTurn.has(memberId) || !towerCanLeaveRoom(state, member.roomId)) continue;
       const room = state.graph.find((entry) => entry.id === member.roomId)!;
+      if (member.roomId === soloReturnTarget) soloReturnTarget = null;
       const returnPath = regroupTarget && room.id !== regroupTarget ? shortestKnownPath(state, room.id, regroupTarget) : null;
+      const soloPath = soloRecoveryTarget
+        ? shortestKnownPath(state, room.id, soloRecoveryTarget)
+        : soloReturnTarget ? shortestKnownPath(state, room.id, soloReturnTarget) : null;
       const route = routePolicy === "STRATEGIC_SPLIT"
         ? state.bossOverloadAwarded ? "UNITED" : "SPLIT"
         : routePolicy;
-      const destination = returnPath?.[1] ?? strategicPaths[memberId]?.[1] ?? nextRoom(room, index, floor, route);
+      const destination = soloPath?.[1] ?? returnPath?.[1] ?? strategicPaths[memberId]?.[1] ?? nextRoom(room, index, floor, route);
       if (destination) {
         state = moveMember(state, memberId, destination);
         movedThisTurn.add(memberId);
@@ -313,6 +344,7 @@ export function simulateTower(
           reserves,
           enemies,
           random,
+          requireEnemyKnockout: true,
         });
         return { won: battle.battle.winner === "A", hpByMascotId: battle.hpByMascotId,
           events: [], kos: enemies.filter((enemy) => (battle.enemyHpById[enemy.id] ?? 0) <= 0).map((enemy) => enemy.id) };

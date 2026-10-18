@@ -73,3 +73,39 @@ test("Guardian interception changes authoritative HP between Tower rooms", () =>
   assert.equal(resolved.hpByMascotId.guard, resolved.battle.finalHpById.guard);
   assert.equal(resolved.enemyHpById.enemy, resolved.battle.finalHpById.enemy);
 });
+
+test("a Tower defeat at the round cap preserves survivors for the next player decision", () => {
+  const active = [fighter("stalled", "owner", { hp: 1000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const enemies = [fighter("wall", "TORRE", { hp: 3000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const result = resolveTowerBattle({ active, reserves: [], enemies, random: () => 0.5, requireEnemyKnockout: true });
+  assert.equal(result.battle.winner, "B");
+  assert.equal(result.battle.rounds, 150);
+  assert.equal(result.hpByMascotId.stalled, 850);
+  assert.equal(result.battle.finalHpById?.stalled, 850);
+  assert.equal(result.battle.teamASurvivors, 1);
+});
+
+test("V2 cannot clear a Tower room by HP lead while defenders survive; legacy keeps its result", () => {
+  const active = [fighter("bulky", "owner", { hp: 10000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const enemies = [fighter("wall", "TORRE", { hp: 3000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const input = { active, reserves: [], enemies, random: () => 0.5 };
+  const legacy = resolveTowerBattle(input);
+  const v2 = resolveTowerBattle({ ...input, requireEnemyKnockout: true });
+  assert.equal(legacy.battle.winner, "A");
+  assert.equal(v2.battle.winner, "B");
+  assert.ok(v2.enemyHpById.wall > 0);
+  assert.ok(v2.hpByMascotId.bulky > 0);
+});
+
+test("undeployed solo reserves remain intact when the round cap ends the encounter", () => {
+  const active = [fighter("a1", "owner", { hp: 1000, force: 1, agility: 1, instinct: 1, vitality: 300 }),
+    fighter("a2", "owner", { hp: 1000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const reserves = [fighter("r1", "owner", { hp: 500 }), fighter("r2", "owner", { hp: 500 })];
+  const enemies = [fighter("wall", "TORRE", { hp: 3000, force: 1, agility: 1, instinct: 1, vitality: 300 })];
+  const result = resolveTowerBattle({ active, reserves, enemies, random: () => 0.5, requireEnemyKnockout: true });
+  assert.equal(result.battle.rounds, 180);
+  assert.equal(result.battle.reserveEntered, false);
+  assert.equal(result.hpByMascotId.r1, 500);
+  assert.equal(result.hpByMascotId.r2, 500);
+  assert.ok(result.battle.log.every((entry) => entry.targetId !== "r1" && entry.targetId !== "r2"));
+});
