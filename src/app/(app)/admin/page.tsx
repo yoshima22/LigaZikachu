@@ -113,7 +113,6 @@ const adminCards = [
 
 export default async function AdminPage() {
   const currentUser = await requireAdmin();
-  await prisma.$transaction((tx) => ensureSyncChallengeItems(tx));
 
   const [
     pendingUsers,
@@ -153,11 +152,46 @@ export default async function AdminPage() {
     getTimedGameBonusEvents(),
   ]);
 
-  const vipsResult = await adminListActiveVips();
-  // Carrega todos os schedules de todos os tipos de passe conhecidos
-  const scheduleLabels = await adminListScheduleLabels();
-  const allSchedules = await Promise.all(
-    scheduleLabels.map(label => adminGetSchedule(label).then(r => ({
+  // Lote 2 (independentes) — tudo que era sequencial agora roda em paralelo.
+  // A página admin re-renderiza inteira após CADA Server Action (padrão do
+  // App Router); manter tudo paralelo evita que salvar um aviso espere ~11
+  // idas-e-voltas ao banco.
+  const [
+    , // ensureSyncChallengeItems (idempotente; só precisa completar)
+    vipsResult,
+    scheduleLabels,
+    allShopItems,
+    managedForms,
+    johtoSummary,
+    ackNotice,
+    patchNotes,
+    serverCostGoal,
+    paidPassOrders,
+  ] = await Promise.all([
+    prisma.$transaction((tx) => ensureSyncChallengeItems(tx)),
+    adminListActiveVips(),
+    adminListScheduleLabels(),
+    prisma.shopItem.findMany({
+      orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, type: true, rarity: true, active: true },
+    }),
+    // Catálogo de formas é exclusivo do admin de plataforma (a action redireciona
+    // Gamemasters), por isso só chamamos quando isAdmin.
+    isAdmin(currentUser.role) ? listManagedForms() : Promise.resolve([]),
+    isAdmin(currentUser.role) ? getJohtoAdminSummary() : Promise.resolve(null),
+    getAckNotice(),
+    getPatchNotes(),
+    getServerCostGoal(),
+    prisma.ligaCashOrder.findMany({
+      where: { status: "PAID", productType: "SUPPORTER_PASS", fulfilledAt: null },
+      orderBy: { paidAt: "asc" },
+      take: 100,
+    }),
+  ]);
+
+  // Lote 3 — dependem dos resultados do lote 2.
+  const [allSchedules, johtoPreviewCandidates, johtoTestMascots, paidPassPlayers, nextPassConfig] = await Promise.all([
+    Promise.all(scheduleLabels.map(label => adminGetSchedule(label).then(r => ({
       label: r.label,
       schedule: r.schedule,
       isCustom: r.isCustom,
@@ -167,38 +201,20 @@ export default async function AdminPage() {
       flavorText: r.flavorText,
       isCurrentStorePass: r.isCurrentStorePass,
       isNextStorePass: r.isNextStorePass,
-    })))
-  );
-
-  const allShopItems = await prisma.shopItem.findMany({
-    orderBy: [{ type: "asc" }, { active: "desc" }, { sortOrder: "asc" }, { name: "asc" }],
-    select: { id: true, name: true, type: true, rarity: true, active: true }
-  });
-
-  // O catálogo de formas altera pools globais e é exclusivo do administrador
-  // de plataforma. Não execute a action (que redireciona) para Gamemasters.
-  const managedForms = isAdmin(currentUser.role) ? await listManagedForms() : [];
-  const johtoSummary = isAdmin(currentUser.role) ? await getJohtoAdminSummary() : null;
-  const johtoPreviewCandidates = johtoSummary ? await getJohtoInvitationPreviewCandidates() : [];
-  const johtoTestMascots = johtoSummary
-    ? await prisma.mascot.findMany({
-        where: { player: { userId: currentUser.id }, arenaState: "FREE", expeditions: { none: { status: "ACTIVE" } } },
-        select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
-        orderBy: { level: "desc" }, take: 250,
-      })
-    : [];
-  const ackNotice = await getAckNotice();
-  const patchNotes = await getPatchNotes();
-  const serverCostGoal = await getServerCostGoal();
-  const paidPassOrders = await prisma.ligaCashOrder.findMany({
-    where: { status: "PAID", productType: "SUPPORTER_PASS", fulfilledAt: null },
-    orderBy: { paidAt: "asc" },
-    take: 100,
-  });
-  const paidPassPlayers = paidPassOrders.length ? await prisma.player.findMany({ where: { id: { in: paidPassOrders.map(order => order.playerId) } }, select: { id: true, displayName: true } }) : [];
+    })))),
+    johtoSummary ? getJohtoInvitationPreviewCandidates() : Promise.resolve([]),
+    johtoSummary
+      ? prisma.mascot.findMany({
+          where: { player: { userId: currentUser.id }, arenaState: "FREE", expeditions: { none: { status: "ACTIVE" } } },
+          select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true },
+          orderBy: { level: "desc" }, take: 250,
+        })
+      : Promise.resolve([]),
+    paidPassOrders.length ? prisma.player.findMany({ where: { id: { in: paidPassOrders.map(order => order.playerId) } }, select: { id: true, displayName: true } }) : Promise.resolve([]),
+    prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true, storeActivationAt: true, storeActivationRetroactive: true } }),
+  ]);
   const paidPassNames = new Map(paidPassPlayers.map(player => [player.id, player.displayName]));
   // Calendário do próximo passe + lista de reservados (para a inclusão em massa).
-  const nextPassConfig = await prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true, storeActivationAt: true, storeActivationRetroactive: true } });
   const nextReservations = nextPassConfig
     ? paidPassOrders.filter(o => o.passOfferSlot === "NEXT" && (o.passScheduleKey === nextPassConfig.id || o.passScheduleKey === null))
         .map(o => ({ id: o.id, playerName: paidPassNames.get(o.playerId) ?? "Jogador removido", paidAt: o.paidAt?.toISOString() ?? null, manual: o.provider === "ADMIN_MANUAL" }))
