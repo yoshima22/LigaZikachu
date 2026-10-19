@@ -3700,11 +3700,13 @@ async function _getArenaRanking(limit: number) {
     WITH eligible AS (
       SELECT b.*
       FROM "arena_battles" b
-      WHERE b."status"::text = 'RESOLVED'
+      -- Comparar o enum DIRETO (sem ::text): o cast desabilitava os índices
+      -- (status_type / type_createdAt) e forçava seq scan de toda a tabela.
+      WHERE b."status" = 'RESOLVED'::"ArenaBattleStatus"
         -- O ranking público é PvP. O filtro Prisma anterior citava BOT, mas a
         -- condição do defensor nulo já os excluía; tornamos a regra explícita
         -- para não transformar farm PvE antigo em milhares de vitórias.
-        AND b."type"::text = 'PVP'
+        AND b."type" = 'PVP'::"ArenaBattleType"
         AND NOT EXISTS (
           SELECT 1
           FROM "players" ap

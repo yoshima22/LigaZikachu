@@ -383,11 +383,16 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   const cooldownTeamIds = readyActiveTeams.map((team) => team.id);
   const latestBattlesByTeamAndType = new Map<string, Date>();
   if (cooldownTeamIds.length > 0 && (activeTab === "equipes" || needsRoomsData)) {
+    // O cooldown (BOT/PVP) é de poucos minutos: só batalhas recentes importam.
+    // Times sem batalha nessa janela já estão prontos (ausência = sem cooldown).
+    // Filtrar por createdAt evita varrer as ~28k batalhas da tabela a cada load.
+    const cooldownWindowMs = Math.max(ARENA_Z_CONFIG.botCooldownMinutes, ARENA_Z_CONFIG.pvpCooldownMinutes) * 60_000 + 60_000;
     const latestBattles = await prisma.arenaBattle.groupBy({
       by: ["attackTeamId", "type"],
       where: {
         attackTeamId: { in: cooldownTeamIds },
         type: { in: ["BOT", "PVP"] },
+        createdAt: { gte: new Date(Date.now() - cooldownWindowMs) },
       },
       _max: { createdAt: true },
     });
