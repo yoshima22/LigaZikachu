@@ -15,6 +15,8 @@ import { ComboMeter, Countdown, JohtoReplayList, JohtoRewardPicker, LeaderTeamBu
 import { attackJohtoRaidAction } from "./actions";
 import { JohtoCooldownRefresh } from "./_components/johto-cooldown-refresh";
 import { JohtoSusPanel } from "./_components/johto-sus-panel";
+import { JohtoFocusRefresh } from "./_components/johto-focus-refresh";
+import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 
 export const dynamic = "force-dynamic";
 
@@ -148,7 +150,11 @@ export default async function JohtoRaidPage({ searchParams }: { searchParams: Pr
           }}
         />
         <div className="relative z-10">
+        <JohtoFocusRefresh />
+        <div className="flex flex-wrap items-start justify-between gap-2">
         <p className="text-[10px] font-black uppercase tracking-[0.3em] text-[#FFCB05]">Evento especial · Semana 8</p>
+        <ManualRefreshButton label="Atualizar" />
+        </div>
         <h1 className="mt-1 flex items-center gap-2 text-3xl font-black text-white"><Swords className="text-[#FFCB05]" size={28} /> Líderes de Johto</h1>
         <p className="mt-2 max-w-3xl text-sm text-slate-300">Os oito líderes de ginásio de Johto enfrentam os treinadores com o time completo de 6 mascotes. Todo o dano que vocês causam é somado na vida do líder: o dano é persistente: cada mascote do líder tem uma vida enorme e, quando ela acaba, ele sai de todas as lutas seguintes. Quando os 6 caem, o líder cai. Cada líder fica disponível por até {event.leaderDays} dias — se ninguém o vencer a tempo, ele vence. Quem lutar ganha ZC e escolhe um mascote do próprio líder!</p>
         {invitation?.available && <JohtoInvitationReviewButton displayName={invitation.displayName} voteSubmitted={Boolean(invitation.voteSubmittedAt)} candidates={invitation.candidates} />}

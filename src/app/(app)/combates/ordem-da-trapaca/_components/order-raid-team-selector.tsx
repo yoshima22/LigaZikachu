@@ -195,10 +195,17 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
 }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
-  const [selected, setSelected] = useState<string[]>([]);
+  const [selectedRaw, setSelected] = useState<string[]>([]);
   const [roles, setRoles] = useState<Record<string, CombatRole>>({});
   const [search, setSearch] = useState("");
   const [result, setResult] = useState<AnyAttackResult | null>(null);
+
+  // A página pode ficar aberta enquanto os mascotes mudam de estado: a seleção só vale para quem ainda está na lista.
+  const availableIds = useMemo(() => new Set(mascots.map((mascot) => mascot.id)), [mascots]);
+  const selected = useMemo(() => selectedRaw.filter((id) => availableIds.has(id)), [selectedRaw, availableIds]);
+  useEffect(() => {
+    setSelected((current) => (current.every((id) => availableIds.has(id)) ? current : current.filter((id) => availableIds.has(id))));
+  }, [availableIds]);
 
   const selectedMascots = selected.map((id) => mascots.find((mascot) => mascot.id === id)).filter(Boolean) as RaidMascot[];
   const displayed = useMemo(() => {
@@ -209,7 +216,8 @@ export function OrderRaidTeamSelector({ mascots, cooldownText, recentAttempts = 
   }, [mascots, search]);
 
   function toggle(mascot: RaidMascot) {
-    setSelected((current) => {
+    setSelected((raw) => {
+      const current = raw.filter((id) => availableIds.has(id));
       if (current.includes(mascot.id)) return current.filter((id) => id !== mascot.id);
       if (current.length >= 6) {
         toast.error("A equipe da raid precisa ter exatamente 6 mascotes.");
