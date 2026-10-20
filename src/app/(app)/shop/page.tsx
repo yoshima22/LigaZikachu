@@ -1,4 +1,5 @@
 import { getAppSession } from "@/lib/session";
+import { getEconomySettings } from "@/lib/economy-settings";
 import { prisma } from "@/lib/prisma";
 import { getOrCreateWallet } from "@/lib/zikacoins";
 import { isAdmin, isStaff } from "@/lib/auth/permissions";
@@ -107,7 +108,7 @@ export default async function ShopPage() {
   const [wallet, ligaCashWallet, economy, rawItems, inventoryRows, eggCounts, foodItems, raidSabotages, promotions] = await Promise.all([
     player ? getOrCreateWallet(player.id) : null,
     player?prisma.ligaCoinWallet.findUnique({where:{playerId:player.id}}):null,
-    prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}}),
+    getEconomySettings(),
     getActiveShopItems(),
     player
       ? prisma.playerInventory.findMany({

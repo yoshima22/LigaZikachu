@@ -1,5 +1,6 @@
 "use server";
 
+import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
 import { EggType, FoodType, GiftStatus, GiftType, Prisma, ShopItemType, ZikaCoinTxType } from "@prisma/client";
@@ -37,7 +38,7 @@ async function buildRewardPayload(data: z.infer<typeof newsSchema>) {
     };
   }
   if (data.rewardKind === "LIGA_CASH") {
-    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+    const economy = await getEconomySettings();
     if (!economy.allowLcEventRewards) throw new Error("Recompensas em LigaCash estão desativadas nas configurações de economia.");
     const amount = Math.max(1, data.rewardAmount);
     return {

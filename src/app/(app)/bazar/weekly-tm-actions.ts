@@ -1,5 +1,6 @@
 "use server";
 
+import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma, ZikaCoinTxType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -81,7 +82,7 @@ export async function getWeeklyTmView(): Promise<WeeklyTmView | null> {
       select: { id: true, name: true, type: true, imageUrl: true, description: true, active: true, metadata: true },
     }),
     getDisabledSpeciesIds(),
-    prisma.economySettings.upsert({ where: { id: SINGLETON }, create: { id: SINGLETON }, update: {} }),
+    getEconomySettings(),
   ]);
   const byId = new Map(items.map((item) => [item.id, item]));
   const compat = stored.map((slot) => (getAbilityTmDef(slot.abilityKey)?.pokemonIds ?? []).filter((id) => !disabled.has(id)));
@@ -157,7 +158,7 @@ export async function buyWeeklyTmSlot(slotIndex: number, currency: "ZC" | "LC" =
         throw new Error("Este TM está indisponível no momento.");
       }
 
-      const economy = await tx.economySettings.upsert({ where: { id: SINGLETON }, create: { id: SINGLETON }, update: {} });
+      const economy = await getEconomySettings(tx);
       if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
       const price = currency === "LC"
         ? suggestedLigaCashPrice(slot.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference)

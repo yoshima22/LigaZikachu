@@ -1,5 +1,6 @@
 "use server";
 
+import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
@@ -350,38 +351,59 @@ export async function autoRefreshMiauvadaoIfNeeded(options?: {
     });
     if (stamp && stamp.offersRefreshedAt && stamp.offersRefreshedAt >= rotation.start) return null;
 
-    // Fase 2 — expirou de fato: agora vale ler os campos pesados da rotação.
-    const config = stamp
-      ? await prisma.miauvadaoConfig.findUniqueOrThrow({
-          where: { id: "singleton" },
-          select: { vaultBalance: true, offerStockOverrides: true },
-        })
-      : await prisma.miauvadaoConfig.create({
-          data: { id: "singleton" },
-          select: { vaultBalance: true, offerStockOverrides: true },
-        });
+    // Fase 2 — expirou de fato. No instante da virada, TODA visita e compra do
+    // bazar cai aqui ao mesmo tempo; antes cada uma sorteava a vitrine inteira em
+    // paralelo (o compare-and-swap só evitava vitrines diferentes, não o trabalho
+    // repetido) — era o pico que congelava o site no reset. Agora é voo único: só
+    // quem pega o lock NÃO bloqueante sorteia; os demais esperam a publicação sem
+    // segurar lock nem refazer o sorteio. Regras e estoque não mudam.
+    const won = await prisma.$transaction(async (tx) => {
+      const [lock] = await tx.$queryRaw<{ got: boolean }[]>`SELECT pg_try_advisory_xact_lock(hashtext('miauvadao-rotation')) AS got`;
+      if (!lock?.got) return false;
+      // Rechecagem dentro do lock: outra requisição pode ter acabado de publicar.
+      const current = await tx.miauvadaoConfig.findUnique({
+        where: { id: "singleton" },
+        select: { offersRefreshedAt: true, vaultBalance: true, offerStockOverrides: true },
+      });
+      if (current?.offersRefreshedAt && current.offersRefreshedAt >= rotation.start) return false;
+      const config = current ?? await tx.miauvadaoConfig.create({
+        data: { id: "singleton" },
+        select: { offersRefreshedAt: true, vaultBalance: true, offerStockOverrides: true },
+      });
 
-    const newOffers = await rollMiauvadaoOffers(
-      config.vaultBalance,
-      0,
-      stockOverridesFromJson(config.offerStockOverrides),
-    );
-    if (newOffers.length === 0) return null;
+      const newOffers = await rollMiauvadaoOffers(
+        config.vaultBalance,
+        0,
+        stockOverridesFromJson(config.offerStockOverrides),
+      );
+      if (newOffers.length === 0) return false;
 
-    // Retorna o resultado do update diretamente — sem precisar re-buscar pelo cache
-    // Compare-and-swap: apenas a primeira requisição do ciclo publica o sorteio.
-    // As demais recebem exatamente o conjunto vencedor, sem vitrine divergente.
-    await prisma.miauvadaoConfig.updateMany({
-      where: {
-        id: "singleton",
-        OR: [{ offersRefreshedAt: null }, { offersRefreshedAt: { lt: rotation.start } }],
-      },
-      data: {
-        dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
-        offersRefreshedAt: rotation.start,
-        slotRefreshUsedCycle: null,
-      },
-    });
+      // Compare-and-swap mantido como segunda barreira contra vitrine divergente.
+      await tx.miauvadaoConfig.updateMany({
+        where: {
+          id: "singleton",
+          OR: [{ offersRefreshedAt: null }, { offersRefreshedAt: { lt: rotation.start } }],
+        },
+        data: {
+          dailyOffers: newOffers as unknown as import("@prisma/client").Prisma.InputJsonValue,
+          offersRefreshedAt: rotation.start,
+          slotRefreshUsedCycle: null,
+        },
+      });
+      return true;
+    }, { maxWait: 10_000, timeout: 30_000 });
+
+    if (!won) {
+      // Outra requisição está sorteando: espera a publicação com leituras leves
+      // (sem lock, sem segurar conexão entre tentativas), até ~4s.
+      for (let attempt = 0; attempt < 20; attempt++) {
+        const published = await prisma.miauvadaoConfig.findUnique({ where: { id: "singleton" }, select: { offersRefreshedAt: true } });
+        if (published?.offersRefreshedAt && published.offersRefreshedAt >= rotation.start) break;
+        await new Promise((resolve) => setTimeout(resolve, 200));
+      }
+      return null;
+    }
+
     const freshConfig = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
     try {
       revalidateTag("miauvadao-config");
@@ -846,7 +868,7 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
 
     // Buscar config do Miauvadão (taxa)
     const config = await getMiauvadaoConfig();
-    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+    const economy = await getEconomySettings();
     const premium = Boolean(input.premium);
     const feeCurrency: "ZC" | "LC" = premium ? "ZC" : (input.listingFeeCurrency ?? "ZC");
     if (feeCurrency === "LC" && !economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
@@ -1261,7 +1283,7 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
     const price = currency === "LC" ? listing.priceLigaCash : listing.priceCoins;
     if (!price) return { error: `Este anúncio não aceita pagamento em ${currency}.` };
     if (listing.listingType === "TRADE") return { error: "Este anúncio é somente troca. Envie uma proposta." };
-    const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+    const economy = await getEconomySettings();
     if (currency === "LC" && !economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
 
     const wallet = currency === "LC"
@@ -1484,7 +1506,7 @@ export async function updateDirectNegotiationOffer(input: {
     if (loan && coins < 1) return { error: "Informe o valor do empréstimo." };
     if (loan && ligaCash > 0) return { error: "Empréstimos são apenas em ZC; remova a LigaCash da oferta." };
     if (ligaCash > 0) {
-      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings();
       if (!economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
     }
     const cleanItems = (input.items ?? []).map((item) => ({ ...item, quantity: item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1)) }));
@@ -1807,7 +1829,7 @@ export async function createProposal(
       }
     }
     if (reservedLigaCash > 0) {
-      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings();
       if (!economy.allowLcBazar) return { error: "LigaCash está desativada no Bazar." };
       const mixesAssets = reservedCoins > 0 || (itemsOffer?.length ?? 0) > 0;
       if (mixesAssets && !economy.allowMixedProposals) return { error: "Propostas combinando LigaCash com outros ativos estão desativadas." };
@@ -2483,6 +2505,9 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
       // SERIALIZABLE global: sob a rajada pós-reset, o SERIALIZABLE gerava falhas
       // de serialização + transações longas que esgotavam o pool e travavam o
       // site inteiro. O lock garante o controle de estoque sem esse custo.
+      // Falha rápido no pico em vez de empilhar compradores segurando conexões
+      // (o que esgotava o pool e congelava o site inteiro no reset).
+      await tx.$executeRaw`SET LOCAL lock_timeout = '4s'`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const now = new Date();
       // Lê só o necessário — a linha inteira tem ~270 kB (playerRefreshData).
@@ -2493,7 +2518,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
       if (offer.sold >= offer.stock) throw new Error("Estoque esgotado.");
       if (now > new Date(offer.validUntil)) throw new Error("Oferta expirada.");
       // Preço em LC na mesma proporção da ZikaShop (definida na economia central).
-      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings(tx);
       if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
       const priceLc = suggestedLigaCashPrice(offer.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
       const price = currency === "LC" ? priceLc : offer.finalPrice;
@@ -2585,7 +2610,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
     after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: offerIndex, amount: result.price }));
     return result;
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "Erro ao comprar." };
+    return { error: miauvadaoPurchaseError(err, "Erro ao comprar.") };
   }
 }
 
@@ -2640,6 +2665,9 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
     const rotation = getMiauvadaoRotation();
     const rotationIso = rotation.start.toISOString();
     const result = await prisma.$transaction(async (tx) => {
+      // Falha rápido no pico em vez de empilhar compradores segurando conexões
+      // (o que esgotava o pool e congelava o site inteiro no reset).
+      await tx.$executeRaw`SET LOCAL lock_timeout = '4s'`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const now = new Date();
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true, purchaseRechargeMinutes: true } });
@@ -2654,7 +2682,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
       if (!reb) throw new Error("Oferta de Rebote indisponível.");
       if (reb.alreadyBought) throw new Error("Você já comprou o Rebote deste item (só há 1 cópia por jogador).");
 
-      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings(tx);
       if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
       const priceLc = suggestedLigaCashPrice(reb.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
       const price = currency === "LC" ? priceLc : reb.finalPrice;
@@ -2699,7 +2727,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
     revalidatePath("/bazar");
     return result;
   } catch (err) {
-    return { error: err instanceof Error ? err.message : "Erro ao comprar o Rebote." };
+    return { error: miauvadaoPurchaseError(err, "Erro ao comprar o Rebote.") };
   }
 }
 
@@ -2852,6 +2880,9 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
     if (!prepared) return { error: "Você não tem oferta pessoal disponível agora." };
     let soldAfter = 0;
     await prisma.$transaction(async (tx) => {
+      // Falha rápido no pico em vez de empilhar compradores segurando conexões
+      // (o que esgotava o pool e congelava o site inteiro no reset).
+      await tx.$executeRaw`SET LOCAL lock_timeout = '4s'`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
       const offer = _storedPersonalOffer(config.playerRefreshData, player.id, rotationIso);
@@ -2860,7 +2891,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
       const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
       const already = _personalSoldCount(prd, player.id, rotationIso);
       if (already >= PERSONAL_SLOT_STOCK) throw new Error("Você já esgotou sua oferta pessoal desta rotação.");
-      const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings(tx);
       if (currency === "LC" && !economy.allowLcShop) throw new Error("Pagamentos em LigaCash estão desativados no momento.");
       const priceLc = suggestedLigaCashPrice(offer.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference);
       const price = currency === "LC" ? priceLc : offer.finalPrice;
@@ -2919,7 +2950,14 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
     revalidatePath("/bazar");
     after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: 3 }));
     return { sold: soldAfter };
-  } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao comprar." }; }
+  } catch (err) { return { error: miauvadaoPurchaseError(err, "Erro ao comprar.") }; }
+}
+
+/** Traduz o timeout do lock (pico de compradores) numa mensagem clara. */
+function miauvadaoPurchaseError(err: unknown, fallback: string) {
+  const message = err instanceof Error ? err.message : "";
+  if (/lock timeout|55P03/i.test(message)) return "Muita gente comprando no Miauvadão agora — tente de novo em alguns segundos.";
+  return message || fallback;
 }
 
 // Admin: definir ofertas do dia
@@ -4011,7 +4049,7 @@ export async function createAuctionListing(input: CreateAuctionInput): Promise<{
     if (!input.minBidCoins || input.minBidCoins < 1) return { error: "Lance mínimo inválido." };
     const auctionCurrency: "ZC" | "LC" = input.currency === "LC" ? "LC" : "ZC";
     if (auctionCurrency === "LC") {
-      const economy = await prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+      const economy = await getEconomySettings();
       if (!economy.allowLcAuctions) return { error: "Leilões em LigaCash estão desativados." };
     }
 

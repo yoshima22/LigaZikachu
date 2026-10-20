@@ -1,4 +1,5 @@
 import { requireAdmin } from "@/lib/auth/permissions";
+import { getEconomySettings } from "@/lib/economy-settings";
 import { prisma } from "@/lib/prisma";
 import Link from "next/link";
 import { ChevronRight } from "lucide-react";
@@ -26,7 +27,7 @@ export default async function ShopAdminPage() {
         items: { include: { item: { select: { id: true, name: true } } }, orderBy: { item: { name: "asc" } } },
       },
     }),
-    prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}}),
+    getEconomySettings(),
   ]);
 
   return (

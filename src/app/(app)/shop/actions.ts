@@ -1,5 +1,6 @@
 "use server";
 
+import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag } from "next/cache";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
@@ -570,7 +571,7 @@ export async function purchaseItem(
     const effectiveUnitPrice = priceIncreasePct > 0
       ? Math.max(1, Math.ceil(promotionPrice.price * (1 + priceIncreasePct / 100)))
       : promotionPrice.price;
-    const economy=await prisma.economySettings.upsert({where:{id:"singleton"},create:{id:"singleton"},update:{}});
+    const economy=await getEconomySettings();
     const {suggestedLigaCashPrice}=await import("@/lib/liga-cash-wallet");
     const effectiveLigaCashPrice=item.ligaCashPrice??suggestedLigaCashPrice(effectiveUnitPrice,economy.shopLcValueMultiplier,economy.zcPerLcReference);
     const selectedUnitPrice=currency==="LC"?effectiveLigaCashPrice:effectiveUnitPrice;

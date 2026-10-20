@@ -1,5 +1,6 @@
 "use server";
 
+import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
@@ -447,7 +448,7 @@ export async function claimPassDay(passId: string, dayNumber: number, stoneItemI
         .filter((item) => item.type === "LIGA_CASH")
         .reduce((total, item) => total + Math.max(0, Math.floor(item.ligaCash ?? item.coins ?? 0)), 0);
       if (passLigaCash > 0) {
-        const economy = await tx.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} });
+        const economy = await getEconomySettings(tx);
         if (economy.allowLcPassRewards) {
           await changeLigaCash(tx, {
             playerId: player.id,

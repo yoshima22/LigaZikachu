@@ -1,4 +1,5 @@
 import { Suspense } from "react";
+import { getEconomySettings } from "@/lib/economy-settings";
 import Link from "next/link";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { getOrCreateWallet } from "@/lib/zikacoins";
@@ -59,7 +60,7 @@ export default async function BazarPage({
   ]) : [null, []];
   const [ligaWallet, economy] = playerId ? await Promise.all([
     prisma.ligaCoinWallet.findUnique({ where: { playerId } }),
-    prisma.economySettings.upsert({ where: { id: "singleton" }, create: { id: "singleton" }, update: {} }),
+    getEconomySettings(),
   ]) : [null, null];
   const fusionEggs: MiauvadaoFusionEgg[] = fusionEggRows.map((egg) => ({
     id: egg.id,
