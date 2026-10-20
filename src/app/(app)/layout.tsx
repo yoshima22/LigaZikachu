@@ -146,9 +146,95 @@ export default async function AppLayout({
 
   const admin = isStaff(user.role);
   const isPlatformAdmin = isAdmin(user.role);
-  const towerAccessSetting = !isPlatformAdmin
-    ? await prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }).catch(() => null)
-    : null;
+
+  // Lote 1 — tudo que depende só do usuário roda em paralelo. Antes eram ~12
+  // etapas SEQUENCIAIS de banco a cada carregamento/router.refresh(); agora são
+  // 2 lotes. Mesmas consultas, mesmos fallbacks de erro.
+  const [
+    towerAccessSetting,
+    birthdayPlayer,
+    ackNotice,
+    navData,
+    orderIntro,
+    johtoRaidVisible,
+    pendingOrderReward,
+    globalNotice,
+    livePvpConfig,
+    zikaTvLive,
+  ] = await Promise.all([
+    !isPlatformAdmin
+      ? prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }).catch(() => null)
+      : Promise.resolve(null),
+    // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
+    prisma.player.findUnique({
+      where: { userId: user.id },
+      select: {
+        id: true,
+        birthDate: true,
+        birthdayGiftYear: true,
+        birthdayGiftPendingKit: true,
+        birthdayGiftReplayKit: true,
+        lastAckedNoticeVersion: true,
+      },
+    }).catch(() => null),
+    // Aviso com confirmação: aparece se houver aviso ativo com versão maior que a
+    // última confirmada por este jogador.
+    getAckNotice().catch(() => null),
+    getNavData(user.id).catch((error) => {
+      console.error("[Layout] nav data failed", { userId: user.id, error });
+      return {
+        player: null,
+        giftCount: 0,
+        wallet: null,
+        ligaWallet: null,
+        unreadNews: 0,
+      };
+    }),
+    prisma.raidEvent
+      .findUnique({
+        where: { slug: ORDER_EVENT_SLUG },
+        select: {
+          active: true,
+          phase: true,
+          notifications: {
+            where: { userId: user.id, notificationType: "ORDER_INTRO" },
+            select: { seenAt: true },
+            take: 1,
+          },
+        },
+      })
+      .catch(() => null),
+    // Raid de Johto: oculta dos jogadores até o admin liberar no painel.
+    isPlatformAdmin ? Promise.resolve(true) : isJohtoRaidVisibleToPlayers(),
+    prisma.userRaidNotification
+      .findFirst({
+        where: {
+          userId: user.id,
+          seenAt: null,
+          notificationType: {
+            in: [
+              "ORDER_REWARD_ZIKALOOT",
+              "ORDER_REWARD_BAZAR",
+              "ORDER_REWARD_LAB",
+              "ORDER_REWARD_LEAGUE",
+              "ORDER_REWARD_MASCOTS",
+              "RAID_DEFEATED",
+            ],
+          },
+        },
+        select: { id: true, notificationType: true },
+        orderBy: { createdAt: "asc" },
+      })
+      .catch(() => null),
+    getGlobalNotice(),
+    getLivePvpAccessConfig().catch(() => ({
+      enabledGlobally: false,
+      allowedPlayerIds: [],
+      biomeImages: {},
+    })),
+    getZikaTvLiveStatus().catch(() => false),
+  ]);
+
   const towerTesterIds = Array.isArray(towerAccessSetting?.value)
     ? towerAccessSetting.value.filter((id): id is string => typeof id === "string")
     : [];
@@ -157,27 +243,10 @@ export default async function AppLayout({
   // protegidas por requireTowerAdmin no servidor.
   const platformAdmin = isPlatformAdmin || towerTesterIds.includes(user.id);
 
-  // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
-  const birthdayPlayer = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: {
-      id: true,
-      birthDate: true,
-      birthdayGiftYear: true,
-      birthdayGiftPendingKit: true,
-      birthdayGiftReplayKit: true,
-      lastAckedNoticeVersion: true,
-    },
-  }).catch(() => null);
-
-  // Aviso com confirmação: aparece se houver aviso ativo com versão maior que a
-  // última confirmada por este jogador.
-  const ackNotice = await getAckNotice().catch(() => null);
   const showAckNotice = Boolean(
     ackNotice?.active && ackNotice.title.trim() &&
     ackNotice.version > (birthdayPlayer?.lastAckedNoticeVersion ?? 0),
   );
-  const giftPopup = !showAckNotice && birthdayPlayer?.id ? await getGiftPopup(birthdayPlayer.id).catch(() => null) : null;
   const birthdayPendingKit = birthdayPlayer?.birthdayGiftPendingKit ?? null;
   const birthdayReplayKit = birthdayPlayer?.birthdayGiftReplayKit ?? null;
   const birthdayEligible = Boolean(birthdayPlayer) && (
@@ -185,58 +254,11 @@ export default async function AppLayout({
     Boolean(birthdayPendingKit) ||
     Boolean(birthdayReplayKit)
   );
-
-  const navData = await getNavData(user.id).catch((error) => {
-    console.error("[Layout] nav data failed", { userId: user.id, error });
-    return {
-      player: null,
-      giftCount: 0,
-      wallet: null,
-      ligaWallet: null,
-      unreadNews: 0,
-    };
-  });
-  const [globalNotice, tickerEvents, livePvpConfig, notificationSnapshot, zikaTvLive] = await Promise.all([
-    getGlobalNotice(),
-    navData.player
-      ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
-      : Promise.resolve([]),
-    getLivePvpAccessConfig().catch(() => ({
-      enabledGlobally: false,
-      allowedPlayerIds: [],
-      biomeImages: {},
-    })),
-    navData.player
-      ? getNavNotificationSnapshot(navData.player.id).catch(() => ({
-          messageCount: 0,
-          bazarCount: 0,
-          bondsCount: 0,
-          messageAlerts: [],
-          bazarAlerts: [],
-          bondsAlerts: [],
-        }))
-      : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [] }),
-    getZikaTvLiveStatus().catch(() => false),
-  ]);
   const livePvpVisible = canAccessLivePvp(
     livePvpConfig,
     navData.player?.id,
     admin,
   );
-  const orderIntro = await prisma.raidEvent
-    .findUnique({
-      where: { slug: ORDER_EVENT_SLUG },
-      select: {
-        active: true,
-        phase: true,
-        notifications: {
-          where: { userId: user.id, notificationType: "ORDER_INTRO" },
-          select: { seenAt: true },
-          take: 1,
-        },
-      },
-    })
-    .catch(() => null);
   const shouldShowOrderIntro = Boolean(
     orderIntro?.active &&
     orderIntro.phase === "INVESTIGATION" &&
@@ -247,39 +269,34 @@ export default async function AppLayout({
     orderIntro.phase !== "ENDED" &&
     (orderIntro.active || orderIntro.phase === "RAID_DEFEATED"),
   );
-  // Raid de Johto: oculta dos jogadores até o admin liberar no painel.
-  const johtoRaidVisible = isPlatformAdmin || await isJohtoRaidVisibleToPlayers();
-  const pendingOrderReward = await prisma.userRaidNotification
-    .findFirst({
-      where: {
-        userId: user.id,
-        seenAt: null,
-        notificationType: {
-          in: [
-            "ORDER_REWARD_ZIKALOOT",
-            "ORDER_REWARD_BAZAR",
-            "ORDER_REWARD_LAB",
-            "ORDER_REWARD_LEAGUE",
-            "ORDER_REWARD_MASCOTS",
-            "RAID_DEFEATED",
-          ],
-        },
-      },
-      select: { id: true, notificationType: true },
-      orderBy: { createdAt: "asc" },
-    })
-    .catch(() => null);
   const { player, giftCount, wallet, ligaWallet, unreadNews } = navData;
-  const johtoInvitation = !isPlatformAdmin && player?.id
-    ? await getJohtoInvitationForPlayer(player.id).catch((error) => {
-        console.error("[Layout] Johto invitation unavailable", { playerId: player.id, error });
-        return null;
-      })
-    : null;
 
-  const occurrenceNotices = player?.id
-    ? await getOccurrenceNoticesForPlayer(player.id).catch(() => [])
-    : [];
+  // Lote 2 — dependem do player/aviso do lote 1, também em paralelo.
+  const [giftPopup, tickerEvents, notificationSnapshot, johtoInvitation, occurrenceNotices] = await Promise.all([
+    !showAckNotice && birthdayPlayer?.id ? getGiftPopup(birthdayPlayer.id).catch(() => null) : Promise.resolve(null),
+    navData.player
+      ? getPendingLeagueTickerEvents(navData.player.id).catch(() => [])
+      : Promise.resolve([]),
+    navData.player
+      ? getNavNotificationSnapshot(navData.player.id).catch(() => ({
+          messageCount: 0,
+          bazarCount: 0,
+          bondsCount: 0,
+          messageAlerts: [],
+          bazarAlerts: [],
+          bondsAlerts: [],
+        }))
+      : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [] }),
+    !isPlatformAdmin && player?.id
+      ? getJohtoInvitationForPlayer(player.id).catch((error) => {
+          console.error("[Layout] Johto invitation unavailable", { playerId: player.id, error });
+          return null;
+        })
+      : Promise.resolve(null),
+    player?.id
+      ? getOccurrenceNoticesForPlayer(player.id).catch(() => [])
+      : Promise.resolve([]),
+  ]);
 
   return (
     <>
