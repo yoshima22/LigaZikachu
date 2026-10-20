@@ -2,6 +2,7 @@ import { createHash, timingSafeEqual } from "crypto";
 import { NextResponse } from "next/server";
 import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { announceZikaTvChange } from "@/lib/spec/live-signal";
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { specLiveTickerMessage } from "@/lib/spec/announce";
@@ -84,6 +85,7 @@ export async function POST(request: Request) {
           href: `/spec/${stream.id}`, eventKey: `spec-live-${stream.id}`, priority: 5, ttlHours: 3,
         });
       } catch (error) { console.error("[WindowsTransmitter] Falha no anúncio da live", error); }
+      await announceZikaTvChange(streamId);
     }
     return NextResponse.json({ ok: true });
   }
@@ -110,7 +112,10 @@ export async function POST(request: Request) {
   }
 
   if (body.action === "end") {
-    if (!['ENDED', 'FAILED'].includes(stream.status)) await prisma.specStream.update({ where: { id: streamId }, data: { status: "ENDED", endedAt: new Date() } });
+    if (!['ENDED', 'FAILED'].includes(stream.status)) {
+      await prisma.specStream.update({ where: { id: streamId }, data: { status: "ENDED", endedAt: new Date() } });
+      await announceZikaTvChange(streamId);
+    }
     await prisma.specSpectator.deleteMany({ where: { streamId } }).catch(() => null);
     return NextResponse.json({ ok: true });
   }

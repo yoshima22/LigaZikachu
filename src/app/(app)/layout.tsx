@@ -7,6 +7,7 @@ import { signOut } from "@/auth";
 import { getAppSession } from "@/lib/session";
 import { isStaff, isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { ZIKA_TV_LIVE_TAG } from "@/lib/spec/live-signal";
 import {
   getManualSessionUser,
   MANUAL_SESSION_COOKIE,
@@ -134,7 +135,7 @@ const getZikaTvLiveStatus = unstable_cache(
     select: { id: true },
   })),
   ["zika-tv-live-nav-v1"],
-  { revalidate: 20 },
+  { revalidate: 20, tags: [ZIKA_TV_LIVE_TAG] },
 );
 
 export default async function AppLayout({

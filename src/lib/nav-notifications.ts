@@ -3,6 +3,7 @@ import "server-only";
 import type { Prisma, PrismaClient } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { dbCategoryToNotif, isInGameAllowed, type NotifCategory } from "@/lib/notification-preferences";
+import { signalRealtime } from "@/lib/realtime-signal";
 
 export type NavAlert = {
   id: string;
@@ -42,6 +43,8 @@ export async function createPlayerNotification(
   // Respeita a preferência in-game do jogador para esta categoria.
   const player = await db.player.findUnique({ where: { id: input.playerId }, select: { notificationSettings: true } }).catch(() => null);
   if (player && !isInGameAllowed(player.notificationSettings, dbCategoryToNotif(input.category))) return null;
+  // Enviado depois da resposta (after), então uma transação em curso já terá commitado.
+  signalRealtime(`player:${input.playerId}`, "nav");
   return db.playerNotification.upsert({
     where: { eventKey: input.eventKey ?? `notification:${crypto.randomUUID()}` },
     update: {},

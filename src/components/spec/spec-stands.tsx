@@ -8,6 +8,7 @@ import {
   sendSpecChatMessageAction,
 } from "@/app/(app)/spec/stands-actions";
 import type { StandsState } from "@/app/(app)/spec/stands-actions";
+import { useRealtimeSignal } from "@/hooks/use-realtime-signal";
 
 type Stands = StandsState;
 
@@ -58,12 +59,18 @@ export function SpecStands({ streamId, sendPresence }: { streamId: string; sendP
     };
   }, [streamId, sendPresence]);
 
+  // Chat, enquete e saídas chegam na hora pelo sinal em tempo real.
+  useRealtimeSignal(`spec:${streamId}`, (event) => {
+    if (event === "stands" && document.visibilityState === "visible") void refresh();
+  });
+
   // Atualiza arquibancada, enquete e chat em um único snapshot. Abas ocultas não
-  // consomem egress; ao voltar, sincronizam imediatamente.
+  // consomem egress; ao voltar, sincronizam imediatamente. O ciclo periódico
+  // cobre entradas na arquibancada e uma eventual queda do WebSocket.
   useEffect(() => {
     void refresh();
     const tick = () => { if (document.visibilityState === "visible") void refresh(); };
-    const timer = window.setInterval(tick, 8_000);
+    const timer = window.setInterval(tick, 15_000);
     const onVisible = () => { if (document.visibilityState === "visible") void refresh(); };
     document.addEventListener("visibilitychange", onVisible);
     return () => {

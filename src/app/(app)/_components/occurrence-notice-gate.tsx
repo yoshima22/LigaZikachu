@@ -17,8 +17,12 @@ export function OccurrenceNoticeGate({ initialNotices }: { initialNotices: Occur
   const [busy, setBusy] = useState(false);
 
   // Também aparece para quem está online quando a ocorrência começa ou o mascote volta.
+  // Abas em segundo plano não consultam; ao voltar, checa na hora se já passou 1 ciclo.
   useEffect(() => {
-    const timer = setInterval(async () => {
+    let lastAt = Date.now();
+    const check = async () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastAt < POLL_MS - 1_000) return;
+      lastAt = Date.now();
       const fresh = await fetchOccurrenceNoticesAction().catch(() => null);
       if (!fresh) return;
       setQueue((prev) => {
@@ -26,8 +30,13 @@ export function OccurrenceNoticeGate({ initialNotices }: { initialNotices: Occur
         const added = fresh.filter((n) => !known.has(`${n.id}:${n.kind}`));
         return added.length ? [...prev, ...added] : prev;
       });
-    }, POLL_MS);
-    return () => clearInterval(timer);
+    };
+    const timer = setInterval(check, POLL_MS);
+    document.addEventListener("visibilitychange", check);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", check);
+    };
   }, []);
 
   const notice = queue[0];

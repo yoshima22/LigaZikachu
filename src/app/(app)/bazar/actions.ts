@@ -40,6 +40,7 @@ import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { createPlayerNotification } from "@/lib/nav-notifications";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
+import { signalRealtime } from "@/lib/realtime-signal";
 import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
 import { trackGachaObjective } from "@/lib/gacha";
 import { withMascotHealth } from "@/lib/bazar-mascot-health";
@@ -412,6 +413,8 @@ export async function autoRefreshMiauvadaoIfNeeded(options?: {
       // transformar uma escrita bem-sucedida em falso negativo para o cron.
       console.warn("[Miauvadao] Rotacao concluida, mas o cache nao foi invalidado.", cacheError);
     }
+    // Vitrine nova publicada: quem está com o bazar aberto recarrega (com atraso aleatório no cliente).
+    signalRealtime("bazar", "miauvadao");
     return { freshConfig };
   } catch (error) {
     console.error("[Miauvadao] Falha ao executar rotacao automatica.", error);
@@ -2607,6 +2610,8 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
+    // Estoque mudou para todo mundo que está com o bazar aberto.
+    signalRealtime("bazar", "miauvadao");
     after(() => trackGachaObjective(player.id, "MIAUVADAO_COMPRA_SLOT", 1, { miauvadaoSlot: offerIndex, amount: result.price }));
     return result;
   } catch (err) {
@@ -3100,6 +3105,7 @@ export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ e
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
+    signalRealtime("bazar", "miauvadao");
     return result;
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
@@ -3139,6 +3145,7 @@ export async function adminRefreshMiauvadaoShopNow(): Promise<{ error?: string }
 
     revalidateTag("miauvadao-config");
     revalidatePath("/bazar");
+    signalRealtime("bazar", "miauvadao");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro." };
@@ -4197,6 +4204,7 @@ async function _sendBazarSystemDM(receiverId: string, content: string): Promise<
     const admin = await prisma.player.findFirst({ where: { user: { role: { in: ["ADMIN", "SUPER_ADMIN"] } } }, select: { id: true } });
     if (!admin || admin.id === receiverId) return;
     await prisma.directMessage.create({ data: { senderId: admin.id, receiverId, content } });
+    signalRealtime(`player:${receiverId}`, "dm", { from: admin.id });
   } catch { /* silencioso */ }
 }
 

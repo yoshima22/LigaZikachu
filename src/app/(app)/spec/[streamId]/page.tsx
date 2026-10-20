@@ -8,6 +8,7 @@ import { SpecPlayerP2P } from "@/components/spec/spec-player-p2p";
 import { SpecStands } from "@/components/spec/spec-stands";
 import { SpecMiniPlayerActivator } from "@/components/spec/spec-mini-player";
 import { SpecYoutubePlayer } from "@/components/spec/spec-youtube-player";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 
 export const dynamic = "force-dynamic";
 
@@ -55,6 +56,8 @@ export default async function SpecWatchPage({ params }: { params: Promise<{ stre
 
   return (
     <main className="mx-auto max-w-3xl space-y-4 px-1 py-3">
+      {/* Live começou (estava preparando) ou terminou: atualiza na hora para quem assiste. */}
+      <RealtimeRefresh topic="zikatv" event="live" match={{ streamId: stream.id }} />
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0">
           <p className="text-[10px] font-black uppercase tracking-widest text-red-400">{isLive ? "🔴 Ao vivo · Zika TV" : "Zika TV"}</p>

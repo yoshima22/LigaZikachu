@@ -9,6 +9,7 @@ import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot
 import { sendNotificationToUser } from "@/lib/notifications";
 import { after } from "next/server";
 import { isDirectMessageBlocked } from "@/lib/dm-block";
+import { signalRealtime } from "@/lib/realtime-signal";
 
 async function requirePlayer(returnTo?: string) {
   const user = await getSessionUser();
@@ -169,6 +170,7 @@ export async function sendMessageAction(
 
   const [message] = await hydrateItemAttachments([msg]);
   revalidateTag(`nav-${receiver.userId}`);
+  signalRealtime(`player:${receiverId}`, "dm", { from: me.id });
   after(() => sendNotificationToUser(receiver.userId, {
       title: `Nova mensagem de ${me.displayName}`,
       body: trimmed || (attachment?.type === "MASCOT" ? "Enviou um mascote." : "Enviou um item."),
@@ -243,6 +245,7 @@ export async function sendGeneralMessageAction(content: string, attachment?: Att
     });
 
     const [message] = await hydrateItemAttachments([msg]);
+    signalRealtime("chat:general", "msg", { from: me.id });
     return { ok: true as const, message: { ...message, sender: { displayName: me.displayName, avatarUrl: null } } };
   } catch {
     return { ok: false as const, error: "Chat geral ainda nao esta disponivel. Aplique o schema do banco e tente novamente." };

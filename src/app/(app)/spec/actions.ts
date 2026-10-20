@@ -11,6 +11,7 @@ import { SPEC_MAX_STREAM_MINUTES, SPEC_MAX_CONCURRENT_STREAMS, parseYouTubeVideo
 import { enrichSpecStreams } from "@/lib/spec/data";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { specLiveTickerMessage } from "@/lib/spec/announce";
+import { announceZikaTvChange } from "@/lib/spec/live-signal";
 
 type ActionError = { error: string };
 
@@ -23,7 +24,7 @@ async function expireStaleStreams() {
   // Abas em segundo plano podem ter timers reduzidos pelo navegador. Três
   // minutos evitam falso encerramento sem deixar uma live travada para sempre.
   const heartbeatCutoff = new Date(Date.now() - 3 * 60_000);
-  await prisma.specStream.updateMany({
+  const expired = await prisma.specStream.updateMany({
     where: {
       status: { in: ["PREPARING", "LIVE"] },
       OR: [
@@ -33,6 +34,7 @@ async function expireStaleStreams() {
     },
     data: { status: "ENDED", endedAt: new Date() },
   }).catch(() => null);
+  if (expired?.count) await announceZikaTvChange(null);
 }
 
 /** Lives ao vivo agora (para a listagem do Modo SPEC). */
@@ -200,6 +202,7 @@ export async function markSpecStreamLiveAction(streamId: string): Promise<Action
     }
   } catch (e) { console.error("[spec] falha ao anunciar no ticker (p2p)", e); }
   revalidatePath("/spec");
+  if (stream.status !== "LIVE") await announceZikaTvChange(streamId);
   return { ok: true };
 }
 
@@ -239,6 +242,7 @@ export async function setSpecStreamYouTubeAction(streamId: string, urlOrId: stri
         });
       }
     } catch (e) { console.error("[spec] falha ao anunciar no ticker (youtube)", e); }
+    await announceZikaTvChange(streamId);
   }
   revalidatePath("/spec");
   return { ok: true };
@@ -248,10 +252,11 @@ export async function setSpecStreamYouTubeAction(streamId: string, urlOrId: stri
 export async function reportSpecYoutubeEndedAction(streamId: string, videoId: string): Promise<{ ok: true }> {
   const session = await getAppSession();
   if (!session?.user?.id) return { ok: true };
-  await prisma.specStream.updateMany({
+  const ended = await prisma.specStream.updateMany({
     where: { id: streamId, provider: "youtube", youtubeVideoId: videoId, status: "LIVE" },
     data: { status: "ENDED", endedAt: new Date(), lastSeenAt: new Date() },
   }).catch(() => null);
+  if (ended?.count) await announceZikaTvChange(streamId);
   revalidatePath("/spec");
   revalidatePath(`/spec/${streamId}`);
   return { ok: true };
@@ -284,5 +289,6 @@ export async function endSpecStreamAction(streamId: string): Promise<ActionError
   await prisma.specSpectator.deleteMany({ where: { streamId } }).catch(() => null);
   await prisma.specChatMessage.deleteMany({ where: { streamId } }).catch(() => null);
   revalidatePath("/spec");
+  await announceZikaTvChange(streamId);
   return { ok: true };
 }

@@ -8,7 +8,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { createClient } from "@supabase/supabase-js";
 import {
   resolveArenaDraftBattleAction,
   advanceArenaDraftTimeoutAction,
@@ -254,35 +253,9 @@ export function DraftRoomClient({
   // Poll leve estilo Batalha de Terreno: recarrega só quando a versão muda.
   useEffect(() => {
     if (["FINISHED", "CANCELLED"].includes(state)) return;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL,
-      key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    let cleanup = () => {};
-    if (url && key) {
-      const supabase = createClient(url, key, {
-        auth: { persistSession: false, autoRefreshToken: false },
-        realtime: { params: { eventsPerSecond: 2 } },
-      });
-      const channel = supabase
-        .channel(`arena-draft-${matchId}`)
-        .on(
-          "postgres_changes",
-          {
-            event: "INSERT",
-            schema: "public",
-            table: "arena_draft_actions",
-            filter: `matchId=eq.${matchId}`,
-          },
-          () => {
-            if (document.visibilityState === "visible") router.refresh();
-          },
-        )
-        .subscribe((status) =>
-          setConnection(status === "SUBSCRIBED" ? "live" : "connecting"),
-        );
-      cleanup = () => {
-        void supabase.removeChannel(channel);
-      };
-    } else setConnection("fallback");
+    // A sala é sincronizada pelo ciclo de 1s abaixo (stateVersion). A antiga
+    // escuta postgres_changes nunca entregava eventos (publicação vazia) e só
+    // mantinha um WebSocket aberto à toa.
     let lastVersion = stateVersion;
     let busy = false;
     let ticks = 0;
@@ -293,6 +266,7 @@ export function DraftRoomClient({
         // Prioridade: detectar a mudança de estado o mais rápido possível.
         // Essa consulta é leve (só stateVersion/state/deadline).
         const sync = await getDraftSyncStateAction(matchId);
+        setConnection(sync.stateVersion >= 0 ? "live" : "fallback");
         if (
           sync.deadlinePassed &&
           ["TEAM_REVEAL", "BAN_PHASE", "PICK_PHASE", "STRATEGY_WINDOW"].includes(
@@ -334,7 +308,6 @@ export function DraftRoomClient({
     return () => {
       window.clearInterval(poll);
       document.removeEventListener("visibilitychange", onVisible);
-      cleanup();
     };
   }, [matchId, router, state, stateVersion]);
   // Bans e picks entram no servidor um alvo por vez (ordem A B B A A B B A A B

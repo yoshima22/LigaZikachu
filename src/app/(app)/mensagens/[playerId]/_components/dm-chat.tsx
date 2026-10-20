@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { useRealtimeSignal } from "@/hooks/use-realtime-signal";
 import { sendMessageAction, pollNewMessagesAction, setDirectMessageMuteAction, type AttachmentData } from "../../actions";
 import { ArrowLeft, Paperclip, Send, User, VolumeX, Volume2, X } from "lucide-react";
 import { toast } from "sonner";
@@ -102,7 +102,6 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack, mu
   const [attachment, setAttachment] = useState<AttachmentData | null>(null);
   const [isMuted, setIsMuted] = useState(muted);
   const bottomRef = useRef<HTMLDivElement>(null);
-  const realtimeReadyRef = useRef(false);
 
   useEffect(() => {
     window.dispatchEvent(new CustomEvent("nav-alert-viewed", {
@@ -126,62 +125,20 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack, mu
     });
   };
 
-  // Realtime: postgres_changes com filtro receiver_id para entrega imediata
-  useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
+  // Entrega imediata: o servidor sinaliza "dm" no tópico do destinatário e esta
+  // conversa busca as mensagens novas pela action autenticada.
+  const pollRef = useRef<() => Promise<void>>(async () => {});
+  useRealtimeSignal(`player:${me.id}`, (event, payload) => {
+    if (event !== "dm" || payload.from !== other.id) return;
+    if (document.visibilityState === "visible") void pollRef.current();
+  });
 
-    const supabase = createClient(url, key, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      realtime: { params: { eventsPerSecond: 2 } },
-    });
-
-    const channel = supabase
-      .channel(`dm-inbox-${me.id}`)
-      .on(
-        "postgres_changes",
-        {
-          event: "INSERT",
-          schema: "public",
-          table: "direct_messages",
-          filter: `receiver_id=eq.${me.id}`,
-        },
-        (payload) => {
-          const row = payload.new as {
-            id: string; content: string; sender_id: string; receiver_id: string;
-            created_at: string; attachment_type: string | null; attachment_data: AttachmentData | null;
-          };
-          // só processa mensagens desta conversa
-          if (row.sender_id !== other.id) return;
-          addNewMessages([{
-            id: row.id,
-            content: row.content,
-            senderId: row.sender_id,
-            senderName: other.displayName,
-            senderAvatar: other.avatarUrl,
-            createdAt: row.created_at,
-            attachmentType: row.attachment_type,
-            attachmentData: row.attachment_data,
-          }]);
-        },
-      )
-      .subscribe((status) => {
-        realtimeReadyRef.current = status === "SUBSCRIBED";
-      });
-
-    return () => {
-      realtimeReadyRef.current = false;
-      void supabase.removeChannel(channel);
-    };
-  }, [me.id, other.id, other.displayName, other.avatarUrl]);
-
-  // Polling fallback: garante entrega mesmo se o WebSocket cair, mas sem
+  // Polling de segurança: garante entrega mesmo se o WebSocket cair, mas sem
   // martelar o banco quando a aba está em segundo plano.
   useEffect(() => {
     let disposed = false;
 
-    const poll = async () => {
+    const poll = pollRef.current = async () => {
       if (document.visibilityState !== "visible") return;
       const cur = messagesRef.current;
       const latest = cur[cur.length - 1];
@@ -202,9 +159,7 @@ export function DmChat({ me, other, initialMessages, compact = false, onBack, mu
     };
 
     const onVisible = () => { void poll(); };
-    const id = setInterval(() => {
-      if (!realtimeReadyRef.current) void poll();
-    }, DM_POLL_MS);
+    const id = setInterval(() => { void poll(); }, DM_POLL_MS);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
 

@@ -6,6 +6,10 @@ import { isStaff } from "@/lib/auth/permissions";
 import { getSpecConfig } from "@/lib/spec/config";
 import { recordSpectatorWatchAndCheck } from "@/lib/spec/usage";
 import { SPEC_PRESENCE_HEARTBEAT_SECONDS } from "@/lib/spec/constants";
+import { signalRealtime } from "@/lib/realtime-signal";
+
+// Chat, enquete e saída da arquibancada avisam quem está assistindo na hora.
+const signalStands = (streamId: string) => signalRealtime(`spec:${streamId}`, "stands");
 
 // Janela para considerar um espectador "online" na arquibancada (ms).
 const PRESENCE_WINDOW_MS = 60_000;
@@ -61,7 +65,8 @@ export async function heartbeatSpecPresenceAction(streamId: string): Promise<{ o
 export async function leaveSpecPresenceAction(streamId: string): Promise<void> {
   const session = await getAppSession();
   if (!session?.user?.id) return;
-  await prisma.specSpectator.deleteMany({ where: { streamId, userId: session.user.id } }).catch(() => null);
+  const left = await prisma.specSpectator.deleteMany({ where: { streamId, userId: session.user.id } }).catch(() => null);
+  if (left?.count) signalStands(streamId);
 }
 
 /** Estado da arquibancada + enquete ativa (para o watch e o painel do transmissor). */
@@ -166,6 +171,7 @@ export async function sendSpecChatMessageAction(streamId: string, rawMessage: st
   }
   try {
     await prisma.specChatMessage.create({ data: { streamId, userId: session.user.id, userName: session.user.name?.trim() || "Jogador", message } });
+    signalStands(streamId);
     return { ok: true };
   } catch (error) {
     console.error("[spec-chat] falha ao enviar mensagem", error);
@@ -198,6 +204,7 @@ export async function createSpecPollAction(
   await prisma.specPoll.create({
     data: { streamId, question: q, options: opts, createdByUserId: session.user.id },
   });
+  signalStands(streamId);
   return { ok: true };
 }
 
@@ -207,7 +214,7 @@ export async function voteSpecPollAction(pollId: string, optionIndex: number): P
   if (!session?.user?.id) return { ok: false, error: "Não autenticado." };
   const poll = await prisma.specPoll.findUnique({
     where: { id: pollId },
-    select: { status: true, options: true },
+    select: { status: true, options: true, streamId: true },
   }).catch(() => null);
   if (!poll || poll.status !== "OPEN") return { ok: false, error: "Enquete encerrada." };
   const optionCount = Array.isArray(poll.options) ? poll.options.length : 0;
@@ -218,6 +225,7 @@ export async function voteSpecPollAction(pollId: string, optionIndex: number): P
     create: { pollId, userId: session.user.id, optionIndex },
     update: { optionIndex },
   }).catch(() => null);
+  signalStands(poll.streamId);
   return { ok: true };
 }
 
@@ -235,5 +243,6 @@ export async function closeSpecPollAction(pollId: string): Promise<{ ok: boolean
   if (!canManage) return { ok: false, error: "Sem permissão." };
 
   await prisma.specPoll.update({ where: { id: pollId }, data: { status: "CLOSED", closedAt: new Date() } }).catch(() => null);
+  signalStands(poll.streamId);
   return { ok: true };
 }

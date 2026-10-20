@@ -2,9 +2,11 @@
 
 import { useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 
-// Botão de atualizar a lista da Zika TV (a página é server-rendered). Também
-// atualiza sozinho em ritmo econômico enquanto a aba está visível.
+// Botão de atualizar a lista da Zika TV (a página é server-rendered). Lives que
+// começam/terminam chegam na hora pelo sinal em tempo real; o refresh periódico
+// fica só como rede de segurança.
 export function SpecRefreshButton() {
   const router = useRouter();
   const [pending, start] = useTransition();
@@ -14,17 +16,20 @@ export function SpecRefreshButton() {
   useEffect(() => {
     const timer = setInterval(() => {
       if (document.visibilityState === "visible") start(() => router.refresh());
-    }, 45_000);
+    }, 120_000);
     return () => clearInterval(timer);
   }, [router]);
 
   return (
-    <button
-      onClick={refresh}
-      disabled={pending}
-      className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-50"
-    >
-      <span className={pending ? "animate-spin" : ""}>↻</span> {pending ? "Atualizando…" : "Atualizar"}
-    </button>
+    <>
+      <RealtimeRefresh topic="zikatv" event="live" />
+      <button
+        onClick={refresh}
+        disabled={pending}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-slate-900 px-3 py-1.5 text-xs font-semibold text-slate-300 hover:text-white disabled:opacity-50"
+      >
+        <span className={pending ? "animate-spin" : ""}>↻</span> {pending ? "Atualizando…" : "Atualizar"}
+      </button>
+    </>
   );
 }

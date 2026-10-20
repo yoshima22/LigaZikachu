@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, useTransition } from "react";
 import Link from "next/link";
-import { createClient } from "@supabase/supabase-js";
+import { useRealtimeSignal } from "@/hooks/use-realtime-signal";
 import { ArrowLeft, Paperclip, Send, Users, X } from "lucide-react";
 import { formatDistanceToNow } from "date-fns";
 import { ptBR } from "date-fns/locale";
@@ -40,7 +40,6 @@ export function GeneralChat({ me, initialMessages, compact = false, onBack }: Pr
   const [pending, start] = useTransition();
   const bottomRef = useRef<HTMLDivElement>(null);
   const messagesRef = useRef<Message[]>(initialMessages);
-  const realtimeReadyRef = useRef(false);
 
   useEffect(() => { messagesRef.current = messages; }, [messages]);
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages]);
@@ -72,36 +71,12 @@ export function GeneralChat({ me, initialMessages, compact = false, onBack }: Pr
     })));
   };
 
-  useEffect(() => {
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
-
-    const supabase = createClient(url, key, {
-      auth: { autoRefreshToken: false, persistSession: false },
-      realtime: { params: { eventsPerSecond: 2 } },
-    });
-
-    const channel = supabase
-      .channel("general-chat")
-      .on(
-        "postgres_changes",
-        { event: "INSERT", schema: "public", table: "general_chat_messages" },
-        (payload) => {
-          const row = payload.new as { sender_id: string };
-          if (row.sender_id === me.id) return;
-          void fetchNewMessages();
-        },
-      )
-      .subscribe((status) => {
-        realtimeReadyRef.current = status === "SUBSCRIBED";
-      });
-
-    return () => {
-      realtimeReadyRef.current = false;
-      void supabase.removeChannel(channel);
-    };
-  }, [me.id]);
+  // Entrega imediata: o servidor sinaliza cada mensagem nova; o polling abaixo
+  // continua como rede de segurança caso o WebSocket caia.
+  useRealtimeSignal("chat:general", (event, payload) => {
+    if (event !== "msg" || payload.from === me.id) return;
+    if (document.visibilityState === "visible") void fetchNewMessages();
+  });
 
   useEffect(() => {
     let disposed = false;
@@ -112,9 +87,7 @@ export function GeneralChat({ me, initialMessages, compact = false, onBack }: Pr
     };
 
     const onVisible = () => { void poll(); };
-    const id = setInterval(() => {
-      if (!realtimeReadyRef.current) void poll();
-    }, GENERAL_POLL_MS);
+    const id = setInterval(() => { void poll(); }, GENERAL_POLL_MS);
     window.addEventListener("focus", onVisible);
     document.addEventListener("visibilitychange", onVisible);
     return () => {

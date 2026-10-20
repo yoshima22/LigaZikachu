@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { announceZikaTvChange } from "@/lib/spec/live-signal";
 import { getAppSession } from "@/lib/session";
 
 export const runtime = "nodejs";
@@ -21,6 +22,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
       prisma.specSpectator.deleteMany({ where: { streamId: id } }),
       prisma.specChatMessage.deleteMany({ where: { streamId: id } }),
     ]);
+    await announceZikaTvChange(id);
   } else {
     await prisma.specStream.update({ where: { id }, data: { lastSeenAt: new Date() } });
   }

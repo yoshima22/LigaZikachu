@@ -37,7 +37,7 @@ import {
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { createClient } from "@supabase/supabase-js";
+import { useRealtimeSignal } from "@/hooks/use-realtime-signal";
 import {
   markNavAlertViewedAction,
   refreshNavNotificationsAction,
@@ -272,7 +272,7 @@ export function AppNav({
   orderEventVisible = false,
   johtoRaidVisible = false,
   livePvpVisible = false,
-  zikaTvLive = false,
+  zikaTvLive: zikaTvLiveProp = false,
 }: {
   admin: boolean;
   platformAdmin?: boolean;
@@ -289,6 +289,12 @@ export function AppNav({
   const profileLinks = buildProfileLinks(playerId);
   const [openMenu, setOpenMenu] = useState<string | null>(null);
   const [notifications, setNotifications] = useState(initialNotifications);
+  // Selo "ao vivo" da Zika TV: o servidor avisa quando uma live começa/termina.
+  const [zikaTvLive, setZikaTvLive] = useState(zikaTvLiveProp);
+  useEffect(() => setZikaTvLive(zikaTvLiveProp), [zikaTvLiveProp]);
+  useRealtimeSignal("zikatv", (event, payload) => {
+    if (event === "live" && typeof payload.anyLive === "boolean") setZikaTvLive(payload.anyLive);
+  });
   const [, startTransition] = useTransition();
   const rootRef = useRef<HTMLDivElement>(null);
   const desktopNavRef = useRef<HTMLElement>(null);
@@ -410,23 +416,13 @@ export function AppNav({
     };
   }, [refreshNotifications, variant]);
 
-  useEffect(() => {
-    if (variant !== "desktop" || !playerId) return;
-    const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-    const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-    if (!url || !key) return;
-    const supabase = createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
-    const channel = supabase
-      .channel(`nav-alerts-${playerId}`)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "direct_messages", filter: `receiver_id=eq.${playerId}`,
-      }, scheduleNotificationRefresh)
-      .on("postgres_changes", {
-        event: "INSERT", schema: "public", table: "player_notifications", filter: `playerId=eq.${playerId}`,
-      }, scheduleNotificationRefresh)
-      .subscribe();
-    return () => { void supabase.removeChannel(channel); };
-  }, [playerId, scheduleNotificationRefresh, variant]);
+  // Nova DM ou notificação do bazar/laços: o servidor avisa e o menu atualiza na hora.
+  useRealtimeSignal(variant === "desktop" ? (playerId ? `player:${playerId}` : null) : null, (event) => {
+    if (event !== "dm" && event !== "nav") return;
+    // Aba oculta: marca como desatualizado para buscar assim que o jogador voltar.
+    if (document.visibilityState !== "visible") lastRefreshAtRef.current = 0;
+    else scheduleNotificationRefresh();
+  });
 
   const dismissAlert = useCallback((alert: NavAlert) => {
     setNotifications((current) => {

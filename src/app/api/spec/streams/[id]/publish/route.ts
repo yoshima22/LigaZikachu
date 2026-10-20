@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { announceZikaTvChange } from "@/lib/spec/live-signal";
 import { getAppSession } from "@/lib/session";
 import { getSpecConfig } from "@/lib/spec/config";
 import { getSpecProvider, SpecProviderNotConfiguredError } from "@/lib/spec/provider";
@@ -92,6 +93,7 @@ export async function POST(request: Request, context: { params: Promise<{ id: st
     } catch (e) {
       console.error("[spec] falha ao anunciar no ticker", e);
     }
+    await announceZikaTvChange(id);
 
     return NextResponse.json({ answerSdp }, { headers: { "Cache-Control": "no-store" } });
   } catch (error) {

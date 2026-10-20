@@ -9,6 +9,7 @@ import type { MiauvadaoOffer, MiauvadaoPurchaseStatus } from "../actions";
 import type { ReboundView } from "@/lib/miauvadao-rebound";
 import { MiauvadaoReboundSection, suggestedLcClient } from "./miauvadao-rebound-section";
 import { getShopItemEmoji } from "@/lib/shop-config";
+import { RealtimeRefresh } from "@/components/realtime-refresh";
 
 // ── Countdown ─────────────────────────────────────────────────────────────────
 
@@ -287,7 +288,8 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
   useEffect(() => {
     const validUntil = rotationEndsAt;
     if (!validUntil) return;
-    const target = new Date(validUntil).getTime();
+    // Atraso aleatório de até 4s: no reset, nem todo mundo bate no servidor no mesmo segundo.
+    const target = new Date(validUntil).getTime() + Math.random() * 4000;
     const check = () => {
       if (Date.now() >= target) {
         const now = Date.now();
@@ -361,6 +363,9 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
         boxShadow: `0 0 0 1px ${GOLD_D}`,
       }}
     >
+      {/* Estoque/vitrine mudou (compra de outro jogador, troca de slot, rotação):
+          atualiza para todos, espalhado em até 3s e no máximo 1 vez a cada 5s. */}
+      <RealtimeRefresh topic="bazar" event="miauvadao" maxJitterMs={3000} minIntervalMs={5000} />
       {/*
         ── Layer 1: Gato ──
         Ancoramos pelo TOPO (top:8px) para que o rosto fique na parte
