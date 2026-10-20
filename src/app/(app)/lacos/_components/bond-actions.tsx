@@ -4,7 +4,7 @@ import { useTransition, useRef } from "react";
 import { toast } from "sonner";
 import { useRouter } from "next/navigation";
 import { resolveBondEventAction, updateBondBehaviorAction } from "../actions";
-import { BOND_BEHAVIOR_LABEL, type BondBehavior, type BondOption } from "@/lib/mascot-bonds";
+import { BOND_BEHAVIOR_LABEL, type BondBehavior, type BondOption } from "@/lib/mascot-bonds-shared";
 
 export function BehaviorSelect({ value }: { value: BondBehavior }) {
   const [pending, startTransition] = useTransition();

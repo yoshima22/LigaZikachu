@@ -1,20 +1,8 @@
 import { prisma } from "@/lib/prisma";
 import { getPokemonName } from "@/lib/mascot-data";
+import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-config";
 
-export const BONDS_V2_BALANCE = {
-  friend: { minScore: 40, expeditionTimeReductionPct: 3, trainingExpPct: 5 },
-  superFriend: { minScore: 80, expeditionTimeReductionPct: 7, trainingExpPct: 10 },
-  enemy: { maxScore: -50, damagePct: 5 },
-  nemesis: { maxScore: -80, damagePct: 8, directRounds: 3 },
-  motivation: { activationsPerMascotPerDay: 1 },
-  caps: { expeditionTimeReductionPct: 8, trainingExpPct: 10 },
-  publicSpaces: {
-    maxMascotsPerPlayer: 8,
-    maxMascotsPerPlayerInSameLocation: 3,
-    moveCooldownMinutes: 120,
-    automaticEventIntervalHours: 4,
-  },
-} as const;
+export { BONDS_V2_BALANCE };
 
 /** Bônus do Laços Alpha para todos os jogadores. */
 export async function getBondsV2ExpeditionBonus(mascotId: string, mode: string) {

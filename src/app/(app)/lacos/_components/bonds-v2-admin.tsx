@@ -5,7 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, getSpriteUrl, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { REFUGE_LOCATIONS, relationEffectV2, relationTierV2, type RefugeLocation } from "@/lib/mascot-bonds-v2";
 import { autoResolveExpiredBondEvents, bondOptionBlockedReason, getBondCostAvailability, normalizeBondOptions } from "@/lib/mascot-bonds";
-import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
+import { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-config";
 import { BondsV2SectionTabs, BondDirectoryV2, BondInventoryV2, BondsTutorial, ImportantMomentsList, RefugeLocationsTabs, SocialGroupsPager, TrainerBondExplorer } from "./bonds-v2-controls";
 import { BOND_ITEM_CATALOG, BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import Link from "next/link";

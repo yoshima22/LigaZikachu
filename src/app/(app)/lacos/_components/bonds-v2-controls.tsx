@@ -41,7 +41,7 @@ import {
   type RefugeLocation,
 } from "@/lib/mascot-bonds-v2";
 import { getShopItemEmoji } from "@/lib/shop-config";
-import type { BondOption } from "@/lib/mascot-bonds";
+import type { BondOption } from "@/lib/mascot-bonds-shared";
 import { ResolveBondOptionButton } from "./bond-actions";
 import { LeagueBattleReplayModal } from "../../combates/liga-semanal/_components/league-battle-replay";
 

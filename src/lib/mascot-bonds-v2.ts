@@ -1,6 +1,6 @@
 import type { MascotPersonality, Prisma } from "@prisma/client";
 import { getPokemonName, getPokemonElement, getTypeLabelPt, PERSONALITY_LABEL } from "@/lib/mascot-data";
-import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds";
+import { clampScore, relationTypeFromScore, type BondOption } from "@/lib/mascot-bonds-shared";
 import { buildRefugeStory, tierFromScore, pairKey, stepArc, pickCallback, type StoryActor, type StoryContext, type PairStoryState, type PairArcState } from "@/lib/bond-story-engine";
 import { runRefugeFight, fightNarrative } from "@/lib/bond-fight";
 
@@ -12,7 +12,7 @@ export const REFUGE_LOCATIONS = {
 } as const;
 
 export type RefugeLocation = keyof typeof REFUGE_LOCATIONS;
-export { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-balance";
+export { BONDS_V2_BALANCE } from "@/lib/mascot-bonds-v2-config";
 
 export function relationTierV2(score: number) {
   if (score <= -80) return "Nêmesis";
