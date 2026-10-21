@@ -44,6 +44,9 @@ test("hidden rooms reveal neither enemy nor title and boss gate names only livin
   assert.equal(node.title, "Sala desconhecida");
   assert.equal(node.kind, "UNKNOWN");
   assert.equal("enemies" in node, false);
+  assert.deepEqual(node.connections, []);
+  assert.ok(view.routes.every((route) => route.intel.signal && route.intel.opportunity && route.intel.risk));
+  assert.ok(view.routes.every((route) => route.visited || route.title === "Rota desconhecida"));
   const boss = state.graph.find((room) => room.kind === "BOSS")!;
   state.members.ana.roomId = boss.id;
   const atBoss = projectExpeditionForMember(state, "ana", { bruno: "Bruno", caio: "Caio" });
@@ -89,4 +92,19 @@ test("banked boss advantage is projected without exposing hidden rooms", () => {
   assert.equal(view.bossAdvantage.available, true);
   state.bossOverloadCharge = 0;
   assert.equal(projectExpeditionForMember(state, "ana").bossAdvantage.available, false);
+});
+
+test("SCOUT reveals route category without leaking the room title; MAP keeps its existing reveal", () => {
+  const { state, entrance } = sample();
+  const hiddenExit = entrance.connections.find((id) => !state.visited.includes(id))!;
+  const destination = state.graph.find((room) => room.id === hiddenExit)!;
+  state.countermeasures = ["SCOUT"];
+  const scouted = projectExpeditionForMember(state, "ana");
+  assert.equal(scouted.routes.find((route) => route.id === hiddenExit)?.kind, destination.kind);
+  assert.equal(scouted.routes.find((route) => route.id === hiddenExit)?.title, "Rota desconhecida");
+  assert.deepEqual(scouted.rooms.find((room) => room.id === hiddenExit)?.connections, []);
+  state.countermeasures = ["MAP"];
+  const mapped = projectExpeditionForMember(state, "ana");
+  assert.equal(mapped.routes.find((route) => route.id === hiddenExit)?.title, destination.title);
+  assert.deepEqual(mapped.rooms.find((room) => room.id === hiddenExit)?.connections, destination.connections);
 });

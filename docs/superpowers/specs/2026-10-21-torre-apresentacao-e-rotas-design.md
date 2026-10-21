@@ -2,6 +2,8 @@
 
 Data: 21/10/2026. Estado: revisão aprovada para implementação. Este documento não abre o evento.
 
+Nota de execução: a proposta de religar corredores permanece pendente. O protótipo passou nos testes estruturais, mas alterou desfechos de expedições e fez três testes de simulação falharem. Foi retirado do código. A entrega segura desta rodada mantém o mapa original e acrescenta pistas verdadeiras e cartões de escolha; não declara que todas as bifurcações já têm perfis diferentes.
+
 ## Objetivo e limites
 
 O jogador deve ver a arte de abertura inteira, entender que há sete desafios sem descobrir antecipadamente os nomes dos chefes ou seus prêmios, e escolher corredores com informações suficientes para ponderar risco e utilidade. A surpresa permanece no resultado exato de cada sala, não na ausência de qualquer informação. As pistas são verdadeiras, porém incompletas: a Torre pode esconder detalhes, mas não mentir ao jogador sobre a natureza básica da passagem. O evento continua exclusivo para administradores e testadores; esta mudança não ativa tickets, baús ou acesso público.

@@ -4,6 +4,7 @@ import { bossOverloadValue } from "./pressure-rules";
 import { canStartBoss } from "./room-resolver";
 import { shortestKnownPath, towerCanLeaveRoom, towerKnownExits } from "./route-rules";
 import { towerRouteKey, type TowerRoomKind } from "./rooms";
+import { getTowerRouteIntel } from "./route-intel";
 
 export type TowerRunProjection = ReturnType<typeof projectExpeditionForMember>;
 
@@ -23,7 +24,7 @@ export function projectExpeditionForMember(
   const rooms = state.graph.map((room) => {
     const known = revealed.has(room.id) || Boolean(state.countermeasures?.includes("MAP"));
     return {
-      id: room.id, x: room.x, y: room.y, connections: room.connections,
+      id: room.id, x: room.x, y: room.y, connections: known ? room.connections : [],
       title: known ? room.title : "Sala desconhecida",
       kind: (known ? room.kind : "UNKNOWN") as TowerRoomKind | "UNKNOWN",
       visited: revealed.has(room.id),
@@ -34,6 +35,10 @@ export function projectExpeditionForMember(
   const routes = towerKnownExits(state, current.id).map((id) => {
     const destination = state.graph.find((room) => room.id === id)!;
     const known = revealed.has(id) || Boolean(state.countermeasures?.includes("MAP"));
+    const knownKind = known || Boolean(state.countermeasures?.includes("SCOUT"));
+    const allyNames = Object.entries(state.members)
+      .filter(([memberId, member]) => memberId !== viewerId && member.status === "ACTIVE" && member.roomId === id)
+      .map(([memberId]) => names[memberId] ?? memberId);
     const traversable = current.connections.includes(id) || state.openedEdges.includes(towerRouteKey(current.id, id));
     const blockedReason = mine.status !== "ACTIVE" ? "Você não pode se mover neste turno."
       : mine.availableFromTurn > state.globalTurn ? "Aguarde o próximo turno após a recuperação."
@@ -41,7 +46,8 @@ export function projectExpeditionForMember(
       : !traversable ? "Passagem ainda fechada." : null;
     return {
       id, title: known ? destination.title : "Rota desconhecida",
-      kind: (known ? destination.kind : "UNKNOWN") as TowerRoomKind | "UNKNOWN",
+      kind: (knownKind ? destination.kind : "UNKNOWN") as TowerRoomKind | "UNKNOWN",
+      intel: getTowerRouteIntel(destination, { allyNames }),
       visited: revealed.has(id), cleared: state.rooms[id]?.cleared ?? false,
       available: !blockedReason, blockedReason,
       role: blockedReason ? "BLOCKED" as const : "NEXT" as const,

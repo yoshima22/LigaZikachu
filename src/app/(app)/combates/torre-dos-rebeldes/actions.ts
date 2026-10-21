@@ -62,6 +62,7 @@ import { TOWER_OBJECTS } from "@/lib/tower/objects";
 import { currentTowerRoom, generateTowerRoomGraph, towerPressureModifiers } from "@/lib/tower/rooms";
 import { isExpeditionV2, newExpeditionState } from "@/lib/tower/expedition-state";
 import { projectExpeditionForMember } from "@/lib/tower/expedition-projection";
+import { getTowerRouteIntel } from "@/lib/tower/route-intel";
 import { moveMember, TowerRouteError } from "@/lib/tower/route-rules";
 import { validateV2Submission } from "@/lib/tower/turn-v2-rules";
 import { recoverSoloMascots, reviveMember, TowerRecoveryError, TOWER_REVIVE_ITEM_ID } from "@/lib/tower/recovery-rules";
@@ -2441,7 +2442,7 @@ export async function getTowerRunStateAction(
                 cleared: projectedNode?.cleared ?? node.cleared,
                 x: node.x,
                 y: node.y,
-                connections: node.connections,
+                connections: projectedNode?.connections ?? (known ? node.connections : []),
                 roomHint: known
                   ? node.kind === "COMBAT" || node.kind === "BOSS"
                     ? "Pode haver uma patrulha ou confronto."
@@ -2484,6 +2485,7 @@ export async function getTowerRunStateAction(
                       cleared: projectedRoute?.cleared ?? node.cleared,
                       available: !blockedReason,
                       blockedReason,
+                      intel: projectedRoute?.intel ?? getTowerRouteIntel(node),
                     }
                   : null;
               })

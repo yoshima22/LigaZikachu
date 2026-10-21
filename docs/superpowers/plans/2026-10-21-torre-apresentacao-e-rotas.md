@@ -137,4 +137,6 @@
 
 ## Final release gate
 
+**Estado da rodada:** Tasks 1 e 2 concluídas; as pistas e cartões das Tasks 4 e 5 foram implementados localmente sobre o mapa legado. Task 3 foi prototipada e retirada após regressões de simulação; permanece pendente. O gate de balanceamento já falha no mapa legado e não deve ser relaxado ou interpretado como aprovação para publicar. Nenhuma geração nova de salas/conexões está nesta entrega.
+
 Re-run the balance test after all changes, compare its two 100-seed coortes for solo, duo, trio and strategic split, and do not publish if the 5–15/100 criterion fails. Verify the existing admin/tester gate still blocks ordinary players, both `ONLINE` and `SLOW` preserve action confirmation, and no unpublished reward appears in the overview or route payload. This repository has no configured lint script or ESLint config; record that explicitly rather than claiming lint passed. Publish only after the chosen execution workflow's final review and successful build; the event remains closed.
