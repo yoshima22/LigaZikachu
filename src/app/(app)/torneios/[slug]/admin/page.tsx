@@ -31,6 +31,7 @@ import { parseChallengeConfig, DEFAULT_CHALLENGE_CONFIG } from "../desafios/conf
 import { TournamentAchievementsPanel } from "./_components/tournament-achievements-panel";
 import { TournamentBadgeManager } from "./_components/tournament-badge-manager";
 import { PostseasonControl } from "./_components/postseason-control";
+import { JohtoRewardsPreview } from "./_components/johto-rewards-preview";
 import { closeTournamentWeek } from "./daily-actions";
 import { WeekReportExportButton } from "./_components/week-report-export-button";
 import { parseTournamentRewardConfig } from "@/lib/tcg-tournament-rewards";
@@ -180,6 +181,8 @@ export default async function TournamentAdminPage({ params }: Props) {
       <h1 className="text-2xl font-bold text-white font-pixel">
         Painel Admin — {tournament.name}
       </h1>
+
+      {isAdmin(user.role) && <JohtoRewardsPreview tournamentName={tournament.name} />}
 
       {/* Editar nome e info do torneio */}
       <Card className="border-slate-800 bg-slate-900/50">
