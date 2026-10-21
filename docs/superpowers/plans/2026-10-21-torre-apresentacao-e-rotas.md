@@ -2,9 +2,9 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** Exibir o pôster inteiro, ocultar chefes/prêmios futuros e oferecer bifurcações com pistas fiéis e alternativas táticas distintas.
+**Goal:** Exibir o pôster inteiro, ocultar chefes/prêmios futuros e oferecer bifurcações com pistas fiéis e alternativas táticas quando disponíveis sem alterar a composição de salas.
 
-**Architecture:** A apresentação é separada em componentes puros testáveis; a geração de mapa recebe uma versão fixada na run, e um módulo puro produz pistas a partir do tipo real da próxima sala. A projeção server-side entrega somente as pistas e o que o jogador já descobriu; um componente único apresenta os cartões de rota no desktop e no mobile.
+**Architecture:** A apresentação é separada em componentes puros testáveis; a geração de mapa recebe uma versão fixada na run, preserva todas as salas e religa saídas redundantes quando possível. Um módulo puro produz pistas a partir do tipo real e da ameaça da próxima sala. A projeção server-side entrega somente as pistas e o que o jogador já descobriu; um componente único apresenta os cartões de rota no desktop e no mobile.
 
 **Tech Stack:** Next.js 15, React 19, TypeScript, Tailwind, `node:test` via `tsx`.
 
@@ -22,7 +22,7 @@
 ## Review Focus
 
 1. Uma run antiga sobe de andar após a publicação: conserva `graphVersion` 1 e o mesmo mapa que geraria antes (Task 3).
-2. Duas saídas oferecem o mesmo perfil apesar de nomes distintos: novas colunas têm perfis diferentes, inclusive a coluna da recuperação fixa (Task 3).
+2. Duas saídas oferecem o mesmo perfil apesar de nomes distintos: religar uma saída quando houver outro perfil alcançável na próxima coluna; quando não houver, informar diferenças reais de risco ou posicionamento (Tasks 3 e 4).
 3. Pista de resgate/descanso sugere garantia que não existe: o texto é condicional e não divulga ocupantes ou resultados (Task 4).
 4. Cliente recebe dados ocultos por outro campo da projeção: nós futuros não transportam título, tipo, puzzle ou conexões futuras desnecessárias (Task 4).
 5. Arte e cartões de rota em tela estreita: pôster usa `contain` e cada opção/estado permanece legível sem depender do mapa desktop (Tasks 1 e 5).
@@ -71,47 +71,46 @@
 - [ ] **Step 4: Verify GREEN.** Rode o arquivo de teste e `npm run typecheck`; ambos exit 0.
 - [ ] **Step 5: Commit.** Stage somente os três arquivos da Task 2 e commit `fix(tower): oculta chefes e premios na visao geral`.
 
-### Task 3: Geração versionada com bifurcações distintas
+### Task 3: Geração versionada sem alterar a composição de salas
 
 **Files:** Modify `src/lib/tower/rooms.ts`, `src/lib/tower/pressure-rules.ts`, `src/lib/tower/turn.ts`, `src/app/(app)/combates/torre-dos-rebeldes/actions.ts`, `src/lib/tower/simulation.ts`; create `src/lib/tower/rooms.test.ts`; extend `src/lib/tower/pressure-rules.test.ts`.
 
 **Interfaces:** Produce `type TowerGraphVersion = 1 | 2`, `type TowerRouteProfile = "CONFRONT" | "MECHANISM" | "RECOVERY" | "RESCUE" | "FIND" | "BOSS" | "ENTRANCE"`, `towerRouteProfile(kind: TowerRoomKind): TowerRouteProfile`, `TowerExplorationState.graphVersion?: TowerGraphVersion`, `generateTowerRoomGraph(seed: string, floor?: number, graphVersion?: TowerGraphVersion): TowerExplorationState`. Default `graphVersion=1` preserva chamadas antigas; início de nova run e simulação de run nova passam `2` explicitamente. Transições V1/V2 passam `state.graphVersion ?? 1`.
 
-- [ ] **Step 1: Write failing tests.** Para sementes representativas e andares 1–7, versão 2 gera entrada/recuperação/chefe fixos, ao menos um caminho da entrada ao chefe, continuação válida para cada saída oferecida, mesmo resultado para a mesma semente e perfis diferentes nos dois destinos de cada bifurcação; a versão 1 coincide com uma fixture de sala capturada antes da alteração do gerador. Em `pressure-rules.test.ts`, uma run sem `graphVersion` que sobe de andar continua na versão 1, e uma da versão 2 continua na versão 2.
+- [ ] **Step 1: Write failing tests.** Para sementes representativas e andares 1–7, versão 2 preserva `id`, `kind`, título, descrição e puzzle de cada sala da versão 1, entrada/recuperação/chefe fixos, reprodutibilidade e continuação válida para cada saída oferecida. Se as saídas legadas têm o mesmo perfil e outra sala da coluna seguinte possui perfil diferente, versão 2 oferece perfis diferentes; se todas têm o mesmo perfil, preserva as saídas legadas. Em `pressure-rules.test.ts`, uma run sem `graphVersion` que sobe de andar continua na versão 1, e uma da versão 2 continua na versão 2.
 
   ```ts
   assert.deepEqual(generateTowerRoomGraph("route-legacy", 2).graph.filter(r => r.id.startsWith("f2-c1-")).map(r => r.kind), ["LUCK", "EVENT", "RESCUE"]);
   const graph = generateTowerRoomGraph("route-contrast", 1, 2);
   assert.equal(graph.graphVersion, 2);
-  for (const room of graph.graph.filter(r => r.connections.length === 2)) {
-    const [a, b] = room.connections.map(id => graph.graph.find(r => r.id === id)!);
-    assert.notEqual(towerRouteProfile(a.kind), towerRouteProfile(b.kind));
-  }
+  const legacy = generateTowerRoomGraph("route-contrast", 1, 1);
+  assert.deepEqual(graph.graph.map(({ connections, ...room }) => room), legacy.graph.map(({ connections, ...room }) => room));
+  // Testar o contraste apenas quando a próxima coluna oferece perfis diferentes.
   assert.equal(transitionFloor(newExpeditionState(generateTowerRoomGraph("old"), ["ana"]), 2, "old", []).state.graphVersion ?? 1, 1);
   ```
 - [ ] **Step 2: Verify RED.** `npx tsx --test src/lib/tower/rooms.test.ts src/lib/tower/pressure-rules.test.ts` falha nos casos de versão 2.
-- [ ] **Step 3: Implement.** Mantenha algoritmo legado para versão 1. Na versão 2, distribua por coluna três perfis distintos entre confronto, mecanismo, recuperação, resgate e achado; preserve o slot `RECOVERY` fixo, `ENTRANCE` e `BOSS`. Ligue versão 2 ao início de run e simulador; propague versão nas duas transições. Não modifique efeitos de sala.
-- [ ] **Step 4: Verify GREEN.** Rode os dois arquivos de teste e `npm run typecheck`; ambos exit 0. Rode `npx tsx --test scripts/tower-balance-check.test.ts`; se a nova composição sair da faixa de 5–15 vitórias/100 em qualquer coorte canônica, ajuste apenas a seleção/composição de salas e repita, sem mexer no combate.
+- [ ] **Step 3: Implement.** Mantenha algoritmo legado para versão 1. Na versão 2, gere as mesmas salas; quando ambas as saídas de uma sala têm o mesmo perfil e há um terceiro destino de perfil diferente na coluna seguinte, troque somente uma conexão, mantendo a outra e a conectividade. Se não há alternativa de perfil, não altere saídas. Ligue versão 2 ao início de run e simulador; propague versão nas duas transições. Não modifique efeitos de sala.
+- [ ] **Step 4: Verify GREEN.** Rode os dois arquivos de teste e `npm run typecheck`; ambos exit 0. Rode `npx tsx --test scripts/tower-balance-check.test.ts`; se uma coorte canônica ficar fora da faixa de 5–15 vitórias/100, investigue o efeito do religamento sem alterar tipos de sala nem atributos de combate. Não publique se o gate final continuar falhando.
 - [ ] **Step 5: Commit.** Stage somente os arquivos da Task 3 e commit `feat(tower): versiona mapas com bifurcacoes distintas`.
 
 ### Task 4: Pistas seguras na projeção de cada jogador
 
 **Files:** Create `src/lib/tower/route-intel.ts` e `src/lib/tower/route-intel.test.ts`; modify `src/lib/tower/expedition-projection.ts`, `src/lib/tower/expedition-projection.test.ts`, `src/app/(app)/combates/torre-dos-rebeldes/actions.ts`.
 
-**Interfaces:** Produce `type TowerRouteIntel = { signal: string; opportunity: string; risk: string }` and `getTowerRouteIntel(kind: TowerRoomKind): TowerRouteIntel`. Each `exploration.routes[]` and V2 `expedition.routes[]` entry gains `intel: TowerRouteIntel`; known titles continue in `title`. A visible/visited destination uses its existing known title; unknown destinations retain generic `title`.
+**Interfaces:** Produce `type TowerRouteIntel = { signal: string; opportunity: string; risk: string }` and `getTowerRouteIntel(room: Pick<TowerRoomNode, "kind" | "index">, context?: { allyDistance?: number }): TowerRouteIntel`. Each `exploration.routes[]` and V2 `expedition.routes[]` entry gains `intel: TowerRouteIntel`; known titles continue in `title`. A visible/visited destination uses its existing known title; unknown destinations retain generic `title`.
 
 - [ ] **Step 1: Write failing tests.** Check each room kind has meaningful, distinct, honest clues; `REST` and `RESCUE` use conditional language; `COMBAT` identifies confrontation without enemy names; `PUZZLE` does not reveal answer. In projection, an unknown adjacent route has `intel` but no true title, puzzle, reward or enemy; known `MAP`/`SCOUT` behavior remains; blocked and visited routes retain state. Hidden nodes expose no future-only `connections`.
 
   ```ts
-  assert.match(getTowerRouteIntel("REST").opportunity, /pode/i);
-  assert.match(getTowerRouteIntel("RESCUE").opportunity, /se houver/i);
+  assert.match(getTowerRouteIntel({ kind: "REST", index: 1 }).opportunity, /pode/i);
+  assert.match(getTowerRouteIntel({ kind: "RESCUE", index: 1 }).opportunity, /se houver/i);
   const view = projectExpeditionForMember(newExpeditionState(generateTowerRoomGraph("intel"), ["ana"]), "ana");
   assert.ok(view.routes.every(route => route.intel.signal && route.intel.opportunity && route.intel.risk));
   assert.ok(view.routes.every(route => route.visited || route.title === "Rota desconhecida"));
   assert.ok(view.rooms.filter(room => room.role === "HIDDEN").every(room => room.connections.length === 0));
   ```
 - [ ] **Step 2: Verify RED.** `npx tsx --test src/lib/tower/route-intel.test.ts src/lib/tower/expedition-projection.test.ts` fails for missing clues/sanitization.
-- [ ] **Step 3: Implement.** Centralize copy in `route-intel.ts`; add it to `projectExpeditionForMember` and the legacy/V2 merge in `getTowerRunStateAction`. Never serialize the full hidden destination. Preserve known names and `blockedReason`; sanitize hidden-node `connections` without removing current/visited edges needed by the map.
+- [ ] **Step 3: Implement.** Centralize copy in `route-intel.ts`; add it to `projectExpeditionForMember` and the legacy/V2 merge in `getTowerRunStateAction`. Quando dois destinos tiverem o mesmo perfil, diferencie-os por ameaça real derivada da posição/índice e, quando disponível, distância efetiva dos aliados; não alegue diferença caso os dados sejam iguais. Never serialize the full hidden destination. Preserve known names and `blockedReason`; sanitize hidden-node `connections` without removing current/visited edges needed by the map.
 - [ ] **Step 4: Verify GREEN.** Run both test files and `npm run typecheck`; both exit 0.
 - [ ] **Step 5: Commit.** Stage only the five Task 4 files and commit `feat(tower): mostra pistas de rotas sem revelar salas`.
 
