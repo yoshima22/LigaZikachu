@@ -50,7 +50,7 @@ async function main() {
     if (error || !data) { console.log("ERRO download", o.name, error?.message); continue; }
     const original = Buffer.from(await data.arrayBuffer());
 
-    let body = original, mime = o.mime;
+    let body: Buffer = original, mime = o.mime;
     if (convertible) {
       const webp = await sharp(original)
         .rotate()
