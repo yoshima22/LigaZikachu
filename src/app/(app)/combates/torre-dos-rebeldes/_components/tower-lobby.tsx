@@ -25,11 +25,11 @@ import {
 } from "./tower-narrative";
 import { TowerAdminSettings } from "./tower-admin-settings";
 import { TowerIntro } from "./tower-intro";
+import { TowerFloorMysteries } from "./tower-floor-mysteries";
 import {
   TOWER_COMMUNITY_STUDIES,
   TOWER_STUDY_TARGET,
 } from "@/lib/tower/studies";
-import { TOWER_BOSS_PRIZES } from "@/lib/tower/exclusive-catalog";
 import { settleTowerLobbyLoad } from "@/lib/tower/lobby-load";
 
 type LobbyData = Extract<
@@ -317,12 +317,7 @@ export function TowerLobby() {
         </section>
       )}
       {view === "OVERVIEW" && <TowerEventDisclosure disclosure={data.eventDisclosure} />}
-      {view === "OVERVIEW" && <section className={card}>
-        <p className="text-[10px] font-black uppercase tracking-[.2em] text-amber-300">Recompensas dos regentes</p>
-        <h2 className="mt-1 text-lg font-black text-white">Prêmios imediatos, mascote somente no topo</h2>
-        <p className="mt-2 text-xs leading-5 text-slate-400">Cada pacote abaixo é entregue uma vez por jogador ao derrotar o respectivo chefe. Derrotar chefes intermediários não concede mais a espécie exclusiva. Depois da primeira expedição concluir o sétimo andar, cada integrante que alcançar o topo recebe uma escolha definitiva entre os sete Rebeldes.</p>
-        <div className="mt-4 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">{TOWER_BOSS_PRIZES.map(prize=><article key={prize.floor} className="rounded-xl border border-amber-300/15 bg-amber-950/10 p-3"><small className="font-black uppercase text-amber-300">{prize.floor}º andar</small><b className="mt-1 block text-sm text-white">{prize.boss}</b><p className="mt-2 text-[11px] text-slate-300">🎁 {prize.label}</p></article>)}</div>
-      </section>}
+      {view === "OVERVIEW" && <TowerFloorMysteries />}
       {claimedMascot && (
         <div className="fixed inset-0 z-[110] flex items-center justify-center overflow-y-auto bg-black/90 p-4">
           <section className="my-auto w-full max-w-2xl overflow-hidden rounded-[2rem] border border-fuchsia-300/50 bg-slate-950 shadow-[0_0_90px_rgba(217,70,239,.35)]">
