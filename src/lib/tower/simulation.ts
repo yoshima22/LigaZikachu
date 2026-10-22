@@ -377,7 +377,7 @@ export function simulateTower(
       }
     }
     const pressureChange = pressureDelta({ activeFronts: activeFrontCount, mistakes: fronts.reduce((sum, front) => sum + front.mistakes, 0), waits, shield: state.pressureShield ?? 0, splitPenalty: talentFx.splitPenalty });
-    state = updateOverload(applyPressureToExpedition(state, pressureChange), turns, overloadFromResults(fronts));
+    state = updateOverload(applyPressureToExpedition(state, pressureChange), turns, overloadFromResults(fronts, partySize));
     if (partySize > 1) {
       const previousCharge = bossOverloadValue(state);
       state = earnBossOverloadCharge(state, fronts.filter((front) => front.success).map((front) => front.roomId));

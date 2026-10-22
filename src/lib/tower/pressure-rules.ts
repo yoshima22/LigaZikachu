@@ -14,6 +14,7 @@ export const TOWER_BALANCE_SEED = {
   maxWaitsCharged: 2,
   maxPressure: 12,
   overloadPerExtraSuccessfulFront: 0.08,
+  duoOverloadPerExtraSuccessfulFront: 0.03,
   maxOverload: 0.16,
   overloadDurationTurns: 2,
   floorPressureRelief: 4,
@@ -61,11 +62,17 @@ export function pressureDelta(input: PressureInput): PressureResult {
   };
 }
 
-export function overloadFromResults(results: RoomFrontResult[]): number {
+function overloadPerExtraFront(partySize?: number): number {
+  return partySize === 2
+    ? TOWER_BALANCE_SEED.duoOverloadPerExtraSuccessfulFront
+    : TOWER_BALANCE_SEED.overloadPerExtraSuccessfulFront;
+}
+
+export function overloadFromResults(results: RoomFrontResult[], partySize?: number): number {
   const successfulRooms = new Set(results.filter((result) => result.success).map((result) => result.roomId));
   return Math.min(
     TOWER_BALANCE_SEED.maxOverload,
-    Math.max(0, successfulRooms.size - 1) * TOWER_BALANCE_SEED.overloadPerExtraSuccessfulFront,
+    Math.max(0, successfulRooms.size - 1) * overloadPerExtraFront(partySize),
   );
 }
 
@@ -83,7 +90,7 @@ export function earnBossOverloadCharge(
   return {
     ...state,
     bossOverloadCharge: Math.min(TOWER_BALANCE_SEED.maxOverload,
-      (distinct.size - 1) * TOWER_BALANCE_SEED.overloadPerExtraSuccessfulFront),
+      (distinct.size - 1) * overloadPerExtraFront(Object.keys(state.members).length)),
     bossOverloadAwarded: true,
   };
 }

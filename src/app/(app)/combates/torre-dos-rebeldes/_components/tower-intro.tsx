@@ -30,7 +30,7 @@ const pages = [
     text: "Jogadores podem seguir rotas diferentes para investigar mais salas, mas a Torre reage a essa divisão. O mapa sempre mostra onde cada aliado está e qual caminho confirmou.",
     points: [
       "No mesmo caminho: progresso mais seguro e ajuda imediata.",
-      "Em caminhos diferentes: duas ou três frentes que vencem salas no mesmo turno guardam 8% ou 16% de redução inimiga para o próximo chefe; cada frente extra também aumenta a Pressão.",
+      "Em caminhos diferentes: uma dupla que vence duas salas no mesmo turno guarda 3% de redução inimiga para o próximo chefe; em trio, duas frentes guardam 8% e três guardam 16%. Cada frente extra também aumenta a Pressão.",
       "Aliados distantes precisam percorrer conexões abertas para ajudar em um encontro.",
       "O chefe só começa quando todos os treinadores vivos estiverem reunidos.",
     ],
@@ -41,7 +41,7 @@ const pages = [
     text: "As reservas não são uma segunda tentativa: elas entram no mesmo encontro somente após a queda dos dois ativos, sem restaurar o inimigo nem reiniciar efeitos. O combate tem um limite de rodadas.",
     points: [
       "Escolha a ordem 1–4 antes de criar a sala; os slots 1–2 começam lutando.",
-      "Entre salas, reorganize a dupla ativa antes de confirmar a ação, desde que ela esteja viva.",
+      "Entre salas, reorganize os ativos antes de confirmar a ação; se restar só um mascote vivo, ele ainda pode lutar.",
       "Salas de recuperação e kits devolvem mascotes caídos com metade do HP; a sala recarrega a cada dois andares.",
       "O replay só revela a segunda formação quando ela realmente entrar.",
     ],

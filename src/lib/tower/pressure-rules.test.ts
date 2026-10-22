@@ -24,6 +24,17 @@ test("two successful independent fronts give bounded temporary overload", () => 
   assert.equal(overloadFromResults([front("a", true), front("b", true), front("c", true), front("d", true)]), 0.16);
 });
 
+test("two-trainer split earns a smaller but persistent combat and boss advantage", () => {
+  const front = (roomId: string) => ({ roomId, success: true }) as RoomFrontResult;
+  const duo = newExpeditionState(generateTowerRoomGraph("duo-advantage"), ["a", "b"]);
+  const trio = newExpeditionState(generateTowerRoomGraph("trio-advantage"), ["a", "b", "c"]);
+  assert.equal(overloadFromResults([front("left"), front("right")], 2), 0.03);
+  assert.equal(overloadFromResults([front("left"), front("right")], 3), 0.08);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(duo, ["left", "right"])), 0.03);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(trio, ["left", "right"])), 0.08);
+  assert.equal(bossOverloadValue(earnBossOverloadCharge(trio, ["left", "right", "third"])), 0.16);
+});
+
 test("next floor moderately heals living mascots and relieves pressure without reviving downed trainers", () => {
   const state = newExpeditionState(generateTowerRoomGraph("floor-transition"), ["ana", "bruno"]);
   state.pressure = 10;
