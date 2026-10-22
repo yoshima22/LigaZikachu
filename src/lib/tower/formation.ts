@@ -40,8 +40,9 @@ export function switchSoloFormation(
   const formation = validateTowerFormation("SOLO", orderedIds);
   if (!formation.ok || formation.slots.some((slot) => !mascots.some((mascot) => mascot.mascotId === slot.mascotId)))
     throw new Error("A troca deve usar os mesmos quatro mascotes, sem repetições.");
-  if (formation.slots.slice(0, 2).some((slot) =>
+  const requiredActive = Math.min(2, mascots.filter((mascot) => mascot.currentHp > 0).length);
+  if (requiredActive === 0 || formation.slots.slice(0, requiredActive).some((slot) =>
     (mascots.find((mascot) => mascot.mascotId === slot.mascotId)?.currentHp ?? 0) <= 0))
-    throw new Error("Os dois mascotes ativos precisam estar vivos.");
+    throw new Error("Os slots ativos disponíveis precisam ter mascotes vivos.");
   return formation.slots;
 }

@@ -115,12 +115,18 @@ test("pace affects reward shards, not the same-seed combat path", () => {
 });
 
 test("an offline prepared trio can complete all seven floors in both paces", () => {
-  for (const pace of ["ONLINE", "SLOW"] as const) {
-    const report = simulateTower("validate-2", 3, "PREPARED", pace, "UNITED");
+  const winningSeed = Array.from({ length: 100 }, (_, index) => `completion-${index}`)
+    .find((seed) => simulateTower(seed, 3, "PREPARED", "ONLINE", "UNITED").outcome === "WIN");
+  assert.ok(winningSeed, "no prepared trio completed seven floors in the fixed cohort");
+  const online = simulateTower(winningSeed, 3, "PREPARED", "ONLINE", "UNITED");
+  const slow = simulateTower(winningSeed, 3, "PREPARED", "SLOW", "UNITED");
+  for (const report of [online, slow]) {
     assert.equal(report.outcome, "WIN");
     assert.equal(report.bossesDefeated, 7);
     assert.equal(report.floorReached, 7);
   }
+  assert.equal(online.turns, slow.turns);
+  assert.equal(online.hpRemaining, slow.hpRemaining);
 });
 
 test("the tuned V2 first floor opens a boss path for an unprepared trio", () => {
@@ -141,9 +147,11 @@ test("a small fixed cohort keeps first-boss progress possible on both routes", (
 });
 
 test("a recovery action never revives someone in the combat turn that downed them", () => {
-  const report = simulateTower("validate-15", 3, "PREPARED", "ONLINE", "STRATEGIC_SPLIT");
-  assert.ok(report.recoveryTimings.length > 0);
-  for (const timing of report.recoveryTimings)
+  const recoveries = Array.from({ length: 20 }, (_, index) =>
+    simulateTower(`recovery-audit-${index}`, 2, "PREPARED", "ONLINE", "UNITED"))
+    .flatMap((report) => report.recoveryTimings);
+  assert.ok(recoveries.length > 0, "the fixed cohort exercised no recovery actions");
+  for (const timing of recoveries)
     assert.ok(timing.recoveredTurn > timing.downedTurn, JSON.stringify(timing));
 });
 

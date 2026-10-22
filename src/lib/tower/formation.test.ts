@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { activeTowerMascots, validateTowerFormation } from "./formation";
+import { activeTowerMascots, switchSoloFormation, validateTowerFormation } from "./formation";
 
 test("solo keeps four distinct mascot IDs in active-then-reserve order", () => {
   assert.deepEqual(validateTowerFormation("SOLO", ["d", "b", "a", "c"]), {
@@ -41,4 +41,20 @@ test("active lineup excludes solo reserves but preserves legacy null-slot snapsh
     { formationSlot: null, currentHp: 50 },
   ];
   assert.deepEqual(activeTowerMascots(null, legacy), legacy);
+});
+
+test("the last surviving solo reserve can take an active slot without reviving anyone", () => {
+  const mascots = [
+    { mascotId: "a", currentHp: 0, formationSlot: 1 },
+    { mascotId: "b", currentHp: 0, formationSlot: 2 },
+    { mascotId: "c", currentHp: 71, formationSlot: 3 },
+    { mascotId: "d", currentHp: 0, formationSlot: 4 },
+  ];
+  assert.deepEqual(switchSoloFormation(mascots, ["c", "a", "b", "d"]), [
+    { mascotId: "c", formationSlot: 1 },
+    { mascotId: "a", formationSlot: 2 },
+    { mascotId: "b", formationSlot: 3 },
+    { mascotId: "d", formationSlot: 4 },
+  ]);
+  assert.throws(() => switchSoloFormation(mascots, ["a", "c", "b", "d"]), /ativo|vivo/i);
 });

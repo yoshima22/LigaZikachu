@@ -2618,7 +2618,7 @@ export async function submitTowerActionAction(
         if (!validation.ok) throw new Error(`Ação recusada (${validation.code}). Atualize a expedição e tente novamente.`);
         if (run.partyProfile === "SOLO" && run.balanceVersion === 2 && payload.action === "FIGHT" &&
             !me.mascots.some((mascot) => (mascot.formationSlot === 1 || mascot.formationSlot === 2) && mascot.currentHp > 0))
-          throw new Error("Os dois ativos estão caídos. Reorganize uma dupla viva ou recupere mascotes antes de lutar.");
+          throw new Error("Os dois ativos estão caídos. Reorganize ao menos um mascote vivo ou recupere a equipe antes de lutar.");
         if (typeof payload.routeId === "string" && payload.routeId) {
           if (payload.action === "REVIVE_ITEM" || payload.action === "REVIVE_ROOM")
             throw new Error("Mover-se e reanimar exigem janelas diferentes.");
