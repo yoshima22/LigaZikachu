@@ -2480,36 +2480,39 @@ function effOfType(atk: string, defTypes: string[]): number {
 }
 
 /**
- * Passo de vantagem/resistência (−2..+2) do melhor tipo do atacante contra o
- * defensor. 4x→+2, 2x→+1, 1x→0, 0,5x→−1, 0,25x/0x→−2. Teto ±2 (±40%).
+ * Passo de vantagem/resistência (−2..+2) do atacante contra o defensor: soma
+ * do passo de cada tipo do atacante. Teto ±2 (±40%).
  */
 export function getTypeAdvantageStep(attackerTypes: string | string[], defenderTypes: string | string[]): number {
   const atk = Array.isArray(attackerTypes) ? attackerTypes : [attackerTypes];
   const def = Array.isArray(defenderTypes) ? defenderTypes : [defenderTypes];
-  let best = 0;
-  for (const a of atk) best = Math.max(best, effOfType(a, def));
-  if (best === 0) return -2;        // sem efeito (0x) → resistência máxima
-  if (best >= 4) return 2;          // x4 (dupla vantagem)
-  if (best === 2) return 1;
-  if (best === 1) return 0;
-  if (best === 0.5) return -1;
+  // TODOS os tipos do atacante contam: os passos se somam (ex.: Dragão/Terra
+  // contra Fada = −2 + 0 = −2), com teto ±2 (±40%).
+  const total = atk.reduce((sum, a) => sum + stepOfEffectiveness(effOfType(a, def)), 0);
+  return Math.max(-2, Math.min(2, total));
+}
+
+/** Passo de UM tipo atacante: 4x→+2, 2x→+1, 1x→0, 0,5x→−1, 0,25x/0x→−2. */
+function stepOfEffectiveness(eff: number): number {
+  if (eff === 0) return -2;         // sem efeito (0x) → resistência máxima
+  if (eff >= 4) return 2;           // x4 (dupla vantagem)
+  if (eff === 2) return 1;
+  if (eff === 1) return 0;
+  if (eff === 0.5) return -1;
   return -2;                        // 0,25x (dupla resistência)
 }
 
 /**
- * Frase de tipo do log de combate. Atacante com 2 tipos ataca com o MELHOR
- * deles; quando isso muda o resultado em relação a algum outro tipo dele
- * (ex.: Dragão/Terra contra Fada → Terra, neutro), a frase diz qual valeu,
- * para o log não parecer que a resistência "não aplicou".
+ * Frase de tipo do log de combate. Com atacante de 2+ tipos, mostra a
+ * contribuição de cada um (ex.: "Dragão −2, Terra 0 → Fada"), já que os
+ * passos se somam — inclusive quando se anulam e o total fica neutro.
  */
 export function formatTypeNote(attackerTypes: string[], defenderTypes: string[], typeStep: number, typeDelta: number): string | null {
-  let used = attackerTypes[0];
-  for (const t of attackerTypes) if (effOfType(t, defenderTypes) > effOfType(used, defenderTypes)) used = t;
-  const otherSteps = attackerTypes.filter((t) => t !== used).map((t) => getTypeAdvantageStep(t, defenderTypes));
-  const matchup = attackerTypes.length > 1 && otherSteps.some((s) => s !== typeStep)
-    ? `${getTypeLabelPt(used)} → ${defenderTypes.map(getTypeLabelPt).join("/")}`
+  const parts = attackerTypes.map((t) => ({ t, step: stepOfEffectiveness(effOfType(t, defenderTypes)) }));
+  const matchup = parts.length > 1 && parts.some((p) => p.step !== 0)
+    ? `${parts.map((p) => `${getTypeLabelPt(p.t)} ${p.step > 0 ? "+" : p.step < 0 ? "−" : ""}${Math.abs(p.step)}`).join(", ")} → ${defenderTypes.map(getTypeLabelPt).join("/")}`
     : null;
-  if (typeStep === 0) return matchup ? `Atacou como ${matchup}: neutro.` : null;
+  if (typeStep === 0) return matchup ? `Tipos se anularam (${matchup}): neutro.` : null;
   const text = typeStep > 0
     ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
     : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;

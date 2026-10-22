@@ -10,8 +10,14 @@ test("passo de vantagem/resistência de tipo (±2, ±20% por passo)", () => {
   assert.equal(getTypeAdvantageStep("fire", ["water", "dragon"]), -2); // dupla resistência
   assert.equal(getTypeAdvantageStep("normal", "ghost"), -2);          // imunidade oficial → -40%
   assert.equal(getTypeAdvantageStep("normal", "normal"), 0);          // neutro
-  // atacante de 2 tipos usa o melhor matchup
-  assert.equal(getTypeAdvantageStep(["water", "normal"], "fire"), 1);
+  // atacante de 2 tipos: os passos de cada tipo se SOMAM (teto ±2)
+  assert.equal(getTypeAdvantageStep(["water", "normal"], "fire"), 1);       // +1 + 0
+  assert.equal(getTypeAdvantageStep(["dragon", "ground"], "fairy"), -2);    // −2 + 0 (antes era 0)
+  assert.equal(getTypeAdvantageStep(["dragon", "flying"], "fairy"), -2);
+  assert.equal(getTypeAdvantageStep(["fire", "water"], "grass"), 0);        // +1 − 1
+  assert.equal(getTypeAdvantageStep(["fighting", "rock"], "ice"), 2);       // +1 + 1
+  assert.equal(getTypeAdvantageStep(["fire", "ground"], ["steel", "rock"]), 2); // +1 (fogo) + 2 (terra ×4), teto
+  assert.equal(getTypeAdvantageStep(["fire", "fighting"], ["fairy", "ghost"]), -2); // 0 + −2
 });
 
 test("multiplicador mapeia passos para ±20% com teto ±40%", () => {
@@ -28,14 +34,10 @@ test("perfil defensivo lista vulnerabilidades e resistências", () => {
   assert.ok(p.resist.includes("water")); // grama resiste a água
 });
 
-test("log diz qual tipo valeu quando o atacante tem 2 tipos", () => {
-  // Dragão/Terra contra Fada: ataca com Terra (neutro), não com Dragão (−40%).
-  assert.equal(formatTypeNote(["dragon", "ground"], ["fairy"], 0, 0), "Atacou como Terra → Fada: neutro.");
-  // Tipo único: frase de sempre, sem rótulo extra.
+test("log mostra a contribuição de cada tipo do atacante", () => {
+  assert.equal(formatTypeNote(["dragon", "ground"], ["fairy"], -2, -30), "Muito resistente: -30 de dano por resistência (Dragão −2, Terra 0 → Fada).");
+  assert.equal(formatTypeNote(["fire", "water"], ["grass"], 0, 0), "Tipos se anularam (Fogo +1, Água −1 → Planta): neutro.");
   assert.equal(formatTypeNote(["dragon"], ["fairy"], -2, -30), "Muito resistente: -30 de dano por resistência.");
   assert.equal(formatTypeNote(["fairy"], ["dragon"], 1, 20), "✦ Super efetivo: +20 de dano por vantagem.");
-  // 2 tipos com o mesmo resultado: nada a esclarecer.
   assert.equal(formatTypeNote(["normal", "flying"], ["fire"], 0, 0), null);
-  // 2 tipos, o melhor dá vantagem: mostra qual.
-  assert.equal(formatTypeNote(["water", "normal"], ["fire"], 1, 15), "✦ Super efetivo: +15 de dano por vantagem (Água → Fogo).");
 });

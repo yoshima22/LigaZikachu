@@ -256,7 +256,7 @@ A rotação do Miauvadão é **voo único**: `autoRefreshMiauvadaoIfNeeded` usa 
 ## 13. Regras de jogo que vivem no código (resumo)
 
 - **W/O conta como BYE**: 3 pontos e 0 vitórias; faltosos são punidos. Postura em combate: use `preferredCombatRole`.
-- **Vantagem de tipo**: ±20% por passo, teto ±40%; x4 = +40%; imunidade (0x) vira −40%. O log guarda `typeStep`/`typeDelta`. Não é retroativo.
+- **Vantagem de tipo**: ±20% por passo, teto ±40%; x4 = +40%; imunidade (0x) vira −40%. Atacante de 2 tipos: os passos de **cada** tipo se somam (Dragão/Terra contra Fada = −2 + 0 = −40%), teto ±40%. O log guarda `typeStep`/`typeDelta`. Não é retroativo.
 - **Habilidades passivas + TM**: só no Arena Draft. Fonte = planilhas em `docs/`; `scripts/generate-ability-data.py` gera `data.generated.ts`.
 - **Megas**: o painel (`EggPokemonToggle`) governa pedras e catálogo do Draft.
 - **LigaCash (LC)**: moeda premium (loja, bazar, carteira, admin, ledger).

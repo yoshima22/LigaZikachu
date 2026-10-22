@@ -877,7 +877,9 @@ export default async function ManualPage() {
             ]}
           />
           <Note>
-            Mascotes de dois tipos atacam com o tipo mais vantajoso. A vantagem e a resistência
+            Mascotes de dois tipos usam os dois: o efeito de cada tipo se soma (ex.: Dragão/Terra contra Fada =
+            −40% do Dragão + 0 da Terra = −40%; Fogo/Água contra Planta = +20% − 20% = neutro), sempre com
+            limite de ±40%. A vantagem e a resistência
             são sinalizadas como o super efetivo — nos efeitos visuais, no texto do replay moderno e nos logs —
             e o dano mostra, entre parênteses, quanto o tipo somou (+) ou removeu (−). Abra a janela de tipos
             (clique na tag de tipo do mascote) para ver suas vulnerabilidades e resistências. Vale apenas
