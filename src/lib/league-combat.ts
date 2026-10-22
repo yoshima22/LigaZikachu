@@ -1,5 +1,5 @@
 import type { ArenaTurnLog } from "./arena-z";
-import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getTypeAdvantageStep, getPokemonName, PERSONALITY_LABEL } from "./mascot-data";
+import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getTypeAdvantageStep, getPokemonName, PERSONALITY_LABEL, formatTypeNote } from "./mascot-data";
 import { PERSONALITY_AFFINITY } from "./personality-design";
 import { debuffResistanceFactor } from "./personality-combat";
 import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getHealerHealAmount, getOpportunistProfile, splitOpportunistDebuff, describeOpportunistSplit, isSupportRole, getAttackerDamageBonus, getDefenderReduction, getDuelistDamageBonus, getEncouragerBonus, getFlankBypassChance, getFlankDamageBonus, getGuardianIntercept, getGuardianReduction, getProvokerChance, getSaboteurSuppression, getScoutBonus, getSpecialistDamageBonus, getSurvivorReduction, type CombatRole } from "./combat-roles";
@@ -755,10 +755,7 @@ export function runLeagueCombat(
         }
       }
 
-      const typeNote = typeStep === 0 ? null
-        : typeStep > 0
-          ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
-          : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;
+      const typeNote = formatTypeNote(typesOf(actor), typesOf(target), typeStep, typeDelta);
       const effects = [
         typeNote,
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,

@@ -47,6 +47,7 @@ import {
   getPokemonName,
   getPokemonTypes,
   getTypeAdvantageMultiplier,
+  formatTypeNote,
 } from "@/lib/mascot-data";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
@@ -1339,10 +1340,7 @@ function runArenaCombatInternal(
         const abilityAfter = abilityEngine
           ? abilityEngine.afterHit({ actor, target, damage })
           : [];
-        const typeNote = typeStep === 0 ? null
-          : typeStep > 0
-            ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
-            : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;
+        const typeNote = formatTypeNote(arenaTypes(actor), arenaTypes(target), typeStep, typeDelta);
         const effects =
           [
             typeNote,

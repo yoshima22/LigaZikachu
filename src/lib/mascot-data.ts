@@ -2496,6 +2496,26 @@ export function getTypeAdvantageStep(attackerTypes: string | string[], defenderT
   return -2;                        // 0,25x (dupla resistência)
 }
 
+/**
+ * Frase de tipo do log de combate. Atacante com 2 tipos ataca com o MELHOR
+ * deles; quando isso muda o resultado em relação a algum outro tipo dele
+ * (ex.: Dragão/Terra contra Fada → Terra, neutro), a frase diz qual valeu,
+ * para o log não parecer que a resistência "não aplicou".
+ */
+export function formatTypeNote(attackerTypes: string[], defenderTypes: string[], typeStep: number, typeDelta: number): string | null {
+  let used = attackerTypes[0];
+  for (const t of attackerTypes) if (effOfType(t, defenderTypes) > effOfType(used, defenderTypes)) used = t;
+  const otherSteps = attackerTypes.filter((t) => t !== used).map((t) => getTypeAdvantageStep(t, defenderTypes));
+  const matchup = attackerTypes.length > 1 && otherSteps.some((s) => s !== typeStep)
+    ? `${getTypeLabelPt(used)} → ${defenderTypes.map(getTypeLabelPt).join("/")}`
+    : null;
+  if (typeStep === 0) return matchup ? `Atacou como ${matchup}: neutro.` : null;
+  const text = typeStep > 0
+    ? `${typeStep === 2 ? "✦ Super vantajoso" : "✦ Super efetivo"}: +${typeDelta} de dano por vantagem.`
+    : `${typeStep === -2 ? "Muito resistente" : "Resistência de tipo"}: ${typeDelta} de dano por resistência.`;
+  return matchup ? `${text.slice(0, -1)} (${matchup}).` : text;
+}
+
 /** Multiplicador de dano por tipo: 0.6 | 0.8 | 1.0 | 1.2 | 1.4 (±20% por passo, teto ±40%). */
 export function getTypeAdvantageMultiplier(attackerTypes: string | string[], defenderTypes: string | string[]): number {
   return 1 + getTypeAdvantageStep(attackerTypes, defenderTypes) * 0.2;
