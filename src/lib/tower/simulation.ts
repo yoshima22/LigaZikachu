@@ -223,15 +223,17 @@ export function simulateTower(
       const kind = state.graph.find((room) => room.id === occupied)?.kind;
       if (!state.rooms[occupied]?.cleared && (kind === "COMBAT" || kind === "BOSS")) {
         const retreat = soloRecoveryRetreatPath(state, occupied, floor);
-        if (!retreat || retreat.length < 2) { outcome = "LOSS"; break; }
-        soloRecoveryTarget = retreat.at(-1)!;
-        soloReturnTarget = occupied;
+        if (retreat && retreat.length >= 2) {
+          soloRecoveryTarget = retreat.at(-1)!;
+          soloReturnTarget = occupied;
+        }
       }
     }
     if (partySize === 1) {
       const ordered = [...mascots].sort((left, right) => left.formationSlot - right.formationSlot);
       const living = ordered.filter((mascot) => mascot.hp > 0);
-      if (living.length >= 2 && ordered.slice(0, 2).filter((mascot) => mascot.hp > 0).length < 2) {
+      const requiredActive = Math.min(2, living.length);
+      if (requiredActive > 0 && ordered.slice(0, requiredActive).filter((mascot) => mascot.hp > 0).length < requiredActive) {
         const selection = [...living, ...ordered.filter((mascot) => mascot.hp <= 0)].map((mascot) => mascot.id);
         for (const slot of switchSoloFormation(ordered.map((mascot) => ({ mascotId: mascot.id, currentHp: mascot.hp, formationSlot: mascot.formationSlot })), selection))
           mascots.find((mascot) => mascot.id === slot.mascotId)!.formationSlot = slot.formationSlot;
@@ -375,7 +377,7 @@ export function simulateTower(
       }
     }
     const pressureChange = pressureDelta({ activeFronts: activeFrontCount, mistakes: fronts.reduce((sum, front) => sum + front.mistakes, 0), waits, shield: state.pressureShield ?? 0, splitPenalty: talentFx.splitPenalty });
-    state = updateOverload(applyPressureToExpedition(state, pressureChange), turns, overloadFromResults(fronts));
+    state = updateOverload(applyPressureToExpedition(state, pressureChange), turns, overloadFromResults(fronts, partySize));
     if (partySize > 1) {
       const previousCharge = bossOverloadValue(state);
       state = earnBossOverloadCharge(state, fronts.filter((front) => front.success).map((front) => front.roomId));

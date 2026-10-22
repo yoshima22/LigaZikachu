@@ -63,3 +63,10 @@ test("late-floor group size tuning does not change the middle floors or legacy r
   assert.equal(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 2),
     towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE, 3));
 });
+
+test("V2 middle floors scale a duo separately without making a trio easier", () => {
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 3, TOWER_BALANCE_GROUP_V2, 2), 61);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 3, TOWER_BALANCE_GROUP_V2, 3), 85);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 1, TOWER_BALANCE_GROUP_V2, 2), 61);
+  assert.equal(towerEnemyBaseStat(70, 4, 1, 5, TOWER_BALANCE_GROUP_V2, 3), 82);
+});

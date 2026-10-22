@@ -33,6 +33,21 @@ test("group and legacy fights have no reserve stage", () => {
   assert.deepEqual(Object.keys(result.hpByMascotId).sort(), ["a1", "a2"]);
 });
 
+test("one surviving solo mascot can fight after taking the first active slot", () => {
+  const waves = selectTowerBattleWaves("SOLO", 2, [
+    { fighter: fighter("survivor", "owner", { hp: 100, force: 80 }), formationSlot: 1 },
+    { fighter: fighter("fallen-active", "owner", { hp: 0 }), formationSlot: 2 },
+    { fighter: fighter("fallen-reserve-1", "owner", { hp: 0 }), formationSlot: 3 },
+    { fighter: fighter("fallen-reserve-2", "owner", { hp: 0 }), formationSlot: 4 },
+  ]);
+  assert.equal(towerEncounterLevel(waves.active), 20);
+  const result = resolveTowerBattle({ ...waves,
+    enemies: [fighter("enemy", "TORRE", { hp: 1, force: 1 })], random: () => 0.5 });
+  assert.equal(result.battle.winner, "A");
+  assert.ok(result.hpByMascotId.survivor > 0);
+  assert.equal(result.hpByMascotId["fallen-active"], 0);
+});
+
 test("V2 solo, group and legacy select only their own present formation", () => {
   const entries = [
     { fighter: fighter("a1", "host", { hp: 0 }), formationSlot: 1 },

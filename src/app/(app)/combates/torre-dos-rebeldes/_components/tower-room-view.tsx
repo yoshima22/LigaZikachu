@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
+import { TowerRouteChoices } from "./tower-route-choices";
 
 type Exploration = NonNullable<
   Extract<
@@ -174,6 +175,7 @@ export function TowerRoomView({
         </div>
       </div>
 
+      <TowerRouteChoices routes={exploration.routes} selectedId={routeId} disabled={disabled} onRoute={onRoute} />
       <div className="rounded-2xl border border-slate-700 bg-[#070b18] p-3 sm:p-5">
         <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">
           Mapa vivo do andar
@@ -183,8 +185,7 @@ export function TowerRoomView({
         </p>
         {expedition && <div className="space-y-2 sm:hidden" aria-label="Mapa em lista para celular">
           <div className="rounded-xl border border-amber-300/50 bg-amber-300/10 p-3"><span className="text-[10px] font-black uppercase text-amber-200">● Você está aqui · {kindLabel[room.kind] ?? room.kind}</span><b className="mt-1 block text-sm text-white">{room.title}</b><p className="mt-1 text-xs text-slate-300">{room.cleared ? "Sala resolvida; escolha uma passagem." : room.kind === "BOSS" ? "Você pode enfrentar o chefe quando a equipe estiver pronta ou voltar por um corredor aberto para ajudar." : "Resolva esta sala antes de seguir."}</p></div>
-          {exploration.routes.map((route) => route && <button type="button" key={route.id} disabled={disabled || !route.available} onClick={() => route.available && onRoute(route.id)} className={`w-full rounded-xl border p-3 text-left ${routeId === route.id ? "border-cyan-200 bg-cyan-200/15" : route.available ? "border-purple-300/40 bg-purple-950/30" : "border-red-400/35 bg-red-950/20"}`}><span className={`text-[10px] font-black uppercase ${route.available ? "text-cyan-200" : "text-red-200"}`}>{route.available ? routeId === route.id ? "✓ Próxima rota escolhida" : "→ Próxima rota disponível" : "🔒 Rota bloqueada"}</span><b className="mt-1 block text-sm text-white">{route.title}</b>{route.blockedReason && <span className="mt-1 block text-xs text-red-200">{route.blockedReason}</span>}</button>)}
-          <p className="text-[10px] text-slate-400">O mapa completo está disponível em telas maiores; esta lista mostra apenas passagens da sua sala.</p>
+          <p className="text-[10px] text-slate-400">As passagens disponíveis estão nos cartões acima. O mapa completo está disponível em telas maiores.</p>
         </div>}
         <div className={`rounded-xl border border-slate-800 bg-[radial-gradient(circle_at_center,rgba(88,28,135,.18),transparent_65%)] ${expedition ? "hidden sm:block" : ""}`}>
           <div className="relative w-full min-w-0" style={{ height: mapHeight }}>

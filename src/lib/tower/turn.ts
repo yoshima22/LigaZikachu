@@ -1040,7 +1040,8 @@ export async function resolveTowerTurnLocked(runId: string, expectedTurn?: numbe
         let nextState = applyPressureToExpedition({ ...resolved.state, members }, pressureChange);
         if (navigatorDiscount) nextState = { ...nextState, countermeasures: [...(nextState.countermeasures ?? []), "ROLE:NAVEGADOR:USED"] };
         const appliedPressure = nextState.lastPressureChange?.applied ?? 0;
-        nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts));
+        nextState = updateOverload(nextState, run.globalTurn, overloadFromResults(resolved.fronts,
+          run.partyProfile === "GROUP" && run.balanceVersion === 2 ? run.members.length : undefined));
         if (run.partyProfile === "GROUP" && run.balanceVersion === 2) {
           const previousBank = bossOverloadValue(nextState);
           nextState = earnBossOverloadCharge(nextState,

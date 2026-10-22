@@ -1,6 +1,7 @@
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { TowerLobby } from "./_components/tower-lobby";
+import { TowerHero } from "./_components/tower-hero";
 import { requireTowerAccess } from "./actions";
 
 export const dynamic = "force-dynamic";
@@ -12,26 +13,7 @@ export default async function TorreDosRebeldesPage() {
 
   return (
     <main className="mx-auto max-w-7xl space-y-6 px-4 py-8">
-      <header className="relative min-h-[360px] overflow-hidden rounded-3xl border border-purple-500/35 bg-cover bg-center p-6 shadow-[0_0_60px_rgba(109,40,217,.18)]" style={{backgroundImage:"linear-gradient(90deg,rgba(5,2,12,.96),rgba(5,2,12,.48),rgba(5,2,12,.82)),url('/events/torre-dos-rebeldes/cover.png')"}}>
-       <div className="absolute inset-x-0 bottom-0 h-48 bg-gradient-to-t from-[#07040d] to-transparent" />
-       <div className="relative max-w-2xl pt-24">
-        <div className="flex flex-wrap items-center gap-2">
-          <span className="text-2xl">🗼</span>
-          <h1 className="text-2xl font-black text-white">Torre dos Rebeldes</h1>
-          <span className="rounded-full border border-purple-400/40 bg-purple-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-purple-200">
-            Evento em construção
-          </span>
-          <span className="rounded-full border border-cyan-400/40 bg-cyan-400/10 px-2 py-0.5 text-[9px] font-black uppercase tracking-wider text-cyan-300">
-            Teste fechado
-          </span>
-        </div>
-        <p className="mt-2 max-w-3xl text-sm leading-relaxed text-slate-300">
-          Uma expedição Solo com quatro mascotes ou cooperativa para 2–3 jogadores com dois mascotes por pessoa. Atravesse
-          salas cobertas pela névoa, neutralize mecanismos e enfrente os rebeldes em
-          confrontos apresentados rodada por rodada. O progresso de vida permanece entre os andares.
-        </p>
-       </div>
-      </header>
+      <TowerHero />
 
       <TowerLobby />
 
