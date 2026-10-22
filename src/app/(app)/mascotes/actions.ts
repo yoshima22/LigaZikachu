@@ -1366,13 +1366,28 @@ export async function adminFormFriendshipAction(mascotAId: string, mascotBId: st
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
+// Card vinculado à conta chega como "<itemId>~bound". Itens vinculados são um
+// subconjunto da quantidade (boundQuantity); sem isto o consumo descontava
+// sempre a unidade comum (negociável) primeiro, mesmo com o card vinculado
+// selecionado. O trigger clamp_bound_quantity segura boundQuantity em [0, quantity].
+function parseInventoryKey(raw: string) {
+  const bound = raw.endsWith("~bound");
+  return { itemId: bound ? raw.slice(0, -"~bound".length) : raw, bound };
+}
+function consumeOne(bound: boolean) {
+  return bound
+    ? { quantity: { decrement: 1 }, boundQuantity: { decrement: 1 } }
+    : { quantity: { decrement: 1 } };
+}
+
 // Usar buff em um mascote
-export async function useMascotBuffAction(mascotId: string, itemId: string): Promise<{
+export async function useMascotBuffAction(mascotId: string, inventoryKey: string): Promise<{
   error?: string;
   replacedExistingBuff?: boolean;
   honeyOutcome?: HoneySocialOutcome;
 }> {
   try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1434,7 +1449,7 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
       // Remove 1 do inventário
       await tx.playerInventory.update({
         where: { playerId_itemId: { playerId: player.id, itemId } },
-        data: { quantity: { decrement: 1 } }
+        data: consumeOne(bound),
       });
 
       if (config.type === "ANTIDOTE") {
@@ -1503,8 +1518,9 @@ export async function useMascotBuffAction(mascotId: string, itemId: string): Pro
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useMegaStoneAction(mascotId: string, itemId: string): Promise<{ error?: string; megaName?: string }> {
+export async function useMegaStoneAction(mascotId: string, inventoryKey: string): Promise<{ error?: string; megaName?: string }> {
   try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
     const user = await getSessionUser();
     if (!user) return { error: "NÃ£o autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1547,7 +1563,7 @@ export async function useMegaStoneAction(mascotId: string, itemId: string): Prom
     await prisma.$transaction(async (tx) => {
       await tx.playerInventory.update({
         where: { playerId_itemId: { playerId: player.id, itemId } },
-        data: { quantity: { decrement: 1 } },
+        data: consumeOne(bound),
       });
       await tx.mascot.update({
         where: { id: mascot.id },
@@ -1611,8 +1627,9 @@ export async function setMascotAbilityAction(mascotId: string, abilitySlug: stri
 }
 
 // TM de habilidade oculta: libera a oculta da espécie para este mascote (uma vez).
-export async function useAbilityTmAction(mascotId: string, itemId: string): Promise<{ error?: string; abilityName?: string }> {
+export async function useAbilityTmAction(mascotId: string, inventoryKey: string): Promise<{ error?: string; abilityName?: string }> {
   try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
     const user = await getSessionUser();
     if (!user) return { error: "Não autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1648,7 +1665,7 @@ export async function useAbilityTmAction(mascotId: string, itemId: string): Prom
       if (unlocked.count !== 1) throw new Error("A habilidade oculta deste mascote já foi desbloqueada.");
       const consumed = await tx.playerInventory.updateMany({
         where: { playerId: player.id, itemId, quantity: { gt: 0 } },
-        data: { quantity: { decrement: 1 } },
+        data: consumeOne(bound),
       });
       if (consumed.count !== 1) throw new Error("Este TM já foi consumido em outra ação.");
       await tx.mascotEvent.create({
@@ -1668,7 +1685,7 @@ export async function useAbilityTmAction(mascotId: string, itemId: string): Prom
 
 // ── Novos itens especiais ─────────────────────────────────────────────────────
 
-export async function useLuckyEggAction(mascotId: string): Promise<{ error?: string }> {
+export async function useLuckyEggAction(mascotId: string, bound = false): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1679,12 +1696,12 @@ export async function useLuckyEggAction(mascotId: string): Promise<{ error?: str
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Ovo da Sorte no inventário." };
     await applyLuckyEgg(player.id, mascotId);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: consumeOne(bound) });
     revalidate(player.id); return {};
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error?: string }> {
+export async function useWeaknessPolicyAction(mascotId: string, bound = false): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1704,7 +1721,7 @@ export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error
     await prisma.$transaction(async (tx) => {
       const consumed = await tx.playerInventory.updateMany({
         where: { id: inv.id, quantity: { gt: 0 } },
-        data: { quantity: { decrement: 1 } },
+        data: consumeOne(bound),
       });
       if (consumed.count !== 1) throw new Error("A Política de Fraqueza já foi consumida em outra ação.");
       await applyWeaknessPolicy(player.id, mascotId, tx);
@@ -1732,7 +1749,7 @@ export async function useWeaknessPolicyAction(mascotId: string): Promise<{ error
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function usePicnicBasketAction(): Promise<{ error?: string; mascotCount?: number }> {
+export async function usePicnicBasketAction(bound = false): Promise<{ error?: string; mascotCount?: number }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1742,12 +1759,12 @@ export async function usePicnicBasketAction(): Promise<{ error?: string; mascotC
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Cesta de Piquenique no inventário." };
     const count = await applyPicnicBasket(player.id);
-    await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+    await prisma.playerInventory.update({ where: { id: inv.id }, data: consumeOne(bound) });
     revalidate(player.id); return { mascotCount: count };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useVacationTicketAction(mascotId: string): Promise<{ error?: string }> {
+export async function useVacationTicketAction(mascotId: string, bound = false): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
@@ -1758,12 +1775,17 @@ export async function useVacationTicketAction(mascotId: string): Promise<{ error
     if (!inv || inv.quantity < 1) return { error: "Você não tem Ticket de Férias no inventário." };
     // Consome o ticket ANTES, com guarda de saldo: dois usos simultâneos (mascotes diferentes) não passam com 1 ticket só,
     // e o estoque nunca fica negativo. Se as férias não puderem começar, devolve o ticket.
-    const consumed = await prisma.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: { quantity: { decrement: 1 } } });
+    // Se o vinculado foi escolhido, guarda se ele de fato existia para devolver do mesmo tipo.
+    const boundUsed = bound && inv.boundQuantity > 0;
+    const consumed = await prisma.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: consumeOne(boundUsed) });
     if (consumed.count !== 1) return { error: "Você não tem Ticket de Férias no inventário." };
     try {
       await applyVacationTicket(player.id, mascotId);
     } catch (err) {
-      await prisma.playerInventory.update({ where: { id: inv.id }, data: { quantity: { increment: 1 } } });
+      await prisma.playerInventory.update({
+        where: { id: inv.id },
+        data: boundUsed ? { quantity: { increment: 1 }, boundQuantity: { increment: 1 } } : { quantity: { increment: 1 } },
+      });
       throw err;
     }
     revalidate(player.id); return {};
@@ -1780,8 +1802,9 @@ export async function claimVacationAction(expeditionId: string): Promise<{ error
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
-export async function useXpShareAction(mascotId: string, itemId: string): Promise<{ error?: string }> {
+export async function useXpShareAction(mascotId: string, inventoryKey: string): Promise<{ error?: string }> {
   try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
@@ -1802,7 +1825,7 @@ export async function useXpShareAction(mascotId: string, itemId: string): Promis
     });
     await applyXpShare(player.id, mascotId, shopItem.type as "XP_SHARE" | "XP_SHARE_TEAM");
     await prisma.$transaction(async (tx) => {
-      await tx.playerInventory.update({ where: { id: inv.id }, data: { quantity: { decrement: 1 } } });
+      await tx.playerInventory.update({ where: { id: inv.id }, data: consumeOne(bound) });
       if (previous) {
         const previousItem = await tx.shopItem.findFirst({
           where: { type: previous.type as "XP_SHARE" | "XP_SHARE_TEAM", active: true },
@@ -1855,12 +1878,13 @@ type RainbowFeatherComparisonSnapshot = {
   statVitality: number;
 };
 
-export async function useRainbowFeatherAction(mascotId: string, itemId: string): Promise<{
+export async function useRainbowFeatherAction(mascotId: string, inventoryKey: string): Promise<{
   error?: string;
   statRange?: string;
   comparison?: { before: RainbowFeatherComparisonSnapshot; after: RainbowFeatherComparisonSnapshot };
 }> {
   try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
@@ -1910,7 +1934,7 @@ export async function useRainbowFeatherAction(mascotId: string, itemId: string):
       const reset = await applyRainbowFeather(player.id, mascotId, eggTier, tx, isAdminLabFeather);
       await tx.playerInventory.update({
         where: { id: inv.id },
-        data: { quantity: { decrement: 1 } },
+        data: consumeOne(bound),
       });
       await tx.mascotEvent.create({
         data: {

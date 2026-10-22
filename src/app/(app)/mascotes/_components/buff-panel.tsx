@@ -9,7 +9,8 @@ import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 
-const realBuffId = (id: string) => id.replace(/~bound$/, "");
+// O id do card vinculado ("<itemId>~bound") vai inteiro para o servidor, que gasta a unidade vinculada.
+const isBoundKey = (id: string) => id.endsWith("~bound");
 
 interface BuffItem {
   id: string; name: string; type: string; quantity: number;
@@ -388,15 +389,16 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       const t = selectedBuffItem.type;
 
       try {
-        if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot);
-        else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot);
-        else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction();
-        else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot);
-        else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, realBuffId(selectedBuff));
-        else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, realBuffId(selectedBuff));
-        else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, realBuffId(selectedBuff));
-        else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, realBuffId(selectedBuff));
-        else r = await useMascotBuffAction(selectedMascot, realBuffId(selectedBuff));
+        const bound = isBoundKey(selectedBuff);
+        if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot, bound);
+        else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot, bound);
+        else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction(bound);
+        else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot, bound);
+        else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
+        else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
+        else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
+        else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
+        else r = await useMascotBuffAction(selectedMascot, selectedBuff);
       } catch (error) {
         // Falha de rede/servidor (ex.: página aberta antes de uma atualização): antes ficava silenciosa.
         console.error("[BuffPanel] falha ao usar o item", error);
