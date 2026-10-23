@@ -358,6 +358,13 @@ export async function closeTournamentWeek(raw: z.infer<typeof closeWeekRewardsSc
     },
   });
   if (!week) throw new Error("Semana nao encontrada.");
+  // Fase final (Semana 9): fechar as recompensas também entrega a premiação de
+  // Johto pela chave (idempotente via rewardedAt) — vale para este botão e
+  // para "Encerrar semana".
+  if (week.weekNumber === 9 && week.tournament.postseasonEnabled) {
+    const { distributePostseasonRewards } = await import("./postseason-actions");
+    await distributePostseasonRewards(week.tournamentId);
+  }
   const weekLabel = week.label ?? `Semana ${week.weekNumber}`;
   const submissionIds = Array.from(new Set(week.matches.flatMap((match) => [match.playerADeckSubmissionId, match.playerBDeckSubmissionId].filter(Boolean) as string[])));
   const submissions = submissionIds.length > 0
