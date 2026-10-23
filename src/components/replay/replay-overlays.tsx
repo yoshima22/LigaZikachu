@@ -4,6 +4,12 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
 import { describeAbility, getAbilityInfo } from "@/lib/abilities";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { COMBAT_ROLE_DESCRIPTIONS, COMBAT_ROLE_LABELS } from "@/lib/combat-roles";
+
+// O log grava a postura pelo rótulo ("Defensor"); a descrição é indexada pelo código.
+const ROLE_DESCRIPTION: Record<string, string> = Object.fromEntries(
+  (Object.keys(COMBAT_ROLE_LABELS) as (keyof typeof COMBAT_ROLE_LABELS)[]).map((k) => [COMBAT_ROLE_LABELS[k], COMBAT_ROLE_DESCRIPTIONS[k]]),
+);
 import type { ActiveStatus } from "@/lib/replay-status";
 import type { Combatant } from "./replay-canvas";
 
@@ -150,9 +156,14 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
               <img src={c.sprite} alt="" className="h-16 w-16 object-contain" />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-black text-white">{c.name}</p>
-                <p className="text-[10px] text-slate-400">{(c.types ?? [c.type]).map((t) => TYPE_LABELS_PT[t] ?? t).join(" · ")}{c.role ? ` · ${c.role}` : ""}</p>
+                <p className="text-[10px] text-slate-400">{(c.types ?? [c.type]).map((t) => TYPE_LABELS_PT[t] ?? t).join(" · ")}</p>
               </div>
               <button type="button" onClick={() => go(1)} aria-label="Próximo mascote" className="rounded-lg p-1 text-slate-400 hover:text-white"><ChevronRight size={18} /></button>
+            </div>
+            <div className="mt-2 rounded-xl border border-cyan-300/20 bg-cyan-400/[.05] p-3">
+              <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Postura</p>
+              <p className="mt-0.5 text-sm font-black text-cyan-100">{c.role ?? "Não registrada"}</p>
+              {c.role && ROLE_DESCRIPTION[c.role] && <p className="mt-1 text-[11px] leading-relaxed text-slate-300">{ROLE_DESCRIPTION[c.role]}</p>}
             </div>
             {info ? (
               <div className="mt-2 rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/[.06] p-3">

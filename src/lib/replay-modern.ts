@@ -31,6 +31,14 @@ export function buildModernReplay(
   opts: { bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string } } = {},
 ): ReplayData {
   const bgUrl = opts.bgUrl ?? "/replay-lab/arena.webp";
+  // Postura de quem não a trouxe no lineup (ex.: Arena Z): o log grava em cada turno.
+  const roleFromLog = (id: string) => {
+    for (const e of log) {
+      if (e.actorId === id && e.actorRole) return e.actorRole;
+      if (e.targetId === id && e.targetRole) return e.targetRole;
+    }
+    return undefined;
+  };
   const toCombatant = (mon: ReplayLineMon, side: "A" | "B"): Combatant => {
     const pokemonId = mon.pokemonId ?? 0;
     return {
@@ -41,7 +49,7 @@ export function buildModernReplay(
       sprite: getStaticSpriteUrl(pokemonId),
       maxHp: Math.max(1, mon.maxHp ?? mon.hp ?? 100),
       side,
-      role: mon.role ?? undefined,
+      role: mon.role ?? roleFromLog(mon.id),
       types: getPokemonTypes(pokemonId),
       ability: mon.ability ?? null,
     };
