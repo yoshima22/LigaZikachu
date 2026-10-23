@@ -10,7 +10,8 @@ import {
   WeekStatus,
 } from "@prisma/client";
 import { revalidatePath, revalidateTag } from "next/cache";
-import { getJohtoPrize, JOHTO_BOXES, JOHTO_PLACEMENTS, johtoPlacementFromResult } from "@/lib/johto-reward-boxes";
+import { johtoPlacementFromResult } from "@/lib/johto-reward-boxes";
+import { createJohtoPrizeGifts, playersWithJohtoPrize } from "@/lib/johto-reward-grant";
 import { signalRealtime } from "@/lib/realtime-signal";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
@@ -317,38 +318,26 @@ export async function distributePostseasonRewards(tournamentId: string) {
   const titleChampion = tournament.postseasonEntries.find((entry) => entry.stage === TournamentPostseasonStage.TITLE_SURVIVAL && entry.status === TournamentPostseasonStatus.CHAMPION);
   const cupChampion = tournament.postseasonEntries.find((entry) => entry.stage === TournamentPostseasonStage.CUP_JOHTO && entry.status === TournamentPostseasonStatus.CHAMPION);
   if (!titleChampion || !cupChampion) throw new Error("Conclua a Chave Z e a Copa Johto antes de distribuir a premiação final.");
-  const pendingEntries = tournament.postseasonEntries.filter((entry) => !entry.rewardedAt);
-  if (pendingEntries.length === 0) return { success: true, alreadyDistributed: true };
-
   // Colocação pela CHAVE da fase final (resultLabel), não pela tabela de pontos.
-  const planned = pendingEntries.map((entry) => ({ entry, placement: johtoPlacementFromResult(entry.stage, entry.resultLabel) }));
-  const missing = planned.filter((p) => !p.placement).map((p) => p.entry.player.displayName);
+  const allPlanned = tournament.postseasonEntries.map((entry) => ({ entry, placement: johtoPlacementFromResult(entry.stage, entry.resultLabel) }));
+  const missing = allPlanned.filter((p) => !p.placement).map((p) => p.entry.player.displayName);
   if (missing.length) throw new Error(`Resultado final indefinido para: ${missing.join(", ")}. Avance as rodadas até o fim antes de distribuir.`);
 
-  await prisma.$transaction(async (tx) => {
-    for (const { entry, placement } of planned) {
-      const scenario = JOHTO_PLACEMENTS.find((p) => p.id === placement)!;
-      const prize = getJohtoPrize(placement!);
-      const base = { tournamentId: tournament.id, stage: entry.stage, resultLabel: entry.resultLabel, placement };
-      // Prêmios fixos: um clique. Cada caixa: aberta uma a uma, com animação; o
-      // sorteio acontece no servidor no momento da abertura.
-      await tx.playerGift.create({
-        data: {
-          playerId: entry.playerId, type: "CUSTOM", title: `Premiação Johto — ${scenario.label}`, description: scenario.message,
-          payload: { ...base, rewardKind: "JOHTO_PRIZE" } as Prisma.InputJsonValue,
-        },
-      });
-      await tx.playerGift.createMany({
-        data: prize.boxes.map((tier, index) => ({
-          playerId: entry.playerId, type: "CUSTOM" as const, title: JOHTO_BOXES[tier].name,
-          description: index === 0 ? "Presente para todos os jogadores de Johto." : scenario.message,
-          payload: { ...base, rewardKind: "JOHTO_BOX", tier, boxIndex: index } as Prisma.InputJsonValue,
-        })),
-      });
+  // "Já premiado" = já tem o presente JOHTO_PRIZE deste torneio (não o rewardedAt,
+  // que a versão antiga marcava ao mandar só um aviso). Lock evita duplicar se os
+  // dois botões de fechamento forem clicados juntos.
+  const planned = await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`johto-prizes:${tournament.id}`}))`;
+    const done = await playersWithJohtoPrize(tx, tournament.id);
+    const pending = allPlanned.filter((p) => !done.has(p.entry.playerId));
+    for (const { entry, placement } of pending) {
+      await createJohtoPrizeGifts(tx, { tournamentId: tournament.id, playerId: entry.playerId, stage: entry.stage, resultLabel: entry.resultLabel, placement: placement! });
       await tx.tournamentPostseasonEntry.update({ where: { id: entry.id }, data: { rewardedAt: new Date() } });
     }
-    await tx.auditLog.create({ data: { actorUserId: admin.id, entityType: "tournament", entityId: tournament.id, action: "postseason.rewards_distributed", after: { players: planned.length, placements: planned.map((p) => ({ playerId: p.entry.playerId, placement: p.placement })) } } });
+    if (pending.length) await tx.auditLog.create({ data: { actorUserId: admin.id, entityType: "tournament", entityId: tournament.id, action: "postseason.rewards_distributed", after: { players: pending.length, placements: pending.map((p) => ({ playerId: p.entry.playerId, placement: p.placement })) } } });
+    return pending;
   });
+  if (planned.length === 0) return { success: true, alreadyDistributed: true };
   for (const { entry } of planned) {
     revalidateTag(`nav-${entry.player.userId}`);
     signalRealtime(`player:${entry.playerId}`, "nav");

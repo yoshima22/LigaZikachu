@@ -1,6 +1,34 @@
 import { EggType, FoodType, Prisma, ZikaCoinTxType, type ShopItemType } from "@prisma/client";
 import { creditCoins } from "@/lib/zikacoins";
-import type { JohtoReward } from "@/lib/johto-reward-boxes";
+import { getJohtoPrize, JOHTO_BOXES, JOHTO_PLACEMENTS, type JohtoPlacement, type JohtoReward } from "@/lib/johto-reward-boxes";
+
+/** Jogadores deste torneio que JÁ receberam a premiação de Johto (fonte da verdade da entrega). */
+export async function playersWithJohtoPrize(db: Prisma.TransactionClient, tournamentId: string): Promise<Set<string>> {
+  const rows = await db.$queryRaw<{ playerId: string }[]>`
+    SELECT DISTINCT "playerId" FROM public.player_gifts
+    WHERE payload->>'rewardKind' = 'JOHTO_PRIZE' AND payload->>'tournamentId' = ${tournamentId}`;
+  return new Set(rows.map((r) => r.playerId));
+}
+
+/** Cria os presentes de Johto de um jogador: prêmios fixos (1 clique) + 1 caixa por item da lista. */
+export async function createJohtoPrizeGifts(tx: Prisma.TransactionClient, input: { tournamentId: string; playerId: string; stage: string; resultLabel: string | null; placement: JohtoPlacement }) {
+  const scenario = JOHTO_PLACEMENTS.find((p) => p.id === input.placement)!;
+  const prize = getJohtoPrize(input.placement);
+  const base = { tournamentId: input.tournamentId, stage: input.stage, resultLabel: input.resultLabel, placement: input.placement };
+  await tx.playerGift.create({
+    data: {
+      playerId: input.playerId, type: "CUSTOM", title: `Premiação Johto — ${scenario.label}`, description: scenario.message,
+      payload: { ...base, rewardKind: "JOHTO_PRIZE" } as Prisma.InputJsonValue,
+    },
+  });
+  await tx.playerGift.createMany({
+    data: prize.boxes.map((tier, index) => ({
+      playerId: input.playerId, type: "CUSTOM" as const, title: JOHTO_BOXES[tier].name,
+      description: index === 0 ? "Presente para todos os jogadores de Johto." : scenario.message,
+      payload: { ...base, rewardKind: "JOHTO_BOX", tier, boxIndex: index } as Prisma.InputJsonValue,
+    })),
+  });
+}
 
 const EGG_BY_ID: Record<string, EggType> = { "event-egg": EggType.EVENT, "special-egg": EggType.SPECIAL, "lab-egg": EggType.LAB };
 const FEATHER_TIER_BY_ID: Record<string, string> = { "rare-feather": "RARE", "special-feather": "SPECIAL", "lab-feather": "LAB" };
