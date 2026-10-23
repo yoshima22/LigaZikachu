@@ -73,7 +73,7 @@ type Phase = "windup" | "strike" | "recover";
 export function ReplayCanvas({ data }: { data: ReplayData }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playing, setPlaying] = useState(true);
-  const [speed, setSpeed] = useState(1);
+  const [speed, setSpeed] = useState(1.5); // começa em 1,5×; o jogador ajusta nos botões
   const [currentLog, setCurrentLog] = useState(0);
 
   // Refs mutáveis para o loop de animação (não disparam re-render).
