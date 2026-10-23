@@ -12,6 +12,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
+import { Johto3PlacementEffect, type Johto3Tier } from "./title-entrance-johto3";
 
 export type TitleEntranceEffect =
   | "NONE" | "LIGHTNING_STRIKE" | "BOSS_ALERT" | "CHAMPION_ARENA"
@@ -19,7 +20,8 @@ export type TitleEntranceEffect =
   | "GLITCH_HACK" | "SLOT_MACHINE" | "ELEMENTAL_AURA" | "MIAUVADAO_SEAL"
   | "PILAR_DA_COMUNIDADE"
   | "ORDER_SHADOW_MARK" | "ORDER_PURPLE_SMOKE" | "ORDER_GLITCH_HEIST" | "ORDER_CAPTAIN_SEAL"
-  | "RAID_BOSS_FLARE" | "MEGA_AWAKENING" | "TREASURE_BURST" | "STARRY_CROWN";
+  | "RAID_BOSS_FLARE" | "MEGA_AWAKENING" | "TREASURE_BURST" | "STARRY_CROWN"
+  | "JOHTO3_FIRST" | "JOHTO3_SECOND" | "JOHTO3_THIRD" | "JOHTO3_CHAMPION" | "JOHTO3_FOURTH";
 
 export interface TitleEntranceProps {
   name: string;
@@ -53,6 +55,11 @@ const DURATION: Record<string, number> = {
   MEGA_AWAKENING:     5600,
   TREASURE_BURST:     5000,
   STARRY_CROWN:       5200,
+  JOHTO3_FIRST:       8200,
+  JOHTO3_SECOND:      7000,
+  JOHTO3_THIRD:       6200,
+  JOHTO3_CHAMPION:    6000,
+  JOHTO3_FOURTH:      4800,
 };
 
 // Tempo até a fase "ambient" começar (ms)
@@ -1997,6 +2004,7 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
       {effect === "ELEMENTAL_AURA"    && <ElementalAuraEffect    {...props}/>}
       {effect === "MIAUVADAO_SEAL"      && <MiauvadaoSealEffect      {...props}/>}
       {effect === "PILAR_DA_COMUNIDADE" && <PilarDaComunidadeEffect  {...props}/>}
+      {effect.startsWith("JOHTO3_") && <Johto3PlacementEffect tier={effect.slice(7) as Johto3Tier} name={name} flavorText={flavorText} />}
       {SPECIAL_EFFECT_CFG[effect] && <CinematicTitleEffect {...props} effect={effect} />}
     </div>
   );
