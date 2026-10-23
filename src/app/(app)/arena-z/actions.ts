@@ -347,8 +347,8 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       damage: number; advantageApplied: boolean; isPlayerAttacker: boolean;
       actorRole?: string; targetRole?: string; effect?: string; hpAfter?: number;
     }>;
-    playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
-    opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number }>;
+    playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
+    opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
     injuredCount: number;
   };
 }> {
@@ -437,6 +437,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           ownerId: string | null;
           maxHp: number;
           side?: "A" | "D";
+          ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null;
         }>
       : [];
     const replayMascotById = new Map(replayMascots.map((mascot) => [mascot.id, mascot]));
@@ -483,6 +484,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           ?? (mascot
             ? Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4))
             : Math.max(1, received + (survived ? 100 : 0))),
+        ability: snapshot?.ability ?? null,
       };
     };
     const playerMascotIds = mascotIds.filter(id => belongsToPlayerSide(id, fighterOwner.get(id)));

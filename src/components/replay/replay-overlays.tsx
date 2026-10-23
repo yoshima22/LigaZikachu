@@ -93,7 +93,7 @@ const STATE_PT: Record<string, { label: string; cls: string }> = {
 };
 
 /** Card sobre o campo com as habilidades de cada mascote, navegável por time e mascote. */
-export function AbilitiesCard({ teams, sideNames, onClose }: { teams: Combatant[]; sideNames: { A: string; B: string }; onClose: () => void }) {
+export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }: { teams: Combatant[]; sideNames: { A: string; B: string }; onClose: () => void; unrecorded?: boolean }) {
   const [side, setSide] = useState<"A" | "B">("A");
   const [i, setI] = useState(0);
   const list = teams.filter((c) => c.side === side);
@@ -158,7 +158,7 @@ export function AbilitiesCard({ teams, sideNames, onClose }: { teams: Combatant[
               <div className="mt-2 rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/[.06] p-3">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-black text-fuchsia-100">
                   ✨ {info.name}
-                  {state && <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${state.cls}`}>{state.label}</span>}
+                  {state && <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${state.cls}`}>{typeof c.ability?.factor === "number" ? `${Math.round(c.ability.factor * 100)}% · ` : ""}{state.label}</span>}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-400">
                   {[info.category, info.effectName, info.activations > 0 ? `${info.activations}× por luta` : "Passiva"].filter(Boolean).join(" · ")}
@@ -167,7 +167,11 @@ export function AbilitiesCard({ teams, sideNames, onClose }: { teams: Combatant[
                 {c.ability?.reason && <p className="mt-2 text-[11px] text-amber-200/90">{c.ability.reason}</p>}
               </div>
             ) : (
-              <p className="mt-2 rounded-xl border border-dashed border-white/10 p-3 text-center text-[11px] text-slate-500">Sem habilidade passiva nesta luta.</p>
+              <p className="mt-2 rounded-xl border border-dashed border-white/10 p-3 text-center text-[11px] text-slate-500">
+                {unrecorded
+                  ? "Este replay é de antes do registro das habilidades: elas atuaram na luta (veja os efeitos no log), mas o detalhe de cada mascote não foi salvo. Lutas novas mostram tudo aqui."
+                  : "Sem habilidade passiva nesta luta."}
+              </p>
             )}
             <p className="mt-2 text-center text-[10px] text-slate-600">{Math.min(i, list.length - 1) + 1} de {list.length} · use ‹ › para navegar</p>
           </div>

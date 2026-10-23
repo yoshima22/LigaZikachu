@@ -235,14 +235,14 @@ function BattleAnimationModal({
   }, [turns, playerMascots, botMascots, playerTeamName, botName]);
   const modernData = useMemo(() => {
     if (!canModern) return null;
-    const toLine = (m: MascotInfo) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, maxHp: m.maxHp, ability: m.ability && m.ability.state !== "NONE" ? { slug: m.ability.slug, state: m.ability.state, reason: m.ability.reason } : null });
+    const toLine = (m: MascotInfo) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, maxHp: m.maxHp, ability: m.ability && m.ability.state !== "NONE" ? { slug: m.ability.slug, state: m.ability.state, factor: m.ability.factor, reason: m.ability.reason } : null });
     const turnsOut: ReplayLogEntry[] = turns.map((t) => ({
       turn: t.turn, actorId: t.attackerId, targetId: t.defenderId, action: t.action ?? "ATTACK",
       attackerType: t.attackerType, damage: t.damage, advantageApplied: t.advantageApplied,
       typeStep: t.typeStep, typeDelta: t.typeDelta, actorRole: t.actorRole, targetRole: t.targetRole,
       effect: t.effect, guardianIntercept: t.guardianIntercept ?? null, debuffEvents: t.debuffEvents,
     }));
-    return buildModernReplay(playerMascots.map(toLine), botMascots.map(toLine), turnsOut, { winnerName, sideNames: { A: playerTeamName, B: botName } });
+    return buildModernReplay(playerMascots.map(toLine), botMascots.map(toLine), turnsOut, { winnerName, sideNames: playerTeamName === botName ? { A: `${playerTeamName} · ataque`, B: `${botName} · defesa` } : { A: playerTeamName, B: botName } });
   }, [turns, playerMascots, botMascots, winnerName, canModern, playerTeamName, botName]);
 
   // HP tracking keyed by stable mascot id; names can repeat.

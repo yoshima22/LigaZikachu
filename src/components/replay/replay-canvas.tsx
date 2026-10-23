@@ -17,7 +17,7 @@ export type Combatant = {
   role?: string; // rótulo de postura (define frente/trás no campo)
   types?: string[];
   /** Habilidade passiva na luta (Arena Draft/Arena Z); ausente nos modos sem habilidade. */
-  ability?: { slug: string; state?: string; reason?: string | null } | null;
+  ability?: { slug: string; state?: string; factor?: number; reason?: string | null } | null;
 };
 export type ReplayTurn = {
   turn: number;
@@ -218,7 +218,8 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     <div className="space-y-3">
       <div className="relative flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
         <canvas ref={canvasRef} width={920} height={440} className="block h-auto w-auto" style={{ maxWidth: "100%", maxHeight: "72vh" }} />
-        {showAbilities && <AbilitiesCard teams={data.teams} sideNames={data.sideNames ?? { A: "Equipe 1", B: "Equipe 2" }} onClose={closeAbilities} />}
+        {showAbilities && <AbilitiesCard teams={data.teams} sideNames={data.sideNames ?? { A: "Equipe 1", B: "Equipe 2" }} onClose={closeAbilities}
+          unrecorded={!data.teams.some((c) => c.ability) && data.turns.some((t) => t.action === "ABILITY")} />}
       </div>
       <StatusStrip teams={data.teams} statuses={statuses} turnIdx={currentLog} />
       <div className="flex flex-wrap items-center gap-2">

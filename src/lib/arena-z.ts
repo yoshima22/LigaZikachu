@@ -4407,6 +4407,8 @@ export async function runPvpBattle(
             // os times num treino "espelho" (self vs self), em que os dois lados têm
             // o mesmo dono e não dá para distinguir só pelo ownerId.
             side,
+            // Habilidade e % efetivo (treino de habilidades) para o card do replay.
+            ability: attackPlan?.states[mascot.id] ?? defensePlan?.states[mascot.id] ?? null,
           })),
         } as unknown as Prisma.InputJsonValue,
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
