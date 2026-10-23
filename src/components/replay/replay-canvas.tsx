@@ -356,6 +356,7 @@ function step(st: St, dt: number, data: ReplayData, onTurn: (i: number) => void)
 // Deriva livre: cada ator caminha até um alvo aleatório dentro da sua metade
 // do campo; ao chegar (ou expirar o cooldown) sorteia outro. `exclude` pula
 // quem está animando um golpe.
+const ROAM_RATE = 0.00154;
 function roam(st: St, dt: number, exclude: Set<string> | null) {
   const { W, H } = st;
   for (const a of Object.values(st.actors)) {
@@ -372,8 +373,10 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
       a.rty = 0.14 * H + Math.random() * 0.72 * H;
       a.roamCd = 700 + Math.random() * 900;
     }
-    a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022 * pace);
-    a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022 * pace);
+    // Passeio entre turnos 30% mais calmo (era 0.0022) para não cruzar o campo
+    // rápido demais e confundir quem está acompanhando.
+    a.x += (a.rtx - a.x) * Math.min(1, dt * ROAM_RATE * pace);
+    a.y += (a.rty - a.y) * Math.min(1, dt * ROAM_RATE * pace);
     a.x = Math.max(24, Math.min(W - 24, a.x)); a.y = Math.max(0.1 * H, Math.min(0.9 * H, a.y));
     // sprite de frente olha p/ a esquerda por padrão: time A espelha (p/ direita), time B natural
     a.face = a.c.side === "A" ? -1 : 1;
