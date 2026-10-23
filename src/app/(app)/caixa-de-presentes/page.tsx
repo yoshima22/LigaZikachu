@@ -8,6 +8,8 @@ import { EmptyState } from "@/components/ui/empty-state";
 import { StatusBadge, type BadgeVariant } from "@/components/ui/status-badge";
 import { prisma } from "@/lib/prisma";
 import { GiftClaimButton, ClaimAllGiftsButton } from "./_components/GiftClaimButton";
+import { JohtoPrizeSection, type JohtoGiftView } from "./_components/johto-prize-section";
+import { isJohtoBoxTier } from "@/lib/johto-reward-boxes";
 
 export const dynamic = "force-dynamic";
 
@@ -74,14 +76,27 @@ export default async function GiftBoxPage({ searchParams }: { searchParams: Prom
 
   const params = await searchParams;
   const pageSize = 24;
-  const unclaimedCount = await prisma.playerGift.count({ where: { playerId: player.id, status: GiftStatus.UNCLAIMED } });
+  // Premiação de Johto tem seção própria (abertura com animação) e fica fora
+  // da lista comum e do "Receber todos".
+  const johtoGifts = await prisma.$queryRaw<{ id: string; title: string; description: string | null; tier: string | null }[]>`
+    SELECT id, title, description, payload->>'tier' AS tier FROM public.player_gifts
+    WHERE "playerId" = ${player.id} AND status = 'UNCLAIMED' AND payload->>'rewardKind' LIKE 'JOHTO%'
+    ORDER BY "createdAt" ASC, id ASC
+  `;
+  const johtoIds = johtoGifts.map((gift) => gift.id);
+  const johtoView: JohtoGiftView[] = johtoGifts.map((gift) => ({
+    id: gift.id, title: gift.title, message: gift.description ?? "",
+    tier: isJohtoBoxTier(gift.tier) ? gift.tier : null,
+  }));
+  const unclaimedCount = await prisma.playerGift.count({ where: { playerId: player.id, status: GiftStatus.UNCLAIMED, id: { notIn: johtoIds } } });
   const pages = Math.max(1, Math.ceil(unclaimedCount / pageSize));
   const requested = Number(params.page ?? 1);
   const page = Number.isSafeInteger(requested) ? Math.min(pages, Math.max(1, requested)) : 1;
   const gifts = await prisma.playerGift.findMany({
     where: {
       playerId: player.id,
-      status: GiftStatus.UNCLAIMED
+      status: GiftStatus.UNCLAIMED,
+      id: { notIn: johtoIds },
     },
     orderBy: [{ createdAt: "desc" }, { id: "desc" }],
     take: pageSize,
@@ -115,12 +130,14 @@ export default async function GiftBoxPage({ searchParams }: { searchParams: Prom
         )}
       </div>
 
+      {johtoView.length > 0 && <JohtoPrizeSection gifts={johtoView} />}
+
       {pages > 1 && <nav className="flex items-center gap-4 text-sm" aria-label="Páginas de presentes">
         {page > 1 && <Link prefetch={false} href={`/caixa-de-presentes?page=${page - 1}`}>Anterior</Link>}
         <span>Página {page} de {pages} · {unclaimedCount} presentes</span>
         {page < pages && <Link prefetch={false} href={`/caixa-de-presentes?page=${page + 1}`}>Próxima</Link>}
       </nav>}
-      {gifts.length === 0 ? (
+      {gifts.length === 0 ? johtoView.length > 0 ? null : (
         <Card>
           <EmptyState message="Nenhum presente pendente. Presentes recebidos aparecem em suas areas correspondentes." icon={<Gift size={28} />} />
         </Card>

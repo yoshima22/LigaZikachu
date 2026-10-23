@@ -1,4 +1,8 @@
-/** Preview catalog. No inventory, wallet, tournament state or persistence is touched here. */
+/**
+ * Catálogo das caixas e prêmios de Johto (puro, usado no cliente e no servidor).
+ * A entrega real fica em `johto-reward-grant.ts`; a distribuição, em
+ * `distributePostseasonRewards` (torneios/[slug]/admin/postseason-actions.ts).
+ */
 export type JohtoBoxTier = "remembrance" | "common" | "rare" | "special";
 export type JohtoRewardKind = "coins" | "food" | "sweet" | "ticket" | "protein" | "feather" | "egg" | "cosmetic";
 export type JohtoReward = { id: string; label: string; kind: JohtoRewardKind; quantity: number; boostPercent?: number };
@@ -81,6 +85,20 @@ export const JOHTO_PLACEMENTS: { id: JohtoPlacement; label: string; message: str
   { id: "cup-semi", label: "Semifinalista da Copa", message: "Uma campanha que merece aplausos. Parabéns pela semifinal!" },
   { id: "cup-first-round", label: "Primeira fase da Copa", message: "Cada partida fez parte dessa história. Obrigado por jogar em Johto!" },
 ];
+
+/**
+ * Colocação pela CHAVE da fase final (resultLabel gravado em advancePostseason),
+ * nunca pela tabela de pontos da fase regular.
+ */
+export function johtoPlacementFromResult(stage: string, resultLabel: string | null): JohtoPlacement | null {
+  const map: Record<string, JohtoPlacement> = stage === "TITLE_SURVIVAL"
+    ? { CAMPEAO_LIGA: "title-first", VICE_LIGA: "title-second", TERCEIRO_LUGAR: "title-third", QUARTO_LUGAR: "title-fourth" }
+    : { CAMPEAO_COPA: "cup-first", VICE_COPA: "cup-second", SEMIFINALISTA_COPA: "cup-semi", QUINTO_SEMIFINALISTA: "cup-semi", ELIMINADO_PRIMEIRA_RODADA: "cup-first-round" };
+  return resultLabel ? map[resultLabel] ?? null : null;
+}
+
+export const isJohtoBoxTier = (value: unknown): value is JohtoBoxTier => typeof value === "string" && value in JOHTO_BOXES;
+export const isJohtoPlacement = (value: unknown): value is JohtoPlacement => JOHTO_PLACEMENTS.some((p) => p.id === value);
 
 function reward(id: string, label: string, kind: JohtoRewardKind, quantity = 1, boostPercent?: number): JohtoReward {
   return { id, label, kind, quantity, ...(boostPercent === undefined ? {} : { boostPercent }) };

@@ -107,7 +107,7 @@ export function PostseasonControl({ tournamentId, enabled, entries, matches }: {
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-red-400/20 bg-red-500/5 p-3">
             <p className="text-xs text-red-200">Reiniciar remove apenas a Semana 9, suas partidas e os estados de vidas. A fase regular não é alterada.</p>
             <div className="flex flex-wrap gap-2">
-              <button type="button" disabled={pending} onClick={() => run(() => distributePostseasonRewards(tournamentId), "Premiação final enviada para a Caixa de Presentes.")} className="rounded-lg border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-3 py-2 text-xs font-semibold text-[#FFCB05]">Distribuir premiação final</button>
+              <button type="button" disabled={pending} onClick={() => { if (window.confirm("Enviar agora os prêmios e as caixas de Johto para a Caixa de Presentes de todos os 11 jogadores, pela colocação na chave? Isso não pode ser desfeito. (Encerrar a Semana 9 faz isso automaticamente.)")) run(() => distributePostseasonRewards(tournamentId), "Premiação final enviada para a Caixa de Presentes."); }} className="rounded-lg border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-3 py-2 text-xs font-semibold text-[#FFCB05]">Distribuir premiação final</button>
               <button type="button" disabled={pending} onClick={() => { if (window.confirm("Reiniciar toda a fase final?")) run(() => resetPostseason(tournamentId), "Fase final reiniciada."); }} className="flex items-center gap-2 rounded-lg border border-red-400/30 px-3 py-2 text-xs font-semibold text-red-300"><RotateCcw size={13} /> Reiniciar fase final</button>
             </div>
           </div>

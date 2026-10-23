@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
-import { EggType, FoodType, GiftStatus, ZikaCoinTxType, type Prisma } from "@prisma/client";
+import { EggType, FoodType, GiftStatus, Prisma, ZikaCoinTxType } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
@@ -12,6 +12,11 @@ import { openStickerPackByName } from "@/app/(app)/passe-apoiador/pack-opener";
 import { grantSyncTicketShopItem } from "@/lib/sync-challenge";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
+import { getJohtoPrize, isJohtoBoxTier, isJohtoPlacement, rollJohtoBox, type JohtoReward } from "@/lib/johto-reward-boxes";
+import { grantJohtoRewards } from "@/lib/johto-reward-grant";
+
+// Caixas/prêmios de Johto abrem um a um com animação: ficam fora do "Receber todos".
+const NOT_JOHTO_GIFT = Prisma.sql`COALESCE(payload->>'rewardKind', '') NOT LIKE 'JOHTO%'`;
 
 const claimGiftSchema = z.object({
   giftId: z.string().min(1),
@@ -50,7 +55,7 @@ async function applyGiftReward(
   tx: Prisma.TransactionClient,
   playerId: string,
   gift: ClaimableGift
-): Promise<{ autoSold?: { itemName: string; coins: number } }> {
+): Promise<{ autoSold?: { itemName: string; coins: number }; rewards?: JohtoReward[] }> {
   const payload = getPayloadRecord(gift.payload);
 
   if (gift.type === "STICKER") {
@@ -73,6 +78,23 @@ async function applyGiftReward(
   if (gift.type !== "CUSTOM" || !payload) return {};
 
   const rewardKind = typeof payload.rewardKind === "string" ? payload.rewardKind : null;
+
+  if (rewardKind === "JOHTO_BOX" || rewardKind === "JOHTO_PRIZE") {
+    // Nada vem do cliente: a caixa é sorteada aqui e os prêmios fixos são
+    // recalculados pela colocação gravada na distribuição.
+    let rewards: JohtoReward[];
+    if (rewardKind === "JOHTO_BOX") {
+      if (!isJohtoBoxTier(payload.tier)) throw new Error("Caixa de Johto inválida. O presente foi mantido na caixa.");
+      rewards = rollJohtoBox(payload.tier);
+    } else {
+      if (!isJohtoPlacement(payload.placement)) throw new Error("Premiação de Johto inválida. O presente foi mantido na caixa.");
+      rewards = getJohtoPrize(payload.placement).items;
+    }
+    await grantJohtoRewards(tx, playerId, rewards, gift.title);
+    // Guarda o resultado sorteado no próprio presente (histórico/auditoria).
+    await tx.playerGift.update({ where: { id: gift.id }, data: { payload: { ...payload, granted: rewards } as Prisma.InputJsonValue } });
+    return { rewards };
+  }
 
   if (rewardKind === "STICKER_PACK") {
     const packName = typeof payload.packName === "string" ? payload.packName : null;
@@ -372,6 +394,14 @@ function revalidateGiftTargets(userId?: string, playerId?: string) {
   if (playerId) revalidateTag(`player-mascots-${playerId}`);
 }
 
+async function countBulkClaimableGifts(playerId: string) {
+  const [row] = await prisma.$queryRaw<{ n: number }[]>`
+    SELECT COUNT(*)::int AS n FROM public.player_gifts
+    WHERE "playerId" = ${playerId} AND status = 'UNCLAIMED' AND ${NOT_JOHTO_GIFT}
+  `;
+  return row?.n ?? 0;
+}
+
 export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
   try {
     const user = await getSessionUser();
@@ -400,6 +430,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
     const now = new Date();
 
     let autoSold: { itemName: string; coins: number } | undefined;
+    let rewards: JohtoReward[] | undefined;
     await prisma.$transaction(async (tx) => {
       const claimed = await tx.playerGift.updateMany({
         where: { id: giftId, playerId: player.id, status: GiftStatus.UNCLAIMED },
@@ -408,6 +439,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
       if (claimed.count !== 1) throw new Error("Presente já resgatado ou indisponível.");
       const result = await applyGiftReward(tx, player.id, gift);
       if (result.autoSold) autoSold = result.autoSold;
+      rewards = result.rewards;
       await tx.auditLog.create({
         data: {
           actorUserId: user.id,
@@ -436,7 +468,7 @@ export async function claimGift(input: z.infer<typeof claimGiftSchema>) {
     });
 
     revalidateGiftTargets(user.id, player.id);
-    return { success: true, autoSold };
+    return { success: true, autoSold, rewards };
   } catch (err) {
     console.error("[claimGift] Erro ao resgatar presente:", err);
     return { error: err instanceof Error ? err.message : "Erro ao resgatar presente. Tente novamente." };
@@ -457,15 +489,12 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
     const { playerId, deferRefresh } = claimAllGiftsSchema.parse(input);
     if (playerId !== player.id) return { error: "Sem permissao" };
 
-    const gifts = await prisma.playerGift.findMany({
-      where: {
-        playerId: player.id,
-        status: GiftStatus.UNCLAIMED,
-      },
-      select: { id: true },
-      take: GIFT_CLAIM_BATCH_SIZE,
-      orderBy: { createdAt: "asc" },
-    });
+    const gifts = await prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM public.player_gifts
+      WHERE "playerId" = ${player.id} AND status = 'UNCLAIMED' AND ${NOT_JOHTO_GIFT}
+      ORDER BY "createdAt" ASC
+      LIMIT ${GIFT_CLAIM_BATCH_SIZE}
+    `;
 
     if (gifts.length === 0) {
       return { success: true, claimed: 0, remaining: 0, failed: 0 };
@@ -488,7 +517,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
           const [current] = await tx.$queryRaw<ClaimableGift[]>`
             UPDATE public.player_gifts
             SET status = 'CLAIMED', "claimedAt" = ${now}
-            WHERE id = ${gift.id} AND "playerId" = ${player.id} AND status = 'UNCLAIMED'
+            WHERE id = ${gift.id} AND "playerId" = ${player.id} AND status = 'UNCLAIMED' AND ${NOT_JOHTO_GIFT}
             RETURNING id, type::text AS type, title, payload
           `;
           if (!current) return false;
@@ -532,9 +561,7 @@ export async function claimAllGifts(input: z.infer<typeof claimAllGiftsSchema>) 
       }
     }
 
-    const remaining = await prisma.playerGift.count({
-      where: { playerId: player.id, status: GiftStatus.UNCLAIMED },
-    });
+    const remaining = await countBulkClaimableGifts(player.id);
     if (!deferRefresh || remaining === 0) revalidateGiftTargets(user.id, player.id);
     else {
       revalidateTag(`nav-${user.id}`);

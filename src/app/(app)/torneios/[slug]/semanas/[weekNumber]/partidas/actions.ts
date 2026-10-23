@@ -1329,6 +1329,14 @@ export async function closeWeek(tournamentId: string, weekNumber: number) {
 
   if (!week) throw new Error("Semana não encontrada");
 
+  // Fase final (Semana 9): encerrar a semana entrega a premiação de Johto pela
+  // chave. Se a Chave Z ou a Copa não terminaram, a distribuição recusa e a
+  // semana continua aberta — nunca fecha sem premiar. Idempotente (rewardedAt).
+  if (week.weekNumber === 9 && week.tournament.postseasonEnabled) {
+    const { distributePostseasonRewards } = await import("@/app/(app)/torneios/[slug]/admin/postseason-actions");
+    await distributePostseasonRewards(tournamentId);
+  }
+
   await prisma.tournamentWeek.update({
     where: { id: week.id },
     data: { status: "CLOSED" },
