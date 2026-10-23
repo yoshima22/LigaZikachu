@@ -9,8 +9,21 @@
 import { classify, splitEffect, type EffectKind } from "@/components/replay-effect-chips";
 import type { ReplayData } from "@/components/replay/replay-canvas";
 
+/** Condições (estados alterados das habilidades) que mudam a aparência do mascote no campo. */
+export type CondKind = "FREEZE" | "SLEEP" | "PARALYSIS" | "CONFUSION" | "POISON" | "BURN" | "CURSE";
+const COND_BY_ADJ: Record<string, CondKind> = {
+  congelado: "FREEZE", dormindo: "SLEEP", paralisado: "PARALYSIS", confuso: "CONFUSION", envenenado: "POISON", queimado: "BURN",
+};
+const COND_LABEL: Record<CondKind, string> = {
+  FREEZE: "❄️ Congelado", SLEEP: "💤 Dormindo", PARALYSIS: "⚡ Paralisado", CONFUSION: "😵 Confuso",
+  POISON: "☠️ Envenenado", BURN: "🔥 Queimado", CURSE: "👻 Maldito",
+};
+const ADJ = "(congelado|dormindo|paralisado|confuso|envenenado|queimado)";
+
 export type ActiveStatus = {
   key: string;
+  /** Presente quando o efeito é uma condição com visual próprio no campo. */
+  condition?: CondKind;
   kind: Exclude<EffectKind, "neutral">;
   label: string;
   detail: string;
@@ -44,6 +57,51 @@ export function statusesAt(data: ReplayData, idx: number): Map<string, ActiveSta
   const names = new Map(data.teams.map((c) => [c.id, c.name]));
   const debuffPct = new Map<string, number>(); // `${target}:${stat}` → pct restante
 
+  // Nome do mascote logo antes de uma expressão ("Pikachu ficou paralisado").
+  // Nomes mais longos primeiro, para "Mega Gyarados" não casar como "Gyarados".
+  const byLongestName = [...data.teams].sort((a, b) => b.name.length - a.name.length);
+  const whoBefore = (sentence: string, phrase: string) => byLongestName.find((c) => sentence.includes(`${c.name} ${phrase}`))?.id ?? null;
+  const setCond = (id: string, cond: CondKind, i: number, detail: string, source: string | null) =>
+    bucket(id).set(`cond:${cond}`, { key: `cond:${cond}`, condition: cond, kind: "debuff", label: COND_LABEL[cond], detail, source, since: i, persistent: true });
+
+  /** Condições vêm como frases fixas do motor (abilities/combat.ts). Retorna true se tratou a frase. */
+  const applyCondition = (sentence: string, i: number): boolean => {
+    let m = sentence.match(new RegExp(`ficou ${ADJ} por (\\d+) rodada`));
+    if (m) {
+      const id = whoBefore(sentence, `ficou ${m[1]}`);
+      const src = sentence.match(/, de ([^)]+)\)/)?.[1] ?? null;
+      if (id) setCond(id, COND_BY_ADJ[m[1]], i, `Dura ${m[2]} rodada${Number(m[2]) > 1 ? "s" : ""}`, src);
+      return Boolean(id);
+    }
+    m = sentence.match(new RegExp(`deixou de estar ${ADJ}`));
+    if (m) {
+      const id = whoBefore(sentence, `deixou de estar ${m[1]}`);
+      if (id) bucket(id).delete(`cond:${COND_BY_ADJ[m[1]]}`);
+      return Boolean(id);
+    }
+    // Reforço: o motor anuncia a condição ao pular a ação (cobre logs sem a frase de aplicação).
+    m = sentence.match(/(continua dormindo|está paralisado|está confuso)/);
+    if (m) {
+      const cond: CondKind = m[1].includes("dormindo") ? "SLEEP" : m[1].includes("paralisado") ? "PARALYSIS" : "CONFUSION";
+      const id = whoBefore(sentence, m[1]);
+      if (id && !bucket(id).has(`cond:${cond}`)) setCond(id, cond, i, "", null);
+      return false; // a frase também vale como efeito do turno
+    }
+    m = sentence.match(/está amaldiçoado por (.+?) e perdeu/);
+    if (m) {
+      const id = whoBefore(sentence, "está amaldiçoado");
+      if (id && !bucket(id).has("cond:CURSE")) setCond(id, "CURSE", i, "Dura até quem amaldiçoou cair", m[1]);
+      return false;
+    }
+    m = sentence.match(/A maldição sobre (.+?) acabou/);
+    if (m) {
+      const id = byLongestName.find((c) => c.name === m![1])?.id;
+      if (id) bucket(id).delete("cond:CURSE");
+      return Boolean(id);
+    }
+    return false;
+  };
+
   const last = Math.min(idx, data.turns.length - 1);
   for (let i = 0; i <= last; i++) {
     const t = data.turns[i];
@@ -72,6 +130,7 @@ export function statusesAt(data: ReplayData, idx: number): Map<string, ActiveSta
 
     if (t.effect) {
       for (const sentence of splitEffect(t.effect)) {
+        if (applyCondition(sentence, i)) continue;
         const kind = classify(sentence);
         if (kind === "neutral") continue;
         // Debuff já veio estruturado nos eventos: não duplica pela frase.
@@ -95,6 +154,16 @@ export function statusesAt(data: ReplayData, idx: number): Map<string, ActiveSta
 
   const out = new Map<string, ActiveStatus[]>();
   for (const [id, m] of byMon) if (m.size) out.set(id, [...m.values()]);
+  return out;
+}
+
+/** Condições ativas por mascote (para o canvas animar). */
+export function conditionsOf(statuses: Map<string, ActiveStatus[]>): Record<string, CondKind[]> {
+  const out: Record<string, CondKind[]> = {};
+  for (const [id, list] of statuses) {
+    const conds = list.flatMap((s) => (s.condition ? [s.condition] : []));
+    if (conds.length) out[id] = conds;
+  }
   return out;
 }
 

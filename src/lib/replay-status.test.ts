@@ -35,6 +35,23 @@ test("nocaute limpa os efeitos do mascote", () => {
   assert.equal(statusesAt(d, 1).has("b"), false);
 });
 
+test("condições: aplicar, reforçar, remover e nomes parecidos", () => {
+  const d: ReplayData = {
+    teams: [mon("a", "A"), { ...mon("g", "B"), name: "Gyarados" }, { ...mon("mg", "B"), name: "Mega Gyarados" }],
+    turns: [
+      turn({ action: "ABILITY", damage: 0, effect: "❄️ Mega Gyarados ficou congelado por 2 rodadas (Nevasca, de a)." }),
+      turn({ action: "ABILITY", damage: 0, effect: "⚡ Gyarados está paralisado e não conseguiu agir." }),
+      turn({ action: "ABILITY", damage: 0, effect: "❄️ Mega Gyarados deixou de estar congelado (descongelou)." }),
+    ],
+  };
+  const at0 = statusesAt(d, 0);
+  assert.equal(at0.get("mg")?.[0].condition, "FREEZE");
+  assert.equal(at0.get("mg")?.[0].source, "a");
+  assert.equal(at0.has("g"), false);
+  assert.equal(statusesAt(d, 1).get("g")?.some((s) => s.condition === "PARALYSIS"), true);
+  assert.equal(statusesAt(d, 2).get("mg")?.some((s) => s.condition === "FREEZE") ?? false, false);
+});
+
 test("rótulo flutuante é curto, nunca a frase inteira", () => {
   assert.equal(shortEffectLabel("✨ Intimidação de Gyarados: reduziu 8% da Força de Pikachu por 2 rodadas."), "✨ Intimidação de Gyarados");
   assert.ok(shortEffectLabel("x".repeat(80)).length <= 26);

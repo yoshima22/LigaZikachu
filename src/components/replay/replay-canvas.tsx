@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { EffectChips } from "@/components/replay-effect-chips";
-import { statusesAt } from "@/lib/replay-status";
+import { conditionsOf, statusesAt, type CondKind } from "@/lib/replay-status";
 import { AbilitiesCard, StatusStrip } from "./replay-overlays";
 
 // ── Tipos de dados (preview isolado; mesma forma que um turnLog normalizado) ──
@@ -82,6 +82,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
   const texRef = useRef<Record<string, HTMLImageElement>>({});
   const tintRef = useRef<Record<string, HTMLCanvasElement>>({});
   const stateRef = useRef<ReturnType<typeof initState> | null>(null);
+  const condsRef = useRef<Record<string, CondKind[]>>({});
   const playRef = useRef(playing);
   const speedRef = useRef(speed);
   playRef.current = playing;
@@ -151,7 +152,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
       sceneIdx: -1, particles: [] as Particle[], pops: [] as Pop[],
       shake: 0, done: false, doneT: 0, idleGap: 500, flashCol: "#ffffff", flashA: 0,
       stepMode: false, requestPause: false,
-      koBanners: [], bolt: null, ring: null, fx: [],
+      koBanners: [], bolt: null, ring: null, fx: [], conds: {},
     } as St;
   }
 
@@ -166,6 +167,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
 
     const loop = (now: number) => {
       const st = stateRef.current!;
+      st.conds = condsRef.current;
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
       try {
@@ -207,6 +209,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
 
   // Efeitos ativos no turno mostrado (faixa abaixo do campo).
   const statuses = useMemo(() => statusesAt(data, currentLog), [data, currentLog]);
+  condsRef.current = conditionsOf(statuses);
   // Card de habilidades: pausa o combate enquanto está aberto e retoma ao fechar
   // só se estava rodando antes.
   const [showAbilities, setShowAbilities] = useState(false);
@@ -297,6 +300,8 @@ type St = {
   bolt: Bolt | null;
   ring: { x: number; y: number; r: number; max: number; color: string; life: number } | null;
   fx: Fx[];
+  /** Condições ativas (congelado, dormindo…) por mascote, vindas da faixa de efeitos. */
+  conds: Record<string, CondKind[]>;
 };
 
 const DUR = { windup: 300, strike: 340, recover: 300 };
@@ -318,7 +323,8 @@ function step(st: St, dt: number, data: ReplayData, onTurn: (i: number) => void)
     a.kx *= 0.82; a.ky *= 0.82; a.flash = Math.max(0, a.flash - dt * 0.003);
     if (a.shield > 0 && (!st.scene || st.scene.turn.guardianInterceptId !== a.c.id)) a.shield = Math.max(0, a.shield - dt * 0.002);
     a.shownHp += (a.hp - a.shownHp) * Math.min(1, dt * 0.01);
-    a.wobble += dt * 0.004;
+    const c = st.conds[a.c.id];
+    a.wobble += c?.includes("FREEZE") ? 0 : dt * (c?.includes("SLEEP") ? 0.0015 : 0.004);
     if (a.fainted) a.faintT += dt;
   }
   st.particles = st.particles.filter((p) => (p.life -= dt) > 0);
@@ -354,6 +360,10 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
   const { W, H } = st;
   for (const a of Object.values(st.actors)) {
     if (a.fainted || (exclude && exclude.has(a.c.id))) continue;
+    const cond = st.conds[a.c.id] ?? [];
+    if (cond.includes("FREEZE") || cond.includes("SLEEP")) continue; // imóvel
+    const pace = cond.includes("PARALYSIS") ? 0.3 : 1;
+    if (cond.includes("CONFUSION") && Math.random() < dt * 0.002) { a.rtx = a.x + (Math.random() - 0.5) * 120; a.rty = a.y + (Math.random() - 0.5) * 80; }
     a.roamCd -= dt;
     const dx = a.rtx - a.x, dy = a.rty - a.y;
     if (a.roamCd <= 0 || dx * dx + dy * dy < 100) {
@@ -362,8 +372,9 @@ function roam(st: St, dt: number, exclude: Set<string> | null) {
       a.rty = 0.14 * H + Math.random() * 0.72 * H;
       a.roamCd = 700 + Math.random() * 900;
     }
-    a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022);
-    a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022);
+    a.x += (a.rtx - a.x) * Math.min(1, dt * 0.0022 * pace);
+    a.y += (a.rty - a.y) * Math.min(1, dt * 0.0022 * pace);
+    a.x = Math.max(24, Math.min(W - 24, a.x)); a.y = Math.max(0.1 * H, Math.min(0.9 * H, a.y));
     // sprite de frente olha p/ a esquerda por padrão: time A espelha (p/ direita), time B natural
     a.face = a.c.side === "A" ? -1 : 1;
   }
@@ -741,7 +752,8 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 
   // atores
   const ordered = Object.values(st.actors).sort((a, b) => a.y - b.y);
-  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex);
+  const now = performance.now();
+  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex, st.conds[a.c.id] ?? [], now);
 
   // pops de dano/cura
   // Texto flutuante legível: no máx. 220px de largura (encolhe até 12px e corta
@@ -1110,7 +1122,7 @@ function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageEleme
   }
 }
 
-function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, tex: Record<string, HTMLImageElement>) {
+function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, tex: Record<string, HTMLImageElement>, conds: CondKind[] = [], now = 0) {
   // escala por profundidade: quem está mais à frente (y maior) aparece maior
   const dz = 0.82 + (a.y / ARENA_H) * 0.26;
   const S = 72 * dz;
@@ -1123,8 +1135,13 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElemen
     return;
   }
 
-  const x = a.x + a.kx, y = a.y + a.ky;
+  // Paralisia: espasmos curtos e periódicos. Confusão: cambaleia de lado.
+  const has = (k: CondKind) => conds.includes(k);
+  const spasm = has("PARALYSIS") && now % 1100 < 220 ? Math.sin(now * 0.09) * 2.4 : 0;
+  const sway = has("CONFUSION") ? Math.sin(now * 0.004) * 5 : 0;
+  const x = a.x + a.kx + spasm + sway, y = a.y + a.ky;
   const bob = Math.sin(a.wobble) * 1.3;
+  if (conds.length) drawConditionBack(ctx, conds, x, y, dz, now);
   const groundY = y + 30; // linha do chão sob os pés
   // sombra (ancora o sprite; encolhe quando ele "sobe" no bob)
   const lift = (bob + 1.3) / 2.6; // 0 = pisando, 1 = topo do bob
@@ -1142,17 +1159,22 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElemen
   // os sprites têm "ar" transparente embaixo; empurra p/ baixo p/ os pés
   // visíveis encostarem na sombra (senão parecem flutuar).
   ctx.translate(x, groundY - S / 2 + S * 0.12 + bob);
+  if (has("CONFUSION")) ctx.rotate(Math.sin(now * 0.004) * 0.12);
+  if (has("SLEEP")) ctx.rotate(0.12 * (a.face === -1 ? -1 : 1)); // cabeça tombada
   if (a.face === -1) ctx.scale(-1, 1);
   if (img && img.complete && img.naturalWidth > 0) {
     if (a.flash > 0) { ctx.shadowBlur = 20 * a.flash; ctx.shadowColor = "#fff"; }
     ctx.imageSmoothingEnabled = false;
-    ctx.drawImage(img, -S / 2, -S / 2, S, S);
+    const tint = conditionTint(conds, now);
+    ctx.drawImage(tint ? tintedSprite(img, S, tint.color, tint.alpha) : img, -S / 2, -S / 2, S, S);
     if (a.flash > 0) { ctx.globalAlpha = 0.5 * a.flash; ctx.globalCompositeOperation = "source-atop"; ctx.fillStyle = "#fff"; ctx.fillRect(-S / 2, -S / 2, S, S); }
   } else {
     // fallback: círculo com cor do tipo
     ctx.fillStyle = hex(a.c.type); ctx.beginPath(); ctx.arc(0, 0, S * 0.36, 0, Math.PI * 2); ctx.fill();
   }
   ctx.restore();
+
+  if (conds.length) drawConditionFront(ctx, conds, x, y, dz, now);
 
   // nome + barra de HP
   ctx.textAlign = "center";
@@ -1164,4 +1186,106 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElemen
   ctx.fillStyle = frac > 0.5 ? "#4ade80" : frac > 0.2 ? "#facc15" : "#ef4444";
   ctx.fillRect(bx, by, bw * frac, bh);
   ctx.strokeStyle = "rgba(255,255,255,0.3)"; ctx.lineWidth = 1; ctx.strokeRect(bx, by, bw, bh);
+}
+
+// ─────────────── condições (estados alterados das habilidades) ───────────────
+// Cor sobre o sprite: congelado (azul gelo), envenenado (roxo pulsante),
+// queimado (laranja tremeluzente), maldito (violeta escuro).
+function conditionTint(conds: CondKind[], now: number): { color: string; alpha: number } | null {
+  if (conds.includes("FREEZE")) return { color: "#7dd3fc", alpha: 0.5 };
+  if (conds.includes("BURN")) return { color: "#fb923c", alpha: 0.18 + 0.12 * Math.abs(Math.sin(now * 0.012)) };
+  if (conds.includes("POISON")) return { color: "#a855f7", alpha: 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(now * 0.004)) };
+  if (conds.includes("CURSE")) return { color: "#4c1d95", alpha: 0.28 };
+  return null;
+}
+
+// Sprite recolorido num canvas auxiliar (o "source-atop" só pinta o próprio sprite).
+let tintCanvas: HTMLCanvasElement | null = null;
+function tintedSprite(img: HTMLImageElement, S: number, color: string, alpha: number): HTMLCanvasElement {
+  const size = Math.ceil(S);
+  tintCanvas ??= document.createElement("canvas");
+  if (tintCanvas.width !== size) { tintCanvas.width = size; tintCanvas.height = size; }
+  const c = tintCanvas.getContext("2d")!;
+  c.clearRect(0, 0, size, size);
+  c.imageSmoothingEnabled = false;
+  c.globalCompositeOperation = "source-over"; c.globalAlpha = 1;
+  c.drawImage(img, 0, 0, size, size);
+  c.globalCompositeOperation = "source-atop"; c.globalAlpha = alpha; c.fillStyle = color;
+  c.fillRect(0, 0, size, size);
+  return tintCanvas;
+}
+
+// Atrás do sprite: aura da maldição e chamas da queimadura.
+function drawConditionBack(ctx: CanvasRenderingContext2D, conds: CondKind[], x: number, y: number, dz: number, now: number) {
+  if (conds.includes("CURSE")) {
+    ctx.save(); const g = ctx.createRadialGradient(x, y - 6, 4, x, y - 6, 46 * dz);
+    g.addColorStop(0, "rgba(76,29,149,0.45)"); g.addColorStop(1, "rgba(76,29,149,0)");
+    ctx.globalAlpha = 0.75 + 0.25 * Math.sin(now * 0.003); ctx.fillStyle = g;
+    ctx.beginPath(); ctx.arc(x, y - 6, 46 * dz, 0, Math.PI * 2); ctx.fill(); ctx.restore();
+  }
+  if (conds.includes("BURN")) {
+    ctx.save();
+    for (let i = 0; i < 5; i++) {
+      const fx = x + (i - 2) * 9 * dz, h = (10 + 6 * Math.abs(Math.sin(now * 0.015 + i * 1.7))) * dz;
+      const g = ctx.createLinearGradient(fx, y + 30, fx, y + 30 - h);
+      g.addColorStop(0, "rgba(239,68,68,0.85)"); g.addColorStop(1, "rgba(253,224,71,0)");
+      ctx.fillStyle = g; ctx.beginPath(); ctx.moveTo(fx - 4 * dz, y + 30); ctx.quadraticCurveTo(fx, y + 30 - h * 1.4, fx + 4 * dz, y + 30); ctx.fill();
+    }
+    ctx.restore();
+  }
+}
+
+// Na frente do sprite: gelo, Zzz, faíscas, estrelas da confusão, bolhas de veneno.
+function drawConditionFront(ctx: CanvasRenderingContext2D, conds: CondKind[], x: number, y: number, dz: number, now: number) {
+  ctx.save();
+  if (conds.includes("FREEZE")) {
+    // cristais de gelo ao redor + reflexo que passa pelo bloco de gelo
+    ctx.strokeStyle = "rgba(186,230,253,0.95)"; ctx.fillStyle = "rgba(224,242,254,0.55)"; ctx.lineWidth = 1.2;
+    const spikes: [number, number, number][] = [[-22, 14, -0.5], [20, 18, 0.45], [-12, -18, -0.2], [16, -10, 0.3], [0, 24, 0]];
+    for (const [ox, oy, r] of spikes) {
+      ctx.save(); ctx.translate(x + ox * dz, y + oy * dz); ctx.rotate(r);
+      ctx.beginPath(); ctx.moveTo(0, -9 * dz); ctx.lineTo(4 * dz, 0); ctx.lineTo(0, 9 * dz); ctx.lineTo(-4 * dz, 0); ctx.closePath(); ctx.fill(); ctx.stroke();
+      ctx.restore();
+    }
+    const sweep = ((now % 2200) / 2200) * 80 - 40;
+    ctx.globalAlpha = 0.35; ctx.fillStyle = "#ffffff";
+    ctx.beginPath(); ctx.ellipse(x + sweep * dz, y - 4, 3 * dz, 26 * dz, 0.5, 0, Math.PI * 2); ctx.fill();
+  }
+  if (conds.includes("SLEEP")) {
+    ctx.fillStyle = "#e0e7ff"; ctx.textAlign = "left";
+    for (let i = 0; i < 3; i++) {
+      const p = ((now / 1600) + i / 3) % 1;
+      ctx.globalAlpha = Math.sin(p * Math.PI);
+      ctx.font = `bold ${Math.round((9 + p * 9) * dz)}px 'Jost', system-ui, sans-serif`;
+      ctx.fillText("z", x + (14 + p * 18) * dz, y - (30 + p * 34) * dz);
+    }
+  }
+  if (conds.includes("PARALYSIS") && now % 1100 < 260) {
+    // descargas em zigue-zague durante o espasmo
+    ctx.strokeStyle = "#fde047"; ctx.lineWidth = 2; ctx.shadowBlur = 10; ctx.shadowColor = "#facc15";
+    for (let k = 0; k < 2; k++) {
+      const sx = x + (k ? 16 : -18) * dz, sy = y - 20 * dz;
+      ctx.beginPath(); ctx.moveTo(sx, sy);
+      for (let j = 1; j <= 4; j++) ctx.lineTo(sx + (j % 2 ? 6 : -6) * dz * (k ? -1 : 1), sy + j * 9 * dz);
+      ctx.stroke();
+    }
+  }
+  if (conds.includes("CONFUSION")) {
+    // estrelinhas orbitando a cabeça
+    ctx.fillStyle = "#fde68a"; ctx.textAlign = "center"; ctx.font = `${Math.round(11 * dz)}px system-ui`;
+    for (let i = 0; i < 3; i++) {
+      const ang = now * 0.004 + (i * Math.PI * 2) / 3;
+      ctx.globalAlpha = 0.6 + 0.4 * Math.sin(ang);
+      ctx.fillText("✦", x + Math.cos(ang) * 16 * dz, y - 34 * dz + Math.sin(ang) * 5 * dz);
+    }
+  }
+  if (conds.includes("POISON")) {
+    ctx.fillStyle = "#c084fc";
+    for (let i = 0; i < 4; i++) {
+      const p = ((now / 1400) + i / 4) % 1;
+      ctx.globalAlpha = 0.8 * (1 - p);
+      ctx.beginPath(); ctx.arc(x + Math.sin(i * 2.3 + p * 4) * 14 * dz, y + (18 - p * 50) * dz, (2 + p * 3) * dz, 0, Math.PI * 2); ctx.fill();
+    }
+  }
+  ctx.restore();
 }
