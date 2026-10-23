@@ -3,9 +3,9 @@
 // Verde: buff · Vermelho: debuff · Azul: proteção · Roxo: personalidade · Amarelo: item.
 // Combates antigos sem notas simplesmente não geram chips.
 
-type EffectKind = "ability" | "buff" | "debuff" | "protection" | "personality" | "item" | "neutral";
+export type EffectKind = "ability" | "buff" | "debuff" | "protection" | "personality" | "item" | "neutral";
 
-const KIND_STYLE: Record<EffectKind, { emoji: string; cls: string }> = {
+export const KIND_STYLE: Record<EffectKind, { emoji: string; cls: string }> = {
   ability:     { emoji: "", cls: "border-fuchsia-400/40 bg-fuchsia-500/15 text-fuchsia-200 font-semibold" },
   buff:        { emoji: "🟢", cls: "border-green-500/30 bg-green-500/10 text-green-300" },
   debuff:      { emoji: "🔴", cls: "border-red-500/30 bg-red-500/10 text-red-300" },
@@ -25,12 +25,12 @@ const RULES: Array<{ kind: EffectKind; re: RegExp }> = [
   { kind: "item",        re: /vitamina|ovo|pena|ticket|amuleto|item|pedra/i },
 ];
 
-function classify(sentence: string): EffectKind {
+export function classify(sentence: string): EffectKind {
   for (const r of RULES) if (r.re.test(sentence)) return r.kind;
   return "neutral";
 }
 
-function splitEffect(effect: string): string[] {
+export function splitEffect(effect: string): string[] {
   return effect
     .split(/(?<=[.!])\s+/)
     .map((s) => s.trim())

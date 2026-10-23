@@ -415,6 +415,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           damage: number; advantageApplied?: boolean; effect?: string; targetHpAfter?: number;
           attackerType?: string; typeStep?: number; typeDelta?: number;
           guardianIntercept?: { mascotId: string; damage: number } | null;
+          debuffEvents?: unknown[];
         }>)
       : [];
     const turnLines = log.map(t =>
@@ -512,6 +513,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       typeStep: turn.typeStep,
       typeDelta: turn.typeDelta,
       guardianIntercept: turn.guardianIntercept ?? undefined,
+      debuffEvents: turn.debuffEvents,
     }));
 
     return {

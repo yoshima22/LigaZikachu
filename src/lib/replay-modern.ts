@@ -2,8 +2,9 @@
 // animado do replay "moderno". Puro: sem I/O, reutilizável no admin e na liga.
 import { getStaticSpriteUrl, getPokemonTypes, getPokemonName } from "@/lib/mascot-data";
 import type { Combatant, ReplayTurn, ReplayData } from "@/components/replay/replay-canvas";
+import { shortEffectLabel } from "@/lib/replay-status";
 
-export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null; role?: string | null };
+export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null; role?: string | null; ability?: { slug: string; state?: string; reason?: string | null } | null };
 export type ReplayLogEntry = {
   turn: number;
   actorId: string;
@@ -27,7 +28,7 @@ export function buildModernReplay(
   lineupA: ReplayLineMon[],
   lineupB: ReplayLineMon[],
   log: ReplayLogEntry[],
-  opts: { bgUrl?: string; winnerName?: string | null } = {},
+  opts: { bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string } } = {},
 ): ReplayData {
   const bgUrl = opts.bgUrl ?? "/replay-lab/arena.webp";
   const toCombatant = (mon: ReplayLineMon, side: "A" | "B"): Combatant => {
@@ -41,6 +42,8 @@ export function buildModernReplay(
       maxHp: Math.max(1, mon.maxHp ?? mon.hp ?? 100),
       side,
       role: mon.role ?? undefined,
+      types: getPokemonTypes(pokemonId),
+      ability: mon.ability ?? null,
     };
   };
   const teams: Combatant[] = [
@@ -94,13 +97,15 @@ export function buildModernReplay(
       actorRole: e.actorRole,
       targetRole: e.targetRole,
       effect: e.effect,
-      abilityName: isHeal ? "Cura" : isSelfish ? "Defesa" : debuffOnly ? (e.effect ?? "Efeito") : undefined,
+      // Só um rótulo curto sobe no campo; a frase completa fica na legenda.
+      abilityName: isHeal ? "Cura" : isSelfish ? "Defesa" : debuffOnly ? shortEffectLabel(e.effect) : undefined,
       guardianInterceptId: guardianId,
       guardianHpAfter,
       guardianInterceptDamage: guardianId ? gDmg : undefined,
       debuff: debuffOnly,
+      debuffEvents: e.debuffEvents ?? undefined,
     });
   }
 
-  return { teams, turns, bgUrl, winnerName: opts.winnerName ?? null };
+  return { teams, turns, bgUrl, winnerName: opts.winnerName ?? null, sideNames: opts.sideNames };
 }

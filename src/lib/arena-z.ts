@@ -3216,6 +3216,7 @@ export async function runBotBattle(
           targetRole: t.targetRole,
           effect: t.effect,
           hpAfter: t.targetHpAfter,
+          debuffEvents: t.debuffEvents,
           isPlayerAttacker: t.actorOwnerId !== null,
         })),
       debugMode: true,
@@ -4669,6 +4670,7 @@ export async function runPvpBattle(
         targetRole: t.targetRole,
         effect: t.effect,
         hpAfter: t.targetHpAfter,
+        debuffEvents: t.debuffEvents,
         isPlayerAttacker: t.actorOwnerId === attackTeam.playerId,
       })),
   };

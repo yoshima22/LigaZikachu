@@ -281,8 +281,8 @@ export function LeagueBattleReplayModal({
   // replay do zero toda vez que o componente re-renderiza (bug "repete 2 ataques").
   const modernData = useMemo(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (canModern ? buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName: modernWinnerName }) : null),
-    [canModern, lineupA, lineupB, replay, modernWinnerName],
+    () => (canModern ? buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName: modernWinnerName, sideNames: { A: playerAName, B: playerBName } }) : null),
+    [canModern, lineupA, lineupB, replay, modernWinnerName, playerAName, playerBName],
   );
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);

@@ -1,7 +1,9 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { EffectChips } from "@/components/replay-effect-chips";
+import { statusesAt } from "@/lib/replay-status";
+import { AbilitiesCard, StatusStrip } from "./replay-overlays";
 
 // ── Tipos de dados (preview isolado; mesma forma que um turnLog normalizado) ──
 export type Combatant = {
@@ -13,6 +15,9 @@ export type Combatant = {
   maxHp: number;
   side: "A" | "B";
   role?: string; // rótulo de postura (define frente/trás no campo)
+  types?: string[];
+  /** Habilidade passiva na luta (Arena Draft/Arena Z); ausente nos modos sem habilidade. */
+  ability?: { slug: string; state?: string; reason?: string | null } | null;
 };
 export type ReplayTurn = {
   turn: number;
@@ -34,8 +39,9 @@ export type ReplayTurn = {
   guardianHpAfter?: number; // HP do guardião após absorver
   guardianInterceptDamage?: number; // quanto o guardião absorveu
   debuff?: boolean; // Oportunista aplicou debuff
+  debuffEvents?: unknown[]; // debuffs de habilidade (origem/valores) p/ a faixa de efeitos
 };
-export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null };
+export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string } };
 
 // Postura → faixa do campo: "front" (perto do centro) ou "back" (perto da borda).
 const FRONT_ROLES = new Set(["Defensor", "Guardião", "Atacante", "Duelista", "Provocador", "Sobrevivente"]);
@@ -199,11 +205,22 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     playTurn(st.sceneIdx + dir);
   };
 
+  // Efeitos ativos no turno mostrado (faixa abaixo do campo).
+  const statuses = useMemo(() => statusesAt(data, currentLog), [data, currentLog]);
+  // Card de habilidades: pausa o combate enquanto está aberto e retoma ao fechar
+  // só se estava rodando antes.
+  const [showAbilities, setShowAbilities] = useState(false);
+  const resumeAfterCard = useRef(false);
+  const openAbilities = () => { resumeAfterCard.current = playRef.current; setPlaying(false); setShowAbilities(true); };
+  const closeAbilities = () => { setShowAbilities(false); if (resumeAfterCard.current) setPlaying(true); };
+
   return (
     <div className="space-y-3">
-      <div className="flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
+      <div className="relative flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
         <canvas ref={canvasRef} width={920} height={440} className="block h-auto w-auto" style={{ maxWidth: "100%", maxHeight: "72vh" }} />
+        {showAbilities && <AbilitiesCard teams={data.teams} sideNames={data.sideNames ?? { A: "Equipe 1", B: "Equipe 2" }} onClose={closeAbilities} />}
       </div>
+      <StatusStrip teams={data.teams} statuses={statuses} turnIdx={currentLog} />
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setPlaying((p) => !p)} className="rounded-lg bg-[#FFCB05] px-4 py-1.5 text-xs font-bold text-[#1A1A2E]">
           {playing ? "❚❚ Pausar" : "▶ Reproduzir"}
@@ -211,9 +228,10 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
         <button onClick={restart} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">↺ Reiniciar</button>
         <button onClick={() => jump(-1)} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">‹ Turno</button>
         <button onClick={() => jump(1)} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">Turno ›</button>
+        <button onClick={openAbilities} className="rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200">✨ Habilidades</button>
         <div className="ml-auto flex items-center gap-1">
-          {[0.5, 1, 2].map((s) => (
-            <button key={s} onClick={() => setSpeed(s)} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${speed === s ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/40" : "border border-slate-700 text-slate-400"}`}>{s}×</button>
+          {[0.5, 1, 1.5, 2].map((s) => (
+            <button key={s} onClick={() => setSpeed(s)} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${speed === s ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/40" : "border border-slate-700 text-slate-400"}`}>{s.toLocaleString("pt-BR")}×</button>
           ))}
         </div>
       </div>
@@ -560,7 +578,7 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     // Debuff/defesa: aura roxa descendo sobre o alvo.
     pushFx(st, "runes", target.x, target.y, 520, "#c084fc");
     for (let i = 0; i < 22; i++) st.particles.push({ x: target.x + (Math.random() - 0.5) * 40, y: target.y - 34 - Math.random() * 22, vx: (Math.random() - 0.5) * 1.5, vy: 3 + Math.random() * 2.5, life: 680, max: 680, color: ["#c084fc", "#a855f7", "#e9d5ff"][(Math.random() * 3) | 0], size: 2 + Math.random() * 3, g: 0.2 });
-    st.pops.push({ x: target.x, y: target.y - 44, text: ability ?? "DEBUFF", color: "#c084fc", life: 1050, vy: -0.6 });
+    if (target !== actor) st.pops.push({ x: target.x, y: target.y - 44, text: sc.turn.debuff ? "▼ EFEITO" : (ability ?? "EFEITO"), color: "#c084fc", life: 1050, vy: -0.6 });
     return;
   }
   // golpes ofensivos → impacto no alvo
@@ -725,10 +743,20 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex);
 
   // pops de dano/cura
-  ctx.textAlign = "center"; ctx.font = "bold 20px 'Jost', system-ui, sans-serif";
+  // Texto flutuante legível: no máx. 220px de largura (encolhe até 12px e corta
+  // com "…"), contorno escuro em vez de brilho, e sempre dentro do campo.
+  ctx.textAlign = "center";
   for (const p of st.pops) {
-    ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 400)); ctx.fillStyle = p.color;
-    ctx.shadowBlur = 6; ctx.shadowColor = "rgba(0,0,0,0.7)"; ctx.fillText(p.text, p.x, p.y); ctx.restore();
+    ctx.save(); ctx.globalAlpha = Math.max(0, Math.min(1, p.life / 400));
+    let size = 20; let text = p.text;
+    ctx.font = `bold ${size}px 'Jost', system-ui, sans-serif`;
+    while (ctx.measureText(text).width > 220 && size > 12) { size -= 1; ctx.font = `bold ${size}px 'Jost', system-ui, sans-serif`; }
+    while (ctx.measureText(text).width > 220 && text.length > 4) text = text.slice(0, -2) + "…";
+    const half = ctx.measureText(text).width / 2;
+    const x = Math.min(st.W - half - 6, Math.max(half + 6, p.x));
+    ctx.lineJoin = "round"; ctx.lineWidth = 4; ctx.strokeStyle = "rgba(8,12,24,0.85)";
+    ctx.strokeText(text, x, p.y);
+    ctx.fillStyle = p.color; ctx.fillText(text, x, p.y); ctx.restore();
   }
 
   // barras de NOCAUTE no topo (sprite + nome), empilhadas e temporárias
