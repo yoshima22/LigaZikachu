@@ -3385,10 +3385,11 @@ export async function runBotBattle(
               }
             : reward),
           replayMascots: [
-            ...attackers.map((mascot) => ({ mascot, side: "A" as const })),
-            ...defenders.map((mascot) => ({ mascot, side: "D" as const })),
-          ].map(({ mascot, side }) => ({
+            ...attackers.map((mascot, i) => ({ mascot, side: "A" as const, slot: i + 1 })),
+            ...defenders.map((mascot, i) => ({ mascot, side: "D" as const, slot: i + 1 })),
+          ].map(({ mascot, side, slot }) => ({
             id: mascot.id,
+            slot, // ordem de ativação das habilidades
             pokemonId: mascot.pokemonId,
             name: mascot.name,
             level: mascot.level,
@@ -4394,10 +4395,11 @@ export async function runPvpBattle(
           attackerEgg: attackerEgg ?? null,
           defenderEgg: defenderEgg ?? null,
           replayMascots: [
-            ...attackers.map((mascot) => ({ mascot, side: "A" as const })),
-            ...defenders.map((mascot) => ({ mascot, side: "D" as const })),
-          ].map(({ mascot, side }) => ({
+            ...attackers.map((mascot, i) => ({ mascot, side: "A" as const, slot: i + 1 })),
+            ...defenders.map((mascot, i) => ({ mascot, side: "D" as const, slot: i + 1 })),
+          ].map(({ mascot, side, slot }) => ({
             id: mascot.id,
+            slot, // ordem de ativação das habilidades
             pokemonId: mascot.pokemonId,
             name: mascot.name,
             level: mascot.level,

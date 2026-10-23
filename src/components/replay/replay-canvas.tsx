@@ -17,7 +17,7 @@ export type Combatant = {
   role?: string; // rótulo de postura (define frente/trás no campo)
   types?: string[];
   /** Habilidade passiva na luta (Arena Draft/Arena Z); ausente nos modos sem habilidade. */
-  ability?: { slug: string; state?: string; factor?: number; reason?: string | null } | null;
+  ability?: { slug: string; state?: string; factor?: number; reason?: string | null; slot?: number } | null;
 };
 export type ReplayTurn = {
   turn: number;
@@ -213,6 +213,11 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
   // Card de habilidades: pausa o combate enquanto está aberto e retoma ao fechar
   // só se estava rodando antes.
   const [showAbilities, setShowAbilities] = useState(false);
+  // Luta "com habilidades": algum mascote com habilidade valendo (>0%) ou turno de habilidade no log.
+  const abilitiesOn = useMemo(
+    () => data.teams.some((c) => c.ability && (c.ability.factor ?? 1) > 0 && c.ability.state !== "OFF") || data.turns.some((t) => t.action === "ABILITY"),
+    [data],
+  );
   const resumeAfterCard = useRef(false);
   const openAbilities = () => { resumeAfterCard.current = playRef.current; setPlaying(false); setShowAbilities(true); };
   const closeAbilities = () => { setShowAbilities(false); if (resumeAfterCard.current) setPlaying(true); };
@@ -232,7 +237,12 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
         <button onClick={restart} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">↺ Reiniciar</button>
         <button onClick={() => jump(-1)} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">‹ Turno</button>
         <button onClick={() => jump(1)} className="rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200">Turno ›</button>
-        <button onClick={openAbilities} className="rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200">✨ Habilidades</button>
+        <button onClick={openAbilities} title={abilitiesOn ? "Esta luta teve habilidades ativas" : "Nenhuma habilidade ativa nesta luta"}
+          className="relative inline-flex items-center gap-1.5 rounded-lg border border-fuchsia-400/40 bg-fuchsia-500/10 px-3 py-1.5 text-xs font-semibold text-fuchsia-200">
+          <span aria-hidden="true" className={`h-2 w-2 rounded-full ${abilitiesOn ? "bg-fuchsia-400 shadow-[0_0_8px_rgba(232,121,249,.9)] animate-pulse" : "bg-slate-600"}`} />
+          ✨ Habilidades
+          <span className="sr-only">{abilitiesOn ? "(ativas nesta luta)" : "(nenhuma ativa)"}</span>
+        </button>
         <div className="ml-auto flex items-center gap-1">
           {[0.5, 1, 1.5, 2].map((s) => (
             <button key={s} onClick={() => setSpeed(s)} className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold ${speed === s ? "bg-cyan-500/20 text-cyan-200 border border-cyan-400/40" : "border border-slate-700 text-slate-400"}`}>{s.toLocaleString("pt-BR")}×</button>

@@ -4,7 +4,7 @@ import { getStaticSpriteUrl, getPokemonTypes, getPokemonName } from "@/lib/masco
 import type { Combatant, ReplayTurn, ReplayData } from "@/components/replay/replay-canvas";
 import { shortEffectLabel } from "@/lib/replay-status";
 
-export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null; role?: string | null; ability?: { slug: string; state?: string; factor?: number; reason?: string | null } | null };
+export type ReplayLineMon = { id: string; name?: string | null; pokemonId?: number; maxHp?: number | null; hp?: number | null; role?: string | null; ability?: { slug: string; state?: string; factor?: number; reason?: string | null; slot?: number } | null };
 export type ReplayLogEntry = {
   turn: number;
   actorId: string;

@@ -347,8 +347,8 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       damage: number; advantageApplied: boolean; isPlayerAttacker: boolean;
       actorRole?: string; targetRole?: string; effect?: string; hpAfter?: number;
     }>;
-    playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
-    opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
+    playerMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; slot?: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
+    opponentMascots: Array<{ id: string; pokemonId: number; name: string; level: number; maxHp: number; slot?: number; ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null }>;
     injuredCount: number;
   };
 }> {
@@ -437,6 +437,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           ownerId: string | null;
           maxHp: number;
           side?: "A" | "D";
+          slot?: number;
           ability?: { slug: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null;
         }>
       : [];
@@ -485,6 +486,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
             ? Math.max(10, Math.round(55 + mascot.level * 6 + mascot.statVitality * 4))
             : Math.max(1, received + (survived ? 100 : 0))),
         ability: snapshot?.ability ?? null,
+        slot: snapshot?.slot,
       };
     };
     const playerMascotIds = mascotIds.filter(id => belongsToPlayerSide(id, fighterOwner.get(id)));

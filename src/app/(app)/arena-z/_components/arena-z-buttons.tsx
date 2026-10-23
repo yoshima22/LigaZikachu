@@ -235,7 +235,7 @@ function BattleAnimationModal({
   }, [turns, playerMascots, botMascots, playerTeamName, botName]);
   const modernData = useMemo(() => {
     if (!canModern) return null;
-    const toLine = (m: MascotInfo) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, maxHp: m.maxHp, ability: m.ability && m.ability.state !== "NONE" ? { slug: m.ability.slug, state: m.ability.state, factor: m.ability.factor, reason: m.ability.reason } : null });
+    const toLine = (m: MascotInfo) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, maxHp: m.maxHp, ability: m.ability && m.ability.state !== "NONE" ? { slug: m.ability.slug, state: m.ability.state, factor: m.ability.factor, reason: m.ability.reason, slot: m.slot } : null });
     const turnsOut: ReplayLogEntry[] = turns.map((t) => ({
       turn: t.turn, actorId: t.attackerId, targetId: t.defenderId, action: t.action ?? "ATTACK",
       attackerType: t.attackerType, damage: t.damage, advantageApplied: t.advantageApplied,

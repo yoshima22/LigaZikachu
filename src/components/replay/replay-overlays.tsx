@@ -140,13 +140,22 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
           ))}
         </div>
         <div className="flex gap-1.5 overflow-x-auto px-3 py-2">
-          {list.map((m, idx) => (
-            <button key={m.id} type="button" onClick={() => setI(idx)} aria-label={m.name}
-              className={`grid h-10 w-10 shrink-0 place-items-center rounded-full bg-slate-900 transition ${idx === i ? "ring-2 ring-fuchsia-300" : "opacity-60 hover:opacity-100"}`}>
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={m.sprite} alt="" className="h-8 w-8 object-contain" />
-            </button>
-          ))}
+          {/* Ordem de ativação: slot e % efetivo de cada mascote, de relance. */}
+          {list.map((m, idx) => {
+            const pct = typeof m.ability?.factor === "number" ? Math.round(m.ability.factor * 100) : null;
+            return (
+              <button key={m.id} type="button" onClick={() => setI(idx)} aria-label={`${m.name}${pct !== null ? `, habilidade a ${pct}%` : ""}`}
+                className={`flex shrink-0 flex-col items-center gap-0.5 transition ${idx === i ? "" : "opacity-60 hover:opacity-100"}`}>
+                <span className={`grid h-10 w-10 place-items-center rounded-full bg-slate-900 ${idx === i ? "ring-2 ring-fuchsia-300" : ""}`}>
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={m.sprite} alt="" className="h-8 w-8 object-contain" />
+                </span>
+                <span className={`text-[9px] font-bold tabular-nums ${pct === null ? "text-slate-600" : pct >= 100 ? "text-emerald-300" : pct > 0 ? "text-amber-300" : "text-slate-500"}`}>
+                  {pct === null ? "—" : `${pct}%`}
+                </span>
+              </button>
+            );
+          })}
         </div>
         {c && (
           <div key={c.id} className="min-h-0 overflow-y-auto px-3 pb-3" style={{ animation: "zcCardPop .25s ease-out both" }}>
@@ -169,7 +178,7 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
               <div className="mt-2 rounded-xl border border-fuchsia-300/20 bg-fuchsia-400/[.06] p-3">
                 <p className="flex flex-wrap items-center gap-2 text-sm font-black text-fuchsia-100">
                   ✨ {info.name}
-                  {state && <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${state.cls}`}>{typeof c.ability?.factor === "number" ? `${Math.round(c.ability.factor * 100)}% · ` : ""}{state.label}</span>}
+                  {state && <span className={`rounded-full border px-2 py-0.5 text-[9px] font-bold ${state.cls}`}>{c.ability?.slot ? `Slot ${c.ability.slot} · ` : ""}{typeof c.ability?.factor === "number" ? `${Math.round(c.ability.factor * 100)}% · ` : ""}{state.label}</span>}
                 </p>
                 <p className="mt-1 text-[11px] text-slate-400">
                   {[info.category, info.effectName, info.activations > 0 ? `${info.activations}× por luta` : "Passiva"].filter(Boolean).join(" · ")}
