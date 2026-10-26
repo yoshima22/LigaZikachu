@@ -1,356 +1,91 @@
 "use client";
 
-/**
- * Efeitos de entrada da Liga Johto Zikachu III (chave secundária).
- * Uma única base parametrizada por tier — quanto maior o tier, mais camadas:
- *   1º lugar (5) > 2º (4) > 3º (3) > Campeão da Liga Johto (2) > 4º (1)
- * Texturas em /public/title-effects/johto3 (foil, rays, flare, smoke, laurel).
- */
-
-import { useEffect, useMemo, useState } from "react";
+import type { ReactNode } from "react";
 
 export type Johto3Tier = "FIRST" | "SECOND" | "THIRD" | "CHAMPION" | "FOURTH";
 
-interface Props {
-  tier: Johto3Tier;
-  name: string;
-  flavorText?: string | null;
+interface Props { tier: Johto3Tier; name: string; flavorText?: string | null; }
+type EffectProps = Omit<Props, "tier">;
+
+function CopyBlock({ label, name, flavorText }: EffectProps & { label: string }) {
+  return <div className="j3-copy">
+    <div className="j3-label">{label} <span>·</span> Johto Zikachu III</div>
+    <p className="j3-name">{name}</p>
+    {flavorText && <p className="j3-flavor">&ldquo;{flavorText}&rdquo;</p>}
+  </div>;
 }
 
-interface TierCfg {
-  level: number;
-  glyph: string;
-  label: string;
-  bright: string; mid: string; deep: string; glow: string;
-  bg: string;
-  confetti: string[];
+function Scene({ placement, children }: { placement: string; children: ReactNode }) {
+  return <><style>{CSS}</style><section className={"j3-scene j3-" + placement} data-placement={placement} aria-label={"Celebração " + placement}>{children}</section></>;
 }
 
-const TEX = "/title-effects/johto3";
+function FirstPlaceEffect({ name, flavorText }: EffectProps) {
+  return <Scene placement="first">
+    <div className="first-sun" /><div className="first-horizon" />
+    <div className="first-column first-column-a" /><div className="first-column first-column-b" /><div className="first-column first-column-c" /><div className="first-column first-column-d" />
+    <div className="first-laurel first-laurel-left">❧</div><div className="first-laurel first-laurel-right">❧</div>
+    <div className="first-crown"><i /><i /><i /><i /><i /></div><div className="first-medallion">1<span>º</span></div>
+    <div className="first-star first-star-a">✦</div><div className="first-star first-star-b">✦</div><div className="first-star first-star-c">✦</div>
+    <CopyBlock label="1º Lugar" name={name} flavorText={flavorText} />
+  </Scene>;
+}
 
-const TIERS: Record<Johto3Tier, TierCfg> = {
-  FIRST: {
-    level: 5, glyph: "1º", label: "1º Lugar",
-    bright: "#fff7cc", mid: "#fbbf24", deep: "#b45309", glow: "#fbbf24",
-    bg: "radial-gradient(ellipse at 50% 40%,#4d3508 0%,#1d1303 46%,#050300 100%)",
-    confetti: ["#fff7cc", "#fbbf24", "#f59e0b", "#fde68a", "#ffffff", "#f97316"],
-  },
-  SECOND: {
-    level: 4, glyph: "2º", label: "2º Lugar",
-    bright: "#ffffff", mid: "#cbd5e1", deep: "#475569", glow: "#93c5fd",
-    bg: "radial-gradient(ellipse at 50% 40%,#17283f 0%,#0a1220 46%,#02050b 100%)",
-    confetti: ["#ffffff", "#cbd5e1", "#93c5fd", "#e2e8f0", "#bae6fd"],
-  },
-  THIRD: {
-    level: 3, glyph: "3º", label: "3º Lugar",
-    bright: "#ffe4c7", mid: "#ea8a4b", deep: "#7c2d12", glow: "#fb923c",
-    bg: "radial-gradient(ellipse at 50% 40%,#341406 0%,#170a04 46%,#050201 100%)",
-    confetti: ["#ffe4c7", "#ea8a4b", "#c2622a", "#fdba74"],
-  },
-  CHAMPION: {
-    level: 2, glyph: "♛", label: "Campeão da Liga Johto",
-    bright: "#fff1c2", mid: "#f59e0b", deep: "#b91c1c", glow: "#ef4444",
-    bg: "radial-gradient(ellipse at 50% 42%,#42100f 0%,#1b0707 48%,#050101 100%)",
-    confetti: ["#fff1c2", "#f59e0b", "#ef4444", "#fb923c"],
-  },
-  FOURTH: {
-    level: 1, glyph: "4º", label: "4º Lugar",
-    bright: "#d1fae5", mid: "#6ee7b7", deep: "#0f766e", glow: "#34d399",
-    bg: "radial-gradient(ellipse at 50% 42%,#0a2e29 0%,#06171a 50%,#02080a 100%)",
-    confetti: ["#d1fae5", "#6ee7b7", "#34d399"],
-  },
-};
+function SecondPlaceEffect({ name, flavorText }: EffectProps) {
+  return <Scene placement="second">
+    <div className="second-aurora" /><div className="second-facet second-facet-a" /><div className="second-facet second-facet-b" /><div className="second-facet second-facet-c" />
+    <div className="second-frame"><div className="second-gem">2<span>º</span></div></div>
+    <div className="second-shard second-shard-a" /><div className="second-shard second-shard-b" /><div className="second-shard second-shard-c" />
+    <div className="second-glint second-glint-a">✧</div><div className="second-glint second-glint-b">✧</div>
+    <CopyBlock label="2º Lugar" name={name} flavorText={flavorText} />
+  </Scene>;
+}
 
-const rnd = (a: number, b: number) => Math.random() * (b - a) + a;
-type Vars = React.CSSProperties & Record<`--${string}`, string | number>;
+function ThirdPlaceEffect({ name, flavorText }: EffectProps) {
+  return <Scene placement="third">
+    <div className="third-smoke third-smoke-a" /><div className="third-smoke third-smoke-b" /><div className="third-anvil"><span /><span /><span /></div>
+    <div className="third-hex third-hex-outer"><div className="third-hex third-hex-inner">3<span>º</span></div></div>
+    <div className="third-strike third-strike-a" /><div className="third-strike third-strike-b" />
+    <div className="third-spark third-spark-a" /><div className="third-spark third-spark-b" /><div className="third-spark third-spark-c" /><div className="third-spark third-spark-d" />
+    <CopyBlock label="3º Lugar" name={name} flavorText={flavorText} />
+  </Scene>;
+}
+
+function FourthPlaceEffect({ name, flavorText }: EffectProps) {
+  return <Scene placement="fourth">
+    <div className="fourth-depth" /><div className="fourth-orbit fourth-orbit-a" /><div className="fourth-orbit fourth-orbit-b" /><div className="fourth-orbit fourth-orbit-c" />
+    <div className="fourth-ripple fourth-ripple-a" /><div className="fourth-ripple fourth-ripple-b" /><div className="fourth-ripple fourth-ripple-c" />
+    <div className="fourth-seal"><div>4<span>º</span></div></div><div className="fourth-comet fourth-comet-a" /><div className="fourth-comet fourth-comet-b" />
+    <CopyBlock label="4º Lugar" name={name} flavorText={flavorText} />
+  </Scene>;
+}
+
+function CupChampionEffect({ name, flavorText }: EffectProps) {
+  return <Scene placement="cup-champion">
+    <div className="cup-curtain cup-curtain-left" /><div className="cup-curtain cup-curtain-right" /><div className="cup-halo" />
+    <div className="cup-ray cup-ray-a" /><div className="cup-ray cup-ray-b" /><div className="cup-ray cup-ray-c" />
+    <div className="cup-trophy"><div className="cup-bowl"><i /></div><div className="cup-stem" /><div className="cup-base" /></div>
+    <div className="cup-crown"><i /><i /><i /></div><div className="cup-seal">C</div>
+    <CopyBlock label="Campeão da Copa Johto" name={name} flavorText={flavorText} />
+  </Scene>;
+}
 
 export function Johto3PlacementEffect({ tier, name, flavorText }: Props) {
-  const c = TIERS[tier];
-  const L = c.level;
-  const [ambient, setAmbient] = useState(false);
-  useEffect(() => {
-    const t = setTimeout(() => setAmbient(true), 1800);
-    return () => clearTimeout(t);
-  }, []);
-
-  const metal = `linear-gradient(115deg,${c.deep} 0%,${c.mid} 28%,${c.bright} 50%,${c.mid} 72%,${c.deep} 100%)`;
-  const foil = `url(${TEX}/foil.webp)`;
-  // Texto/ornamento metálico: gradiente do tier + textura de folha em overlay + brilho varrendo.
-  const metalFill: React.CSSProperties = {
-    backgroundImage: `${foil}, ${metal}`,
-    backgroundBlendMode: "overlay, normal",
-    backgroundSize: "256px 256px, 220% 100%",
-    animation: "j3-sweep 3.2s linear infinite",
-  };
-
-  const fx = useMemo(() => {
-    const rays = L >= 4 ? 2 : L >= 2 ? 1 : 0;
-    const pillarsN = L === 5 ? 9 : L === 4 ? 5 : 0;
-    const pillars = Array.from({ length: pillarsN }, (_, i) => {
-      const mid = (pillarsN - 1) / 2, d = Math.abs(i - mid) / mid;
-      return { x: 6 + (88 / (pillarsN - 1)) * i, h: 100 - d * 52, w: i === mid ? 8 : 3, delay: d * 0.35, hero: i === mid };
-    });
-    const rings = [1, 1, 2, 3, 4][L - 1];
-    const flares = Array.from({ length: [1, 3, 4, 6, 10][L - 1] }, () => ({
-      x: rnd(8, 92), y: rnd(8, 88), s: rnd(26, 70), d: rnd(0, 3), t: rnd(1.6, 3.2),
-    }));
-    // L>=3: confete caindo; L<=2: brasas subindo
-    const confN = [0, 0, 16, 26, 44][L - 1];
-    const confetti = Array.from({ length: confN }, (_, i) => ({
-      x: rnd(2, 98), col: c.confetti[i % c.confetti.length], w: rnd(6, 13), h: rnd(4, 9),
-      d: rnd(0, 2.2), t: rnd(2.4, 4.4), r: rnd(-540, 540),
-    }));
-    const embN = [8, 22, 0, 0, 0][L - 1];
-    const embers = Array.from({ length: embN }, (_, i) => ({
-      x: rnd(4, 96), s: rnd(3, 8), col: c.confetti[i % c.confetti.length],
-      d: rnd(0, 3), t: rnd(2.8, 5), dx: rnd(-40, 40),
-    }));
-    const smoke = L >= 3;
-    return { rays, pillars, rings, flares, confetti, embers, smoke };
-  }, [L, c.confetti]);
-
-  const medal = "min(250px,58vw)";
-  const glowAnim = ambient ? "j3-breathe 2.6s ease-in-out infinite" : undefined;
-
-  return (
-    <>
-      <style>{CSS}</style>
-
-      {/* Fundo + vinheta */}
-      <div className="absolute inset-0" style={{ background: c.bg, animation: "entrance-in .2s ease forwards" }} />
-      <div className="absolute inset-0 pointer-events-none" style={{
-        boxShadow: `inset 0 0 200px ${c.glow}${ambient ? "55" : "33"}`, transition: "box-shadow 1.2s", zIndex: 1,
-      }} />
-
-      {/* Fumaça de textura (neblina dourada/prateada se movendo) */}
-      {fx.smoke && [0, 1].map((i) => (
-        <div key={i} className="absolute inset-0 pointer-events-none" style={{
-          zIndex: 1, opacity: 0, mixBlendMode: "screen",
-          backgroundImage: `url(${TEX}/smoke.webp)`, backgroundSize: "720px 720px",
-          filter: `sepia(1) saturate(3) hue-rotate(${tier === "SECOND" ? 170 : tier === "THIRD" ? -20 : 0}deg)`,
-          animation: `j3-smoke${i} ${26 + i * 10}s linear infinite, j3-fade-in 2s ease ${0.3 + i * 0.4}s forwards`,
-          ["--o" as string]: i ? 0.18 : 0.26,
-        } as Vars} />
-      ))}
-
-      {/* Raios de luz girando em sentidos opostos */}
-      {Array.from({ length: fx.rays }, (_, i) => (
-        <div key={i} className="absolute pointer-events-none" style={{
-          zIndex: 2, left: "50%", top: "38%", width: "170vmax", height: "170vmax",
-          marginLeft: "-85vmax", marginTop: "-85vmax",
-          backgroundImage: `url(${TEX}/rays.webp)`, backgroundSize: "100% 100%",
-          mixBlendMode: "screen", opacity: 0,
-          filter: `sepia(1) saturate(4) hue-rotate(${tier === "SECOND" ? 170 : tier === "THIRD" ? -20 : tier === "CHAMPION" ? -30 : tier === "FOURTH" ? 100 : 0}deg)`,
-          animation: `${i ? "j3-spin-r 55s" : "j3-spin 40s"} linear infinite, j3-fade-in 1.4s ease ${0.2 + i * 0.3}s forwards`,
-          ["--o" as string]: L === 2 ? 0.28 : i ? 0.35 : 0.55,
-        } as Vars} />
-      ))}
-
-      {/* Pilares de luz */}
-      {fx.pillars.length > 0 && (
-        <div className="absolute inset-x-0 bottom-0 pointer-events-none" style={{ height: "78%", zIndex: 3 }}>
-          {fx.pillars.map((p, i) => (
-            <div key={i} style={{
-              position: "absolute", left: `${p.x}%`, bottom: 0, width: p.w, height: `${p.h}%`,
-              background: `linear-gradient(to top,${c.mid}ee,${c.bright}88 45%,transparent)`,
-              boxShadow: `0 0 ${p.w * 5}px ${c.glow}88`, borderRadius: `${p.w}px ${p.w}px 0 0`,
-              opacity: 0, animation: `j3-pillar 1.5s cubic-bezier(.16,1,.3,1) ${p.delay}s forwards`,
-            }}>
-              {p.hero && ambient && <div style={{
-                position: "absolute", top: -10, left: "50%", marginLeft: -9, width: 18, height: 18,
-                backgroundImage: `url(${TEX}/flare.webp)`, backgroundSize: "100% 100%",
-                animation: "j3-twinkle 1.4s ease-in-out infinite",
-              }} />}
-            </div>
-          ))}
-        </div>
-      )}
-
-      {/* Anéis + onda de choque saindo da medalha */}
-      <div className="absolute inset-x-0 pointer-events-none" style={{ top: "38%", zIndex: 4 }}>
-        {Array.from({ length: fx.rings }, (_, i) => (
-          <div key={i} style={{
-            position: "absolute", left: "50%", top: 0, width: 160 + i * 110, height: 160 + i * 110,
-            marginLeft: -(80 + i * 55), marginTop: -(80 + i * 55), borderRadius: "50%",
-            border: `${2 - i * 0.3}px solid ${i % 2 ? c.bright : c.mid}`,
-            boxShadow: `0 0 24px ${c.glow}66, inset 0 0 24px ${c.glow}33`,
-            opacity: 0, animation: `j3-ring ${1.8 + i * 0.2}s ease-out ${0.3 + i * 0.22}s ${ambient && L >= 4 ? "infinite" : "forwards"}`,
-          }} />
-        ))}
-        {L >= 2 && (
-          <div style={{
-            position: "absolute", left: "50%", top: 0, width: 80, height: 80, marginLeft: -40, marginTop: -40,
-            borderRadius: "50%", background: `radial-gradient(circle,#fff 0%,${c.bright}88 30%,transparent 70%)`,
-            opacity: 0, animation: "j3-shock 1s cubic-bezier(.1,.8,.3,1) .15s forwards",
-          }} />
-        )}
-      </div>
-
-      {/* Confete / brasas */}
-      <div className="absolute inset-0 overflow-hidden pointer-events-none" style={{ zIndex: 6 }}>
-        {fx.confetti.map((p, i) => (
-          <div key={`c${i}`} style={{
-            position: "absolute", left: `${p.x}%`, top: -20, width: p.w, height: p.h, background: p.col,
-            borderRadius: 2, boxShadow: `0 0 6px ${p.col}aa`,
-            ["--r" as string]: `${p.r}deg`,
-            animation: `j3-confetti ${p.t}s ease-in ${p.d}s ${ambient ? "infinite" : "forwards"}`,
-          } as Vars} />
-        ))}
-        {fx.embers.map((p, i) => (
-          <div key={`e${i}`} style={{
-            position: "absolute", left: `${p.x}%`, bottom: -10, width: p.s, height: p.s, borderRadius: "50%",
-            background: p.col, boxShadow: `0 0 10px ${p.col}, 0 0 20px ${c.glow}88`, opacity: 0,
-            ["--dx" as string]: `${p.dx}px`,
-            animation: `j3-ember ${p.t}s ease-out ${p.d}s infinite`,
-          } as Vars} />
-        ))}
-      </div>
-
-      {/* Estrelas de brilho (lens flare) */}
-      <div className="absolute inset-0 pointer-events-none" style={{ zIndex: 7 }}>
-        {fx.flares.map((f, i) => (
-          <div key={i} style={{
-            position: "absolute", left: `${f.x}%`, top: `${f.y}%`, width: f.s, height: f.s,
-            marginLeft: -f.s / 2, marginTop: -f.s / 2, mixBlendMode: "screen", opacity: 0,
-            backgroundImage: `url(${TEX}/flare.webp)`, backgroundSize: "100% 100%",
-            filter: `drop-shadow(0 0 8px ${c.glow})`,
-            animation: `j3-twinkle ${f.t}s ease-in-out ${0.6 + f.d}s infinite`,
-          }} />
-        ))}
-      </div>
-
-      {/* Faixas de folha metálica no topo e na base */}
-      {L >= 3 && [0, 1].map((i) => (
-        <div key={i} className="absolute inset-x-0 pointer-events-none" style={{
-          [i ? "bottom" : "top"]: 0, height: L === 5 ? 14 : 9, zIndex: 8, ...metalFill,
-          boxShadow: `0 0 28px ${c.glow}99`,
-          animationName: `j3-sweep, ${i ? "j3-band-b" : "j3-band-t"}`,
-          animationDuration: "3.2s, .9s", animationIterationCount: "infinite, 1",
-          animationFillMode: "none, both", animationTimingFunction: "linear, cubic-bezier(.2,1,.3,1)",
-        } as React.CSSProperties} />
-      ))}
-
-      {/* Flash de câmera na estreia */}
-      {L >= 2 && (
-        <div className="absolute inset-0 pointer-events-none" style={{
-          zIndex: 20, background: `radial-gradient(circle at 50% 38%,#fff,${c.bright}88 40%,transparent 75%)`,
-          opacity: 0, animation: `j3-flash ${L === 5 ? "1.3s" : ".8s"} ease-out .1s forwards`,
-        }} />
-      )}
-
-      {/* Conteúdo central: medalha + selo + título */}
-      <div className="absolute inset-0 flex flex-col items-center justify-center" style={{ zIndex: 10, paddingTop: "4vh" }}>
-        {/* Medalha */}
-        <div style={{ position: "relative", width: medal, height: medal, marginBottom: "clamp(4px,1.5vh,14px)" }}>
-          <div style={{
-            position: "absolute", inset: "-14%", borderRadius: "50%", pointerEvents: "none",
-            background: `radial-gradient(circle,${c.glow}66 0%,${c.glow}22 45%,transparent 70%)`,
-            animation: glowAnim,
-          }} />
-          {L >= 3 ? (
-            <div style={{
-              position: "absolute", inset: 0, opacity: 0,
-              WebkitMaskImage: `url(${TEX}/laurel.webp)`, maskImage: `url(${TEX}/laurel.webp)`,
-              WebkitMaskSize: "100% 100%", maskSize: "100% 100%",
-              filter: `drop-shadow(0 0 10px ${c.glow}aa)`,
-              ...metalFill,
-              animationName: "j3-laurel, j3-sweep",
-              animationDuration: ".9s, 3.2s", animationDelay: ".35s, 0s",
-              animationIterationCount: "1, infinite", animationFillMode: "forwards, none",
-              animationTimingFunction: "cubic-bezier(.2,1.2,.3,1), linear",
-            }} />
-          ) : (
-            <div style={{
-              position: "absolute", inset: "14%", borderRadius: L === 2 ? "22%" : "50%", opacity: 0,
-              transform: L === 2 ? "rotate(45deg)" : undefined,
-              border: `${L === 2 ? 4 : 3}px solid transparent`,
-              backgroundImage: `linear-gradient(#0000,#0000),${metal}`,
-              backgroundOrigin: "border-box", backgroundClip: "padding-box, border-box",
-              boxShadow: `0 0 28px ${c.glow}88, inset 0 0 28px ${c.glow}33`,
-              animation: `j3-badge .8s cubic-bezier(.2,1.3,.3,1) .35s forwards${L === 2 && ambient ? ", j3-diamond 6s ease-in-out infinite" : ""}`,
-            }} />
-          )}
-          {/* Numeral / glifo metálico */}
-          <div style={{
-            position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center",
-            fontWeight: 900, fontSize: L === 2 ? "min(110px,25vw)" : "min(104px,24vw)", lineHeight: 1, opacity: 0,
-            backgroundClip: "text", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            filter: `drop-shadow(0 2px 0 ${c.deep}) drop-shadow(0 0 18px ${c.glow}bb)`,
-            animation: "j3-glyph .7s cubic-bezier(.2,1.5,.35,1) .8s forwards",
-            ...metalFill,
-            animationName: "j3-glyph, j3-sweep",
-            animationDuration: ".7s, 3.2s", animationDelay: ".8s, 0s",
-            animationIterationCount: "1, infinite", animationFillMode: "forwards, none",
-            animationTimingFunction: "cubic-bezier(.2,1.5,.35,1), linear",
-          }}>
-            {c.glyph}
-          </div>
-          {/* Coroa cai sobre os louros (só 1º) */}
-          {L === 5 && (
-            <div style={{
-              position: "absolute", left: 0, right: 0, top: "-9%", textAlign: "center", fontSize: "min(54px,12vw)",
-              opacity: 0, filter: `drop-shadow(0 0 16px ${c.glow}) drop-shadow(0 0 34px ${c.glow}88)`,
-              animation: "j3-crown 1s cubic-bezier(.22,1.5,.36,1) 1.1s forwards",
-            }}>👑</div>
-          )}
-        </div>
-
-        {/* Selo com o nome da colocação */}
-        <div style={{
-          opacity: 0, animation: "j3-stamp .7s cubic-bezier(.36,.07,.19,.97) 1.2s forwards",
-          fontWeight: 900, textTransform: "uppercase", letterSpacing: "0.34em",
-          fontSize: "clamp(10px,2.3vw,14px)", padding: "6px clamp(14px,4vw,26px)", borderRadius: 6,
-          color: c.bright, border: `2px solid ${c.mid}aa`, background: `linear-gradient(135deg,${c.deep}55,#0000)`,
-          textShadow: `0 0 18px ${c.glow}`, boxShadow: `0 0 30px ${c.glow}44`, textAlign: "center",
-        }}>
-          {c.label} <span style={{ opacity: 0.6 }}>·</span> Johto Zikachu III
-        </div>
-
-        {/* Título */}
-        <div style={{ textAlign: "center", marginTop: "clamp(10px,2.6vh,22px)", opacity: 0, animation: "j3-title 1s cubic-bezier(.16,1,.3,1) 1.5s forwards" }}>
-          <p style={{
-            margin: 0, padding: "0 20px", fontWeight: 900, letterSpacing: "0.06em", lineHeight: 1.2,
-            fontSize: "clamp(24px,6.2vw,44px)",
-            backgroundClip: "text", WebkitBackgroundClip: "text", WebkitTextFillColor: "transparent",
-            filter: `drop-shadow(0 0 14px ${c.glow}) drop-shadow(0 0 34px ${c.glow}88)`,
-            ...metalFill,
-            // gradiente mais claro que o das ornamentações, p/ manter o nome legível
-            backgroundImage: `${foil}, linear-gradient(115deg,${c.mid} 0%,${c.bright} 30%,${c.mid} 50%,${c.bright} 70%,${c.mid} 100%)`,
-          }}>{name}</p>
-          {flavorText && (
-            <p style={{
-              margin: "12px 24px 0", fontStyle: "italic", lineHeight: 1.6, color: `${c.bright}d0`,
-              fontSize: "clamp(12px,2.8vw,15px)", textShadow: `0 0 14px ${c.glow}88`,
-            }}>&ldquo;{flavorText}&rdquo;</p>
-          )}
-        </div>
-      </div>
-    </>
-  );
+  const props = { name, flavorText };
+  switch (tier) {
+    case "FIRST": return <FirstPlaceEffect {...props} />;
+    case "SECOND": return <SecondPlaceEffect {...props} />;
+    case "THIRD": return <ThirdPlaceEffect {...props} />;
+    case "FOURTH": return <FourthPlaceEffect {...props} />;
+    case "CHAMPION": return <CupChampionEffect {...props} />;
+  }
 }
 
-const CSS = `
-@keyframes j3-fade-in { to { opacity: var(--o,1); } }
-@keyframes j3-spin   { to { transform: rotate(360deg); } }
-@keyframes j3-spin-r { from { transform: rotate(360deg); } to { transform: rotate(0deg); } }
-@keyframes j3-smoke0 { from { background-position: 0 0; } to { background-position: 720px 360px; } }
-@keyframes j3-smoke1 { from { background-position: 0 0; } to { background-position: -720px 540px; } }
-@keyframes j3-sweep  { from { background-position: 0 0, 220% 0; } to { background-position: 0 0, -120% 0; } }
-@keyframes j3-pillar { 0% { opacity:0; transform: scaleY(0); transform-origin: bottom; } 15% { opacity:1; } 100% { opacity:.85; transform: scaleY(1); transform-origin: bottom; } }
-@keyframes j3-ring   { 0% { opacity:0; transform: scale(.2); } 25% { opacity:.9; } 100% { opacity:0; transform: scale(1.9); } }
-@keyframes j3-shock  { 0% { opacity:1; transform: scale(.2); } 100% { opacity:0; transform: scale(14); } }
-@keyframes j3-flash  { 0% { opacity:0; } 8% { opacity:1; } 100% { opacity:0; } }
-@keyframes j3-confetti { 0% { transform: translateY(0) rotate(0); opacity:1; } 100% { transform: translateY(112vh) rotate(var(--r)); opacity:.9; } }
-@keyframes j3-ember  { 0% { transform: translate(0,0) scale(1); opacity:0; } 15% { opacity:1; } 100% { transform: translate(var(--dx),-85vh) scale(.3); opacity:0; } }
-@keyframes j3-twinkle { 0%,100% { opacity:0; transform: scale(.4) rotate(0); } 50% { opacity:1; transform: scale(1) rotate(45deg); } }
-@keyframes j3-band-t { from { transform: translateY(-100%); } to { transform: translateY(0); } }
-@keyframes j3-band-b { from { transform: translateY(100%); } to { transform: translateY(0); } }
-@keyframes j3-laurel { 0% { opacity:0; transform: scale(.55) rotate(-25deg); } 100% { opacity:1; transform: scale(1) rotate(0); } }
-@keyframes j3-badge  { 0% { opacity:0; transform: scale(.3) rotate(0); } 100% { opacity:1; transform: scale(1); } }
-@keyframes j3-diamond { 0%,100% { transform: rotate(45deg) scale(1); } 50% { transform: rotate(135deg) scale(1.06); } }
-@keyframes j3-glyph  { 0% { opacity:0; transform: scale(2.4); } 100% { opacity:1; transform: scale(1); } }
-@keyframes j3-crown  { 0% { opacity:0; transform: translateY(-70px) scale(.4) rotate(-18deg); } 60% { transform: translateY(8px) scale(1.15) rotate(5deg); } 100% { opacity:1; transform: translateY(0) scale(1) rotate(0); } }
-@keyframes j3-stamp  { 0% { opacity:0; transform: scale(2.2) rotate(-4deg); } 100% { opacity:1; transform: scale(1) rotate(0); } }
-@keyframes j3-title  { 0% { opacity:0; transform: translateY(26px) scale(.88); } 100% { opacity:1; transform: translateY(0) scale(1); } }
-@keyframes j3-breathe { 0%,100% { opacity:.7; transform: scale(1); } 50% { opacity:1; transform: scale(1.08); } }
-`;
+const CSS = [
+".j3-scene{position:absolute;inset:0;overflow:hidden;isolation:isolate;color:#fff}.j3-scene:after{content:'';position:absolute;inset:0;z-index:15;pointer-events:none;background:linear-gradient(90deg,#0008,transparent 30%,transparent 70%,#0008),linear-gradient(0deg,#000a,transparent 38%)}.j3-copy{position:absolute;z-index:20;inset:auto 0 11%;display:grid;justify-items:center;text-align:center;opacity:0;animation:j3-copy-in .72s cubic-bezier(.16,1,.3,1) 1.5s forwards}.j3-label{max-width:calc(100% - 32px);padding:7px clamp(14px,3vw,25px);border:1px solid currentColor;border-radius:999px;font-size:clamp(9px,1.9vw,12px);font-weight:900;letter-spacing:.2em;text-transform:uppercase;backdrop-filter:blur(6px)}.j3-label span{opacity:.55;padding:0 5px}.j3-name{margin:12px 18px 0;font-size:clamp(27px,6.5vw,52px);font-weight:950;letter-spacing:.035em;line-height:1.04}.j3-flavor{max-width:min(570px,86vw);margin:10px 18px 0;font-size:clamp(12px,2.4vw,15px);line-height:1.5;font-style:italic}@keyframes j3-copy-in{from{opacity:0;transform:translateY(25px)}to{opacity:1;transform:none}}",
+".j3-first{background:radial-gradient(ellipse at 50% 34%,#765214,#2a1804 44%,#080502);color:#fff4c7}.first-sun{position:absolute;width:min(44vw,440px);aspect-ratio:1;left:50%;top:25%;transform:translate(-50%,-50%) scale(.25);border-radius:50%;background:radial-gradient(circle,#fffbe5 0 12%,#ffd95d 24%,#d88a14 48%,transparent 69%);opacity:0;animation:first-sun .9s ease-out .08s forwards}.first-horizon{position:absolute;left:-8%;right:-8%;top:48%;height:2px;background:linear-gradient(90deg,transparent,#ffe49a,#fff 50%,#ffe49a,transparent);box-shadow:0 0 18px #ffc531,0 0 45px #d88715;transform:scaleX(0);animation:first-horizon .7s ease-out .25s forwards}.first-column{position:absolute;bottom:36%;width:2px;background:linear-gradient(#fff9ce,transparent);opacity:0;transform-origin:bottom;animation:first-column .75s ease-out forwards}.first-column-a{left:23%;height:49%;animation-delay:.28s}.first-column-b{left:38%;height:66%;animation-delay:.18s}.first-column-c{right:38%;height:66%;animation-delay:.18s}.first-column-d{right:23%;height:49%;animation-delay:.28s}.first-laurel{position:absolute;top:25%;z-index:3;color:#f7bd38;font:900 clamp(100px,22vw,180px)/1 Georgia,serif;opacity:0;text-shadow:0 0 18px #f1a31b88;animation:first-laurel .72s cubic-bezier(.16,1.1,.3,1) .38s forwards}.first-laurel-left{left:calc(50% - min(23vw,185px));transform:rotate(-47deg)}.first-laurel-right{right:calc(50% - min(23vw,185px));transform:scaleX(-1) rotate(-47deg)}.first-medallion,.second-gem,.third-hex-inner,.fourth-seal>div{display:grid;place-items:center;font-weight:950}.first-medallion{position:absolute;z-index:4;left:50%;top:27%;width:clamp(108px,20vw,166px);aspect-ratio:1;border:4px solid #ffe69a;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fffbe7,#e6a51e 48%,#84500a);box-shadow:0 0 0 7px #7a450488,0 0 42px #ffc42eaa;color:#542c00;font-size:clamp(65px,13vw,106px);transform:translate(-50%,-50%) scale(.35) rotate(-18deg);opacity:0;animation:first-medal .7s cubic-bezier(.12,1.35,.28,1) .48s forwards}.first-medallion span,.second-gem span,.third-hex span,.fourth-seal span{font-size:.42em;align-self:start;margin-top:26%}.first-crown{position:absolute;z-index:5;left:50%;top:12%;display:flex;align-items:end;gap:3px;height:47px;padding:0 10px 7px;border:2px solid #ffe89a;border-top:0;border-radius:0 0 18px 18px;background:linear-gradient(#fcd35a,#b66b0a);box-shadow:0 0 26px #ffc52f;transform:translateX(-50%) translateY(-42px);opacity:0;animation:first-crown .55s cubic-bezier(.2,1.5,.4,1) .78s forwards}.first-crown i{display:block;width:14px;background:#fff4c3;clip-path:polygon(0 100%,10% 12%,50% 60%,90% 12%,100% 100%)}.first-crown i:nth-child(1),.first-crown i:nth-child(5){height:25px}.first-crown i:nth-child(2),.first-crown i:nth-child(4){height:35px}.first-crown i:nth-child(3){height:43px}.first-star{position:absolute;z-index:4;color:#fff5be;font-size:28px;opacity:0;animation:first-star 1.5s ease-in-out infinite}.first-star-a{top:18%;left:29%;animation-delay:.8s}.first-star-b{top:36%;right:28%;animation-delay:1.1s}.first-star-c{top:13%;right:37%;animation-delay:1.4s}.j3-first .j3-copy{text-shadow:0 2px #592d00,0 0 24px #f6b319}.j3-first .j3-label{background:#5e350083;color:#ffe99d}@keyframes first-sun{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}@keyframes first-horizon{to{transform:scaleX(1)}}@keyframes first-column{to{opacity:.66;transform:scaleY(1)}}@keyframes first-laurel{to{opacity:1}}@keyframes first-medal{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}@keyframes first-crown{to{opacity:1;transform:translateX(-50%)}}@keyframes first-star{0%,100%{opacity:0;transform:scale(.45)}45%{opacity:1;transform:scale(1) rotate(45deg)}}",
+".j3-second{background:radial-gradient(ellipse at 50% 35%,#234a6b,#101b34 43%,#040712);color:#e9f6ff}.second-aurora{position:absolute;inset:-15%;background:conic-gradient(from 230deg at 50% 37%,transparent,#a8e5ff33,transparent 26%,#d9f2ff44,transparent 53%,#7ac2ff33,transparent 76%);filter:blur(18px);opacity:0;animation:second-aurora 2.8s ease-out .1s forwards}.second-facet{position:absolute;width:38vw;height:70vh;opacity:0;background:linear-gradient(135deg,#dff8ff40,transparent 45%,#80bbff24);border:1px solid #dff7ff38;clip-path:polygon(50% 0,100% 50%,50% 100%,0 50%);animation:second-facet .7s cubic-bezier(.2,1,.3,1) forwards}.second-facet-a{left:3%;top:2%;animation-delay:.12s}.second-facet-b{right:1%;top:14%;transform:rotate(52deg);animation-delay:.22s}.second-facet-c{left:16%;bottom:-21%;transform:rotate(112deg);animation-delay:.32s}.second-frame{position:absolute;z-index:3;left:50%;top:30%;width:clamp(126px,22vw,185px);aspect-ratio:1;display:grid;place-items:center;border:2px solid #ddf7ff;transform:translate(-50%,-50%) rotate(45deg) scale(.45);opacity:0;box-shadow:0 0 0 8px #6eaee844,0 0 38px #a8e7ff77,inset 0 0 34px #8bd4ff33;animation:second-frame .82s cubic-bezier(.16,1.25,.26,1) .42s forwards}.second-gem{width:70%;aspect-ratio:1;transform:rotate(-45deg);background:linear-gradient(135deg,#f8feff,#9cccf2 49%,#426c9f);color:#143a61;font-size:clamp(69px,13vw,108px);text-shadow:0 1px #fff;box-shadow:inset 8px 8px 18px #fff9,inset -9px -9px 20px #16467244}.second-shard{position:absolute;z-index:2;height:2px;background:linear-gradient(90deg,transparent,#e7faff,transparent);opacity:0;transform:rotate(-25deg);animation:second-shard 1.6s ease-out infinite}.second-shard-a{width:44%;top:25%;left:2%;animation-delay:.5s}.second-shard-b{width:38%;top:43%;right:0;animation-delay:.95s}.second-shard-c{width:31%;top:15%;right:18%;animation-delay:1.3s}.second-glint{position:absolute;z-index:4;color:#fff;font-size:34px;opacity:0;animation:second-glint 2.1s ease-in-out infinite}.second-glint-a{top:20%;left:35%;animation-delay:.8s}.second-glint-b{top:38%;right:31%;animation-delay:1.45s}.j3-second .j3-copy{text-shadow:0 2px #173857,0 0 26px #91d7ff}.j3-second .j3-label{color:#d9f5ff;background:#19446a77}@keyframes second-aurora{to{opacity:1;transform:rotate(35deg)}}@keyframes second-facet{to{opacity:1}}@keyframes second-frame{to{opacity:1;transform:translate(-50%,-50%) rotate(45deg)}}@keyframes second-shard{0%,100%{opacity:0;transform:translateX(-20px) rotate(-25deg)}40%{opacity:.9}65%{opacity:0;transform:translateX(70px) rotate(-25deg)}}@keyframes second-glint{0%,100%{opacity:0;transform:scale(.3)}48%{opacity:1;transform:scale(1) rotate(50deg)}}",
+".j3-third{background:radial-gradient(ellipse at 50% 40%,#5b1f10,#210b08 49%,#070303);color:#ffddbd}.third-smoke{position:absolute;width:55vw;height:24vh;border-radius:50%;background:#b94d2444;filter:blur(34px);opacity:0;animation:third-smoke 3s ease-in-out infinite}.third-smoke-a{top:26%;left:8%;animation-delay:.1s}.third-smoke-b{top:34%;right:4%;animation-delay:1.4s}.third-anvil{position:absolute;z-index:2;left:50%;top:46%;width:min(65vw,440px);height:22px;transform:translate(-50%,-50%) scaleX(.4);opacity:0;animation:third-anvil .55s ease-out .13s forwards}.third-anvil span{position:absolute;display:block;background:linear-gradient(#4b251b,#100908)}.third-anvil span:first-child{inset:0 13% auto;height:13px;clip-path:polygon(0 100%,14% 0,86% 0,100% 100%)}.third-anvil span:nth-child(2){left:37%;top:12px;width:26%;height:14px}.third-anvil span:last-child{left:27%;top:25px;width:46%;height:16px;clip-path:polygon(10% 0,90% 0,100% 100%,0 100%)}.third-hex{position:absolute;display:grid;place-items:center;clip-path:polygon(25% 6.7%,75% 6.7%,100% 50%,75% 93.3%,25% 93.3%,0 50%)}.third-hex-outer{z-index:4;left:50%;top:27%;width:clamp(130px,22vw,183px);aspect-ratio:1;background:linear-gradient(135deg,#ffd3a2,#a9461d 45%,#4d160b);transform:translate(-50%,-50%) scale(.38) rotate(-25deg);opacity:0;filter:drop-shadow(0 0 26px #f5762b99);animation:third-hex .64s cubic-bezier(.2,1.3,.3,1) .4s forwards}.third-hex-inner{width:83%;aspect-ratio:1;background:radial-gradient(circle at 38% 25%,#ffe3c0,#c45c29 48%,#61200d);color:#481305;font-size:clamp(66px,13vw,105px);text-shadow:0 1px #ffd4a1}.third-strike{position:absolute;z-index:3;left:50%;top:43%;width:min(73vw,510px);height:3px;background:linear-gradient(90deg,transparent,#ffefc6,#f9782c,transparent);opacity:0;animation:third-strike .5s ease-out forwards}.third-strike-a{transform:translateX(-50%) rotate(18deg);animation-delay:.62s}.third-strike-b{transform:translateX(-50%) rotate(-18deg);animation-delay:.69s}.third-spark{position:absolute;z-index:5;width:7px;height:7px;border-radius:50%;background:#ffd18b;box-shadow:0 0 10px #ff7d2c;opacity:0;animation:third-spark .92s ease-out forwards}.third-spark-a{left:45%;top:34%;--x:-82px;--y:-55px;animation-delay:.65s}.third-spark-b{left:53%;top:35%;--x:96px;--y:-38px;animation-delay:.7s}.third-spark-c{left:49%;top:42%;--x:-116px;--y:32px;animation-delay:.73s}.third-spark-d{left:51%;top:40%;--x:118px;--y:24px;animation-delay:.69s}.j3-third .j3-copy{text-shadow:0 2px #4b160c,0 0 23px #ed6828}.j3-third .j3-label{color:#ffd8ae;background:#65241188}@keyframes third-smoke{0%,100%{opacity:.12;transform:translateX(-14px) scale(.88)}50%{opacity:.3;transform:translateX(24px) scale(1.12)}}@keyframes third-anvil{to{opacity:1;transform:translate(-50%,-50%) scaleX(1)}}@keyframes third-hex{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}@keyframes third-strike{0%{opacity:0}25%{opacity:1}100%{opacity:0}}@keyframes third-spark{0%{opacity:1;transform:translate(0,0) scale(.6)}100%{opacity:0;transform:translate(var(--x),var(--y)) scale(.1)}}",
+".j3-fourth{background:radial-gradient(ellipse at 50% 38%,#0d4a45,#062523 51%,#010808);color:#d7fff0}.fourth-depth{position:absolute;inset:0;background:repeating-radial-gradient(ellipse at 50% 36%,transparent 0 34px,#65e5c308 35px 36px)}.fourth-orbit{position:absolute;z-index:2;left:50%;top:31%;border:1px solid #a0ffe044;border-radius:50%;transform:translate(-50%,-50%) rotateX(68deg);animation:fourth-orbit 7s linear infinite}.fourth-orbit-a{width:clamp(230px,47vw,410px);height:clamp(100px,18vw,150px)}.fourth-orbit-b{width:clamp(165px,33vw,290px);height:clamp(72px,13vw,110px);animation-direction:reverse;animation-duration:5s}.fourth-orbit-c{width:clamp(310px,59vw,520px);height:clamp(135px,25vw,215px);animation-duration:9s;opacity:.6}.fourth-ripple{position:absolute;z-index:1;left:50%;top:40%;border:1px solid #8affda;border-radius:50%;transform:translate(-50%,-50%) scale(.2);opacity:0;animation:fourth-ripple 2.6s ease-out infinite}.fourth-ripple-a{width:150px;height:53px;animation-delay:.15s}.fourth-ripple-b{width:190px;height:67px;animation-delay:1s}.fourth-ripple-c{width:225px;height:79px;animation-delay:1.85s}.fourth-seal{position:absolute;z-index:4;left:50%;top:31%;width:clamp(116px,19vw,160px);aspect-ratio:1;border-radius:50%;padding:6px;opacity:0;background:conic-gradient(#b9ffe8,#40d8aa,#0e7168,#9affdc,#b9ffe8);box-shadow:0 0 0 10px #3de1b52e,0 0 36px #58e4bd88;transform:translate(-50%,-50%) scale(.45);animation:fourth-seal .76s cubic-bezier(.16,1.25,.3,1) .38s forwards}.fourth-seal>div{height:100%;border-radius:50%;background:radial-gradient(circle at 35% 30%,#196a61,#06302e 72%);color:#ccffea;font-size:clamp(64px,12vw,99px);text-shadow:0 0 20px #75ffda}.fourth-comet{position:absolute;z-index:3;width:80px;height:2px;background:linear-gradient(90deg,transparent,#b9ffe8);opacity:0;animation:fourth-comet 4s linear infinite}.fourth-comet-a{top:25%;left:17%;transform:rotate(-25deg);animation-delay:.6s}.fourth-comet-b{top:41%;right:16%;transform:rotate(154deg);animation-delay:2.1s}.j3-fourth .j3-copy{text-shadow:0 2px #06322e,0 0 22px #4be0b5}.j3-fourth .j3-label{color:#c7ffeb;background:#0b554d88}@keyframes fourth-orbit{to{transform:translate(-50%,-50%) rotateX(68deg) rotateZ(360deg)}}@keyframes fourth-ripple{0%{opacity:.9;transform:translate(-50%,-50%) scale(.2)}100%{opacity:0;transform:translate(-50%,-50%) scale(2.25)}}@keyframes fourth-seal{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}@keyframes fourth-comet{0%,16%{opacity:0}26%{opacity:1}42%,100%{opacity:0;transform:translateX(160px) rotate(-25deg)}}",
+".j3-cup-champion{background:radial-gradient(ellipse at 50% 31%,#621d1d,#25070d 49%,#080104);color:#fff0bd}.cup-curtain{position:absolute;top:-5%;width:34%;height:112%;opacity:0;background:linear-gradient(90deg,#310308,#891f29 44%,#3a050a);box-shadow:inset -9px 0 15px #0009;animation:cup-curtain .85s cubic-bezier(.16,1,.3,1) .04s forwards}.cup-curtain-left{left:-3%;clip-path:polygon(0 0,100% 0,72% 100%,0 100%)}.cup-curtain-right{right:-3%;clip-path:polygon(0 0,100% 0,100% 100%,28% 100%);transform:scaleX(-1)}.cup-halo{position:absolute;left:50%;top:31%;width:min(48vw,390px);aspect-ratio:1;border-radius:50%;transform:translate(-50%,-50%) scale(.35);opacity:0;background:repeating-conic-gradient(#ffd777 0 4deg,transparent 5deg 13deg);mask-image:radial-gradient(transparent 0 38%,#000 42% 75%,transparent 77%);animation:cup-halo .9s ease-out .34s forwards}.cup-ray{position:absolute;z-index:2;left:50%;top:32%;width:4px;height:clamp(125px,24vw,205px);transform-origin:bottom;opacity:0;background:linear-gradient(#ffe49b,transparent);box-shadow:0 0 12px #ffc84d;animation:cup-ray .56s ease-out forwards}.cup-ray-a{transform:translate(-50%,-100%) rotate(-31deg);animation-delay:.38s}.cup-ray-b{transform:translate(-50%,-100%);animation-delay:.48s}.cup-ray-c{transform:translate(-50%,-100%) rotate(31deg);animation-delay:.58s}.cup-trophy{position:absolute;z-index:4;left:50%;top:29%;width:clamp(106px,18vw,150px);height:clamp(134px,23vw,190px);transform:translate(-50%,-50%) translateY(-35px) scale(.55);opacity:0;animation:cup-trophy .72s cubic-bezier(.2,1.35,.3,1) .48s forwards}.cup-bowl{position:absolute;left:6%;top:0;width:88%;height:48%;border:5px solid #ffe6a2;border-top:0;border-radius:0 0 52% 52%;background:linear-gradient(110deg,#8e1720,#ffc957 49%,#8d101b);box-shadow:0 0 25px #ffc542}.cup-bowl:before,.cup-bowl:after{content:'';position:absolute;top:6%;width:28%;height:47%;border:4px solid #fbd984;border-radius:50%}.cup-bowl:before{left:-32%;border-right:0}.cup-bowl:after{right:-32%;border-left:0}.cup-bowl i{position:absolute;left:50%;top:27%;width:22%;aspect-ratio:1;transform:translateX(-50%) rotate(45deg);background:#fff0b4;box-shadow:0 0 12px #fff2ae}.cup-stem{position:absolute;left:44%;top:48%;width:12%;height:27%;background:linear-gradient(90deg,#986017,#ffdc77,#8b5013)}.cup-base{position:absolute;left:20%;bottom:0;width:60%;height:14%;border:3px solid #ffe4a0;border-radius:8px 8px 2px 2px;background:linear-gradient(#b32126,#4a0710)}.cup-crown{position:absolute;z-index:5;left:50%;top:12%;display:flex;align-items:end;gap:4px;height:36px;padding:0 8px 5px;border:2px solid #ffe39a;border-top:0;border-radius:0 0 15px 15px;background:#b8242b;transform:translateX(-50%) translateY(-20px);opacity:0;animation:cup-crown .5s cubic-bezier(.2,1.4,.4,1) .94s forwards}.cup-crown i{display:block;width:15px;height:29px;background:#ffe799;clip-path:polygon(0 100%,12% 10%,50% 67%,88% 10%,100% 100%)}.cup-crown i:nth-child(2){height:37px}.cup-seal{position:absolute;z-index:3;left:50%;top:51%;display:grid;place-items:center;width:38px;aspect-ratio:1;border:1px solid #ffdf87;border-radius:50%;color:#ffdc83;font:bold 18px Georgia,serif;opacity:0;transform:translateX(-50%) scale(.3);animation:cup-seal .45s ease-out 1.07s forwards}.j3-cup-champion .j3-copy{text-shadow:0 2px #4e070c,0 0 27px #f9bb42}.j3-cup-champion .j3-label{color:#ffe7a4;background:#650c1777}@keyframes cup-curtain{to{opacity:.9}}@keyframes cup-halo{to{opacity:.68;transform:translate(-50%,-50%) scale(1)}}@keyframes cup-ray{to{opacity:.72}}@keyframes cup-trophy{to{opacity:1;transform:translate(-50%,-50%) scale(1)}}@keyframes cup-crown{to{opacity:1;transform:translateX(-50%)}}@keyframes cup-seal{to{opacity:1;transform:translateX(-50%) scale(1)}}",
+"@media(max-height:620px){.j3-copy{bottom:6%}.j3-name{margin-top:8px}.j3-flavor{display:none}}"
+].join("");
