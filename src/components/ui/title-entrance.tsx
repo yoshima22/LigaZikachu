@@ -55,12 +55,16 @@ const DURATION: Record<string, number> = {
   MEGA_AWAKENING:     5600,
   TREASURE_BURST:     5000,
   STARRY_CROWN:       5200,
-  JOHTO3_FIRST:       8200,
-  JOHTO3_SECOND:      7000,
-  JOHTO3_THIRD:       6200,
-  JOHTO3_CHAMPION:    6000,
-  JOHTO3_FOURTH:      4800,
+  JOHTO3_FIRST:       7200,
+  JOHTO3_SECOND:      6000,
+  JOHTO3_THIRD:       5200,
+  JOHTO3_CHAMPION:    5000,
+  JOHTO3_FOURTH:      3800,
 };
+
+export function getTitleEntranceDuration(effect: string) {
+  return DURATION[effect] ?? 2400;
+}
 
 // Tempo até a fase "ambient" começar (ms)
 const AMBIENT_AT: Record<string, number> = {
@@ -1968,7 +1972,7 @@ export function TitleEntrance({ name, rarity, theme, effect, color, glowColor, f
     hasPlayed.current = true;
     setMounted(true);
 
-    const total  = DURATION[effect] ?? 2400;
+    const total  = getTitleEntranceDuration(effect);
     const fadeAt = total - FADE_MS;
 
     tFadeRef.current = setTimeout(() => setVisible(false), fadeAt);
