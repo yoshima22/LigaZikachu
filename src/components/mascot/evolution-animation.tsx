@@ -87,15 +87,17 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
 
       <div className="relative flex h-72 items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e1b4b_0%,#05030f_70%)]" />
+      <div className="absolute inset-0 flex items-center justify-center">
       <div
-        className="absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 opacity-40"
+        className="h-[700px] w-[700px] shrink-0 opacity-40"
         style={{
           background: "repeating-conic-gradient(from 0deg, rgba(125,211,252,.55) 0deg 6deg, transparent 6deg 20deg)",
           maskImage: "radial-gradient(circle, #000 0%, transparent 60%)",
           WebkitMaskImage: "radial-gradient(circle, #000 0%, transparent 60%)",
-          animation: `evo-rays ${phase === "morph" ? 5 : 22}s linear infinite`,
+          animation: `evo-rays 90s linear infinite`,
         }}
       />
+      </div>
 
       {/* palco */}
       <div className="relative flex h-64 w-64 items-center justify-center">
