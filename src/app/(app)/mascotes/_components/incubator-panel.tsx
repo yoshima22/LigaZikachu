@@ -730,11 +730,12 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     <div className="space-y-6">
       {/* Incubadora */}
       <div className="rounded-2xl border border-border bg-slate-950/50 p-5">
-        <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+        <div className="mb-4 flex flex-wrap items-center gap-3">
           <h2 className="flex items-center gap-2 font-semibold text-slate-200">
             <span className="text-xl">🥚</span> Incubadora
             <span className="text-[10px] text-slate-600">1 slot</span>
           </h2>
+          <div className="ml-auto flex flex-wrap items-center gap-3">
           <EggPityButton />
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-[11px] text-slate-300 transition hover:border-violet-400/40">
             <input
@@ -749,6 +750,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             {showHatchAnimation ? <Sparkles size={13} className="text-violet-300" /> : <Eye size={13} className="text-slate-500" />}
             <span><strong className="text-white">Abertura animada</strong><span className="ml-1 text-slate-500">{showHatchAnimation ? "ativada" : "resultado direto"}</span></span>
           </label>
+          </div>
         </div>
 
         {hatchResult ? (
