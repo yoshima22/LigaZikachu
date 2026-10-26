@@ -146,6 +146,9 @@ export function JohtoRewardPicker({ rewards, choiceUsed, clairItem, allLeaders }
   const [rewardPage, setRewardPage] = useState(0);
   const itemAvailable = Boolean(clairItem && !clairItem.used) && !choiceUsed;
   if (rewards.length === 0) return null;
+  const leaderIdx = Math.min(leaderPage, Math.max(0, allLeaders.length - 1));
+  const pickFromAnyLeader = itemAvailable && useItem && allLeaders.length > 0;
+  const activeLeader = pickFromAnyLeader ? allLeaders[leaderIdx] : null;
   const REWARD_PAGE_SIZE = 2;
   const rewardPages = Math.ceil(rewards.length / REWARD_PAGE_SIZE);
   const safeRewardPage = Math.min(rewardPage, rewardPages - 1);
@@ -153,7 +156,7 @@ export function JohtoRewardPicker({ rewards, choiceUsed, clairItem, allLeaders }
   const pager = rewardPages > 1 && (
     <div className="flex items-center justify-between gap-2 rounded-xl border border-slate-800 bg-slate-900/60 px-3 py-2">
       <button type="button" disabled={safeRewardPage <= 0} onClick={() => setRewardPage(safeRewardPage - 1)} className="rounded-md border border-slate-700 px-3 py-1 text-xs font-black text-white disabled:opacity-30">◀ Anterior</button>
-      <p className="text-xs font-bold text-slate-300">Recompensas {safeRewardPage * REWARD_PAGE_SIZE + 1}–{Math.min(rewards.length, (safeRewardPage + 1) * REWARD_PAGE_SIZE)} de {rewards.length} · página {safeRewardPage + 1}/{rewardPages}</p>
+      <p className="text-xs font-bold text-slate-300">Recompensas {safeRewardPage * REWARD_PAGE_SIZE + 1}–{Math.min(rewards.length, (safeRewardPage + 1) * REWARD_PAGE_SIZE)} de {rewards.length}</p>
       <button type="button" disabled={safeRewardPage >= rewardPages - 1} onClick={() => setRewardPage(safeRewardPage + 1)} className="rounded-md border border-slate-700 px-3 py-1 text-xs font-black text-white disabled:opacity-30">Próxima ▶</button>
     </div>
   );
@@ -211,6 +214,17 @@ Confirmar a escolha?`,
                   </select>
                 </div>
               )}
+              {useItem && allLeaders.length > 1 && (
+                <div className="mt-3">
+                  <p className="mb-1 text-[11px] font-bold text-indigo-200">Mascotes de qual líder?</p>
+                  <div className="flex flex-wrap gap-1.5">
+                    {allLeaders.map((l, i) => (
+                      <button key={l.name} type="button" onClick={() => { setLeaderPage(i); setChoice({}); }}
+                        className={`rounded-full border px-3 py-1 text-[11px] font-black transition ${i === leaderIdx ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-700 bg-slate-900/60 text-slate-300 hover:border-slate-500"}`}>{l.name}</button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </>
           )}
         </div>
@@ -233,16 +247,9 @@ Confirmar a escolha?`,
               <p className="mt-2 text-xs text-slate-400">🔒 Bloqueado: você já escolheu um mascote nesta raid (só é permitido UM em todo o evento).</p>
             ) : (
               <>
-                <p className="mb-2 mt-2 text-[11px] text-amber-200">Escolha 1 dos 6 mascotes de {reward.leaderName} — lembre-se: <b>será o único mascote que você poderá escolher em toda a raid</b>.</p>
-                {itemAvailable && useItem && allLeaders.length > 1 && (
-                  <div className="mb-2 flex items-center justify-between gap-2 rounded-lg border border-slate-800 bg-slate-900/60 px-2 py-1.5">
-                    <button type="button" disabled={leaderPage <= 0} onClick={() => setLeaderPage((p) => Math.max(0, p - 1))} className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-black text-white disabled:opacity-30">◀</button>
-                    <p className="text-center text-xs font-black text-white">{allLeaders[Math.min(leaderPage, allLeaders.length - 1)].name} <span className="font-semibold text-slate-400">· {Math.min(leaderPage, allLeaders.length - 1) + 1}/{allLeaders.length}</span></p>
-                    <button type="button" disabled={leaderPage >= allLeaders.length - 1} onClick={() => setLeaderPage((p) => Math.min(allLeaders.length - 1, p + 1))} className="rounded-md border border-slate-700 px-2.5 py-1 text-xs font-black text-white disabled:opacity-30">▶</button>
-                  </div>
-                )}
+                <p className="mb-2 mt-2 text-[11px] text-amber-200">Escolha 1 dos {(activeLeader ? activeLeader.pokemonIds : reward.options).length} mascotes de {activeLeader?.name ?? reward.leaderName}{activeLeader ? " (Selo do Dragão)" : ""} — lembre-se: <b>será o único mascote que você poderá escolher em toda a raid</b>.</p>
                 <div className="grid grid-cols-3 gap-2 sm:grid-cols-6">
-                  {(itemAvailable && useItem ? (allLeaders[Math.min(leaderPage, allLeaders.length - 1)]?.pokemonIds ?? []) : reward.options).map((pokemonId) => (
+                  {(activeLeader ? activeLeader.pokemonIds : reward.options).map((pokemonId) => (
                     <button key={pokemonId} type="button" onClick={() => setChoice((c) => ({ ...c, [reward.id]: pokemonId }))}
                       className={`rounded-xl border p-2 text-center transition ${choice[reward.id] === pokemonId ? "border-[#FFCB05] bg-[#FFCB05]/15" : "border-slate-800 bg-slate-900/60 hover:border-slate-600"}`}>
                       <img src={getStaticSpriteUrl(pokemonId)} alt="" className="mx-auto h-14 w-14 object-contain" style={{ imageRendering: "pixelated" }} />
@@ -258,7 +265,6 @@ Confirmar a escolha?`,
           </div>
         );
       })}
-      {pager}
     </section>
   );
 }
