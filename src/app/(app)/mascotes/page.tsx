@@ -23,6 +23,7 @@ import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
 import { getOrderStepUnlockState, getRandomMascotInjurySabotage } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
 import { getMegaStoneForMegaPokemon, MEGA_STONE_SHOP_ITEM_TYPES } from "@/lib/mega-evolution";
+import { EvolutionWatcher } from "./_components/evolution-watcher";
 import { getPokedexLink } from "@/lib/pokedex-link";
 import { getActiveEggRarityBonusPct, getExpeditionEventBonusPct } from "@/lib/timed-game-bonuses";
 
@@ -440,6 +441,7 @@ export default async function MascotesPage() {
 
   return (
     <div className="space-y-8">
+      <EvolutionWatcher playerId={player.id} mascots={featuredMascots.map((m) => ({ id: m.id, pokemonId: m.pokemonId }))} />
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-4 rounded-2xl border border-[#FFCB05]/20 bg-gradient-to-r from-[#1A1A2E] via-[#201d38] to-[#1A1A2E] p-6">
         <div>
