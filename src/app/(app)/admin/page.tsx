@@ -44,6 +44,7 @@ import { Button } from "@/components/ui/button";
 import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
 import { listManagedForms } from "./actions";
 import { FormsPoolManager } from "./_components/forms-pool-manager";
+import { EvolutionDebug } from "./_components/evolution-debug";
 import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
 import { AdminTabs } from "./_components/admin-tabs";
 import { LigaCashPanel } from "./_components/liga-cash-panel";
@@ -429,6 +430,11 @@ export default async function AdminPage() {
           <h2 className="mb-2 text-sm font-semibold text-slate-200">🎂 Aniversário</h2>
           <p className="mb-3 text-xs text-slate-500">Teste a roleta de presentes de aniversário (apenas simulação — nada é entregue).</p>
           <BirthdayRouletteDebug />
+        </div>
+        <div className="border-t border-border/60 pt-3">
+          <h2 className="mb-2 text-sm font-semibold text-slate-200">✨ Evolução</h2>
+          <p className="mb-3 text-xs text-slate-500">Escolha um Pokémon e veja a animação de evolução.</p>
+          <EvolutionDebug />
         </div>
         <div className="border-t border-border/60 pt-3">
           <h2 className="mb-2 text-sm font-semibold text-slate-200">👋 Boas-vindas</h2>
