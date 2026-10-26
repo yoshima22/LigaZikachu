@@ -768,8 +768,14 @@ export const PARADOX_IDS = new Set([
   1023, // Iron Crown (Paradox Cobalion)
 ]);
 
+/** Espécie que define o crescimento: a Mega herda a linhagem (e o multiplicador) da forma original. */
+export function getGrowthSpeciesId(pokemonId: number): number {
+  return getMegaStoneForMegaPokemon(pokemonId)?.compatiblePokemonId ?? pokemonId;
+}
+
 export function getMascotStatusGrowthMultiplier(pokemonId?: number | null): number {
   if (!pokemonId) return 1;
+  pokemonId = getGrowthSpeciesId(pokemonId);
   if (LEGENDARY_POOL.includes(pokemonId)) return 1.3;
   if (PSEUDO_LEGENDARY_LINE_IDS.has(pokemonId)) return 1.1;
   if (PARADOX_IDS.has(pokemonId)) return 1.1;
@@ -831,6 +837,7 @@ export function getMascotProgressMilestones(
   level: number,
   evolvedThisGain = false,
 ): MascotProgressMilestoneRule[] {
+  pokemonId = getGrowthSpeciesId(pokemonId);
   if (LEGENDARY_POOL.includes(pokemonId)) return [];
 
   const depth = getEvolutionDepth(pokemonId);

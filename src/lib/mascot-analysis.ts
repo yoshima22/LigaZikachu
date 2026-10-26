@@ -2,7 +2,7 @@
 // Tudo determinístico — reaproveita as mesmas regras de crescimento de mascot.ts.
 import {
   EVOLUTION_MAP, EVOLUTION_REVERSE_MAP, LEGENDARY_POOL,
-  getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getPokemonName, getMascotRarity,
+  getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getGrowthSpeciesId, getPokemonName, getMascotRarity,
 } from "@/lib/mascot-data";
 import { COMBAT_ROLE_LABELS, COMBAT_ROLE_DESCRIPTIONS } from "@/lib/combat-roles";
 import { PERSONALITY_AFFINITY } from "@/lib/personality-design";
@@ -130,6 +130,7 @@ function futureProgressMilestones(
   targetLevel: number,
   evolutionLocked: boolean,
 ): NonNullable<MascotAnalysis["progressMilestones"]> {
+  pokemonId = getGrowthSpeciesId(pokemonId);
   if (LEGENDARY_POOL.includes(pokemonId)) return [];
   const chain = fullEvolutionChain(pokemonId);
   const currentIndex = Math.max(0, chain.findIndex((form) => form.pokemonId === pokemonId));
