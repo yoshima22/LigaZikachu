@@ -3,12 +3,15 @@
 import { useState, useTransition } from "react";
 import { searchMascotSprites, type MascotSpriteHit } from "../actions";
 import { EVOLUTION_MAP } from "@/lib/mascot-data";
+import { MEGA_STONES } from "@/lib/mega-evolution";
 import { EvolutionAnimation } from "@/components/mascot/evolution-animation";
 
 export function EvolutionDebug() {
   const [query, setQuery] = useState("");
   const [hits, setHits] = useState<MascotSpriteHit[] | null>(null);
-  const [anim, setAnim] = useState<{ from: number; to: number } | null>(null);
+  const [anim, setAnim] = useState<{ from: number; to: number; mega?: boolean; stoneName?: string } | null>(null);
+  const [stoneType, setStoneType] = useState<string>(MEGA_STONES[0]?.type ?? "");
+  const stone = MEGA_STONES.find((s) => s.type === stoneType);
   const [pending, start] = useTransition();
 
   const run = () => {
@@ -47,8 +50,18 @@ export function EvolutionDebug() {
               );
             })}
           </div>)}
+      <div className="flex flex-wrap items-center gap-2 border-t border-border/60 pt-3">
+        <select value={stoneType} onChange={(e) => setStoneType(e.target.value)}
+          className="min-w-56 rounded-lg border border-fuchsia-500/25 bg-slate-950 px-3 py-2 text-sm text-slate-200">
+          {MEGA_STONES.map((s) => <option key={s.type} value={s.type}>{s.stoneName} — {s.compatiblePokemonName}</option>)}
+        </select>
+        <button type="button" disabled={!stone} onClick={() => stone && setAnim({ from: stone.compatiblePokemonId, to: stone.megaPokemonId, mega: true, stoneName: stone.stoneName })}
+          className="rounded-lg border border-fuchsia-400/40 px-4 py-2 text-sm font-semibold text-fuchsia-200 hover:bg-fuchsia-500/10">
+          💎 Mega Evoluir
+        </button>
+      </div>
       <p className="text-xs text-slate-500">Simulação visual: não altera nenhum mascote.</p>
-      {anim && <EvolutionAnimation fromId={anim.from} toId={anim.to} onClose={() => setAnim(null)} />}
+      {anim && <EvolutionAnimation fromId={anim.from} toId={anim.to} mega={anim.mega} stoneName={anim.stoneName} onClose={() => setAnim(null)} />}
     </div>
   );
 }

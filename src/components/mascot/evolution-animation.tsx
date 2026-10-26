@@ -19,7 +19,7 @@ const PARTICLES = Array.from({ length: 28 }, (_, i) => ({
 }));
 
 /** Janela cinematográfica de evolução: silhueta brilha, alterna entre as formas cada vez mais rápido, clarão e revelação. */
-export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; toId: number; onClose: () => void }) {
+export function EvolutionAnimation({ fromId, toId, onClose, mega = false, stoneName }: { fromId: number; toId: number; onClose: () => void; mega?: boolean; stoneName?: string }) {
   const [phase, setPhase] = useState<Phase>("intro");
   const [showTo, setShowTo] = useState(false);
   const [runKey, setRunKey] = useState(0);
@@ -38,17 +38,18 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
     let t = INTRO_MS;
     let interval = 520;
     let toggle = false;
-    while (t < INTRO_MS + MORPH_MS) {
+    // Mega: sem alternância; a forma só troca no clarão.
+    while (!mega && t < INTRO_MS + MORPH_MS) {
       toggle = !toggle;
       const next = toggle;
       timers.push(setTimeout(() => setShowTo(next), t));
       t += interval;
       interval = Math.max(70, interval * 0.82);
     }
-    timers.push(setTimeout(() => setPhase("flash"), INTRO_MS + MORPH_MS));
+    timers.push(setTimeout(() => { setShowTo(true); setPhase("flash"); }, INTRO_MS + MORPH_MS));
     timers.push(setTimeout(() => setPhase("reveal"), INTRO_MS + MORPH_MS + FLASH_MS));
     return () => timers.forEach(clearTimeout);
-  }, [runKey]);
+  }, [runKey, mega]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -62,18 +63,20 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
   const current = phase === "reveal" ? toId : phase === "morph" && showTo ? toId : fromId;
   const imgStyle = {
     imageRendering: getMascotImageRendering(current),
-    filter: silhouette ? "brightness(0) invert(1) drop-shadow(0 0 18px #fff)" : "drop-shadow(0 6px 10px rgba(0,0,0,.6))",
+    filter: silhouette ? `brightness(0) invert(1) drop-shadow(0 0 18px ${mega ? "#f0abfc" : "#fff"})` : "drop-shadow(0 6px 10px rgba(0,0,0,.6))",
   } as const;
 
   const caption =
-    phase === "intro" ? `O que? ${fromName} está evoluindo!`
-    : phase === "reveal" ? `Parabéns! ${fromName} evoluiu para ${toName}!`
+    phase === "intro" ? (mega ? `${stoneName ?? "A Mega Pedra"} reage ao vínculo com ${fromName}!` : `O que? ${fromName} está evoluindo!`)
+    : phase === "reveal" ? (mega ? `${fromName} Mega Evoluiu para ${toName}!` : `Parabéns! ${fromName} evoluiu para ${toName}!`)
     : "";
 
   return createPortal(
     <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-label="Evolução" onClick={onClose}>
-    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-[#FFCB05]/30 bg-[#05030f] shadow-2xl" onClick={(e) => e.stopPropagation()}>
+    <div className={`relative w-full max-w-sm overflow-hidden rounded-2xl border ${mega ? "border-fuchsia-400/50" : "border-[#FFCB05]/30"} bg-[#05030f] shadow-2xl`} onClick={(e) => e.stopPropagation()}>
       <style>{`
+        @keyframes evo-ring { 0% { transform: scale(.3); opacity:.9; } 100% { transform: scale(2.2); opacity:0; } }
+        @keyframes evo-orbit { to { transform: rotate(360deg); } }
         @keyframes evo-rays { to { transform: rotate(360deg); } }
         @keyframes evo-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
         @keyframes evo-glow { 0%,100% { opacity:.35; transform: scale(.9);} 50% { opacity:.9; transform: scale(1.15);} }
@@ -86,15 +89,17 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
       `}</style>
 
       <div className="relative flex h-72 items-center justify-center overflow-hidden">
-      <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e1b4b_0%,#05030f_70%)]" />
+      <div className={`absolute inset-0 ${mega ? "bg-[radial-gradient(circle_at_center,#3b0764_0%,#05030f_70%)]" : "bg-[radial-gradient(circle_at_center,#1e1b4b_0%,#05030f_70%)]"}`} />
       <div className="absolute inset-0 flex items-center justify-center">
       <div
         className="h-[700px] w-[700px] shrink-0 opacity-40"
         style={{
-          background: "repeating-conic-gradient(from 0deg, rgba(125,211,252,.55) 0deg 6deg, transparent 6deg 20deg)",
+          background: mega
+            ? "repeating-conic-gradient(from 0deg, rgba(240,171,252,.6) 0deg 5deg, rgba(253,224,71,.45) 5deg 10deg, transparent 10deg 24deg)"
+            : "repeating-conic-gradient(from 0deg, rgba(125,211,252,.55) 0deg 6deg, transparent 6deg 20deg)",
           maskImage: "radial-gradient(circle, #000 0%, transparent 60%)",
           WebkitMaskImage: "radial-gradient(circle, #000 0%, transparent 60%)",
-          animation: `evo-rays 90s linear infinite`,
+          animation: `evo-rays ${mega ? 45 : 90}s linear infinite`,
         }}
       />
       </div>
@@ -102,11 +107,22 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
       {/* palco */}
       <div className="relative flex h-64 w-64 items-center justify-center">
         {(phase === "morph" || phase === "flash") && (
-          <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.9)_0%,rgba(125,211,252,.4)_45%,transparent_70%)]"
+          <div className={`absolute inset-0 rounded-full ${mega ? "bg-[radial-gradient(circle,rgba(255,255,255,.9)_0%,rgba(217,70,239,.5)_45%,transparent_70%)]" : "bg-[radial-gradient(circle,rgba(255,255,255,.9)_0%,rgba(125,211,252,.4)_45%,transparent_70%)]"}`}
             style={{ animation: "evo-glow 0.7s ease-in-out infinite" }} />
         )}
         {phase === "reveal" && (
           <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,203,5,.55)_0%,transparent_65%)]" style={{ animation: "evo-glow 2.4s ease-in-out infinite" }} />
+        )}
+
+        {/* Mega: anéis de choque + Mega Pedra orbitando */}
+        {mega && (phase === "morph" || phase === "flash") && [0, 1, 2].map((i) => (
+          <span key={i} className="absolute left-1/2 top-1/2 -ml-24 -mt-24 h-48 w-48 rounded-full border-2 border-fuchsia-300/80"
+            style={{ animation: `evo-ring 1.5s ease-out ${i * 0.5}s infinite` }} />
+        ))}
+        {mega && phase !== "reveal" && (
+          <div className="absolute left-1/2 top-1/2 h-0 w-0" style={{ animation: `evo-orbit ${phase === "intro" ? 3 : 0.9}s linear infinite` }}>
+            <span className="absolute -ml-2 -mt-2 block h-4 w-4 rotate-45 rounded-sm bg-gradient-to-br from-fuchsia-200 via-violet-400 to-amber-300 shadow-[0_0_14px_#e879f9]" style={{ transform: "translateX(100px) rotate(45deg)" }} />
+          </div>
         )}
 
         {/* partículas convergindo (morph) ou explodindo (reveal) */}
