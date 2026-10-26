@@ -6,7 +6,7 @@ import { EVOLUTION_REVERSE_MAP } from "@/lib/mascot-data";
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 
 type Seen = { id: string; pokemonId: number };
-type Queued = { key: string; from: number; to: number; mega: boolean; stoneName?: string };
+type Queued = { key: string; mascotId: string; from: number; to: number; mega: boolean; stoneName?: string };
 
 // `from` está na linha evolutiva que leva a `to`? (exclui desevoluções, ex.: Pena Arco-Íris)
 function isForwardEvolution(from: number, to: number) {
@@ -42,15 +42,16 @@ export function EvolutionWatcher({ playerId, mascots }: { playerId: string; masc
         if (was !== undefined && was !== m.pokemonId) {
           const stone = getMegaStoneForMegaPokemon(m.pokemonId);
           if (stone && stone.compatiblePokemonId === was) {
-            found.push({ key: `${m.id}:${m.pokemonId}`, from: was, to: m.pokemonId, mega: true, stoneName: stone.stoneName });
+            found.push({ key: `${m.id}:${m.pokemonId}`, mascotId: m.id, from: was, to: m.pokemonId, mega: true, stoneName: stone.stoneName });
           } else if (isForwardEvolution(was, m.pokemonId)) {
-            found.push({ key: `${m.id}:${m.pokemonId}`, from: was, to: m.pokemonId, mega: false });
+            found.push({ key: `${m.id}:${m.pokemonId}`, mascotId: m.id, from: was, to: m.pokemonId, mega: false });
           }
         }
-        next[m.id] = m.pokemonId;
+        // Quem vai animar só vira "visto" ao fechar a animação (recarregar no meio da fila não perde as restantes).
+        if (!found.some((f) => f.mascotId === m.id)) next[m.id] = m.pokemonId;
       }
       localStorage.setItem(storageKey, JSON.stringify(next));
-      if (found.length) setQueue(found);
+      if (found.length) setQueue((q) => [...q, ...found.filter((f) => !q.some((x) => x.key === f.key))]);
     } catch {
       // sem localStorage: sem animação, nada quebra
     }
@@ -65,7 +66,15 @@ export function EvolutionWatcher({ playerId, mascots }: { playerId: string; masc
       toId={current.to}
       mega={current.mega}
       stoneName={current.stoneName}
-      onClose={() => setQueue((q) => q.slice(1))}
+      onClose={() => {
+        try {
+          const key = `evo-seen:${playerId}`;
+          const map = JSON.parse(localStorage.getItem(key) ?? "{}");
+          map[current.mascotId] = current.to;
+          localStorage.setItem(key, JSON.stringify(map));
+        } catch {}
+        setQueue((q) => q.slice(1));
+      }}
     />
   );
 }
