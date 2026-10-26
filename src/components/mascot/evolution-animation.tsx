@@ -71,7 +71,8 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
     : "";
 
   return createPortal(
-    <div className="fixed inset-0 z-[300] flex flex-col items-center justify-center overflow-hidden bg-black" role="dialog" aria-label="Evolução">
+    <div className="fixed inset-0 z-[300] flex items-center justify-center bg-black/70 p-4" role="dialog" aria-label="Evolução" onClick={onClose}>
+    <div className="relative w-full max-w-sm overflow-hidden rounded-2xl border border-[#FFCB05]/30 bg-[#05030f] shadow-2xl" onClick={(e) => e.stopPropagation()}>
       <style>{`
         @keyframes evo-rays { to { transform: rotate(360deg); } }
         @keyframes evo-pulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.12); } }
@@ -84,10 +85,10 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
         @keyframes evo-converge { 0% { transform: translate(var(--dx),var(--dy)) scale(.2); opacity:0; } 60% { opacity:1; } 100% { transform: translate(0,0) scale(1); opacity:0; } }
       `}</style>
 
-      {/* fundo: névoa + raios giratórios */}
+      <div className="relative flex h-72 items-center justify-center overflow-hidden">
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_center,#1e1b4b_0%,#05030f_70%)]" />
       <div
-        className="absolute left-1/2 top-1/2 h-[1400px] w-[1400px] -translate-x-1/2 -translate-y-1/2 opacity-40"
+        className="absolute left-1/2 top-1/2 h-[700px] w-[700px] -translate-x-1/2 -translate-y-1/2 opacity-40"
         style={{
           background: "repeating-conic-gradient(from 0deg, rgba(125,211,252,.55) 0deg 6deg, transparent 6deg 20deg)",
           maskImage: "radial-gradient(circle, #000 0%, transparent 60%)",
@@ -97,7 +98,7 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
       />
 
       {/* palco */}
-      <div className="relative flex h-80 w-80 items-center justify-center">
+      <div className="relative flex h-64 w-64 items-center justify-center">
         {(phase === "morph" || phase === "flash") && (
           <div className="absolute inset-0 rounded-full bg-[radial-gradient(circle,rgba(255,255,255,.9)_0%,rgba(125,211,252,.4)_45%,transparent_70%)]"
             style={{ animation: "evo-glow 0.7s ease-in-out infinite" }} />
@@ -128,7 +129,7 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
           key={current}
           src={getStaticSpriteUrl(current)}
           alt={current === toId ? toName : fromName}
-          className="relative h-56 w-56 object-contain"
+          className="relative h-44 w-44 object-contain"
           style={{
             ...imgStyle,
             animation: phase === "reveal" ? "evo-pop .8s ease-out" : silhouette ? "evo-pulse .5s ease-in-out infinite" : "evo-pulse 2.4s ease-in-out infinite",
@@ -136,13 +137,15 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
         />
       </div>
 
-      <p key={phase} className="relative mt-8 min-h-[3rem] max-w-md px-6 text-center font-pixel text-sm leading-relaxed text-[#FFCB05]"
+      </div>
+
+      <p key={phase} className="relative mt-4 min-h-[3rem] px-6 text-center font-pixel text-sm leading-relaxed text-[#FFCB05]"
         style={{ animation: "evo-rise .6s ease-out" }}>
         {caption}
       </p>
 
       {phase === "reveal" && (
-        <div className="relative mt-4 flex gap-2" style={{ animation: "evo-rise .6s ease-out .4s both" }}>
+        <div className="relative mb-5 mt-3 flex justify-center gap-2" style={{ animation: "evo-rise .6s ease-out .4s both" }}>
           <button type="button" onClick={() => setRunKey((k) => k + 1)}
             className="rounded-lg border border-cyan-400/40 px-4 py-2 text-sm font-semibold text-cyan-200 hover:bg-cyan-500/10">
             ↻ Rever
@@ -162,6 +165,7 @@ export function EvolutionAnimation({ fromId, toId, onClose }: { fromId: number; 
         className="absolute right-4 top-4 rounded-lg border border-white/20 px-3 py-1 text-xs text-white/70 hover:bg-white/10">
         {phase === "reveal" ? "Fechar ✕" : "Pular ✕"}
       </button>
+    </div>
     </div>,
     document.body,
   );
