@@ -2,14 +2,20 @@
 import { Prisma } from "@prisma/client";
 
 /**
- * Acerta o cofre numa compra: entra 25% do pago em ZC e sai o valor do desconto dado
- * (preço original - preço final, em ZC). O cofre nunca fica negativo.
+ * Fração do desconto que sai do cofre. O resto é margem do Miauvadão: com 100%, descontos
+ * médios acima de ~20% faziam o cofre perder mais do que os 25% que entram em cada compra.
+ */
+export const VAULT_DISCOUNT_COVERAGE = 0.6;
+
+/**
+ * Acerta o cofre numa compra: entra 25% do pago em ZC e sai VAULT_DISCOUNT_COVERAGE do
+ * desconto dado (preço original - preço final, em ZC). O cofre nunca fica negativo.
  */
 export async function settleVaultForPurchase(
   tx: Prisma.TransactionClient,
   { coinsToVault, discountZc }: { coinsToVault: number; discountZc: number },
 ) {
-  const net = coinsToVault - Math.max(0, discountZc);
+  const net = coinsToVault - Math.round(Math.max(0, discountZc) * VAULT_DISCOUNT_COVERAGE);
   if (net === 0) return;
   await tx.$executeRaw(Prisma.sql`UPDATE miauvadao_config SET "vaultBalance" = GREATEST(0, "vaultBalance" + ${net}) WHERE id = 'singleton'`);
 }
