@@ -1,0 +1,1 @@
+ALTER TABLE mascot_buffs ADD COLUMN IF NOT EXISTS "accountBound" BOOLEAN NOT NULL DEFAULT false;

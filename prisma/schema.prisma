@@ -3167,6 +3167,8 @@ model MascotBuff {
   mascotId  String
   type      MascotBuffType
   expiresAt DateTime
+  // Item vinculado à conta: ao desequipar/trocar, volta ao inventário como vinculado.
+  accountBound Boolean      @default(false)
   createdAt DateTime       @default(now())
   mascot    Mascot         @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 

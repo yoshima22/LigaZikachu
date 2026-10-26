@@ -1835,9 +1835,9 @@ export async function useXpShareAction(mascotId: string, inventoryKey: string): 
         mascot: { playerId: player.id },
         expiresAt: { gt: new Date("2090-01-01") },
       },
-      select: { type: true },
+      select: { type: true, accountBound: true },
     });
-    await applyXpShare(player.id, mascotId, shopItem.type as "XP_SHARE" | "XP_SHARE_TEAM");
+    await applyXpShare(player.id, mascotId, shopItem.type as "XP_SHARE" | "XP_SHARE_TEAM", bound && inv.boundQuantity > 0);
     await prisma.$transaction(async (tx) => {
       await tx.playerInventory.update({ where: { id: inv.id }, data: consumeOne(bound) });
       if (previous) {
@@ -1848,8 +1848,8 @@ export async function useXpShareAction(mascotId: string, inventoryKey: string): 
         if (previousItem) {
           await tx.playerInventory.upsert({
             where: { playerId_itemId: { playerId: player.id, itemId: previousItem.id } },
-            update: { quantity: { increment: 1 } },
-            create: { playerId: player.id, itemId: previousItem.id, quantity: 1 },
+            update: previous.accountBound ? { quantity: { increment: 1 }, boundQuantity: { increment: 1 } } : { quantity: { increment: 1 } },
+            create: { playerId: player.id, itemId: previousItem.id, quantity: 1, boundQuantity: previous.accountBound ? 1 : 0 },
           });
         }
       }
@@ -1863,7 +1863,7 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
     const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil nao encontrado." };
-    const removedType = await removeXpShare(player.id, mascotId);
+    const { type: removedType, accountBound } = await removeXpShare(player.id, mascotId);
     // Devolve o item ao inventário do jogador
     const shopItem = await prisma.shopItem.findFirst({
       where: { type: removedType as "XP_SHARE" | "XP_SHARE_TEAM", active: true },
@@ -1872,8 +1872,8 @@ export async function removeXpShareAction(mascotId: string): Promise<{ error?: s
     if (shopItem) {
       await prisma.playerInventory.upsert({
         where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } },
-        update: { quantity: { increment: 1 } },
-        create: { playerId: player.id, itemId: shopItem.id, quantity: 1 },
+        update: accountBound ? { quantity: { increment: 1 }, boundQuantity: { increment: 1 } } : { quantity: { increment: 1 } },
+        create: { playerId: player.id, itemId: shopItem.id, quantity: 1, boundQuantity: accountBound ? 1 : 0 },
       });
     }
     revalidate(player.id); return {};

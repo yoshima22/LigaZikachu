@@ -3243,7 +3243,7 @@ export async function claimVacation(playerId: string, expeditionId: string) {
 }
 
 /** Compartilhador de XP: equipa em Pokémon fora de expedição (1 por jogador) */
-export async function applyXpShare(playerId: string, mascotId: string, type: "XP_SHARE" | "XP_SHARE_TEAM") {
+export async function applyXpShare(playerId: string, mascotId: string, type: "XP_SHARE" | "XP_SHARE_TEAM", accountBound = false) {
   const mascot = await prisma.mascot.findUnique({
     where: { id: mascotId },
     include: { expeditions: { where: { status: "ACTIVE" }, take: 1 } }
@@ -3264,7 +3264,7 @@ export async function applyXpShare(playerId: string, mascotId: string, type: "XP
       },
     });
     await tx.mascotBuff.create({
-      data: { mascotId, type, expiresAt: new Date("2099-12-31T23:59:59Z") },
+      data: { mascotId, type, expiresAt: new Date("2099-12-31T23:59:59Z"), accountBound },
     });
   });
   await logEvent(mascotId, "📡", type === "XP_SHARE"
@@ -3280,7 +3280,7 @@ export async function removeXpShare(playerId: string, mascotId: string) {
   if (!buff) throw new Error("Compartilhador de XP não encontrado neste mascote.");
   await prisma.mascotBuff.delete({ where: { id: buff.id } });
   await logEvent(mascotId, "📡", "Compartilhador de XP removido.");
-  return buff.type;
+  return { type: buff.type, accountBound: buff.accountBound };
 }
 
 const RAINBOW_FEATHER_BASE_FORM_OVERRIDES: Readonly<Record<number, number>> = {
