@@ -18,6 +18,7 @@ import {
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
+import { getEggPityProgress } from "@/lib/egg-pity";
 import type { ExpeditionMode } from "@/lib/mascot-data";
 import { EGG_SHINY_CHANCE, feedBaseExp, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
@@ -747,6 +748,19 @@ export async function getIncubatorDropPreviewAction(): Promise<{ error?: string;
   } catch (error) {
     return { error: error instanceof Error ? error.message : "Não foi possível calcular os drops deste ovo." };
   }
+}
+
+export async function getEggPityProgressAction(): Promise<{
+  error?: string;
+  progress?: Awaited<ReturnType<typeof getEggPityProgress>>;
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    return { progress: await getEggPityProgress(player.id) };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
 export async function hatchEggAction(): Promise<{

@@ -227,7 +227,8 @@ model UserTutorialProgress {
 model Player {
   id                          String                         @id @default(cuid())
   mascotOccurrences           MascotOccurrence[]
-  userId                      String                         @unique
+  eggPityCounters             EggPityCounter[]
+  userId                     String                         @unique
   displayName                 String
   whatsapp                    String?
   ptcglNick                   String?                        @unique
@@ -2694,6 +2695,17 @@ model MascotEgg {
 
   @@index([playerId])
   @@map("mascot_eggs")
+}
+
+// Garantia de alta raridade: ovos seguidos sem raridade aumentada, por tipo de ovo.
+model EggPityCounter {
+  playerId String
+  eggKey   String // COMMON | RARE | EVENT | SPECIAL | LAB
+  count    Int    @default(0)
+  player   Player @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@id([playerId, eggKey])
+  @@map("egg_pity_counters")
 }
 
 model MascotIncubator {

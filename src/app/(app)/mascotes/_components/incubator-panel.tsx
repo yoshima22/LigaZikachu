@@ -14,6 +14,7 @@ import {
   type IncubatorDropPreview,
 } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
+import { EggPityButton } from "./egg-pity-button";
 import { getPokemonName, PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { CELESTIAL_EGG_IMAGE, EVENT_EGG_IMAGE, LAB_EGG_IMAGE, eggImageUrl } from "@/lib/egg-origin";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
@@ -734,6 +735,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <span className="text-xl">🥚</span> Incubadora
             <span className="text-[10px] text-slate-600">1 slot</span>
           </h2>
+          <EggPityButton />
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-[11px] text-slate-300 transition hover:border-violet-400/40">
             <input
               type="checkbox"

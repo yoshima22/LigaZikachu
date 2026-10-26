@@ -3,6 +3,7 @@
  */
 
 import { prisma } from "@/lib/prisma";
+import { isEggPityDue, recordEggPityResult } from "@/lib/egg-pity";
 import { creditCoins } from "@/lib/zikacoins";
 import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromExpedition } from "@/lib/raid-event";
@@ -175,9 +176,12 @@ export async function rollEggChoicesForPlayer(
   const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
   const disabledIds = await getDisabledEggPokemonIds();
+  const pityDue = await isEggPityDue(playerId, eggType);
   const choices: number[] = [];
   while (choices.length < count) {
     const result = await includeCustomSpeciesInRoll(rollEggPokemon(eggType, {
+      // Garantia: a primeira opção do ovo de laboratório é sempre de alta raridade.
+      guaranteeHighRarity: pityDue && choices.length === 0,
       generationType,
       rarityBonusPct: rarityBonusPct + eventRarityBonusPct,
       randomGenerationBonus: randomGeneration,
@@ -224,7 +228,10 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   const eventRarityBonusPct = await getActiveEggRarityBonusPct();
   const ownedBaseCounts = await getOwnedBaseCounts(playerId);
   const disabledEggPokemonIds = await getDisabledEggPokemonIds();
+  const pityKey = getEggStatTypeKey(incubator.egg.type as string, incubator.egg.origin);
+  const pityDue = !forcedPokemonId && await isEggPityDue(playerId, pityKey);
   const rollResult = forcedPokemonId ? null : await includeCustomSpeciesInRoll(rollEggPokemon(rollContext.eggType, {
+    guaranteeHighRarity: pityDue,
     generationType: rollContext.generationType,
     rarityBonusPct: incubator.egg.hatchRarityBonusPct + eventRarityBonusPct,
     randomGenerationBonus: rollContext.randomGeneration,
@@ -233,8 +240,12 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   }));
   const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();
+  const gotHighRarity = rollResult
+    ? rollResult.category !== "COMMON"
+    : registryTier(getMascotRarity(pokemonId)) !== "COMMON";
 
   const mascot = await prisma.$transaction(async (tx) => {
+    await recordEggPityResult(playerId, pityKey, gotHighRarity, tx);
     // Stat range baseado no tipo do ovo (ovos mais raros = stats melhores)
     const eggTypeKey = getEggStatTypeKey(incubator.egg.type as string, incubator.egg.origin);
     const [statMin, statMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
