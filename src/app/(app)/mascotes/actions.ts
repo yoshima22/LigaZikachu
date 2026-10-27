@@ -2545,3 +2545,12 @@ export async function feedAllAction(
     return { error: err instanceof Error ? err.message : "Erro.", fed: 0, skipped: 0, noFood: false };
   }
 }
+
+// Leve: id + espécie de TODOS os mascotes do jogador (inclui o banco), para detectar evoluções e tocar a animação.
+export async function getMascotFormsAction(): Promise<{ id: string; pokemonId: number }[]> {
+  const user = await getSessionUser();
+  if (!user) return [];
+  const player = await getSessionPlayer(user.id);
+  if (!player) return [];
+  return prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true } });
+}

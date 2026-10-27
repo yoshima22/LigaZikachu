@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { EvolutionAnimation } from "@/components/mascot/evolution-animation";
 import { EVOLUTION_REVERSE_MAP } from "@/lib/mascot-data";
+import { getMascotFormsAction } from "../actions";
 import { getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 
 type Seen = { id: string; pokemonId: number };
@@ -31,13 +32,19 @@ export function EvolutionWatcher({ playerId, mascots }: { playerId: string; masc
   const [queue, setQueue] = useState<Queued[]>([]);
 
   useEffect(() => {
+    let cancelled = false;
+    // Busca todos os mascotes (inclui o banco); se falhar, usa só os do time.
+    getMascotFormsAction().catch(() => mascots).then((all) => { if (!cancelled) check(all.length ? all : mascots); });
+    return () => { cancelled = true; };
+
+    function check(list: Seen[]) {
     const storageKey = `evo-seen:${playerId}`;
     try {
       const raw = localStorage.getItem(storageKey);
       const prev: Record<string, number> | null = raw ? JSON.parse(raw) : null;
       const next: Record<string, number> = { ...(prev ?? {}) };
       const found: Queued[] = [];
-      for (const m of mascots) {
+      for (const m of list) {
         const was = prev?.[m.id];
         if (was !== undefined && was !== m.pokemonId) {
           const stone = getMegaStoneForMegaPokemon(m.pokemonId);
@@ -54,6 +61,7 @@ export function EvolutionWatcher({ playerId, mascots }: { playerId: string; masc
       if (found.length) setQueue((q) => [...q, ...found.filter((f) => !q.some((x) => x.key === f.key))]);
     } catch {
       // sem localStorage: sem animação, nada quebra
+    }
     }
   }, [playerId, mascots]);
 
