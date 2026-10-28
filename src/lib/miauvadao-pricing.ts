@@ -3,12 +3,14 @@ import { Prisma } from "@prisma/client";
 
 /**
  * Fração do desconto que sai do cofre. O resto é margem do Miauvadão: com 100%, descontos
- * médios acima de ~20% faziam o cofre perder mais do que os 25% que entram em cada compra.
+ * médios acima de ~20% faziam o cofre perder mais do que os 30% que entram em cada compra.
  */
-export const VAULT_DISCOUNT_COVERAGE = 0.6;
+export const VAULT_DISCOUNT_COVERAGE = 0.5;
+/** Fração do preço pago num slot do Miauvadão (em ZC) que entra no cofre. */
+export const VAULT_SLOT_SALE_SHARE = 0.3;
 
 /**
- * Acerta o cofre numa compra: entra 25% do pago em ZC e sai VAULT_DISCOUNT_COVERAGE do
+ * Acerta o cofre numa compra: entra VAULT_SLOT_SALE_SHARE do pago em ZC e sai VAULT_DISCOUNT_COVERAGE do
  * desconto dado (preço original - preço final, em ZC). O cofre nunca fica negativo.
  */
 export async function settleVaultForPurchase(

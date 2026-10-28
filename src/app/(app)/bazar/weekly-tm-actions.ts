@@ -12,7 +12,7 @@ import { recordPlayerActivity } from "@/lib/player-activity";
 import { filterAvailableTmItems, getDisabledSpeciesIds } from "@/lib/ability-tm-shop";
 import { getAbilityInfo, describeAbility } from "@/lib/abilities";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
-import { rollDiscountPct, settleVaultForPurchase } from "@/lib/miauvadao-pricing";
+import { rollDiscountPct, settleVaultForPurchase, VAULT_SLOT_SALE_SHARE } from "@/lib/miauvadao-pricing";
 import { getWeeklyTmWindow, pickDistinct, WEEKLY_TM_SLOTS, type WeeklyTmSlot, type WeeklyTmView } from "@/lib/weekly-tm";
 
 const SINGLETON = "singleton";
@@ -170,8 +170,8 @@ export async function buyWeeklyTmSlot(slotIndex: number, currency: "ZC" | "LC" =
         throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency} disponíveis, o TM custa ${price} ${currency}).`);
       }
 
-      // Só compras em ZC alimentam o cofre (25%), como nos slots padrão.
-      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      // Só compras em ZC alimentam o cofre (30%), como nos slots padrão.
+      const coinsToVault = currency === "ZC" ? Math.floor(price * VAULT_SLOT_SALE_SHARE) : 0;
       if (currency === "ZC") {
         await creditCoins(tx, {
           playerId: player.id,

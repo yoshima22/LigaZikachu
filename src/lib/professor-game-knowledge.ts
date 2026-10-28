@@ -82,7 +82,7 @@ OVOS, BAZAR E ECONOMIA
 - Todo tipo de ovo pode gerar qualquer raridade de mascote permitida por suas chances; a raridade do ovo define chances e faixa de atributos, enquanto a geracao limita a especie. Somente formas iniciais nascem.
 - Escolha aleatoria de geracao recebe +1 ponto percentual nas chances de classes raras configuradas.
 - O Miauvadao troca ofertas as 04:00, 10:00, 16:00 e 22:00 no horario de Brasilia. Cada jogador tem duas cargas de compra, cada uma recarrega 10 minutos apos o uso.
-- Compras dos slots do Miauvadao geram 25% para o cofre. Compras entre jogadores geram 10% de dinheiro fantasma no cofre, sem descontar esse adicional das partes.
+- Compras dos slots do Miauvadao geram 30% para o cofre. Compras entre jogadores geram 15% de dinheiro fantasma no cofre, sem descontar esse adicional das partes.
 `;
 
 const TCG_KNOWLEDGE = `

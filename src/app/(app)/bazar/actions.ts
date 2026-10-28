@@ -14,7 +14,7 @@ import { registerPokemonDiscovery } from "@/lib/pokemon-dex";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { isMegaStoneType } from "@/lib/mega-evolution";
 import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
-import { DISCOUNT_BY_RARITY, MIAUVADAO_MAX_DISCOUNT, MIAUVADAO_MEGA_STONE_MAX_DISCOUNT, settleVaultForPurchase } from "@/lib/miauvadao-pricing";
+import { DISCOUNT_BY_RARITY, MIAUVADAO_MAX_DISCOUNT, MIAUVADAO_MEGA_STONE_MAX_DISCOUNT, VAULT_SLOT_SALE_SHARE, settleVaultForPurchase } from "@/lib/miauvadao-pricing";
 import { CUSTOM_MEGA_POKEMON_IDS } from "@/lib/extra-mega-stones";
 import { cleanupExpiredArenaResting, syncDefeatedArenaTeams } from "@/lib/arena-z";
 import { isMascotLockedInWeeklyLeague } from "@/lib/weekly-league-locks";
@@ -52,7 +52,7 @@ import {
   publishDuePremiumBazarTicker,
 } from "@/lib/bazar-premium";
 
-const PLAYER_TRANSACTION_VAULT_SHARE = 0.10;
+const PLAYER_TRANSACTION_VAULT_SHARE = 0.15;
 
 function revalidateBazar() {
   revalidatePath("/bazar");
@@ -2550,7 +2550,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
         data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now },
       });
       // Só compras em ZC alimentam o cofre (o cofre é em ZC).
-      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      const coinsToVault = currency === "ZC" ? Math.floor(price * VAULT_SLOT_SALE_SHARE) : 0;
       // Cobrança e extrato fazem parte da mesma transação da entrega.
       if (currency === "ZC") {
         await creditCoins(tx, {
@@ -2571,7 +2571,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
         });
       }
 
-      // Atualizar sold na oferta + adicionar 25% ao cofre (só ZC) + mensagem NPC
+      // Atualizar sold na oferta + adicionar 30% ao cofre (só ZC) + mensagem NPC
       const updatedOffers = [...offers];
       updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
       await tx.miauvadaoConfig.update({
@@ -2707,7 +2707,7 @@ export async function buyMiauvadaoRebound(offerIndex: number, currency: "ZC" | "
         throw new Error(`Suas duas compras estão recarregando. Próxima disponível às ${new Date(status.rechargeAt[0]).toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" })}.`);
       }
       await tx.miauvadaoPurchaseQuota.update({ where: { playerId: player.id }, data: chargeOneAvailable ? { chargeOneUsedAt: now } : { chargeTwoUsedAt: now } });
-      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      const coinsToVault = currency === "ZC" ? Math.floor(price * VAULT_SLOT_SALE_SHARE) : 0;
       if (currency === "ZC") {
         await creditCoins(tx, { playerId: player.id, type: ZikaCoinTxType.SHOP_PURCHASE, amount: -price, description: `Miauvadão (Rebote): compra de ${offer.name}` });
       } else {
@@ -2904,7 +2904,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
         ? await tx.ligaCoinWallet.findUnique({ where: { playerId: player.id } })
         : await tx.zikaCoinWallet.findUnique({ where: { playerId: player.id } });
       if (!wallet || wallet.balance < price) throw new Error(`Saldo insuficiente (${wallet?.balance ?? 0} ${currency}, oferta custa ${price} ${currency}).`);
-      const coinsToVault = currency === "ZC" ? Math.floor(price * 0.25) : 0;
+      const coinsToVault = currency === "ZC" ? Math.floor(price * VAULT_SLOT_SALE_SHARE) : 0;
       if (currency === "ZC") {
         await creditCoins(tx, {
           playerId: player.id,
