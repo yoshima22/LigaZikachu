@@ -427,7 +427,21 @@ export async function executeDueSyncRounds(now = new Date()) {
           const available = team.lineups
             .filter((lineup) => lineup.playerId === playerId && !used.has(lineup.mascotId))
             .sort((a, b) => a.slot - b.slot);
-          const auto = available.slice(0, 3).map((lineup) => lineup.mascotId);
+          // Divisão Limitada: no máximo 1 mega por jogador na rodada, também no preenchimento automático.
+          const megaIds = new Set((await tx.mascot.findMany({
+            where: { id: { in: available.map((lineup) => lineup.mascotId) }, OR: [{ megaEvolvedAt: { not: null } }, { megaEvolvedFromPokemonId: { not: null } }] },
+            select: { id: true },
+          })).map((mascot) => mascot.id));
+          const auto: string[] = [];
+          let megas = 0;
+          for (const lineup of available) {
+            if (auto.length === 3) break;
+            if (megaIds.has(lineup.mascotId)) {
+              if (megas >= 1) continue;
+              megas++;
+            }
+            auto.push(lineup.mascotId);
+          }
           if (auto.length > 0) {
             await tx.syncRoundSelection.create({
               data: { roundId: round.id, teamId: team.id, playerId, mascotIds: auto, isAuto: true },
