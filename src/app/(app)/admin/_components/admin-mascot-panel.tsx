@@ -681,12 +681,13 @@ function GrantEggSection() {
   const [playerId, setPlayerId] = useState("");
   const [playerName, setPlayerName] = useState("");
   const [eggType, setEggType]   = useState("EGG_LAB");
+  const [bonusPct, setBonusPct] = useState(0);
   const [result, setResult]     = useState<string | null>(null);
 
   const handleGrant = () => {
     if (!playerId) { toast.error("Selecione um jogador."); return; }
     start(async () => {
-      const r = await grantEggToPlayer(playerId, eggType);
+      const r = await grantEggToPlayer(playerId, eggType, bonusPct);
       if (r.error) { toast.error(r.error); return; }
       const label = EGG_OPTIONS.find(o => o.value === eggType)?.label ?? eggType;
       toast.success(`${label} adicionado ao inventário!`);
@@ -711,6 +712,11 @@ function GrantEggSection() {
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
             {EGG_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
+        </div>
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Chance aumentada (+% raridade)</label>
+          <input type="number" min={0} max={100} value={bonusPct} onChange={e => setBonusPct(Math.max(0, Math.min(100, +e.target.value || 0)))}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-amber-200 outline-none focus:border-[#FFCB05]" />
         </div>
       </div>
       <Button type="button" disabled={pending || !playerId} onClick={handleGrant}

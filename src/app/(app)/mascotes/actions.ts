@@ -1991,7 +1991,7 @@ export async function adminTriggerSocialEventsAction(): Promise<{ error?: string
 }
 
 // Admin: dar ovo a um jogador
-export async function grantEggToPlayer(playerId: string, eggType: string): Promise<{ error?: string }> {
+export async function grantEggToPlayer(playerId: string, eggType: string, bonusPct = 0): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
     if (!user || (user.role !== "ADMIN" && user.role !== "SUPER_ADMIN")) return { error: "Sem permissão." };
@@ -2001,6 +2001,7 @@ export async function grantEggToPlayer(playerId: string, eggType: string): Promi
         playerId,
         type: mappedType as import("@prisma/client").EggType,
         origin: "Admin",
+        hatchRarityBonusPct: Math.max(0, Math.min(100, Number(bonusPct) || 0)),
       },
     });
     revalidate(playerId);

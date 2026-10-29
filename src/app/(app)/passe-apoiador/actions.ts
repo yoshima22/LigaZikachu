@@ -11,7 +11,6 @@ import { ZikaCoinTxType } from "@prisma/client";
 import { deactivateExpiredSupporterPasses } from "@/lib/supporter-pass";
 import { expandDayReward, type DayReward } from "./schedule";
 import { findActiveMegaStone, listActiveMegaStones } from "@/lib/redeem-codes";
-export type { DayReward } from "./schedule";
 import { PASS_SCHEDULE, PASS_SCHEDULE_DEFAULTS } from "./schedule";
 
 const DEFAULT_PASS_DISPLAY = {
@@ -467,6 +466,7 @@ export async function claimPassDay(passId: string, dayNumber: number, stoneItemI
             playerId: player.id,
             type: (item.eggType ?? "COMMON") as import("@prisma/client").EggType,
             origin: "VIP_PASS",
+            hatchRarityBonusPct: Math.max(0, Math.min(100, Number(item.rarityBonusPct) || 0)),
           }))
         : []);
       if (eggs.length > 0) {

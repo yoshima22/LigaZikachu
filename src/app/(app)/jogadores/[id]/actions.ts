@@ -231,22 +231,23 @@ export async function revokeItemFromPlayer(
 
 // ── Admin: grant/revoke eggs ─────────────────────────────────────────────
 
-export async function grantEggToPlayer(playerId: string, eggType: string, quantity = 1): Promise<{ error?: string }> {
+export async function grantEggToPlayer(playerId: string, eggType: string, quantity = 1, bonusPct = 0): Promise<{ error?: string }> {
   try {
     const admin = await requireAdmin();
     const mapped = EGG_TYPE_MAP[eggType] ?? (Object.values(EggType).includes(eggType as EggType) ? eggType as EggType : null);
     if (!mapped) return { error: `Tipo de ovo inválido: ${eggType}` };
+    const bonus = Math.max(0, Math.min(100, Number(bonusPct) || 0));
 
     for (let i = 0; i < Math.min(quantity, 20); i++) {
       await prisma.mascotEgg.create({
-        data: { playerId, type: mapped as EggType, origin: "ADMIN_GRANT" },
+        data: { playerId, type: mapped as EggType, origin: "ADMIN_GRANT", hatchRarityBonusPct: bonus },
       });
     }
     const granted = Math.min(quantity, 20);
     await recordPlayerActivity(prisma, {
       playerId, actorUserId: admin.id, category: "EGG", action: "ADMIN_EGG_GRANTED",
-      summary: `Admin concedeu ${granted} ovo(s) ${mapped}`, source: "ADMIN_GRANT", entityType: "mascotEgg",
-      amount: granted, unit: "EGG", after: { eggType: mapped, quantity: granted },
+      summary: `Admin concedeu ${granted} ovo(s) ${mapped}${bonus ? ` (chance aumentada +${bonus}%)` : ""}`, source: "ADMIN_GRANT", entityType: "mascotEgg",
+      amount: granted, unit: "EGG", after: { eggType: mapped, quantity: granted, hatchRarityBonusPct: bonus },
     });
 
     revalidatePath(`/jogadores/${playerId}`);

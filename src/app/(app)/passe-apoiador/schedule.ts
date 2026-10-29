@@ -6,6 +6,8 @@ export type DayRewardItem = {
   ligaCash?: number;
   eggType?: string;
   quantity?: number;
+  /** Chance aumentada do ovo (pontos percentuais de raridade elevada ao chocar). */
+  rarityBonusPct?: number;
   packName?: string;
   shopItemName?: string;
   zikalootSpecial?: boolean;

@@ -25,7 +25,7 @@ type SlotKind = "COINS" | "LIGA_CASH" | "EGG" | "FOOD" | "SWEET" | "RARE_SWEET" 
 type Slot =
   | { id: string; kind: "COINS"; amount: number }
   | { id: string; kind: "LIGA_CASH"; amount: number }
-  | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE" | "LAB"; qty: number }
+  | { id: string; kind: "EGG"; eggType: "COMMON" | "SPECIAL" | "RARE" | "LAB"; qty: number; bonusPct?: number }
   | { id: string; kind: "FOOD"; qty: number }
   | { id: string; kind: "SWEET"; qty: number }
   | { id: string; kind: "RARE_SWEET"; qty: number }
@@ -58,7 +58,7 @@ function rewardToSlots(reward: DayReward): Slot[] {
       switch (item.type) {
         case "COINS": return { id: uid(), kind: "COINS", amount: item.coins ?? 0 };
         case "LIGA_CASH": return { id: uid(), kind: "LIGA_CASH", amount: item.ligaCash ?? item.coins ?? 0 };
-        case "EGG": return { id: uid(), kind: "EGG", eggType: (item.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: item.quantity ?? 1 };
+        case "EGG": return { id: uid(), kind: "EGG", eggType: (item.eggType as "COMMON" | "SPECIAL" | "RARE" | "LAB") ?? "COMMON", qty: item.quantity ?? 1, bonusPct: item.rarityBonusPct };
         case "FOOD": return { id: uid(), kind: "FOOD", qty: item.quantity ?? 1 };
         case "SWEET": return { id: uid(), kind: "SWEET", qty: item.quantity ?? 1 };
         case "RARE_SWEET": return { id: uid(), kind: "RARE_SWEET", qty: item.quantity ?? 1 };
@@ -128,7 +128,7 @@ function slotsToReward(day: number, emoji: string, label: string, isMilestone: b
     switch (slot.kind) {
       case "COINS": return { type: "COINS", coins: slot.amount };
       case "LIGA_CASH": return { type: "LIGA_CASH", ligaCash: slot.amount };
-      case "EGG": return { type: "EGG", eggType: slot.eggType, quantity: slot.qty };
+      case "EGG": return { type: "EGG", eggType: slot.eggType, quantity: slot.qty, ...(slot.bonusPct ? { rarityBonusPct: slot.bonusPct } : {}) };
       case "FOOD": return { type: "FOOD", quantity: slot.qty };
       case "SWEET": return { type: "SWEET", quantity: slot.qty };
       case "RARE_SWEET": return { type: "RARE_SWEET", quantity: slot.qty };
@@ -1182,6 +1182,13 @@ function SlotEditor({ slot, onUpdate, onRemove }: {
                 value={slot.qty}
                 onChange={e => onUpdate({ qty: Math.max(1, Number(e.target.value) || 1) })}
                 className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-slate-200 focus:outline-none focus:border-teal-400/50" />
+            </div>
+            <div className="col-span-2 sm:col-span-3 space-y-1">
+              <label className="text-[10px] text-slate-500 uppercase tracking-widest">Chance aumentada (+% raridade, 0 = nenhuma)</label>
+              <input type="number" min={0} max={100}
+                value={slot.bonusPct ?? 0}
+                onChange={e => onUpdate({ bonusPct: Math.max(0, Math.min(100, Number(e.target.value) || 0)) })}
+                className="w-full rounded-lg border border-border bg-slate-950 px-2 py-1.5 text-sm text-amber-200 focus:outline-none focus:border-amber-400/50" />
             </div>
           </>
         )}

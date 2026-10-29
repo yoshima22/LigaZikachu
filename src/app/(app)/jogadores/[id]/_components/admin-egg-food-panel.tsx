@@ -14,7 +14,7 @@ const EGG_TYPES = [
   { value: "LAB", label: "Laboratório" },
 ];
 
-type PlayerEgg = { id: string; type: string; obtainedAt: string; origin: string | null };
+type PlayerEgg = { id: string; type: string; obtainedAt: string; origin: string | null; hatchRarityBonusPct?: number };
 type PlayerFood = { type: string; quantity: number };
 
 const GRANT_FOOD_TYPE = { food: "FOOD", sweet: "SWEET", rareSweet: "RARE_SWEET" } as const;
@@ -35,13 +35,14 @@ export function AdminEggFoodPanel({
   const [pending, startTransition] = useTransition();
   const [eggType, setEggType] = useState("COMMON");
   const [eggQty, setEggQty] = useState(1);
+  const [eggBonus, setEggBonus] = useState(0);
   const [foodQty, setFoodQty] = useState(1);
 
   const grant = (type: "egg" | "food" | "sweet" | "rareSweet") => {
     startTransition(async () => {
       try {
         const res = type === "egg"
-          ? await grantEggToPlayer(playerId, eggType, eggQty)
+          ? await grantEggToPlayer(playerId, eggType, eggQty, eggBonus)
           : await grantFoodToPlayer(playerId, GRANT_FOOD_TYPE[type], foodQty);
         if (res.error) { toast.error(res.error); return; }
         toast.success(`Concedido!`);
@@ -103,6 +104,11 @@ export function AdminEggFoodPanel({
           <input type="number" min={1} max={20} value={eggQty} onChange={e => setEggQty(Math.max(1, +e.target.value))}
             className="block w-16 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 text-center" />
         </div>
+        <div>
+          <label className="text-[10px] text-slate-500">Chance aum. (+%)</label>
+          <input type="number" min={0} max={100} value={eggBonus} onChange={e => setEggBonus(Math.max(0, Math.min(100, +e.target.value || 0)))}
+            className="block w-20 rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-amber-200 text-center" />
+        </div>
         <button onClick={() => grant("egg")} disabled={pending}
           className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-[#1A1A2E] disabled:opacity-40">
           <Plus size={12} className="inline mr-1" />Conceder Ovo
@@ -129,7 +135,7 @@ export function AdminEggFoodPanel({
             <div className="mt-1 max-h-40 overflow-y-auto space-y-1">
               {eggs.map(egg => (
                 <div key={egg.id} className="flex items-center justify-between rounded-lg bg-slate-900/40 px-2 py-1">
-                  <span className="text-[10px] text-slate-300">🥚 {EGG_TYPES.find(t => t.value === egg.type)?.label ?? egg.type} · {egg.origin ?? "?"}</span>
+                  <span className="text-[10px] text-slate-300">🥚 {EGG_TYPES.find(t => t.value === egg.type)?.label ?? egg.type} · {egg.origin ?? "?"}{egg.hatchRarityBonusPct ? ` · ★+${egg.hatchRarityBonusPct}%` : ""}</span>
                   <button onClick={() => revokeEgg(egg.id)} disabled={pending}
                     className="text-[10px] text-red-400 hover:text-red-300 disabled:opacity-40">
                     <Minus size={10} className="inline" /> Remover

@@ -924,7 +924,7 @@ export default async function PlayerDetailPage({
             playerId={playerId}
             eggs={await prisma.mascotEgg.findMany({
               where: { playerId },
-              select: { id: true, type: true, obtainedAt: true, origin: true },
+              select: { id: true, type: true, obtainedAt: true, origin: true, hatchRarityBonusPct: true },
               orderBy: { obtainedAt: "desc" },
             }).then(eggs => eggs.map(e => ({ ...e, obtainedAt: e.obtainedAt.toISOString() })))}
             foods={await prisma.mascotFoodItem.findMany({
