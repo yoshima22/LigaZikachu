@@ -60,6 +60,34 @@ export function PassPageClient({ status, schedule }: Props) {
     });
   };
 
+  // Dias resgatáveis agora: hoje + retroativos (se o passe permitir), em ordem.
+  const claimableDays = status.pass && !status.pass.isExpired && today !== null
+    ? schedule
+        .filter((r) => r.day <= status.pass!.totalDays && !claimedDays.has(r.day) &&
+          (r.day === today ? status.canClaimToday : status.pass!.allowRetroactiveClaims && r.day < today))
+        .map((r) => r.day)
+    : [];
+
+  const handleClaimAll = () => {
+    if (!status.pass) return;
+    start(async () => {
+      let ok = 0;
+      for (const day of claimableDays) {
+        const result = await claimPassDay(status.pass!.id, day);
+        if (result.ok) { ok++; continue; }
+        if (result.needsStoneChoice && result.stoneOptions) {
+          setStoneSearch("");
+          setStonePick({ day, options: result.stoneOptions });
+        } else {
+          toast.error(`Dia ${day}: ${result.error ?? "erro ao resgatar."}`);
+        }
+        break; // para no primeiro dia que precisa de ação do jogador
+      }
+      if (ok > 0) toast.success(`${ok} ${ok === 1 ? "dia resgatado" : "dias resgatados"}! 🎉`);
+      router.refresh();
+    });
+  };
+
   // Sem VIP
   if (!status.pass) {
     return (
@@ -232,6 +260,17 @@ export function PassPageClient({ status, schedule }: Props) {
         <div className="flex items-center gap-2 mb-4">
           <Calendar size={14} className="text-slate-400" />
           <h2 className="text-sm font-semibold text-slate-300">Calendário de {totalDays} dias</h2>
+          {claimableDays.length > 1 && (
+            <Button
+              onClick={handleClaimAll}
+              disabled={pending}
+              size="sm"
+              className="ml-auto gap-2 bg-gradient-to-r from-yellow-500 to-orange-500 hover:from-yellow-400 hover:to-orange-400 text-black font-bold"
+            >
+              <Gift size={14} />
+              {pending ? "Coletando..." : `Coletar todos (${claimableDays.length})`}
+            </Button>
+          )}
         </div>
 
         {status.pass?.allowRetroactiveClaims && today !== null && today > 1 && (
