@@ -36,6 +36,7 @@ function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: Pr
   const [description, setDescription] = useState("");
   const [qty, setQty] = useState(1);
   const [eggType, setEggType] = useState("COMMON");
+  const [bonusPct, setBonusPct] = useState(0);
   const [shopItemName, setShopItemName] = useState("");
   const [packName, setPackName] = useState("Pacote Comum");
 
@@ -45,14 +46,14 @@ function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: Pr
     else if (type === "STICKER") prize = { type: "STICKER", cardId: itemId, cardName: itemId };
     else if (type === "TICKET") prize = { type: "TICKET", itemId, itemName: "Ticket" };
     else if (type === "COSMETIC") prize = { type: "COSMETIC", itemId, itemName: itemId };
-    else if (type === "EGG") prize = { type: "EGG", eggType, qty };
+    else if (type === "EGG") prize = { type: "EGG", eggType, qty, ...(bonusPct > 0 ? { bonusPct } : {}) };
     else if (type === "FOOD") prize = { type: "FOOD", qty };
     else if (type === "SWEET") prize = { type: "SWEET", qty };
     else if (type === "SHOP_ITEM") prize = { type: "SHOP_ITEM", shopItemName, qty };
     else if (type === "STICKER_PACK") prize = { type: "STICKER_PACK", packName };
     else prize = { type: "CUSTOM", description };
     onChange([...prizes, prize]);
-    setItemId(""); setDescription(""); setAmount(500); setQty(1); setShopItemName("");
+    setItemId(""); setDescription(""); setAmount(500); setQty(1); setBonusPct(0); setShopItemName("");
   };
 
   const removePrize = (i: number) => onChange(prizes.filter((_, idx) => idx !== i));
@@ -62,7 +63,7 @@ function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: Pr
     if (p.type === "STICKER") return `🃏 Figurinha: ${p.cardName}`;
     if (p.type === "TICKET") return `🎟️ Ticket: ${p.itemId}`;
     if (p.type === "COSMETIC") return `🎨 Cosmético: ${p.itemName}`;
-    if (p.type === "EGG") return `🥚 Ovo ${EGG_LABELS[p.eggType] ?? p.eggType}${p.qty && p.qty > 1 ? ` x${p.qty}` : ""}`;
+    if (p.type === "EGG") return `🥚 Ovo ${EGG_LABELS[p.eggType] ?? p.eggType}${p.qty && p.qty > 1 ? ` x${p.qty}` : ""}${p.bonusPct ? ` (raridade +${p.bonusPct}%)` : ""}`;
     if (p.type === "FOOD") return `🍖 Comida x${p.qty}`;
     if (p.type === "SWEET") return `🍬 Doce x${p.qty}`;
     if (p.type === "SHOP_ITEM") return `🛒 ${p.shopItemName}${p.qty && p.qty > 1 ? ` x${p.qty}` : ""}`;
@@ -106,6 +107,8 @@ function PrizeList({ prizes, onChange }: { prizes: PrizeItem[]; onChange: (p: Pr
             </select>
             <input type="number" min={1} max={10} value={qty} onChange={(e) => setQty(Number(e.target.value))} placeholder="Qtd"
               className="w-16 rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
+            <input type="number" min={0} max={100} value={bonusPct} onChange={(e) => setBonusPct(Number(e.target.value))} placeholder="+% raridade" title="Chance de raridade aumentada (%)"
+              className="w-24 rounded-lg border border-border bg-slate-950 px-3 py-2 text-sm text-slate-100 outline-none focus:border-[#FFCB05]" />
           </div>
         )}
         {(type === "FOOD" || type === "SWEET") && (

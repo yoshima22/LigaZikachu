@@ -223,7 +223,7 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
                 playerId: winningPick.playerId, type: "CUSTOM",
                 title: `🎉 ZikaLoot: ${loot.name}`,
                 description: `Você ganhou um Ovo ${prize.eggType}! Verifique a Caixa de Presentes.`,
-                payload: { lootId, drawnNumber, rewardKind: "MASCOT_EGG", eggType: eggEnumMap[prize.eggType]?.toString() ?? prize.eggType, rewardLabel: `Ovo ${prize.eggType}` }
+                payload: { lootId, drawnNumber, rewardKind: "MASCOT_EGG", eggType: eggEnumMap[prize.eggType]?.toString() ?? prize.eggType, rewardLabel: `Ovo ${prize.eggType}`, hatchRarityBonusPct: Math.max(0, Math.min(100, Number(prize.bonusPct) || 0)) }
               }});
             }
           } else if (prize.type === "FOOD" || prize.type === "SWEET") {

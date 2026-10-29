@@ -4,7 +4,7 @@ export type PrizeItem =
   | { type: "TICKET"; itemId: string; itemName?: string }
   | { type: "COSMETIC"; itemId: string; itemName: string }
   | { type: "CUSTOM"; description: string }
-  | { type: "EGG"; eggType: string; qty?: number }
+  | { type: "EGG"; eggType: string; qty?: number; bonusPct?: number }
   | { type: "FOOD"; qty: number }
   | { type: "SWEET"; qty: number }
   | { type: "SHOP_ITEM"; shopItemName: string; qty?: number }
