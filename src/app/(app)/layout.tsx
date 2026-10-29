@@ -283,11 +283,13 @@ export default async function AppLayout({
           messageCount: 0,
           bazarCount: 0,
           bondsCount: 0,
+          mascotCount: 0,
           messageAlerts: [],
           bazarAlerts: [],
           bondsAlerts: [],
+          mascotAlerts: [],
         }))
-      : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [] }),
+      : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, mascotCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [], mascotAlerts: [] }),
     !isPlatformAdmin && player?.id
       ? getJohtoInvitationForPlayer(player.id).catch((error) => {
           console.error("[Layout] Johto invitation unavailable", { playerId: player.id, error });

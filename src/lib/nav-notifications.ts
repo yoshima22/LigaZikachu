@@ -7,7 +7,7 @@ import { signalRealtime } from "@/lib/realtime-signal";
 
 export type NavAlert = {
   id: string;
-  category: "MESSAGE" | "BAZAR" | "BONDS";
+  category: "MESSAGE" | "BAZAR" | "BONDS" | "MASCOT";
   title: string;
   body: string;
   href: string;
@@ -20,9 +20,11 @@ export type NavNotificationSnapshot = {
   messageCount: number;
   bazarCount: number;
   bondsCount: number;
+  mascotCount: number;
   messageAlerts: NavAlert[];
   bazarAlerts: NavAlert[];
   bondsAlerts: NavAlert[];
+  mascotAlerts: NavAlert[];
 };
 
 type NotificationDb = PrismaClient | Prisma.TransactionClient;
@@ -31,7 +33,7 @@ export async function createPlayerNotification(
   db: NotificationDb,
   input: {
     playerId: string;
-    category: "BAZAR";
+    category: "BAZAR" | "BONDS" | "MASCOT";
     type: string;
     title: string;
     body: string;
@@ -63,7 +65,7 @@ export async function filterInGameRecipients(playerIds: string[], category: Noti
 }
 
 export async function getNavNotificationSnapshot(playerId: string): Promise<NavNotificationSnapshot> {
-  const [messages, messageGroups, bazar, bazarCount, bonds, bondsCount] = await Promise.all([
+  const [messages, messageGroups, bazar, bazarCount, bonds, bondsCount, mascots, mascotCount] = await Promise.all([
     prisma.directMessage.findMany({
       where: { receiverId: playerId, readAt: null },
       orderBy: { createdAt: "desc" },
@@ -98,6 +100,12 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
       select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
     }),
     prisma.playerNotification.count({ where: { playerId, category: "BONDS", readAt: null } }),
+    prisma.playerNotification.findMany({
+      where: { playerId, category: "MASCOT", readAt: null },
+      orderBy: { createdAt: "desc" }, take: 5,
+      select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
+    }),
+    prisma.playerNotification.count({ where: { playerId, category: "MASCOT", readAt: null } }),
   ]);
 
   const senderCounts = new Map(messageGroups.map((group) => [group.senderId, group._count._all]));
@@ -126,6 +134,7 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
     messageCount: messageGroups.reduce((total, group) => total + group._count._all, 0),
     bazarCount,
     bondsCount,
+    mascotCount,
     messageAlerts,
     bazarAlerts: bazar.slice(0, 5).map((notification) => ({
       id: notification.id,
@@ -138,6 +147,10 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
     })),
     bondsAlerts: bonds.map((notification) => ({
       id: notification.id, category: "BONDS" as const, title: notification.title, body: notification.body,
+      href: notification.href, entityId: notification.entityId ?? notification.id, createdAt: notification.createdAt.toISOString(),
+    })),
+    mascotAlerts: mascots.map((notification) => ({
+      id: notification.id, category: "MASCOT" as const, title: notification.title, body: notification.body,
       href: notification.href, entityId: notification.entityId ?? notification.id, createdAt: notification.createdAt.toISOString(),
     })),
   };

@@ -78,6 +78,7 @@ async function fetchMascotPageData(playerId: string) {
     lastRetiredTeam,
     buffInventory,
     weaknessPolicyMascots,
+    xpShareHolder,
   ] = await retryMascotLoad(() => Promise.all([
     prisma.mascot.findMany({
       where: {
@@ -169,6 +170,10 @@ async function fetchMascotPageData(playerId: string) {
       },
       orderBy: [{ arenaState: "asc" }, { level: "desc" }, { id: "asc" }],
     }),
+    prisma.mascotBuff.findFirst({
+      where: { type: { in: ["XP_SHARE", "XP_SHARE_TEAM"] }, expiresAt: { gt: new Date("2090-01-01") }, mascot: { playerId } },
+      select: { type: true, mascot: { select: { id: true, pokemonId: true, nickname: true, isFavorite: true, isEquipped: true } } },
+    }),
   ]));
 
   // Mascotes trazidos apenas para atalhos de expedição não precisam carregar
@@ -232,7 +237,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>
@@ -323,7 +328,7 @@ export default async function MascotesPage() {
     return {} as Record<string, string>;
   });
 
-  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, activeMascotBuffs, proteinBoostedMascots } = pageData;
+  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots } = pageData;
 
   // Bônus de raridade de evento ativo agora — recalculado a cada carregamento
   // da página, refletindo eventos de fim de semana no painel da incubadora.
@@ -740,6 +745,13 @@ export default async function MascotesPage() {
             mascots={mascotData}
             bankMascots={bankMascots}
             bankMascotCount={bankMascotCount}
+            xpShareHolder={xpShareHolder ? {
+              id: xpShareHolder.mascot.id,
+              pokemonId: xpShareHolder.mascot.pokemonId,
+              name: xpShareHolder.mascot.nickname ?? getPokemonName(xpShareHolder.mascot.pokemonId),
+              isFeatured: xpShareHolder.mascot.isFavorite || xpShareHolder.mascot.isEquipped,
+              shareType: xpShareHolder.type,
+            } : null}
             hasFood={hasFood}
             hasSweet={hasSweet}
             hasRareSweet={hasRareSweet}

@@ -39,6 +39,7 @@ import { trackGachaObjective } from "@/lib/gacha";
 import { Prisma } from "@prisma/client";
 import { after } from "next/server";
 import { processMascotExpGrantBatch } from "@/lib/mascot-exp-grants";
+import { sortMascotRoster, type MascotRosterSortMode } from "@/lib/mascot-roster-sort";
 
 function revalidate(playerId?: string) {
   revalidatePath("/mascotes");
@@ -2022,6 +2023,7 @@ export async function getBankMascotsPageAction(input?: {
   personality?: string;
   origin?: string;
   sort?: string;
+  focusMascotId?: string;
 }): Promise<{
   error?: string;
   data?: {
@@ -2084,6 +2086,7 @@ export async function getBankMascotsPageAction(input?: {
     const personality = (input?.personality ?? "").trim().toUpperCase();
     const origin = (input?.origin ?? "").trim();
     const sort = (input?.sort ?? "").trim();
+    const focusMascotId = (input?.focusMascotId ?? "").trim();
     const now = new Date();
 
     const and: Prisma.MascotWhereInput[] = [
@@ -2091,6 +2094,7 @@ export async function getBankMascotsPageAction(input?: {
       { isFavorite: false },
       { isEquipped: false },
     ];
+    if (focusMascotId) and.push({ id: focusMascotId });
 
     // Filtro de análise/ranking do Laboratório
     if (rank === "analyzed") and.push({ analyzedAt: { not: null } });
@@ -2253,11 +2257,24 @@ export async function getBankMascotsPageAction(input?: {
       return { data: { mascots: pageItems, total, page, pageSize: BANK_MASCOT_PAGE_SIZE, originTypes, hasUnknownOrigin } };
     }
 
+    const rosterMode = sort === "default" ? "level" : sort;
+    const rosterSortModes: MascotRosterSortMode[] = ["level", "total", "force", "agility", "charisma", "instinct", "vitality"];
+    if (rosterSortModes.includes(rosterMode as MascotRosterSortMode)) {
+      const all = await prisma.mascot.findMany({
+        where, select: bankSelect,
+        take: 5000,
+      });
+      const ordered = sortMascotRoster(all, rosterMode as MascotRosterSortMode);
+      const total = ordered.length;
+      const pageItems = ordered.slice((page - 1) * BANK_MASCOT_PAGE_SIZE, page * BANK_MASCOT_PAGE_SIZE);
+      return { data: { mascots: pageItems, total, page, pageSize: BANK_MASCOT_PAGE_SIZE, originTypes, hasUnknownOrigin } };
+    }
+
     const [total, mascots] = await Promise.all([
       prisma.mascot.count({ where }),
       prisma.mascot.findMany({
         where, select: bankSelect,
-        orderBy: [{ level: "desc" }, { id: "asc" }],
+        orderBy: [{ level: "desc" }, { statForce: "desc" }, { statAgility: "desc" }, { statCharisma: "desc" }, { statInstinct: "desc" }, { statVitality: "desc" }, { id: "asc" }],
         skip: (page - 1) * BANK_MASCOT_PAGE_SIZE,
         take: BANK_MASCOT_PAGE_SIZE,
       }),

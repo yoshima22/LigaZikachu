@@ -204,6 +204,7 @@ export function MascotList({
   mascots,
   bankMascots = [],
   bankMascotCount,
+  xpShareHolder = null,
   hasFood = false,
   hasSweet = false,
   hasRareSweet = false,
@@ -214,6 +215,7 @@ export function MascotList({
   mascots: MascotData[];
   bankMascots?: BankMascot[];
   bankMascotCount?: number;
+  xpShareHolder?: { id: string; pokemonId: number; name: string; isFeatured: boolean; shareType: string } | null;
   hasFood?: boolean;
   hasSweet?: boolean;
   hasRareSweet?: boolean;
@@ -498,6 +500,7 @@ export function MascotList({
             <MascotBankList
               mascots={bankMascots}
               totalCount={bankMascotCount}
+              xpShareHolder={xpShareHolder}
               hasFood={hasFood}
               hasSweet={hasSweet}
               hasRareSweet={hasRareSweet}

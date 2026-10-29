@@ -26,6 +26,7 @@ import { queueMascotInteraction } from "./interaction-request-queue";
 import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { buildFocusedMascotBankRequest } from "@/lib/mascot-bank-focus";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
 type OcupFilter = "all" | "free" | "busy" | "expedition" | "refuge" | "bazar" | "arena" | "resting" | "injured" | "diseased" | "buff";
@@ -531,6 +532,7 @@ export function MascotBankList({
   hasRareSweet = false,
   isAdmin,
   spritePreferences,
+  xpShareHolder = null,
 }: {
   mascots: BankMascot[];
   totalCount?: number;
@@ -539,6 +541,7 @@ export function MascotBankList({
   hasRareSweet?: boolean;
   isAdmin: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
+  xpShareHolder?: { id: string; pokemonId: number; name: string; isFeatured: boolean; shareType: string } | null;
 }) {
   const [rows, setRows] = useState<BankMascot[]>(mascots);
   const confirmedFeeds = useRef(new Map<string, number>());
@@ -582,7 +585,7 @@ export function MascotBankList({
   const [rarityFilter, setRarityFilter] = useState("");
   const [personalityFilter, setPersonalityFilter] = useState("");
   const [originFilter, setOriginFilter] = useState("");
-  const [sortMode, setSortMode] = useState<"default" | "duplicates">("default");
+  const [sortMode, setSortMode] = useState<"default" | "duplicates" | "total" | "force" | "agility" | "charisma" | "instinct" | "vitality">("default");
   const [originTypes, setOriginTypes] = useState<string[]>([]);
   const [hasUnknownOrigin, setHasUnknownOrigin] = useState(false);
   const [page, setPage] = useState(1);
@@ -591,13 +594,13 @@ export function MascotBankList({
   const [loadingPage, startPageLoad] = useTransition();
   const requestSequence = useRef(0);
 
-  const loadPage = useCallback((nextPage: number) => {
+  const loadPage = useCallback((nextPage: number, focusMascotId?: string) => {
     const safeNextPage = Math.max(1, nextPage);
     const requestId = ++requestSequence.current;
     setLoadError(null);
     startPageLoad(async () => {
       try {
-        const res = await getBankMascotsPageAction({
+        const res = await getBankMascotsPageAction(focusMascotId ? buildFocusedMascotBankRequest(focusMascotId) : {
           page: safeNextPage,
           search,
           type: typeFilter,
@@ -647,6 +650,12 @@ export function MascotBankList({
   const busyCount = rows.filter((mascot) => isBusy(mascot)).length;
   const freeCount = rows.length - busyCount;
   const isInitialLoading = loadingPage && rows.length === 0;
+  const locateXpShareHolder = () => {
+    if (!xpShareHolder || xpShareHolder.isFeatured) return;
+    setSearch(""); setOcup("all"); setTypeFilter(""); setRankFilter(""); setPerfFilter("");
+    setRarityFilter(""); setPersonalityFilter(""); setOriginFilter(""); setSortMode("default");
+    loadPage(1, xpShareHolder.id);
+  };
 
   return (
     <section className="space-y-3">
@@ -669,6 +678,15 @@ export function MascotBankList({
       <p className="rounded-xl border border-slate-700/50 bg-slate-950/60 px-3 py-2 text-[11px] text-slate-500">
         Para economizar dados, o banco carrega sob demanda em paginas pequenas. Favoritos e companheiro continuam completos.
       </p>
+
+      {xpShareHolder && (
+        <div className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-cyan-400/30 bg-cyan-500/10 px-3 py-2 text-[11px] text-cyan-100">
+          <span>📡 {xpShareHolder.shareType === "XP_SHARE_TEAM" ? "Compartilhador Geral" : "Compartilhador de XP"} equipado em <b>{xpShareHolder.name}</b>.</span>
+          {xpShareHolder.isFeatured ? <span className="text-cyan-300">Visível nos Destaques acima.</span> : (
+            <button type="button" onClick={locateXpShareHolder} disabled={loadingPage} className="rounded-lg border border-cyan-300/40 bg-cyan-400/10 px-2 py-1 font-bold text-cyan-100 hover:bg-cyan-400/20 disabled:opacity-40">Localizar no banco</button>
+          )}
+        </div>
+      )}
 
       <div className="flex flex-wrap items-center gap-1 pb-1">
         <div className="relative shrink-0">
@@ -754,10 +772,16 @@ export function MascotBankList({
         )}
         <select
           value={sortMode}
-          onChange={(event) => setSortMode(event.target.value as "default" | "duplicates")}
+          onChange={(event) => setSortMode(event.target.value as typeof sortMode)}
           className="shrink-0 rounded-lg border border-border bg-slate-900 px-1.5 py-1 text-[10px] text-slate-300 outline-none focus:border-[#FFCB05]"
         >
-          <option value="default">Ordem padrão</option>
+          <option value="default">Nível (status geral desempata)</option>
+          <option value="total">Status geral</option>
+          <option value="force">Força</option>
+          <option value="agility">Agilidade</option>
+          <option value="charisma">Carisma</option>
+          <option value="instinct">Instinto</option>
+          <option value="vitality">Vitalidade</option>
           <option value="duplicates">Agrupar repetidos</option>
         </select>
         <button

@@ -1283,7 +1283,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         </div>}
 
         {/* ── Expedição ativa ── */}
-        {expedition && !claimable && (
+        {expedition && (
           <div className="space-y-1.5">
             <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
               <MapPin size={12} className="shrink-0" />
@@ -1300,12 +1300,15 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               type="button"
               disabled={pending}
               onClick={() => {
-                if (!confirm("Cancelar a expedição? O mascote volta sem recompensa.")) return;
-                act(() => cancelExpeditionAction(expedition.id), "Expedição cancelada.");
+                const vacation = expedition.mode === "VACATION";
+                if (!confirm(vacation
+                  ? "Cancelar as férias? O mascote volta sem recompensa e o Ticket de Férias não será devolvido."
+                  : "Cancelar a expedição? O mascote volta sem recompensa.")) return;
+                act(() => cancelExpeditionAction(expedition.id), vacation ? "Férias canceladas. O ticket não foi devolvido." : "Expedição cancelada.");
               }}
               className="w-full rounded-xl border border-red-500/20 bg-red-500/5 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10 disabled:opacity-40"
             >
-              ✕ Cancelar expedição (sem recompensa)
+              ✕ {expedition.mode === "VACATION" ? "Cancelar férias (ticket não retorna)" : "Cancelar expedição (sem recompensa)"}
             </button>
           </div>
         )}

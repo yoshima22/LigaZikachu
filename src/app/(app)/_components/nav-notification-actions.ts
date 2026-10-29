@@ -19,7 +19,7 @@ export async function refreshNavNotificationsAction(): Promise<NavNotificationSn
 }
 
 /** Marca como lidas TODAS as notificações de uma categoria (botão "limpar"). */
-export async function clearNavCategoryAction(category: "MESSAGE" | "BAZAR" | "BONDS") {
+export async function clearNavCategoryAction(category: "MESSAGE" | "BAZAR" | "BONDS" | "MASCOT") {
   const current = await currentPlayer();
   if (!current) return;
 
@@ -38,7 +38,7 @@ export async function clearNavCategoryAction(category: "MESSAGE" | "BAZAR" | "BO
 }
 
 export async function markNavAlertViewedAction(input: {
-  category: "MESSAGE" | "BAZAR" | "BONDS";
+  category: "MESSAGE" | "BAZAR" | "BONDS" | "MASCOT";
   id: string;
   entityId: string;
 }) {

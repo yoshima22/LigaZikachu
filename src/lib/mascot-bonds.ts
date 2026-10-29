@@ -7,6 +7,8 @@ import { isStandbyActive } from "@/lib/account-standby";
 import { sendNotificationToPlayers } from "@/lib/notifications";
 import { isInGameAllowed } from "@/lib/notification-preferences";
 import { BOND_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { createPlayerNotification } from "@/lib/nav-notifications";
+import { formatMascotHealthAlert } from "@/lib/mascot-health-alerts";
 
 import {
   BOND_BEHAVIOR_LABEL, type BondBehavior, type BondOption,
@@ -813,16 +815,20 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
   let infections = 0;
   if (now < DISEASE_RESUMES_AT) return { newCases, infections };
 
-  for (const mascot of mascots) {
-    if (mascot.diseasedAt) continue;
+  const atRisk = mascots.filter((mascot) => {
+    if (mascot.diseasedAt) return false;
     const starvingBefore = new Date(now.getTime() - (mascot.isEquipped ? 24 : 120) * 60 * 60_000);
     const starving = !mascot.lastFedAt || mascot.lastFedAt <= starvingBefore;
     const emotionallyUnwell = mascot.happiness < 40 || mascot.mood === "ANGRY";
-    if (!starving || !emotionallyUnwell) continue;
+    return starving && emotionallyUnwell;
+  });
+  const newlyDiseased: { id: string; name: string }[] = [];
+
+  for (const mascot of atRisk) {
     if (Math.random() >= 0.35) continue;
     await prisma.mascot.update({ where: { id: mascot.id }, data: { diseasedAt: now, diseaseLastSpreadAt: now, mood: "TIRED" } });
     newCases += 1;
-    await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: "Um mascote ficou doente", body: `${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ficou doente enquanto estava faminto e triste ou com raiva. Seus atributos estão 40% menores até receber um Antídoto.`, href: "/mascotes", entityId: mascot.id, eventKey: `disease:${mascot.id}:${now.toISOString().slice(0, 10)}` } }).catch(() => undefined);
+    newlyDiseased.push({ id: mascot.id, name: mascot.nickname ?? getPokemonName(mascot.pokemonId) });
   }
 
   const refreshed = await prisma.mascot.findMany({ where: { playerId }, select: { id: true, pokemonId: true, nickname: true, diseasedAt: true, diseaseLastSpreadAt: true, lastFedAt: true } });
@@ -840,9 +846,25 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
     if (Math.random() < 0.35) {
       await prisma.mascot.update({ where: { id: target.id }, data: { diseasedAt: now, diseaseLastSpreadAt: now, mood: "TIRED" } });
       infections += 1;
-      await prisma.playerNotification.create({ data: { playerId, category: "MASCOT", type: "MASCOT_DISEASE_SPREAD", title: "A doença se espalhou", body: `${target.nickname ?? getPokemonName(target.pokemonId)} foi contagiado por outro mascote da sua conta. Use Antídoto para interromper a transmissão.`, href: "/mascotes", entityId: target.id, eventKey: `disease-spread:${target.id}:${now.toISOString()}` } }).catch(() => undefined);
+      newlyDiseased.push({ id: target.id, name: target.nickname ?? getPokemonName(target.pokemonId) });
     }
     await prisma.mascot.update({ where: { id: source.id }, data: { diseaseLastSpreadAt: now } });
+  }
+  const dateKey = now.toISOString().slice(0, 10);
+  if (newlyDiseased.length > 0) {
+    const alert = formatMascotHealthAlert("DISEASED", newlyDiseased);
+    await createPlayerNotification(prisma, {
+      playerId, category: "MASCOT", type: "MASCOT_DISEASE", title: alert.title, body: alert.body,
+      href: "/mascotes", entityId: newlyDiseased[0].id, eventKey: `mascot-disease:${playerId}:${dateKey}`,
+    }).catch(() => undefined);
+  }
+  const stillAtRisk = atRisk.filter((mascot) => !newlyDiseased.some((affected) => affected.id === mascot.id));
+  if (stillAtRisk.length > 0) {
+    const alert = formatMascotHealthAlert("AT_RISK", stillAtRisk.map((mascot) => ({ name: mascot.nickname ?? getPokemonName(mascot.pokemonId) })));
+    await createPlayerNotification(prisma, {
+      playerId, category: "MASCOT", type: "MASCOT_DISEASE_RISK", title: alert.title, body: alert.body,
+      href: "/mascotes", entityId: stillAtRisk[0].id, eventKey: `mascot-disease-risk:${playerId}:${dateKey}`,
+    }).catch(() => undefined);
   }
   return { newCases, infections };
 }

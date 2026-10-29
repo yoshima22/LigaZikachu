@@ -326,7 +326,7 @@ export function AppNav({
     mutation.observe(root, { attributes: true, attributeFilter: ["data-header-layout"] });
     void document.fonts?.ready.then(check);
     return () => { window.removeEventListener("resize", check); observer?.disconnect(); mutation.disconnect(); root.removeAttribute("data-nav-compact"); root.removeAttribute("data-nav-tight"); };
-  }, [variant, admin, notifications.messageCount, notifications.bazarCount, notifications.bondsCount, giftCount, zikaTvLive, unreadNews]);
+  }, [variant, admin, notifications.messageCount, notifications.bazarCount, notifications.bondsCount, notifications.mascotCount, giftCount, zikaTvLive, unreadNews]);
   const refreshInFlightRef = useRef(false);
   const lastRefreshAtRef = useRef(Date.now());
   const refreshTimerRef = useRef<number | null>(null);
@@ -371,7 +371,7 @@ export function AppNav({
 
   useEffect(() => {
     const viewed = (event: Event) => {
-      const detail = (event as CustomEvent<{ category: "MESSAGE" | "BAZAR" | "BONDS"; entityId: string }>).detail;
+      const detail = (event as CustomEvent<{ category: "MESSAGE" | "BAZAR" | "BONDS" | "MASCOT"; entityId: string }>).detail;
       if (!detail) return;
       setNotifications((current) => {
         if (detail.category === "MESSAGE") {
@@ -385,6 +385,10 @@ export function AppNav({
         if (detail.category === "BONDS") {
           const removed = current.bondsAlerts.filter((item) => item.entityId === detail.entityId);
           return { ...current, bondsCount: Math.max(0, current.bondsCount - removed.length), bondsAlerts: current.bondsAlerts.filter((item) => item.entityId !== detail.entityId) };
+        }
+        if (detail.category === "MASCOT") {
+          const removed = current.mascotAlerts.filter((item) => item.entityId === detail.entityId);
+          return { ...current, mascotCount: Math.max(0, current.mascotCount - removed.length), mascotAlerts: current.mascotAlerts.filter((item) => item.entityId !== detail.entityId) };
         }
         const removed = current.bazarAlerts.filter((item) => item.entityId === detail.entityId);
         return {
@@ -441,6 +445,11 @@ export function AppNav({
         window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
         return next;
       }
+      if (alert.category === "MASCOT") {
+        const next = { ...current, mascotCount: Math.max(0, current.mascotCount - 1), mascotAlerts: current.mascotAlerts.filter((item) => item.id !== alert.id) };
+        window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
+        return next;
+      }
       const next = {
         ...current,
         bazarCount: Math.max(0, current.bazarCount - 1),
@@ -453,13 +462,15 @@ export function AppNav({
     startTransition(() => { void markNavAlertViewedAction(alert); });
   }, []);
 
-  const clearAlerts = useCallback((category: "MESSAGE" | "BAZAR" | "BONDS") => {
+  const clearAlerts = useCallback((category: "MESSAGE" | "BAZAR" | "BONDS" | "MASCOT") => {
     setNotifications((current) => {
       const next = category === "MESSAGE"
         ? { ...current, messageCount: 0, messageAlerts: [] }
         : category === "BONDS"
           ? { ...current, bondsCount: 0, bondsAlerts: [] }
-          : { ...current, bazarCount: 0, bazarAlerts: [] };
+          : category === "MASCOT"
+            ? { ...current, mascotCount: 0, mascotAlerts: [] }
+            : { ...current, bazarCount: 0, bazarAlerts: [] };
       window.dispatchEvent(new CustomEvent("nav-notifications-updated", { detail: next }));
       return next;
     });
@@ -557,8 +568,8 @@ export function AppNav({
             admin={admin}
             openMenu={openMenu}
             setOpenMenu={setOpenMenu}
-            badgeHrefs={{ "/lacos": notifications.bondsCount }}
-            alerts={notifications.bondsAlerts}
+            badgeHrefs={{ "/lacos": notifications.bondsCount, "/mascotes": notifications.mascotCount }}
+            alerts={[...notifications.mascotAlerts, ...notifications.bondsAlerts]}
             onAlertClick={dismissAlert}
             onClearAll={clearAlerts}
           />
@@ -669,8 +680,8 @@ export function AppNav({
               admin={admin}
               openMenu={openMenu}
               setOpenMenu={setOpenMenu}
-              badgeHrefs={{ "/lacos": notifications.bondsCount }}
-              alerts={notifications.bondsAlerts}
+              badgeHrefs={{ "/lacos": notifications.bondsCount, "/mascotes": notifications.mascotCount }}
+              alerts={[...notifications.mascotAlerts, ...notifications.bondsAlerts]}
               onAlertClick={dismissAlert}
               onClearAll={clearAlerts}
             />
