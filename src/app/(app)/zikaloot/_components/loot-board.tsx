@@ -130,12 +130,12 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
       )}
       {isLoggedIn && !hasTicket && !hasSpecialTicket && myNumbers.length > 0 && (
         <p className="text-xs text-slate-500 bg-slate-900/60 border border-border rounded-lg px-3 py-2">
-          Todos os tickets usados neste sorteio. Seus números: <strong className="text-[#FFCB05]">{myNumbers.join(", ")}</strong>
+          Todos os seus tickets foram usados neste sorteio.
         </p>
       )}
       {isLoggedIn && (hasTicket || hasSpecialTicket) && myNumbers.length > 0 && (
         <p className="text-xs text-green-400 bg-green-500/5 border border-green-500/20 rounded-lg px-3 py-2">
-          🎟️ Você ainda tem tickets! Clique em um número para escolher. Números atuais: <strong>{myNumbers.join(", ")}</strong>
+          🎟️ Você ainda tem tickets! Clique em um número para escolher outro.
         </p>
       )}
       {isExpired && <p className="text-sm text-red-400">O prazo para escolher números encerrou.</p>}

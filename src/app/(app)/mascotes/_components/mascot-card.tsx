@@ -15,6 +15,7 @@ import {
 } from "@/lib/mascot-data";
 import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { mascotOriginIcon } from "@/lib/mascot-origin-icons";
+import { shouldShowExpeditionStatus } from "@/lib/mascot-expedition-visibility";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
@@ -1285,17 +1286,19 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
         {/* ── Expedição ativa ── */}
         {expedition && (
           <div className="space-y-1.5">
-            <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
-              <MapPin size={12} className="shrink-0" />
-              <span>
-                {(() => {
-                  const mode = expedition.mode;
-                  const modeLabel = mode === "TRAINING" ? "🏋️ Treinamento" : mode === "ITEMS" ? "📦 Itens" : mode === "VACATION" ? "🏖️ Férias" : "🗺 Padrão";
-                  return <><strong className="text-blue-300">{modeLabel}</strong> — falta </>;
-                })()}
-                <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} />
-              </span>
-            </div>
+            {shouldShowExpeditionStatus(claimable) && (
+              <div className="flex items-center gap-2 rounded-xl border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-400">
+                <MapPin size={12} className="shrink-0" />
+                <span>
+                  {(() => {
+                    const mode = expedition.mode;
+                    const modeLabel = mode === "TRAINING" ? "🏋️ Treinamento" : mode === "ITEMS" ? "📦 Itens" : mode === "VACATION" ? "🏖️ Férias" : "🗺 Padrão";
+                    return <><strong className="text-blue-300">{modeLabel}</strong> — falta </>;
+                  })()}
+                  <ExpeditionCountdown finishAt={new Date(expedition.finishAt)} />
+                </span>
+              </div>
+            )}
             <button
               type="button"
               disabled={pending}

@@ -12,6 +12,7 @@ import { checkAndRunPendingDraws } from "./actions";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
+import { formatZikaLootTicketUsage } from "@/lib/zikaloot-ticket-usage";
 
 export const dynamic = "force-dynamic";
 
@@ -220,6 +221,7 @@ export default async function ZikaLootPage() {
     myPickMap.set(p.lootId, arr);
   }
   const activeLoot = loots.find((l) => l.status === ZikaLootStatus.SCHEDULED);
+  const activeLootMaxPicks = (activeLoot?.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200;
 
   // Busca imagens das figurinhas que são prêmio na loteria ativa.
   // cardId pode ser o nationalId numérico (ex: "248") ou o id CUID do card.
@@ -260,7 +262,7 @@ export default async function ZikaLootPage() {
             <p className="text-xs uppercase tracking-widest text-slate-500">Liga Zikachu</p>
             <h1 className="font-pixel text-base text-[#FFCB05]">ZikaLoot</h1>
             <p className="mt-1 text-sm text-slate-400">
-              {activeLoot ? ((activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200) : 200} números{(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number } | null)?.maxPicksPerPlayer ? `, com limite de ${(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number }).maxPicksPerPlayer} por jogador` : ""}. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
+              Escolha seu número para concorrer ao prêmio{(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number } | null)?.maxPicksPerPlayer ? `, com limite de ${(activeLoot?.prizeConfig as { maxPicksPerPlayer?: number }).maxPicksPerPlayer} por jogador` : ""}. Um sorteado por dia. Se o seu número for o escolhido, você ganha o prêmio!
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -352,15 +354,10 @@ export default async function ZikaLootPage() {
                 </p>
               </div>
               <div>
-                <p className="text-[10px] text-slate-500">Números escolhidos</p>
-                <p className="text-sm text-slate-300">{activeLoot.picks.length}/{(activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200}</p>
+                <p className="text-[10px] text-slate-500">Tickets do sorteio</p>
+                <p className="text-sm text-slate-300">{formatZikaLootTicketUsage(activeLoot.picks.length, activeLootMaxPicks)}</p>
               </div>
             </div>
-            {(myPickMap.get(activeLoot.id)??[]).length > 0 && (
-              <p className="mt-2 text-xs text-[#FFCB05]">
-                ✓ {(myPickMap.get(activeLoot.id)?.length ?? 0) > 1 ? "Seus números" : "Seu número"}: <strong>{(myPickMap.get(activeLoot.id) ?? []).join(", ")}</strong>
-              </p>
-            )}
           </div>
         )}
 
@@ -378,7 +375,7 @@ export default async function ZikaLootPage() {
           isLoggedIn={!!player}
           drawAt={activeLoot.drawAt.toISOString()}
           previousDraws={activeLoot.drawnNumbers}
-          maxPicks={(activeLoot.prizeConfig as { maxPicks?: number } | null)?.maxPicks ?? 200}
+          maxPicks={activeLootMaxPicks}
         />
       )}
 
