@@ -15,7 +15,7 @@ import {
 } from "@/lib/mascot-data";
 import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { mascotOriginIcon } from "@/lib/mascot-origin-icons";
-import { shouldShowExpeditionStatus } from "@/lib/mascot-expedition-visibility";
+import { shouldShowExpeditionCancellation, shouldShowExpeditionStatus } from "@/lib/mascot-expedition-visibility";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
   renameMascotAction, startExpeditionAction, claimExpeditionAction,
@@ -1299,7 +1299,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 </span>
               </div>
             )}
-            <button
+            {shouldShowExpeditionCancellation(claimable) && <button
               type="button"
               disabled={pending}
               onClick={() => {
@@ -1312,7 +1312,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               className="w-full rounded-xl border border-red-500/20 bg-red-500/5 py-1.5 text-[11px] text-red-400 hover:bg-red-500/10 disabled:opacity-40"
             >
               ✕ {expedition.mode === "VACATION" ? "Cancelar férias (ticket não retorna)" : "Cancelar expedição (sem recompensa)"}
-            </button>
+            </button>}
           </div>
         )}
         {claimable && expedition && (
