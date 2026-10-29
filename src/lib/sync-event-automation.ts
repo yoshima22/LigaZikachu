@@ -442,6 +442,11 @@ export async function executeDueSyncRounds(now = new Date()) {
             }
             auto.push(lineup.mascotId);
           }
+          // Sem mascotes suficientes fora do limite de megas (ex.: só sobraram megas na última rodada), completa com as restantes: a luta exige 3.
+          for (const lineup of available) {
+            if (auto.length === 3) break;
+            if (!auto.includes(lineup.mascotId)) auto.push(lineup.mascotId);
+          }
           if (auto.length > 0) {
             await tx.syncRoundSelection.create({
               data: { roundId: round.id, teamId: team.id, playerId, mascotIds: auto, isAuto: true },
@@ -543,7 +548,7 @@ export async function executeDueSyncRounds(now = new Date()) {
           data: { status: "FINISHED", finishedAt: now },
         });
       }
-    });
+    }, { timeout: 60_000, maxWait: 20_000 });
     if (round.roundNumber === 3) {
       await finalizeSyncEventRoomRewards(round.roomId);
     }
