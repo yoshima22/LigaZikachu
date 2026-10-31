@@ -462,7 +462,9 @@ export default async function ManualPage() {
           <p className="text-xs leading-5 text-slate-400">
             A Bala de Mel continua levando a felicidade a 100 e pode criar uma
             amizade, respeitando o limite de 10 vínculos, ou abrir um evento
-            social bônus.
+            social bônus. A nova amizade começa com 40 pontos de laço (Amigo) e
+            nunca reduz os pontos que a dupla já tinha; o evento bônus é um
+            evento comum de Laços e soma pontos normalmente.
           </p>
         </Sub>
 

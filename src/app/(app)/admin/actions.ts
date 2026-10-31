@@ -815,10 +815,10 @@ export async function cloneMascotAction(mascotId: string): Promise<{
         battleWins: true, battleLosses: true,
         // Relações para transferir ao clone
         relationsAsA: {
-          select: { mascotBId: true, type: true, wins: true, losses: true, interactionCount: true },
+          select: { mascotBId: true, type: true, relationshipScore: true, specialBondType: true, wins: true, losses: true, interactionCount: true },
         },
         relationsAsB: {
-          select: { mascotAId: true, type: true, wins: true, losses: true, interactionCount: true },
+          select: { mascotAId: true, type: true, relationshipScore: true, specialBondType: true, wins: true, losses: true, interactionCount: true },
         },
       },
     });
@@ -860,16 +860,16 @@ export async function cloneMascotAction(mascotId: string): Promise<{
       for (const rel of src.relationsAsA) {
         await tx.mascotRelation.upsert({
           where:  { mascotAId_mascotBId: { mascotAId: clone.id, mascotBId: rel.mascotBId } },
-          create: { mascotAId: clone.id, mascotBId: rel.mascotBId, type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
-          update: { type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          create: { mascotAId: clone.id, mascotBId: rel.mascotBId, type: rel.type, relationshipScore: rel.relationshipScore, specialBondType: rel.specialBondType, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          update: { type: rel.type, relationshipScore: rel.relationshipScore, specialBondType: rel.specialBondType, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
         }).catch(() => null); // ignora se mascotB não existir mais
       }
       // relationsAsB: o mascote original era o "B" — recria com o clone como "B"
       for (const rel of src.relationsAsB) {
         await tx.mascotRelation.upsert({
           where:  { mascotAId_mascotBId: { mascotAId: rel.mascotAId, mascotBId: clone.id } },
-          create: { mascotAId: rel.mascotAId, mascotBId: clone.id, type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
-          update: { type: rel.type, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          create: { mascotAId: rel.mascotAId, mascotBId: clone.id, type: rel.type, relationshipScore: rel.relationshipScore, specialBondType: rel.specialBondType, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
+          update: { type: rel.type, relationshipScore: rel.relationshipScore, specialBondType: rel.specialBondType, wins: rel.wins, losses: rel.losses, interactionCount: rel.interactionCount },
         }).catch(() => null); // ignora se mascotA não existir mais
       }
 

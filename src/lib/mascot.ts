@@ -33,6 +33,7 @@ import { getSpeciesSnapshot } from "@/lib/species-registry";
 import { trackGachaObjective } from "@/lib/gacha";
 import { PERSONALITY_AFFINITY, type StatKey } from "@/lib/personality-design";
 import { getBondsV2ExpeditionBonus } from "@/lib/mascot-bonds-v2-balance";
+import { effectiveRelationScore } from "@/lib/mascot-bonds-shared";
 
 // Afinidade usa chaves "force/agility/..."; o crescimento usa "statForce/...".
 const STAT_KEY_TO_WEIGHT: Record<StatKey, "statForce" | "statAgility" | "statInstinct" | "statVitality" | "statCharisma"> = {
@@ -2257,9 +2258,10 @@ export async function formFriendship(mascotAId: string, mascotBId: string): Prom
   ]);
   if (!a || !b) return;
 
+  const relSelect = { isActive: true, relationshipScore: true, type: true, interactionCount: true } as const;
   const [existingA, existingB, activeA, activeB] = await Promise.all([
-    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId, mascotBId } }, select: { isActive: true, relationshipScore: true } }),
-    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } }, select: { isActive: true, relationshipScore: true } }),
+    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId, mascotBId } }, select: relSelect }),
+    prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } }, select: relSelect }),
     prisma.mascotRelation.count({ where: { mascotAId, isActive: true } }),
     prisma.mascotRelation.count({ where: { mascotAId: mascotBId, isActive: true } }),
   ]);
@@ -2268,15 +2270,18 @@ export async function formFriendship(mascotAId: string, mascotBId: string): Prom
     where: { isActive: false, OR: [{ mascotAId, mascotBId }, { mascotAId: mascotBId, mascotBId: mascotAId }] },
   });
 
+  // Piso de 40 pontos, mas nunca abaixo do que o jogador já vê (inclui o score legado de relações antigas).
+  const floorA = Math.max(40, existingA?.isActive ? effectiveRelationScore(existingA) : 0);
+  const floorB = Math.max(40, existingB?.isActive ? effectiveRelationScore(existingB) : 0);
   await prisma.$transaction([
     prisma.mascotRelation.upsert({
       where: { mascotAId_mascotBId: { mascotAId, mascotBId } },
-      update: { type: "FRIEND", relationshipScore: Math.max(40, existingA?.relationshipScore ?? 0), isActive: true, dormantAt: null },
+      update: { type: "FRIEND", relationshipScore: floorA, isActive: true, dormantAt: null },
       create: { mascotAId, mascotBId, type: "FRIEND", relationshipScore: 40, isActive: true },
     }),
     prisma.mascotRelation.upsert({
       where: { mascotAId_mascotBId: { mascotAId: mascotBId, mascotBId: mascotAId } },
-      update: { type: "FRIEND", relationshipScore: Math.max(40, existingB?.relationshipScore ?? 0), isActive: true, dormantAt: null },
+      update: { type: "FRIEND", relationshipScore: floorB, isActive: true, dormantAt: null },
       create: { mascotAId: mascotBId, mascotBId: mascotAId, type: "FRIEND", relationshipScore: 40, isActive: true },
     }),
   ]);
@@ -2645,16 +2650,23 @@ export async function triggerSocialEvents(): Promise<SocialEventSummary> {
       summary.events.push(`👀 ${aName} e ${bName} — evento neutro`);
     } else {
       try {
+        // Grava o score real (antes ficava 0 e a tela mostrava um valor legado que caía ao primeiro evento de Laços).
+        const relSel = { relationshipScore: true, type: true, interactionCount: true } as const;
+        const [prevAB, prevBA] = await Promise.all([
+          prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: partner.id } }, select: relSel }),
+          prisma.mascotRelation.findUnique({ where: { mascotAId_mascotBId: { mascotAId: partner.id, mascotBId: a.id } }, select: relSel }),
+        ]);
+        const nextScore = (prev: typeof prevAB) => Math.min(100, Math.max(15, prev ? effectiveRelationScore(prev) : 0) + 5);
         await prisma.$transaction([
           prisma.mascotRelation.upsert({
             where: { mascotAId_mascotBId: { mascotAId: a.id, mascotBId: partner.id } },
-            update: { type: "FRIEND", interactionCount: { increment: 1 } },
-            create: { mascotAId: a.id, mascotBId: partner.id, type: "FRIEND" },
+            update: { type: "FRIEND", relationshipScore: nextScore(prevAB), interactionCount: { increment: 1 } },
+            create: { mascotAId: a.id, mascotBId: partner.id, type: "FRIEND", relationshipScore: nextScore(null) },
           }),
           prisma.mascotRelation.upsert({
             where: { mascotAId_mascotBId: { mascotAId: partner.id, mascotBId: a.id } },
-            update: { type: "FRIEND", interactionCount: { increment: 1 } },
-            create: { mascotAId: partner.id, mascotBId: a.id, type: "FRIEND" },
+            update: { type: "FRIEND", relationshipScore: nextScore(prevBA), interactionCount: { increment: 1 } },
+            create: { mascotAId: partner.id, mascotBId: a.id, type: "FRIEND", relationshipScore: nextScore(null) },
           }),
         ]);
         const msg = pickText(SOCIAL_TEXTS.ally_cheer, aName, bName);
