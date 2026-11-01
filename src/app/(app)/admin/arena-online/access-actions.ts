@@ -1,12 +1,13 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import {
   getLivePvpAccessConfig,
   LIVE_PVP_ACCESS_KEY,
+  LIVE_PVP_ACCESS_TAG,
 } from "@/lib/live-pvp-access";
 import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { TACTICAL_BIOMES, type TacticalBiomeId } from "@/lib/tactical-arena";
@@ -47,7 +48,9 @@ export async function updateLivePvpAccessAction(input: {
       },
     }),
   ]);
+  revalidateTag(LIVE_PVP_ACCESS_TAG);
   revalidatePath("/combates/arena-online");
+  revalidateTag(LIVE_PVP_ACCESS_TAG);
   revalidatePath("/admin/arena-online");
   return { ok: true, config: value };
 }

@@ -4,7 +4,7 @@
 // As ações administrativas continuam exigindo ADMIN/SUPER_ADMIN.
 
 import { randomBytes } from "crypto";
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
@@ -204,6 +204,7 @@ export async function adminAddTowerTesterAction(query: string) {
   const ids = await towerTesterIds();
   if (!ids.includes(player.userId)) ids.push(player.userId);
   await prisma.appSetting.upsert({ where: { key: TOWER_TESTER_ACCESS_KEY }, create: { key: TOWER_TESTER_ACCESS_KEY, value: ids }, update: { value: ids } });
+  revalidateTag("tower-testers-nav");
   revalidatePath(PATH);
   return { ok: true as const, player: { userId: player.userId, name: player.displayName, email: player.user.email } };
 }
@@ -213,6 +214,7 @@ export async function adminRemoveTowerTesterAction(userId: string) {
   if (!admin) return { error: "Acesso restrito." };
   const ids = (await towerTesterIds()).filter((id) => id !== userId);
   await prisma.appSetting.upsert({ where: { key: TOWER_TESTER_ACCESS_KEY }, create: { key: TOWER_TESTER_ACCESS_KEY, value: ids }, update: { value: ids } });
+  revalidateTag("tower-testers-nav");
   revalidatePath(PATH);
   return { ok: true as const };
 }

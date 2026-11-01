@@ -150,14 +150,25 @@ async function endOccurrence(
 /** Ativa as agendadas que venceram e encerra as ativas cujo prazo passou. */
 export async function processDueOccurrences(now = new Date(), playerId?: string) {
   const scope = playerId ? { playerId } : {};
-  const [toStart, toEnd] = await Promise.all([
-    prisma.mascotOccurrence.findMany({ where: { ...scope, status: "SCHEDULED", startsAt: { lte: now } }, select: { id: true }, take: 500 }),
-    prisma.mascotOccurrence.findMany({ where: { ...scope, status: "ACTIVE", endsAt: { lte: now } }, select: { id: true }, take: 500 }),
-  ]);
+  // Uma leitura só (antes eram duas): o layout chama isto em toda navegação.
+  const due = await prisma.mascotOccurrence.findMany({
+    where: {
+      ...scope,
+      OR: [
+        { status: "SCHEDULED", startsAt: { lte: now } },
+        { status: "ACTIVE", endsAt: { lte: now } },
+      ],
+    },
+    select: { id: true, status: true },
+    take: 1000,
+  });
   let activated = 0;
   let ended = 0;
-  for (const { id } of toStart) if ((await activateOccurrence(id, now).catch(() => "skipped")) === "activated") activated++;
-  for (const { id } of toEnd) if ((await endOccurrence(id, "EXPIRED", null, now).catch(() => "skipped")) === "ended") ended++;
+  for (const { id, status } of due) {
+    if (status === "SCHEDULED") {
+      if ((await activateOccurrence(id, now).catch(() => "skipped")) === "activated") activated++;
+    } else if ((await endOccurrence(id, "EXPIRED", null, now).catch(() => "skipped")) === "ended") ended++;
+  }
   return { activated, ended };
 }
 

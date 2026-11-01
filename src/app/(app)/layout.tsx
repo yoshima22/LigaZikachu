@@ -46,7 +46,7 @@ import { getPendingLeagueTickerEvents } from "@/lib/league-ticker";
 import { LeagueTicker } from "./_components/league-ticker";
 import {
   canAccessLivePvp,
-  getLivePvpAccessConfig,
+  getLivePvpAccessConfigForNav,
 } from "@/lib/live-pvp-access";
 import { getNavNotificationSnapshot } from "@/lib/nav-notifications";
 import { DesktopChatDockLoader } from "./_components/desktop-chat-dock-loader";
@@ -54,7 +54,7 @@ import { AndroidUpdateBadge } from "@/components/android-update";
 import { SpecMiniPlayer } from "@/components/spec/spec-mini-player";
 import { SpecBroadcastControlDock } from "@/components/spec/spec-broadcast-control-dock";
 import { AccountAccessObserver } from "@/components/account-access-observer";
-import { getJohtoInvitationForPlayer } from "@/lib/johto-invitation";
+import { getJohtoInvitationGateState } from "@/lib/johto-invitation";
 import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
 import { getOccurrenceNoticesForPlayer } from "@/lib/mascot-occurrences";
@@ -123,6 +123,13 @@ const getNavData = (userId: string) =>
     { revalidate: 60, tags: [`nav-${userId}`] },
   )();
 
+// Lista de testers da Torre: global e quase estática; as actions do admin invalidam a tag.
+const getTowerTesterSetting = unstable_cache(
+  () => prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }),
+  ["tower-testers-nav-v1"],
+  { revalidate: 60, tags: ["tower-testers-nav"] },
+);
+
 // Um único sinal compartilhado por todos os usuários. O cache curto evita uma
 // consulta por navegação e o corte por heartbeat impede que uma live abandonada
 // mantenha o selo aceso indefinidamente.
@@ -164,7 +171,7 @@ export default async function AppLayout({
     zikaTvLive,
   ] = await Promise.all([
     !isPlatformAdmin
-      ? prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }).catch(() => null)
+      ? getTowerTesterSetting().catch(() => null)
       : Promise.resolve(null),
     // Roleta de aniversário: elegível no dia (ou depois) do aniversário, uma vez por ano.
     prisma.player.findUnique({
@@ -228,7 +235,7 @@ export default async function AppLayout({
       })
       .catch(() => null),
     getGlobalNotice(),
-    getLivePvpAccessConfig().catch(() => ({
+    getLivePvpAccessConfigForNav().catch(() => ({
       enabledGlobally: false,
       allowedPlayerIds: [],
       biomeImages: {},
@@ -291,7 +298,7 @@ export default async function AppLayout({
         }))
       : Promise.resolve({ messageCount: 0, bazarCount: 0, bondsCount: 0, mascotCount: 0, messageAlerts: [], bazarAlerts: [], bondsAlerts: [], mascotAlerts: [] }),
     !isPlatformAdmin && player?.id
-      ? getJohtoInvitationForPlayer(player.id).catch((error) => {
+      ? getJohtoInvitationGateState(player.id).catch((error) => {
           console.error("[Layout] Johto invitation unavailable", { playerId: player.id, error });
           return null;
         })

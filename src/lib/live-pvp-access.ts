@@ -1,3 +1,4 @@
+import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { TacticalBiomeId } from "@/lib/tactical-arena";
 
@@ -34,6 +35,16 @@ export async function getLivePvpAccessConfig(): Promise<LivePvpAccessConfig> {
         : {},
   };
 }
+
+export const LIVE_PVP_ACCESS_TAG = "live-pvp-access";
+
+/** Só para o menu do layout (lido em toda navegação). A escrita do admin invalida a tag na hora;
+ * regras de acesso/partida seguem usando getLivePvpAccessConfig sem cache. */
+export const getLivePvpAccessConfigForNav = unstable_cache(
+  getLivePvpAccessConfig,
+  ["live-pvp-access-nav-v1"],
+  { revalidate: 60, tags: [LIVE_PVP_ACCESS_TAG] },
+);
 
 export function canAccessLivePvp(
   _config: LivePvpAccessConfig,

@@ -1,3 +1,4 @@
+import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
 import {
@@ -94,6 +95,7 @@ export async function prepareJohtoInvitationCampaign(input: { publish?: boolean;
   const campaign = input.publish
     ? await prisma.johtoInvitationCampaign.findUniqueOrThrow({ where: { id: prepared.id } })
     : prepared;
+  try { revalidateTag(JOHTO_CAMPAIGN_TAG); } catch { /* fora do Next (script): o TTL de 60s cobre */ }
   if (isLive(campaign, now) && !campaign.pushSentAt) {
     const players = await prisma.player.findMany({
       where: { active: true, user: { status: "ACTIVE", role: { notIn: [...ADMIN_ROLES] } } },
@@ -108,6 +110,46 @@ export async function prepareJohtoInvitationCampaign(input: { publish?: boolean;
     }
   }
   return campaign;
+}
+
+const JOHTO_CAMPAIGN_TAG = "johto-invitation-campaign";
+
+// Campanha é global; datas voltam como string do cache (JSON). Publicar invalida a tag.
+const getCachedCampaign = unstable_cache(
+  async () => {
+    const c = await prisma.johtoInvitationCampaign.findUnique({
+      where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG },
+      select: { id: true, publishedAt: true, launchAt: true },
+    });
+    return c && { id: c.id, publishedAt: c.publishedAt?.toISOString() ?? null, launchAt: c.launchAt.toISOString() };
+  },
+  ["johto-invitation-campaign-v1"],
+  { revalidate: 60, tags: [JOHTO_CAMPAIGN_TAG] },
+);
+
+/** Caminho quente do layout (toda navegação). Se o convite já foi aberto o portal não renderiza nada,
+ * então basta 1 leitura do destinatário: sem upsert (escrita) e sem a lista de candidatos do torneio.
+ * Qualquer outro caso cai no fluxo completo. */
+export async function getJohtoInvitationGateState(playerId: string, now = new Date()): Promise<JohtoInvitationPlayerState> {
+  const campaign = await getCachedCampaign().catch(() => null);
+  if (!campaign || !campaign.publishedAt || new Date(campaign.publishedAt) > now || new Date(campaign.launchAt) > now) {
+    return unavailableState();
+  }
+  const recipient = await prisma.johtoInvitationRecipient.findUnique({
+    where: { campaignId_playerId: { campaignId: campaign.id, playerId } },
+    select: { availableAt: true, openedAt: true, votingSkippedAt: true, voteSubmittedAt: true },
+  });
+  if (recipient?.availableAt && recipient.openedAt) {
+    return {
+      available: true,
+      displayName: null,
+      openedAt: recipient.openedAt.toISOString(),
+      votingSkippedAt: recipient.votingSkippedAt?.toISOString() ?? null,
+      voteSubmittedAt: recipient.voteSubmittedAt?.toISOString() ?? null,
+      candidates: [],
+    };
+  }
+  return getJohtoInvitationForPlayer(playerId, now);
 }
 
 export async function getJohtoInvitationForPlayer(playerId: string, now = new Date()): Promise<JohtoInvitationPlayerState> {

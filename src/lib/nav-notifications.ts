@@ -65,7 +65,7 @@ export async function filterInGameRecipients(playerIds: string[], category: Noti
 }
 
 export async function getNavNotificationSnapshot(playerId: string): Promise<NavNotificationSnapshot> {
-  const [messages, messageGroups, bazar, bazarCount, bonds, bondsCount, mascots, mascotCount] = await Promise.all([
+  const [messages, messageGroups, bazar, bonds, mascots, unreadByCategory] = await Promise.all([
     prisma.directMessage.findMany({
       where: { receiverId: playerId, readAt: null },
       orderBy: { createdAt: "desc" },
@@ -91,22 +91,26 @@ export async function getNavNotificationSnapshot(playerId: string): Promise<NavN
       take: 5,
       select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
     }),
-    prisma.playerNotification.count({
-      where: { playerId, category: "BAZAR", readAt: null },
-    }),
     prisma.playerNotification.findMany({
       where: { playerId, category: "BONDS", readAt: null },
       orderBy: { createdAt: "desc" }, take: 5,
       select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
     }),
-    prisma.playerNotification.count({ where: { playerId, category: "BONDS", readAt: null } }),
     prisma.playerNotification.findMany({
       where: { playerId, category: "MASCOT", readAt: null },
       orderBy: { createdAt: "desc" }, take: 5,
       select: { id: true, title: true, body: true, href: true, entityId: true, createdAt: true },
     }),
-    prisma.playerNotification.count({ where: { playerId, category: "MASCOT", readAt: null } }),
+    prisma.playerNotification.groupBy({
+      by: ["category"],
+      where: { playerId, category: { in: ["BAZAR", "BONDS", "MASCOT"] }, readAt: null },
+      _count: { _all: true },
+    }),
   ]);
+  const unread = (category: string) => unreadByCategory.find((row) => row.category === category)?._count._all ?? 0;
+  const bazarCount = unread("BAZAR");
+  const bondsCount = unread("BONDS");
+  const mascotCount = unread("MASCOT");
 
   const senderCounts = new Map(messageGroups.map((group) => [group.senderId, group._count._all]));
   const seenSenders = new Set<string>();
