@@ -241,3 +241,7 @@ export function defaultCombatRoleFor(mascot: {
   return recommendCombatRole(mascot);
 }
 
+/** Opções de postura que o mascote pode escolher (esconde posturas de jornada não desbloqueadas). */
+export function selectableCombatRoleOptions(unlockedStances: readonly string[] = []) {
+  return COMBAT_ROLE_OPTIONS.filter((option) => canSelectTrainingStance(option.value, unlockedStances));
+}

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
 import { Lock, Search, Unlock, X, CheckCircle2, Clock } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, selectableCombatRoleOptions, getCombatRoleLabel, normalizeCombatRole } from "@/lib/combat-roles";
 import { getStaticSpriteUrl, getPokemonName } from "@/lib/mascot-data";
 import { addLineupMascotAction, lockLineupAction, removeLineupMascotAction, adminClearLineupAction, setLineupCombatRoleAction } from "../lineup-actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
@@ -39,6 +39,7 @@ interface Props {
   myLocked: boolean;
   partnerLocked: boolean;
   myMascots: PlayerMascot[];
+  stanceMap?: Record<string, string[]>;
   isAdmin: boolean;
   partnerPlayerId: string;
 }
@@ -49,7 +50,7 @@ export function SyncLineupPanel({
   teamId, playerId, partnerName,
   myLineup, partnerLineup,
   myLocked, partnerLocked,
-  myMascots, isAdmin, partnerPlayerId,
+  myMascots, stanceMap = {}, isAdmin, partnerPlayerId,
 }: Props) {
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState("");
@@ -158,7 +159,7 @@ export function SyncLineupPanel({
                           className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1 py-0.5 text-[8px] font-semibold text-slate-300 outline-none hover:border-[#FFCB05]/50 disabled:opacity-50"
                           title={myLocked ? "Escalacao travada: voce ainda pode ajustar a postura." : "Postura de combate"}
                         >
-                          {COMBAT_ROLE_OPTIONS.map((role) => (
+                          {selectableCombatRoleOptions(stanceMap[entry.mascotId]).map((role) => (
                             <option key={role.value} value={role.value}>{role.label}</option>
                           ))}
                         </select>

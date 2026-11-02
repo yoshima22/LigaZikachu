@@ -219,6 +219,7 @@ export async function getRushDataAction() {
       personality: true,
       statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true,
       megaEvolvedAt: true, megaEvolvedFromPokemonId: true, primaryTypeOverride: true, secondaryTypeOverride: true,
+      stanceUnlocks: { select: { stanceKey: true } },
     },
   }) : [];
   // Feedback de punição: jogador que faltou (tudo W/O) na edição anterior fica
@@ -241,7 +242,7 @@ export async function getRushDataAction() {
     playerId: player.id,
     joined,
     names,
-    mascots: mascots.map((m) => ({ ...m, name: m.nickname ?? getPokemonName(m.pokemonId), types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) : getPokemonTypes(m.pokemonId) })),
+    mascots: mascots.map(({ stanceUnlocks, ...m }) => ({ ...m, unlockedStances: stanceUnlocks.map((unlock) => unlock.stanceKey), name: m.nickname ?? getPokemonName(m.pokemonId), types: m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) : getPokemonTypes(m.pokemonId) })),
     today: teamDate,
     rewards: parseRewards(league.rewardsJson),
     rewardPlan: rewardPlan(String(ruleData(league.ruleJson).rewardPlanId ?? "")),

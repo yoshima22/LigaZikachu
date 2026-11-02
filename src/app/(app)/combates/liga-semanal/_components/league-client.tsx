@@ -3,7 +3,7 @@
 import React, { useState, useTransition, useEffect, useCallback } from "react";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, selectableCombatRoleOptions, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName, mascotTypes, getStaticSpriteUrl, getTypeAdvantageMultiplier } from "@/lib/mascot-data";
 import { PlayerDayGames, type PlayerDayGame } from "@/components/league/player-day-games";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
@@ -830,7 +830,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
     for (const id of ids) {
       if (!mergedRoles[id]) {
         const m = data.availableMascots.find((x: any) => x.id === id);
-        if (m) mergedRoles[id] = defaultCombatRoleFor(m as any);
+        if (m) mergedRoles[id] = defaultCombatRoleFor(m as any, (m as any).unlockedStances);
       }
     }
     setRoles(mergedRoles);
@@ -847,7 +847,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
       setSelected(prev => [...prev, id]);
       const m = data.availableMascots.find((x: any) => x.id === id);
       if (m) {
-        const rec = defaultCombatRoleFor(m as any);
+        const rec = defaultCombatRoleFor(m as any, (m as any).unlockedStances);
         setRoles(prev => ({ ...prev, [id]: prev[id] ?? rec }));
       }
     }
@@ -1021,7 +1021,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                         title={currentRole ? COMBAT_ROLE_DESCRIPTIONS[currentRole] : ""}
                         className="min-w-0 flex-1 rounded border border-slate-700 bg-slate-950 px-1.5 py-1 sm:py-0.5 text-[11px] sm:text-[9px] font-semibold text-yellow-300 outline-none hover:border-yellow-500/50"
                       >
-                        {COMBAT_ROLE_OPTIONS.map(r => (
+                        {selectableCombatRoleOptions((m as any).unlockedStances).map(r => (
                           <option key={r.value} value={r.value} title={r.description}>
                             {r.label}{r.value === recRole ? " ★" : ""}
                           </option>
@@ -1239,7 +1239,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                   const m = data.availableMascots.find((x: any) => x.id === id) as any;
                   if (!m) return <div key={id} className="rounded-xl border border-dashed border-slate-700 p-2 min-h-[80px] flex items-center justify-center text-[9px] text-slate-600">?</div>;
                   const types = mascotTypes(m);
-                  const role = teamRoles?.[id] || defaultCombatRoleFor(m as any);
+                  const role = teamRoles?.[id] || defaultCombatRoleFor(m as any, (m as any).unlockedStances);
                   const mascotName = m.nickname ?? getPokemonName(m.pokemonId);
                   const isMoving = movingMascot?.slot === slot && movingMascot.index === i;
                   const invalidReason = invalidInfo.get(id);

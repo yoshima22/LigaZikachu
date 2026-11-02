@@ -50,7 +50,7 @@ import {
   saveWorldAvatarAction,
   touchWorldPresenceAction,
 } from "./actions";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel } from "@/lib/combat-roles";
+import { selectableCombatRoleOptions, getCombatRoleLabel } from "@/lib/combat-roles";
 import { worldModeAsset } from "@/world-data/assets";
 import { WORLD_AVATAR_CATEGORIES, WORLD_AVATAR_OPTIONS, worldAvatarAssetUrl, type WorldAvatarSelection } from "@/world-data/avatar";
 
@@ -63,6 +63,7 @@ type WorldMascot = {
   level: number;
   personality: string;
   mainMascotId: string | null;
+  unlockedStances?: string[];
   baseOptions: Array<{ id: string; label: string }>;
   posture: string;
   stats: {
@@ -779,7 +780,7 @@ function WorldPartyPanel({
                       onChange={(e) => setPosture(entry.mascotId, e.target.value)}
                       className="max-w-[100px] rounded border border-emerald-300/30 bg-slate-900 px-1 py-1 text-[9px] font-bold text-emerald-200"
                     >
-                      {COMBAT_ROLE_OPTIONS.map((option) => (
+                      {selectableCombatRoleOptions(m?.unlockedStances).map((option) => (
                         <option key={option.value} value={option.value} className="text-white">
                           {option.label}
                         </option>

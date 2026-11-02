@@ -4,7 +4,7 @@ import { useState, useTransition, useEffect, useCallback, useMemo } from "react"
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
+import { COMBAT_ROLE_OPTIONS, selectableCombatRoleOptions, getCombatRoleLabel, recommendCombatRole, defaultCombatRoleFor, normalizeCombatRole, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl, getPokemonName, mascotPrimaryType, mascotTypes, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
@@ -27,6 +27,7 @@ export interface ValidMascot {
   statInstinct: number;
   statCharisma: number;
   preferredCombatRole?: string | null;
+  unlockedStances?: string[];
   abilityChoice?: string | null;
   hiddenAbilityUnlocked?: boolean;
   arenaState: string;
@@ -128,7 +129,7 @@ function defaultRoleForMascot(m: ValidMascot): CombatRole {
     statVitality: m.statVitality,
     statInstinct: m.statInstinct,
     statCharisma: m.statCharisma,
-  });
+  }, m.unlockedStances);
 }
 
 type BlockInfo = { type: "arena" | "injured" | "resting" | "cooldown"; until?: number };
@@ -324,7 +325,7 @@ function SelectedBar({
                     className="min-w-0 flex-1 rounded-md border border-slate-700 bg-slate-900 px-2 py-1.5 sm:py-1 text-[12px] sm:text-[10px] font-semibold text-slate-200 outline-none hover:border-[#FFCB05]/40"
                     title="Postura deste mascote na equipe"
                   >
-                    {COMBAT_ROLE_OPTIONS.map((option) => (
+                    {selectableCombatRoleOptions(m.unlockedStances).map((option) => (
                       <option key={option.value} value={option.value}>{option.label}</option>
                     ))}
                   </select>

@@ -191,6 +191,7 @@ export async function getWorldPartyMascotsAction() {
       statInstinct: mascot.statInstinct,
       statCharisma: mascot.statCharisma,
     }, mainMascots.find((base) => base.id === mascot.mainMascotId)?.stanceUnlocks.map((unlock) => unlock.stanceKey)),
+    unlockedStances: mainMascots.find((base) => base.id === mascot.mainMascotId)?.stanceUnlocks.map((unlock) => unlock.stanceKey) ?? [],
     stats: {
       force: mascot.statForce,
       agility: mascot.statAgility,

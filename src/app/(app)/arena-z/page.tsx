@@ -24,6 +24,7 @@ import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { CombatRoleSelect } from "./_components/combat-role-select";
+import { getStanceUnlockMap } from "@/lib/stance-unlocks";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { AdminArenaHistorySelector } from "./_components/admin-arena-history-selector";
 import {
@@ -143,6 +144,7 @@ export default async function ArenaZPage({
   const historyPlayerId = viewAsPlayer?.id ?? player.id;
 
   await cleanupExpiredArenaResting(player.id).catch(() => null);
+  const stanceMap = await getStanceUnlockMap(player.id);
 
   // Colunas novas (adicionadas na reformulação Jun/2026) — lidas separadamente para não quebrar se migration ainda não rodou
   const playerArenaData = await prisma.player.findUnique({
@@ -1061,6 +1063,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                             teamId={team.id}
                             mascotId={member.mascotId}
                             value={member.combatRole}
+                            unlockedStances={stanceMap[member.mascotId]}
                             stats={{ ...member.mascot, name: member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId) }}
                             teamStats={team.members.map(({ mascot }) => ({ ...mascot, name: mascot.nickname ?? getPokemonName(mascot.pokemonId) }))}
                           />
@@ -1225,7 +1228,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                 statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
-                preferredCombatRole: m.preferredCombatRole,
+                preferredCombatRole: m.preferredCombatRole, unlockedStances: stanceMap[m.id] ?? [],
                 abilityChoice: m.abilityChoice, hiddenAbilityUnlocked: m.hiddenAbilityUnlocked,
                 arenaState: m.arenaState, restingUntil: m.restingUntil?.toISOString() ?? null,
                 arenaEntryCooldownUntil: null,

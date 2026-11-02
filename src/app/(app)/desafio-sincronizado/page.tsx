@@ -2,6 +2,7 @@ import Image from "next/image";
 import { Clock, Flame, Send, ShieldBan, Sparkles, Swords, Ticket, Waves } from "lucide-react";
 import { SyncTicketSide } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { getStanceUnlockMap } from "@/lib/stance-unlocks";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import Link from "next/link";
@@ -49,6 +50,7 @@ export default async function DesafioSincronizadoPage() {
   }
 
   const admin = isAdmin(session.user.role);
+  const stanceMap = await getStanceUnlockMap(player.id);
   // Só recria/normaliza os itens de ticket quando faltam: fazer isso (várias
   // escritas em transação) a cada renderização deixava a página lenta.
   const activeTicketItems = await prisma.shopItem.count({
@@ -628,6 +630,7 @@ export default async function DesafioSincronizadoPage() {
                 myLocked={myLocked}
                 partnerLocked={partnerLocked}
                 myMascots={myMascots}
+                stanceMap={stanceMap}
                 isAdmin={admin}
               />
             )}

@@ -362,11 +362,12 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
         id: true, pokemonId: true, nickname: true, level: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true,
         megaEvolvedAt: true, megaEvolvedFromPokemonId: true, preferredCombatRole: true,
+        stanceUnlocks: { select: { stanceKey: true } },
       },
       orderBy: { level: "desc" },
     });
     const { isMegaEvolvedMascot } = await import("@/lib/battle-divisions");
-    allMascots = rows.map((m) => ({ ...m, isMega: isMegaEvolvedMascot(m) }));
+    allMascots = rows.map(({ stanceUnlocks, ...m }) => ({ ...m, unlockedStances: stanceUnlocks.map((unlock) => unlock.stanceKey), isMega: isMegaEvolvedMascot(m) }));
   } catch { /* should always work */ }
 
   // Divisão atual do modo (LIMITED/UNLIMITED) para o client validar/avisar.
