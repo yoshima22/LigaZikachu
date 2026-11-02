@@ -5,6 +5,7 @@ import { getManualContent } from "@/lib/manual-content";
 import { EditableText } from "./_components/EditableText";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
+import { buildTrainingManualCopy } from "@/lib/training-milestones";
 import {
   PERSONALITY_DESIGN,
   STAT_LABEL,
@@ -159,6 +160,7 @@ export default async function ManualPage() {
   const session = await getAppSession();
   const admin = session?.user ? isAdmin(session.user.role) : false;
   const c = await getManualContent();
+  const trainingManual = buildTrainingManualCopy();
 
   const tocSections = [
     { id: "mascotes", label: "Mascotes & EXP" },
@@ -1005,6 +1007,18 @@ export default async function ManualPage() {
           boa como ponto de partida, mas você pode trocar a postura para
           encaixar melhor na estratégia do time.
         </Note>
+        <Sub title="Posturas desbloqueáveis — em preparação">
+          <p className="text-xs leading-6 text-slate-400">{trainingManual}</p>
+          <Table headers={["Objetivo", "Meta", "Limite por combate"]} rows={[
+            ["Arena-Z válida", "6 créditos", "1"],
+            ["Liga Semanal ou Rush", "12 combates", "1"],
+            ["Expedições", "24; ao menos 6 de cada tipo", "1"],
+            ["K.O.s", "20", "2"],
+            ["Proteções de aliado em perigo", "30", "2"],
+            ["Buffs / curas efetivas", "40 / 35", "3"],
+            ["Sobrevivência especial", "12–20 combates", "1"],
+          ]} />
+        </Sub>
       </Section>
 
       {/* ── 8. Personalidades ─────────────────────────────────────────────── */}

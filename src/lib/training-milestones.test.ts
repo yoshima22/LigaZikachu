@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   buildTrainingJourney,
+  buildTrainingManualCopy,
   evaluateTrainingEvent,
   validateArenaTrainingCredit,
   type TrainingJourney,
@@ -78,4 +79,13 @@ test("rejects same owner, short battles, missing focus, and daily cap", () => {
     { ...arenaInput, selectedTrainingMascot: false },
     { ...arenaInput, ownerCreditsToday: 2 },
   ]) assert.equal(validateArenaTrainingCredit(input).eligible, false);
+});
+
+test("manual copy publishes training limits without claiming the system is live", () => {
+  const copy = buildTrainingManualCopy();
+  assert.match(copy, /em preparação/i);
+  assert.match(copy, /Marco de Postura - \[Postura\]/);
+  assert.match(copy, /24 horas/i);
+  assert.match(copy, /Penetração de Armadura/);
+  assert.doesNotMatch(copy, /mitigação de dano/i);
 });

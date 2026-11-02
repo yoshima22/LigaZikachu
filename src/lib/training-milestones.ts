@@ -202,3 +202,7 @@ export function validateArenaTrainingCredit(input: ArenaTrainingCreditInput): Ar
   }
   return reasons.length ? { eligible: false, reasons } : { eligible: true, reasons: [] };
 }
+
+export function buildTrainingManualCopy() {
+  return "Posturas desbloqueáveis — em preparação. Cada Marco de Postura - [Postura] iniciará uma jornada longa de 5 a 7 marcos após o lançamento. Arena-Z: a mesma dupla recebe no máximo um crédito a cada 24 horas, cada jogador ganha no máximo dois créditos por dia e somente um mascote em treino por batalha. Os objetivos têm limites por combate: K.O.s até 2, proteção de aliado em perigo até 2, buffs e curas até 3, e sobrevivência especial até 1. Fontes permitidas: Arena-Z PvP válida, Liga Semanal, Liga Rush e expedições Padrão, Treinamento e Itens. Arena Draft, Terreno, testes, admin, modos desligados e inacessíveis não contam. Aliado em perigo é aliado vivo abaixo de 50% de HP antes da ação. Cura efetiva é HP realmente recuperado. Penetração de Armadura é dano ofensivo adicional que atravessa a defesa; Resistência de Dano é a redução defensiva recebida.";
+}
