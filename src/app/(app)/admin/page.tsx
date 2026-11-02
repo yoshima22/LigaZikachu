@@ -49,6 +49,7 @@ import { EvolutionDebug } from "./_components/evolution-debug";
 import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
 import { AdminTabs } from "./_components/admin-tabs";
 import { LigaCashPanel } from "./_components/liga-cash-panel";
+import { TrainingJourneyAdminPanel } from "./_components/training-journey-admin-panel";
 
 const adminCards = [
   {
@@ -216,6 +217,15 @@ export default async function AdminPage() {
     prisma.passScheduleConfig.findFirst({ where: { isNextStorePass: true }, select: { id: true, displayTitle: true, allowRetroactiveClaims: true, storeActivationAt: true, storeActivationRetroactive: true } }),
   ]);
   const paidPassNames = new Map(paidPassPlayers.map(player => [player.id, player.displayName]));
+  const activeTrainingJourneys = await prisma.mascotTrainingJourney.findMany({
+    where: { status: "ACTIVE" },
+    orderBy: { startedAt: "asc" },
+    select: {
+      id: true, stanceKey: true, startedAt: true,
+      mascot: { select: { id: true, nickname: true, pokemonId: true, player: { select: { displayName: true } } } },
+      milestones: { orderBy: { milestoneKey: "asc" }, select: { milestoneKey: true, value: true, target: true, detailsJson: true } },
+    },
+  });
   // Calendário do próximo passe + lista de reservados (para a inclusão em massa).
   const nextReservations = nextPassConfig
     ? paidPassOrders.filter(o => o.passOfferSlot === "NEXT" && (o.passScheduleKey === nextPassConfig.id || o.passScheduleKey === null))
@@ -392,6 +402,7 @@ export default async function AdminPage() {
       <MascotSocialPanel />
       <AdminExpeditionPanel />
       <AdminMascotPanel />
+      <TrainingJourneyAdminPanel journeys={activeTrainingJourneys} />
       {/* ── Formas de Pokémon: pools de ovo + visualizador ── */}
       {isAdmin(currentUser.role) && <div className="rounded-2xl border border-border bg-slate-950/50 p-5 space-y-4">
         <div className="flex items-center gap-2">

@@ -554,6 +554,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [showPermanentItems, setShowPermanentItems] = useState(false);
   const [selectedTrainingMilestoneId, setSelectedTrainingMilestoneId] = useState("");
   const [cardTab, setCardTab] = useState<"ABILITIES" | "STANCES">("ABILITIES");
+  const [trainingMilestonePage, setTrainingMilestonePage] = useState(0);
 
   const activateTrainingJourney = () => {
     if (!selectedTrainingMilestoneId) return;
@@ -1243,17 +1244,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       </div>
                     </div>
                   )}
-                  {mascot.trainingJourney && (
+                  {mascot.trainingJourney && (() => {
+                    const pageSize = 3;
+                    const pageCount = Math.ceil(mascot.trainingJourney.milestones.length / pageSize);
+                    const currentPage = Math.min(trainingMilestonePage, Math.max(0, pageCount - 1));
+                    const visibleMilestones = mascot.trainingJourney.milestones.slice(currentPage * pageSize, (currentPage + 1) * pageSize);
+                    return (
               <div className="rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
                 <p className="font-bold">📜 Jornada ativa — {mascot.trainingJourney.stanceKey}</p>
                 <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos.</p>
                 <ol className="mt-2 space-y-1.5">
-                  {mascot.trainingJourney.milestones.map((milestone, index) => {
+                  {visibleMilestones.map((milestone, index) => {
                     const display = getTrainingMilestoneDisplay(milestone);
                     return (
                       <li key={milestone.milestoneKey} className={`rounded border px-1.5 py-1 ${display.complete ? "border-emerald-400/30 bg-emerald-500/10" : "border-slate-600/60 bg-slate-950/35"}`}>
                         <div className="flex items-start gap-1.5">
-                          <span className={`mt-px font-bold ${display.complete ? "text-emerald-300" : "text-amber-300"}`}>{display.complete ? "✓" : `${index + 1}.`}</span>
+                          <span className={`mt-px font-bold ${display.complete ? "text-emerald-300" : "text-amber-300"}`}>{display.complete ? "✓" : `${currentPage * pageSize + index + 1}.`}</span>
                           <div className="min-w-0 flex-1">
                             <p className={display.complete ? "text-emerald-100 line-through decoration-emerald-400/60" : "text-slate-100"}>{display.label}</p>
                             <div className="mt-0.5 flex items-center justify-between gap-2 text-[9px]">
@@ -1269,11 +1275,13 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     );
                   })}
                 </ol>
+                {pageCount > 1 && <div className="mt-2 flex items-center justify-between gap-2 border-t border-amber-400/15 pt-1.5"><button type="button" disabled={currentPage === 0} onClick={() => setTrainingMilestonePage(currentPage - 1)} className="rounded border border-slate-600 px-1.5 py-0.5 text-[9px] text-slate-200 disabled:opacity-30">← Anterior</button><span className="text-[9px] text-amber-100/70">Objetivos {currentPage + 1}/{pageCount}</span><button type="button" disabled={currentPage >= pageCount - 1} onClick={() => setTrainingMilestonePage(currentPage + 1)} className="rounded border border-slate-600 px-1.5 py-0.5 text-[9px] text-slate-200 disabled:opacity-30">Próximo →</button></div>}
                 <button type="button" disabled={pending} onClick={cancelTrainingJourney} className="mt-1.5 rounded border border-red-400/35 px-1.5 py-0.5 text-[9px] font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-40">
                   Cancelar jornada
                 </button>
               </div>
-                  )}
+                    );
+                  })()}
                   {trainingMilestoneItems.length > 0 && (
               <div className="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2 py-1.5 text-[10px] text-sky-100">
                 <p className="font-bold">🎯 Marcos de Postura no inventário</p>
