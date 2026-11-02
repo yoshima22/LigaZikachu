@@ -8,7 +8,7 @@ import {
   TYPE_ADVANTAGE,
   TYPE_LABELS_PT,
 } from "@/lib/mascot-data";
-import { normalizeArenaDraftPosture } from "@/lib/arena-draft";
+import { normalizeArenaDraftPosture, type ArenaDraftPet } from "@/lib/arena-draft";
 import type { ArenaCombatRuntime, ArenaMascot } from "@/lib/arena-z";
 import { draftAbilitySlug } from "@/lib/abilities/draft";
 import { DraftRoomClient } from "./room-client";
