@@ -15,6 +15,7 @@ import { RunawayRevertPanel } from "./_components/runaway-revert-panel";
 import { GamemasterPanel } from "./_components/gamemaster-panel";
 import { TimedGameBonusPanel } from "./_components/timed-game-bonus-panel";
 import { CombatTestPanel } from "./_components/combat-test-panel";
+import { TrainingMilestonesLab } from "./_components/training-milestones-lab";
 import { JohtoAdminControls } from "../combates/raid-johto/_components/johto-admin-controls";
 import { getJohtoAdminSummary } from "@/lib/johto-raid";
 import { getJohtoInvitationPreviewCandidates } from "@/lib/johto-invitation";
@@ -425,6 +426,7 @@ export default async function AdminPage() {
     { id: "testes", label: "Testes e simulações", content: (
       <>
       <CombatTestPanel />
+      <TrainingMilestonesLab />
       <div className="rounded-2xl border border-border bg-slate-900/40 p-4 space-y-4">
         <div>
           <h2 className="mb-2 text-sm font-semibold text-slate-200">🎂 Aniversário</h2>
