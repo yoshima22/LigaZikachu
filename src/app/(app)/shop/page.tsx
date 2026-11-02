@@ -20,6 +20,7 @@ import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
 import {suggestedLigaCashPrice} from "@/lib/liga-cash-wallet";
+import { ensureTrainingMilestoneShopItems } from "@/lib/training-milestone-shop";
 
 export const dynamic = "force-dynamic";
 
@@ -99,6 +100,7 @@ export default async function ShopPage() {
   const platformAdmin = isAdmin(session.user.role);
   await ensureWeeklyLeagueItems();
   await ensureCoreMascotItems();
+  await ensureTrainingMilestoneShopItems(true);
 
   const player = await prisma.player.findUnique({
     where: { userId: session.user.id },

@@ -27,6 +27,9 @@ import { generationForEggPokemon, getEggCandidatesForGeneration, getInitialPokem
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
+import { ensureTrainingMilestoneShopItems } from "@/lib/training-milestone-shop";
+import { TRAINING_MILESTONE_ITEMS } from "@/lib/training-catalog";
+import { recordTrainingJourneyProgress } from "@/lib/training-journeys";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
@@ -1412,6 +1415,7 @@ export type ExpeditionReward =
   | { type: "COINS";     amount: number; luckNote?: string }
   | { type: "BUFF_ITEM"; shopItemType: string; quantity?: number; luckNote?: string }
   | { type: "MEGA_STONE"; shopItemType: string }
+  | { type: "TRAINING_MILESTONE"; shopItemType: string }
   | { type: "TRAINING";  exp: number; durationLabel: string; luckyEggPct?: number }  // retorna só EXP, nunca itens
   | { type: "VACATION";  expBonus: number; gotEgg: boolean; eggType?: "RARE" | "COMMON" }
   | { type: "NOTHING" };
@@ -1583,7 +1587,9 @@ async function rollItemExpeditionReward(
   const hasLuckBuff = !!luckBuff;
   const finish = (reward: ExpeditionReward) => hasLuckBuff ? applyLuckBonus(reward, durationKey, luck) : reward;
   if (roll < odds.megaStone) return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
-  const labEggLimit = odds.megaStone + odds.labEgg;
+  const trainingMilestoneLimit = odds.megaStone + odds.trainingMilestone;
+  if (roll < trainingMilestoneLimit) return { type: "TRAINING_MILESTONE", shopItemType: randomFrom(TRAINING_MILESTONE_ITEMS).type };
+  const labEggLimit = trainingMilestoneLimit + odds.labEgg;
   const eggLimit = odds.megaStone + odds.egg + picnicBonusPct;
   const sweetLimit = eggLimit + odds.sweet;
   const foodLimit = sweetLimit + Math.max(0, odds.food - picnicBonusPct * 2);
@@ -1667,6 +1673,10 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
           rewardLabel: label,
         }
       };
+    }
+    case "TRAINING_MILESTONE": {
+      const label = TRAINING_MILESTONE_ITEMS.find((item) => item.type === reward.shopItemType)?.name ?? "Marco de Postura";
+      return { title: `${label} encontrado!`, description: "Seu mascote encontrou um Marco de Postura raro em uma expedição de itens de 6 horas.", payload: { rewardKind: "MASCOT_BUFF", buffType: reward.shopItemType, quantity: 1, rewardLabel: label } };
     }
     case "VACATION":
       return null;
@@ -1759,6 +1769,7 @@ export async function startExpedition(
   // Elétrico: reduz um pouco mais o tempo de expedições curtas (30min e 1h).
   const electricTimeReductionPct = mascot.personality === "ELECTRIC" && (durationKey === "30min" || durationKey === "1h") ? 8 : 0;
   const bondBonus = await getBondsV2ExpeditionBonus(mascot.id, mode);
+  const activeJourney = await prisma.mascotTrainingJourney.findFirst({ where: { mascotId, status: "ACTIVE" }, select: { id: true } });
   const bondTimeReductionPct = bondBonus.timeReductionPct;
   const effectiveDurationMs = Math.round(agilityAdjustedDurationMs * (1 - picnicTimeReductionPct / 100) * (1 - electricTimeReductionPct / 100) * (1 - bondTimeReductionPct / 100));
   const finishAt = new Date(Date.now() + effectiveDurationMs);
@@ -1782,6 +1793,7 @@ export async function startExpedition(
           agilityRollBucket: rollBucket,
           picnicActive: !!picnicRewardBuff,
           eventExpBonusPct,
+          trainingJourneyId: activeJourney?.id ?? null,
         },
       },
     });
@@ -1997,6 +2009,7 @@ export async function claimExpedition(
   if (reward.type === "MEGA_STONE") {
     await ensureMegaStoneShopItems(false);
   }
+  if (reward.type === "TRAINING_MILESTONE") await ensureTrainingMilestoneShopItems(true);
   const gift = mode === "TRAINING" ? null : await describeExpeditionReward(reward);
   // Preguiçoso (qualquer expedição) e Brincalhão (Padrão): o ovo recebido nasce
   // com +1 ponto percentual na chance de raridade do mascote ao chocar.
@@ -2012,6 +2025,9 @@ export async function claimExpedition(
   };
   if (reward.type === "MEGA_STONE") {
     storedRewardJson.megaStoneDropChance = getMegaStoneExpeditionChance(expedition.mascot.statInstinct) / 100;
+  }
+  if (reward.type === "TRAINING_MILESTONE") {
+    storedRewardJson.trainingMilestoneDropChance = getExpeditionOdds({ duration: durationKey, mode: "ITEMS", level: expedition.mascot.level, instinct: expedition.mascot.statInstinct }).trainingMilestone / 100;
   }
 
   const expGrants: Array<{ id: string; playerId: string; key: string; mascotId: string; amount: number; source: string; ignoreExpBoost?: boolean }> = [];
@@ -2072,6 +2088,8 @@ export async function claimExpedition(
         }
       });
     }
+    const trainingJourneyId = typeof stored.trainingJourneyId === "string" ? stored.trainingJourneyId : null;
+    if (trainingJourneyId) await recordTrainingJourneyProgress(tx, { journeyId: trainingJourneyId, mascotId: expedition.mascotId, objectiveType: "EXPEDITIONS", amount: 1 });
 
     // ── Bônus e presentes dos aliados ──────────────────────────────────────
     for (const rel of friends) {

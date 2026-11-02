@@ -110,6 +110,8 @@ async function fetchMascotPageData(playerId: string) {
           select: { id: true, startedAt: true, finishAt: true, status: true, rewardJson: true }
         },
         routine: { select: { status: true, locationType: true } },
+        trainingJourneys: { where: { status: "ACTIVE" }, select: { id: true, stanceKey: true, startedAt: true, milestones: { select: { milestoneKey: true, target: true, value: true, detailsJson: true } } }, take: 1 },
+        stanceUnlocks: { select: { stanceKey: true } },
       },
       // Equipado sempre primeiro; depois favoritos na ordem manual (favoriteOrder).
       orderBy: [{ isEquipped: "desc" }, { isFavorite: "desc" }, { favoriteOrder: "asc" }, { level: "desc" }, { id: "asc" }],
@@ -416,6 +418,11 @@ export default async function MascotesPage() {
     ivScore: m.ivScore,
     performanceTag: m.performanceTag,
     preferredCombatRole: m.preferredCombatRole,
+    unlockedStances: m.stanceUnlocks.map((unlock) => unlock.stanceKey),
+    trainingJourney: m.trainingJourneys[0] ? {
+      id: m.trainingJourneys[0].id, stanceKey: m.trainingJourneys[0].stanceKey, startedAt: m.trainingJourneys[0].startedAt,
+      milestones: m.trainingJourneys[0].milestones.map((milestone) => ({ milestoneKey: milestone.milestoneKey, target: milestone.target, value: milestone.value, details: milestone.detailsJson })),
+    } : null,
     activeBuffs: buffsByMascotId.get(m.id) ?? [],
     expeditions: m.expeditions.map(e => ({
       id: e.id, startedAt: e.startedAt, finishAt: e.finishAt, status: e.status,

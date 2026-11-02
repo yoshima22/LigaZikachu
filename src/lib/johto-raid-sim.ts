@@ -156,10 +156,11 @@ export function computeLeaderRewards(stats: LeaderStatRow[], finalBlowPlayerId: 
 
 // ── Combate ──────────────────────────────────────────────────────────────────
 
-const ROLE_MAIN_STATS: Record<CombatRole, Array<"force" | "agility" | "instinct" | "vitality" | "charisma">> = {
+const ROLE_MAIN_STATS: Record<string, Array<"force" | "agility" | "instinct" | "vitality" | "charisma">> = {
   ATTACKER: ["force"], FLANK: ["agility"], DEFENDER: ["vitality"], HEALER: ["charisma"], GUARDIAN: ["vitality", "charisma"],
   OPPORTUNIST: ["instinct"], DUELIST: ["force", "instinct"], ENCOURAGER: ["charisma"], SCOUT: ["agility", "instinct"],
   SABOTEUR: ["instinct", "agility"], PROVOKER: ["charisma", "instinct"], SPECIALIST: ["force"], SURVIVOR: ["vitality"],
+  EXECUTOR: ["force", "agility"], COMMANDER: ["force", "charisma"], PURIFIER: ["agility", "charisma"], BLOODTHIRSTY: ["force", "vitality"], ARTILLERY: ["force", "agility"], RETRIBUTOR: ["vitality", "force"], CORROSIVE: ["force", "instinct"], STRATEGIST: ["instinct", "agility"], UNSHAKABLE: ["vitality", "instinct"], FORTRESS: ["vitality", "instinct"], ACCUMULATOR: ["force", "agility"], EXPLOSIVE: ["agility", "vitality"], TRAPPER: ["instinct", "agility"],
 };
 
 

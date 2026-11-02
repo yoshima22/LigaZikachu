@@ -34,6 +34,7 @@ import {
   getSurvivorReduction,
   type CombatRole,
 } from "@/lib/combat-roles";
+import { isTrainingStance } from "@/lib/training-journey-state";
 import {
   personalityOffenseMult,
   personalityDefenseMult,
@@ -2471,6 +2472,10 @@ export async function setArenaTeamMemberCombatRole(
     throw new Error("Equipe nao encontrada.");
   if (team.status !== "ACTIVE")
     throw new Error("Apenas equipes ativas podem alterar postura.");
+  if (isTrainingStance(role)) {
+    const unlocked = await prisma.mascotStanceUnlock.findFirst({ where: { mascotId, stanceKey: role } });
+    if (!unlocked) throw new Error("Esta postura ainda está bloqueada para este mascote.");
+  }
 
   const updated = await prisma.arenaTeamMember.updateMany({
     where: { teamId, mascotId },

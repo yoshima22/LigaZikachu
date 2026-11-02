@@ -20,7 +20,7 @@ import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getEggPityProgress } from "@/lib/egg-pity";
 import type { ExpeditionMode } from "@/lib/mascot-data";
-import { EGG_SHINY_CHANCE, feedBaseExp, getMascotRarity, getMascotStatusGrowthMultiplier, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, PERSONALITIES, feedBaseExp, getMascotRarity, getMascotStatusGrowthMultiplier, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
   eligibleFormVariants,
@@ -32,6 +32,8 @@ import {
 import { getActiveEggRarityBonusPct } from "@/lib/timed-game-bonuses";
 import { normalizePerformanceTag } from "@/lib/mascot-performance";
 import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
+import { activateTrainingJourney, cancelTrainingJourney } from "@/lib/training-journeys";
+import { isTrainingStance } from "@/lib/training-journey-state";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { recordPlayerActivity } from "@/lib/player-activity";
@@ -72,6 +74,10 @@ export async function setMascotPreferredCombatRoleAction(mascotId: string, role:
   if (!player) return { ok: false, error: "Perfil não encontrado." };
   const trimmed = (role ?? "").trim().toUpperCase();
   const normalized = COMBAT_ROLE_VALUES.includes(trimmed as (typeof COMBAT_ROLE_VALUES)[number]) ? trimmed : null;
+  if (normalized && isTrainingStance(normalized)) {
+    const unlocked = await prisma.mascotStanceUnlock.findFirst({ where: { mascotId, stanceKey: normalized } });
+    if (!unlocked) return { ok: false, error: "Esta postura ainda está bloqueada para este mascote. Conclua a Jornada de Postura." };
+  }
   const res = await prisma.mascot.updateMany({
     where: { id: mascotId, playerId: player.id },
     data: { preferredCombatRole: normalized },
@@ -79,6 +85,36 @@ export async function setMascotPreferredCombatRoleAction(mascotId: string, role:
   if (res.count === 0) return { ok: false, error: "Mascote não encontrado." };
   revalidate(player.id);
   return { ok: true, role: normalized };
+}
+
+/** Consome o Marco após confirmação explícita e inicia (ou substitui) a jornada. */
+export async function activateMascotTrainingJourneyAction(mascotId: string, itemId: string, replaceActive = false) {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { ok: false, error: "Perfil não encontrado." };
+  try {
+    const result = await prisma.$transaction((tx) => activateTrainingJourney(tx, { playerId: player.id, mascotId, itemId, replaceActive }));
+    if (result.needsReplacementConfirmation) return { ok: false, needsReplacementConfirmation: true, error: "Este mascote já possui uma jornada ativa. Ativar outro Marco consumirá o novo item e apagará o progresso atual." };
+    revalidate(player.id);
+    return { ok: true, journeyId: result.journey.id };
+  } catch (error) {
+    const code = error instanceof Error ? error.message : "";
+    const messages: Record<string, string> = {
+      MASCOT_NOT_FOUND: "Mascote não encontrado.", ITEM_MISMATCH: "Este item não é um Marco de Postura válido.", ITEM_UNAVAILABLE: "Você não possui um Marco negociável disponível.",
+    };
+    return { ok: false, error: messages[code] ?? "Não foi possível ativar a jornada." };
+  }
+}
+
+export async function cancelMascotTrainingJourneyAction(mascotId: string) {
+  const user = await getSessionUser();
+  if (!user) return { ok: false, error: "Não autenticado." };
+  const player = await getSessionPlayer(user.id);
+  if (!player) return { ok: false, error: "Perfil não encontrado." };
+  await prisma.$transaction((tx) => cancelTrainingJourney(tx, { playerId: player.id, mascotId }));
+  revalidate(player.id);
+  return { ok: true };
 }
 
 // Reordena a Equipe Favorita movendo um mascote para cima/baixo. O equipado é
@@ -1424,8 +1460,8 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 0, label: "Bala de Mel — felicidade máxima instantânea" },
       // 🍀 Amuleto da Sorte: chance dobrada de loot raro em expedições por 6h
       MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte — loot raro dobrado por 6h" },
-      // 💧 Água Fresca: remove humor negativo, +20 de felicidade e protege contra doenças por 24h
-      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 24, label: "Água Fresca — humor renovado e proteção contra doenças por 24h" },
+      // 💧 Água Fresca: sorteia uma nova personalidade, sempre diferente da atual
+      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Fresca — nova personalidade" },
       ANTIDOTE:          { type: "ANTIDOTE", hours: 0, label: "Antídoto — cura a doença imediatamente" },
       // Age na conta inteira: o mascote selecionado é só o ponto de uso.
       FIRST_AID_KIT:     { type: "FIRST_AID_KIT", hours: 0, label: "Kit de Primeiros Socorros — cura a doença de todos os mascotes" },
@@ -1491,8 +1527,12 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
           });
         }
       } else if (config.type === "MOOD_RESET") {
-        // Efeito imediato — remove humores negativos
-        await tx.mascot.update({ where: { id: mascotId }, data: { mood: "NEUTRAL", happiness: Math.min(100, mascot.happiness + 20) } });
+        // Nova personalidade aleatória, nunca igual à ativa. Atributos e nível não mudam.
+        if (mascot.arenaState !== "FREE") throw new Error("Mascote deve estar livre para usar a Água Fresca.");
+        const options = PERSONALITIES.filter((p) => p !== mascot.personality);
+        const personality = options[Math.floor(Math.random() * options.length)];
+        await tx.mascot.update({ where: { id: mascotId }, data: { personality } });
+        await tx.mascotEvent.create({ data: { mascotId, emoji: "💧", description: `Água Fresca usada! A personalidade mudou de ${PERSONALITY_LABEL[mascot.personality as keyof typeof PERSONALITY_LABEL] ?? mascot.personality} para ${PERSONALITY_LABEL[personality]}.` } });
       } else if (config.type === "HAPPINESS") {
         await tx.mascot.update({ where: { id: mascotId }, data: { happiness: 100, mood: "HAPPY" } });
       } else if (config.type === "STAT_BOOST") {
@@ -1509,9 +1549,9 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       // EXP_BOOST substitui qualquer buff ativo do mesmo tipo (sem acúmulo)
       // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
       if (config.hours > 0 && config.type !== "ANTIDOTE" && config.type !== "FIRST_AID_KIT") {
-        if (config.type === "EXP_BOOST" || config.type === "MOOD_RESET") {
-          // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas nem de Água Fresca)
-          await tx.mascotBuff.deleteMany({ where: { mascotId, type: config.type } });
+        if (config.type === "EXP_BOOST") {
+          // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas)
+          await tx.mascotBuff.deleteMany({ where: { mascotId, type: "EXP_BOOST" } });
         }
         await tx.mascotBuff.create({ data: { mascotId, type: config.type, expiresAt } });
       } else if (config.type === "STAT_BOOST") {

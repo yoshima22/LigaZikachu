@@ -146,7 +146,7 @@ const PERCENT_EVENTS = new Set([
   "SCOUT_BONUS",
   "MITIGATE",
 ]);
-const TACTICAL_ROLE_DETAILS: Record<CombatRole, string> = {
+const TACTICAL_ROLE_DETAILS: Record<string, string> = {
   DEFENDER:
     "Protege aliados a até 2 casas, redireciona uma vez por rodada e recebe redução baseada em Vitalidade. Preparar defesa aumenta a chance e reduz 45% do próximo ataque.",
   ATTACKER:

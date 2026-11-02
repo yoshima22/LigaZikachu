@@ -5,6 +5,7 @@ import { toast } from "sonner";
 import { COMBAT_ROLE_OPTIONS, getCombatRoleLabel, recommendCombatRole } from "@/lib/combat-roles";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { setMascotPreferredCombatRoleAction } from "../actions";
+import { isTrainingStance } from "@/lib/training-journey-state";
 
 type Stats = {
   statForce: number; statAgility: number; statVitality: number; statInstinct: number; statCharisma: number;
@@ -14,10 +15,12 @@ export function PreferredRolePicker({
   mascotId,
   initial,
   stats,
+  unlockedStances = [],
 }: {
   mascotId: string;
   initial: string | null | undefined;
   stats: Stats;
+  unlockedStances?: string[];
 }) {
   const [value, setValue] = useState<string>(initial ?? "");
   const [pending, startTransition] = useTransition();
@@ -61,7 +64,7 @@ export function PreferredRolePicker({
         >
           <option value="">✨ Auto — {getCombatRoleLabel(recommended)}</option>
           {COMBAT_ROLE_OPTIONS.map((role) => (
-            <option key={role.value} value={role.value}>{role.label}</option>
+            <option key={role.value} value={role.value} disabled={isTrainingStance(role.value) && !unlockedStances.includes(role.value)}>{role.label}{isTrainingStance(role.value) && !unlockedStances.includes(role.value) ? " 🔒" : ""}</option>
           ))}
         </select>
       </div>

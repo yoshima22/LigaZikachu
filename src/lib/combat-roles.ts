@@ -12,6 +12,8 @@ export const COMBAT_ROLE_VALUES = [
   "PROVOKER",
   "SPECIALIST",
   "SURVIVOR",
+  "EXECUTOR", "COMMANDER", "PURIFIER", "BLOODTHIRSTY", "ARTILLERY", "RETRIBUTOR",
+  "CORROSIVE", "STRATEGIST", "UNSHAKABLE", "FORTRESS", "ACCUMULATOR", "EXPLOSIVE", "TRAPPER",
 ] as const;
 
 export type CombatRole = typeof COMBAT_ROLE_VALUES[number];
@@ -92,6 +94,9 @@ export const COMBAT_ROLE_LABELS: Record<CombatRole, string> = {
   PROVOKER: "Provocador",
   SPECIALIST: "Especialista",
   SURVIVOR: "Sobrevivente",
+  EXECUTOR: "Executor", COMMANDER: "Comandante", PURIFIER: "Purificador", BLOODTHIRSTY: "Sanguinário",
+  ARTILLERY: "Artilheiro", RETRIBUTOR: "Revidador", CORROSIVE: "Corrosivo", STRATEGIST: "Estrategista",
+  UNSHAKABLE: "Inabalável", FORTRESS: "Fortaleza", ACCUMULATOR: "Acumulador", EXPLOSIVE: "Explosivo", TRAPPER: "Armadilheiro",
 };
 
 export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
@@ -108,6 +113,19 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   PROVOKER: "Atributos diretos: Carisma e Instinto. Pela média dos dois até 250, escala de 20% a 55% de chance de redirecionar ataques, reduzindo o golpe em 8%. Causa 8% menos dano.",
   SPECIALIST: "Atributo direto: o maior entre Força, Agilidade, Instinto, Vitalidade e Carisma. Recebe de +6% a +20% de dano.",
   SURVIVOR: "Atributos diretos: Vitalidade e Instinto. Reduz até 15% do dano; abaixo de 30% de HP ganha +15% de dano e mais 25% de redução, além de sobreviver uma vez com 1 HP.",
+  EXECUTOR: "Força e Agilidade. Uma vez por round, finaliza alvo com 5–20% de HP; sobrevivência do alvo ainda é verificada.",
+  COMMANDER: "Força e Carisma. O primeiro K.O. organiza um único foco dos aliados até o fim do próximo round, sem alterar a iniciativa.",
+  PURIFIER: "Agilidade e Carisma. A cada dois rounds remove até duas reduções de Oportunista/Estrategista do aliado mais ferido e converte em Agilidade própria.",
+  BLOODTHIRSTY: "Força e Vitalidade. Ataques diretos recuperam 5–20% do dano efetivo, até 8% da vida máxima por round.",
+  ARTILLERY: "Força e Agilidade. O primeiro ataque direto do round causa 15–25% do dano final em outro inimigo vivo de menor HP.",
+  RETRIBUTOR: "Vitalidade e Força. Ao sobreviver a dano acumulado de 15% da vida no round, revida uma vez no primeiro agressor.",
+  CORROSIVE: "Força e Instinto. Ataques diretos aplicam Ferida, reduzindo cura efetiva em 30–60% até o fim do próximo round.",
+  STRATEGIST: "Instinto e Agilidade. Marca o primeiro alvo do round; o primeiro aliado diferente que o acerta ganha 4–10% de Agilidade.",
+  UNSHAKABLE: "Vitalidade e Instinto. Após cada ataque direto próprio, renova escudo de 5% da vida máxima.",
+  FORTRESS: "Vitalidade e Instinto. A cada golpe direto recebido ganha 2–4% de Vitalidade e Instinto e perde a mesma Força, até 20%.",
+  ACCUMULATOR: "Força e Agilidade. Ao sobreviver após agir em um round ganha carga; três cargas fortalecem o próximo ataque direto em 15–35%.",
+  EXPLOSIVE: "Agilidade e Vitalidade. No terceiro ataque direto mira o inimigo mais ágil, soma 50% da vida atual ao dano e se sacrifica.",
+  TRAPPER: "Instinto e Agilidade. Nos rounds 3 e 5 desativa ativações bônus de postura inimigas durante aquele round.",
 };
 
 export const COMBAT_ROLE_OPTIONS = COMBAT_ROLE_VALUES.map((value) => ({
@@ -115,6 +133,14 @@ export const COMBAT_ROLE_OPTIONS = COMBAT_ROLE_VALUES.map((value) => ({
   label: COMBAT_ROLE_LABELS[value],
   description: COMBAT_ROLE_DESCRIPTIONS[value],
 }));
+
+export function getExecutorThreshold(force: number, agility: number) { return scaleCombatRoleEffect((force + agility) / 2, 0.05, 0.20); }
+export function getBloodthirstyLifeSteal(force: number, vitality: number) { return scaleCombatRoleEffect((force + vitality) / 2, 0.05, 0.20); }
+export function getArtillerySplashPct(force: number, agility: number) { return scaleCombatRoleEffect((force + agility) / 2, 0.15, 0.25); }
+export function getCorrosiveWoundPct(force: number, instinct: number) { return scaleCombatRoleEffect((force + instinct) / 2, 0.30, 0.60); }
+export function getStrategistAgilityPct(instinct: number, agility: number) { return scaleCombatRoleEffect((instinct + agility) / 2, 0.04, 0.10); }
+export function getAccumulatorDamagePct(force: number, agility: number) { return scaleCombatRoleEffect((force + agility) / 2, 0.15, 0.35); }
+export function getFortressStatPct(vitality: number, instinct: number) { return scaleCombatRoleEffect((vitality + instinct) / 2, 0.02, 0.04); }
 
 export function normalizeCombatRole(value: unknown): CombatRole {
   return COMBAT_ROLE_VALUES.includes(value as CombatRole) ? (value as CombatRole) : "ATTACKER";

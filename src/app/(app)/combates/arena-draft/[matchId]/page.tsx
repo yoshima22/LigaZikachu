@@ -140,7 +140,7 @@ export default async function DraftRoomPage({
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
           isMega: p.isMega,
           status,
-          posture: revealBuild ? (ownPostures[p.id] ?? p.posture) : "ATTACKER",
+          posture: (revealBuild ? (ownPostures[p.id] ?? p.posture) : "ATTACKER") as ArenaDraftPet["posture"],
           stats: revealBuild ? p.stats : null,
           hp: battle?.runtime?.hp[p.id] ?? null,
           maxHp: Math.max(

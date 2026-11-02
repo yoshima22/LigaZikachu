@@ -1408,7 +1408,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
 
   const mascotOrder = new Map(uniqueMascotIds.map((id, index) => [id, index]));
   const orderedMascots = [...mascots].sort((a, b) => (mascotOrder.get(a.id) ?? 999) - (mascotOrder.get(b.id) ?? 999));
-  const roleDamageMultiplier: Record<CombatRole, number> = {
+  const roleDamageMultiplier: Record<string, number> = {
     ATTACKER: 1.12,
     FLANK: 1.08,
     OPPORTUNIST: 1.06,
@@ -1423,7 +1423,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
     SURVIVOR: 0.98,
     DEFENDER: 0.9,
   };
-  const roleDefenseMultiplier: Record<CombatRole, number> = {
+  const roleDefenseMultiplier: Record<string, number> = {
     DEFENDER: 0.74,
     GUARDIAN: 0.8,
     SURVIVOR: 0.82,
@@ -1480,7 +1480,7 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
       const critChance = Math.min(38, 4 + Math.floor(mascot.statInstinct / 8) + (mascot.combatRole === "OPPORTUNIST" ? 10 : 0));
       const crit = randomInt(100) < critChance ? (mascot.combatRole === "DUELIST" ? 1.7 : 1.55) : 1;
       const lowHpMultiplier = mascot.hp / mascot.maxHp <= 0.3 && mascot.combatRole === "SURVIVOR" ? 1.15 : 1;
-      const roleAttributeMultiplier = {
+      const roleAttributeMultiplier: Record<string, number> = {
         ATTACKER: 1 + getAttackerDamageBonus(mascot.statForce),
         FLANK: 1 + getFlankDamageBonus(mascot.statAgility),
         OPPORTUNIST: 1 + scaleCombatRoleEffect(mascot.statInstinct, 0.05, 0.28),
@@ -1494,7 +1494,8 @@ export async function runOrderRaidBattle(userId: string, selectedMascotIds: stri
         SPECIALIST: 1 + getSpecialistDamageBonus(Math.max(mascot.statForce, mascot.statAgility, mascot.statInstinct, mascot.statVitality, mascot.statCharisma)),
         SURVIVOR: lowHpMultiplier,
         DEFENDER: 0.9,
-      } satisfies Record<CombatRole, number>;
+        EXECUTOR: 1, COMMANDER: 1, PURIFIER: 0.9, BLOODTHIRSTY: 1, ARTILLERY: 1, RETRIBUTOR: 0.95, CORROSIVE: 1, STRATEGIST: 0.95, UNSHAKABLE: 0.9, FORTRESS: 0.88, ACCUMULATOR: 1, EXPLOSIVE: 1, TRAPPER: 0.92,
+      };
       const activeTeamDamageAura = teamDamageAura();
       const damage = Math.max(1, Math.round(mascot.power * variance * crit * roleDamageMultiplier[mascot.combatRole] * roleAttributeMultiplier[mascot.combatRole] * (1 + activeTeamDamageAura)));
       mascot.damage += damage;

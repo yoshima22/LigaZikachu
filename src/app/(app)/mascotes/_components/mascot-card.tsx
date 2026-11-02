@@ -100,6 +100,8 @@ interface MascotData {
   ivScore?: number | null;
   performanceTag?: string | null;
   preferredCombatRole?: string | null;
+  unlockedStances?: string[];
+  trainingJourney?: { id: string; stanceKey: string; startedAt: Date; milestones: Array<{ milestoneKey: string; target: number; value: number; details: unknown }> } | null;
   activeBuffs: { type: string; expiresAt: Date }[];
   relations?: MascotRelation[];
   expeditions: Expedition[];
@@ -327,7 +329,6 @@ export interface ExpeditionRewardDisplay {
 const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   EXP_BOOST:       { emoji: "⚡",    label: "Boost de EXP" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Boost de Sorte" },
-  MOOD_RESET:      { emoji: "💧",   label: "Água Fresca" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika" },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política de Fraqueza" },
@@ -399,7 +400,6 @@ export function rewardToDisplay(reward: { type: string; eggType?: string | null;
 const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string; permanent?: boolean; areas?: string }> = {
   EXP_BOOST:       { emoji: "⚡",   label: "EXP +25%",       color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Sorte",           color: "border-green-500/40 bg-green-500/10 text-green-300" },
-  MOOD_RESET:      { emoji: "💧",   label: "Refrescado (sem doenças)", color: "border-sky-500/40 bg-sky-500/10 text-sky-300" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Escudo (proteção)", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },
@@ -1167,12 +1167,19 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <PreferredRolePicker
                 mascotId={mascot.id}
                 initial={mascot.preferredCombatRole}
+                unlockedStances={mascot.unlockedStances ?? []}
                 stats={{
                   statForce: mascot.statForce, statAgility: mascot.statAgility, statVitality: mascot.statVitality,
                   statInstinct: mascot.statInstinct, statCharisma: mascot.statCharisma,
                 }}
               />
             </div>
+            {mascot.trainingJourney && (
+              <div className="mt-1 rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
+                <p className="font-bold">📜 Jornada ativa — {mascot.trainingJourney.stanceKey}</p>
+                <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos · selecione o card para acompanhar.</p>
+              </div>
+            )}
             {mascot.hiddenAbilityUnlocked !== undefined && (
               <MascotAbilityPanel
                 mascotId={mascot.id}

@@ -1879,6 +1879,19 @@ enum ShopItemType {
   MASCOT_BUFF_HAPPY
   MASCOT_BUFF_LUCK
   MASCOT_BUFF_MOOD
+  TRAINING_MILESTONE_EXECUTOR
+  TRAINING_MILESTONE_COMMANDER
+  TRAINING_MILESTONE_PURIFIER
+  TRAINING_MILESTONE_BLOODTHIRSTY
+  TRAINING_MILESTONE_ARTILLERY
+  TRAINING_MILESTONE_RETRIBUTOR
+  TRAINING_MILESTONE_CORROSIVE
+  TRAINING_MILESTONE_STRATEGIST
+  TRAINING_MILESTONE_UNSHAKABLE
+  TRAINING_MILESTONE_FORTRESS
+  TRAINING_MILESTONE_ACCUMULATOR
+  TRAINING_MILESTONE_EXPLOSIVE
+  TRAINING_MILESTONE_TRAPPER
   ANTIDOTE
   LUCKY_EGG
   WEAKNESS_POLICY
@@ -2119,6 +2132,26 @@ enum MascotCombatRole {
   PROVOKER
   SPECIALIST
   SURVIVOR
+  EXECUTOR
+  COMMANDER
+  PURIFIER
+  BLOODTHIRSTY
+  ARTILLERY
+  RETRIBUTOR
+  CORROSIVE
+  STRATEGIST
+  UNSHAKABLE
+  FORTRESS
+  ACCUMULATOR
+  EXPLOSIVE
+  TRAPPER
+}
+
+enum MascotTrainingJourneyStatus {
+  ACTIVE
+  COMPLETED
+  CANCELED
+  CANCELED_REPLACED
 }
 
 enum WeeklyLeagueStatus {
@@ -2227,6 +2260,7 @@ model ShopItem {
   syncChallengeConsumptions SyncChallengeEntry[]
   promotions                ShopPromotion[]
   promotionEntries          ShopPromotionItem[]
+  trainingJourneys          MascotTrainingJourney[] @relation("TrainingSourceItem")
 
   @@map("shop_items")
 }
@@ -2815,6 +2849,8 @@ model Mascot {
   syncLineups               SyncEventLineup[]         @relation("SyncEventLineupMascot")
   traceRoomsAsHider         TraceRoom[]               @relation("TraceRoomHiderMascot")
   traceRoomsAsHunter        TraceRoom[]               @relation("TraceRoomHunterMascot")
+  trainingJourneys          MascotTrainingJourney[]
+  stanceUnlocks             MascotStanceUnlock[]
 
   @@index([playerId])
   @@index([primordialBoundPlayerId])
@@ -5322,4 +5358,48 @@ model MascotOccurrence {
   @@index([mascotId, status])
   @@index([batchId])
   @@map("mascot_occurrences")
+}
+
+model MascotTrainingJourney {
+  id           String                       @id @default(cuid())
+  mascotId     String
+  stanceKey    String
+  status       MascotTrainingJourneyStatus @default(ACTIVE)
+  catalogVersion Int                        @default(1)
+  seed         Int
+  sourceItemId String
+  startedAt    DateTime                     @default(now())
+  cancelledAt  DateTime?
+  completedAt  DateTime?
+  mascot       Mascot                       @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  sourceItem   ShopItem                     @relation("TrainingSourceItem", fields: [sourceItemId], references: [id], onDelete: Restrict)
+  milestones   MascotTrainingMilestoneProgress[]
+  @@index([mascotId, status])
+  @@index([stanceKey, status])
+  @@map("mascot_training_journeys")
+}
+
+model MascotTrainingMilestoneProgress {
+  id          String                 @id @default(cuid())
+  journeyId   String
+  milestoneKey String
+  target      Int
+  value       Int                    @default(0)
+  detailsJson Json?
+  completedAt DateTime?
+  journey     MascotTrainingJourney  @relation(fields: [journeyId], references: [id], onDelete: Cascade)
+  @@unique([journeyId, milestoneKey])
+  @@map("mascot_training_milestones")
+}
+
+model MascotStanceUnlock {
+  id        String   @id @default(cuid())
+  mascotId  String
+  stanceKey String
+  journeyId String
+  unlockedAt DateTime @default(now())
+  mascot    Mascot    @relation(fields: [mascotId], references: [id], onDelete: Cascade)
+  @@unique([mascotId, stanceKey])
+  @@index([mascotId])
+  @@map("mascot_stance_unlocks")
 }

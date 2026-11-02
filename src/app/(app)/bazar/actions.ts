@@ -6,7 +6,7 @@ import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { getMascotRarity, getPokemonName, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
-import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES, TRAINING_MILESTONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { canonicalizeReservedInventoryOffer } from "@/lib/bazar-offer-items";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
@@ -242,6 +242,7 @@ function sanitizePayloadImageUrl(url: string | null | undefined): string | null 
 const MIAUVADAO_ELIGIBLE_TYPES = [
   // TMs de habilidade têm vitrine própria (TMs da Semana) e não entram nos slots padrão.
   ...MASCOT_SHOP_ITEM_TYPES.filter((type) => type !== "ABILITY_TM"),
+  ...TRAINING_MILESTONE_SHOP_ITEM_TYPES,
   "ZIKALOOT_TICKET",
   // Pedras de mega custom (liberadas pelo toggle do admin) também entram no pool.
   ...CUSTOM_MEGA_POKEMON_IDS.map((id) => `MEGA_STONE_CUSTOM_${id}`),
@@ -288,14 +289,18 @@ async function rollMiauvadaoOffers(
   const chosen: typeof shopItems = [];
   let hasMegaStone = false;
   let hasAbilityTm = false;
+  let hasTrainingMilestone = false;
   for (const item of shuffled) {
     const megaStone = isMegaStoneType(item.type);
     const abilityTm = item.type === "ABILITY_TM";
+    const trainingMilestone = item.type.startsWith("TRAINING_MILESTONE_");
     if (megaStone && hasMegaStone) continue;
     if (abilityTm && hasAbilityTm) continue; // no máximo 1 TM por rotação
+    if (trainingMilestone && hasTrainingMilestone) continue; // no máximo 1 Marco nos slots públicos
     chosen.push(item);
     if (megaStone) hasMegaStone = true;
     if (abilityTm) hasAbilityTm = true;
+    if (trainingMilestone) hasTrainingMilestone = true;
     if (chosen.length === 3) break;
   }
 
@@ -3079,9 +3084,11 @@ export async function refreshMiauvadaoOfferSlot(offerIndex: number): Promise<{ e
       const existingIds = new Set(offers.map((offer) => offer.shopItemId));
       const anotherMegaStoneExists = offers.some((offer, index) => index !== offerIndex && isMegaStoneType(offer.itemType));
       const anotherAbilityTmExists = offers.some((offer, index) => index !== offerIndex && offer.itemType === "ABILITY_TM");
+      const anotherTrainingMilestoneExists = offers.some((offer, index) => index !== offerIndex && offer.itemType.startsWith("TRAINING_MILESTONE_"));
       const eligibleCandidates = candidates.filter((offer) =>
         (!anotherMegaStoneExists || !isMegaStoneType(offer.itemType)) &&
-        (!anotherAbilityTmExists || offer.itemType !== "ABILITY_TM"));
+        (!anotherAbilityTmExists || offer.itemType !== "ABILITY_TM") &&
+        (!anotherTrainingMilestoneExists || !offer.itemType.startsWith("TRAINING_MILESTONE_")));
       const replacement = eligibleCandidates.find((offer) => !existingIds.has(offer.shopItemId)) ?? eligibleCandidates[0];
       if (!replacement) throw new Error("Nenhum item elegível para a troca.");
       const updatedOffers = [...offers];
@@ -3302,6 +3309,12 @@ async function assertMascotTradeableInBazar(
   }
   if (await isMascotLockedInWeeklyLeague(client, mascot.id, playerId)) {
     throw new Error(`${name} está escalado na Liga Semanal e não pode ser oferecido no Bazar.`);
+  }
+  const activeTrainingJourney = await client.mascotTrainingJourney.findFirst({
+    where: { mascotId: mascot.id, status: "ACTIVE" }, select: { id: true },
+  });
+  if (activeTrainingJourney) {
+    throw new Error(`${name} possui uma Jornada de Postura ativa. Cancele-a antes de negociar este mascote.`);
   }
 
   const [activeExpedition, activeArenaMember, activeRefugeRoutine] = await Promise.all([

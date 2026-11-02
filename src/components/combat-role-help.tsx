@@ -161,7 +161,7 @@ export function CombatRoleHelpButton({
 
         <p className="mt-4 text-xs leading-relaxed text-slate-300">{COMBAT_ROLE_DESCRIPTIONS[normalized]}</p>
         <div className="mt-4 space-y-2">
-          {roleNumbers(normalized, stats).map((line) => (
+          {(roleNumbers(normalized, stats) ?? [COMBAT_ROLE_DESCRIPTIONS[normalized]]).map((line) => (
             <div key={line} className="rounded-lg border border-slate-800 bg-slate-900/70 px-3 py-2 text-xs leading-relaxed text-slate-200">{line}</div>
           ))}
         </div>
