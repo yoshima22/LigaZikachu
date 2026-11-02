@@ -21,7 +21,7 @@ const ITEM_TYPES = [
   { value: "MASCOT_BUFF_STAT", label: "💊 Proteína Zika" },
   { value: "MASCOT_BUFF_HAPPY", label: "🍯 Bala de Mel" },
   { value: "MASCOT_BUFF_LUCK", label: "🍀 Amuleto da Sorte" },
-  { value: "MASCOT_BUFF_MOOD", label: "💧 Água Sagrada" },
+  { value: "MASCOT_BUFF_MOOD", label: "💧 Água Fresca" },
   ...MEGA_STONES.map((stone) => ({
     value: stone.type,
     label: `Mega: ${stone.stoneName} (${stone.compatiblePokemonName})`,

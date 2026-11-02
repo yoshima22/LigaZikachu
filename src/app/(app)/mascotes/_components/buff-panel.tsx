@@ -6,7 +6,7 @@ import { toast } from "sonner";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
 import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
-import { PERSONALITY_LABEL, shortMascotCode } from "@/lib/mascot-data";
+import { PERSONALITY_LABEL, getMascotStatusGrowthMultiplier, shortMascotCode } from "@/lib/mascot-data";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 
 // O id do card vinculado ("<itemId>~bound") vai inteiro para o servidor, que gasta a unidade vinculada.
@@ -17,7 +17,7 @@ interface BuffItem {
   /** Cópia vinculada à conta (id termina em "~bound"); nunca empilha com a comum. */
   bound?: boolean;
   description?: string; imageUrl?: string;
-  metadata?: { eggTier?: string; adminLabOriginOverride?: boolean; kind?: string; abilityKey?: string } | null;
+  metadata?: { eggTier?: string; adminLabOriginOverride?: boolean; commonSpeciesOnly?: boolean; kind?: string; abilityKey?: string } | null;
 }
 interface MascotOption {
   id: string; name: string; pokemonId: number; level: number; isEquipped: boolean; isFavorite: boolean;
@@ -231,6 +231,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (!isRainbowFeather) return true;
     if (mascot.arenaState && mascot.arenaState !== "FREE") return false;
     if (isAdminLabFeather) return !mascot.hatchedFromEggType && !mascot.hatchedFromEggOrigin;
+    if (selectedBuffItem?.metadata?.commonSpeciesOnly && getMascotStatusGrowthMultiplier(mascot.pokemonId) !== 1) return false;
     if (!featherTier) return true;
     return tierRank[featherTier] >= tierRank[getOriginTier(mascot)];
   };

@@ -123,7 +123,7 @@ const DEFAULT_MASCOT_SHOP_ITEMS: Array<{
   {
     type: ShopItemType.LUCKY_EGG,
     name: "Ovo da Sorte",
-    description: "+20% EXP na próxima expedição de treinamento. Recarrega em 24h por mascote.",
+    description: "Bônus de EXP sorteado (+20% a +150%) na próxima expedição de treinamento. Recarrega em 24h por mascote.",
     imageUrl: null,
     rarity: ShopItemRarity.UNCOMMON,
     price: 400,

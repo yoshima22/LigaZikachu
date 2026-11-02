@@ -106,7 +106,7 @@ export function ArenaTutorial({ tutorialClaimed }: { tutorialClaimed: boolean })
               </p>
             </div>
             <div className="rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 p-4 text-left space-y-1.5">
-              {["🍖 3× Comida de Mascote","💊 1× Proteína Zika","💧 1× Água Sagrada","💰 200 ZikaCoins","🥚 1× Ovo Comum","🥚 1× Ovo Raro","🥚 1× Ovo Especial"].map(item => (
+              {["🍖 3× Comida de Mascote","💊 1× Proteína Zika","💧 1× Água Fresca","💰 200 ZikaCoins","🥚 1× Ovo Comum","🥚 1× Ovo Raro","🥚 1× Ovo Especial"].map(item => (
                 <p key={item} className="text-xs text-slate-300">{item}</p>
               ))}
             </div>

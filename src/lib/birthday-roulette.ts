@@ -33,10 +33,10 @@ export function getBirthdayKit(id: string): BirthdayKit | undefined {
 
 // Nome exato dos itens de loja usados nos kits (para concessão server-side).
 export const FEATHER_NAME_BY_TIER: Record<string, string> = {
-  RARE: "Pena Arco-Íris Rara",
-  EVENT: "Pena Arco-Íris de Evento",
-  SPECIAL: "Pena Arco-Íris Especial",
-  LAB: "Pena Arco-Íris de Laboratório",
+  RARE: "Pena Arco-Íris Rara Potente",
+  EVENT: "Pena Arco-Íris de Evento Potente",
+  SPECIAL: "Pena Arco-Íris Especial Potente",
+  LAB: "Pena Arco-Íris de Laboratório Potente",
 };
 
 // Especificação de concessão de cada kit.

@@ -20,7 +20,7 @@ import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getEggPityProgress } from "@/lib/egg-pity";
 import type { ExpeditionMode } from "@/lib/mascot-data";
-import { EGG_SHINY_CHANCE, feedBaseExp, getMascotRarity, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
+import { EGG_SHINY_CHANCE, feedBaseExp, getMascotRarity, getMascotStatusGrowthMultiplier, getPokemonIdsByRarity, getPokemonName, getPokemonTypes, getSpriteUrl, PERSONALITY_LABEL, POKEMON_ELEMENT } from "@/lib/mascot-data";
 import {
   eggDuplicateWeight,
   eligibleFormVariants,
@@ -1424,8 +1424,8 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       MASCOT_BUFF_HAPPY: { type: "HAPPINESS",   hours: 0, label: "Bala de Mel — felicidade máxima instantânea" },
       // 🍀 Amuleto da Sorte: chance dobrada de loot raro em expedições por 6h
       MASCOT_BUFF_LUCK:  { type: "LUCK_BOOST",  hours: 6, label: "Amuleto da Sorte — loot raro dobrado por 6h" },
-      // 💧 Água Sagrada: remove humor negativo (Bravo/Cansado/Carente) imediatamente
-      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 0, label: "Água Sagrada — remove humor negativo" },
+      // 💧 Água Fresca: remove humor negativo, +20 de felicidade e protege contra doenças por 24h
+      MASCOT_BUFF_MOOD:  { type: "MOOD_RESET",  hours: 24, label: "Água Fresca — humor renovado e proteção contra doenças por 24h" },
       ANTIDOTE:          { type: "ANTIDOTE", hours: 0, label: "Antídoto — cura a doença imediatamente" },
       // Age na conta inteira: o mascote selecionado é só o ponto de uso.
       FIRST_AID_KIT:     { type: "FIRST_AID_KIT", hours: 0, label: "Kit de Primeiros Socorros — cura a doença de todos os mascotes" },
@@ -1509,9 +1509,9 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       // EXP_BOOST substitui qualquer buff ativo do mesmo tipo (sem acúmulo)
       // STAT_BOOST também grava com expiresAt permanente (2099) como marcador confiável de limite
       if (config.hours > 0 && config.type !== "ANTIDOTE" && config.type !== "FIRST_AID_KIT") {
-        if (config.type === "EXP_BOOST") {
-          // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas)
-          await tx.mascotBuff.deleteMany({ where: { mascotId, type: "EXP_BOOST" } });
+        if (config.type === "EXP_BOOST" || config.type === "MOOD_RESET") {
+          // Apaga buff anterior antes de criar novo (sem acúmulo de Vitaminas nem de Água Fresca)
+          await tx.mascotBuff.deleteMany({ where: { mascotId, type: config.type } });
         }
         await tx.mascotBuff.create({ data: { mascotId, type: config.type, expiresAt } });
       } else if (config.type === "STAT_BOOST") {
@@ -1911,7 +1911,8 @@ export async function useRainbowFeatherAction(mascotId: string, inventoryKey: st
     const isAdminLabFeather = shopItem.id === ADMIN_LAB_RAINBOW_FEATHER_ID;
     const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
     if (!inv || inv.quantity < 1) return { error: "Você não tem Pena Arco-Íris no inventário." };
-    const metadataTier = (shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" } | null)?.eggTier;
+    const featherMeta = shopItem.metadata as { eggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB"; commonSpeciesOnly?: boolean } | null;
+    const metadataTier = featherMeta?.eggTier;
     const eggTier = metadataTier ?? (
       shopItem.rarity === "LEGENDARY" || shopItem.rarity === "MYTHIC" || shopItem.rarity === "RELIC" ? "LAB"
       : shopItem.rarity === "EPIC" ? "SPECIAL"
@@ -1945,6 +1946,13 @@ export async function useRainbowFeatherAction(mascotId: string, inventoryKey: st
           data: { adminLabFeatherUsedAt: new Date() },
         });
         if (marked.count !== 1) throw new Error("Esta Pena especial só pode ser usada uma vez por conta.");
+      }
+      if (featherMeta?.commonSpeciesOnly) {
+        // Penas não-Potentes só servem para espécies de crescimento padrão (x1.0).
+        const target = await tx.mascot.findUnique({ where: { id: mascotId }, select: { pokemonId: true } });
+        if (!target || getMascotStatusGrowthMultiplier(target.pokemonId) !== 1) {
+          throw new Error("Esta pena só pode ser usada em mascotes de raridade comum. Para lendários, pseudo-lendários e paradoxos, use uma Pena Potente.");
+        }
       }
       const reset = await applyRainbowFeather(player.id, mascotId, eggTier, tx, isAdminLabFeather);
       await tx.playerInventory.update({

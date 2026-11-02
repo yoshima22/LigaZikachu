@@ -481,12 +481,12 @@ function scaleRewardPlan(planId: string | undefined, cap: number) {
     if(safeCap>=7500&&index===1)addItem("MASCOT_BUFF_LUCK","Amuleto da Sorte");
     if(safeCap>=8000&&index===2)addItem("LUCKY_EGG","Ovo da Sorte");
     if(safeCap>=8500&&index===0)addEgg("SPECIAL");
-    if(safeCap>=9000&&index===1)addItem("RAINBOW_FEATHER","Pena Arco-Íris Especial","Pena Arco-Íris Especial");
-    if(safeCap>=9500&&index===2)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Evento","Pena Arco-Íris de Evento");
-    if(safeCap>=10000&&index===3)addItem("RAINBOW_FEATHER","Pena Arco-Íris Rara","Pena Arco-Íris Rara");
-    if(safeCap>=11000&&index===0)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Laboratório","Pena Arco-Íris de Laboratório");
+    if(safeCap>=9000&&index===1)addItem("RAINBOW_FEATHER","Pena Arco-Íris Especial Potente","Pena Arco-Íris Especial Potente");
+    if(safeCap>=9500&&index===2)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Evento Potente","Pena Arco-Íris de Evento Potente");
+    if(safeCap>=10000&&index===3)addItem("RAINBOW_FEATHER","Pena Arco-Íris Rara Potente","Pena Arco-Íris Rara Potente");
+    if(safeCap>=11000&&index===0)addItem("RAINBOW_FEATHER","Pena Arco-Íris de Laboratório Potente","Pena Arco-Íris de Laboratório Potente");
     if(safeCap>=12000&&index===0)scaled.randomMegaStone=true;
-    if(safeCap>=12000&&index===4)addItem("RAINBOW_FEATHER","Pena Arco-Íris Comum","Pena Arco-Íris Comum");
+    if(safeCap>=12000&&index===4)addItem("RAINBOW_FEATHER","Pena Arco-Íris Comum Potente","Pena Arco-Íris Comum Potente");
     scaled.label=describeRushReward(scaled);
     return scaled;
   });

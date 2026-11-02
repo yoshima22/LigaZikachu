@@ -43,10 +43,28 @@ async function main() {
       source: "C:/Users/LuizAguiar/Pictures/ImagensZikachu/Icones/Itens/ovoPokemonEvento.png",
       storagePath: "items/event-egg-v1.webp",
     },
+    {
+      source: "C:/Users/LUIZAG~1/AppData/Local/Temp/claude/C--Users-LuizAguiar-projects-liga-zikachu/c4796c75-8a16-4cb6-8c42-8aad8b48a89d/images/1.webp",
+      storagePath: "items/rainbow-feather-potent-v1.webp",
+    },
+    {
+      source: "C:/Users/LUIZAG~1/AppData/Local/Temp/claude/C--Users-LuizAguiar-projects-liga-zikachu/c4796c75-8a16-4cb6-8c42-8aad8b48a89d/images/2.webp",
+      storagePath: "items/rainbow-feather-v1.webp",
+    },
+    {
+      source: "C:/Users/LUIZAG~1/AppData/Local/Temp/claude/C--Users-LuizAguiar-projects-liga-zikachu/c4796c75-8a16-4cb6-8c42-8aad8b48a89d/images/3.webp",
+      storagePath: "items/luck-charm-v1.webp",
+    },
+    {
+      source: "C:/Users/LUIZAG~1/AppData/Local/Temp/claude/C--Users-LuizAguiar-projects-liga-zikachu/c4796c75-8a16-4cb6-8c42-8aad8b48a89d/images/4.webp",
+      storagePath: "items/fresh-water-v1.webp",
+    },
   ];
 
   for (const asset of assets) {
-    const input = await fs.readFile(asset.source);
+    // Fontes antigas (temp/clipboard) podem não existir mais: já estão no Storage, então só pula.
+    const input = await fs.readFile(asset.source).catch(() => null);
+    if (!input) { console.log(`${asset.storagePath}: fonte ausente, ignorado`); continue; }
     const output = await sharp(input)
       .resize({ width: 512, height: 512, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 86, alphaQuality: 100, effort: 6 })

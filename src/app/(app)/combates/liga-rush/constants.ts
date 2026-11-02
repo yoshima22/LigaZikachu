@@ -107,11 +107,11 @@ export const RUSH_REWARD_PLANS: RushRewardPlan[] = [
     name: "Cofres Arco-Íris",
     description: "As Penas Arco-Íris entram em rotação respeitando o nível indicado no prêmio, do Comum ao Laboratório.",
     bundles: [
-      { key: "first", rankFrom: 1, label: "1 Pena Arco-Íris de Laboratório + 800 ZC", estimatedValue: 5000, coins: 800, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Laboratório", quantity: 1, label: "Pena Arco-Íris de Laboratório" }] },
-      { key: "second", rankFrom: 2, label: "1 Pena Arco-Íris Especial + 600 ZC", estimatedValue: 3700, coins: 600, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Especial", quantity: 1, label: "Pena Arco-Íris Especial" }] },
-      { key: "third", rankFrom: 3, label: "1 Pena Arco-Íris de Evento + 500 ZC", estimatedValue: 2700, coins: 500, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Evento", quantity: 1, label: "Pena Arco-Íris de Evento" }] },
-      { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Pena Arco-Íris Rara + 250 ZC", estimatedValue: 2250, coins: 250, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Rara", quantity: 1, label: "Pena Arco-Íris Rara" }] },
-      { key: "participation", rankFrom: 7, rankTo: 9999, label: "1 Pena Arco-Íris Comum + 100 ZC", estimatedValue: 1000, coins: 100, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Comum", quantity: 1, label: "Pena Arco-Íris Comum" }] },
+      { key: "first", rankFrom: 1, label: "1 Pena Arco-Íris de Laboratório Potente + 800 ZC", estimatedValue: 5000, coins: 800, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Laboratório Potente", quantity: 1, label: "Pena Arco-Íris de Laboratório Potente" }] },
+      { key: "second", rankFrom: 2, label: "1 Pena Arco-Íris Especial Potente + 600 ZC", estimatedValue: 3700, coins: 600, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Especial Potente", quantity: 1, label: "Pena Arco-Íris Especial Potente" }] },
+      { key: "third", rankFrom: 3, label: "1 Pena Arco-Íris de Evento Potente + 500 ZC", estimatedValue: 2700, coins: 500, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris de Evento Potente", quantity: 1, label: "Pena Arco-Íris de Evento Potente" }] },
+      { key: "top6", rankFrom: 4, rankTo: 6, label: "1 Pena Arco-Íris Rara Potente + 250 ZC", estimatedValue: 2250, coins: 250, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Rara Potente", quantity: 1, label: "Pena Arco-Íris Rara Potente" }] },
+      { key: "participation", rankFrom: 7, rankTo: 9999, label: "1 Pena Arco-Íris Comum Potente + 100 ZC", estimatedValue: 1000, coins: 100, shopItems: [{ type: "RAINBOW_FEATHER", itemName: "Pena Arco-Íris Comum Potente", quantity: 1, label: "Pena Arco-Íris Comum Potente" }] },
     ],
   },
   {

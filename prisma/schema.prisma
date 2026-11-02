@@ -2770,6 +2770,10 @@ model Mascot {
   operationsLocked          Boolean                   @default(false) // impede envio ao Bazar e uso no Laboratório
   isShiny                   Boolean                   @default(false) // variante shiny — sprite diferente e marcador visual
   primordialBoundPlayerId   String? // conta fixada pela Pena Primordial; o banco impede troca de playerId
+  // Bônus sorteado de mascotes de Ovo de Evento (+3 a +6 em um atributo). Fixo: a Pena Arco-Íris o preserva.
+  eventBonusStat            String?
+  eventBonusValue           Int?
+  eventBonusRolledAt        DateTime?
   megaEvolvedFromPokemonId  Int?
   megaStoneItemId           String?
   megaEvolvedAt             DateTime?

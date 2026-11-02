@@ -327,6 +327,7 @@ export interface ExpeditionRewardDisplay {
 const BUFF_ITEM_DISPLAY: Record<string, { emoji: string; label: string }> = {
   EXP_BOOST:       { emoji: "⚡",    label: "Boost de EXP" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Boost de Sorte" },
+  MOOD_RESET:      { emoji: "💧",   label: "Água Fresca" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika" },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Política de Fraqueza" },
@@ -398,6 +399,7 @@ export function rewardToDisplay(reward: { type: string; eggType?: string | null;
 const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string; permanent?: boolean; areas?: string }> = {
   EXP_BOOST:       { emoji: "⚡",   label: "EXP +25%",       color: "border-yellow-500/40 bg-yellow-500/10 text-yellow-300", areas: "Expedição ✓ · Arena ✓ · Interações ✓ · Férias ✗" },
   LUCK_BOOST:      { emoji: "🍀",   label: "Sorte",           color: "border-green-500/40 bg-green-500/10 text-green-300" },
+  MOOD_RESET:      { emoji: "💧",   label: "Refrescado (sem doenças)", color: "border-sky-500/40 bg-sky-500/10 text-sky-300" },
   STAT_BOOST:      { emoji: "💊",   label: "Proteína Zika",   color: "border-purple-500/40 bg-purple-500/10 text-purple-300", permanent: true },
   LUCKY_EGG:       { emoji: "🥚✨", label: "Ovo da Sorte",    color: "border-yellow-400/40 bg-yellow-400/10 text-yellow-200", areas: "Expedição ✓ · Arena ✗ · Interações ✗" },
   WEAKNESS_POLICY: { emoji: "🛡️",  label: "Escudo (proteção)", color: "border-blue-500/40 bg-blue-500/10 text-blue-300", permanent: true },

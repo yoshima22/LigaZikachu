@@ -41,7 +41,7 @@ const typeLabel: Record<string, string> = {
   MASCOT_BUFF_STAT:  "💊 Proteína Zika (Buff Stats)",
   MASCOT_BUFF_HAPPY: "🍯 Bala de Mel (Buff Felicidade)",
   MASCOT_BUFF_LUCK:  "🍀 Amuleto da Sorte (Buff Expedição)",
-  MASCOT_BUFF_MOOD:  "💧 Água Sagrada (Reset Humor)",
+  MASCOT_BUFF_MOOD:  "💧 Água Fresca (Reset Humor)",
   LUCKY_EGG:         "🥚✨ Ovo da Sorte",
   WEAKNESS_POLICY:   "🛡️ Política de Fraqueza",
   PICNIC_BASKET:     "🧺⚡ Cesta de Piquenique Chocante",

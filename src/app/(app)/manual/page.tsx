@@ -313,7 +313,7 @@ export default async function ManualPage() {
               ["Ovo Raro", "Pokémon raros de todas as gerações"],
               ["Ovo Especial", "Pokémon épicos e lendários"],
               ["Ovo Gen 1–9", "Pokémon específicos da geração"],
-              ["Ovo de Evento", "Pokémon sazonais ou especiais"],
+              ["Ovo de Evento", "Pokémon sazonais ou especiais. Mascotes nascidos dele têm 35% de chance de vir com +3 a +6 em um atributo aleatório (não é garantido). O bônus é fixo e permanece mesmo após usar a Pena Arco-Íris."],
               ["Ovo Celestial", "Exclusivo dos banners de invocação — atributos 23~30, a melhor pool do jogo. Não é vendido na ZikaShop nem sai nos slots do Bazar."],
             ]}
           />
@@ -637,11 +637,11 @@ export default async function ManualPage() {
           <Table
             headers={["Item", "Drop 6h", "Drop 3h", "Drop 1h/30min"]}
             rows={[
-              ["Vitamina Elétrica", "34%", "42%", "55%"],
-              ["Amuleto da Sorte", "28%", "30%", "45%"],
-              ["Cesta de Piquenique", "16%", "15%", "—"],
-              ["Política de Fraqueza", "14%", "13%", "—"],
-              ["Ovo da Sorte", "8%", "—", "—"],
+              ["Vitamina Elétrica", "22%", "29%", "49%"],
+              ["Amuleto da Sorte", "18%", "18%", "25%"],
+              ["Cesta de Piquenique", "14%", "14%", "—"],
+              ["Política de Fraqueza", "24%", "30%", "20%"],
+              ["Ovo da Sorte", "10%", "—", "—"],
             ]}
           />
         </Sub>
@@ -667,8 +667,8 @@ export default async function ManualPage() {
               ],
               [
                 "🥚 Ovo da Sorte",
-                "+20% EXP em 1 expedição",
-                "1 uso (diário)",
+                "Bônus de sorte em 1 expedição: +20% (55%), +40% (30%), +80% (12%) ou +150% (3%) de EXP",
+                "1 uso (recarrega em 24h)",
                 "Expedição de Treinamento",
               ],
             ]}
@@ -687,7 +687,7 @@ export default async function ManualPage() {
             rows={[
               [
                 "🍀 Amuleto da Sorte",
-                "Dobra chance de loot raro em expedições por 6h",
+                "Por 6h: dobra a sorte da expedição; 25% de chance de subir a raridade do ovo (Comum→Raro, Raro→Especial), dobrar comida/doce/item ou render +50% de moedas; +50% de chance de Pedra de Mega nas expedições de Itens; em expedições de 6h com sorte ≥ 90, o Ovo Especial pode virar Ovo de Laboratório (0,5% a 3%). O resultado avisa quando o bônus acontece.",
               ],
               [
                 "💊 Proteína Zika",
@@ -698,8 +698,8 @@ export default async function ManualPage() {
                 "Felicidade vai para 100 e tem 40% de chance de criar uma nova amizade (até 10 amigos) ou abrir um evento bônus com presente enviado por um amigo",
               ],
               [
-                "💧 Água Sagrada",
-                "Remove humor negativo (ANGRY/TIRED/NEEDY) imediatamente",
+                "💧 Água Fresca",
+                "Remove humor negativo (ANGRY/TIRED/NEEDY), +20 de felicidade e deixa o mascote refrescado por 24h: ele não adoece nem pega doença dos outros mascotes nesse período",
               ],
               [
                 "🛡️ Política de Fraqueza",
@@ -719,7 +719,11 @@ export default async function ManualPage() {
               ],
               [
                 "🌈 Pena Arco-Íris",
-                "IRREVERSÍVEL — volta ao Nv.1 e ressorteia personalidade/status no intervalo do ovo original; sem registro usa Ovo Raro",
+                "IRREVERSÍVEL — volta ao Nv.1 e ressorteia personalidade/status no intervalo do ovo original; sem registro usa Ovo Raro. Só funciona em mascotes de raridade comum (crescimento x1.0); é 25% mais barata que a Potente. O Bônus de Ovo de Evento é preservado.",
+              ],
+              [
+                "🌈 Pena Arco-Íris Potente",
+                "Mesmo efeito da Pena Arco-Íris, mas funciona em qualquer mascote, inclusive lendários, pseudo-lendários e paradoxos. Vendida na ZikaShop e no Bazar.",
               ],
             ]}
           />
@@ -749,7 +753,7 @@ export default async function ManualPage() {
               ],
               [
                 "Ovo da Sorte",
-                "Se uma expedição de treino renderia 1.000 EXP, com +20% ela rende 1.200 EXP.",
+                "Se uma expedição de treino renderia 1.000 EXP, o Ovo da Sorte rende entre 1.200 e 2.500 EXP (média ≈ 1.370).",
               ],
               [
                 "Cesta de Piquenique",
@@ -761,7 +765,7 @@ export default async function ManualPage() {
               ],
               [
                 "Amuleto da Sorte",
-                "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2.",
+                "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2. Além disso, cada drop tem 25% de chance de vir melhor (ovo de raridade maior, quantidade dobrada ou +50% de moedas).",
               ],
               [
                 "Mega Stone",

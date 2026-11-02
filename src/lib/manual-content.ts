@@ -31,9 +31,9 @@ export const MANUAL_DEFAULTS: ManualContentMap = {
   "expedicoes.formula":
     "EXP final = Base (50) × multiplicador de duração × (1 + bônus de nível) × (1 + bônus de aliados)",
   "expedicoes.qualidade.note":
-    "Instinto efetivo = statInstinct + floor(nível/5). Com Amuleto da Sorte ativo, o valor dobra.",
+    "Instinto efetivo = statInstinct + floor(nível/5). Com Amuleto da Sorte ativo, o valor dobra e os drops ainda podem vir melhores (ovo de raridade maior, quantidade dobrada).",
   "expedicoes.especiais.note":
-    "Percentuais dentro do pool de \"Item Especial\". Política de Fraqueza e Ovo da Sorte só caem em 6h (Padrão e Itens).",
+    "Percentuais dentro do pool de \"Item Especial\" (aproximados, depois de Antídoto e itens de liga). O Ovo da Sorte só cai em 6h; a Política de Fraqueza cai em todas as durações.",
   "expedicoes.padrao.note":
     "Pesos aproximados para mascote nível 10, sem buff de sorte, sem aliados.",
   "expedicoes.itens.note":

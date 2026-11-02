@@ -1129,8 +1129,9 @@ export function getExpeditionOdds(params: {
     food: 38 + rewardBonus * 0.3 + Math.min(10, level),
     specialItem: duration === "6h" ? 14 + (luckBuff ? 4 : 0) : duration === "3h" ? 8 : duration === "1h" ? 4 : 2,
   };
+  // Amuleto da Sorte aumenta em 50% a chance de Pedra de Mega.
   const megaStone = mode === "ITEMS" && duration === "6h"
-    ? getMegaStoneExpeditionChance(instinct)
+    ? getMegaStoneExpeditionChance(instinct) * (luckBuff ? 1.5 : 1)
     : 0;
   // Fonte excepcional, não recorrente: exige a expedição mais longa de Itens,
   // Instinto extremo, oito amigos e Amuleto da Sorte. O máximo é 1% da expedição.
@@ -1379,6 +1380,31 @@ export function getShinySprite(pokemonId: number, animated = false): string {
     return `https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/shiny/${spriteId}.gif`;
   }
   return `/sprites/pokemon/shiny/${spriteId}.png`;
+}
+
+// ── Bônus de Ovo de Evento ────────────────────────────────────────────────────
+// Mascotes de Ovo de Evento têm EVENT_BONUS_CHANCE de nascer com +3 a +6 em UM atributo
+// aleatório. O bônus é fixo: a Pena Arco-Íris sorteia os atributos de novo, mas o preserva.
+export const EVENT_BONUS_CHANCE = 0.35;
+export const EVENT_BONUS_RANGE: [number, number] = [3, 6];
+export const EVENT_BONUS_STATS = [
+  { key: "statForce", label: "Força" },
+  { key: "statAgility", label: "Agilidade" },
+  { key: "statCharisma", label: "Carisma" },
+  { key: "statInstinct", label: "Instinto" },
+  { key: "statVitality", label: "Vitalidade" },
+] as const;
+export type EventBonusStatKey = (typeof EVENT_BONUS_STATS)[number]["key"];
+
+export function rollEventBonus(random: () => number = Math.random): { stat: EventBonusStatKey; value: number } | null {
+  if (random() >= EVENT_BONUS_CHANCE) return null;
+  const stat = EVENT_BONUS_STATS[Math.floor(random() * EVENT_BONUS_STATS.length)].key;
+  const [min, max] = EVENT_BONUS_RANGE;
+  return { stat, value: min + Math.floor(random() * (max - min + 1)) };
+}
+
+export function eventBonusLabel(stat: string | null | undefined) {
+  return EVENT_BONUS_STATS.find((s) => s.key === stat)?.label ?? null;
 }
 
 // ── Stat ranges por tipo de ovo ───────────────────────────────────────────────

@@ -815,8 +815,14 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
   let infections = 0;
   if (now < DISEASE_RESUMES_AT) return { newCases, infections };
 
+  // Água Fresca: mascote refrescado não adoece nem é contagiado enquanto o buff durar.
+  const refreshed24h = new Set((await prisma.mascotBuff.findMany({
+    where: { type: "MOOD_RESET", expiresAt: { gt: now }, mascot: { playerId } },
+    select: { mascotId: true },
+  })).map((buff) => buff.mascotId));
+
   const atRisk = mascots.filter((mascot) => {
-    if (mascot.diseasedAt) return false;
+    if (mascot.diseasedAt || refreshed24h.has(mascot.id)) return false;
     const starvingBefore = new Date(now.getTime() - (mascot.isEquipped ? 24 : 120) * 60 * 60_000);
     const starving = !mascot.lastFedAt || mascot.lastFedAt <= starvingBefore;
     const emotionallyUnwell = mascot.happiness < 40 || mascot.mood === "ANGRY";
@@ -835,7 +841,7 @@ export async function processMascotDiseaseForPlayer(playerId: string) {
   // Mascote alimentado nas últimas 24h resiste ao contágio: ficar doente "do nada"
   // mesmo cuidando dele não é punição que o jogador consiga evitar.
   const fedBefore = new Date(now.getTime() - 24 * 60 * 60_000);
-  const healthy = refreshed.filter((mascot) => !mascot.diseasedAt && (!mascot.lastFedAt || mascot.lastFedAt <= fedBefore));
+  const healthy = refreshed.filter((mascot) => !mascot.diseasedAt && !refreshed24h.has(mascot.id) && (!mascot.lastFedAt || mascot.lastFedAt <= fedBefore));
   // Teto por ciclo: antes, cada doente sorteava um alvo, então o surto crescia
   // junto com o número de doentes e contaminava a conta inteira em poucos dias.
   const maxInfectionsPerCycle = 2;

@@ -17,7 +17,7 @@ import {
   getSpriteUrl, getPokemonName, getMascotRarity, mascotPrimaryType, getTypeAdvantageMultiplier,
   getMascotStatusGrowthMultiplier, getMascotProgressMilestones, getExpeditionOdds,
   getMegaStoneExpeditionChance, rollExpeditionAgilityReduction, rollExpeditionEggRarity,
-  VIVILLON_FORM_IDS,
+  VIVILLON_FORM_IDS, rollEventBonus, eventBonusLabel,
 } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
 import type { EggType, Mascot, MascotMood, MascotPersonality } from "@prisma/client";
@@ -256,6 +256,17 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     const shinyChance = EGG_SHINY_CHANCE[eggTypeKey] ?? (1 / 500);
     const isShiny = forcedShiny ?? (Math.random() < shinyChance);
 
+    const baseStats = {
+      statForce:    randomInt(statMin, statMax),
+      statAgility:  randomInt(statMin, statMax),
+      statCharisma: randomInt(statMin, statMax),
+      statInstinct: randomInt(statMin, statMax),
+      statVitality: randomInt(statMin, statMax),
+    };
+    // Ovo de Evento: chance de +3 a +6 em um atributo aleatório (fixo, sobrevive à Pena).
+    const eventBonus = eggTypeKey === "EVENT" ? rollEventBonus() : null;
+    if (eventBonus) baseStats[eventBonus.stat] += eventBonus.value;
+
     // Cria o mascote com stats escalados por raridade do ovo
     const m = await tx.mascot.create({
       data: {
@@ -271,11 +282,12 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
         // para não adoecer instantaneamente (doença exige STARVING + tristeza/raiva).
         happiness: 90,
         lastFedAt: new Date(Date.now() - 72 * 60 * 60 * 1000), // ~72h no banco = HUNGRY
-        statForce:    randomInt(statMin, statMax),
-        statAgility:  randomInt(statMin, statMax),
-        statCharisma: randomInt(statMin, statMax),
-        statInstinct: randomInt(statMin, statMax),
-        statVitality: randomInt(statMin, statMax),
+        ...baseStats,
+        ...(eggTypeKey === "EVENT" ? {
+          eventBonusRolledAt: new Date(),
+          eventBonusStat: eventBonus?.stat ?? null,
+          eventBonusValue: eventBonus?.value ?? null,
+        } : {}),
       }
     });
     await recordPlayerActivity(tx, {
@@ -321,6 +333,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
     const hatchNotes: string[] = [];
     if (isShiny) hatchNotes.push("✨ É SHINY!");
     if (isStatBuffed) hatchNotes.push(`⬆️ Stats elevados (${statMin}–${statMax}) pelo ovo de alta raridade!`);
+    if (eventBonus) hatchNotes.push(`🎉 Bônus de Ovo de Evento: +${eventBonus.value} em ${eventBonusLabel(eventBonus.stat)}!`);
     if (hatchNotes.length > 0) {
       await tx.mascotEvent.create({
         data: {
@@ -1392,13 +1405,14 @@ export async function recalculateMood(mascotId: string): Promise<void> {
 
 // ── Expedições ────────────────────────────────────────────────────────────────
 
+// luckNote: aviso exibido ao jogador quando o Amuleto da Sorte melhorou o drop.
 export type ExpeditionReward =
-  | { type: "EGG";       eggType: string }
-  | { type: "FOOD";      foodType: "FOOD" | "SWEET"; quantity: number }
-  | { type: "COINS";     amount: number }
-  | { type: "BUFF_ITEM"; shopItemType: string }
+  | { type: "EGG";       eggType: string; luckNote?: string }
+  | { type: "FOOD";      foodType: "FOOD" | "SWEET"; quantity: number; luckNote?: string }
+  | { type: "COINS";     amount: number; luckNote?: string }
+  | { type: "BUFF_ITEM"; shopItemType: string; quantity?: number; luckNote?: string }
   | { type: "MEGA_STONE"; shopItemType: string }
-  | { type: "TRAINING";  exp: number; durationLabel: string }  // retorna só EXP, nunca itens
+  | { type: "TRAINING";  exp: number; durationLabel: string; luckyEggPct?: number }  // retorna só EXP, nunca itens
   | { type: "VACATION";  expBonus: number; gotEgg: boolean; eggType?: "RARE" | "COMMON" }
   | { type: "NOTHING" };
 
@@ -1407,26 +1421,67 @@ function rollRandomMegaStoneType(): string {
 }
 
 // Pool de itens especiais que podem ser encontrados em expedições
-function rollBuffItemType(durationKey: ExpeditionDuration): string {
+function rollBuffItemType(durationKey: ExpeditionDuration, luckBuff = false): string {
   const leagueChance = durationKey === "6h" ? 0.18 : durationKey === "3h" ? 0.10 : 0.05;
   if (Math.random() < leagueChance) return randomFrom([...LEAGUE_SHOP_ITEM_TYPES]);
   const roll = Math.random() * 100;
-  if (roll < (durationKey === "6h" ? 12 : durationKey === "3h" ? 9 : 6)) return "ANTIDOTE";
-  if (durationKey === "6h") {
-    if (roll < 34) return "MASCOT_BUFF_EXP";   // 34% — Vitamina Elétrica
-    if (roll < 62) return "MASCOT_BUFF_LUCK";  // 28% — Amuleto da Sorte
-    if (roll < 78) return "PICNIC_BASKET";     // 16% — Cesta de Piquenique
-    if (roll < 92) return "WEAKNESS_POLICY";  // 14% — Política de Fraqueza
-    return "LUCKY_EGG";                        //  8% — Ovo da Sorte
+  const pick = (): string => {
+    if (roll < (durationKey === "6h" ? 12 : durationKey === "3h" ? 9 : 6)) return "ANTIDOTE";
+    if (durationKey === "6h") {
+      if (roll < 34) return "MASCOT_BUFF_EXP";   // 22% — Vitamina Elétrica
+      if (roll < 52) return "MASCOT_BUFF_LUCK";  // 18% — Amuleto da Sorte
+      if (roll < 66) return "PICNIC_BASKET";     // 14% — Cesta de Piquenique
+      if (roll < 90) return "WEAKNESS_POLICY";   // 24% — Política de Fraqueza
+      return "LUCKY_EGG";                        // 10% — Ovo da Sorte
+    }
+    if (durationKey === "3h") {
+      if (roll < 38) return "MASCOT_BUFF_EXP";   // 29%
+      if (roll < 56) return "MASCOT_BUFF_LUCK";  // 18%
+      if (roll < 70) return "PICNIC_BASKET";     // 14%
+      return "WEAKNESS_POLICY";                  // 30%
+    }
+    // 1h / 30min: apenas buffs comuns
+    if (roll < 55) return "MASCOT_BUFF_EXP";
+    return roll < 80 ? "MASCOT_BUFF_LUCK" : "WEAKNESS_POLICY";
+  };
+  const type = pick();
+  // Amuleto da Sorte: metade dos itens de pouco valor é trocada por um melhor.
+  if (luckBuff && durationKey !== "1h" && durationKey !== "30min"
+    && (type === "MASCOT_BUFF_EXP" || type === "ANTIDOTE") && Math.random() < 0.5) {
+    return randomFrom(durationKey === "6h" ? ["PICNIC_BASKET", "WEAKNESS_POLICY", "LUCKY_EGG"] : ["PICNIC_BASKET", "WEAKNESS_POLICY"]);
   }
-  if (durationKey === "3h") {
-    if (roll < 42) return "MASCOT_BUFF_EXP";
-    if (roll < 72) return "MASCOT_BUFF_LUCK";
-    if (roll < 88) return "PICNIC_BASKET";
-    return "WEAKNESS_POLICY";
+  return type;
+}
+
+const LUCK_BONUS_CHANCE = 0.25;
+
+/** Ovo da Sorte: 55% +20%, 30% +40%, 12% +80%, 3% +150% (média ≈ +37%). */
+function rollLuckyEggPct(): number {
+  const roll = Math.random();
+  return roll < 0.55 ? 20 : roll < 0.85 ? 40 : roll < 0.97 ? 80 : 150;
+}
+
+/**
+ * Amuleto da Sorte: melhora o drop já sorteado. Ovo sobe de raridade, comida/doce/item
+ * vêm em dobro e moedas rendem +50%. Ovo Especial de 6h com sorte alta pode virar Lab.
+ */
+function applyLuckBonus(reward: ExpeditionReward, durationKey: ExpeditionDuration, luck: number): ExpeditionReward {
+  if (reward.type === "EGG") {
+    if (reward.eggType === "SPECIAL" && durationKey === "6h" && luck >= 90) {
+      const labChance = Math.min(0.03, 0.005 + (luck - 90) * 0.0003);
+      if (Math.random() < labChance) return { ...reward, eggType: "LAB", luckNote: "🍀 Sorte extraordinária! O ovo veio de Laboratório." };
+    }
+    const next = reward.eggType === "COMMON" ? "RARE" : reward.eggType === "RARE" ? "SPECIAL" : null;
+    if (next && Math.random() < LUCK_BONUS_CHANCE) {
+      return { ...reward, eggType: next, luckNote: `🍀 Sorte! O ovo subiu de raridade (${next === "RARE" ? "Raro" : "Especial"}).` };
+    }
+    return reward;
   }
-  // 1h / 30min: apenas buffs comuns
-  return roll < 55 ? "MASCOT_BUFF_EXP" : "MASCOT_BUFF_LUCK";
+  if (Math.random() >= LUCK_BONUS_CHANCE) return reward;
+  if (reward.type === "FOOD") return { ...reward, quantity: reward.quantity * 2, luckNote: "🍀 Sorte! Quantidade dobrada pelo Amuleto da Sorte." };
+  if (reward.type === "COINS") return { ...reward, amount: Math.round(reward.amount * 1.5), luckNote: "🍀 Sorte! +50% de ZikaCoins pelo Amuleto da Sorte." };
+  if (reward.type === "BUFF_ITEM") return { ...reward, quantity: 2, luckNote: "🍀 Sorte! Você recebeu 2 unidades pelo Amuleto da Sorte." };
+  return reward;
 }
 
 async function rollExpeditionReward(
@@ -1480,12 +1535,13 @@ async function rollExpeditionReward(
   const cumSweet = picnicEggLimit + odds.sweet;
   const cumFood = cumSweet + odds.food;
   const cumCoin = cumFood + odds.coins;
+  const finish = (reward: ExpeditionReward) => hasLuckBuff ? applyLuckBonus(reward, durationKey, luck) : reward;
   if (roll < cumNothing) return { type: "NOTHING" };
-  if (roll < picnicEggLimit) return { type: "EGG", eggType };
-  if (roll < cumSweet) return { type: "FOOD", foodType: "SWEET", quantity: sweetQty * 2 };
-  if (roll < cumFood)  return { type: "FOOD", foodType: "FOOD", quantity: randomInt(foodQtyMin, foodQtyMax) * 2 };
-  if (roll < cumCoin)  return { type: "COINS", amount: randomInt(odds.coinMin, odds.coinMax) };
-  return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
+  if (roll < picnicEggLimit) return finish({ type: "EGG", eggType });
+  if (roll < cumSweet) return finish({ type: "FOOD", foodType: "SWEET", quantity: sweetQty * 2 });
+  if (roll < cumFood)  return finish({ type: "FOOD", foodType: "FOOD", quantity: randomInt(foodQtyMin, foodQtyMax) * 2 });
+  if (roll < cumCoin)  return finish({ type: "COINS", amount: randomInt(odds.coinMin, odds.coinMax) });
+  return finish({ type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey, hasLuckBuff) });
 }
 
 async function rollItemExpeditionReward(
@@ -1524,16 +1580,18 @@ async function rollItemExpeditionReward(
   const bonusQuantity = Math.floor((rewardBonus + allyBonus) / 18);
   const quantity = randomInt(quantityBase, quantityBase + 1 + bonusQuantity);
 
+  const hasLuckBuff = !!luckBuff;
+  const finish = (reward: ExpeditionReward) => hasLuckBuff ? applyLuckBonus(reward, durationKey, luck) : reward;
   if (roll < odds.megaStone) return { type: "MEGA_STONE", shopItemType: rollRandomMegaStoneType() };
   const labEggLimit = odds.megaStone + odds.labEgg;
   const eggLimit = odds.megaStone + odds.egg + picnicBonusPct;
   const sweetLimit = eggLimit + odds.sweet;
   const foodLimit = sweetLimit + Math.max(0, odds.food - picnicBonusPct * 2);
   if (roll < labEggLimit) return { type: "EGG", eggType: "LAB" };
-  if (roll < eggLimit) return { type: "EGG", eggType };
-  if (roll < sweetLimit) return { type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 };
-  if (roll < foodLimit) return { type: "FOOD", foodType: "FOOD", quantity: quantity * 2 };
-  return { type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey) };
+  if (roll < eggLimit) return finish({ type: "EGG", eggType });
+  if (roll < sweetLimit) return finish({ type: "FOOD", foodType: "SWEET", quantity: Math.max(1, Math.floor(quantity / 2)) * 2 });
+  if (roll < foodLimit) return finish({ type: "FOOD", foodType: "FOOD", quantity: quantity * 2 });
+  return finish({ type: "BUFF_ITEM", shopItemType: rollBuffItemType(durationKey, hasLuckBuff) });
 }
 
 async function describeExpeditionReward(reward: ExpeditionReward) {
@@ -1542,7 +1600,7 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
       const eggLabel = reward.eggType === "LAB" ? "de Laboratório" : reward.eggType === "SPECIAL" ? "Especial" : reward.eggType === "RARE" ? "Raro" : "Comum";
       return {
         title: `Ovo ${eggLabel} encontrado!`,
-        description: "Seu mascote voltou da expedição carregando um ovo.",
+        description: `Seu mascote voltou da expedição carregando um ovo.${reward.luckNote ? ` ${reward.luckNote}` : ""}`,
         payload: {
           rewardKind: "MASCOT_EGG",
           eggType: reward.eggType,
@@ -1554,7 +1612,7 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
     case "FOOD":
       return {
         title: reward.foodType === "SWEET" ? "Doce de Mascote encontrado" : "Comida de Mascote encontrada",
-        description: `Seu mascote trouxe ${reward.quantity} item(ns) da expedição.`,
+        description: `Seu mascote trouxe ${reward.quantity} item(ns) da expedição.${reward.luckNote ? ` ${reward.luckNote}` : ""}`,
         payload: {
           rewardKind: "MASCOT_FOOD",
           foodType: reward.foodType,
@@ -1565,7 +1623,7 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
     case "COINS":
       return {
         title: "ZikaCoins encontradas",
-        description: `Seu mascote trouxe ${reward.amount} ZikaCoins da expedição.`,
+        description: `Seu mascote trouxe ${reward.amount} ZikaCoins da expedição.${reward.luckNote ? ` ${reward.luckNote}` : ""}`,
         payload: {
           rewardKind: "ZIKA_COINS",
           amount: reward.amount,
@@ -1587,10 +1645,11 @@ async function describeExpeditionReward(reward: ExpeditionReward) {
       const label = registeredItem?.name ?? BUFF_LABELS[reward.shopItemType] ?? "Item Especial";
       return {
         title: `${label} encontrado!`,
-        description: "Seu mascote voltou da expedição com um item especial.",
+        description: `Seu mascote voltou da expedição com um item especial.${reward.luckNote ? ` ${reward.luckNote}` : ""}`,
         payload: {
           rewardKind: "MASCOT_BUFF",
           buffType: reward.shopItemType,
+          ...(reward.quantity && reward.quantity > 1 ? { quantity: reward.quantity } : {}),
           rewardLabel: label,
         }
       };
@@ -1900,12 +1959,11 @@ export async function claimExpedition(
   const expBoostBuff = await prisma.mascotBuff.findFirst({
     where: { mascotId: expedition.mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } },
   });
-  const [luckyEggMeta, expBoostMeta] = await Promise.all([
-    luckyEggBuff  ? getShopItemMeta("LUCKY_EGG")       : null,
-    expBoostBuff  ? getShopItemMeta("MASCOT_BUFF_EXP") : null,
-  ]);
+  const expBoostMeta = expBoostBuff ? await getShopItemMeta("MASCOT_BUFF_EXP") : null;
 
-  const luckyEggMult  = luckyEggBuff  ? 1 + ((luckyEggMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 20) / 100 : 1.0;
+  // Ovo da Sorte: o bônus é sorteado a cada uso (média ≈ +37% EXP).
+  const luckyEggPct = luckyEggBuff ? rollLuckyEggPct() : 0;
+  const luckyEggMult  = 1 + luckyEggPct / 100;
   const expBoostMult  = expBoostBuff  ? 1 + ((expBoostMeta  as { expMultiplierPct?: number } | null)?.expMultiplierPct ?? 25) / 100 : 1.0;
   const picnicExpMult = picnicActive
     ? mode === "TRAINING" ? 1.25 : mode === "STANDARD" ? 1.12 : 1
@@ -1934,7 +1992,7 @@ export async function claimExpedition(
 
   // Reward final — TRAINING usa tipo especial com EXP para exibir no modal
   const reward: ExpeditionReward = mode === "TRAINING"
-    ? { type: "TRAINING", exp: expeditionExp, durationLabel: dur.label }
+    ? { type: "TRAINING", exp: expeditionExp, durationLabel: dur.label, ...(luckyEggPct > 0 ? { luckyEggPct } : {}) }
     : (baseReward ?? { type: "NOTHING" as const });
   if (reward.type === "MEGA_STONE") {
     await ensureMegaStoneShopItems(false);
@@ -1986,6 +2044,7 @@ export async function claimExpedition(
       if (allyCount > 0) bonuses.push(`${allyCount} aliado${allyCount > 1 ? "s" : ""} apoiou`);
       if (rivalBonus > 1) bonuses.push("motivação de rivalidade");
       if (eventExpBonusPct > 0) bonuses.push(`evento +${eventExpBonusPct}% EXP`);
+      if (luckyEggPct > 0) bonuses.push(`🍀 Ovo da Sorte +${luckyEggPct}% EXP`);
       if (bondTrainingExpPct > 0) bonuses.push(`Laços 2.0 +${bondTrainingExpPct}% EXP com ${String(stored.bondPartnerName ?? "um amigo")}`);
       const note = bonuses.length > 0 ? ` (${bonuses.join(", ")})` : "";
       await tx.mascotEvent.create({
@@ -3096,7 +3155,7 @@ async function pruneExcessRelations(): Promise<void> {
 
 // ── Novos Itens Especiais ─────────────────────────────────────────────────────
 
-/** Ovo da Sorte: +20% EXP na próxima expedição TRAINING (1x por dia) */
+/** Ovo da Sorte: bônus de EXP sorteado (+20% a +150%) na próxima expedição TRAINING (1x por dia) */
 export async function applyLuckyEgg(playerId: string, mascotId: string) {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
@@ -3108,7 +3167,7 @@ export async function applyLuckyEgg(playerId: string, mascotId: string) {
   await prisma.mascotBuff.create({
     data: { mascotId, type: "LUCKY_EGG", expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000) }
   });
-  await logEvent(mascotId, "🥚✨", "Ovo da Sorte ativado! Próxima expedição de treinamento terá +20% EXP.");
+  await logEvent(mascotId, "🥚✨", "Ovo da Sorte ativado! Próxima expedição de treinamento terá um bônus de sorte: de +20% a +150% EXP.");
 }
 
 /** Política de Fraqueza: recupera um mascote ferido/em repouso e bloqueia 1 ataque oportunista. */
@@ -3581,13 +3640,17 @@ export async function applyRainbowFeather(
   const personality = randomPersonality();
   const basePokemonId = getRainbowFeatherBaseForm(mascot.pokemonId);
   const resetDefaultNickname = mascot.nickname === getPokemonName(mascot.pokemonId);
-  const resetStats = {
+  const resetStats: Record<"statForce" | "statAgility" | "statCharisma" | "statInstinct" | "statVitality", number> = {
     statForce: randomInt(statMin, statMax),
     statAgility: randomInt(statMin, statMax),
     statCharisma: randomInt(statMin, statMax),
     statInstinct: randomInt(statMin, statMax),
     statVitality: randomInt(statMin, statMax),
   };
+  // Bônus de Ovo de Evento é fixo: o sorteio refaz a base e o bônus volta por cima.
+  if (mascot.eventBonusStat && mascot.eventBonusValue && mascot.eventBonusStat in resetStats) {
+    resetStats[mascot.eventBonusStat as keyof typeof resetStats] += mascot.eventBonusValue;
+  }
   await db.mascot.update({
     where: { id: mascotId },
     data: {
