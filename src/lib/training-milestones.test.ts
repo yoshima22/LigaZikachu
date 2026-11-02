@@ -21,6 +21,12 @@ test("builds a long Loyal Purifier journey without impossible self-healing", () 
   assert.equal(journey.objectives.some((objective) => objective.type === "SELF_HEAL_AFTER_LOW_HP"), false);
 });
 
+test("builds every deterministic Executor seed without looping", () => {
+  const journey = buildTrainingJourney({ stance: "EXECUTOR", personality: "COMPETITIVE", seed: 1 });
+  assert.equal(journey.objectives.length, 7);
+  assert.equal(new Set(journey.objectives.map((objective) => objective.type)).size, 7);
+});
+
 function journeyWith(type: TrainingJourney["objectives"][number]["type"], target: number): TrainingJourney {
   return {
     stance: "EXECUTOR",

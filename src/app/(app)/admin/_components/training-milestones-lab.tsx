@@ -21,22 +21,34 @@ export function TrainingMilestonesLab() {
   const [seed, setSeed] = useState(7);
   const [focusA, setFocusA] = useState(125);
   const [focusB, setFocusB] = useState(125);
+  const [selectedObjectiveId, setSelectedObjectiveId] = useState("");
+  const [progress, setProgress] = useState<Record<string, number>>({});
+  const [arenaOwnMascots, setArenaOwnMascots] = useState(2);
+  const [arenaOpponentMascots, setArenaOpponentMascots] = useState(2);
+  const [arenaActions, setArenaActions] = useState(6);
+  const [arenaDailyCredits, setArenaDailyCredits] = useState(0);
+  const [arenaSameOwner, setArenaSameOwner] = useState(false);
+  const [arenaCooldown, setArenaCooldown] = useState<"none" | "early" | "ready">("none");
   const [eventResult, setEventResult] = useState<string | null>(null);
   const [arenaResult, setArenaResult] = useState<string | null>(null);
   const view = useMemo(() => buildTrainingLabView({ stance, personality, seed, focusA, focusB }), [stance, personality, seed, focusA, focusB]);
 
   function simulateProgress() {
-    const objective = view.objectives.find((item) => item.type !== "ARENA_Z" && item.type !== "LEAGUE" && item.type !== "EXPEDITIONS") ?? view.objectives[0];
-    const result = evaluateTrainingEvent({ ...view, objectives: [objective] }, { battleId: "admin-local", kos: 4, lowHpDirectAttacks: 3, survivedToNextRound: true, directAttacks: 5, damageUnits: 12, buffs: 4, heals: 4, protects: 3, debuffs: 4, superEffective: 5, ultraEffective: 3, resistedHits: 5, heavilyResistedHits: 3, focusChains: 2, survivedSequences: 2, thirdAttacks: 2, turnThree: 1, turnFive: 1 });
-    setEventResult(`${objective.label} ${result.reason}`);
+    const objective = view.objectives.find((item) => item.id === selectedObjectiveId) ?? view.objectives.find((item) => item.type !== "ARENA_Z" && item.type !== "LEAGUE" && item.type !== "EXPEDITIONS") ?? view.objectives[0];
+    const result = evaluateTrainingEvent({ ...view, objectives: [objective] }, { battleId: "admin-local", kos: 4, lowHpDirectAttacks: 3, survivedToNextRound: true, directAttacks: 5, damageUnits: 12, buffs: 4, heals: 4, protects: 3, debuffs: 4, superEffective: 5, ultraEffective: 3, resistedHits: 5, heavilyResistedHits: 3, focusChains: 2, survivedSequences: 2, thirdAttacks: 2, turnThree: 1, turnFive: 1, typeKos: 3, roleKos: 3, lastSurvivor: 1, survivedDebuff: 1, lowestHpAttacks: 3, multiKoBattles: 1, armorPenetration: 3, affinity: 2 });
+    const next = Math.min(objective.target, (progress[objective.id] ?? 0) + result.delta);
+    setProgress((current) => ({ ...current, [objective.id]: next }));
+    setEventResult(`${objective.label} ${result.reason} Contador: ${next}/${objective.target}.`);
   }
 
-  function simulateArena(valid: boolean) {
+  function simulateArena() {
+    const now = new Date();
+    const pairLastCreditAt = arenaCooldown === "none" ? null : new Date(now.getTime() - (arenaCooldown === "early" ? 24 * 60 * 60 * 1000 - 1000 : 24 * 60 * 60 * 1000));
     const result = validateArenaTrainingCredit({
-      sourceMode: valid ? "ARENA_Z_PVP" : "ARENA_DRAFT",
-      ownerId: "admin-a", opponentOwnerId: valid ? "admin-b" : "admin-a",
-      ownMascots: 2, opponentMascots: 2, resolvedActions: valid ? 6 : 4,
-      selectedTrainingMascot: valid, pairLastCreditAt: valid ? null : new Date(), now: new Date(), ownerCreditsToday: 0,
+      sourceMode: "ARENA_Z_PVP",
+      ownerId: "admin-a", opponentOwnerId: arenaSameOwner ? "admin-a" : "admin-b",
+      ownMascots: arenaOwnMascots, opponentMascots: arenaOpponentMascots, resolvedActions: arenaActions,
+      selectedTrainingMascot: true, pairLastCreditAt, now, ownerCreditsToday: arenaDailyCredits,
     });
     setArenaResult(result.eligible ? "Arena-Z aprovada: o crédito de teste contaria para o foco selecionado." : `Arena-Z recusada: ${result.reasons.join(" ")}`);
   }
@@ -62,9 +74,11 @@ export function TrainingMilestonesLab() {
       </div>
 
       <div className="rounded-xl border border-slate-700 bg-slate-950/50 p-3"><p className="text-xs font-bold text-slate-100">Efeito previsto</p><p className="mt-1 text-xs text-slate-400">{TRAINING_STANCES[stance].effect}</p></div>
-      <ol className="space-y-2">{view.objectives.map((objective, index) => <li key={objective.id} className="rounded border border-slate-800 bg-slate-950/50 p-2 text-xs text-slate-300"><b className="text-amber-200">{index + 1}. {objective.target}</b> · {objective.label} <span className="text-slate-500">(máx. {objective.perBattleCap}/combate)</span></li>)}</ol>
+      <ol className="space-y-2">{view.objectives.map((objective, index) => <li key={objective.id} className="rounded border border-slate-800 bg-slate-950/50 p-2 text-xs text-slate-300"><label className="flex cursor-pointer gap-2"><input type="radio" name="objective" checked={(selectedObjectiveId || view.objectives.find((item) => item.type !== "ARENA_Z" && item.type !== "LEAGUE" && item.type !== "EXPEDITIONS")?.id) === objective.id} onChange={() => setSelectedObjectiveId(objective.id)} /><span><b className="text-amber-200">{index + 1}. {progress[objective.id] ?? 0}/{objective.target}</b> · {objective.label} <span className="text-slate-500">(máx. {objective.perBattleCap}/combate)</span></span></label></li>)}</ol>
 
-      <div className="flex flex-wrap gap-2"><button onClick={simulateProgress} className="rounded bg-cyan-400 px-3 py-2 text-xs font-bold text-slate-950">Testar evento de combate</button><button onClick={() => simulateArena(true)} className="rounded border border-emerald-400/50 px-3 py-2 text-xs font-bold text-emerald-200">Testar Arena válida</button><button onClick={() => simulateArena(false)} className="rounded border border-red-400/50 px-3 py-2 text-xs font-bold text-red-200">Testar bloqueio Arena</button></div>
+      <div className="grid gap-2 rounded border border-emerald-400/20 bg-emerald-950/15 p-3 text-xs md:grid-cols-3"><b className="md:col-span-3 text-emerald-200">Debug Arena-Z (dados locais)</b><label>Mascotes próprios<input type="number" value={arenaOwnMascots} onChange={(event) => setArenaOwnMascots(Number(event.target.value))} className="mt-1 w-full rounded bg-slate-950 p-1" /></label><label>Mascotes rivais<input type="number" value={arenaOpponentMascots} onChange={(event) => setArenaOpponentMascots(Number(event.target.value))} className="mt-1 w-full rounded bg-slate-950 p-1" /></label><label>Ações resolvidas<input type="number" value={arenaActions} onChange={(event) => setArenaActions(Number(event.target.value))} className="mt-1 w-full rounded bg-slate-950 p-1" /></label><label>Créditos hoje<input type="number" value={arenaDailyCredits} onChange={(event) => setArenaDailyCredits(Number(event.target.value))} className="mt-1 w-full rounded bg-slate-950 p-1" /></label><label>Cooldown<select value={arenaCooldown} onChange={(event) => setArenaCooldown(event.target.value as typeof arenaCooldown)} className="mt-1 w-full rounded bg-slate-950 p-1"><option value="none">Sem crédito anterior</option><option value="early">23:59:59 atrás</option><option value="ready">24:00:00 atrás</option></select></label><label className="flex items-end gap-2"><input type="checkbox" checked={arenaSameOwner} onChange={(event) => setArenaSameOwner(event.target.checked)} /> Mesmo proprietário</label></div>
+
+      <div className="flex flex-wrap gap-2"><button onClick={simulateProgress} className="rounded bg-cyan-400 px-3 py-2 text-xs font-bold text-slate-950">Testar evento selecionado</button><button onClick={() => setProgress({})} className="rounded border border-slate-500 px-3 py-2 text-xs font-bold text-slate-200">Reiniciar contadores</button><button onClick={simulateArena} className="rounded border border-emerald-400/50 px-3 py-2 text-xs font-bold text-emerald-200">Validar configuração Arena-Z</button></div>
       {eventResult && <p className="rounded bg-cyan-950/40 p-2 text-xs text-cyan-100">Debug de evento: {eventResult}</p>}
       {arenaResult && <p className="rounded bg-slate-950/70 p-2 text-xs text-slate-200">Debug Arena-Z: {arenaResult}</p>}
     </section>

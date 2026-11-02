@@ -92,11 +92,6 @@ function affinity(stance: TrainingStanceKey, personality: TrainingPersonality): 
   return { id: "affinity", type: "AFFINITY", label, target: 20, progress: 0, perBattleCap: 1 };
 }
 
-function seededIndex(seed: number, index: number, length: number) {
-  const value = Math.abs(Math.imul(seed + 31, 1103515245) + index * 12345);
-  return value % length;
-}
-
 export function buildTrainingJourney(input: { stance: TrainingStanceKey; personality: TrainingPersonality; seed: number }): TrainingJourney {
   const stance = TRAINING_STANCES[input.stance];
   const eligible = ["ARENA_Z", "LEAGUE", "EXPEDITIONS", ...stance.preferredObjectives,
@@ -106,8 +101,10 @@ export function buildTrainingJourney(input: { stance: TrainingStanceKey; persona
   ] as Array<keyof typeof OBJECTIVES>;
   const unique = [...new Set(eligible)];
   const picked: Array<keyof typeof OBJECTIVES> = ["ARENA_Z", "LEAGUE", "EXPEDITIONS"];
-  for (let index = 0; picked.length < 6; index += 1) {
-    const candidate = unique[seededIndex(input.seed, index, unique.length)];
+  const offset = ((input.seed % unique.length) + unique.length) % unique.length;
+  const ordered = [...unique.slice(offset), ...unique.slice(0, offset)];
+  for (const candidate of ordered) {
+    if (picked.length >= 6) break;
     if (!picked.includes(candidate)) picked.push(candidate);
   }
   const objectives = picked.map((type, index) => ({ ...OBJECTIVES[type], id: `${type.toLowerCase()}-${index}`, progress: 0 }));
@@ -135,6 +132,14 @@ export type TrainingEvent = {
   thirdAttacks?: number;
   turnThree?: number;
   turnFive?: number;
+  typeKos?: number;
+  roleKos?: number;
+  lastSurvivor?: number;
+  survivedDebuff?: number;
+  lowestHpAttacks?: number;
+  multiKoBattles?: number;
+  armorPenetration?: number;
+  affinity?: number;
 };
 
 export function evaluateTrainingEvent(journey: TrainingJourney, event: TrainingEvent): { delta: number; reason: string } {
@@ -157,6 +162,14 @@ export function evaluateTrainingEvent(journey: TrainingJourney, event: TrainingE
     THIRD_ATTACK: event.thirdAttacks,
     TURN_THREE_HOLD: event.turnThree,
     TURN_FIVE_HOLD: event.turnFive,
+    TYPE_KOS: event.typeKos,
+    ROLE_KOS: event.roleKos,
+    LAST_SURVIVOR: event.lastSurvivor,
+    SURVIVE_DEBUFF: event.survivedDebuff,
+    LOWEST_HP_ATTACK: event.lowestHpAttacks,
+    MULTI_KO_BATTLE: event.multiKoBattles,
+    ARMOR_PENETRATION: event.armorPenetration,
+    AFFINITY: event.affinity,
   };
   const raw = value[objective.type] ?? 0;
   const delta = Math.min(Math.max(0, raw), objective.perBattleCap);
