@@ -59,7 +59,7 @@ export async function activateTrainingJourney(
       milestones: {
         create: snapshot.objectives.map((objective) => ({
           milestoneKey: objective.id, target: objective.target,
-          detailsJson: { type: objective.type, label: objective.label, perBattleCap: objective.perBattleCap, catalogVersion: 1 },
+          detailsJson: { type: objective.type, label: objective.label, perBattleCap: objective.perBattleCap, ...(objective.param ? { param: objective.param } : {}), catalogVersion: 1 },
         })),
       },
     },

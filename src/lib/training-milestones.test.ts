@@ -5,6 +5,7 @@ import {
   buildTrainingManualCopy,
   evaluateTrainingEvent,
   expeditionProgressValue,
+  pickObjectiveTarget,
   validateArenaTrainingCredit,
   type TrainingJourney,
 } from "./training-milestones";
@@ -93,7 +94,7 @@ test("manual copy publishes training limits without claiming the system is live"
   assert.match(copy, /em preparação/i);
   assert.match(copy, /Marco de Postura - \[Postura\]/);
   assert.match(copy, /24 horas/i);
-  assert.match(copy, /Penetração de Armadura/);
+  assert.doesNotMatch(copy, /Penetração de Armadura/);
   assert.doesNotMatch(copy, /mitigação de dano/i);
 });
 
@@ -101,4 +102,11 @@ test("expedition milestone only completes with 6 expeditions in every mode", () 
   assert.equal(expeditionProgressValue({ STANDARD: 30, TRAINING: 0, ITEMS: 0 }, 24), 12);
   assert.equal(expeditionProgressValue({ STANDARD: 12, TRAINING: 12, ITEMS: 5 }, 24), 23);
   assert.equal(expeditionProgressValue({ STANDARD: 12, TRAINING: 6, ITEMS: 6 }, 24), 24);
+});
+
+test("type and posture KO objectives name a concrete target", () => {
+  const journey = buildTrainingJourney({ stance: "EXECUTOR", personality: "LOYAL", seed: 3 });
+  for (const objective of journey.objectives) assert.doesNotMatch(objective.label, /\{type\}|\{role\}|alvo desta jornada/);
+  assert.equal(pickObjectiveTarget("TYPE_KOS", 2), "Água");
+  assert.equal(pickObjectiveTarget("ROLE_KOS", 0), "Defensor");
 });

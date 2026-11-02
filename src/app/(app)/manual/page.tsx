@@ -1001,6 +1001,24 @@ export default async function ManualPage() {
             Comandante: só o primeiro K.O. da batalha cria a ordem. Cada aliado vivo apenas troca o alvo da sua próxima ação normal — não ganha turno adicional, não ultrapassa ninguém na fila e a Agilidade continua decidindo quando ele age.
           </Note>
         </Sub>
+        <Sub title="O que é um round (rodada)">
+          <p className="mb-3 text-xs leading-6 text-slate-400">
+            Round é um ciclo completo do combate. No começo dele, todos os mascotes vivos dos dois lados entram em uma fila por Agilidade (maior primeiro, com uma pequena variação aleatória). Cada mascote age na sua vez; quando todos os vivos terminam suas ações, o round acaba e o próximo começa. Mascotes derrotados saem da fila. A luta termina quando um lado fica sem mascotes vivos ou quando chega ao limite de rounds (150 na Arena e nas Ligas); se o limite chegar, vence quem tem mais HP total restante.
+          </p>
+          <Table
+            headers={["Termo", "O que significa"]}
+            rows={[
+              ["Ação", "Uma jogada de um mascote dentro do round. Cada um tem 1 ação por round; com Agilidade bem acima da média adversária (+60 ou +140) passa a ter 2 ou 3 ações no mesmo round."],
+              ["Início do round 3", "Momento logo antes de qualquer ação do 3º round. \"Chegar vivo ao início do round 3\" significa sobreviver a tudo que aconteceu nos rounds 1 e 2."],
+              ["Fim do round", "Depois que todos os mascotes vivos fizeram suas ações. \"Agir e sobreviver no round\" significa fazer ao menos uma ação e estar vivo nesse momento."],
+              ["Round seguinte", "O round que começa logo depois. \"Sobreviver ao round seguinte\" significa estar vivo quando ele terminar."],
+              ["Ataque direto", "O golpe normal contra um inimigo. Cura, buff e efeitos de postura (como o dano secundário do Artilheiro) não são ataques diretos."],
+              ["K.O.", "O golpe que leva o HP de um inimigo a 0. Só conta para quem deu esse golpe, exceto nos objetivos que dizem \"sua equipe\"."],
+              ["Super-efetivo / ultraefetivo", "Vantagem de tipo: +20% de dano (super-efetivo) ou +40% (ultraefetivo, vantagem dupla). O contrário é resistido (-20%) ou fortemente resistido (-40%)."],
+              ["Foco de equipe", "Dois ou mais aliados atacando o mesmo inimigo no mesmo round."],
+            ]}
+          />
+        </Sub>
         <Note>
           Regra geral de Agilidade: cada mascote começa com 1 ação por rodada.
           Na Arena e Liga, recebe 2 ações quando sua Agilidade supera a média
