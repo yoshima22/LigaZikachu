@@ -991,6 +991,16 @@ export default async function ManualPage() {
             ]}
           />
         </Sub>
+        <Sub title="Posturas desbloqueáveis — como funcionam na batalha">
+          <p className="mb-3 text-xs leading-6 text-slate-400">Estas posturas só ficam disponíveis ao concluir a respectiva Jornada de Postura. Quando houver uma faixa de porcentagem, a descrição informa exatamente quais atributos movem o efeito entre o mínimo e o máximo; atributos duplos usam a média, até 250.</p>
+          <Table
+            headers={["Postura", "Gatilho e alvo", "Escala, duração e limites"]}
+            rows={COMBAT_ROLE_OPTIONS.filter((role) => ["EXECUTOR", "COMMANDER", "PURIFIER", "BLOODTHIRSTY", "ARTILLERY", "RETRIBUTOR", "CORROSIVE", "STRATEGIST", "UNSHAKABLE", "FORTRESS", "ACCUMULATOR", "EXPLOSIVE", "TRAPPER"].includes(role.value)).map((role) => [role.label, role.description.split(". ")[0] + ".", role.description.split(". ").slice(1).join(". ")])}
+          />
+          <Note>
+            Comandante: só o primeiro K.O. da batalha cria a ordem. Cada aliado vivo apenas troca o alvo da sua próxima ação normal — não ganha turno adicional, não ultrapassa ninguém na fila e a Agilidade continua decidindo quando ele age.
+          </Note>
+        </Sub>
         <Note>
           Regra geral de Agilidade: cada mascote começa com 1 ação por rodada.
           Na Arena e Liga, recebe 2 ações quando sua Agilidade supera a média

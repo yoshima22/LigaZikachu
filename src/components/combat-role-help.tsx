@@ -27,6 +27,13 @@ import {
   getScoutBonus,
   getSpecialistDamageBonus,
   getSurvivorReduction,
+  getAccumulatorDamagePct,
+  getArtillerySplashPct,
+  getBloodthirstyLifeSteal,
+  getCorrosiveWoundPct,
+  getExecutorThreshold,
+  getFortressStatPct,
+  getStrategistAgilityPct,
   type CombatRole,
 } from "@/lib/combat-roles";
 
@@ -80,6 +87,32 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
     }
     case "SURVIVOR":
       return [`Redução base: ${pct(getSurvivorReduction(v))}.`, "Abaixo de 30% de HP: +15% de dano e mais 25% de redução.", "Uma vez por combate, um golpe fatal o deixa com 1 HP."];
+    case "EXECUTOR":
+      return [`Executa uma vez por round ao atingir inimigo com até ${pct(getExecutorThreshold(f, a))} do HP máximo.`, "A média de Força e Agilidade define o limiar; Sobrevivente e Dramático ainda são verificados."];
+    case "COMMANDER":
+      return ["O primeiro K.O. da batalha cria uma ordem única de foco.", "Na próxima ação normal de cada aliado vivo, ele mira o mesmo inimigo; não há ação extra nem alteração de Agilidade."];
+    case "PURIFIER":
+      return ["A cada dois rounds, remove até duas reduções de Oportunista/Estrategista do aliado vivo de menor HP.", "Cada redução removida vira Agilidade própria; o ganho depende da média de Agilidade e Carisma."];
+    case "BLOODTHIRSTY":
+      return [`Cura prevista: ${pct(getBloodthirstyLifeSteal(f, v))} do dano efetivo por ataque direto.`, "A média de Força e Vitalidade define o valor; total limitado a 8% do HP máximo por round."];
+    case "ARTILLERY":
+      return [`Dano secundário previsto: ${pct(getArtillerySplashPct(f, a))} do dano final do primeiro ataque direto do round.`, "Atinge outro inimigo vivo de menor HP; não ativa rebote, tipo nem outra postura."];
+    case "RETRIBUTOR":
+      return ["Após sofrer ao menos 15% do HP máximo no round e sobreviver, revida uma vez no primeiro agressor.", "O revide usa 20% do dano base do próprio ataque; Força e Vitalidade não alteram os 20%."];
+    case "CORROSIVE":
+      return [`Ferida reduz a cura efetiva em ${pct(getCorrosiveWoundPct(f, i))} até o fim do próximo round.`, "A média de Força e Instinto define o valor; o alvo pode resistir ao debuff."];
+    case "STRATEGIST":
+      return [`O primeiro aliado diferente que acertar o alvo marcado recebe ${pct(getStrategistAgilityPct(i, a))} de Agilidade.`, "A média de Instinto e Agilidade define o bônus; as marcas somem se o Estrategista cair."];
+    case "UNSHAKABLE":
+      return ["Cada ataque direto próprio renova escudo de 5% do HP máximo.", "Vitalidade e Instinto não alteram os 5%; o efeito não consome ação adicional."];
+    case "FORTRESS":
+      return [`Cada golpe direto recebido altera ${pct(getFortressStatPct(v, i))} de Vitalidade, Instinto e Força.`, "Ganha Vitalidade e Instinto, perde a mesma Força; cada alteração para no limite acumulado de 20%."];
+    case "ACCUMULATOR":
+      return [`Com três cargas, o próximo ataque direto recebe ${pct(getAccumulatorDamagePct(f, a))} de dano extra.`, "A média de Força e Agilidade define o bônus; a terceira carga aguarda o próximo ataque e não explode sozinha."];
+    case "EXPLOSIVE":
+      return ["No terceiro ataque direto da batalha, mira o inimigo vivo de maior Agilidade.", "Adiciona 50% do HP atual ao dano e é derrotado depois do golpe, mesmo com efeitos de sobrevivência."];
+    case "TRAPPER":
+      return ["Nos rounds 3 e 5, bloqueia ativações bônus de postura inimigas apenas durante o round.", "Instinto e Agilidade não alteram round ou duração; buffs já ativos e ataques normais continuam funcionando."];
   }
 }
 
