@@ -1471,8 +1471,8 @@ function rollLuckyEggPct(): number {
  */
 function applyLuckBonus(reward: ExpeditionReward, durationKey: ExpeditionDuration, luck: number): ExpeditionReward {
   if (reward.type === "EGG") {
-    if (reward.eggType === "SPECIAL" && durationKey === "6h" && luck >= 90) {
-      const labChance = Math.min(0.03, 0.005 + (luck - 90) * 0.0003);
+    if (reward.eggType === "SPECIAL" && durationKey === "6h" && luck >= 150) {
+      const labChance = Math.min(0.03, 0.005 + (luck - 150) * 0.0003);
       if (Math.random() < labChance) return { ...reward, eggType: "LAB", luckNote: "🍀 Sorte extraordinária! O ovo veio de Laboratório." };
     }
     const next = reward.eggType === "COMMON" ? "RARE" : reward.eggType === "RARE" ? "SPECIAL" : null;

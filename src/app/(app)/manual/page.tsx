@@ -687,7 +687,7 @@ export default async function ManualPage() {
             rows={[
               [
                 "🍀 Amuleto da Sorte",
-                "Por 6h: dobra a sorte da expedição; 25% de chance de subir a raridade do ovo (Comum→Raro, Raro→Especial), dobrar comida/doce/item ou render +50% de moedas; +50% de chance de Pedra de Mega nas expedições de Itens; em expedições de 6h com sorte ≥ 90, o Ovo Especial pode virar Ovo de Laboratório (0,5% a 3%). O resultado avisa quando o bônus acontece.",
+                "Por 6h: dobra a sorte da expedição; 25% de chance de subir a raridade do ovo (Comum→Raro, Raro→Especial), dobrar comida/doce/item ou render +50% de moedas; +50% de chance de Pedra de Mega nas expedições de Itens; em expedições de 6h com sorte ≥ 150, o Ovo Especial pode virar Ovo de Laboratório (0,5% a 3%). O resultado avisa quando o bônus acontece.",
               ],
               [
                 "💊 Proteína Zika",
