@@ -10,7 +10,7 @@ test("shows the saved objective, progress, and battle cap for an active mileston
       target: 20,
       details: { label: "Aplique 20 K.O.s.", perBattleCap: 2 },
     }),
-    { label: "Aplique 20 K.O.s.", progressLabel: "7/20", perBattleCapLabel: "Máx. 2 por combate", complete: false },
+    { breakdown: null, label: "Aplique 20 K.O.s.", progressLabel: "7/20", perBattleCapLabel: "Máx. 2 por combate", complete: false },
   );
 });
 

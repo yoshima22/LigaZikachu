@@ -2,6 +2,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { buildTrainingJourney, TRAINING_STANCE_KEYS, type TrainingPersonality, type TrainingStanceKey } from "./training-milestones";
 import { isTrainingMilestoneItemType } from "./training-catalog";
 import { completeTrainingJourney } from "./training-journey-state";
+import { EXPEDITION_MODES, expeditionProgressValue } from "./training-milestones";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -80,7 +81,7 @@ export async function cancelTrainingJourney(tx: Db, input: { playerId: string; m
 /** Records an immutable, source-validated increment and unlocks exactly once. */
 export async function recordTrainingJourneyProgress(
   tx: Db,
-  input: { journeyId: string; mascotId: string; objectiveType: string; amount: number },
+  input: { journeyId: string; mascotId: string; objectiveType: string; amount: number; mode?: string },
 ) {
   const journey = await tx.mascotTrainingJourney.findFirst({
     where: { id: input.journeyId, mascotId: input.mascotId, status: "ACTIVE" },
@@ -92,11 +93,18 @@ export async function recordTrainingJourneyProgress(
     return details?.type === input.objectiveType;
   });
   for (const milestone of candidates) {
-    const details = milestone.detailsJson as { perBattleCap?: number } | null;
-    const next = Math.min(milestone.target, milestone.value + Math.max(0, Math.min(Math.floor(input.amount), details?.perBattleCap ?? input.amount)));
-    if (next !== milestone.value) await tx.mascotTrainingMilestoneProgress.update({
+    const details = milestone.detailsJson as { perBattleCap?: number; modes?: Record<string, number> } | null;
+    let next = Math.min(milestone.target, milestone.value + Math.max(0, Math.min(Math.floor(input.amount), details?.perBattleCap ?? input.amount)));
+    let detailsJson: Prisma.InputJsonValue | undefined;
+    if (input.objectiveType === "EXPEDITIONS" && input.mode && (EXPEDITION_MODES as readonly string[]).includes(input.mode)) {
+      const modes = { ...(details?.modes ?? {}) };
+      modes[input.mode] = (modes[input.mode] ?? 0) + 1;
+      next = expeditionProgressValue(modes, milestone.target);
+      detailsJson = { ...(details as object), modes } as Prisma.InputJsonValue;
+    }
+    if (next !== milestone.value || detailsJson) await tx.mascotTrainingMilestoneProgress.update({
       where: { journeyId_milestoneKey: { journeyId: journey.id, milestoneKey: milestone.milestoneKey } },
-      data: { value: next, ...(next >= milestone.target ? { completedAt: new Date() } : {}) },
+      data: { value: next, ...(detailsJson ? { detailsJson } : {}), ...(next >= milestone.target ? { completedAt: new Date() } : {}) },
     });
   }
   const updated = await tx.mascotTrainingMilestoneProgress.findMany({ where: { journeyId: journey.id }, select: { milestoneKey: true, target: true, value: true } });

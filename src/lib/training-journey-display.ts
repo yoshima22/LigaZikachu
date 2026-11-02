@@ -1,4 +1,6 @@
-type MilestoneDetails = { label?: unknown; perBattleCap?: unknown } | null | undefined;
+type MilestoneDetails = { label?: unknown; perBattleCap?: unknown; modes?: Record<string, number>; type?: unknown } | null | undefined;
+
+const MODE_LABELS: Record<string, string> = { STANDARD: "Padrão", TRAINING: "Treino", ITEMS: "Itens" };
 
 const TRAINING_STANCE_LABELS: Record<string, string> = {
   EXECUTOR: "Executor", COMMANDER: "Comandante", PURIFIER: "Purificador", BLOODTHIRSTY: "Sanguinário",
@@ -27,7 +29,15 @@ export function getTrainingMilestoneDisplay(milestone: {
     ? `Máx. ${details.perBattleCap} por combate`
     : null;
 
+  const breakdown = details?.type === "EXPEDITIONS"
+    ? Object.entries(MODE_LABELS).map(([mode, modeLabel]) => {
+        const count = details.modes?.[mode] ?? 0;
+        return { label: modeLabel, count: Math.min(count, 6), target: 6, done: count >= 6 };
+      })
+    : null;
+
   return {
+    breakdown,
     label,
     progressLabel: `${value}/${milestone.target}`,
     perBattleCapLabel: cap,

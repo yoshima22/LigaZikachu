@@ -2089,7 +2089,7 @@ export async function claimExpedition(
       });
     }
     const trainingJourneyId = typeof stored.trainingJourneyId === "string" ? stored.trainingJourneyId : null;
-    if (trainingJourneyId) await recordTrainingJourneyProgress(tx, { journeyId: trainingJourneyId, mascotId: expedition.mascotId, objectiveType: "EXPEDITIONS", amount: 1 });
+    if (trainingJourneyId) await recordTrainingJourneyProgress(tx, { journeyId: trainingJourneyId, mascotId: expedition.mascotId, objectiveType: "EXPEDITIONS", amount: 1, mode });
 
     // ── Bônus e presentes dos aliados ──────────────────────────────────────
     for (const rel of friends) {

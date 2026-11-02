@@ -4,6 +4,7 @@ import {
   buildTrainingJourney,
   buildTrainingManualCopy,
   evaluateTrainingEvent,
+  expeditionProgressValue,
   validateArenaTrainingCredit,
   type TrainingJourney,
 } from "./training-milestones";
@@ -94,4 +95,10 @@ test("manual copy publishes training limits without claiming the system is live"
   assert.match(copy, /24 horas/i);
   assert.match(copy, /Penetração de Armadura/);
   assert.doesNotMatch(copy, /mitigação de dano/i);
+});
+
+test("expedition milestone only completes with 6 expeditions in every mode", () => {
+  assert.equal(expeditionProgressValue({ STANDARD: 30, TRAINING: 0, ITEMS: 0 }, 24), 12);
+  assert.equal(expeditionProgressValue({ STANDARD: 12, TRAINING: 12, ITEMS: 5 }, 24), 23);
+  assert.equal(expeditionProgressValue({ STANDARD: 12, TRAINING: 6, ITEMS: 6 }, 24), 24);
 });

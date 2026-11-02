@@ -1274,6 +1274,15 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                               <span className={display.complete ? "font-bold text-emerald-300" : "font-bold text-[#FFCB05]"}>{display.progressLabel}</span>
                               {display.perBattleCapLabel && <span className="text-slate-400">{display.perBattleCapLabel}</span>}
                             </div>
+                            {display.breakdown && (
+                              <div className="mt-1 flex flex-wrap gap-1 text-[9px]">
+                                {display.breakdown.map((part) => (
+                                  <span key={part.label} className={`rounded border px-1.5 py-0.5 font-semibold ${part.done ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" : "border-amber-400/30 bg-amber-500/10 text-amber-200"}`}>
+                                    {part.done ? "✓ " : ""}{part.label} {part.count}/{part.target}
+                                  </span>
+                                ))}
+                              </div>
+                            )}
                             <div className="mt-1 h-1 overflow-hidden rounded bg-slate-800" aria-label={`Progresso ${display.progressLabel}`}>
                               <div className={`h-full rounded ${display.complete ? "bg-emerald-400" : "bg-[#FFCB05]"}`} style={{ width: `${Math.min(100, (milestone.value / milestone.target) * 100)}%` }} />
                             </div>
