@@ -699,7 +699,7 @@ export default async function ManualPage() {
               ],
               [
                 "💧 Água Fresca",
-                "Remove humor negativo (ANGRY/TIRED/NEEDY), +20 de felicidade e deixa o mascote refrescado por 24h: ele não adoece nem pega doença dos outros mascotes nesse período",
+                "Sorteia uma nova personalidade aleatória, sempre diferente da atual. Nível e atributos não mudam. O mascote precisa estar livre (fora da Arena).",
               ],
               [
                 "🛡️ Política de Fraqueza",

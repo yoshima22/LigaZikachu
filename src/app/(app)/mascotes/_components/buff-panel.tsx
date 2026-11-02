@@ -219,6 +219,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   };
   const isEligible = (mascot: MascotOption) => {
     if (isFirstAidKit) return true;
+    if (selectedBuffItem?.type === "MASCOT_BUFF_MOOD") return !mascot.arenaState || mascot.arenaState === "FREE";
     if (isAbilityTm) return Boolean(abilityTmDef?.pokemonIds.includes(mascot.pokemonId)) && mascot.hiddenAbilityUnlocked !== true;
     if (isAntidote) return Boolean(mascot.diseasedAt);
     if (isWeaknessPolicy) {

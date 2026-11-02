@@ -72,7 +72,8 @@ async function main() {
   });
   await update("MASCOT_BUFF_MOOD", {
     imageUrl: FRESH_WATER_IMAGE,
-    description: "Remove humores negativos (Bravo, Cansado, Carente), devolve +20 de felicidade e deixa o mascote refrescado por 24h: enquanto durar, ele não adoece nem pega doenças de outros mascotes.",
+    price: 1500, ligaCashPrice: 140,
+    description: "Sorteia uma nova personalidade aleatória para o mascote, sempre diferente da atual. Nível e atributos não mudam. O mascote precisa estar livre (fora da Arena).",
   });
   await update("LUCKY_EGG", {
     price: 1300, ligaCashPrice: 120,
