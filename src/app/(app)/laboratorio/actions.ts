@@ -49,7 +49,7 @@ const WEEKLY_LIMITS = { coinsTraded: 5, commonEggs: 10, rareEggs: 4, specialEggs
 const SHOP_COSTS = { coins: 10, commonEgg: 15, rareEgg: 25, specialEgg: 40 } as const;
 const MONTHLY_SHOP_COSTS = { labEgg: 250, evolutionStone: 300 } as const;
 const SHOP_REWARDS = { coins: 400 } as const;
-const FOOD_TRADE_COSTS = { SWEET: 10, RARE_SWEET: 20, HONEY_CANDY: 150, FRESH_WATER: 100 } as const;
+const FOOD_TRADE_COSTS = { SWEET: 10, RARE_SWEET: 20, HONEY_CANDY: 150, FRESH_WATER: 350 } as const;
 // Moeda de cada troca. Todas gastam Comida, menos o Doce Raro, que e comprado
 // com Doces comuns — por isso o tipo consumido nao pode ser fixo em FOOD.
 const FOOD_TRADE_CURRENCY = {

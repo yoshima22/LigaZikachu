@@ -318,7 +318,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
           <div className="rounded-lg border border-border/40 bg-slate-900/60 p-3 space-y-1">
             <p>🍬 <strong className="text-slate-200">1 Doce</strong> — 10 comidas · sem limite</p>
             <p>🍯 <strong className="text-amber-300">1 Bala de Mel</strong> — 150 comidas · limite 3×/semana</p>
-            <p>💧 <strong className="text-cyan-300">1 Água Fresca</strong> — 100 comidas · limite 3×/semana</p>
+            <p>💧 <strong className="text-cyan-300">1 Água Fresca</strong> — 350 comidas · limite 3×/semana</p>
           </div>
           <p>Os limites da Bala de Mel e da Água Fresca reiniciam toda segunda-feira e são contados separadamente.</p>
         </GuideSection>
