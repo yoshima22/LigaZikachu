@@ -43,6 +43,7 @@ import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } 
 import { TypeBadges } from "@/components/mascot/type-badges";
 import { eventEggBonusForStat, type MascotStatKey } from "@/lib/event-egg-bonus";
 import type { TrainingMilestoneInventoryItem } from "@/lib/training-milestone-inventory";
+import { getTrainingMilestoneDisplay } from "@/lib/training-journey-display";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
 interface MascotRelation {
@@ -1214,6 +1215,28 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <div className="mt-1 rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
                 <p className="font-bold">📜 Jornada ativa — {mascot.trainingJourney.stanceKey}</p>
                 <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos.</p>
+                <ol className="mt-2 space-y-1.5">
+                  {mascot.trainingJourney.milestones.map((milestone, index) => {
+                    const display = getTrainingMilestoneDisplay(milestone);
+                    return (
+                      <li key={milestone.milestoneKey} className={`rounded border px-1.5 py-1 ${display.complete ? "border-emerald-400/30 bg-emerald-500/10" : "border-slate-600/60 bg-slate-950/35"}`}>
+                        <div className="flex items-start gap-1.5">
+                          <span className={`mt-px font-bold ${display.complete ? "text-emerald-300" : "text-amber-300"}`}>{display.complete ? "✓" : `${index + 1}.`}</span>
+                          <div className="min-w-0 flex-1">
+                            <p className={display.complete ? "text-emerald-100 line-through decoration-emerald-400/60" : "text-slate-100"}>{display.label}</p>
+                            <div className="mt-0.5 flex items-center justify-between gap-2 text-[9px]">
+                              <span className={display.complete ? "font-bold text-emerald-300" : "font-bold text-[#FFCB05]"}>{display.progressLabel}</span>
+                              {display.perBattleCapLabel && <span className="text-slate-400">{display.perBattleCapLabel}</span>}
+                            </div>
+                            <div className="mt-1 h-1 overflow-hidden rounded bg-slate-800" aria-label={`Progresso ${display.progressLabel}`}>
+                              <div className={`h-full rounded ${display.complete ? "bg-emerald-400" : "bg-[#FFCB05]"}`} style={{ width: `${Math.min(100, (milestone.value / milestone.target) * 100)}%` }} />
+                            </div>
+                          </div>
+                        </div>
+                      </li>
+                    );
+                  })}
+                </ol>
                 <button type="button" disabled={pending} onClick={cancelTrainingJourney} className="mt-1.5 rounded border border-red-400/35 px-1.5 py-0.5 text-[9px] font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-40">
                   Cancelar jornada
                 </button>
