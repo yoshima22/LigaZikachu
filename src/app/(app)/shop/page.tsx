@@ -20,6 +20,7 @@ import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
 import {suggestedLigaCashPrice} from "@/lib/liga-cash-wallet";
+import { getTrainingMilestoneShopItems } from "@/lib/shop-training-items";
 
 export const dynamic = "force-dynamic";
 
@@ -197,6 +198,7 @@ export default async function ShopPage() {
     return { ...i, compatibleIds: (def?.pokemonIds ?? []).filter((id) => !disabledSpecies.has(id)) };
   });
   const leagueItems = items.filter((i) => LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]));
+  const trainingMilestoneItems = getTrainingMilestoneShopItems(items);
   const mascotItems = items.filter((i) =>
     MASCOT_SHOP_ITEM_TYPES.includes(i.type as typeof MASCOT_SHOP_ITEM_TYPES[number]) &&
     !LEAGUE_SHOP_ITEM_TYPES.includes(i.type as typeof LEAGUE_SHOP_ITEM_TYPES[number]) &&
@@ -301,6 +303,20 @@ export default async function ShopPage() {
                 ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} />
             ) : null,
           },
+          ...((trainingMilestoneItems.length > 0) ? [{
+            id: "marcos-postura", label: "Marcos de Postura", icon: TAB_ICONS.buffs,
+            count: trainingMilestoneItems.length,
+            content: (
+              <div className="space-y-3">
+                <div className="rounded-xl border border-amber-400/25 bg-amber-500/5 px-4 py-3 text-xs leading-relaxed text-amber-100/85">
+                  Compre um Marco negociável e use-o em um mascote para iniciar sua Jornada de Postura. O Marco é consumido ao iniciar a jornada e não é devolvido em caso de cancelamento ou substituição.
+                </div>
+                <ShopGrid title="Marcos de Postura"
+                  items={trainingMilestoneItems.map(i => ({ ...i, imageUrl: i.imageUrl ?? null, description: i.description ?? null }))}
+                  ownedIds={new Set()} inventoryCounts={inventoryCountRecord} balance={wallet?.balance ?? 0} ligaCashBalance={ligaCashWallet?.balance??0} ligaCashEnabled={economy.allowLcShop} playerId={player?.id ?? null} searchable pageSize={13} />
+              </div>
+            ),
+          }] : []),
           {
             id: "liga-semanal", label: "Liga Semanal", icon: TAB_ICONS.buffs,
             count: leagueItems.length,
