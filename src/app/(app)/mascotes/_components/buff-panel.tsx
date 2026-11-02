@@ -6,7 +6,8 @@ import { toast } from "sonner";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
 import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
 import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
-import { PERSONALITY_LABEL, getMascotStatusGrowthMultiplier, shortMascotCode } from "@/lib/mascot-data";
+import { PERSONALITY_LABEL, PERSONALITY_DESCRIPTION, getMascotStatusGrowthMultiplier, shortMascotCode } from "@/lib/mascot-data";
+import { FRESH_WATER_IMAGE } from "@/lib/item-image-assets";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
 
 // O id do card vinculado ("<itemId>~bound") vai inteiro para o servidor, que gasta a unidade vinculada.
@@ -121,6 +122,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const [selectedMascot, setSelectedMascot] = useState<string>("");
   const [selectedMascotObj, setSelectedMascotObj] = useState<MascotOption | null>(null);
   const [featherComparison, setFeatherComparison] = useState<RainbowFeatherComparison | null>(null);
+  const [waterResult, setWaterResult] = useState<{ mascotName: string; from: string; to: string } | null>(null);
   // Busca digitável de mascotes (não só favoritos) para o uso de itens.
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<MascotOption[]>([]);
@@ -382,6 +384,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         abilityName?: string;
         statRange?: string;
         comparison?: RainbowFeatherComparison;
+        personalityChange?: { from: string; to: string };
         honeyOutcome?: {
           type: "NEW_FRIEND" | "BONUS_EVENT";
           partnerName: string;
@@ -428,6 +431,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           toast.success(`${mascotName} desbloqueou a habilidade oculta ${r.abilityName ?? ""}! 💿`);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
+        } else if (t === "MASCOT_BUFF_MOOD" && r.personalityChange) {
+          setWaterResult({ mascotName, ...r.personalityChange });
         } else if (t === "LUCKY_EGG") {
           toast.success(`Ovo da Sorte ativado em ${mascotName}! Próximo treinamento +20% EXP. 🥚`);
         } else if (t === "WEAKNESS_POLICY") {
@@ -768,6 +773,66 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           >
             {pending ? "Usando…" : "Usar item ✨"}
           </button>
+        </div>
+      )}
+
+      {waterResult && (
+        <div
+          className="fixed inset-0 z-[120] flex items-center justify-center bg-slate-950/85 p-4 backdrop-blur-sm"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="water-result-title"
+        >
+          <div className="relative max-h-[92vh] w-full max-w-lg overflow-y-auto rounded-3xl border border-cyan-400/40 bg-gradient-to-b from-slate-900 to-slate-950 p-5 shadow-2xl shadow-cyan-950/50 sm:p-7">
+            <button
+              type="button"
+              onClick={() => { setWaterResult(null); router.refresh(); }}
+              className="absolute right-4 top-4 rounded-full border border-slate-700 bg-slate-900 p-2 text-slate-400 transition hover:border-slate-500 hover:text-white"
+              aria-label="Fechar"
+            >
+              <X size={18} />
+            </button>
+
+            <div className="mb-5 flex items-center gap-3 pr-10">
+              <img src={FRESH_WATER_IMAGE} alt="" aria-hidden className="h-14 w-14 shrink-0 object-contain drop-shadow-[0_0_12px_rgba(34,211,238,0.45)]" />
+              <div>
+                <div className="flex items-center gap-1.5 text-cyan-300">
+                  <Sparkles size={14} />
+                  <span className="text-[10px] font-black uppercase tracking-[0.2em]">Água Fresca usada</span>
+                </div>
+                <h3 id="water-result-title" className="text-xl font-black text-white">Nova personalidade!</h3>
+                <p className="text-xs text-slate-400">{waterResult.mascotName} mudou de jeito. Nível e atributos continuam iguais.</p>
+              </div>
+            </div>
+
+            <div className="grid items-stretch gap-3 sm:grid-cols-[1fr_auto_1fr]">
+              <div className="rounded-2xl border border-slate-700 bg-slate-900/70 p-4 text-center">
+                <p className="text-[10px] font-black uppercase tracking-widest text-slate-500">Antes</p>
+                <p className="mt-2 text-lg font-black text-slate-300">{PERSONALITY_LABEL[waterResult.from] ?? waterResult.from}</p>
+              </div>
+              <div className="flex items-center justify-center text-cyan-300">
+                <ArrowRight className="rotate-90 sm:rotate-0" size={24} />
+              </div>
+              <div className="rounded-2xl border border-cyan-400/50 bg-cyan-500/10 p-4 text-center shadow-[0_0_24px_rgba(34,211,238,0.15)]">
+                <p className="text-[10px] font-black uppercase tracking-widest text-cyan-300">Agora</p>
+                <p className="mt-2 text-lg font-black text-white">{PERSONALITY_LABEL[waterResult.to] ?? waterResult.to}</p>
+              </div>
+            </div>
+
+            {PERSONALITY_DESCRIPTION[waterResult.to] && (
+              <p className="mt-4 rounded-xl border border-cyan-400/20 bg-slate-950/70 p-3 text-xs leading-relaxed text-slate-300">
+                {PERSONALITY_DESCRIPTION[waterResult.to]}
+              </p>
+            )}
+
+            <button
+              type="button"
+              onClick={() => { setWaterResult(null); router.refresh(); }}
+              className="mt-5 w-full rounded-xl bg-[#FFCB05] px-4 py-3 text-sm font-black text-[#1A1A2E] transition hover:bg-[#FFD700]"
+            >
+              Beleza!
+            </button>
+          </div>
         </div>
       )}
 

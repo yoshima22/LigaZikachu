@@ -1436,6 +1436,7 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
   error?: string;
   replacedExistingBuff?: boolean;
   honeyOutcome?: HoneySocialOutcome;
+  personalityChange?: { from: string; to: string };
 }> {
   try {
     const { itemId, bound } = parseInventoryKey(inventoryKey);
@@ -1491,6 +1492,7 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
 
     // Verifica se há EXP_BOOST ativo para informar o cliente que será substituído
     let replacedExistingBuff = false;
+    let personalityChange: { from: string; to: string } | undefined;
     if (config.type === "EXP_BOOST") {
       const existing = await prisma.mascotBuff.findFirst({ where: { mascotId, type: "EXP_BOOST", expiresAt: { gt: new Date() } } });
       if (existing) replacedExistingBuff = true;
@@ -1532,6 +1534,7 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
         const options = PERSONALITIES.filter((p) => p !== mascot.personality);
         const personality = options[Math.floor(Math.random() * options.length)];
         await tx.mascot.update({ where: { id: mascotId }, data: { personality } });
+        personalityChange = { from: mascot.personality, to: personality };
         await tx.mascotEvent.create({ data: { mascotId, emoji: "💧", description: `Água Fresca usada! A personalidade mudou de ${PERSONALITY_LABEL[mascot.personality as keyof typeof PERSONALITY_LABEL] ?? mascot.personality} para ${PERSONALITY_LABEL[personality]}.` } });
       } else if (config.type === "HAPPINESS") {
         await tx.mascot.update({ where: { id: mascotId }, data: { happiness: 100, mood: "HAPPY" } });
@@ -1569,7 +1572,7 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       : null;
 
     revalidate(player.id);
-    return { replacedExistingBuff, honeyOutcome };
+    return { replacedExistingBuff, honeyOutcome, personalityChange };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 
