@@ -5,7 +5,7 @@
 import { PrismaClient, Prisma } from "@prisma/client";
 import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
-import { AFFINITY_LABELS, OBJECTIVES, TRAINING_STANCES, type TrainingPersonality, type TrainingStanceKey } from "../src/lib/training-milestones";
+import { AFFINITY_LABELS, OBJECTIVES, affinityLabel, type TrainingPersonality } from "../src/lib/training-milestones";
 for (const f of [".env", ".env.local"]) { const p = resolve(process.cwd(), f); if (!existsSync(p)) continue;
   for (const line of readFileSync(p, "utf8").split(/\r?\n/)) { const m = line.trim().match(/^([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(.*)$/); if (!m) continue; let v = m[2].trim(); if (/^["'].*["']$/.test(v)) v = v.slice(1, -1); process.env[m[1]] ??= v; } }
 const APPLY = process.argv.includes("--apply");
@@ -19,7 +19,11 @@ async function main() {
     if (d.type && d.type in OBJECTIVES) label = OBJECTIVES[d.type as keyof typeof OBJECTIVES].label;
     else if (d.type === "AFFINITY") {
       const m = d.label?.match(/personalidade ([A-Z]+)\.$/);
-      if (m && m[1] in AFFINITY_LABELS) label = `${TRAINING_STANCES[row.journey.stanceKey as TrainingStanceKey].label} - ${AFFINITY_LABELS[m[1] as TrainingPersonality]}`;
+      if (m && m[1] in AFFINITY_LABELS) label = affinityLabel(m[1] as TrainingPersonality);
+      else {
+        const known = (Object.keys(AFFINITY_LABELS) as TrainingPersonality[]).find((p) => d.label?.endsWith(AFFINITY_LABELS[p]));
+        if (known) label = affinityLabel(known);
+      }
     }
     if (d.type === "EXPEDITIONS" && row.value > 0 && !d.modes && row.journey.status === "ACTIVE") legacyExpeditions++;
     if (!label || label === d.label) continue;

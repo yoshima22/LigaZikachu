@@ -100,11 +100,31 @@ export const AFFINITY_LABELS: Record<TrainingPersonality, string> = {
   SERENE: "Em 20 combates, receba um debuff ou provocação e termine o combate vivo.",
 };
 
+export const PERSONALITY_NAMES_PT: Record<TrainingPersonality, string> = {
+  LOYAL: "Leal",
+  PROUD: "Orgulhoso",
+  MISCHIEVOUS: "Travesso",
+  LAZY: "Preguiçoso",
+  COMPETITIVE: "Competitivo",
+  DRAMATIC: "Dramático",
+  PLAYFUL: "Brincalhão",
+  ELECTRIC: "Elétrico",
+  TIMID: "Tímido",
+  CHAOTIC: "Caótico",
+  CURIOUS: "Curioso",
+  GLUTTON: "Guloso",
+  SERENE: "Sereno",
+};
+
+export function affinityLabel(personality: TrainingPersonality) {
+  return `Personalidade ${PERSONALITY_NAMES_PT[personality]}: ${AFFINITY_LABELS[personality]}`;
+}
+
 function affinity(stance: TrainingStanceKey, personality: TrainingPersonality): TrainingObjective {
   if (stance === "PURIFIER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Proteja 30 vezes o aliado vinculado abaixo de 50% de HP.", target: 30, progress: 0, perBattleCap: 2 };
   if (stance === "EXECUTOR" && personality === "COMPETITIVE") return { id: "affinity", type: "AFFINITY", label: "Aplique 20 K.O.s em inimigos com status total maior que o seu.", target: 20, progress: 0, perBattleCap: 2 };
   if (stance === "COMMANDER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Aplique 15 K.O.s no agressor do aliado vinculado em perigo.", target: 15, progress: 0, perBattleCap: 1 };
-  const label = `${TRAINING_STANCES[stance].label} - ${AFFINITY_LABELS[personality]}`;
+  const label = affinityLabel(personality);
   return { id: "affinity", type: "AFFINITY", label, target: 20, progress: 0, perBattleCap: 1 };
 }
 
