@@ -1,5 +1,15 @@
 type MilestoneDetails = { label?: unknown; perBattleCap?: unknown } | null | undefined;
 
+const TRAINING_STANCE_LABELS: Record<string, string> = {
+  EXECUTOR: "Executor", COMMANDER: "Comandante", PURIFIER: "Purificador", BLOODTHIRSTY: "Sanguinário",
+  ARTILLERY: "Artilheiro", RETRIBUTOR: "Revidador", CORROSIVE: "Corrosivo", STRATEGIST: "Estrategista",
+  UNSHAKABLE: "Inabalável", FORTRESS: "Fortaleza", ACCUMULATOR: "Acumulador", EXPLOSIVE: "Explosivo", TRAPPER: "Armadilheiro",
+};
+
+export function getUnlockedTrainingStances(stanceKeys: readonly string[]) {
+  return stanceKeys.flatMap((stanceKey) => TRAINING_STANCE_LABELS[stanceKey] ? [TRAINING_STANCE_LABELS[stanceKey]] : []);
+}
+
 export function getTrainingMilestoneDisplay(milestone: {
   milestoneKey: string;
   value: number;

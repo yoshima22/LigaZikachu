@@ -43,7 +43,7 @@ import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } 
 import { TypeBadges } from "@/components/mascot/type-badges";
 import { eventEggBonusForStat, type MascotStatKey } from "@/lib/event-egg-bonus";
 import type { TrainingMilestoneInventoryItem } from "@/lib/training-milestone-inventory";
-import { getTrainingMilestoneDisplay } from "@/lib/training-journey-display";
+import { getTrainingMilestoneDisplay, getUnlockedTrainingStances } from "@/lib/training-journey-display";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
 interface MascotRelation {
@@ -553,6 +553,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [showRelations, setShowRelations] = useState(false);
   const [showPermanentItems, setShowPermanentItems] = useState(false);
   const [selectedTrainingMilestoneId, setSelectedTrainingMilestoneId] = useState("");
+  const [cardTab, setCardTab] = useState<"ABILITIES" | "STANCES">("ABILITIES");
 
   const activateTrainingJourney = () => {
     if (!selectedTrainingMilestoneId) return;
@@ -1199,20 +1200,51 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               <TypeBadges types={mascot.primaryTypeOverride ? [mascot.primaryTypeOverride, mascot.secondaryTypeOverride].filter(Boolean) as string[] : getPokemonTypes(mascot.pokemonId)} />
               <PerformanceTagPicker mascotId={mascot.id} initial={mascot.performanceTag ?? "NEUTRO"} size="md" />
             </div>
-            {/* Postura de combate preferida (levada ao equipar em equipes) */}
-            <div className="mt-1">
-              <PreferredRolePicker
-                mascotId={mascot.id}
-                initial={mascot.preferredCombatRole}
-                unlockedStances={mascot.unlockedStances ?? []}
-                stats={{
-                  statForce: mascot.statForce, statAgility: mascot.statAgility, statVitality: mascot.statVitality,
-                  statInstinct: mascot.statInstinct, statCharisma: mascot.statCharisma,
-                }}
-              />
-            </div>
-            {mascot.trainingJourney && (
-              <div className="mt-1 rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
+            <div className="mt-2 overflow-hidden rounded-lg border border-slate-700/70 bg-slate-950/35">
+              <div className="grid grid-cols-2 border-b border-slate-700/70">
+                <button type="button" onClick={() => setCardTab("ABILITIES")} className={`px-2 py-1.5 text-[10px] font-bold ${cardTab === "ABILITIES" ? "bg-fuchsia-500/10 text-fuchsia-200" : "text-slate-500 hover:bg-slate-800/70 hover:text-slate-200"}`}>
+                  ✨ Habilidades
+                </button>
+                <button type="button" onClick={() => setCardTab("STANCES")} className={`border-l border-slate-700/70 px-2 py-1.5 text-[10px] font-bold ${cardTab === "STANCES" ? "bg-amber-500/10 text-[#FFCB05]" : "text-slate-500 hover:bg-slate-800/70 hover:text-slate-200"}`}>
+                  ⚔️ Posturas
+                </button>
+              </div>
+              {cardTab === "ABILITIES" && mascot.hiddenAbilityUnlocked !== undefined && (
+                <div className="p-2">
+                  <MascotAbilityPanel
+                    mascotId={mascot.id}
+                    pokemonId={mascot.pokemonId}
+                    hiddenAbilityUnlocked={mascot.hiddenAbilityUnlocked}
+                    abilityChoice={mascot.abilityChoice ?? null}
+                    stats={{ force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality }}
+                    pokedex={mascot.pokedexLink ?? null}
+                  />
+                </div>
+              )}
+              {cardTab === "STANCES" && (
+                <div className="space-y-2 p-2">
+                  <div>
+                    <p className="text-[9px] font-bold uppercase tracking-wide text-slate-500">Postura de combate</p>
+                    <PreferredRolePicker
+                      mascotId={mascot.id}
+                      initial={mascot.preferredCombatRole}
+                      unlockedStances={mascot.unlockedStances ?? []}
+                      stats={{
+                        statForce: mascot.statForce, statAgility: mascot.statAgility, statVitality: mascot.statVitality,
+                        statInstinct: mascot.statInstinct, statCharisma: mascot.statCharisma,
+                      }}
+                    />
+                  </div>
+                  {getUnlockedTrainingStances(mascot.unlockedStances ?? []).length > 0 && (
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-wide text-emerald-300">Posturas conquistadas</p>
+                      <div className="mt-1 flex flex-wrap gap-1">
+                        {getUnlockedTrainingStances(mascot.unlockedStances ?? []).map((stance) => <span key={stance} className="rounded border border-emerald-400/30 bg-emerald-500/10 px-1.5 py-0.5 text-[9px] font-semibold text-emerald-100">✓ {stance}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {mascot.trainingJourney && (
+              <div className="rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
                 <p className="font-bold">📜 Jornada ativa — {mascot.trainingJourney.stanceKey}</p>
                 <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos.</p>
                 <ol className="mt-2 space-y-1.5">
@@ -1241,9 +1273,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   Cancelar jornada
                 </button>
               </div>
-            )}
-            {trainingMilestoneItems.length > 0 && (
-              <div className="mt-1 rounded-lg border border-sky-400/25 bg-sky-500/5 px-2 py-1.5 text-[10px] text-sky-100">
+                  )}
+                  {trainingMilestoneItems.length > 0 && (
+              <div className="rounded-lg border border-sky-400/25 bg-sky-500/5 px-2 py-1.5 text-[10px] text-sky-100">
                 <p className="font-bold">🎯 Marcos de Postura no inventário</p>
                 <p className="mt-0.5 text-sky-100/70">Escolha um Marco para iniciar uma jornada neste mascote. O item é consumido ao ativar.</p>
                 <div className="mt-1.5 flex gap-1.5">
@@ -1256,17 +1288,13 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   </button>
                 </div>
               </div>
-            )}
-            {mascot.hiddenAbilityUnlocked !== undefined && (
-              <MascotAbilityPanel
-                mascotId={mascot.id}
-                pokemonId={mascot.pokemonId}
-                hiddenAbilityUnlocked={mascot.hiddenAbilityUnlocked}
-                abilityChoice={mascot.abilityChoice ?? null}
-                stats={{ force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality }}
-                pokedex={mascot.pokedexLink ?? null}
-              />
-            )}
+                  )}
+                  {!mascot.trainingJourney && trainingMilestoneItems.length === 0 && getUnlockedTrainingStances(mascot.unlockedStances ?? []).length === 0 && (
+                    <p className="text-[10px] text-slate-500">Nenhuma postura especial conquistada ou Marco disponível.</p>
+                  )}
+                </div>
+              )}
+            </div>
             {/* Battle record */}
             {(mascot.battleWins > 0 || mascot.battleLosses > 0) && (
               <div className="text-[9px] text-slate-600">

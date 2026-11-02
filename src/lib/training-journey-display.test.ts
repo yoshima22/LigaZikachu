@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { getTrainingMilestoneDisplay } from "./training-journey-display";
+import { getTrainingMilestoneDisplay, getUnlockedTrainingStances } from "./training-journey-display";
 
 test("shows the saved objective, progress, and battle cap for an active milestone", () => {
   assert.deepEqual(
@@ -18,4 +18,8 @@ test("uses a safe label when a legacy milestone has no saved description", () =>
   const result = getTrainingMilestoneDisplay({ milestoneKey: "legacy", value: 4, target: 4, details: null });
   assert.equal(result.label, "Objetivo de treinamento");
   assert.equal(result.complete, true);
+});
+
+test("lists only posture journey rewards that the mascot has unlocked", () => {
+  assert.deepEqual(getUnlockedTrainingStances(["EXECUTOR", "ATTACKER", "FORTRESS"]), ["Executor", "Fortaleza"]);
 });
