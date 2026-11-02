@@ -1293,11 +1293,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full bg-slate-500 transition-all" style={{ width: `${Math.min(100, Math.round((s.value / 250) * 100))}%` }} />
                 </div>
-                <span className={`min-w-16 text-right text-[10px] font-bold shrink-0 ${mascot.diseasedAt ? "text-lime-300" : "text-slate-400"}`}>
+                <span className={`min-w-[5.5rem] text-right text-[11px] font-bold tabular-nums shrink-0 ${mascot.diseasedAt ? "text-lime-300" : "text-slate-100"}`}>
                   {mascot.diseasedAt ? (
                     <><s className="mr-1 text-slate-600">{s.value}</s>{Math.max(1, Math.floor(s.value * 0.6))} <small className="text-rose-300">(−{s.value - Math.max(1, Math.floor(s.value * 0.6))})</small></>
                   ) : (
-                    <>{s.value}{eventEggBonus && <small className="ml-1 font-black text-emerald-300">(+{eventEggBonus})</small>}</>
+                    <>{s.value}{eventEggBonus && <small className="ml-1 inline-flex rounded border border-emerald-300/35 bg-emerald-400/10 px-1 py-px text-[10px] font-bold leading-none text-emerald-100">+{eventEggBonus}</small>}</>
                   )}
                 </span>
                 <Info size={9} className="text-slate-700 shrink-0" />
