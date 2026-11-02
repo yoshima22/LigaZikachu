@@ -1,3 +1,5 @@
+import { canSelectTrainingStance } from "./training-journey-state";
+
 export const COMBAT_ROLE_VALUES = [
   "DEFENDER",
   "ATTACKER",
@@ -233,8 +235,9 @@ export function defaultCombatRoleFor(mascot: {
   statVitality?: number | null;
   statInstinct?: number | null;
   statCharisma?: number | null;
-}): CombatRole {
+}, unlockedStances: readonly string[] = []): CombatRole {
   const preferred = mascot.preferredCombatRole;
-  if (preferred && COMBAT_ROLE_VALUES.includes(preferred as CombatRole)) return preferred as CombatRole;
+  if (preferred && COMBAT_ROLE_VALUES.includes(preferred as CombatRole) && canSelectTrainingStance(preferred, unlockedStances)) return preferred as CombatRole;
   return recommendCombatRole(mascot);
 }
+

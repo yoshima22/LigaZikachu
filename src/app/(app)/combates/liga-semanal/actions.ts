@@ -8,6 +8,7 @@ import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, MIN_WEEKLY_LEAGUE_MASCOTS } from "./con
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
 import { swissPairSlot } from "@/lib/league-pairing";
 import { getCombatRoleLabel, defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { getPokemonName } from "@/lib/mascot-data";
 import type { WeeklyModifier } from "./constants";
 import { EggType, GiftType, Role, UserStatus, ZikaCoinTxType, type Prisma } from "@prisma/client";
@@ -67,6 +68,7 @@ function activeWeeklyPlayerWhere(now = new Date()) {
 type RoleRecommendMascot = {
   id: string;
   preferredCombatRole?: string | null;
+  stanceUnlocks?: { stanceKey: string }[];
   statForce?: number | null;
   statAgility?: number | null;
   statVitality?: number | null;
@@ -75,11 +77,13 @@ type RoleRecommendMascot = {
 };
 
 function recommendedRolesForMascots(mascots: RoleRecommendMascot[]) {
-  return Object.fromEntries(mascots.map((mascot) => [mascot.id, defaultCombatRoleFor(mascot)]));
+  return Object.fromEntries(mascots.map((mascot) => [mascot.id, defaultCombatRoleFor(mascot, mascot.stanceUnlocks?.map((unlock) => unlock.stanceKey))]));
 }
 
 function resolveMascotRole(mascot: RoleRecommendMascot, roles?: Record<string, string>) {
-  return roles?.[mascot.id] ?? defaultCombatRoleFor(mascot);
+  const unlocked = mascot.stanceUnlocks?.map((unlock) => unlock.stanceKey) ?? [];
+  const stored = roles?.[mascot.id];
+  return stored && canSelectTrainingStance(stored, unlocked) ? stored : defaultCombatRoleFor(mascot, unlocked);
 }
 
 function buildDivisionValidTeam<T extends MegaCandidate>(preferred: T[], fallback: T[], maxSize = 6, maxMegas = 2) {
@@ -675,6 +679,7 @@ const MAX_WEEKLY_PRESETS = 10;
 
 type PresetMascot = {
   id: string; pokemonId: number; nickname: string | null; preferredCombatRole: string | null;
+  stanceUnlocks: { stanceKey: string }[];
   megaEvolvedAt: Date | null; megaEvolvedFromPokemonId: number | null;
   statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number;
 };
@@ -692,11 +697,17 @@ async function validatePresetMascots(playerId: string, mascotIds: unknown, roles
   const ids = mascotIds as string[];
   const owned = await prisma.mascot.findMany({
     where: { id: { in: ids }, playerId },
-    select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true },
+    select: { id: true, pokemonId: true, nickname: true, preferredCombatRole: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true, stanceUnlocks: { select: { stanceKey: true } } },
   });
   if (owned.length !== ids.length) return { error: "Algum mascote selecionado não pertence a você." as string };
   const map = new Map<string, PresetMascot>(owned.map((m) => [m.id, m]));
-  const normalizedRoles = Object.fromEntries(ids.map((id) => [id, normalizeCombatRole(roles?.[id] ?? map.get(id)!.preferredCombatRole ?? defaultCombatRoleFor(map.get(id)!))]));
+  const normalizedRoles = Object.fromEntries(ids.map((id) => {
+    const mascot = map.get(id)!;
+    const unlocked = mascot.stanceUnlocks.map((unlock) => unlock.stanceKey);
+    const role = normalizeCombatRole(roles?.[id] ?? defaultCombatRoleFor(mascot, unlocked));
+    if (!canSelectTrainingStance(role, unlocked)) throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda não desbloqueou a postura ${getCombatRoleLabel(role)}.`);
+    return [id, role];
+  }));
   return { ids, map, normalizedRoles };
 }
 
@@ -1263,7 +1274,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
           // CLEARED slot — skip to auto-fill
         } else {
           const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
-          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
+          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } , include: { stanceUnlocks: { select: { stanceKey: true } } } });
           const ordered = ids
             .map(id => mascots.find(m => m.id === id))
             .filter((mascot) => mascot && !alreadyUsedToday.has(mascot.id));
@@ -1273,6 +1284,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
           const fillers = await prisma.mascot.findMany({
             where: { playerId, id: { notIn: [...alreadyUsedToday] } },
             orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
+            include: { stanceUnlocks: { select: { stanceKey: true } } },
           });
           const validTeam = limitedDivision
             ? buildDivisionValidTeam(ordered.filter(Boolean) as typeof mascots, fillers, 6, 2)
@@ -1287,16 +1299,18 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         where: { playerId, isFavorite: true, id: { notIn: [...alreadyUsedToday] } },
         orderBy: { level: "desc" },
         take: 6,
+        include: { stanceUnlocks: { select: { stanceKey: true } } },
       });
       const usedIds = new Set(favs.map(m => m.id));
       const rest = await prisma.mascot.findMany({
         where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...usedIds])] } },
         orderBy: { level: "desc" },
+        include: { stanceUnlocks: { select: { stanceKey: true } } },
       });
       const all = limitedDivision
         ? buildDivisionValidTeam(favs, rest, 6, 2)
         : buildDivisionValidTeam(favs, rest, 6, Number.POSITIVE_INFINITY);
-      return all.map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
+      return all.map((m, i) => toLeagueMascot(m, i + 1, resolveMascotRole(m)));
     }
 
     // Load items for each player
@@ -1515,12 +1529,12 @@ export async function regenerateReplaysAction(leagueId: string) {
         if (dailyTeam) {
           const ids = dailyTeam.mascotIdsJson as string[];
           const roles = (dailyTeam.rolesJson as Record<string, string>) ?? {};
-          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } });
+          const mascots = await prisma.mascot.findMany({ where: { id: { in: ids }, playerId } , include: { stanceUnlocks: { select: { stanceKey: true } } } });
           const ordered = ids.map(id => mascots.find(m => m.id === id)).filter(Boolean);
           return ordered.map((m, i) => toLeagueMascot(m!, i + 1, resolveMascotRole(m!, roles)));
         }
-        const mascots = await prisma.mascot.findMany({ where: { playerId }, orderBy: { level: "desc" }, take: 6 });
-        return mascots.map((m, i) => toLeagueMascot(m, i + 1, defaultCombatRoleFor(m)));
+        const mascots = await prisma.mascot.findMany({ where: { playerId }, orderBy: { level: "desc" }, take: 6 , include: { stanceUnlocks: { select: { stanceKey: true } } } });
+        return mascots.map((m, i) => toLeagueMascot(m, i + 1, resolveMascotRole(m)));
       }
 
       const [teamA, teamB] = await Promise.all([

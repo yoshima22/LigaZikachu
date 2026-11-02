@@ -13,6 +13,7 @@ import {
   getSpriteUrl,
 } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import {
   WORLD_PARTY_MAX,
   readWorldParty,
@@ -171,7 +172,7 @@ export async function getWorldPartyMascotsAction() {
     where: { playerId: player.id },
     orderBy: [{ isInParty: "desc" }, { level: "desc" }, { createdAt: "asc" }],
     take: 400,
-  }), prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true, preferredCombatRole: true } })]);
+  }), prisma.mascot.findMany({ where: { playerId: player.id }, select: { id: true, pokemonId: true, nickname: true, level: true, preferredCombatRole: true, stanceUnlocks: { select: { stanceKey: true } } } })]);
   return mascots.map((mascot) => ({
     id: mascot.id,
     speciesId: mascot.pokemonId,
@@ -189,7 +190,7 @@ export async function getWorldPartyMascotsAction() {
       statVitality: mascot.statVitality,
       statInstinct: mascot.statInstinct,
       statCharisma: mascot.statCharisma,
-    }),
+    }, mainMascots.find((base) => base.id === mascot.mainMascotId)?.stanceUnlocks.map((unlock) => unlock.stanceKey)),
     stats: {
       force: mascot.statForce,
       agility: mascot.statAgility,
@@ -250,15 +251,22 @@ export async function saveWorldPartyAction(
       throw new Error("Escolha ao menos um mascote para a equipe.");
     const owned = await prisma.worldMascot.findMany({
       where: { id: { in: cleaned.map((e) => e.mascotId) }, playerId: player.id },
-      select: { id: true },
+      select: { id: true, mainMascotId: true },
     });
     const ownedIds = new Set(owned.map((m) => m.id));
+    const bases = await prisma.mascot.findMany({
+      where: { id: { in: owned.flatMap((m) => (m.mainMascotId ? [m.mainMascotId] : [])) }, playerId: player.id },
+      select: { id: true, stanceUnlocks: { select: { stanceKey: true } } },
+    });
+    const unlockedByWorld = new Map(owned.map((m) => [m.id, bases.find((b) => b.id === m.mainMascotId)?.stanceUnlocks.map((u) => u.stanceKey) ?? []]));
     const party = cleaned
       .filter((entry) => ownedIds.has(entry.mascotId))
-      .map((entry) => ({
-        mascotId: entry.mascotId,
-        posture: normalizeCombatRole(entry.posture),
-      }));
+      .map((entry) => {
+        const posture = normalizeCombatRole(entry.posture);
+        if (!canSelectTrainingStance(posture, unlockedByWorld.get(entry.mascotId) ?? []))
+          throw new Error("Esta postura ainda está bloqueada para o mascote-base.");
+        return { mascotId: entry.mascotId, posture };
+      });
     if (party.length !== cleaned.length)
       throw new Error("Um ou mais mascotes não pertencem à sua conta.");
     await prisma.$transaction(async (tx) => {

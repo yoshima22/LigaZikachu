@@ -2127,7 +2127,7 @@ export async function validateArenaMascots(
 
   const mascots = await prisma.mascot.findMany({
     where: { id: { in: unique }, playerId },
-    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 }, routine: { select: { status: true, locationType: true } } },
+    include: { expeditions: { where: { status: "ACTIVE" }, take: 1 }, routine: { select: { status: true, locationType: true } }, stanceUnlocks: { select: { stanceKey: true } } },
   });
   if (mascots.length !== unique.length)
     throw new Error("Um ou mais mascotes nao pertencem ao jogador.");
@@ -2262,6 +2262,14 @@ export async function createArenaTeam(
 
   const mascots = await validateArenaMascots(playerId, mascotIds);
 
+  for (const mascot of mascots) {
+    const requested = combatRoles?.[mascot.id];
+    const role = requested ? normalizeCombatRole(requested) : defaultCombatRoleFor(mascot, mascot.stanceUnlocks.map((unlock) => unlock.stanceKey));
+    if (isTrainingStance(role) && !mascot.stanceUnlocks.some((unlock) => unlock.stanceKey === role)) {
+      throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda não desbloqueou a postura ${getCombatRoleLabel(role)}.`);
+    }
+  }
+
   // Valida nível apenas para salas normais (treino não tem teto de nível)
   if (!isTraining) {
     for (const m of mascots) {
@@ -2369,7 +2377,7 @@ export async function createArenaTeam(
               slot: index + 1,
               combatRole: combatRoles?.[m.id]
                 ? normalizeCombatRole(combatRoles[m.id])
-                : defaultCombatRoleFor(m),
+                : defaultCombatRoleFor(m, m.stanceUnlocks.map((unlock) => unlock.stanceKey)),
             })),
           },
         },
@@ -2448,7 +2456,7 @@ export async function addMascotToArenaTeam(
           teamId,
           mascotId: mascot.id,
           slot,
-          combatRole: defaultCombatRoleFor(mascot),
+          combatRole: defaultCombatRoleFor(mascot, mascot.stanceUnlocks.map((unlock) => unlock.stanceKey)),
         },
       });
       return member;

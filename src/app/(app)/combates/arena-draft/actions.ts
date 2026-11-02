@@ -17,6 +17,7 @@ import {
   getSpriteUrl,
 } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
 import { availableAbilities, resolveAbilitySlug } from "@/lib/abilities";
@@ -57,6 +58,7 @@ export async function getMyDraftMascotsAction() {
       level: true,
       personality: true,
       preferredCombatRole: true,
+      stanceUnlocks: { select: { stanceKey: true } },
       statForce: true,
       diseasedAt: true,
       statAgility: true,
@@ -92,7 +94,7 @@ export async function getMyDraftMascotsAction() {
       statVitality: mascot.statVitality,
       statInstinct: mascot.statInstinct,
       statCharisma: mascot.statCharisma,
-    }),
+    }, mascot.stanceUnlocks.map((unlock) => unlock.stanceKey)),
     isMega: Boolean(mascot.megaEvolvedAt || mascot.megaEvolvedFromPokemonId),
     diseased: Boolean(mascot.diseasedAt),
     stats: {
@@ -154,6 +156,7 @@ export async function saveRealRosterAction(input: {
         nickname: true,
         personality: true,
         preferredCombatRole: true,
+        stanceUnlocks: { select: { stanceKey: true } },
         statForce: true,
         diseasedAt: true,
         statAgility: true,
@@ -184,6 +187,20 @@ export async function saveRealRosterAction(input: {
         hiddenUnlocked: mascot.hiddenAbilityUnlocked,
         mode: "REAL",
       });
+      const unlocked = mascot.stanceUnlocks.map((unlock) => unlock.stanceKey);
+      const posture = normalizeCombatRole(
+        input.postures?.[mascot.id] ??
+          defaultCombatRoleFor({
+            preferredCombatRole: mascot.preferredCombatRole,
+            statForce: mascot.statForce,
+            statAgility: mascot.statAgility,
+            statVitality: mascot.statVitality,
+            statInstinct: mascot.statInstinct,
+            statCharisma: mascot.statCharisma,
+          }, unlocked),
+      );
+      if (!canSelectTrainingStance(posture, unlocked))
+        throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda não desbloqueou esta postura.`);
       return {
         ...(ability ? { ability } : {}),
         id: mascot.id,
@@ -195,17 +212,7 @@ export async function saveRealRosterAction(input: {
         nickname: mascot.nickname?.slice(0, 18) || undefined,
         personality: mascot.personality,
         // Postura escolhida pelo jogador (se houver), senão a padrão do mascote.
-        posture: normalizeCombatRole(
-          input.postures?.[mascot.id] ??
-            defaultCombatRoleFor({
-              preferredCombatRole: mascot.preferredCombatRole,
-              statForce: mascot.statForce,
-              statAgility: mascot.statAgility,
-              statVitality: mascot.statVitality,
-              statInstinct: mascot.statInstinct,
-              statCharisma: mascot.statCharisma,
-            }),
-        ),
+        posture,
         stats: {
           force: Math.max(1, Math.floor(mascot.statForce * (mascot.diseasedAt ? 0.6 : 1))),
           agility: Math.max(1, Math.floor(mascot.statAgility * (mascot.diseasedAt ? 0.6 : 1))),

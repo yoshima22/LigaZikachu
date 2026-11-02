@@ -7,6 +7,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
 import { normalizeBattleDivision, validateBattleDivision, evaluateBattleTeam } from "@/lib/battle-divisions";
 import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
@@ -364,7 +365,7 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
     if (!(["REGISTRATION", "ACTIVE"] as string[]).includes(league.status)) return { error: "Esta edição não aceita mais equipes." };
     if (input.battleSlot < 1 || input.battleSlot > 3) return { error: "Horário de combate inválido." };
     if (input.mascotIds.length < 1 || input.mascotIds.length > league.teamSize || new Set(input.mascotIds).size !== input.mascotIds.length) return { error: `Selecione entre 1 e ${league.teamSize} mascotes diferentes.` };
-    const mascots = await prisma.mascot.findMany({ where: { id: { in: input.mascotIds }, playerId: player.id } });
+    const mascots = await prisma.mascot.findMany({ where: { id: { in: input.mascotIds }, playerId: player.id }, include: { stanceUnlocks: { select: { stanceKey: true } } } });
     if (mascots.length !== input.mascotIds.length) return { error: "Um ou mais mascotes não pertencem à sua conta." };
     if (league.maxLevel && mascots.some((m) => m.level > league.maxLevel!)) return { error: `Esta semana aceita apenas mascotes até o nível ${league.maxLevel}.` };
     if (league.requiredType && mascots.some((m) => !((m.primaryTypeOverride ? [m.primaryTypeOverride, m.secondaryTypeOverride].filter(Boolean) : getPokemonTypes(m.pokemonId)).includes(league.requiredType!)))) return { error: `Semana monotipo: todos precisam possuir o tipo ${league.requiredType}.` };
@@ -406,7 +407,12 @@ export async function saveRushTeamAction(input: { leagueId: string; battleDate: 
         return { error: `${rotulo}: ${repeated.nickname ?? getPokemonName(repeated.pokemonId)} ${onde}` };
       }
     }
-    const roles = Object.fromEntries(mascots.map((m) => [m.id, normalizeCombatRole(input.roles?.[m.id]??m.preferredCombatRole??defaultCombatRoleFor(m))]));
+    const roles = Object.fromEntries(mascots.map((m) => {
+      const unlocked = m.stanceUnlocks.map((unlock) => unlock.stanceKey);
+      const role = normalizeCombatRole(input.roles?.[m.id] ?? defaultCombatRoleFor(m, unlocked));
+      if (!canSelectTrainingStance(role, unlocked)) throw new Error(`${m.nickname ?? getPokemonName(m.pokemonId)} ainda não desbloqueou esta postura.`);
+      return [m.id, role];
+    }));
     await prisma.rushLeagueDailyTeam.upsert({
       where: { leagueId_playerId_battleDate_battleSlot: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot } },
       create: { leagueId: league.id, playerId: player.id, battleDate: input.battleDate, battleSlot: input.battleSlot, source: "MANUAL", mascotIdsJson: input.mascotIds, rolesJson: roles, lockedAt: new Date() },

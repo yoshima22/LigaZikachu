@@ -6,6 +6,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { normalizeCombatRole, defaultCombatRoleFor } from "@/lib/combat-roles";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { currentEventTeamsWhere, getSyncWindowState } from "@/lib/sync-challenge";
 import type { Role } from "@prisma/client";
 import { validateBattleDivision } from "@/lib/battle-divisions";
@@ -77,6 +78,7 @@ export async function addLineupMascotAction(
           id: true, playerId: true, nickname: true, pokemonId: true, preferredCombatRole: true,
           megaEvolvedAt: true, megaEvolvedFromPokemonId: true,
           statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
+          stanceUnlocks: { select: { stanceKey: true } },
         },
       }),
       prisma.syncEventLineup.findFirst({
@@ -96,7 +98,7 @@ export async function addLineupMascotAction(
     let nextSlot = 1;
     while (usedSlots.has(nextSlot)) nextSlot++;
     await prisma.syncEventLineup.create({
-      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: defaultCombatRoleFor(mascot) },
+      data: { teamId: team.id, playerId: player.id, mascotId, slot: nextSlot, combatRole: defaultCombatRoleFor(mascot, mascot.stanceUnlocks.map((unlock) => unlock.stanceKey)) },
     });
 
     revalidatePath("/desafio-sincronizado");
@@ -120,9 +122,13 @@ export async function setLineupCombatRoleAction(
     const entry = team.lineups.find((l) => l.playerId === player.id && l.mascotId === mascotId);
     if (!entry) return { error: "Mascote não está na sua escalação." };
 
+    const mascot = await prisma.mascot.findFirst({ where: { id: mascotId, playerId: player.id }, select: { stanceUnlocks: { select: { stanceKey: true } } } });
+    if (!mascot) return { error: "Mascote não encontrado." };
+    const role = normalizeCombatRole(combatRole);
+    if (!canSelectTrainingStance(role, mascot.stanceUnlocks.map((unlock) => unlock.stanceKey))) return { error: "Esta postura ainda está bloqueada para este mascote." };
     await prisma.syncEventLineup.update({
       where: { id: entry.id },
-      data: { combatRole: normalizeCombatRole(combatRole) },
+      data: { combatRole: role },
     });
 
     revalidatePath("/desafio-sincronizado");

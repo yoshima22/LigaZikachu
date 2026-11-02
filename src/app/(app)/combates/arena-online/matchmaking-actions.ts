@@ -273,6 +273,7 @@ function fighterFromMascot(mascot: {
   statInstinct: number;
   statVitality: number;
   preferredCombatRole?: string | null;
+  stanceUnlocks?: { stanceKey: string }[];
 }) {
   const maxHp = Math.max(
     10,
@@ -299,7 +300,7 @@ function fighterFromMascot(mascot: {
       statCharisma: mascot.statCharisma,
       statInstinct: mascot.statInstinct,
       statVitality: mascot.statVitality,
-    }),
+    }, mascot.stanceUnlocks?.map((unlock) => unlock.stanceKey)),
     x: -1,
     y: -1,
     shield: 0,
@@ -778,6 +779,7 @@ export async function getLivePvpMatchAction(
             statVitality: true,
             performanceTag: true,
             preferredCombatRole: true,
+            stanceUnlocks: { select: { stanceKey: true } },
             playerId: true,
             isShiny: true,
             player: {
@@ -1041,6 +1043,7 @@ export async function initializeLivePvpBattleActionLegacy() {
       statAgility: true,
       statCharisma: true,
       preferredCombatRole: true,
+      stanceUnlocks: { select: { stanceKey: true } },
       statInstinct: true,
       statVitality: true,
     },
@@ -2281,6 +2284,7 @@ export async function initializeLivePvpBattleAction() {
       statAgility: true,
       statCharisma: true,
       preferredCombatRole: true,
+      stanceUnlocks: { select: { stanceKey: true } },
       statInstinct: true,
       statVitality: true,
     },

@@ -4,6 +4,7 @@ import { MascotPersonality, Prisma, ZikaCoinTxType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
 import { toLeagueMascot } from "@/lib/league-combat";
+import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { cleanupExpiredArenaResting } from "@/lib/arena-z";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { EGG_SHINY_CHANCE, EGG_STAT_RANGES, getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
@@ -308,6 +309,7 @@ const PLAYER_MASCOT_SELECT = {
   id: true, playerId: true, pokemonId: true, nickname: true, level: true, personality: true, diseasedAt: true,
   statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true,
   speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
+  stanceUnlocks: { select: { stanceKey: true } },
 } as const;
 
 export type JohtoBattlePayload = {
@@ -373,6 +375,8 @@ export async function runJohtoRaidAttack(userId: string, selectedMascotIds: stri
   const alive = leaderRow.mascots.filter((m) => m.hpCurrent > 0).map((m) => ({ slot: m.slot, hpMax: m.hpMax, hpCurrent: m.hpCurrent }));
   if (alive.length === 0) return { ok: false, message: `${def.name} já foi derrotado.` };
 
+  const locked = mascots.find((m) => !canSelectTrainingStance(selectedRoles[m.id] ?? "", m.stanceUnlocks.map((u) => u.stanceKey)));
+  if (locked) return { ok: false, message: `${locked.nickname ?? getPokemonName(locked.pokemonId)} ainda não desbloqueou esta postura.` };
   const playerTeam = mascots.map((m, index) => toLeagueMascot({ ...m, playerId: player.id }, index, selectedRoles[m.id]));
   const combo = await getComboState(event.id, now);
   const outcome = runJohtoBattle(playerTeam, def, leaderRow.position, alive, event.damageScale, combo.bonusPct);
