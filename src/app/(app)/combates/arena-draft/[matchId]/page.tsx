@@ -8,7 +8,7 @@ import {
   TYPE_ADVANTAGE,
   TYPE_LABELS_PT,
 } from "@/lib/mascot-data";
-import type { ArenaDraftPet } from "@/lib/arena-draft";
+import { normalizeArenaDraftPosture } from "@/lib/arena-draft";
 import type { ArenaCombatRuntime, ArenaMascot } from "@/lib/arena-z";
 import { draftAbilitySlug } from "@/lib/abilities/draft";
 import { DraftRoomClient } from "./room-client";
@@ -140,7 +140,7 @@ export default async function DraftRoomPage({
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),
           isMega: p.isMega,
           status,
-          posture: (revealBuild ? (ownPostures[p.id] ?? p.posture) : "ATTACKER") as ArenaDraftPet["posture"],
+          posture: normalizeArenaDraftPosture(revealBuild ? (ownPostures[p.id] ?? p.posture) : "ATTACKER"),
           stats: revealBuild ? p.stats : null,
           hp: battle?.runtime?.hp[p.id] ?? null,
           maxHp: Math.max(

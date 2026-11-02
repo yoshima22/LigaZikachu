@@ -48,6 +48,15 @@ export const DRAFT_POSTURES = [
   "SPECIALIST",
   "SURVIVOR",
 ] as const;
+export type ArenaDraftPosture = (typeof DRAFT_POSTURES)[number];
+
+/** Draft deliberately does not expose locked training postures. Snapshots from
+ * other modes are normalized at the page boundary instead of widening Draft UI. */
+export function normalizeArenaDraftPosture(value: unknown): ArenaDraftPosture {
+  return DRAFT_POSTURES.includes(value as ArenaDraftPosture)
+    ? value as ArenaDraftPosture
+    : "ATTACKER";
+}
 export const DRAFT_STAT_KEYS = [
   "force",
   "agility",
