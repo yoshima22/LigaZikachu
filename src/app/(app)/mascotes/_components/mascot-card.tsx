@@ -910,6 +910,14 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
               </div>
             );
           })()}
+          <div className="flex gap-1">
+            {(["STANDARD", "TRAINING", "ITEMS"] as const).map(m => (
+              <button key={m} type="button" onClick={() => setExpeditionMode(m)}
+                className={`flex-1 rounded-lg border py-1 text-[10px] font-semibold ${expeditionMode === m ? "border-blue-500/40 bg-blue-500/10 text-blue-300" : "border-border text-slate-500"}`}>
+                {m === "TRAINING" ? "Treino" : m === "ITEMS" ? "Itens" : "Padrão"}
+              </button>
+            ))}
+          </div>
           <div className="flex items-center justify-between gap-2">
             <button type="button" onClick={() => { const keys: ExpeditionDuration[] = ["30min", "1h", "3h", "6h"]; const index = keys.indexOf(lootPreviewDuration); setLootPreviewDuration(keys[(index + keys.length - 1) % keys.length]); }} className="rounded-lg border border-border bg-slate-900 p-2 text-slate-300"><ChevronLeft size={13}/></button>
             <div className="flex flex-wrap justify-center gap-1">
@@ -1433,6 +1441,11 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 </span>
               </div>
             )}
+            {shouldShowExpeditionStatus(claimable) && <button type="button"
+              onClick={() => { if (expedition.mode === "STANDARD" || expedition.mode === "TRAINING" || expedition.mode === "ITEMS") setExpeditionMode(expedition.mode); setShowLootPreview(true); }}
+              className="w-full rounded-xl border border-border bg-slate-900/60 py-1.5 text-[11px] text-slate-400 hover:text-slate-200">
+              🎁 Loot? Consultar chances de expedição
+            </button>}
             {shouldShowExpeditionCancellation(claimable) && <button
               type="button"
               disabled={pending}

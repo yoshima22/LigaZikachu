@@ -1,5 +1,6 @@
 "use client";
 
+import { FRESH_WATER_IMAGE } from "@/lib/item-image-assets";
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
 import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction, tradeFoodInLabAction } from "../actions";
@@ -620,8 +621,9 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
           />
           <FoodTradeItem
             title="1 Água Fresca"
-            description="Remove imediatamente o humor negativo de um mascote."
+            description="Sorteia uma nova personalidade para o mascote, sempre diferente da atual."
             emoji="💧"
+            imageUrl={FRESH_WATER_IMAGE}
             cost={foodTrades.costs.FRESH_WATER}
             food={foodTrades.food}
             used={weeklyUsage.freshWaters}
