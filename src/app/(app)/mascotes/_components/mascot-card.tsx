@@ -28,6 +28,8 @@ import {
   toggleExpLockAction,
   toggleMascotOperationsLockAction,
   removeXpShareAction,
+  activateMascotTrainingJourneyAction,
+  cancelMascotTrainingJourneyAction,
 } from "../actions";
 import { EXPEDITION_DURATIONS, TRAINING_EXP_MULT, EXP_REWARDS, expeditionPersonalityExpMult, getExpeditionAgilityReduction, getExpeditionOdds, getExpeditionEggRarityChances, getShinySprite, EVOLUTION_MAP, getPokemonName as getEvoName } from "@/lib/mascot-data";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -40,6 +42,7 @@ import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } from "@/lib/mascot-data";
 import { TypeBadges } from "@/components/mascot/type-badges";
 import { eventEggBonusForStat, type MascotStatKey } from "@/lib/event-egg-bonus";
+import type { TrainingMilestoneInventoryItem } from "@/lib/training-milestone-inventory";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
 interface MascotRelation {
@@ -125,6 +128,7 @@ interface Props {
   spritePreferences?: PlayerSpritePreferences | null;
   /** % de bônus de EXP de evento ativo por modo, para a prévia bater com o recebido. */
   eventExpBonusPct?: Partial<Record<ExpeditionMode, number>>;
+  trainingMilestoneItems?: TrainingMilestoneInventoryItem[];
 }
 
 const IV_RATING_STYLE: Record<string, string> = {
@@ -520,7 +524,7 @@ function XpShareBadge({ mascotId }: { mascotId: string }) {
   );
 }
 
-export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh, spritePreferences = null, eventExpBonusPct }: Props) {
+export function MascotCard({ mascot, isAdmin = false, compactView = false, onRefresh, spritePreferences = null, eventExpBonusPct, trainingMilestoneItems = [] }: Props) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [editingName, setEditingName] = useState(false);
@@ -547,6 +551,35 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [lootPreviewDuration, setLootPreviewDuration] = useState<ExpeditionDuration>("1h");
   const [showRelations, setShowRelations] = useState(false);
   const [showPermanentItems, setShowPermanentItems] = useState(false);
+  const [selectedTrainingMilestoneId, setSelectedTrainingMilestoneId] = useState("");
+
+  const activateTrainingJourney = () => {
+    if (!selectedTrainingMilestoneId) return;
+    startTransition(async () => {
+      let result = await activateMascotTrainingJourneyAction(mascot.id, selectedTrainingMilestoneId);
+      if (result.needsReplacementConfirmation) {
+        const replace = window.confirm("Este mascote já possui uma jornada ativa. O novo Marco será consumido e o progresso atual será apagado. Deseja continuar?");
+        if (!replace) return;
+        result = await activateMascotTrainingJourneyAction(mascot.id, selectedTrainingMilestoneId, true);
+      }
+      if (!result.ok) { toast.error(result.error ?? "Não foi possível ativar a jornada."); return; }
+      setSelectedTrainingMilestoneId("");
+      toast.success("Jornada de Postura ativada. O Marco foi consumido.");
+      onRefresh?.();
+      router.refresh();
+    });
+  };
+
+  const cancelTrainingJourney = () => {
+    if (!window.confirm("Cancelar esta jornada? O progresso será apagado e o Marco não será devolvido.")) return;
+    startTransition(async () => {
+      const result = await cancelMascotTrainingJourneyAction(mascot.id);
+      if (!result.ok) { toast.error("Não foi possível cancelar a jornada."); return; }
+      toast.success("Jornada cancelada. O Marco não é devolvido.");
+      onRefresh?.();
+      router.refresh();
+    });
+  };
 
   // Estado otimista — reflete mudanças localmente antes do re-render do servidor
   const [localHappiness, setLocalHappiness] = useState(mascot.happiness);
@@ -1180,7 +1213,25 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             {mascot.trainingJourney && (
               <div className="mt-1 rounded-lg border border-amber-400/25 bg-amber-500/5 px-2 py-1.5 text-[10px] text-amber-100">
                 <p className="font-bold">📜 Jornada ativa — {mascot.trainingJourney.stanceKey}</p>
-                <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos · selecione o card para acompanhar.</p>
+                <p className="mt-0.5 text-amber-100/75">{mascot.trainingJourney.milestones.filter((m) => m.value >= m.target).length}/{mascot.trainingJourney.milestones.length} marcos concluídos.</p>
+                <button type="button" disabled={pending} onClick={cancelTrainingJourney} className="mt-1.5 rounded border border-red-400/35 px-1.5 py-0.5 text-[9px] font-semibold text-red-200 hover:bg-red-500/10 disabled:opacity-40">
+                  Cancelar jornada
+                </button>
+              </div>
+            )}
+            {trainingMilestoneItems.length > 0 && (
+              <div className="mt-1 rounded-lg border border-sky-400/25 bg-sky-500/5 px-2 py-1.5 text-[10px] text-sky-100">
+                <p className="font-bold">🎯 Marcos de Postura no inventário</p>
+                <p className="mt-0.5 text-sky-100/70">Escolha um Marco para iniciar uma jornada neste mascote. O item é consumido ao ativar.</p>
+                <div className="mt-1.5 flex gap-1.5">
+                  <select value={selectedTrainingMilestoneId} onChange={(event) => setSelectedTrainingMilestoneId(event.target.value)} disabled={pending} className="min-w-0 flex-1 rounded border border-slate-600 bg-slate-950 px-1.5 py-1 text-[10px] text-slate-100">
+                    <option value="">Selecionar Marco…</option>
+                    {trainingMilestoneItems.map((item) => <option key={item.id} value={item.id}>{item.name} ×{item.quantity}</option>)}
+                  </select>
+                  <button type="button" disabled={pending || !selectedTrainingMilestoneId} onClick={activateTrainingJourney} className="rounded bg-[#FFCB05] px-2 py-1 text-[10px] font-bold text-[#1A1A2E] disabled:opacity-40">
+                    Ativar
+                  </button>
+                </div>
               </div>
             )}
             {mascot.hiddenAbilityUnlocked !== undefined && (

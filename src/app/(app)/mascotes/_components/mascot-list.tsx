@@ -16,6 +16,7 @@ import { MascotBankList } from "./mascot-bank-list-demand";
 import type { BankMascot } from "./mascot-bank-list";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { MascotCard, getOrderClueStepLabel, rewardToDisplay, type ExpeditionRewardDisplay } from "./mascot-card";
+import type { TrainingMilestoneInventoryItem } from "@/lib/training-milestone-inventory";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 
 interface MascotData {
@@ -213,6 +214,7 @@ export function MascotList({
   isAdmin = false,
   spritePreferences = null,
   eventExpBonusPct,
+  trainingMilestoneItems = [],
 }: {
   mascots: MascotData[];
   bankMascots?: BankMascot[];
@@ -224,6 +226,7 @@ export function MascotList({
   isAdmin?: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
   eventExpBonusPct?: Partial<Record<import("@/lib/mascot-data").ExpeditionMode, number>>;
+  trainingMilestoneItems?: TrainingMilestoneInventoryItem[];
 }) {
   const router = useRouter();
   const [search, setSearch] = useState("");
@@ -492,7 +495,7 @@ export function MascotList({
                 </span>
               </div>
               <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} spritePreferences={spritePreferences} eventExpBonusPct={eventExpBonusPct} />)}
+                {highlighted.map(m => <MascotCard key={m.id} mascot={m} isAdmin={isAdmin} spritePreferences={spritePreferences} eventExpBonusPct={eventExpBonusPct} trainingMilestoneItems={trainingMilestoneItems} />)}
               </div>
             </section>
           )}
@@ -508,6 +511,7 @@ export function MascotList({
               hasRareSweet={hasRareSweet}
               isAdmin={isAdmin}
               spritePreferences={spritePreferences}
+              trainingMilestoneItems={trainingMilestoneItems}
             />
           )}
         </>

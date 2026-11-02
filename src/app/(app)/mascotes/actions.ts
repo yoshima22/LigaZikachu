@@ -2353,6 +2353,8 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string; preferredCombatRole: string | null;
     eventBonusStat: string | null; eventBonusValue: number | null;
+    unlockedStances: string[];
+    trainingJourney: { id: string; stanceKey: string; startedAt: Date; milestones: { milestoneKey: string; target: number; value: number; details: unknown }[] } | null;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -2376,6 +2378,12 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
           take: 10,
           include: { mascotB: { select: { id: true, pokemonId: true, nickname: true, player: { select: { id: true, displayName: true } } } } },
         },
+        trainingJourneys: {
+          where: { status: "ACTIVE" },
+          take: 1,
+          select: { id: true, stanceKey: true, startedAt: true, milestones: { select: { milestoneKey: true, target: true, value: true, detailsJson: true } } },
+        },
+        stanceUnlocks: { select: { stanceKey: true } },
       },
     });
     if (!m || m.playerId !== player.id) return { error: "Mascote não encontrado." };
@@ -2411,6 +2419,18 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         ivRating: m.ivRating, ivScore: m.ivScore, performanceTag: m.performanceTag,
         preferredCombatRole: m.preferredCombatRole,
         eventBonusStat: m.eventBonusStat, eventBonusValue: m.eventBonusValue,
+        unlockedStances: m.stanceUnlocks.map((unlock) => unlock.stanceKey),
+        trainingJourney: m.trainingJourneys[0] ? {
+          id: m.trainingJourneys[0].id,
+          stanceKey: m.trainingJourneys[0].stanceKey,
+          startedAt: m.trainingJourneys[0].startedAt,
+          milestones: m.trainingJourneys[0].milestones.map((milestone) => ({
+            milestoneKey: milestone.milestoneKey,
+            target: milestone.target,
+            value: milestone.value,
+            details: milestone.detailsJson,
+          })),
+        } : null,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,

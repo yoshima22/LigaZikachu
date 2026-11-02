@@ -16,7 +16,8 @@ import { BuffPanel } from "./_components/buff-panel";
 import { BulkInteractPanel } from "./_components/bulk-interact-panel";
 import { Egg, ShoppingBag, ChevronDown } from "lucide-react";
 import Link from "next/link";
-import { EGG_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { EGG_SHOP_ITEM_TYPES, TRAINING_MILESTONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
+import { getTrainingMilestoneInventoryItems } from "@/lib/training-milestone-inventory";
 import { getShopItemImages } from "@/lib/shop-cache";
 import { cleanupExpiredArenaResting, RETIRE_COOLDOWN_MS } from "@/lib/arena-z";
 import { RetirePenaltyBadge } from "./../arena-z/_components/arena-z-buttons";
@@ -77,6 +78,7 @@ async function fetchMascotPageData(playerId: string) {
     foods,
     lastRetiredTeam,
     buffInventory,
+    trainingMilestoneInventory,
     weaknessPolicyMascots,
     xpShareHolder,
   ] = await retryMascotLoad(() => Promise.all([
@@ -147,6 +149,16 @@ async function fetchMascotPageData(playerId: string) {
         quantity: true,
         boundQuantity: true,
         item: { select: { id: true, name: true, type: true, description: true, imageUrl: true, metadata: true, rarity: true } }
+      },
+    }),
+    // Marcos não são buffs: ficam em sua própria consulta para aparecerem no
+    // card do mascote e nunca caírem no fluxo genérico de uso de consumíveis.
+    prisma.playerInventory.findMany({
+      where: { playerId, quantity: { gt: 0 }, item: { type: { in: TRAINING_MILESTONE_SHOP_ITEM_TYPES as unknown as import("@prisma/client").ShopItemType[] } } },
+      select: {
+        quantity: true,
+        boundQuantity: true,
+        item: { select: { id: true, name: true, type: true, imageUrl: true } },
       },
     }),
     // Consulta mínima para a Política de Fraqueza: inclui elegíveis do banco sem carregar seus cards.
@@ -240,7 +252,7 @@ async function fetchMascotPageData(playerId: string) {
     return [];
   }) : [];
 
-  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots };
+  return { featuredMascots: featuredMascotsEnriched, bankMascots: [], bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, trainingMilestoneInventory: getTrainingMilestoneInventoryItems(trainingMilestoneInventory), weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots };
 }
 
 const getCachedMascotPageData = (playerId: string) =>
@@ -331,7 +343,7 @@ export default async function MascotesPage() {
     return {} as Record<string, string>;
   });
 
-  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots } = pageData;
+  const { featuredMascots, bankMascots, bankMascotCount, eggs, incubator, foods, lastRetiredTeam, buffInventory, trainingMilestoneInventory, weaknessPolicyMascots, xpShareHolder, activeMascotBuffs, proteinBoostedMascots } = pageData;
 
   // Bônus de raridade de evento ativo agora — recalculado a cada carregamento
   // da página, refletindo eventos de fim de semana no painel da incubadora.
@@ -768,6 +780,7 @@ export default async function MascotesPage() {
             isAdmin={admin}
             spritePreferences={spritePreferences}
             eventExpBonusPct={expeditionEventExpBonusPct}
+            trainingMilestoneItems={trainingMilestoneInventory}
           />
         )}
       </div>

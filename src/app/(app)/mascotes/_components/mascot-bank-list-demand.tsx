@@ -27,6 +27,7 @@ import { PerformanceTagPicker } from "./performance-tag-picker";
 import type { BankMascot } from "./mascot-bank-list";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 import { buildFocusedMascotBankRequest } from "@/lib/mascot-bank-focus";
+import type { TrainingMilestoneInventoryItem } from "@/lib/training-milestone-inventory";
 
 type FullMascotData = NonNullable<Awaited<ReturnType<typeof getMascotDetailAction>>["data"]>;
 type OcupFilter = "all" | "free" | "busy" | "expedition" | "refuge" | "bazar" | "arena" | "resting" | "injured" | "diseased" | "buff";
@@ -279,6 +280,7 @@ function BankRow({
   hasRareSweet,
   isAdmin,
   spritePreferences,
+  trainingMilestoneItems,
 }: {
   mascot: BankMascot;
   hasFood: boolean;
@@ -286,6 +288,7 @@ function BankRow({
   hasRareSweet: boolean;
   isAdmin: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
+  trainingMilestoneItems: TrainingMilestoneInventoryItem[];
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState<"basic" | "full">("basic");
@@ -514,6 +517,7 @@ function BankRow({
                   compactView={view === "basic"}
                   onRefresh={fetchFull}
                   spritePreferences={spritePreferences}
+                  trainingMilestoneItems={trainingMilestoneItems}
                 />
               </div>
             </>
@@ -532,6 +536,7 @@ export function MascotBankList({
   hasRareSweet = false,
   isAdmin,
   spritePreferences,
+  trainingMilestoneItems = [],
   xpShareHolder = null,
 }: {
   mascots: BankMascot[];
@@ -541,6 +546,7 @@ export function MascotBankList({
   hasRareSweet?: boolean;
   isAdmin: boolean;
   spritePreferences?: PlayerSpritePreferences | null;
+  trainingMilestoneItems?: TrainingMilestoneInventoryItem[];
   xpShareHolder?: { id: string; pokemonId: number; name: string; isFeatured: boolean; shareType: string } | null;
 }) {
   const [rows, setRows] = useState<BankMascot[]>(mascots);
@@ -815,6 +821,7 @@ export function MascotBankList({
               hasRareSweet={rareSweetAvailable}
               isAdmin={isAdmin}
               spritePreferences={spritePreferences}
+              trainingMilestoneItems={trainingMilestoneItems}
             />
           ))}
         </div>
