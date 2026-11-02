@@ -2265,6 +2265,7 @@ export async function getBankMascotsPageAction(input?: {
       hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true, diseasedAt: true,
       lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
       ivRating: true, ivScore: true, performanceTag: true, hiddenAbilityUnlocked: true, abilityChoice: true,
+      eventBonusStat: true, eventBonusValue: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
       expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true } },
       routine: { select: { status: true, locationType: true } },
@@ -2351,6 +2352,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string; preferredCombatRole: string | null;
+    eventBonusStat: string | null; eventBonusValue: number | null;
     activeBuffs: { type: string; expiresAt: Date }[];
     relations: { type: string; interactionCount: number; relationshipScore: number; specialBondType: string | null; mascotB: { id: string; pokemonId: number; nickname: string | null; ownerName: string; ownerId: string } }[];
     expeditions: { id: string; finishAt: Date; status: string; mode: string }[];
@@ -2408,6 +2410,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         primordialBoundPlayerId: m.primordialBoundPlayerId, isShiny: m.isShiny,
         ivRating: m.ivRating, ivScore: m.ivScore, performanceTag: m.performanceTag,
         preferredCombatRole: m.preferredCombatRole,
+        eventBonusStat: m.eventBonusStat, eventBonusValue: m.eventBonusValue,
         activeBuffs,
         relations: m.relationsAsA.map(r => ({
           type: r.type, interactionCount: r.interactionCount,

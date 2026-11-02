@@ -97,6 +97,7 @@ async function fetchMascotPageData(playerId: string) {
         happiness: true, mood: true, personality: true,
         isEquipped: true, isFavorite: true, isShiny: true, evolutionLocked: true, expLocked: true, operationsLocked: true, primordialBoundPlayerId: true,
         ivRating: true, ivScore: true, performanceTag: true, preferredCombatRole: true, favoriteOrder: true,
+        eventBonusStat: true, eventBonusValue: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
@@ -418,6 +419,8 @@ export default async function MascotesPage() {
     ivScore: m.ivScore,
     performanceTag: m.performanceTag,
     preferredCombatRole: m.preferredCombatRole,
+    eventBonusStat: m.eventBonusStat,
+    eventBonusValue: m.eventBonusValue,
     unlockedStances: m.stanceUnlocks.map((unlock) => unlock.stanceKey),
     trainingJourney: m.trainingJourneys[0] ? {
       id: m.trainingJourneys[0].id, stanceKey: m.trainingJourneys[0].stanceKey, startedAt: m.trainingJourneys[0].startedAt,

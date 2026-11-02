@@ -39,6 +39,7 @@ import { FavoriteReorderButtons } from "./favorite-reorder-buttons";
 import { useTimerExpiry, formatRemaining } from "@/hooks/use-timer-expiry";
 import { PERSONALITY_DESCRIPTION, getMascotRarity, RARITY_LABEL, RARITY_COLOR } from "@/lib/mascot-data";
 import { TypeBadges } from "@/components/mascot/type-badges";
+import { eventEggBonusForStat, type MascotStatKey } from "@/lib/event-egg-bonus";
 
 interface Expedition { id: string; finishAt: Date; status: string; mode?: string }
 interface MascotRelation {
@@ -100,6 +101,8 @@ interface MascotData {
   ivScore?: number | null;
   performanceTag?: string | null;
   preferredCombatRole?: string | null;
+  eventBonusStat?: string | null;
+  eventBonusValue?: number | null;
   unlockedStances?: string[];
   trainingJourney?: { id: string; stanceKey: string; startedAt: Date; milestones: Array<{ milestoneKey: string; target: number; value: number; details: unknown }> } | null;
   activeBuffs: { type: string; expiresAt: Date }[];
@@ -784,7 +787,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
     : getPreferredSpriteUrl(mascot.pokemonId, spritePreferences, { shiny: mascot.isShiny }));
   const hasIllustratedSprite = getMascotImageRendering(mascot.pokemonId) === "auto";
 
-  const STATS = [
+  const STATS: Array<{ key: MascotStatKey; label: string; emoji: string; value: number; tip: string }> = [
     { key: "statForce",    label: "Força",      emoji: "💪", value: mascot.statForce,    tip: "Poder em brigas com rivais e expedições pesadas" },
     { key: "statAgility",  label: "Agilidade",  emoji: "⚡", value: mascot.statAgility,  tip: "Pode acelerar em até 13% a segunda metade da expedição (até 6,5% do tempo total); também influencia iniciativa em brigas" },
     { key: "statCharisma", label: "Carisma",    emoji: "💛", value: mascot.statCharisma, tip: "Chance de fazer amigos e receber mais presentes" },
@@ -1277,19 +1280,31 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
         {/* ── Stats ── */}
         {!compactView && <div className="space-y-1.5">
-          {STATS.map(s => (
-            <Tip key={s.key} text={s.tip}>
+          {STATS.map(s => {
+            const eventEggBonus = eventEggBonusForStat(s.key, mascot.eventBonusStat, mascot.eventBonusValue);
+            const statTip = eventEggBonus
+              ? `${s.tip} • Bônus de Ovo de Evento: +${eventEggBonus}. Este bônus já está incluído no valor final mostrado no card; ele não é somado novamente.`
+              : s.tip;
+            return (
+            <Tip key={s.key} text={statTip} wide={Boolean(eventEggBonus)}>
               <div className="flex items-center gap-2">
                 <span className="w-4 text-center text-xs shrink-0">{s.emoji}</span>
                 <span className="w-16 text-[10px] text-slate-500 shrink-0">{s.label}</span>
                 <div className="flex-1 h-1.5 rounded-full bg-slate-800 overflow-hidden">
                   <div className="h-full rounded-full bg-slate-500 transition-all" style={{ width: `${Math.min(100, Math.round((s.value / 250) * 100))}%` }} />
                 </div>
-                <span className={`min-w-16 text-right text-[10px] font-bold shrink-0 ${mascot.diseasedAt ? "text-lime-300" : "text-slate-400"}`}>{mascot.diseasedAt ? <><s className="mr-1 text-slate-600">{s.value}</s>{Math.max(1, Math.floor(s.value * 0.6))} <small className="text-rose-300">(−{s.value - Math.max(1, Math.floor(s.value * 0.6))})</small></> : s.value}</span>
+                <span className={`min-w-16 text-right text-[10px] font-bold shrink-0 ${mascot.diseasedAt ? "text-lime-300" : "text-slate-400"}`}>
+                  {mascot.diseasedAt ? (
+                    <><s className="mr-1 text-slate-600">{s.value}</s>{Math.max(1, Math.floor(s.value * 0.6))} <small className="text-rose-300">(−{s.value - Math.max(1, Math.floor(s.value * 0.6))})</small></>
+                  ) : (
+                    <>{s.value}{eventEggBonus && <small className="ml-1 font-black text-emerald-300">(+{eventEggBonus})</small>}</>
+                  )}
+                </span>
                 <Info size={9} className="text-slate-700 shrink-0" />
               </div>
             </Tip>
-          ))}
+            );
+          })}
         </div>}
 
         {/* ── Expedição ativa ── */}
