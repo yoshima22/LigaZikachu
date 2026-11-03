@@ -557,7 +557,7 @@ export function runLeagueCombat(
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
-              turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
+              turn: actionNum, round, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
               targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
               action: "HEAL", damage: heal,
               attackerType: elementOf(actor), defenderType: elementOf(target),
@@ -770,7 +770,7 @@ export function runLeagueCombat(
       ].filter(Boolean).join(" ") || undefined;
 
       log.push({
-        turn: actionNum, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
+        turn: actionNum, round, actorId: actor.id, actorName: actor.name, actorOwnerId: actor.ownerId, actorPokemonId: actor.pokemonId, actorLevel: actor.level,
         targetId: target.id, targetName: target.name, targetOwnerId: target.ownerId, targetPokemonId: target.pokemonId, targetLevel: target.level,
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: typeStep > 0, typeStep, typeDelta,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),

@@ -6,6 +6,7 @@ import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, MIN_WEEKLY_LEAGUE_MASCOTS } from "./constants";
 import { toLeagueMascot, runLeagueCombat } from "@/lib/league-combat";
+import { recordLeagueBattleProgress } from "@/lib/training-journeys";
 import { swissPairSlot } from "@/lib/league-pairing";
 import { getCombatRoleLabel, defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
@@ -1382,14 +1383,18 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       status: "RESOLVED" as const, resolvedAt: new Date(),
     };
 
+    const trainingBattleId = pair.existingMatchId ?? createId();
     if (pair.existingMatchId) {
       await prisma.weeklyMascotLeagueMatch.update({ where: { id: pair.existingMatchId }, data: matchData });
     } else {
       await prisma.weeklyMascotLeagueMatch.create({
-        data: { id: createId(), leagueId, roundNumber, battleDate: today, battleSlot, scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId, ...matchData },
+        data: { id: trainingBattleId, leagueId, roundNumber, battleDate: today, battleSlot, scheduledAt: new Date(), playerAId: pair.aId, playerBId: pair.bId, ...matchData },
       });
       if (winnerId) void trackGachaObjective(winnerId, "LIGA_SEMANAL_VITORIA", 1, { won: true });
     }
+
+    // Jornadas de postura: conta o combate resolvido (idempotente por id da partida). Falha aqui nunca derruba a liga.
+    await recordLeagueBattleProgress(prisma, { battleId: trainingBattleId, resolvedAt: new Date(), log: result.log, lineupA: matchData.resultJson.lineupA, lineupB: matchData.resultJson.lineupB, winner: result.winner, rounds: result.rounds }).catch((err) => console.error("[training-journey] liga semanal", err));
 
     await prisma.weeklyMascotLeagueBattleItem.updateMany({
       where: { leagueId, battleDate: today, battleSlot, playerId: { in: [pair.aId, pair.bId!] }, consumedAt: null, refundedAt: null },

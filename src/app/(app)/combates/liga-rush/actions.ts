@@ -9,6 +9,7 @@ import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
 import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { runLeagueCombat, toLeagueMascot } from "@/lib/league-combat";
+import { recordLeagueBattleProgress } from "@/lib/training-journeys";
 import { normalizeBattleDivision, validateBattleDivision, evaluateBattleTeam } from "@/lib/battle-divisions";
 import { swissPairSlot, type PairingPlayer } from "@/lib/league-pairing";
 import { MEGA_STONES } from "@/lib/mega-evolution";
@@ -713,6 +714,7 @@ export async function adminRunRushDayAction(leagueId: string, battleDate: string
         return true;
       });
       if (applied) {
+        await recordLeagueBattleProgress(prisma, { battleId: match.id, resolvedAt: new Date(), log: result.log, lineupA: result.lineupA, lineupB: result.lineupB, winner: result.winner, rounds: result.rounds }).catch((err) => console.error("[training-journey] liga rush", err));
         resolved++;
         if (winnerId) void trackGachaObjective(winnerId, "LIGA_RUSH_VITORIA", 1, { won: true });
       } else skipped++;

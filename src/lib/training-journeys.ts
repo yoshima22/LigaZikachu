@@ -2,7 +2,8 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { buildTrainingJourney, TRAINING_STANCE_KEYS, type TrainingPersonality, type TrainingStanceKey } from "./training-milestones";
 import { isTrainingMilestoneItemType } from "./training-catalog";
 import { completeTrainingJourney } from "./training-journey-state";
-import { EXPEDITION_MODES, expeditionProgressValue } from "./training-milestones";
+import { EXPEDITION_MODES, expeditionProgressValue, PERSONALITY_NAMES_PT } from "./training-milestones";
+import { extractBattleStats, type CombatLineupMascot, type CombatLogEntry } from "./training-combat-stats";
 
 type Db = PrismaClient | Prisma.TransactionClient;
 
@@ -115,4 +116,65 @@ export async function recordTrainingJourneyProgress(
     update: {}, create: { mascotId: journey.mascotId, stanceKey: journey.stanceKey, journeyId: journey.id },
   });
   return { recorded: candidates.length > 0, completed: true };
+}
+
+const BATTLE_LEDGER_LIMIT = 300;
+
+/**
+ * Conta um combate de liga já resolvido (Semanal/Rush) nas jornadas ativas dos mascotes que lutaram.
+ * Idempotente: o id do combate fica no "livro" do marco LEAGUE, então reprocessar não conta duas vezes.
+ * `resolvedAt` impede que um combate anterior ao início da jornada conte.
+ */
+export async function recordLeagueBattleProgress(
+  tx: Db,
+  input: { battleId: string; resolvedAt: Date; log: CombatLogEntry[]; lineupA: CombatLineupMascot[]; lineupB: CombatLineupMascot[]; winner: "A" | "B" | "DRAW"; rounds: number },
+) {
+  const ids = [...input.lineupA, ...input.lineupB].map((m) => m.id);
+  const journeys = await tx.mascotTrainingJourney.findMany({
+    where: { mascotId: { in: ids }, status: "ACTIVE", startedAt: { lte: input.resolvedAt } },
+    include: { milestones: true },
+  });
+  if (!journeys.length) return { counted: 0 };
+  const stats = extractBattleStats(input);
+  let counted = 0;
+  for (const journey of journeys) {
+    const league = journey.milestones.find((m) => (m.detailsJson as { type?: string } | null)?.type === "LEAGUE");
+    const ledger = ((league?.detailsJson as { battles?: string[] } | null)?.battles ?? []);
+    if (ledger.includes(input.battleId)) continue;
+    const s = stats.get(journey.mascotId);
+    if (!s) continue;
+    counted++;
+    for (const milestone of journey.milestones) {
+      const d = (milestone.detailsJson ?? {}) as { type?: string; label?: string; param?: string; perBattleCap?: number; carry?: number; battles?: string[] };
+      if (milestone.completedAt || !d.type) continue;
+      let raw = 0;
+      if (d.type === "LEAGUE") raw = 1;
+      else if (d.type === "TYPE_KOS") raw = s.typeKos[d.param ?? ""] ?? 0;
+      else if (d.type === "ROLE_KOS") raw = s.roleKos[d.param ?? ""] ?? 0;
+      else if (d.type === "AFFINITY") {
+        const key = Object.entries(PERSONALITY_NAMES_PT).find(([, name]) => d.label?.startsWith(`Personalidade ${name}:`))?.[0];
+        raw = key ? (s.affinity[key] ?? 0) : 0;
+      } else raw = (s.counts as Record<string, number | undefined>)[d.type] ?? 0;
+      const capped = Math.max(0, Math.min(raw, d.perBattleCap ?? raw));
+      const isLeague = d.type === "LEAGUE";
+      if (capped === 0 && !isLeague) continue;
+      let inc = Math.floor(capped);
+      const details: Record<string, unknown> = { ...d };
+      if (d.type === "DAMAGE") { const total = (d.carry ?? 0) + capped; inc = Math.floor(total); details.carry = total - inc; }
+      if (isLeague) details.battles = [...ledger, input.battleId].slice(-BATTLE_LEDGER_LIMIT);
+      const next = Math.min(milestone.target, milestone.value + inc);
+      await tx.mascotTrainingMilestoneProgress.update({
+        where: { journeyId_milestoneKey: { journeyId: journey.id, milestoneKey: milestone.milestoneKey } },
+        data: { value: next, detailsJson: details as Prisma.InputJsonValue, ...(next >= milestone.target ? { completedAt: new Date() } : {}) },
+      });
+    }
+    const updated = await tx.mascotTrainingMilestoneProgress.findMany({ where: { journeyId: journey.id }, select: { milestoneKey: true, target: true, value: true } });
+    if (!completeTrainingJourney(updated)) continue;
+    await tx.mascotTrainingJourney.update({ where: { id: journey.id }, data: { status: "COMPLETED", completedAt: new Date() } });
+    await tx.mascotStanceUnlock.upsert({
+      where: { mascotId_stanceKey: { mascotId: journey.mascotId, stanceKey: journey.stanceKey } },
+      update: {}, create: { mascotId: journey.mascotId, stanceKey: journey.stanceKey, journeyId: journey.id },
+    });
+  }
+  return { counted };
 }

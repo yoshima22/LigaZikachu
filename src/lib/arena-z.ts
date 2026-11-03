@@ -340,6 +340,8 @@ export type ArenaLoot = {
 
 export type ArenaTurnLog = {
   turn: number;
+  /** Round em que a ação ocorreu (Liga Semanal/Rush; ausente em combates antigos). */
+  round?: number;
   actorId: string;
   actorName: string;
   actorOwnerId: string | null;
