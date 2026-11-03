@@ -11,6 +11,7 @@ import {
   confirmLabChoiceAction,
   getIncubatorDropPreviewAction,
   skipIncubationAction,
+  renameMascotAction,
   type IncubatorDropPreview,
 } from "../actions";
 import { PerformanceTagPicker } from "./performance-tag-picker";
@@ -355,6 +356,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
+  const [nickname, setNickname] = useState("");
   const [labChoices, setLabChoices] = useState<LabChoice[] | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
   const [dropPreview, setDropPreview] = useState<IncubatorDropPreview | null>(null);
@@ -439,7 +441,17 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     setSelectedGen("");
   };
 
+  const saveNickname = () => {
+    if (!hatchResult || !nickname.trim()) return;
+    startTransition(async () => {
+      const r = await renameMascotAction(hatchResult.mascotId, nickname);
+      if (r.error) toast.error(r.error);
+      else toast.success("Nome salvo!");
+    });
+  };
+
   const revealHatchResult = (result: HatchResult) => {
+    setNickname("");
     setHatchResult({
       mascotId: result.mascotId,
       pokemonId: result.pokemonId,
@@ -757,7 +769,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
           <div className="flex flex-col items-center gap-3 py-4">
             <div className="text-4xl animate-bounce">🎉</div>
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={getSpriteUrl(hatchResult.pokemonId)} alt={hatchResult.name}
+            <img src={hatchResult.isShiny ? getShinySprite(hatchResult.pokemonId, true) : getSpriteUrl(hatchResult.pokemonId)} alt={hatchResult.name}
               width={96} height={96} className="object-contain" style={{ imageRendering: "pixelated" }} />
             <div className="text-center space-y-0.5">
               <p className="text-lg font-bold text-white">
@@ -819,6 +831,24 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
                 </p>
               </div>
             )}
+
+            {/* Apelido do recém-chocado */}
+            <form
+              onSubmit={(e) => { e.preventDefault(); saveNickname(); }}
+              className="flex items-center gap-2"
+            >
+              <input
+                value={nickname}
+                onChange={(e) => setNickname(e.target.value)}
+                maxLength={20}
+                placeholder="Dar um nome (opcional)"
+                className="w-44 rounded-lg border border-border/50 bg-slate-900/60 px-2 py-1 text-xs text-white placeholder:text-slate-600"
+              />
+              <button type="submit" disabled={pending || !nickname.trim()}
+                className="rounded-lg bg-[#FFCB05] px-2.5 py-1 text-xs font-bold text-black disabled:opacity-40">
+                Salvar
+              </button>
+            </form>
 
             {/* Já marque o desempenho do recém-chocado */}
             <div className="flex items-center gap-2">
