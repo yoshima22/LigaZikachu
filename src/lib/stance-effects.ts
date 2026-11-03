@@ -17,7 +17,7 @@ export const UNLOCKABLE_STANCES = [
 const STANCE_SET = new Set<string>(UNLOCKABLE_STANCES);
 
 /** Números de equilíbrio que não vêm de atributos. Explosivo: fração do HP atual somada ao dano-base do 3º ataque. */
-export const STANCE_TUNING = { explosiveHpPct: 1, explosiveSplashPct: 1, retributorPct: 0.1 };
+export const STANCE_TUNING = { explosiveHpPct: 1, retributorPct: 0.1 };
 
 export type StanceMascot = {
   id: string; name: string; level: number; combatRole: string; hp: number;
@@ -265,12 +265,6 @@ export class StanceEngine<M extends StanceMascot> {
       s.pendingExplosive = null;
       const d = this.damageTo(actor.id, this.hpOf(actor.id));
       reactions.push({ kind: "SELF_KO", actorId: actor.id, targetId: actor.id, amount: d, hpAfter: 0, text: `Explosivo ${actor.name} se sacrificou na explosão.` });
-      // A explosão também atinge os demais inimigos vivos, com uma parcela do dano causado ao alvo principal.
-      if (STANCE_TUNING.explosiveSplashPct > 0 && dealt > 0) {
-        for (const foe of this.alive(eSide).filter((f) => f.id !== target.id)) {
-          hit(actor, foe, Math.max(1, Math.round(dealt * STANCE_TUNING.explosiveSplashPct)), `A explosão de ${actor.name} atingiu ${foe.name}.`);
-        }
-      }
     }
     return { notes, reactions };
   }

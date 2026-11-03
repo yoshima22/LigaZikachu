@@ -126,7 +126,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   UNSHAKABLE: "Depois de cada ataque direto próprio, renova um escudo igual a 5% do HP máximo. Vitalidade e Instinto não mudam os 5%; eles apenas são os atributos indicados para a postura e ajudam o mascote a permanecer em combate.",
   FORTRESS: "Sempre que receber um golpe direto, ganha Vitalidade e Instinto e perde a mesma porcentagem de Força. A média de Vitalidade e Instinto até 250 define 2% a 4% por golpe; cada atributo para de variar ao atingir 20% acumulados.",
   ACCUMULATOR: "Ao terminar um round em que agiu e sobreviveu, ganha uma carga (máximo 3). Ao chegar a 3, o próximo ataque direto consome todas as cargas e recebe 15% a 35% de dano; a média de Força e Agilidade até 250 define esse bônus. A terceira carga não explode sozinha.",
-  EXPLOSIVE: "No terceiro ataque direto da batalha, ignora o alvo comum, mira o inimigo vivo de maior Agilidade e ataca. Soma 100% do HP atual ao dano-base e, depois do golpe, este mascote é derrotado à força — mesmo com Sobrevivente ou Dramático. A explosão em área causa o mesmo dano a todos os outros inimigos vivos (cada um com a própria defesa).",
+  EXPLOSIVE: "No terceiro ataque direto da batalha, ignora o alvo comum, mira o inimigo vivo de maior Agilidade e ataca. Soma 100% do HP atual ao dano-base e, depois do golpe, este mascote é derrotado à força — mesmo com Sobrevivente ou Dramático.",
   TRAPPER: "No início dos rounds 3 e 5, bloqueia somente as ativações bônus de postura da equipe inimiga durante aquele round. Instinto e Agilidade não alteram os rounds nem a duração; não remove buffs que já estavam ativos e não impede ataques normais.",
 };
 
