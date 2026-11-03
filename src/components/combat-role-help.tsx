@@ -110,7 +110,7 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
     case "ACCUMULATOR":
       return [`Com três cargas, o próximo ataque direto recebe ${pct(getAccumulatorDamagePct(f, a))} de dano extra.`, "A média de Força e Agilidade define o bônus; a terceira carga aguarda o próximo ataque e não explode sozinha."];
     case "EXPLOSIVE":
-      return ["No terceiro ataque direto da batalha, mira o inimigo vivo de maior Agilidade.", "Adiciona 100% do HP atual ao dano-base e é derrotado depois do golpe, mesmo com efeitos de sobrevivência."];
+      return ["No terceiro ataque direto da batalha, mira o inimigo vivo de maior Agilidade.", "Adiciona 100% do HP atual do próprio Explosivo ao dano-base. Depois do golpe, fica com apenas 1% do HP máximo."];
     case "TRAPPER":
       return ["Nos rounds 3 e 5, bloqueia ativações bônus de postura inimigas apenas durante o round.", "Instinto e Agilidade não alteram round ou duração; buffs já ativos e ataques normais continuam funcionando."];
   }

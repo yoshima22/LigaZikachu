@@ -54,7 +54,7 @@ test("Acumulador carrega 1 por round, libera na 4ª ação e zera", () => {
   assert.equal(eng.beginAttack(A[0], B, B[0]).dmgMult, 1);
 });
 
-test("Explosivo: 3º ataque mira só o mais ágil, soma 100% da vida e se sacrifica", () => {
+test("Explosivo: 3º ataque mira só o mais ágil, soma 100% da vida e fica com 1% do HP máximo", () => {
   const { hp, eng, A, B } = mk([m("bo", "EXPLOSIVE"), m("ally", "ATTACKER"), m("slow", "DEFENDER", { agility: 10 }), m("fast", "DEFENDER", { agility: 300 })]);
   eng.roundStart(1, new Map());
   const foes = B;
@@ -66,7 +66,7 @@ test("Explosivo: 3º ataque mira só o mais ágil, soma 100% da vida e se sacrif
   assert.equal(third.target?.id, "fast");
   assert.equal(third.rawAdd, 1000);
   const post = eng.postHit(A[0], foes[1], 400);
-  assert.equal(hp.get("bo"), 0);
+  assert.equal(hp.get("bo"), Math.max(1, Math.round(A[0].hp * 0.01)));
   assert.ok(post.reactions.some((r) => r.kind === "SELF_KO"));
   assert.equal(post.reactions.some((r) => r.kind === "HIT"), false, "a explosão não pode atingir os outros inimigos");
 });
