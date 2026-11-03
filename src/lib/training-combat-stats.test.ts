@@ -36,3 +36,23 @@ test("sem round no log, objetivos baseados em round não contam", () => {
   assert.equal(s.get("g")!.counts.TURN_THREE_HOLD, undefined);
   assert.equal(s.get("g")!.counts.DIRECT_ATTACKS, 1);
 });
+
+test("buffs de apoio, Leal, Caótico e Competitivo", () => {
+  const A = [
+    { id: "s", name: "Sup", pokemonId: 25, maxHp: 100, force: 10, agility: 10, instinct: 10, vitality: 10, charisma: 10 },
+    { id: "l", name: "Leo", pokemonId: 94, maxHp: 100, force: 10, agility: 10, instinct: 10, vitality: 10, charisma: 5 },
+  ];
+  const B = [{ id: "e", name: "Boss", pokemonId: 6, maxHp: 100, force: 99, agility: 99, instinct: 99, vitality: 99, charisma: 99 }];
+  const log = [
+    { turn: 1, round: 1, action: "ATTACK", actorId: "l", targetId: "e", damage: 40, actorName: "Leo", targetName: "Boss", actorRole: "Atacante", targetRole: "Defensor", typeStep: 0, effect: "Encorajador: +10%. 🤝 Leal Leo protege Sup." },
+    { turn: 2, round: 1, action: "ATTACK", actorId: "e", targetId: "l", damage: 10, actorName: "Boss", targetName: "Leo", actorRole: "Defensor", targetRole: "Atacante", typeStep: 0, effect: "Oportunista reduziu Agilidade de Leo (resistência aplicada)." },
+    { turn: 3, round: 2, action: "ATTACK", actorId: "l", targetId: "e", damage: 80, actorName: "Leo", targetName: "Boss", actorRole: "Atacante", targetRole: "Defensor", typeStep: 0, effect: "Encorajador: +10%. 🤝 Leal Leo protege Sup." },
+    { turn: 0, round: 2, action: "DEFEND", actorId: "s", targetId: "s", damage: 0, actorRole: "Encorajador", targetRole: "Encorajador" },
+  ];
+  const s = extractBattleStats({ log, lineupA: A, lineupB: B, winner: "A", rounds: 2 });
+  assert.equal(s.get("s")!.counts.BUFFS, 2);
+  assert.equal(s.get("l")!.affinity.LOYAL, 1);
+  assert.equal(s.get("l")!.affinity.CHAOTIC, 1);
+  assert.equal(s.get("l")!.affinity.COMPETITIVE, 1);
+  assert.equal(s.get("l")!.special.EXEC_COMPETITIVE, 1);
+});

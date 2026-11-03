@@ -2,7 +2,7 @@ import { Prisma, PrismaClient } from "@prisma/client";
 import { buildTrainingJourney, TRAINING_STANCE_KEYS, type TrainingPersonality, type TrainingStanceKey } from "./training-milestones";
 import { isTrainingMilestoneItemType } from "./training-catalog";
 import { completeTrainingJourney } from "./training-journey-state";
-import { EXPEDITION_MODES, expeditionProgressValue, PERSONALITY_NAMES_PT } from "./training-milestones";
+import { EXPEDITION_MODES, expeditionProgressValue, PERSONALITY_NAMES_PT, validateArenaTrainingCredit } from "./training-milestones";
 import { extractBattleStats, type CombatLineupMascot, type CombatLogEntry } from "./training-combat-stats";
 
 type Db = PrismaClient | Prisma.TransactionClient;
@@ -127,8 +127,9 @@ const BATTLE_LEDGER_LIMIT = 300;
  */
 export async function recordLeagueBattleProgress(
   tx: Db,
-  input: { battleId: string; resolvedAt: Date; log: CombatLogEntry[]; lineupA: CombatLineupMascot[]; lineupB: CombatLineupMascot[]; winner: "A" | "B" | "DRAW"; rounds: number },
+  input: { battleId: string; resolvedAt: Date; log: CombatLogEntry[]; lineupA: CombatLineupMascot[]; lineupB: CombatLineupMascot[]; winner: "A" | "B" | "DRAW"; rounds: number; source?: "LEAGUE" | "ARENA_Z" },
 ) {
+  const source = input.source ?? "LEAGUE";
   const ids = [...input.lineupA, ...input.lineupB].map((m) => m.id);
   const journeys = await tx.mascotTrainingJourney.findMany({
     where: { mascotId: { in: ids }, status: "ACTIVE", startedAt: { lte: input.resolvedAt } },
@@ -136,6 +137,9 @@ export async function recordLeagueBattleProgress(
   });
   if (!journeys.length) return { counted: 0 };
   const stats = extractBattleStats(input);
+  const ownerOf = (id: string) => [...input.lineupA, ...input.lineupB].find((m) => m.id === id)?.ownerId ?? null;
+  const sideOf = (id: string) => (input.lineupA.some((m) => m.id === id) ? "A" : "B");
+  const brDay = (d: Date) => new Date(d.getTime() - 3 * 3600_000).toISOString().slice(0, 10);
   let counted = 0;
   for (const journey of journeys) {
     const league = journey.milestones.find((m) => (m.detailsJson as { type?: string } | null)?.type === "LEAGUE");
@@ -148,12 +152,34 @@ export async function recordLeagueBattleProgress(
       const d = (milestone.detailsJson ?? {}) as { type?: string; label?: string; param?: string; perBattleCap?: number; carry?: number; battles?: string[] };
       if (milestone.completedAt || !d.type) continue;
       let raw = 0;
-      if (d.type === "LEAGUE") raw = 1;
+      let arenaCredit: { at: string; opp: string } | null = null;
+      if (d.type === "LEAGUE") raw = source === "LEAGUE" ? 1 : 0;
+      else if (d.type === "ARENA_Z") {
+        const owner = ownerOf(journey.mascotId);
+        const oppSide = sideOf(journey.mascotId) === "A" ? input.lineupB : input.lineupA;
+        const opp = oppSide[0]?.ownerId ?? null;
+        if (source === "ARENA_Z" && owner && opp) {
+          const credits = await arenaCreditsOf(tx, owner);
+          const result = validateArenaTrainingCredit({
+            sourceMode: "ARENA_Z_PVP", ownerId: owner, opponentOwnerId: opp,
+            ownMascots: (sideOf(journey.mascotId) === "A" ? input.lineupA : input.lineupB).length, opponentMascots: oppSide.length,
+            resolvedActions: input.log.filter((e) => e.action === "ATTACK" || e.action === "HEAL").length,
+            selectedTrainingMascot: true,
+            pairLastCreditAt: credits.filter((c) => c.opp === opp).map((c) => new Date(c.at)).sort((x, y) => y.getTime() - x.getTime())[0] ?? null,
+            now: input.resolvedAt,
+            ownerCreditsToday: credits.filter((c) => brDay(new Date(c.at)) === brDay(input.resolvedAt)).length,
+          });
+          if (result.eligible) { raw = 1; arenaCredit = { at: input.resolvedAt.toISOString(), opp }; }
+        }
+      }
       else if (d.type === "TYPE_KOS") raw = s.typeKos[d.param ?? ""] ?? 0;
       else if (d.type === "ROLE_KOS") raw = s.roleKos[d.param ?? ""] ?? 0;
       else if (d.type === "AFFINITY") {
         const key = Object.entries(PERSONALITY_NAMES_PT).find(([, name]) => d.label?.startsWith(`Personalidade ${name}:`))?.[0];
-        raw = key ? (s.affinity[key] ?? 0) : 0;
+        const special = d.label?.startsWith("Aplique 20 K.O.s em inimigos com status") ? "EXEC_COMPETITIVE"
+          : d.label?.startsWith("Proteja 30 vezes o aliado") ? "PURIFIER_LOYAL"
+          : d.label?.startsWith("Aplique 15 K.O.s") ? "COMMANDER_LOYAL" : null;
+        raw = special ? (s.special[special] ?? 0) : key ? (s.affinity[key] ?? 0) : 0;
       } else raw = (s.counts as Record<string, number | undefined>)[d.type] ?? 0;
       const capped = Math.max(0, Math.min(raw, d.perBattleCap ?? raw));
       const isLeague = d.type === "LEAGUE";
@@ -161,6 +187,7 @@ export async function recordLeagueBattleProgress(
       let inc = Math.floor(capped);
       const details: Record<string, unknown> = { ...d };
       if (d.type === "DAMAGE") { const total = (d.carry ?? 0) + capped; inc = Math.floor(total); details.carry = total - inc; }
+      if (arenaCredit) details.credits = [...((d as { credits?: unknown[] }).credits ?? []), arenaCredit].slice(-60);
       if (isLeague) details.battles = [...ledger, input.battleId].slice(-BATTLE_LEDGER_LIMIT);
       const next = Math.min(milestone.target, milestone.value + inc);
       await tx.mascotTrainingMilestoneProgress.update({
@@ -177,4 +204,13 @@ export async function recordLeagueBattleProgress(
     });
   }
   return { counted };
+}
+
+/** Créditos de Arena-Z já concedidos ao jogador (todas as jornadas dos mascotes dele): base do limite diário e do intervalo por dupla. */
+async function arenaCreditsOf(tx: Db, playerId: string) {
+  const rows = await tx.mascotTrainingMilestoneProgress.findMany({
+    where: { milestoneKey: { startsWith: "arena_z" }, journey: { mascot: { playerId } } },
+    select: { detailsJson: true },
+  });
+  return rows.flatMap((r) => ((r.detailsJson as { credits?: Array<{ at: string; opp: string }> } | null)?.credits ?? []));
 }

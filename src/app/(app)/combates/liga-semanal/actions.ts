@@ -1394,7 +1394,7 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
     }
 
     // Jornadas de postura: conta o combate resolvido (idempotente por id da partida). Falha aqui nunca derruba a liga.
-    await recordLeagueBattleProgress(prisma, { battleId: trainingBattleId, resolvedAt: new Date(), log: result.log, lineupA: matchData.resultJson.lineupA, lineupB: matchData.resultJson.lineupB, winner: result.winner, rounds: result.rounds }).catch((err) => console.error("[training-journey] liga semanal", err));
+    await recordLeagueBattleProgress(prisma, { battleId: trainingBattleId, resolvedAt: new Date(), log: result.log, lineupA: result.lineupA.map((m) => ({ ...m, maxHp: m.hp })), lineupB: result.lineupB.map((m) => ({ ...m, maxHp: m.hp })), winner: result.winner, rounds: result.rounds }).catch((err) => console.error("[training-journey] liga semanal", err));
 
     await prisma.weeklyMascotLeagueBattleItem.updateMany({
       where: { leagueId, battleDate: today, battleSlot, playerId: { in: [pair.aId, pair.bId!] }, consumedAt: null, refundedAt: null },

@@ -8,15 +8,20 @@ export type CombatLogEntry = {
   typeStep?: number; effect?: string; guardianIntercept?: { mascotId: string; damage: number };
 };
 /** Lineup gravada em resultJson (Liga Semanal usa maxHp, Liga Rush guarda o mascote inteiro com hp). */
-export type CombatLineupMascot = { id: string; ownerId?: string; pokemonId?: number; maxHp?: number; hp?: number; role?: string };
+export type CombatLineupMascot = {
+  id: string; ownerId?: string | null; pokemonId?: number; name?: string; maxHp?: number; hp?: number; role?: string;
+  force?: number; agility?: number; instinct?: number; vitality?: number; charisma?: number;
+};
 
 export type MascotBattleStats = {
   counts: Partial<Record<TrainingObjectiveType, number>>;
   /** K.O.s em inimigos, por nome PT do tipo / por rótulo da postura (qualquer aliado dá o golpe final). */
   typeKos: Record<string, number>;
   roleKos: Record<string, number>;
-  /** Afinidade de personalidade que dá para medir no log: PROUD, MISCHIEVOUS, DRAMATIC, SERENE. */
+  /** Afinidade de personalidade medida no log (PROUD, MISCHIEVOUS, DRAMATIC, SERENE, LOYAL, CHAOTIC e COMPETITIVE quando há atributos). */
   affinity: Record<string, number>;
+  /** Objetivos de afinidade especiais por postura+personalidade (EXEC_COMPETITIVE, PURIFIER_LOYAL, COMMANDER_LOYAL). */
+  special: Record<string, number>;
   /** O log traz `round`? Sem ele, objetivos baseados em round não são medidos. */
   hasRounds: boolean;
 };
@@ -43,7 +48,7 @@ export function extractBattleStats(input: {
   const bump = (id: string, type: TrainingObjectiveType, n = 1) => {
     const s = stats.get(id)!; s.counts[type] = (s.counts[type] ?? 0) + n;
   };
-  for (const id of info.keys()) stats.set(id, { counts: {}, typeKos: {}, roleKos: {}, affinity: {}, hasRounds });
+  for (const id of info.keys()) stats.set(id, { counts: {}, typeKos: {}, roleKos: {}, affinity: {}, special: {}, hasRounds });
 
   const deathRound = new Map<string, number>();
   const kosByTeamBattle = { A: 0, B: 0 };
@@ -53,6 +58,19 @@ export function extractBattleStats(input: {
   const pressure: Array<{ id: string; round: number }> = [];
   const roleOfDead = new Map<string, string>();
   const debuffed = new Set<string>();
+  const provoked = new Set<string>();
+  const names = new Map<string, string>();
+  for (const [id, m] of info) if (m.name) names.set(id, m.name);
+  for (const e of log) { if (e.actorId && (e as { actorName?: string }).actorName) names.set(e.actorId, (e as { actorName?: string }).actorName!); if (e.targetId && (e as { targetName?: string }).targetName) names.set(e.targetId, (e as { targetName?: string }).targetName!); }
+  const statTotal = (id: string) => { const m = info.get(id); return m && m.force != null ? (m.force ?? 0) + (m.agility ?? 0) + (m.instinct ?? 0) + (m.vitality ?? 0) + (m.charisma ?? 0) : null; };
+  const loyalMate = new Map<string, string>();
+  const attacks: Array<{ actor: string; target: string; targetPct: number; killed: boolean }> = [];
+  const protections: Array<{ by: string; ally: string; pct: number }> = [];
+  const hitHigherStat = new Set<string>();
+  const koHigherStat = new Map<string, number>();
+  const buffHits = new Map<string, { enc: number; scout: number }>();
+  const roleOf = new Map<string, string>();
+  for (const e of log) { if (e.actorId && e.actorRole) roleOf.set(e.actorId, e.actorRole); if (e.targetId && e.targetRole) roleOf.set(e.targetId, e.targetRole); }
 
   for (const e of log) {
     if (!e.actorId || !e.targetId || !info.has(e.actorId) || !info.has(e.targetId) || !e.turn) continue;
@@ -65,7 +83,7 @@ export function extractBattleStats(input: {
       const healed = Math.max(0, Math.min(max, before + (e.damage ?? 0)) - before);
       hp.set(target, before + healed);
       if (actor !== target && healed >= max * 0.05) bump(actor, "HEALS");
-      if (actor !== target && before / max < 0.5 && healed > 0) bump(actor, "PROTECT_DANGER");
+      if (actor !== target && before / max < 0.5 && healed > 0) { bump(actor, "PROTECT_DANGER"); protections.push({ by: actor, ally: target, pct: before / max }); }
       continue;
     }
     if (e.action !== "ATTACK" || !(e.damage! > 0) || teamOf.get(actor) === teamOf.get(target)) continue;
@@ -89,16 +107,32 @@ export function extractBattleStats(input: {
       if (/Travessura de/.test(e.effect ?? "")) stats.get(actor)!.affinity.MISCHIEVOUS = 1;
     }
     if (/último ato/i.test(e.effect ?? "")) stats.get(target)!.affinity.DRAMATIC = 1;
+    if (/Provocador desviou/.test(e.effect ?? "")) provoked.add(target);
+    const actorName = names.get(actor);
+    if (actorName && (e.effect ?? "").includes(`Leal ${actorName} `)) {
+      for (const [id, nm] of names) if (id !== actor && teamOf.get(id) === side && ((e.effect ?? "").includes(`protege ${nm}.`) || (e.effect ?? "").includes(`defende ${nm} em perigo`))) loyalMate.set(actor, id);
+    }
+    // Buffs de apoio (Encorajador/Batedor): cada ataque de um aliado que recebeu o bônus conta para o mascote de apoio.
+    for (const [id, role] of roleOf) {
+      if (id === actor || teamOf.get(id) !== side || (hp.get(id) ?? 0) <= 0) continue;
+      const bh = buffHits.get(id) ?? { enc: 0, scout: 0 };
+      if (role === "Encorajador" && /Encorajador: \+/.test(e.effect ?? "")) bh.enc++;
+      if (role === "Batedor" && /Batedor: \+/.test(e.effect ?? "")) bh.scout++;
+      buffHits.set(id, bh);
+    }
+    const aStat = statTotal(actor), tStat = statTotal(target);
+    if (aStat != null && tStat != null && tStat > aStat) hitHigherStat.add(actor);
 
     // dano efetivo (não passa do HP que restava) + Guardião
     const before = hp.get(target) ?? 0;
+    attacks.push({ actor, target, targetPct: before / maxHpOf(info.get(target)!), killed: before - Math.min(e.damage!, before) <= 0 });
     const dealt = Math.min(e.damage!, before);
     hp.set(target, before - dealt);
     stats.get(actor)!.counts.DAMAGE = (stats.get(actor)!.counts.DAMAGE ?? 0) + dealt / maxHpOf(info.get(actor)!);
     if (e.guardianIntercept && info.has(e.guardianIntercept.mascotId)) {
       const g = e.guardianIntercept.mascotId;
       const gBefore = hp.get(g) ?? 0;
-      if (before / maxHpOf(info.get(target)!) < 0.5) bump(g, "PROTECT_DANGER");
+      if (before / maxHpOf(info.get(target)!) < 0.5) { bump(g, "PROTECT_DANGER"); protections.push({ by: g, ally: target, pct: before / maxHpOf(info.get(target)!) }); }
       hp.set(g, Math.max(0, gBefore - e.guardianIntercept.damage));
       if (gBefore > 0 && (hp.get(g) ?? 0) <= 0) { if (round != null) deathRound.set(g, round); }
     }
@@ -112,6 +146,8 @@ export function extractBattleStats(input: {
     if (before > 0 && (hp.get(target) ?? 0) <= 0) {
       kosByTeamBattle[side]++;
       bump(actor, "KOS");
+      const kaStat = statTotal(actor), ktStat = statTotal(target);
+      if (kaStat != null && ktStat != null && ktStat > kaStat) koHigherStat.set(actor, (koHigherStat.get(actor) ?? 0) + 1);
       if (round != null) deathRound.set(target, round);
       const types = getPokemonTypes(info.get(target)!.pokemonId ?? 0).map(getTypeLabelPt);
       const role = e.targetRole ?? info.get(target)!.role ?? "";
@@ -132,7 +168,22 @@ export function extractBattleStats(input: {
     const won = winner === side;
     if (kosByTeamBattle[side] >= 2) s.counts.MULTI_KO_BATTLE = 1;
     if (aliveAtEnd(id) && mates.filter(aliveAtEnd).length === 1 && mates.length > 1) s.counts.LAST_SURVIVOR = 1;
-    if (debuffed.has(id) && aliveAtEnd(id)) { s.counts.SURVIVE_DEBUFF = 1; s.affinity.SERENE = 1; }
+    if (debuffed.has(id) && aliveAtEnd(id)) s.counts.SURVIVE_DEBUFF = 1;
+    if ((debuffed.has(id) || provoked.has(id)) && aliveAtEnd(id)) s.affinity.SERENE = 1;
+    if (won && debuffed.has(id)) s.affinity.CHAOTIC = 1;
+    if (won && hitHigherStat.has(id)) s.affinity.COMPETITIVE = 1;
+    if (koHigherStat.get(id)) s.special.EXEC_COMPETITIVE = koHigherStat.get(id)!;
+    const mate = loyalMate.get(id);
+    if (mate) {
+      if (won && aliveAtEnd(mate)) s.affinity.LOYAL = 1;
+      const prot = protections.filter((p) => p.by === id && p.ally === mate).length;
+      if (prot) s.special.PURIFIER_LOYAL = prot;
+      const aggressors = new Set(attacks.filter((a) => a.target === mate && a.targetPct < 0.5).map((a) => a.actor));
+      const kos = attacks.filter((a) => a.actor === id && a.killed && aggressors.has(a.target)).length;
+      if (kos) s.special.COMMANDER_LOYAL = kos;
+    }
+    const bh = buffHits.get(id);
+    if (bh && bh.enc + bh.scout > 0) s.counts.BUFFS = bh.enc + bh.scout;
     if (won && aliveAtEnd(id) && (hp.get(id) ?? 0) / maxHpOf(info.get(id)!) > 0.7) s.affinity.PROUD = 1;
     if (!hasRounds) continue;
     const alive = (r: number) => (deathRound.has(id) ? deathRound.get(id)! >= r : rounds >= r);

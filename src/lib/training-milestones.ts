@@ -57,7 +57,7 @@ export const TRAINING_STANCES: Record<TrainingStanceKey, StanceDefinition> = {
 };
 
 export const OBJECTIVES: Record<Exclude<TrainingObjectiveType, "AFFINITY" | "SELF_HEAL_AFTER_LOW_HP">, Omit<TrainingObjective, "id" | "progress">> = {
-  ARENA_Z: { type: "ARENA_Z", label: "Dispute 6 batalhas de Arena-Z PvP válidas com este mascote escolhido como foco de treino. Vale: contra outro jogador, com 2 ou mais mascotes por lado e ao menos 6 ações na batalha. Cada jogador soma no máximo 2 por dia, e a mesma dupla só conta 1 vez a cada 24h.", target: 6, perBattleCap: 1 },
+  ARENA_Z: { type: "ARENA_Z", label: "Dispute 6 batalhas de Arena-Z PvP válidas com este mascote na equipe. Vale: contra outro jogador, com 2 ou mais mascotes por lado e ao menos 6 ações na batalha. Cada jogador soma no máximo 2 por dia, e a mesma dupla só conta 1 vez a cada 24h.", target: 6, perBattleCap: 1 },
   LEAGUE: { type: "LEAGUE", label: "Dispute 12 combates resolvidos da Liga Semanal ou da Liga Rush com este mascote na equipe. W.O. e BYE não contam.", target: 12, perBattleCap: 1 },
   EXPEDITIONS: { type: "EXPEDITIONS", label: "Conclua 24 expedições com este mascote (colete a recompensa), com no mínimo 6 em cada modo: Padrão, Treinamento e Itens. O painel mostra quantas faltam em cada modo.", target: 24, perBattleCap: 1 },
   DIRECT_ATTACKS: { type: "DIRECT_ATTACKS", label: "Realize 60 ataques diretos em combates válidos (Arena-Z, Liga Semanal ou Liga Rush). Ataque direto é o golpe normal do mascote contra um inimigo; cura, buff e efeitos de postura não contam. Máximo de 4 por combate.", target: 60, perBattleCap: 4 },
@@ -86,7 +86,7 @@ export const OBJECTIVES: Record<Exclude<TrainingObjectiveType, "AFFINITY" | "SEL
 };
 
 export const AFFINITY_LABELS: Record<TrainingPersonality, string> = {
-  LOYAL: "Vença 20 combates com o aliado vinculado (Super Amigo) vivo na equipe até o fim.",
+  LOYAL: "Vença 20 combates com o aliado que o Leal protege (o de maior Carisma da equipe) vivo até o fim.",
   PROUD: "Vença 20 combates terminando com este mascote acima de 70% de HP.",
   MISCHIEVOUS: "Em 20 combates, acerte o 1º ataque contra um inimigo reduzindo o atributo dele (efeito do Travesso).",
   LAZY: "Conclua 20 expedições de 3h ou 6h com este mascote.",
@@ -137,9 +137,9 @@ export function resolveObjectiveLabel(type: string, template: string, seed: numb
 }
 
 function affinity(stance: TrainingStanceKey, personality: TrainingPersonality): TrainingObjective {
-  if (stance === "PURIFIER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Proteja 30 vezes o aliado vinculado abaixo de 50% de HP.", target: 30, progress: 0, perBattleCap: 2 };
+  if (stance === "PURIFIER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Proteja 30 vezes o aliado que o Leal protege (o de maior Carisma da equipe) quando ele estiver abaixo de 50% de HP: cure-o ou intercepte o golpe com a postura Guardião.", target: 30, progress: 0, perBattleCap: 2 };
   if (stance === "EXECUTOR" && personality === "COMPETITIVE") return { id: "affinity", type: "AFFINITY", label: "Aplique 20 K.O.s em inimigos com status total maior que o seu.", target: 20, progress: 0, perBattleCap: 2 };
-  if (stance === "COMMANDER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Aplique 15 K.O.s no agressor do aliado vinculado em perigo.", target: 15, progress: 0, perBattleCap: 1 };
+  if (stance === "COMMANDER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Aplique 15 K.O.s em inimigos que atacaram o aliado que o Leal protege (o de maior Carisma da equipe) quando ele estava abaixo de 50% de HP.", target: 15, progress: 0, perBattleCap: 1 };
   const label = affinityLabel(personality);
   return { id: "affinity", type: "AFFINITY", label, target: 20, progress: 0, perBattleCap: 1 };
 }

@@ -17,7 +17,7 @@ test("builds a long Loyal Purifier journey without impossible self-healing", () 
   assert.equal(new Set(journey.objectives.map((objective) => objective.type)).size, journey.objectives.length);
   const affinity = journey.objectives.find((objective) => objective.type === "AFFINITY");
   assert.deepEqual(affinity && { label: affinity.label, target: affinity.target }, {
-    label: "Proteja 30 vezes o aliado vinculado abaixo de 50% de HP.",
+    label: "Proteja 30 vezes o aliado que o Leal protege (o de maior Carisma da equipe) quando ele estiver abaixo de 50% de HP: cure-o ou intercepte o golpe com a postura Guardião.",
     target: 30,
   });
   assert.equal(journey.objectives.some((objective) => objective.type === "SELF_HEAL_AFTER_LOW_HP"), false);

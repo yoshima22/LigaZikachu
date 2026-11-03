@@ -45,9 +45,16 @@ async function main() {
     prisma.weeklyMascotLeagueMatch.findMany({ where: { status: "RESOLVED", resolvedAt: { gte: since } }, select, orderBy: { resolvedAt: "asc" } }),
     prisma.rushLeagueMatch.findMany({ where: { status: "RESOLVED", resolvedAt: { gte: since } }, select, orderBy: { resolvedAt: "asc" } }),
   ]);
+  const arena = await prisma.arenaBattle.findMany({
+    where: { type: "PVP", createdAt: { gte: since }, attackerPlayerId: { not: null }, defenderPlayerId: { not: null } },
+    select: { id: true, createdAt: true, turnLog: true, lootResult: true, result: true, attackerPlayerId: true, defenderPlayerId: true, rounds: true },
+    orderBy: { createdAt: "asc" },
+  });
   const battles = ([...weekly, ...rush] as Battle[]).sort((a, b) => a.resolvedAt.getTime() - b.resolvedAt.getTime());
   console.log(`${journeys.length} jornadas ativas; ${battles.length} partidas resolvidas desde ${since.toISOString()}.`);
 
+  const arenaBattles = arena.filter((b) => b.attackerPlayerId !== b.defenderPlayerId && Array.isArray(b.turnLog));
+  console.log(`${arenaBattles.length} batalhas PvP da Arena-Z no período.`);
   const before = new Map(journeys.map((j) => [j.id, new Map(j.milestones.map((m) => [m.milestoneKey, m.value]))]));
   try {
     await prisma.$transaction(async (tx) => {
@@ -58,6 +65,16 @@ async function main() {
         const winner = b.isDraw || !b.winnerId ? "DRAW" : b.winnerId === b.playerAId ? "A" : "B";
         const res = await recordLeagueBattleProgress(tx, { battleId: b.id, resolvedAt: b.resolvedAt, log: b.replayJson as never, lineupA: lineupA as never, lineupB: lineupB as never, winner, rounds: Number((r as { rounds?: number }).rounds) || 0 });
         if (res.counted) console.log(`  partida ${b.id} (${b.resolvedAt.toISOString()}): contou em ${res.counted} jornada(s)`);
+      }
+      for (const b of arenaBattles) {
+        const mascots = ((b.lootResult as { replayMascots?: Array<{ id: string; side: "A" | "D"; maxHp: number; ownerId: string | null; pokemonId: number; name: string }> } | null)?.replayMascots ?? []);
+        if (!mascots.some((m) => ids.has(m.id))) continue;
+        const res = await recordLeagueBattleProgress(tx, {
+          battleId: b.id, resolvedAt: b.createdAt, source: "ARENA_Z", log: b.turnLog as never,
+          lineupA: mascots.filter((m) => m.side === "A"), lineupB: mascots.filter((m) => m.side === "D"),
+          winner: b.result === "ATTACKER_WIN" ? "A" : b.result === "DEFENDER_WIN" ? "B" : "DRAW", rounds: b.rounds,
+        });
+        if (res.counted) console.log(`  Arena-Z ${b.id} (${b.createdAt.toISOString()}): contou em ${res.counted} jornada(s)`);
       }
       const after = await tx.mascotTrainingJourney.findMany({ where: { id: { in: journeys.map((j) => j.id) } }, include: { milestones: { orderBy: { milestoneKey: "asc" } } } });
       for (const j of after) {

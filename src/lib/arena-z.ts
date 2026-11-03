@@ -6,6 +6,7 @@ import {
 } from "@/lib/timed-game-bonuses";
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
+import { recordLeagueBattleProgress } from "@/lib/training-journeys";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import {
   getCombatRoleLabel,
@@ -4386,6 +4387,7 @@ export async function runPvpBattle(
       : [];
   let foundGroundSpoils: ArenaLoot | null = null;
   const pveDailyCoinsCap = await getActiveArenaDailyZcLimit();
+  let pvpBattleId: string | null = null;
 
   await prisma.$transaction(async (tx) => {
     const battle = await tx.arenaBattle.create({
@@ -4431,6 +4433,7 @@ export async function runPvpBattle(
         injuredMascotIds: injuredMascotIds as unknown as Prisma.InputJsonValue,
       },
     });
+    pvpBattleId = battle.id;
 
     if (!isTrainingBattle && !isCasualBattle && winnerTeam && lootSplit) {
       await tx.arenaTeam.update({
@@ -4590,6 +4593,15 @@ export async function runPvpBattle(
       }
     }
   });
+
+  // Jornadas de postura: a Arena-Z PvP real (não treino) conta para os mascotes dos dois lados.
+  if (!isTrainingBattle && pvpBattleId) {
+    await recordLeagueBattleProgress(prisma, {
+      battleId: pvpBattleId, resolvedAt: new Date(), source: "ARENA_Z", log: combat.log as never,
+      lineupA: attackers.map((m) => ({ ...m, maxHp: m.hp })), lineupB: defenders.map((m) => ({ ...m, maxHp: m.hp })),
+      winner: attackerWon ? "A" : defenderWon ? "B" : "DRAW", rounds: combat.rounds,
+    }).catch((err) => console.error("[training-journey] arena-z", err));
+  }
 
   if (!isTrainingBattle && !isCasualBattle && loserTeamDefeated && preserved)
     await distributeArenaExp(loserDefeatExpMascotIds, preserved.exp);
