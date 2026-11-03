@@ -6,8 +6,12 @@ import { normalizeCombatRole, getCombatRoleLabel, getCombatActionsPerRound, getH
 import type { WeeklyModifier, LeagueItemDef } from "@/app/(app)/combates/liga-semanal/constants";
 import type { WeeklyLeagueSabotageConfig } from "@/lib/raid-event";
 import type { BondCombatLink, OpposingBondCombatEffect } from "@/lib/mascot-bonds";
+import { createStanceEngine, type StanceEngine, type StanceReaction } from "./stance-effects";
 
 // ── Types ──────────────────────────────────────────────────────────────────
+
+// Efeitos das posturas desbloqueáveis do combate em andamento (null quando nenhuma está em campo).
+let activeStance: StanceEngine<LeagueMascot> | null = null;
 
 export type LeagueMascot = {
   id: string;
@@ -412,6 +416,21 @@ export function runLeagueCombat(
     );
 
   const debuffs = new Map<string, Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>>();
+  const st = createStanceEngine<LeagueMascot>(hp, { A: [...a, ...(reserveTeamA ?? [])], B: b });
+  activeStance = st;
+  const everyone = () => [...a, ...b, ...(reserveTeamA ?? [])];
+  const pushStanceLog = (r: StanceReaction) => {
+    const by = everyone().find((m) => m.id === r.actorId); const to = everyone().find((m) => m.id === r.targetId);
+    if (!by || !to) return;
+    log.push({
+      turn: actionNum, round, actorId: by.id, actorName: by.name, actorOwnerId: by.ownerId, actorPokemonId: by.pokemonId, actorLevel: by.level,
+      targetId: to.id, targetName: to.name, targetOwnerId: to.ownerId, targetPokemonId: to.pokemonId, targetLevel: to.level,
+      action: r.kind === "HEAL" ? "HEAL" : "ATTACK", damage: r.amount, attackerType: elementOf(by), defenderType: elementOf(to),
+      multiplier: 1, advantageApplied: false, typeStep: 0, typeDelta: 0,
+      actorRole: getCombatRoleLabel(by.combatRole), targetRole: getCombatRoleLabel(to.combatRole), effect: r.text, reaction: true,
+    });
+    actionNum++;
+  };
   const healCount = new Map<string, number>();
   const survivorUsed = new Set<string>();
   const lastMascotBoostUsed = new Set<"A" | "B">();
@@ -511,6 +530,7 @@ export function runLeagueCombat(
       midBattleRerolled = true;
     }
 
+    st?.roundStart(round, debuffs);
     const aAlive = alive(a, hp);
     const bAlive = alive(b, hp);
     const all = [
@@ -553,7 +573,7 @@ export function runLeagueCombat(
             wounded.sort((x, y) => (hp.get(x.id) ?? 0) - (hp.get(y.id) ?? 0));
             const target = wounded[0];
             const healSupp = saboteurSuppression(opponents, hp, actor);
-            const heal = Math.max(1, Math.round(getHealerHealAmount(actor) * (1 - healSupp)));
+            const heal = Math.max(1, Math.round(getHealerHealAmount(actor) * (1 - healSupp) * (st?.healFactor(target.id) ?? 1)));
             hp.set(target.id, Math.min(target.hp, (hp.get(target.id) ?? 0) + heal));
             healCount.set(actor.id, count + 1);
             log.push({
@@ -595,6 +615,16 @@ export function runLeagueCombat(
         const refreshedOpponents = alive(enemyTeam, hp);
         if (refreshedOpponents.length === 0) break;
         target = selectTarget(actor, refreshedOpponents, hp);
+      }
+
+      // Posturas desbloqueáveis: podem trocar o alvo (Explosivo, Comandante, Estrategista) e somar dano.
+      let stanceRawAdd = 0, stanceDmgMult = 1;
+      const stanceNotes: string[] = [];
+      if (st) {
+        const begin = st.beginAttack(actor, opponents, target);
+        stanceNotes.push(...begin.notes);
+        if (begin.target) { target = begin.target; provoked = false; }
+        stanceRawAdd = begin.rawAdd; stanceDmgMult = begin.dmgMult;
       }
 
       const attackerType = elementOf(actor);
@@ -641,7 +671,7 @@ export function runLeagueCombat(
         else loyalNote = `🤝 Leal ${actor.name} protege ${loyalMate.name}.`;
       }
       const raw = (force * 1.8 + actor.level * 2 + instinct * 0.7 + rand(0, 12))
-        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult;
+        * (1 + encourage + scoutBonus) * roleMult * duelistMult * survivorDmg * persOff * loyalMult * stanceDmgMult + stanceRawAdd;
       const mitigation = vitality * 0.8 + target.level;
       let damage = Math.max(1, Math.round((raw * multiplier - mitigation) * survivorDef * persDef));
       // Dano paralelo SEM vantagem/resistência de tipo, p/ medir quanto o tipo
@@ -687,6 +717,9 @@ export function runLeagueCombat(
         guardianKnockedOut = (hp.get(g.id) ?? 0) === 0;
         guardianEffect = `Guardião ${g.name} absorveu ${absorbed} de dano.`;
       }
+
+      if (st) { const pre = st.preHit(actor, target, damage); damage = pre.damage; stanceNotes.push(...pre.notes); }
+      const targetHpBefore = hp.get(target.id) ?? 0;
 
       // SURVIVOR last stand
       let survivorEffect: string | null = null;
@@ -755,9 +788,13 @@ export function runLeagueCombat(
         }
       }
 
+      if (debuffEffect) st?.tagOpportunist(target.id);
+      const stancePost = st?.postHit(actor, target, targetHpBefore - (hp.get(target.id) ?? 0));
+      if (stancePost) stanceNotes.push(...stancePost.notes);
       const typeNote = formatTypeNote(typesOf(actor), typesOf(target), typeStep, typeDelta);
       const effects = [
         typeNote,
+        ...stanceNotes,
         actionIndex > 0 ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).` : null,
         encourage > 0 ? `Encorajador: +${Math.round(encourage * 100)}%.` : null,
         scoutBonus > 0 ? `Batedor: +${Math.round(scoutBonus * 100)}%.` : null,
@@ -778,10 +815,13 @@ export function runLeagueCombat(
         ...(guardianIntercept ? { guardianIntercept } : {}),
       });
       actionNum++;
+      for (const reaction of stancePost?.reactions ?? []) pushStanceLog(reaction);
       }
     }
+    st?.roundEnd();
     round++;
   }
+  activeStance = null;
 
   const aSurvivors = alive(a, hp).length;
   const bSurvivors = alive(b, hp).length;
@@ -815,7 +855,8 @@ export function runLeagueCombat(
 
 function getStat(m: LeagueMascot, debuffs: Map<string, Partial<Record<string, number>>>, stat: string) {
   const pct = debuffs.get(m.id)?.[stat] ?? 0;
-  return Math.max(1, Math.round((m as unknown as Record<string, number>)[stat] * (1 - pct)));
+  const stance = activeStance && (stat === "force" || stat === "agility" || stat === "instinct" || stat === "vitality") ? activeStance.statMult(m.id, stat) : 1;
+  return Math.max(1, Math.round((m as unknown as Record<string, number>)[stat] * (1 - pct) * stance));
 }
 
 function selectTarget(actor: LeagueMascot, opponents: LeagueMascot[], hp: Map<string, number>) {

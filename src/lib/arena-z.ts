@@ -7,6 +7,7 @@ import {
 import { creditCoins } from "@/lib/zikacoins";
 import { addExp } from "@/lib/mascot";
 import { recordLeagueBattleProgress } from "@/lib/training-journeys";
+import { createStanceEngine, type StanceEngine, type StanceState } from "@/lib/stance-effects";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import {
   getCombatRoleLabel,
@@ -341,6 +342,8 @@ export type ArenaLoot = {
 
 export type ArenaTurnLog = {
   turn: number;
+  /** Evento extra de postura desbloqueável (dano/cura secundária): não é um ataque direto do mascote. */
+  reaction?: boolean;
   /** Round em que a ação ocorreu (Liga Semanal/Rush; ausente em combates antigos). */
   round?: number;
   actorId: string;
@@ -391,6 +394,8 @@ export type ArenaCombatRuntime = {
   guard: { team: "A" | "D"; reduction: number } | null;
   rngCounter: number;
   abilities?: AbilityRuntime;
+  /** Estado das posturas desbloqueáveis entre segmentos (Arena Draft). */
+  stance?: StanceState;
 };
 
 export type ArenaCombatOptions = {
@@ -556,6 +561,8 @@ function alive(team: ArenaMascot[], hp: Map<string, number>) {
 
 // Motor de habilidades da luta em andamento (síncrono; cada execução o redefine).
 let activeAbilityEngine: AbilityEngine | null = null;
+// Efeitos das posturas desbloqueáveis do combate em andamento (null quando nenhuma está em campo).
+let activeStanceEngine: StanceEngine<ArenaMascot> | null = null;
 
 function getEffectiveStat(
   m: ArenaMascot,
@@ -566,7 +573,7 @@ function getEffectiveStat(
   stat: "force" | "agility" | "instinct" | "vitality",
 ) {
   const pct = debuffs.get(m.id)?.[stat] ?? 0;
-  const boost = stat === "agility" && activeAbilityEngine ? activeAbilityEngine.agilityMult(m.id) : 1;
+  const boost = (stat === "agility" && activeAbilityEngine ? activeAbilityEngine.agilityMult(m.id) : 1) * (activeStanceEngine?.statMult(m.id, stat) ?? 1);
   return Math.max(1, Math.round(m[stat] * (1 - pct) * boost));
 }
 
@@ -725,6 +732,7 @@ function tryHealerAction(
   opponents: ArenaMascot[],
   hp: Map<string, number>,
   healCount: Map<string, number>,
+  healFactor: (id: string) => number = () => 1,
 ): {
   effect: string;
   targetId: string;
@@ -749,7 +757,7 @@ function tryHealerAction(
   const suppressionPct = aliveSaboteurSuppression(opponents, hp, actor);
   const heal = Math.max(
     1,
-    Math.round(getHealerHealAmount(actor) * (1 - suppressionPct)),
+    Math.round(getHealerHealAmount(actor) * (1 - suppressionPct) * healFactor(target.id)),
   );
   const currentHp = hp.get(target.id) ?? 0;
   const targetHpAfter = Math.min(target.hp, currentHp + heal);
@@ -876,6 +884,8 @@ function runArenaCombatInternal(
     string,
     Partial<Record<"force" | "agility" | "instinct" | "vitality", number>>
   >(Object.entries(previous?.debuffs ?? {}));
+  const st = createStanceEngine<ArenaMascot>(hp, { A: attackers, D: defenders }, previous?.stance);
+  activeStanceEngine = st;
   const healCount = new Map<string, number>(
     Object.entries(previous?.healCount ?? {}),
   );
@@ -963,6 +973,7 @@ function runArenaCombatInternal(
       abilityEngine.onRoundStart(round);
       flushAbilityLog();
     }
+    st?.roundStart(round, debuffs);
     const aAlive = alive(attackers, hp);
     const dAlive = alive(defenders, hp);
     const all = [
@@ -1023,6 +1034,7 @@ function runArenaCombatInternal(
           opponents,
           hp,
           healCount,
+          (id) => st?.healFactor(id) ?? 1,
         );
         if (healResult) {
           log.push({
@@ -1124,6 +1136,19 @@ function runArenaCombatInternal(
             multiplier = getTypeAdvantageMultiplier(arenaTypes(actor), arenaTypes(target));
           }
         }
+        // Posturas desbloqueáveis: podem trocar o alvo (Explosivo, Comandante, Estrategista) e somar dano.
+        let stanceRawAdd = 0, stanceDmgMult = 1;
+        const stanceNotes: string[] = [];
+        if (st) {
+          const begin = st.beginAttack(actor, opponents, target);
+          stanceNotes.push(...begin.notes);
+          if (begin.target) {
+            target = begin.target; provoked = null;
+            defenderType = arenaElement(target);
+            multiplier = getTypeAdvantageMultiplier(arenaTypes(actor), arenaTypes(target));
+          }
+          stanceRawAdd = begin.rawAdd; stanceDmgMult = begin.dmgMult;
+        }
         const force = getEffectiveStat(actor, debuffs, "force");
         const instinct = getEffectiveStat(actor, debuffs, "instinct");
         const vitality = getEffectiveStat(target, debuffs, "vitality");
@@ -1212,7 +1237,7 @@ function runArenaCombatInternal(
           survivorDmgBonus *
           persOff *
           loyalMult *
-          (1 + (abilityAtk?.off ?? 0));
+          (1 + (abilityAtk?.off ?? 0)) * stanceDmgMult + stanceRawAdd;
         const mitigation =
           (vitality * 0.8 + target.level) * (1 - (abilityAtk?.ignore ?? 0));
         const guarded =
@@ -1250,6 +1275,9 @@ function runArenaCombatInternal(
             if (ge.note) abilityNotes.push(ge.note);
           }
         }
+
+        if (st) { const pre = st.preHit(actor, target, damage); damage = pre.damage; stanceNotes.push(...pre.notes); }
+        const targetHpBefore = hp.get(target.id) ?? 0;
 
         // SURVIVOR: last stand (survive lethal once)
         const survivorLS = trySurvivorLastStand(
@@ -1340,7 +1368,11 @@ function runArenaCombatInternal(
             travessoEffect = `Travessura de ${actor.name}: -${Math.round(tv.amount * 100)}% de ${tv.stat} de ${target.name}.`;
           }
         }
+        if (debuffEffect) st?.tagOpportunist(target.id);
         const saboteurEffect = trySaboteurDisrupt(actor, opponents, hp);
+        const targetHpAfterMain = hp.get(target.id) ?? newHp;
+        const stancePost = st?.postHit(actor, target, targetHpBefore - targetHpAfterMain);
+        if (stancePost) stanceNotes.push(...stancePost.notes);
         const abilityAfter = abilityEngine
           ? abilityEngine.afterHit({ actor, target, damage })
           : [];
@@ -1348,6 +1380,7 @@ function runArenaCombatInternal(
         const effects =
           [
             typeNote,
+            ...stanceNotes,
             actionIndex > 0
               ? `Agilidade: ação extra (${actionIndex + 1}/${actionProfile.actions}).`
               : null,
@@ -1388,7 +1421,8 @@ function runArenaCombatInternal(
           targetOwnerId: target.ownerId,
           action: "ATTACK",
           damage,
-          targetHpAfter: hp.get(target.id) ?? newHp,
+          round,
+          targetHpAfter: targetHpAfterMain,
           attackerType,
           defenderType,
           multiplier,
@@ -1407,8 +1441,21 @@ function runArenaCombatInternal(
           for (const c of abilityEngine.flushHpChanges())
             pushAbilityLog({ actor: c.by, target: c.m, hpAfter: c.hpAfter, heal: c.heal, text: c.text });
         turn++;
+        for (const r of stancePost?.reactions ?? []) {
+          const by = [...attackers, ...defenders].find((m) => m.id === r.actorId);
+          const to = [...attackers, ...defenders].find((m) => m.id === r.targetId);
+          if (!by || !to) continue;
+          log.push({
+            turn, actorId: by.id, actorName: by.name, actorOwnerId: by.ownerId, targetId: to.id, targetName: to.name, targetOwnerId: to.ownerId,
+            action: r.kind === "HEAL" ? "HEAL" : "ATTACK", damage: r.amount, targetHpAfter: r.hpAfter,
+            attackerType: arenaElement(by), defenderType: arenaElement(to), multiplier: 1, advantageApplied: false, typeStep: 0, typeDelta: 0,
+            actorRole: getCombatRoleLabel(by.combatRole), targetRole: getCombatRoleLabel(to.combatRole), effect: r.text, reaction: true,
+          });
+          turn++;
+        }
       }
     }
+    st?.roundEnd();
     round++;
   }
 
@@ -1440,8 +1487,10 @@ function runArenaCombatInternal(
     guard,
     rngCounter: previous?.rngCounter ?? 0,
     ...(abilityEngine ? { abilities: abilityEngine.snapshot() } : {}),
+    ...(st ? { stance: st.snapshot() } : {}),
   };
   activeAbilityEngine = null;
+  activeStanceEngine = null;
   const finished =
     alive(attackers, hp).length === 0 ||
     alive(defenders, hp).length === 0 ||

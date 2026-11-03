@@ -3,7 +3,7 @@ import type { TrainingObjectiveType } from "./training-milestones";
 
 /** Entrada mínima do log de combate (ArenaTurnLog gravado em replayJson). */
 export type CombatLogEntry = {
-  turn?: number; round?: number; action?: string; damage?: number;
+  turn?: number; round?: number; reaction?: boolean; action?: string; damage?: number;
   actorId?: string; targetId?: string; actorRole?: string; targetRole?: string;
   typeStep?: number; effect?: string; guardianIntercept?: { mascotId: string; damage: number };
 };
@@ -43,6 +43,8 @@ export function extractBattleStats(input: {
   for (const m of lineupB) { teamOf.set(m.id, "B"); info.set(m.id, m); }
   const hp = new Map<string, number>([...info].map(([id, m]) => [id, maxHpOf(m)]));
   const hasRounds = log.some((e) => typeof e.round === "number");
+  // Arena-Z guarda o nº de ações em `rounds`; com `round` no log o total real é o maior round.
+  const totalRounds = hasRounds ? Math.max(...log.map((e) => e.round ?? 0)) : rounds;
 
   const stats = new Map<string, MascotBattleStats>();
   const bump = (id: string, type: TrainingObjectiveType, n = 1) => {
@@ -84,6 +86,13 @@ export function extractBattleStats(input: {
       hp.set(target, before + healed);
       if (actor !== target && healed >= max * 0.05) bump(actor, "HEALS");
       if (actor !== target && before / max < 0.5 && healed > 0) { bump(actor, "PROTECT_DANGER"); protections.push({ by: actor, ally: target, pct: before / max }); }
+      continue;
+    }
+    // Dano de postura (Artilheiro, Revidador, Explosivo): tira HP mas não é ataque direto do mascote.
+    if (e.action === "ATTACK" && e.reaction) {
+      const before = hp.get(target) ?? 0, lost = Math.min(e.damage ?? 0, before);
+      hp.set(target, before - lost);
+      if (before > 0 && before - lost <= 0 && round != null) deathRound.set(target, round);
       continue;
     }
     if (e.action !== "ATTACK" || !(e.damage! > 0) || teamOf.get(actor) === teamOf.get(target)) continue;
@@ -186,7 +195,7 @@ export function extractBattleStats(input: {
     if (bh && bh.enc + bh.scout > 0) s.counts.BUFFS = bh.enc + bh.scout;
     if (won && aliveAtEnd(id) && (hp.get(id) ?? 0) / maxHpOf(info.get(id)!) > 0.7) s.affinity.PROUD = 1;
     if (!hasRounds) continue;
-    const alive = (r: number) => (deathRound.has(id) ? deathRound.get(id)! >= r : rounds >= r);
+    const alive = (r: number) => (deathRound.has(id) ? deathRound.get(id)! >= r : totalRounds >= r);
     if (alive(3)) s.counts.TURN_THREE_HOLD = 1;
     if (alive(5)) s.counts.TURN_FIVE_HOLD = 1;
     if ((directAttacks.get(id) ?? 0) >= 3) s.counts.THIRD_ATTACK = 1;
