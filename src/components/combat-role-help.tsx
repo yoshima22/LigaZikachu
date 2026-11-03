@@ -98,7 +98,7 @@ function roleNumbers(role: CombatRole, s?: CombatRoleStats) {
     case "ARTILLERY":
       return [`Dano secundário previsto: ${pct(getArtillerySplashPct(f, a))} do dano final do primeiro ataque direto do round.`, "Atinge outro inimigo vivo de menor HP; não ativa rebote, tipo nem outra postura."];
     case "RETRIBUTOR":
-      return ["Após sofrer ao menos 15% do HP máximo no round e sobreviver, revida uma vez no primeiro agressor.", "O revide usa 20% do dano base do próprio ataque; Força e Vitalidade não alteram os 20%."];
+      return ["Após sofrer ao menos 15% do HP máximo no round e sobreviver, revida uma vez no primeiro agressor.", "O revide usa 10% do dano base do próprio ataque; Força e Vitalidade não alteram os 10%."];
     case "CORROSIVE":
       return [`Ferida reduz a cura efetiva em ${pct(getCorrosiveWoundPct(f, i))} até o fim do próximo round.`, "A média de Força e Instinto define o valor; o alvo pode resistir ao debuff."];
     case "STRATEGIST":

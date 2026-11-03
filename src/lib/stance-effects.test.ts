@@ -122,7 +122,7 @@ test("Artilheiro: 1º ataque do round atinge o inimigo de menor HP; Revidador re
   hp.set("t2", 300);
   const splash = eng.postHit(A[0], B[0], 100).reactions.find((r) => r.kind === "HIT")!;
   assert.equal(splash.targetId, "t2");
-  assert.ok(splash.amount >= 15 && splash.amount <= 25);
+  assert.ok(splash.amount >= 7 && splash.amount <= 11);
   assert.equal(eng.postHit(A[0], B[0], 100).reactions.length, 0);
   hp.set("re", 840);
   const first = eng.postHit(B[0], A[1], 160);

@@ -17,7 +17,7 @@ export const UNLOCKABLE_STANCES = [
 const STANCE_SET = new Set<string>(UNLOCKABLE_STANCES);
 
 /** Números de equilíbrio que não vêm de atributos. Explosivo: fração do HP atual somada ao dano-base do 3º ataque. */
-export const STANCE_TUNING = { explosiveHpPct: 1, explosiveSplashPct: 1 };
+export const STANCE_TUNING = { explosiveHpPct: 1, explosiveSplashPct: 1, retributorPct: 0.1 };
 
 export type StanceMascot = {
   id: string; name: string; level: number; combatRole: string; hp: number;
@@ -250,7 +250,7 @@ export class StanceEngine<M extends StanceMascot> {
       if (aggressor && this.hpOf(aggressor.id) > 0) {
         s.retUsed.push(target.id);
         const b = this.b(target.id);
-        hit(target, aggressor, Math.max(1, Math.round(0.2 * (b.force * 1.8 + target.level * 2 + b.instinct * 0.7 + 6))), `Revidador ${target.name} revidou contra ${aggressor.name}.`);
+        hit(target, aggressor, Math.max(1, Math.round(STANCE_TUNING.retributorPct * (b.force * 1.8 + target.level * 2 + b.instinct * 0.7 + 6))), `Revidador ${target.name} revidou contra ${aggressor.name}.`);
       }
     }
     if (!targetAlive && this.active(actor, "COMMANDER") && !s.commanderDone.includes(actor.id)) {
