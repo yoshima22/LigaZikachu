@@ -29,7 +29,7 @@ import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/l
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
 import { ensureTrainingMilestoneShopItems } from "@/lib/training-milestone-shop";
 import { TRAINING_MILESTONE_ITEMS } from "@/lib/training-catalog";
-import { recordTrainingJourneyProgress } from "@/lib/training-journeys";
+import { recordTrainingJourneyProgress, recordAffinityEvent } from "@/lib/training-journeys";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
@@ -1115,7 +1115,9 @@ export async function interactWithMascot(
   playerId: string,
   mascotId: string,
   type: InteractionType,
-  skipCooldown = false
+  skipCooldown = false,
+  /** Ação automática (ex.: brinde ao coletar expedição): não conta como clique do jogador nas jornadas de postura. */
+  automatic = false,
 ): Promise<InteractionResult> {
   const mascot = await prisma.mascot.findUnique({ where: { id: mascotId } });
   if (!mascot || mascot.playerId !== playerId) throw new Error("Mascote não encontrado.");
@@ -1335,6 +1337,12 @@ export async function interactWithMascot(
   const levelResult = expGained > 0
     ? await addExp(mascotId, expGained, { ignoreBenchPenalty: true, ignoreExpBoost: true, mascotSnapshot: mascot })
     : null;
+
+  // Jornadas de postura: Brincalhão (brincar/carinho) e Guloso (comida/doces).
+  if (!automatic) {
+    const affinity = type === "PLAY" || type === "PET" ? "PLAYFUL" : "GLUTTON";
+    await recordAffinityEvent(prisma, { mascotId, personality: affinity }).catch((err) => console.error("[training-journey] afinidade", err));
+  }
 
   return { success: true, message, happinessChange, expGained, newMood: finalMood, inventoryRemaining, evolved: levelResult?.evolved };
 }
@@ -2089,7 +2097,16 @@ export async function claimExpedition(
       });
     }
     const trainingJourneyId = typeof stored.trainingJourneyId === "string" ? stored.trainingJourneyId : null;
-    if (trainingJourneyId) await recordTrainingJourneyProgress(tx, { journeyId: trainingJourneyId, mascotId: expedition.mascotId, objectiveType: "EXPEDITIONS", amount: 1, mode });
+    if (trainingJourneyId) {
+      await recordTrainingJourneyProgress(tx, { journeyId: trainingJourneyId, mascotId: expedition.mascotId, objectiveType: "EXPEDITIONS", amount: 1, mode });
+      // Afinidades de expedição: Preguiçoso (3h/6h), Elétrico (30min/1h), Tímido (Itens com felicidade > 70), Curioso (1ª do dia).
+      const events: string[] = [];
+      if (durationKey === "3h" || durationKey === "6h") events.push("LAZY");
+      if (durationKey === "30min" || durationKey === "1h") events.push("ELECTRIC");
+      if (mode === "ITEMS" && expedition.mascot.happiness > 70) events.push("TIMID");
+      if (isFirstExpeditionToday) events.push("CURIOUS");
+      for (const personality of events) await recordAffinityEvent(tx, { mascotId: expedition.mascotId, personality, journeyId: trainingJourneyId });
+    }
 
     // ── Bônus e presentes dos aliados ──────────────────────────────────────
     for (const rel of friends) {

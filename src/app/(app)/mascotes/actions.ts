@@ -1267,8 +1267,8 @@ export async function collectCareAndRepeatExpeditionsAction(): Promise<{
         entry.expGained = claimed.expGained;
 
         await recalculateMood(expedition.mascotId).catch(() => undefined);
-        const play = await interactWithMascot(player.id, expedition.mascotId, "PLAY");
-        const pet = await interactWithMascot(player.id, expedition.mascotId, "PET");
+        const play = await interactWithMascot(player.id, expedition.mascotId, "PLAY", false, true);
+        const pet = await interactWithMascot(player.id, expedition.mascotId, "PET", false, true);
         entry.playMessage = play.message;
         entry.petMessage = pet.message;
 

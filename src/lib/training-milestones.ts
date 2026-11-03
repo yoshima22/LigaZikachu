@@ -92,7 +92,7 @@ export const AFFINITY_LABELS: Record<TrainingPersonality, string> = {
   LAZY: "Conclua 20 expedições de 3h ou 6h com este mascote.",
   COMPETITIVE: "Vença 20 combates contra oponentes com status total maior que o do mascote.",
   DRAMATIC: "Em 20 combates, derrote um inimigo ou sobreviva a um golpe fatal estando abaixo de 35% de HP.",
-  PLAYFUL: "Brinque com este mascote 20 vezes (botão Brincar).",
+  PLAYFUL: "Interaja com este mascote 20 vezes, brincando ou fazendo carinho (botões Brincar e Carinho).",
   ELECTRIC: "Conclua 20 expedições curtas (30min ou 1h) com este mascote.",
   TIMID: "Conclua 20 expedições de Itens com este mascote feliz (felicidade acima de 70).",
   CHAOTIC: "Vença 20 combates em que este mascote sofreu ao menos um debuff durante a luta.",

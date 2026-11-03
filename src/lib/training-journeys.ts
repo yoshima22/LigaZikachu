@@ -214,3 +214,40 @@ async function arenaCreditsOf(tx: Db, playerId: string) {
   });
   return rows.flatMap((r) => ((r.detailsJson as { credits?: Array<{ at: string; opp: string }> } | null)?.credits ?? []));
 }
+
+/**
+ * Evento de afinidade que não vem de combate: brincar/carinho (PLAYFUL), alimentar (GLUTTON) e expedições
+ * (LAZY, ELECTRIC, TIMID, CURIOUS). `personality` diz qual texto de afinidade o evento satisfaz; quem manda
+ * é o texto gravado no marco ("Personalidade X: ..."), então trocar a personalidade do mascote depois não muda a jornada.
+ */
+export async function recordAffinityEvent(
+  tx: Db,
+  input: { mascotId: string; personality: string; journeyId?: string; amount?: number },
+) {
+  const name = (PERSONALITY_NAMES_PT as Record<string, string>)[input.personality];
+  if (!name) return { recorded: false };
+  const journey = await tx.mascotTrainingJourney.findFirst({
+    where: { mascotId: input.mascotId, status: "ACTIVE", ...(input.journeyId ? { id: input.journeyId } : {}) },
+    include: { milestones: true },
+  });
+  if (!journey) return { recorded: false };
+  const milestone = journey.milestones.find((m) => {
+    const d = m.detailsJson as { type?: string; label?: string } | null;
+    return d?.type === "AFFINITY" && d.label?.startsWith(`Personalidade ${name}:`) && !m.completedAt;
+  });
+  if (!milestone) return { recorded: false };
+  const next = Math.min(milestone.target, milestone.value + Math.max(1, Math.floor(input.amount ?? 1)));
+  await tx.mascotTrainingMilestoneProgress.update({
+    where: { journeyId_milestoneKey: { journeyId: journey.id, milestoneKey: milestone.milestoneKey } },
+    data: { value: next, ...(next >= milestone.target ? { completedAt: new Date() } : {}) },
+  });
+  const updated = await tx.mascotTrainingMilestoneProgress.findMany({ where: { journeyId: journey.id }, select: { milestoneKey: true, target: true, value: true } });
+  if (completeTrainingJourney(updated)) {
+    await tx.mascotTrainingJourney.update({ where: { id: journey.id }, data: { status: "COMPLETED", completedAt: new Date() } });
+    await tx.mascotStanceUnlock.upsert({
+      where: { mascotId_stanceKey: { mascotId: journey.mascotId, stanceKey: journey.stanceKey } },
+      update: {}, create: { mascotId: journey.mascotId, stanceKey: journey.stanceKey, journeyId: journey.id },
+    });
+  }
+  return { recorded: true };
+}
