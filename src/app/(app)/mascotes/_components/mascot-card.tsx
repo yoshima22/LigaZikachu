@@ -358,14 +358,17 @@ export function getOrderClueStepLabel(stepKey?: string | null) {
   return ORDER_CLUE_STEP_LABELS[stepKey] ?? "Pista da investigacao";
 }
 
-export function rewardToDisplay(reward: { type: string; eggType?: string | null; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string }): ExpeditionRewardDisplay {
+export function rewardToDisplay(reward: { type: string; eggType?: string | null; foodType?: string; quantity?: number; amount?: number; exp?: number; expBonus?: number; gotEgg?: boolean; durationLabel?: string; shopItemType?: string; luckyEggPct?: number }): ExpeditionRewardDisplay {
   if (reward.type === "TRAINING") {
     const exp = reward.exp ?? 0;
     const dur = reward.durationLabel ?? "";
+    // Ovo da Sorte: o bônus já está dentro de `exp` (multiplicativo); mostra quanto ele rendeu.
+    const lucky = reward.luckyEggPct ?? 0;
+    const luckyExtra = lucky > 0 ? exp - Math.round(exp / (1 + lucky / 100)) : 0;
     return {
       emoji: "🏋️",
       title: `Treinamento de ${dur} concluído!`,
-      description: `+${exp.toLocaleString("pt-BR")} EXP recebido. Nenhum item — isso é esperado no modo Treinamento.`,
+      description: `+${exp.toLocaleString("pt-BR")} EXP recebido.${lucky > 0 ? ` 🍀 Ovo da Sorte: +${lucky}% de EXP (+${luckyExtra.toLocaleString("pt-BR")} EXP a mais).` : ""} Nenhum item — isso é esperado no modo Treinamento.`,
     };
   }
   if (reward.type === "VACATION") {
