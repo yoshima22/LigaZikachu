@@ -16,6 +16,9 @@ export const UNLOCKABLE_STANCES = [
 ] as const;
 const STANCE_SET = new Set<string>(UNLOCKABLE_STANCES);
 
+/** Números de equilíbrio que não vêm de atributos. Explosivo: fração do HP atual somada ao dano-base do 3º ataque. */
+export const STANCE_TUNING = { explosiveHpPct: 1, explosiveSplashPct: 1 };
+
 export type StanceMascot = {
   id: string; name: string; level: number; combatRole: string; hp: number;
   force: number; agility: number; instinct: number; vitality: number; charisma: number;
@@ -144,8 +147,8 @@ export class StanceEngine<M extends StanceMascot> {
     s.pendingExplosive = null;
     if (this.active(actor, "EXPLOSIVE") && s.directCount[actor.id] === 3 && opponents.length) {
       target = [...opponents].sort((x, y) => y.agility * this.statMult(y.id, "agility") - x.agility * this.statMult(x.id, "agility"))[0];
-      rawAdd = this.hpOf(actor.id) * 0.5; s.pendingExplosive = actor.id;
-      notes.push(`Explosivo ${actor.name} mirou o inimigo mais ágil, ${target.name}, somando metade da própria vida ao golpe.`);
+      rawAdd = this.hpOf(actor.id) * STANCE_TUNING.explosiveHpPct; s.pendingExplosive = actor.id;
+      notes.push(`Explosivo ${actor.name} mirou o inimigo mais ágil, ${target.name}, somando ${Math.round(STANCE_TUNING.explosiveHpPct * 100)}% da própria vida ao golpe.`);
     }
     const order = s.order[this.sideOfId.get(actor.id) ?? ""];
     if (!target && order && order.commanderId !== actor.id && !order.used.includes(actor.id) && this.round <= order.expires && opponents.length) {
@@ -262,6 +265,12 @@ export class StanceEngine<M extends StanceMascot> {
       s.pendingExplosive = null;
       const d = this.damageTo(actor.id, this.hpOf(actor.id));
       reactions.push({ kind: "SELF_KO", actorId: actor.id, targetId: actor.id, amount: d, hpAfter: 0, text: `Explosivo ${actor.name} se sacrificou na explosão.` });
+      // A explosão também atinge os demais inimigos vivos, com uma parcela do dano causado ao alvo principal.
+      if (STANCE_TUNING.explosiveSplashPct > 0 && dealt > 0) {
+        for (const foe of this.alive(eSide).filter((f) => f.id !== target.id)) {
+          hit(actor, foe, Math.max(1, Math.round(dealt * STANCE_TUNING.explosiveSplashPct)), `A explosão de ${actor.name} atingiu ${foe.name}.`);
+        }
+      }
     }
     return { notes, reactions };
   }

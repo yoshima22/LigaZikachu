@@ -54,7 +54,7 @@ test("Acumulador carrega 1 por round, libera na 4ª ação e zera", () => {
   assert.equal(eng.beginAttack(A[0], B, B[0]).dmgMult, 1);
 });
 
-test("Explosivo: 3º ataque mira o mais ágil, soma 50% da vida e se sacrifica", () => {
+test("Explosivo: 3º ataque mira o mais ágil, soma 100% da vida, explode em área e se sacrifica", () => {
   const { hp, eng, A, B } = mk([m("bo", "EXPLOSIVE"), m("ally", "ATTACKER"), m("slow", "DEFENDER", { agility: 10 }), m("fast", "DEFENDER", { agility: 300 })]);
   eng.roundStart(1, new Map());
   const foes = B;
@@ -64,10 +64,13 @@ test("Explosivo: 3º ataque mira o mais ágil, soma 50% da vida e se sacrifica",
   eng.postHit(A[0], foes[0], 10);
   const third = eng.beginAttack(A[0], foes, foes[0]);
   assert.equal(third.target?.id, "fast");
-  assert.equal(third.rawAdd, 500);
-  const post = eng.postHit(A[0], foes[1], 10);
+  assert.equal(third.rawAdd, 1000);
+  const post = eng.postHit(A[0], foes[1], 400);
   assert.equal(hp.get("bo"), 0);
   assert.ok(post.reactions.some((r) => r.kind === "SELF_KO"));
+  const splash = post.reactions.find((r) => r.kind === "HIT")!;
+  assert.equal(splash.targetId, "slow");
+  assert.equal(splash.amount, 400);
 });
 
 test("Sanguinário cura, limitado a 8% do HP máximo por round e reduzido pela Ferida", () => {

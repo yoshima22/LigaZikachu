@@ -65,7 +65,7 @@ Esta tabela substitui qualquer versão anterior do efeito.
 | Inabalável | Vitalidade + Instinto | Após cada ataque direto próprio, recebe escudo de `5%` do HP máximo. O escudo substitui o anterior, não acumula, e termina no combate. |
 | Fortaleza | Vitalidade + Instinto | Após cada golpe direto recebido, Vitalidade e Instinto-base ganham `2–4%`, enquanto Força-base perde a mesma parcela. Não composto; cada uma limita em `+20%`, `+20%` e `-20%`, respectivamente, e termina no combate. |
 | Acumulador | Força + Agilidade | Ao sobreviver ao fim de round em que agiu, ganha uma carga (máximo 3, uma por round). Com três cargas, o próximo ataque direto recebe `15–35%` de dano e consome as três; não explode imediatamente. |
-| Explosivo | Agilidade + Vitalidade | No terceiro ataque direto do combate, mira o inimigo vivo de maior Agilidade (empate: slot), soma `50%` do HP atual próprio ao dano-base e então morre, ignorando suas próprias sobrevivências. Defesa, tipo, interceptação e sobrevivência do alvo continuam funcionando. |
+| Explosivo | Agilidade + Vitalidade | No terceiro ataque direto do combate, mira o inimigo vivo de maior Agilidade (empate: slot), soma `100%` do HP atual próprio ao dano-base, causa o mesmo dano (sem recalcular) a todos os outros inimigos vivos e então morre, ignorando suas próprias sobrevivências. Defesa, tipo, interceptação e sobrevivência do alvo continuam funcionando. |
 | Armadilheiro | Instinto + Agilidade | Nos rounds 3 e 5, desliga todos os bônus de postura inimigos por aquele round. Não desliga ataque-base, personalidade, tipo, item ou habilidade; não remove estados já aplicados. |
 
 ## Resoluções de integridade e transferência
