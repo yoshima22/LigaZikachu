@@ -35,7 +35,7 @@ export function TrainingMilestonesLab() {
 
   function simulateProgress() {
     const objective = view.objectives.find((item) => item.id === selectedObjectiveId) ?? view.objectives.find((item) => item.type !== "ARENA_Z" && item.type !== "LEAGUE" && item.type !== "EXPEDITIONS") ?? view.objectives[0];
-    const result = evaluateTrainingEvent({ ...view, objectives: [objective] }, { battleId: "admin-local", kos: 4, lowHpDirectAttacks: 3, survivedToNextRound: true, directAttacks: 5, damageUnits: 12, buffs: 4, heals: 4, protects: 3, debuffs: 4, superEffective: 5, ultraEffective: 3, resistedHits: 5, heavilyResistedHits: 3, focusChains: 2, survivedSequences: 2, thirdAttacks: 2, turnThree: 1, turnFive: 1, typeKos: 3, roleKos: 3, lastSurvivor: 1, survivedDebuff: 1, lowestHpAttacks: 3, multiKoBattles: 1, armorPenetration: 3, affinity: 2 });
+    const result = evaluateTrainingEvent({ ...view, objectives: [objective] }, { battleId: "admin-local", kos: 4, lowHpDirectAttacks: 3, survivedToNextRound: true, directAttacks: 5, damageUnits: 12, buffs: 4, heals: 4, protects: 3, debuffs: 4, superEffective: 5, ultraEffective: 3, resistedHits: 5, heavilyResistedHits: 3, focusChains: 2, survivedSequences: 2, thirdAttacks: 2, turnThree: 1, turnFive: 1, typeKos: 3, roleKos: 3, lastSurvivor: 1, survivedDebuff: 1, lowestHpAttacks: 3, multiKoBattles: 1, affinity: 2 });
     const next = Math.min(objective.target, (progress[objective.id] ?? 0) + result.delta);
     setProgress((current) => ({ ...current, [objective.id]: next }));
     setEventResult(`${objective.label} ${result.reason} Contador: ${next}/${objective.target}.`);
