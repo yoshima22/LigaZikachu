@@ -122,7 +122,7 @@ export const COMBAT_ROLE_DESCRIPTIONS: Record<CombatRole, string> = {
   ARTILLERY: "No primeiro ataque direto de cada round, atinge o alvo normal e causa dano secundário a outro inimigo vivo com menor HP. A média de Força e Agilidade até 250 define 7% a 11% do dano final do golpe; o segundo impacto não rebate, não recalcula tipo e não ativa outra postura.",
   RETRIBUTOR: "Se receber no mesmo round dano total de ao menos 15% do próprio HP máximo e continuar vivo, revida uma vez contra o primeiro agressor daquele round. O contra-ataque causa 10% do dano base do próprio ataque; Vitalidade e Força não alteram essa porcentagem, mas aumentam sobrevivência e dano base.",
   CORROSIVE: "Todo ataque direto pode aplicar Ferida, sujeita à resistência a debuff do alvo. Ferida reduz a cura efetiva recebida até o fim do próximo round; a média de Força e Instinto até 250 define a redução entre 30% e 60%.",
-  STRATEGIST: "No primeiro alvo atingido a cada round, aplica Marca e prioriza inimigos ainda sem Marca. O primeiro aliado diferente que acertar esse alvo recebe Agilidade; a média de Instinto e Agilidade até 250 define o bônus de 4% a 10%. Marcas e bônus somem se o Estrategista cair.",
+  STRATEGIST: "No primeiro alvo atingido a cada round, aplica Marca e prioriza inimigos ainda sem Marca. O primeiro aliado diferente que acertar esse alvo recebe Agilidade; a média de Instinto e Agilidade até 250 define o bônus de 1% a 2%. Marcas e bônus somem se o Estrategista cair.",
   UNSHAKABLE: "Depois de cada ataque direto próprio, renova um escudo igual a 5% do HP máximo. Vitalidade e Instinto não mudam os 5%; eles apenas são os atributos indicados para a postura e ajudam o mascote a permanecer em combate.",
   FORTRESS: "Sempre que receber um golpe direto, ganha Vitalidade e Instinto e perde a mesma porcentagem de Força. A média de Vitalidade e Instinto até 250 define 2% a 4% por golpe; cada atributo para de variar ao atingir 20% acumulados.",
   ACCUMULATOR: "Ao terminar um round em que agiu e sobreviveu, ganha uma carga (máximo 3). Ao chegar a 3, o próximo ataque direto consome todas as cargas e recebe 15% a 35% de dano; a média de Força e Agilidade até 250 define esse bônus. A terceira carga não explode sozinha.",
@@ -140,7 +140,7 @@ export function getExecutorThreshold(force: number, agility: number) { return sc
 export function getBloodthirstyLifeSteal(force: number, vitality: number) { return scaleCombatRoleEffect((force + vitality) / 2, 0.05, 0.20); }
 export function getArtillerySplashPct(force: number, agility: number) { return scaleCombatRoleEffect((force + agility) / 2, 0.07, 0.11); }
 export function getCorrosiveWoundPct(force: number, instinct: number) { return scaleCombatRoleEffect((force + instinct) / 2, 0.30, 0.60); }
-export function getStrategistAgilityPct(instinct: number, agility: number) { return scaleCombatRoleEffect((instinct + agility) / 2, 0.04, 0.10); }
+export function getStrategistAgilityPct(instinct: number, agility: number) { return scaleCombatRoleEffect((instinct + agility) / 2, 0.01, 0.02); }
 export function getAccumulatorDamagePct(force: number, agility: number) { return scaleCombatRoleEffect((force + agility) / 2, 0.15, 0.35); }
 export function getFortressStatPct(vitality: number, instinct: number) { return scaleCombatRoleEffect((vitality + instinct) / 2, 0.02, 0.04); }
 

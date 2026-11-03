@@ -149,7 +149,7 @@ test("Estrategista marca; primeiro aliado que acerta o alvo ganha Agilidade (má
   eng.postHit(A[0], B[0], 10);
   eng.postHit(A[1], B[0], 10);
   const bonus = eng.statMult("al", "agility");
-  assert.ok(bonus > 1.039 && bonus <= 1.1);
+  assert.ok(bonus > 1.009 && bonus <= 1.02);
   for (let r = 2; r < 12; r++) { eng.roundStart(r, new Map()); eng.postHit(A[0], B[0], 1); eng.postHit(A[1], B[0], 1); }
   assert.ok(eng.statMult("al", "agility") <= 1.2 + 1e-9);
 });
