@@ -57,7 +57,7 @@ export const TRAINING_STANCES: Record<TrainingStanceKey, StanceDefinition> = {
 };
 
 export const OBJECTIVES: Record<Exclude<TrainingObjectiveType, "AFFINITY" | "SELF_HEAL_AFTER_LOW_HP">, Omit<TrainingObjective, "id" | "progress">> = {
-  ARENA_Z: { type: "ARENA_Z", label: "Dispute 6 batalhas de Arena-Z PvP válidas com este mascote na equipe. Vale: contra outro jogador, com 2 ou mais mascotes por lado e ao menos 6 ações na batalha. Cada jogador soma no máximo 2 por dia, e a mesma dupla só conta 1 vez a cada 24h.", target: 6, perBattleCap: 1 },
+  ARENA_Z: { type: "ARENA_Z", label: "Dispute 6 batalhas de Arena-Z PvP válidas com este mascote na equipe. Vale: contra outro jogador, com 2 ou mais mascotes por lado e ao menos 6 ações na batalha. Cada missão soma no máximo 2 por dia, e a mesma dupla só conta 1 vez a cada 24h nela.", target: 6, perBattleCap: 1 },
   LEAGUE: { type: "LEAGUE", label: "Dispute 12 combates resolvidos da Liga Semanal ou da Liga Rush com este mascote na equipe. W.O. e BYE não contam.", target: 12, perBattleCap: 1 },
   EXPEDITIONS: { type: "EXPEDITIONS", label: "Conclua 24 expedições com este mascote (colete a recompensa), com no mínimo 6 em cada modo: Padrão, Treinamento e Itens. O painel mostra quantas faltam em cada modo.", target: 24, perBattleCap: 1 },
   DIRECT_ATTACKS: { type: "DIRECT_ATTACKS", label: "Realize 60 ataques diretos em combates válidos (Arena-Z, Liga Semanal ou Liga Rush). Ataque direto é o golpe normal do mascote contra um inimigo; cura, buff e efeitos de postura não contam. Máximo de 4 por combate.", target: 60, perBattleCap: 4 },
@@ -258,7 +258,7 @@ export function validateArenaTrainingCredit(input: ArenaTrainingCreditInput): Ar
   if (input.ownMascots < 2 || input.opponentMascots < 2) reasons.push("Cada lado precisa iniciar com ao menos dois mascotes.");
   if (input.resolvedActions < 6) reasons.push("A batalha precisa registrar ao menos seis ações resolvidas.");
   if (!input.selectedTrainingMascot) reasons.push("Selecione um mascote em treino antes da batalha.");
-  if (input.ownerCreditsToday >= ARENA_TRAINING_DAILY_CAP) reasons.push("O limite diário de dois créditos de Arena-Z já foi alcançado.");
+  if (input.ownerCreditsToday >= ARENA_TRAINING_DAILY_CAP) reasons.push("O limite diário de dois créditos de Arena-Z desta missão já foi alcançado.");
   if (input.pairLastCreditAt) {
     const nextEligibleAt = new Date(input.pairLastCreditAt.getTime() + ARENA_TRAINING_PAIR_COOLDOWN_MS);
     if (input.now.getTime() < nextEligibleAt.getTime()) {
@@ -270,7 +270,7 @@ export function validateArenaTrainingCredit(input: ArenaTrainingCreditInput): Ar
 }
 
 export function buildTrainingManualCopy() {
-  return "Posturas desbloqueáveis — em preparação. Cada Marco de Postura - [Postura] iniciará uma jornada longa de 5 a 7 marcos após o lançamento. Arena-Z: a mesma dupla recebe no máximo um crédito a cada 24 horas, cada jogador ganha no máximo dois créditos por dia e somente um mascote em treino por batalha. Os objetivos têm limites por combate: K.O.s até 2, proteção de aliado em perigo até 2, buffs e curas até 3, e sobrevivência especial até 1. Fontes permitidas: Arena-Z PvP válida, Liga Semanal, Liga Rush e expedições Padrão, Treinamento e Itens. Arena Draft, Terreno, testes, admin, modos desligados e inacessíveis não contam. Aliado em perigo é aliado vivo abaixo de 50% de HP antes da ação. Cura efetiva é HP realmente recuperado.";
+  return "Posturas desbloqueáveis — em preparação. Cada Marco de Postura - [Postura] iniciará uma jornada longa de 5 a 7 marcos após o lançamento. Arena-Z: a mesma dupla recebe no máximo um crédito a cada 24 horas, cada missão de postura ganha no máximo dois créditos por dia (mascotes diferentes contam separado). Os objetivos têm limites por combate: K.O.s até 2, proteção de aliado em perigo até 2, buffs e curas até 3, e sobrevivência especial até 1. Fontes permitidas: Arena-Z PvP válida, Liga Semanal, Liga Rush e expedições Padrão, Treinamento e Itens. Arena Draft, Terreno, testes, admin, modos desligados e inacessíveis não contam. Aliado em perigo é aliado vivo abaixo de 50% de HP antes da ação. Cura efetiva é HP realmente recuperado.";
 }
 
 export const EXPEDITION_MODES = ["STANDARD", "TRAINING", "ITEMS"] as const;

@@ -159,7 +159,8 @@ export async function recordLeagueBattleProgress(
         const oppSide = sideOf(journey.mascotId) === "A" ? input.lineupB : input.lineupA;
         const opp = oppSide[0]?.ownerId ?? null;
         if (source === "ARENA_Z" && owner && opp) {
-          const credits = await arenaCreditsOf(tx, owner);
+          // Limite diário e intervalo por dupla valem por missão de postura (cada mascote tem o seu).
+          const credits = (d as { credits?: Array<{ at: string; opp: string }> }).credits ?? [];
           const result = validateArenaTrainingCredit({
             sourceMode: "ARENA_Z_PVP", ownerId: owner, opponentOwnerId: opp,
             ownMascots: (sideOf(journey.mascotId) === "A" ? input.lineupA : input.lineupB).length, opponentMascots: oppSide.length,
@@ -204,15 +205,6 @@ export async function recordLeagueBattleProgress(
     });
   }
   return { counted };
-}
-
-/** Créditos de Arena-Z já concedidos ao jogador (todas as jornadas dos mascotes dele): base do limite diário e do intervalo por dupla. */
-async function arenaCreditsOf(tx: Db, playerId: string) {
-  const rows = await tx.mascotTrainingMilestoneProgress.findMany({
-    where: { milestoneKey: { startsWith: "arena_z" }, journey: { mascot: { playerId } } },
-    select: { detailsJson: true },
-  });
-  return rows.flatMap((r) => ((r.detailsJson as { credits?: Array<{ at: string; opp: string }> } | null)?.credits ?? []));
 }
 
 /**
