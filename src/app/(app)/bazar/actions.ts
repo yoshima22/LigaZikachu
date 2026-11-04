@@ -2036,7 +2036,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
             }
             await tx.mascot.update({
               where: { id: item.mascotId },
-              data: { playerId: player.id, bazarListed: false, isEquipped: false },
+              data: { playerId: player.id, bazarListed: false, isEquipped: false, isFavorite: false, favoriteOrder: 0 },
             });
             await registerPokemonDiscovery({ playerId: player.id, pokemonId: mascot.pokemonId, source: "bazar-proposal" }, tx);
           } else if (item.type === "FOOD" || item.type === "SWEET") {
@@ -3512,7 +3512,7 @@ async function _deliverProposalOffers(tx: TxClient, items: ProposalOfferItem[], 
       const mascot = await tx.mascot.findUnique({ where: { id: item.mascotId } });
       if (!mascot || mascot.playerId !== fromPlayerId || !mascot.bazarListed) throw new Error(`${item.displayName} não está mais reservado.`);
       if (mascot.primordialBoundPlayerId) throw new Error("Mascote vinculado pela Pena Arco-Íris Primordial não pode ser transferido.");
-      await tx.mascot.update({ where: { id: mascot.id }, data: { playerId: toPlayerId, bazarListed: false, isEquipped: false } });
+      await tx.mascot.update({ where: { id: mascot.id }, data: { playerId: toPlayerId, bazarListed: false, isEquipped: false, isFavorite: false, favoriteOrder: 0 } });
       await registerPokemonDiscovery({ playerId: toPlayerId, pokemonId: mascot.pokemonId, source: "bazar-direct-negotiation" }, tx);
       continue;
     }
@@ -3609,7 +3609,7 @@ async function _transferItem(tx: TxClient, listing: { id: string; category: stri
     }
     await tx.mascot.update({
       where: { id: mascotId },
-      data: { playerId: toBuyerId, bazarListed: false, isEquipped: false },
+      data: { playerId: toBuyerId, bazarListed: false, isEquipped: false, isFavorite: false, favoriteOrder: 0 },
     });
     const pokemonId = Number(payload.pokemonId);
     if (Number.isFinite(pokemonId)) {
