@@ -31,6 +31,12 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     topic: roomTopic(room),
     maxParticipants: room.maxParticipants,
     label: roomLabel(room.code),
+    // Chave publishable/anon do Supabase (pública por natureza, protegida por RLS). Entregue em tempo de execução
+    // para não depender de variável NEXT_PUBLIC_ embutida no build.
+    realtime: {
+      url: process.env.SUPABASE_URL ?? process.env.NEXT_PUBLIC_SUPABASE_URL ?? null,
+      key: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? null,
+    },
     iceServers: STUN_SERVERS,
   });
 }

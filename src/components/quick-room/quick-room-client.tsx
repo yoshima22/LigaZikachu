@@ -250,9 +250,9 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
       iceServers.current = data.iceServers ?? [];
       maxParticipants.current = data.maxParticipants ?? 13;
 
-      const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-      const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!url || !key) throw new Error("Tempo real indisponível neste ambiente (chave pública do Supabase não configurada).");
+      const url = data.realtime?.url ?? process.env.NEXT_PUBLIC_SUPABASE_URL;
+      const key = data.realtime?.key ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+      if (!url || !key) throw new Error("Tempo real indisponível neste ambiente (chave do Supabase não configurada).");
       myId.current = crypto.randomUUID();
       myName.current = cleanName(name);
       supabase.current ??= createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { params: { eventsPerSecond: 10 } } });
