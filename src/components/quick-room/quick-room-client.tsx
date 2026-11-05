@@ -5,10 +5,12 @@ import Link from "next/link";
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft, Camera, CameraOff, Copy, Eye, EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MonitorX,
-  PhoneOff, Send, Users, Volume2, VolumeX, X,
+  PhoneOff, Send, SlidersHorizontal, Users, Volume2, VolumeX, X,
 } from "lucide-react";
 import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
+import { microphoneConstraints } from "@/lib/quick-room-audio";
 import { formatRoomCode } from "@/lib/quick-room-code";
+import { activeLiveSources, participantActivityLabel } from "@/lib/quick-room-live";
 
 type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string };
 type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boolean };
@@ -143,6 +145,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null);
   const [startWithMic, setStartWithMic] = useState(false);
   const [sharing, setSharing] = useState(false);
+  const [noiseReduction, setNoiseReduction] = useState(true);
   const [copied, setCopied] = useState<"link" | "code" | null>(null);
   const [watching, setWatching] = useState<string[]>([]);
   const [needsCode, setNeedsCode] = useState(false);
@@ -514,7 +517,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       return;
     }
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: microphoneConstraints(noiseReduction) });
       micStream.current = stream;
       for (const peer of peers.current.values()) addLocalTracks(peer, "mic", stream);
       setMicOn(true);
@@ -523,6 +526,13 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     } catch {
       setError("Não foi possível acessar o microfone. Verifique a permissão do navegador.");
     }
+  };
+
+  const toggleNoiseReduction = async () => {
+    const next = !noiseReduction;
+    setNoiseReduction(next);
+    const track = micStream.current?.getAudioTracks()[0];
+    if (track) await track.applyConstraints(microphoneConstraints(next)).catch(() => null);
   };
 
   const stopScreen = useCallback(() => {
@@ -664,6 +674,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
   const others = members.filter((m) => m.id !== myId.current);
   const sharers = members.filter((m) => m.sharing);
+  const liveSources = activeLiveSources(members);
   const watched = watching
     .map((value) => parseSourceKey(value))
     .filter((source): source is { id: string; source: MediaKind } => !!source && source.source === "screen")
@@ -713,26 +724,17 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
       <div className="grid flex-1 gap-3 lg:grid-cols-[1fr_340px]">
         <section className="min-w-0 space-y-3">
-          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2">
-            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Telas ao vivo</span>
-            {sharers.length === 0 && <span className="text-sm text-slate-500">Ninguém está compartilhando. Use “Compartilhar tela” para começar.</span>}
-            {sharers.map((m) => {
+          <section aria-label="Transmissões disponíveis" className="overflow-hidden rounded-2xl border border-[#FFCB05]/35 bg-[radial-gradient(circle_at_top_right,rgba(255,203,5,.18),transparent_45%),linear-gradient(135deg,rgba(15,23,42,.95),rgba(8,12,27,.96))] shadow-[0_18px_45px_-30px_rgba(255,203,5,.75)]">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-[#FFCB05]/15 px-4 py-3 sm:px-5">
+              <div className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFCB05] text-slate-950 shadow-lg shadow-[#FFCB05]/20"><MonitorUp size={20} /></span><div><p className="text-[11px] font-black uppercase tracking-[0.18em] text-[#FFCB05]">Ao vivo agora</p><h2 className="font-bold text-white">Transmissões em destaque</h2></div></div>
+              <span className="rounded-full border border-cyan-300/25 bg-cyan-300/10 px-3 py-1 text-xs font-bold text-cyan-100">{sharers.length} {sharers.length === 1 ? "tela disponível" : "telas disponíveis"}</span>
+            </div>
+            {sharers.length === 0 ? <div className="px-5 py-5 text-sm text-slate-400">Nenhuma tela compartilhada ainda. Use <strong className="font-semibold text-slate-200">Compartilhar tela</strong> para colocar uma transmissão na mesa.</div> : <div className="grid gap-2 p-3 sm:grid-cols-2">{sharers.map((m) => {
               const isMe = m.id === myId.current;
               const on = watching.includes(sourceKey(m.id, "screen"));
-              return (
-                <button
-                  key={m.id}
-                  onClick={() => toggleWatch(m.id, "screen")}
-                  aria-pressed={on}
-                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-600 text-slate-200 hover:border-slate-400"}`}
-                >
-                  {on ? <Eye size={14} /> : <EyeOff size={14} />}
-                  {isMe ? "Sua tela" : m.name}
-                  <span className="font-normal opacity-70">{on ? "assistindo" : "assistir"}</span>
-                </button>
-              );
-            })}
-          </div>
+              return <button key={m.id} onClick={() => toggleWatch(m.id, "screen")} aria-pressed={on} className={`group flex min-h-24 items-center justify-between gap-3 rounded-xl border p-4 text-left transition ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 shadow-[0_12px_28px_-20px_rgba(255,203,5,.85)]" : "border-slate-700 bg-slate-950/60 hover:-translate-y-0.5 hover:border-[#FFCB05]/60"}`}><span className="flex items-center gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-full ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-cyan-200"}`}><MonitorUp size={18} /></span><span><strong className="block text-sm text-white">{isMe ? "Sua tela" : m.name}</strong><span className="text-xs text-slate-400">Tela compartilhada</span></span></span><span className={`rounded-full px-3 py-1.5 text-xs font-black ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-slate-100 group-hover:bg-slate-700"}`}>{on ? "Assistindo" : "Assistir"}</span></button>;
+            })}</div>}
+          </section>
 
           {watched.length === 0 ? (
             <div className="flex aspect-video max-h-[60vh] w-full items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-6 text-center text-sm text-slate-500">
@@ -776,17 +778,18 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             return peer ? <VoiceAudio key={m.id} streams={peer.streams} screenId={m.screenId} version={version.current} /> : null;
           })}
 
-          <ul className="flex flex-wrap gap-2 text-xs">
-            {members.map((m) => (
-              <li key={m.id} className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-slate-300">
-                {m.mic ? <Mic size={12} className="text-emerald-400" /> : <MicOff size={12} className="text-slate-500" />}
-                {m.name}{m.id === myId.current ? " (você)" : ""}{m.sharing ? " · tela" : ""}{m.camera ? " · câmera" : ""}
-              </li>
-            ))}
-          </ul>
         </section>
 
-        <aside className="flex h-80 flex-col rounded-xl border border-slate-700 bg-slate-900/70 lg:h-[calc(100vh-12rem)] lg:min-h-[24rem]">
+        <aside className="flex min-h-0 flex-col gap-3 lg:h-[calc(100vh-12rem)]">
+          <section aria-label="Pessoas na sala" className="rounded-2xl border border-slate-700 bg-slate-900/70 p-3 shadow-lg shadow-black/10">
+            <div className="mb-2 flex items-center justify-between px-1"><div><p className="text-[11px] font-bold uppercase tracking-[0.16em] text-slate-400">Mesa atual</p><h2 className="font-bold text-white">Pessoas na sala</h2></div><span className="rounded-full bg-slate-800 px-2.5 py-1 text-xs font-bold text-slate-200">{members.length}</span></div>
+            <ul className="max-h-56 space-y-1 overflow-y-auto pr-1">{members.map((m) => {
+              const isMe = m.id === myId.current;
+              return <li key={m.id} className="flex items-center gap-3 rounded-xl px-2 py-2 transition hover:bg-white/5"><span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-gradient-to-br from-[#FFCB05] to-amber-600 text-sm font-black text-slate-950">{m.name.slice(0, 1).toUpperCase()}</span><span className="min-w-0 flex-1"><strong className="block truncate text-sm text-slate-100">{m.name}{isMe ? <span className="ml-1 text-xs font-medium text-[#FFCB05]">você</span> : null}</strong><span className="sr-only">{participantActivityLabel(m)}</span><span aria-hidden="true" className="flex gap-1.5 pt-1 text-slate-500"><span title={m.mic ? "Microfone ligado" : "Microfone desligado"}>{m.mic ? <Mic size={13} className="text-emerald-400" /> : <MicOff size={13} />}</span>{m.camera && <span title="Câmera disponível"><Camera size={13} className="text-cyan-300" /></span>}{m.sharing && <span title="Tela disponível"><MonitorUp size={13} className="text-[#FFCB05]" /></span>}</span></span><span className={`h-2.5 w-2.5 rounded-full ${m.mic || m.camera || m.sharing ? "bg-emerald-400 shadow-[0_0_10px_rgba(74,222,128,.9)]" : "bg-slate-600"}`} aria-hidden="true" /></li>;
+            })}</ul>
+          </section>
+
+          <section className="flex h-80 flex-1 flex-col rounded-2xl border border-slate-700 bg-slate-900/70 lg:min-h-[16rem]">
           <div role="log" aria-live="polite" aria-label="Mensagens da sala" className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
             {chat.length === 0 && <p className="text-xs text-slate-500">O chat some quando a sala encerra.</p>}
             {chat.map((line) => (
@@ -798,12 +801,14 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={500} placeholder="Mensagem" aria-label="Mensagem" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
             <button type="submit" aria-label="Enviar" className="rounded-lg bg-[#FFCB05] px-3 text-slate-900"><Send size={16} /></button>
           </form>
+          </section>
         </aside>
       </div>
 
       <footer className="fixed inset-x-0 bottom-3 z-20 flex justify-center gap-2 px-3">
         <div className="flex gap-2 rounded-full border border-slate-700 bg-slate-950/90 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
           <button onClick={toggleMic} aria-pressed={micOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${micOn ? "bg-emerald-500 text-slate-900" : "bg-slate-800 text-slate-200"}`}>{micOn ? <Mic size={16} /> : <MicOff size={16} />}<span className="hidden sm:inline">{micOn ? "Microfone ligado" : "Ligar microfone"}</span></button>
+          <button onClick={() => void toggleNoiseReduction()} aria-pressed={noiseReduction} aria-label="Alternar redução de ruído" title={noiseReduction ? "Redução de ruído ativada" : "Redução de ruído desativada"} className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold ${noiseReduction ? "border border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "bg-slate-800 text-slate-300"}`}><SlidersHorizontal size={16} /><span>{noiseReduction ? "Ruído reduzido" : "Ruído natural"}</span></button>
           <button onClick={toggleCamera} aria-pressed={cameraOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${cameraOn ? "bg-cyan-300 text-slate-950" : "bg-slate-800 text-slate-200"}`}>{cameraOn ? <Camera size={16} /> : <CameraOff size={16} />}<span className="hidden sm:inline">{cameraOn ? "Parar câmera" : "Ligar câmera"}</span></button>
           <button onClick={toggleScreen} aria-pressed={sharing} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sharing ? "bg-[#FFCB05] text-slate-900" : "bg-slate-800 text-slate-200"}`}>{sharing ? <MonitorX size={16} /> : <MonitorUp size={16} />}<span className="hidden sm:inline">{sharing ? "Parar tela" : "Compartilhar tela"}</span></button>
           <button onClick={() => { leave(); setPhase("form"); }} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white"><PhoneOff size={16} /><span className="hidden sm:inline">Sair</span></button>
