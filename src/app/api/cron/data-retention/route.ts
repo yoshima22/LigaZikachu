@@ -36,6 +36,9 @@ export async function GET(req: NextRequest) {
   const results: Record<string, number> = {};
 
   // O registro e os resgates permanecem para auditoria; apenas sai do estado ativo.
+  // Salas rápidas paradas há mais de 1 dia (as ociosas já são recusadas na entrada).
+  results.quickRooms = (await prisma.quickRoom.deleteMany({ where: { lastActiveAt: { lt: daysAgo(1) } } }).catch(() => ({ count: 0 }))).count;
+
   results.expiredSupporterPasses = await deactivateExpiredSupporterPasses().catch(() => 0);
 
   // 1. MascotEvent — mantém apenas os 4 mais recentes por mascote

@@ -5407,3 +5407,17 @@ model MascotStanceUnlock {
   @@index([mascotId])
   @@map("mascot_stance_unlocks")
 }
+
+/// Sala rápida pública (sem conta): só metadados. Chat e mídia vão por Realtime/WebRTC.
+model QuickRoom {
+  id              String   @id @default(cuid())
+  code            String   @unique
+  topicSecret     String
+  passwordHash    String?
+  maxParticipants Int      @default(6)
+  createdAt       DateTime @default(now())
+  lastActiveAt    DateTime @default(now())
+
+  @@index([lastActiveAt])
+  @@map("quick_rooms")
+}
