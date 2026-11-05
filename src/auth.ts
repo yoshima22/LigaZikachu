@@ -1,3 +1,4 @@
+import { rateLimit } from "@/lib/rate-limit";
 import NextAuth from "next-auth";
 import Credentials from "next-auth/providers/credentials";
 import { PrismaAdapter } from "@auth/prisma-adapter";
@@ -27,6 +28,8 @@ const providers = [
         if (!parsed.success) return null;
 
         const identifier = parsed.data.identifier.trim();
+        // Mesmo limite do /api/auth/manual-login: 10 tentativas por identificador a cada 10 min.
+        if (!rateLimit(`login:id:${identifier.toLowerCase()}`, 10, 10 * 60_000)) return null;
 
         // Tenta encontrar por email primeiro, depois por ptcglNick
         let user = await prisma.user.findFirst({

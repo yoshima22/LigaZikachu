@@ -4,7 +4,9 @@ import { AuthError } from "next-auth";
 import { z } from "zod";
 import { signIn } from "@/auth";
 import { hashPassword } from "@/lib/auth/password";
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { ensureBeginnerOnboarding } from "@/lib/beginner-onboarding";
 import { generateUniqueInviteCode } from "@/lib/invite-code";
 import { parseBirthDateInput } from "@/lib/birthday";
@@ -24,6 +26,9 @@ export async function registerWithCredentials(
   _previousState: FormState | undefined,
   formData: FormData
 ): Promise<FormState | undefined> {
+  if (!rateLimit(`register:ip:${clientIp(await headers())}`, 10, 60 * 60_000)) {
+    return { error: "Muitas tentativas de cadastro. Aguarde um pouco e tente de novo." };
+  }
   const parsed = registerSchema.safeParse({
     name:       formData.get("name"),
     email:      formData.get("email"),

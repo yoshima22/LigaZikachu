@@ -1,6 +1,8 @@
 "use server";
 
+import { headers } from "next/headers";
 import { prisma } from "@/lib/prisma";
+import { clientIp, rateLimit } from "@/lib/rate-limit";
 import { hashPassword } from "@/lib/auth/password";
 import { sendPasswordResetEmail } from "@/lib/email";
 import { z } from "zod";
@@ -13,6 +15,10 @@ export async function requestPasswordReset(
   formData: FormData
 ): Promise<{ error?: string; success?: boolean }> {
   const email = String(formData.get("email") ?? "").toLowerCase().trim();
+
+  if (!rateLimit(`reset:ip:${clientIp(await headers())}`, 5, 60 * 60_000) || !rateLimit(`reset:email:${email}`, 3, 60 * 60_000)) {
+    return { error: "Muitos pedidos de recuperação. Aguarde um pouco e tente de novo." };
+  }
 
   if (!email.includes("@")) {
     return { error: "Informe um e-mail válido." };
