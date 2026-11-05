@@ -107,7 +107,7 @@ export function extractBattleStats(input: {
     if (lowestEnemy === target) bump(actor, "LOWEST_HP_ATTACK");
     const step = e.typeStep ?? 0;
     if (step >= 2) bump(actor, "ULTRA_EFFECTIVE");
-    else if (step === 1) bump(actor, "SUPER_EFFECTIVE");
+    if (step >= 1) bump(actor, "SUPER_EFFECTIVE"); // vantagem dupla também é super-efetiva
     if (step <= -2) bump(target, "HEAVILY_RESISTED_HITS");
     else if (step === -1) bump(target, "RESISTED_HITS");
     if (/reduziu|Travessura de/i.test(e.effect ?? "")) {

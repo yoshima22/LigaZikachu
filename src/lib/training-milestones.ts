@@ -52,7 +52,7 @@ export const TRAINING_STANCES: Record<TrainingStanceKey, StanceDefinition> = {
   UNSHAKABLE: { label: "Inabalável", role: "defender", focus: ["Vitalidade", "Instinto"], effect: "Cada ataque próprio renova um escudo de 5% da vida máxima.", preferredObjectives: ["ROUND_SURVIVAL", "RESISTED_HITS", "DIRECT_ATTACKS"] },
   FORTRESS: { label: "Fortaleza", role: "defender", focus: ["Vitalidade", "Instinto"], effect: "Ao sofrer golpe, ganha Vitalidade e Instinto e perde a mesma proporção de Força, até 20%.", preferredObjectives: ["HEAVILY_RESISTED_HITS", "ROUND_SURVIVAL", "LAST_SURVIVOR"] },
   ACCUMULATOR: { label: "Acumulador", role: "attacker", focus: ["Força", "Agilidade"], effect: "Ao agir e sobreviver no round, ganha carga; com 3, o próximo ataque direto recebe 15–35% e consome tudo. A média de Força e Agilidade define o bônus.", preferredObjectives: ["ROUND_SURVIVAL", "DIRECT_ATTACKS", "DAMAGE"] },
-  EXPLOSIVE: { label: "Explosivo", role: "attacker", focus: ["Agilidade", "Vitalidade"], effect: "No terceiro ataque, atinge o inimigo mais ágil, soma toda a própria vida atual ao dano e fica com apenas 1% do HP máximo.", preferredObjectives: ["THIRD_ATTACK", "DAMAGE", "ULTRA_EFFECTIVE"] },
+  EXPLOSIVE: { label: "Explosivo", role: "attacker", focus: ["Agilidade", "Vitalidade"], effect: "No terceiro ataque, atinge o inimigo mais ágil, soma toda a própria vida atual ao dano e fica com apenas 1% do HP máximo.", preferredObjectives: ["THIRD_ATTACK", "DAMAGE", "SUPER_EFFECTIVE"] },
   TRAPPER: { label: "Armadilheiro", role: "support", focus: ["Instinto", "Agilidade"], effect: "Nos rounds 3 e 5 bloqueia ativações bônus de posturas inimigas.", preferredObjectives: ["TURN_THREE_HOLD", "TURN_FIVE_HOLD", "SURVIVE_DEBUFF"] },
 };
 
@@ -149,7 +149,7 @@ export function buildTrainingJourney(input: { stance: TrainingStanceKey; persona
   const eligible = ["ARENA_Z", "LEAGUE", "EXPEDITIONS", ...stance.preferredObjectives,
     ...(stance.role === "support" ? ["BUFFS", "HEALS", "PROTECT_DANGER"] : []),
     ...(stance.role === "defender" ? ["RESISTED_HITS", "HEAVILY_RESISTED_HITS", "LAST_SURVIVOR"] : []),
-    ...(stance.role === "attacker" ? ["SUPER_EFFECTIVE", "ULTRA_EFFECTIVE", "TYPE_KOS"] : []),
+    ...(stance.role === "attacker" ? ["SUPER_EFFECTIVE", "TYPE_KOS"] : []),
   ] as Array<keyof typeof OBJECTIVES>;
   const unique = [...new Set(eligible)];
   const picked: Array<keyof typeof OBJECTIVES> = ["ARENA_Z", "LEAGUE", "EXPEDITIONS"];
