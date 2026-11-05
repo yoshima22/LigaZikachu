@@ -50,15 +50,25 @@ export default async function DashboardPage() {
 
   const admin = isAdmin(user.role);
 
-  const allSeasons = await getCachedSeasons().catch((error) => {
-    console.error("[Dashboard] seasons lookup failed", { userId: user.id, error });
-    return [];
-  });
-  const activeSeason = await getCachedActiveSeason().catch((error) => {
-    console.error("[Dashboard] active season lookup failed", { userId: user.id, error });
-    return null;
-  });
-  const serverCostGoal = await getServerCostGoal();
+  // Consultas independentes rodam juntas (antes: 3 esperas em fila + a do jogador mais abaixo).
+  const [allSeasons, activeSeason, serverCostGoal, playerLookup] = await Promise.all([
+    getCachedSeasons().catch((error) => {
+      console.error("[Dashboard] seasons lookup failed", { userId: user.id, error });
+      return [];
+    }),
+    getCachedActiveSeason().catch((error) => {
+      console.error("[Dashboard] active season lookup failed", { userId: user.id, error });
+      return null;
+    }),
+    getServerCostGoal(),
+    admin ? null : prisma.player.findUnique({
+      where: { userId: user.id },
+      select: { id: true, displayName: true }
+    }).catch((error) => {
+      console.error("[Dashboard] player lookup failed", { userId: user.id, error });
+      return null;
+    }),
+  ]);
 
   // ===== ADMIN =====
   if (admin) {
@@ -165,13 +175,7 @@ export default async function DashboardPage() {
   }
 
   // ===== JOGADOR =====
-  const player = await prisma.player.findUnique({
-    where: { userId: user.id },
-    select: { id: true, displayName: true }
-  }).catch((error) => {
-    console.error("[Dashboard] player lookup failed", { userId: user.id, error });
-    return null;
-  });
+  const player = playerLookup;
 
   if (!player) {
     return (
