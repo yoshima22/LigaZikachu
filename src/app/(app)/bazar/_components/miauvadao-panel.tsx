@@ -291,9 +291,11 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
     // Atraso aleatório de até 4s: no reset, nem todo mundo bate no servidor no mesmo segundo.
     const target = new Date(validUntil).getTime() + Math.random() * 4000;
     const check = () => {
-      if (Date.now() >= target) {
+      if (Date.now() >= target && document.visibilityState === "visible") {
         const now = Date.now();
-        if (now - lastRefreshRef.current > 4000) {
+        // 60s: se o relógio do aparelho estiver adiantado, `target` já nasce no passado
+        // e um throttle curto faria a aba renderizar o Bazar inteiro a cada 4s para sempre.
+        if (now - lastRefreshRef.current > 60_000) {
           lastRefreshRef.current = now;
           router.refresh();
         }
