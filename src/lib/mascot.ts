@@ -27,6 +27,7 @@ import { generationForEggPokemon, getEggCandidatesForGeneration, getInitialPokem
 import { isStandbyActive } from "@/lib/account-standby";
 import { MEGA_STONES, getMegaStoneByType, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
 import { ensureMegaStoneShopItems } from "@/lib/mega-shop";
+import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
 import { ensureTrainingMilestoneShopItems } from "@/lib/training-milestone-shop";
 import { TRAINING_MILESTONE_ITEMS } from "@/lib/training-catalog";
 import { recordTrainingJourneyProgress, recordAffinityEvent } from "@/lib/training-journeys";
@@ -158,15 +159,8 @@ async function includeCustomSpeciesInRoll(result: EggRollResult, excludedPokemon
 }
 
 // Formas desligadas no admin (tabela EggPokemonToggle) — removidas do drop.
-// Cache curto para não bater no banco a cada sorteio.
-let _disabledEggCache: { ids: number[]; at: number } | null = null;
-export async function getDisabledEggPokemonIds(): Promise<number[]> {
-  if (_disabledEggCache && Date.now() - _disabledEggCache.at < 60_000) return _disabledEggCache.ids;
-  const rows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
-  const ids = rows.map((r) => r.pokemonId);
-  _disabledEggCache = { ids, at: Date.now() };
-  return ids;
-}
+// Cache de 60 s em disabled-species.ts.
+export { getDisabledEggPokemonIds };
 
 export async function rollEggChoicesForPlayer(
   playerId: string,

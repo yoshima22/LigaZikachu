@@ -1,3 +1,4 @@
+import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
 import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { buildMegaStoneMetadata, getMegaStoneDescription, MEGA_STONES, getMegaStoneForMegaPokemon } from "@/lib/mega-evolution";
@@ -9,11 +10,8 @@ const CUSTOM_MEGA_SET = new Set(CUSTOM_MEGA_POKEMON_IDS);
 
 // Megas desligadas no painel (oficiais e custom) — a pedra fica inativa.
 async function getDisabledMegaIds(): Promise<Set<number>> {
-  const rows = await prisma.eggPokemonToggle.findMany({
-    where: { pokemonId: { in: MEGA_STONES.map((stone) => stone.megaPokemonId) }, disabled: true },
-    select: { pokemonId: true },
-  });
-  return new Set(rows.map((r) => r.pokemonId));
+  const megaIds = new Set(MEGA_STONES.map((stone) => stone.megaPokemonId));
+  return new Set((await getDisabledEggPokemonIds()).filter((id) => megaIds.has(id))); // cache de 60 s em mascot.ts
 }
 
 const MEGA_STONE_ASSET_BASE = (process.env.NEXT_PUBLIC_MEGA_STONE_ASSET_BASE_URL ?? "https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/shop/mega-stones")

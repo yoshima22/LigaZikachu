@@ -1,3 +1,4 @@
+import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
 import { prisma } from "@/lib/prisma";
 import { invalidateShopCache } from "@/lib/shop-cache";
 import { describeAbility, getAbilityInfo } from "@/lib/abilities";
@@ -59,8 +60,7 @@ export async function ensureAbilityTmShopItems(activeOnCreate = false) {
 
 /** Espécies desligadas no painel de admin (EggPokemonToggle): suas informações de habilidade ficam ocultas. */
 export async function getDisabledSpeciesIds(): Promise<Set<number>> {
-  const rows = await prisma.eggPokemonToggle.findMany({ where: { disabled: true }, select: { pokemonId: true } });
-  return new Set(rows.map((row) => row.pokemonId));
+  return new Set(await getDisabledEggPokemonIds()); // cache de 60 s em mascot.ts
 }
 
 /** TMs sem nenhuma espécie compatível ligada no painel não devem aparecer nem ser vendidos. */
