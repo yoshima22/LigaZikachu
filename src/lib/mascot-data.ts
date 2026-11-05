@@ -1340,10 +1340,10 @@ const SPRITE_ID_OVERRIDES: Record<number, number> = {
 // arquivos existiam no Storage com `Cache-Control: no-cache`; usar a cópia local
 // evita baixar novamente imagens de até 2,3 MB do Supabase em cada card/replay.
 const EVENT_CUSTOM_SPRITES: Record<number,string> = {
-  210001: "/events/torre-dos-rebeldes/leaders/01_pikachu_rebelde.png", 210002: "/events/torre-dos-rebeldes/leaders/02_lucario_rebelde.png",
-  210003: "/events/torre-dos-rebeldes/leaders/03_umbreon_rebelde.png", 210004: "/events/torre-dos-rebeldes/leaders/04_gengar_rebelde.png",
-  210005: "/events/torre-dos-rebeldes/leaders/05_mimikyu_rebelde.png", 210006: "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png",
-  210007: "/events/torre-dos-rebeldes/leaders/07_espeon_rebelde.png", 210008: "/events/torre-dos-rebeldes/chandelure.png",
+  210001: "/events/torre-dos-rebeldes/leaders/01_pikachu_rebelde.webp", 210002: "/events/torre-dos-rebeldes/leaders/02_lucario_rebelde.webp",
+  210003: "/events/torre-dos-rebeldes/leaders/03_umbreon_rebelde.webp", 210004: "/events/torre-dos-rebeldes/leaders/04_gengar_rebelde.webp",
+  210005: "/events/torre-dos-rebeldes/leaders/05_mimikyu_rebelde.webp", 210006: "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.webp",
+  210007: "/events/torre-dos-rebeldes/leaders/07_espeon_rebelde.webp", 210008: "/events/torre-dos-rebeldes/chandelure.webp",
 };
 export function getSpriteUrl(pokemonId: number, animated = false): string {
   if (EVENT_CUSTOM_SPRITES[pokemonId]) return EVENT_CUSTOM_SPRITES[pokemonId];

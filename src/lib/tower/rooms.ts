@@ -81,7 +81,7 @@ export type TowerRunReport = {
   roomsCleared: number;
 };
 
-const BG = "/events/torre-dos-rebeldes/background.png";
+const BG = "/events/torre-dos-rebeldes/background.webp";
 
 const PUZZLES: TowerPuzzle[] = [
   {

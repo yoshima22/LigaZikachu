@@ -25,7 +25,7 @@ export function TowerHero() {
         <div className="mx-auto w-full max-w-[360px] rounded-2xl border border-purple-300/20 bg-purple-950/15 p-2 shadow-[0_20px_60px_rgba(0,0,0,.35)] lg:max-w-none">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/events/torre-dos-rebeldes/cover.png"
+            src="/events/torre-dos-rebeldes/cover.webp"
             alt="Pôster ilustrado da Torre dos Rebeldes"
             width={1122}
             height={1402}

@@ -2191,7 +2191,7 @@ function ArenaDraftTutorial({
       <div className="relative grid max-h-[96vh] w-full max-w-7xl overflow-hidden rounded-[2rem] border border-cyan-300/20 bg-[#070b18] shadow-2xl shadow-black/70 lg:grid-cols-[1.08fr_.92fr]">
         <div className="relative hidden min-h-[680px] bg-slate-950 lg:block">
           <img
-            src="/images/arena-draft/tutorial-arena.png"
+            src="/images/arena-draft/tutorial-arena.webp"
             alt="Arena com mascotes preparados para o draft"
             className="absolute inset-0 h-full w-full object-contain object-center"
           />

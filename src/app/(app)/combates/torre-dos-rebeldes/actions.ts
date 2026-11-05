@@ -1058,7 +1058,7 @@ export async function saveTowerNarrativeScenesAction(
           `${id}-background`,
         )
       : raw.backgroundUrl?.trim() ||
-        "/events/torre-dos-rebeldes/background.png";
+        "/events/torre-dos-rebeldes/background.webp";
     const characterUrl = raw.characterUrl?.startsWith("data:image/")
       ? await uploadDataUrlAsset(
           raw.characterUrl,
@@ -1066,7 +1066,7 @@ export async function saveTowerNarrativeScenesAction(
           `${id}-character`,
         )
       : raw.characterUrl?.trim() ||
-        "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.png";
+        "/events/torre-dos-rebeldes/leaders/06_meowth_rebelde.webp";
     scenes.push({
       id,
       groupId: raw.groupId?.trim() || "PERSONALIZADO",

@@ -102,7 +102,7 @@ export function TowerIntro({ forceKey = 0 }: { forceKey?: number }) {
         <div className="relative min-h-[300px] overflow-hidden border-b border-purple-400/20 lg:min-h-[640px] lg:border-b-0 lg:border-r">
           {/* eslint-disable-next-line @next/next/no-img-element */}
           <img
-            src="/events/torre-dos-rebeldes/cover.png"
+            src="/events/torre-dos-rebeldes/cover.webp"
             alt="Torre dos Rebeldes"
             className="absolute inset-0 h-full w-full object-cover object-[center_18%]"
           />
