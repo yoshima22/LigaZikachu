@@ -89,7 +89,7 @@ export default async function HomePage() {
                 <Link href="/salas">
                   <Button size="lg" variant="outline" className="border-slate-600 text-slate-300 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]">
                     <Radio size={16} className="mr-2" />
-                    Salas de voz e tela
+                    ZikaChat
                   </Button>
                 </Link>
               </div>

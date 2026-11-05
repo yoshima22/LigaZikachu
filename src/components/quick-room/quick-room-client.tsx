@@ -379,7 +379,7 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     return (
       <main className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
         <div className="w-full space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
-          <p className="text-xs uppercase tracking-widest text-[#FFCB05]">Sala rápida</p>
+          <p className="text-xs uppercase tracking-widest text-[#FFCB05]">ZikaChat</p>
           <h1 className="text-xl font-bold text-white">Entrar na {label}</h1>
           <p className="text-sm text-slate-400">Sem cadastro. Escolha um apelido para entrar com voz, tela e chat.</p>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />

@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 // O link é o segredo da sala: não indexar.
 export const metadata: Metadata = {
-  title: "Sala rápida",
+  title: "ZikaChat",
   robots: { index: false, follow: false },
 };
 

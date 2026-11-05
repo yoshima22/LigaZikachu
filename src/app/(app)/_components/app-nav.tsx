@@ -68,7 +68,6 @@ const mainLinks = [
     adminOnly: false,
     tutorialId: undefined,
   },
-  { href: "/salas", label: "Salas (voz e tela)", icon: Radio, adminOnly: false, tutorialId: undefined },
 ];
 
 const combatLinks = [
@@ -178,6 +177,7 @@ const colecaoLinks = [
   { href: "/carteira", label: "Carteira", icon: Coins, adminOnly: false },
   { href: "/inventario", label: "Inventário", icon: Package, adminOnly: false },
   { href: "/resgatar", label: "Resgatar código", icon: Gift, adminOnly: false },
+  { href: "/salas", label: "ZikaChat", icon: Radio, adminOnly: false },
 ];
 
 const mercadoLinks = [
