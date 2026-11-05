@@ -9,7 +9,18 @@ export function generateRoomCode(): string {
 }
 
 export function isValidRoomCode(code: string): boolean {
-  return /^[a-z2-9]{10}$/.test(code);
+  return new RegExp(`^[${ALPHABET}]{10}$`).test(code);
+}
+
+/** Normaliza o código digitado sem reduzir sua entropia ou aceitar caracteres ambíguos. */
+export function normalizeRoomCodeInput(input: string): string {
+  const normalized = input.toLowerCase().replace(/[\s-]+/g, "");
+  return isValidRoomCode(normalized) ? normalized : "";
+}
+
+/** Agrupa o mesmo segredo existente para leitura e ditado, sem alterar seu valor. */
+export function formatRoomCode(code: string): string {
+  return isValidRoomCode(code) ? code.slice(0, 4) + "-" + code.slice(4, 8) + "-" + code.slice(8) : code;
 }
 
 /** Nome curto para exibir ("Sala-0427"). Derivado do código, então é estável; não é único nem secreto. */

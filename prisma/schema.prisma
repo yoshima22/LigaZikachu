@@ -5408,16 +5408,64 @@ model MascotStanceUnlock {
   @@map("mascot_stance_unlocks")
 }
 
+enum QuickRoomVisibility {
+  UNLISTED
+  PUBLIC
+}
+
+enum QuickRoomReportReason {
+  ABUSE
+  HARASSMENT
+  INAPPROPRIATE_CONTENT
+  OTHER
+}
+
 /// Sala rápida pública (sem conta): só metadados. Chat e mídia vão por Realtime/WebRTC.
 model QuickRoom {
   id              String   @id @default(cuid())
   code            String   @unique
   topicSecret     String
   passwordHash    String?
+  hostTokenHash   String?
+  title           String?
+  visibility      QuickRoomVisibility @default(UNLISTED)
+  publicLastSeenAt DateTime?
   maxParticipants Int      @default(6)
   createdAt       DateTime @default(now())
   lastActiveAt    DateTime @default(now())
+  participantLeases QuickRoomParticipantLease[]
+  reports         QuickRoomReport[]
 
   @@index([lastActiveAt])
+  @@index([visibility, publicLastSeenAt])
   @@map("quick_rooms")
+}
+
+model QuickRoomParticipantLease {
+  id        String    @id @default(cuid())
+  roomId    String
+  tokenHash String    @unique
+  name      String
+  micOn     Boolean   @default(false)
+  cameraOn  Boolean   @default(false)
+  screenOn  Boolean   @default(false)
+  isHost    Boolean   @default(false)
+  createdAt DateTime  @default(now())
+  lastSeenAt DateTime @default(now())
+  room      QuickRoom @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, lastSeenAt])
+  @@map("quick_room_participant_leases")
+}
+
+model QuickRoomReport {
+  id        String                @id @default(cuid())
+  roomId    String
+  reason    QuickRoomReportReason
+  note      String?
+  createdAt DateTime              @default(now())
+  room      QuickRoom             @relation(fields: [roomId], references: [id], onDelete: Cascade)
+
+  @@index([roomId, createdAt])
+  @@map("quick_room_reports")
 }
