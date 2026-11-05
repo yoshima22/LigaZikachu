@@ -2838,8 +2838,14 @@ function _storedPersonalOffer(prd: unknown, playerId: string, rotationStartIso: 
 async function _getOrCreatePersonalOffer(playerId: string) {
   const rotation = getMiauvadaoRotation();
   const rotationIso = rotation.start.toISOString();
-  const config = await prisma.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
-  const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
+  // Só a entrada deste jogador: playerRefreshData guarda TODOS os jogadores (~155 kB)
+  // e ler a linha inteira a cada visita ao Bazar era o grosso do egress do banco.
+  const [row] = await prisma.$queryRaw<{ entry: PersonalSlotState | null; vaultBalance: number }[]>(Prisma.sql`
+    SELECT "playerRefreshData" -> ${playerId} AS entry, "vaultBalance" FROM miauvadao_config WHERE id = 'singleton'
+  `);
+  if (!row) throw new Error("miauvadao_config ausente");
+  const config = { vaultBalance: Number(row.vaultBalance) };
+  const prd: Record<string, PersonalSlotState> = row.entry ? { [playerId]: row.entry } : {};
   const stored = _storedPersonalOffer(prd, playerId, rotationIso);
   if (stored) return { offer: stored, sold: _personalSoldCount(prd, playerId, rotationIso) };
 

@@ -416,7 +416,7 @@ export function WeeklyTmPanel({
   const refresh = useCallback(() => router.refresh(), [router]);
   // Outros jogadores podem comprar a única cópia: atualiza a vitrine de tempos em tempos.
   useEffect(() => {
-    const id = setInterval(() => { if (document.visibilityState === "visible") router.refresh(); }, 45_000);
+    const id = setInterval(() => { if (document.visibilityState === "visible") router.refresh(); }, 180_000); // cada refresh re-renderiza o Bazar inteiro (egress do banco)
     return () => clearInterval(id);
   }, [router]);
 
