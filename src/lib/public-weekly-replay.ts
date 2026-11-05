@@ -10,6 +10,7 @@ export type PublicReplayTurn = {
   targetId: string;
   action: "ATTACK" | "DEFEND" | "HEAL" | "ABILITY";
   damage: number;
+  attackerType?: string;
 };
 
 export type PublicWeeklyReplay = {
@@ -19,7 +20,16 @@ export type PublicWeeklyReplay = {
 };
 
 type RawFighter = { id?: unknown; pokemonId?: unknown; maxHp?: unknown; hp?: unknown };
-type RawTurn = { actorId?: unknown; targetId?: unknown; action?: unknown; damage?: unknown };
+type RawTurn = { actorId?: unknown; targetId?: unknown; action?: unknown; damage?: unknown; attackerType?: unknown };
+
+const ELEMENT_TYPES = new Set([
+  "normal", "fire", "water", "electric", "grass", "ice", "fighting", "poison", "ground", "flying",
+  "psychic", "bug", "rock", "ghost", "dragon", "dark", "steel", "fairy",
+]);
+
+function publicElement(value: unknown): string | undefined {
+  return typeof value === "string" && ELEMENT_TYPES.has(value) ? value : undefined;
+}
 
 const DEMO_REPLAY: PublicWeeklyReplay = {
   source: "demo",
@@ -30,12 +40,12 @@ const DEMO_REPLAY: PublicWeeklyReplay = {
     { id: "b-2", pokemonId: 448, maxHp: 118, side: "B" },
   ],
   turns: [
-    { actorId: "a-1", targetId: "b-1", action: "ATTACK", damage: 28 },
-    { actorId: "b-1", targetId: "a-1", action: "ABILITY", damage: 19 },
-    { actorId: "a-2", targetId: "b-1", action: "ATTACK", damage: 23 },
+    { actorId: "a-1", targetId: "b-1", action: "ATTACK", damage: 28, attackerType: "fire" },
+    { actorId: "b-1", targetId: "a-1", action: "ABILITY", damage: 19, attackerType: "ghost" },
+    { actorId: "a-2", targetId: "b-1", action: "ATTACK", damage: 23, attackerType: "electric" },
     { actorId: "b-2", targetId: "a-2", action: "DEFEND", damage: 0 },
     { actorId: "a-1", targetId: "a-1", action: "HEAL", damage: 16 },
-    { actorId: "b-2", targetId: "a-1", action: "ATTACK", damage: 26 },
+    { actorId: "b-2", targetId: "a-1", action: "ATTACK", damage: 26, attackerType: "fighting" },
   ],
 };
 
@@ -61,7 +71,8 @@ function asTurns(value: unknown, validIds: Set<string>): PublicReplayTurn[] {
     const damage = Number(turn.damage);
     if (!validIds.has(actorId) || !validIds.has(targetId)) return [];
     if (action !== "ATTACK" && action !== "DEFEND" && action !== "HEAL" && action !== "ABILITY") return [];
-    return [{ actorId, targetId, action, damage: Number.isFinite(damage) ? Math.max(0, damage) : 0 }];
+    const attackerType = publicElement(turn.attackerType);
+    return [{ actorId, targetId, action, damage: Number.isFinite(damage) ? Math.max(0, damage) : 0, ...(attackerType ? { attackerType } : {}) }];
   });
 }
 

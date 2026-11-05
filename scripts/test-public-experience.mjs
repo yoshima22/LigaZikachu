@@ -45,11 +45,11 @@ test("sanitizes a real weekly replay for the public hero without mascot names", 
       lineupA: [{ id: "a", name: "Mascote confidencial", pokemonId: 25, maxHp: 90 }],
       lineupB: [{ id: "b", name: "Outro nome", pokemonId: 6, maxHp: 120 }],
     },
-    replayJson: [{ turn: 1, actorId: "a", targetId: "b", action: "ATTACK", damage: 30 }],
+    replayJson: [{ turn: 1, actorId: "a", targetId: "b", action: "ATTACK", damage: 30, attackerType: "electric" }],
   });
   assert.equal(replay.source, "real");
   assert.equal(JSON.stringify(replay.teams.map((team) => team.pokemonId)), JSON.stringify([25, 6]));
-  assert.equal(JSON.stringify(replay.turns), JSON.stringify([{ actorId: "a", targetId: "b", action: "ATTACK", damage: 30 }]));
+  assert.equal(JSON.stringify(replay.turns), JSON.stringify([{ actorId: "a", targetId: "b", action: "ATTACK", damage: 30, attackerType: "electric" }]));
   assert.equal(JSON.stringify(replay).includes("Mascote confidencial"), false);
   assert.equal(JSON.stringify(replay).includes("Outro nome"), false);
 });
