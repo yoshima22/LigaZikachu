@@ -32,7 +32,14 @@ export async function uploadAvatarToStorage(playerId: string, dataUrl: string): 
   const supabase = getStorageClient();
   if (!supabase) throw new Error("Storage não configurado (SUPABASE_SERVICE_ROLE_KEY ausente).");
 
-  const { buffer, mimeType, ext } = base64ToBuffer(dataUrl);
+  let { buffer, mimeType, ext } = base64ToBuffer(dataUrl);
+  // Avatar aparece em 40-128px: reduz para 256px em WebP (mantém GIF animado). Se o sharp falhar, sobe o original.
+  try {
+    const sharp = (await import("sharp")).default;
+    buffer = await sharp(buffer, { animated: true }).rotate().resize({ width: 256, height: 256, fit: "inside", withoutEnlargement: true }).webp({ quality: 82 }).toBuffer();
+    mimeType = "image/webp";
+    ext = "webp";
+  } catch { /* mantém o arquivo original */ }
   const storagePath = `avatars/${playerId}-${Date.now()}.${ext}`;
 
   const { error: uploadError } = await supabase.storage
