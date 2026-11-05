@@ -86,7 +86,7 @@ export function RedeemForm() {
               >
                 {s.imageUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={s.imageUrl} alt="" className="h-8 w-8 shrink-0 object-contain" />
+                  <img loading="lazy" decoding="async" src={s.imageUrl} alt="" className="h-8 w-8 shrink-0 object-contain" />
                 )}
                 <span className="truncate">{s.name}</span>
               </button>

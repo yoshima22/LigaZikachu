@@ -96,7 +96,7 @@ export default async function TournamentRankingPage({
                   {badges.map((badge) => (
                     <th key={badge.id} className="min-w-28 px-3 py-3 text-center">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={badge.imageUrl} alt="" className="mx-auto mb-1 h-8 w-8 object-contain" />
+                      <img loading="lazy" decoding="async" src={badge.imageUrl} alt="" className="mx-auto mb-1 h-8 w-8 object-contain" />
                       <span>{badge.name}</span>
                     </th>
                   ))}

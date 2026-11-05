@@ -122,7 +122,7 @@ export function AttachmentPicker({ onSelect, onClose }: Props) {
                   onClick={() => { onSelect(m); onClose(); }}
                   className="flex flex-col items-center gap-1 rounded-xl border border-border bg-slate-800/60 p-2 text-center transition-colors hover:border-[#FFCB05]/40 hover:bg-slate-800"
                 >
-                  <img src={m.spriteUrl} alt="" className="h-12 w-12 object-contain" />
+                  <img loading="lazy" decoding="async" src={m.spriteUrl} alt="" className="h-12 w-12 object-contain" />
                   <span className="line-clamp-1 text-[10px] font-medium text-slate-300">
                     {m.nickname || m.displayName}
                   </span>
@@ -147,7 +147,7 @@ export function AttachmentPicker({ onSelect, onClose }: Props) {
                   className="flex w-full items-center gap-3 rounded-xl border border-border bg-slate-800/60 px-3 py-2 text-left transition-colors hover:border-[#FFCB05]/40 hover:bg-slate-800"
                 >
                   {item.imageUrl ? (
-                    <img src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 object-contain" />
+                    <img loading="lazy" decoding="async" src={item.imageUrl} alt="" className="h-10 w-10 shrink-0 object-contain" />
                   ) : (
                     <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-slate-700 text-xl">📦</div>
                   )}

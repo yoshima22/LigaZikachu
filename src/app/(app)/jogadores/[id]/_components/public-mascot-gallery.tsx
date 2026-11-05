@@ -178,7 +178,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
                   className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/30 bg-slate-950/70 p-2 text-left transition-colors hover:border-[#FFCB05]/60 hover:bg-[#FFCB05]/10"
                 >
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getSpriteUrl(mascot.pokemonId, true)} alt="" className="h-11 w-11 object-contain" style={{ imageRendering: "pixelated" }} />
+                  <img loading="lazy" decoding="async" src={getSpriteUrl(mascot.pokemonId, true)} alt="" className="h-11 w-11 object-contain" style={{ imageRendering: "pixelated" }} />
                   <span className="min-w-0">
                     <span className="block truncate text-xs font-semibold text-slate-100">{mascot.nickname ?? pokemonName}</span>
                     <span className="text-[10px] text-slate-500">Nv.{mascot.level} | {TYPE_LABELS[mascotPrimaryType(mascot)] ?? mascotPrimaryType(mascot)}</span>
@@ -202,7 +202,7 @@ export function PublicMascotGallery({ mascots, isAdmin = false }: { mascots: Pub
               className="flex items-center gap-2 rounded-xl border border-border/60 bg-slate-950/50 p-2 text-left transition-colors hover:border-[#FFCB05]/50 hover:bg-[#FFCB05]/5"
             >
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <img loading="lazy" decoding="async"
                 src={getSpriteUrl(mascot.pokemonId, true)}
                 alt=""
                 className="h-11 w-11 object-contain"

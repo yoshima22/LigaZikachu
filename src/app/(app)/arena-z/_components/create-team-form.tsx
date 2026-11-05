@@ -303,7 +303,7 @@ function SelectedBar({
           return (
             <div key={m.id} className={`flex items-center gap-2 rounded-lg border bg-slate-950/60 p-2 ${overLevel ? "border-red-500/50" : "border-slate-700/60"}`}>
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <img loading="lazy" decoding="async"
                 src={getSpriteUrl(m.pokemonId, true)}
                 alt={displayName(m)}
                 className="h-10 w-10 shrink-0 rounded-lg bg-slate-800/60 object-contain"
@@ -557,7 +557,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                   {p.members.map((mem) => (
                     <div key={mem.id} className={`rounded-lg border p-1.5 text-center ${mem.missing ? "border-red-500/40 bg-red-500/5" : "border-[#FFCB05]/20 bg-[#FFCB05]/5"}`}>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getSpriteUrl(mem.pokemonId, true)} alt="" className="mx-auto h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} onError={(e) => { (e.target as HTMLImageElement).src = getSpriteUrl(mem.pokemonId); }} />
+                      <img loading="lazy" decoding="async" src={getSpriteUrl(mem.pokemonId, true)} alt="" className="mx-auto h-9 w-9 object-contain" style={{ imageRendering: "pixelated" }} onError={(e) => { (e.target as HTMLImageElement).src = getSpriteUrl(mem.pokemonId); }} />
                       <p className="truncate text-[10px] font-semibold text-slate-200">{mem.name}</p>
                       <p className="text-[9px] text-slate-500">Nv.{mem.level}</p>
                       <p className="truncate text-[9px] font-semibold text-yellow-300">{getCombatRoleLabel(mem.role)}</p>
@@ -926,7 +926,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                       <span className="absolute right-1 top-1 flex h-3.5 w-3.5 items-center justify-center rounded-full bg-[#FFCB05] text-[7px] font-black text-[#1A1A2E]">✓</span>
                     )}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={getSpriteUrl(m.pokemonId, true)}
                       alt=""
                       className="h-9 w-9 object-contain shrink-0"
@@ -975,7 +975,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                     <div key={m.id} className={`flex items-center justify-between rounded-lg border px-2 py-1.5 ${bs.cls}`}>
                       <div className="flex items-center gap-1.5">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-6 w-6 object-contain grayscale" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }} />
+                        <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-6 w-6 object-contain grayscale" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }} />
                         <span className="text-[10px] font-medium">{displayName(m)} Nv.{m.level}</span>
                       </div>
                       <div className="text-right text-[9px] font-mono">
@@ -991,7 +991,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
           {selected && (
             <div className="flex items-center gap-2 rounded-lg border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={getSpriteUrl(selected.pokemonId, true)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(selected.pokemonId); }} />
+              <img loading="lazy" decoding="async" src={getSpriteUrl(selected.pokemonId, true)} alt="" className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(selected.pokemonId); }} />
               <div className="flex-1 min-w-0">
                 <p className="text-[11px] font-semibold text-[#FFCB05] truncate">{displayName(selected)}</p>
                 <p className="text-[9px] text-slate-400">Nv.{selected.level} · For {selected.statForce} Vel {selected.statAgility} Vit {selected.statVitality}</p>

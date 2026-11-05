@@ -70,12 +70,12 @@ function ItemSection({ title, items }: { title: string; items: InventoryItem[] }
               item.type === "BANNER" ? (
                 <div className="aspect-[3/1] w-full overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
+                  <img loading="lazy" decoding="async" src={item.imageUrl} alt={item.name} className="h-full w-full object-cover" />
                 </div>
               ) : (
                 <div className="flex h-20 items-center justify-center bg-slate-900">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={item.imageUrl} alt={item.name} className="max-h-16 object-contain" />
+                  <img loading="lazy" decoding="async" src={item.imageUrl} alt={item.name} className="max-h-16 object-contain" />
                 </div>
               )
             ) : item.type === "TITLE" ? (

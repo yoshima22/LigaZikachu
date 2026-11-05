@@ -351,7 +351,7 @@ export default async function TorneioDetailPage({
                   return (
                     <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 ${rarityColor.split(" ")[0]}`}>
                       <div className="flex items-start gap-2 mb-2">
-                        {a.iconUrl && <img src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0" />}
+                        {a.iconUrl && <img loading="lazy" decoding="async" src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0" />}
                         <div className="min-w-0 flex-1">
                           <p className={`text-sm font-semibold truncate ${rarityColor.split(" ")[1]}`}>{a.name}</p>
                           {a.description && <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{a.description}</p>}
@@ -384,7 +384,7 @@ export default async function TorneioDetailPage({
                   return (
                     <div key={a.id} className={`rounded-xl border bg-slate-950/60 p-3 opacity-70 ${rarityColor.split(" ")[0]}`}>
                       <div className="flex items-start gap-2 mb-2">
-                        {a.iconUrl && <img src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0 opacity-50" />}
+                        {a.iconUrl && <img loading="lazy" decoding="async" src={a.iconUrl} alt="" className="h-5 w-5 object-contain shrink-0 opacity-50" />}
                         <div className="min-w-0 flex-1">
                           <p className={`text-sm font-semibold truncate ${rarityColor.split(" ")[1]}`}>{a.name}</p>
                           {a.description && <p className="text-[10px] text-slate-400 mt-0.5 line-clamp-2">{a.description}</p>}
@@ -417,7 +417,7 @@ export default async function TorneioDetailPage({
                 >
                   {badge.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={badge.imageUrl}
                       alt={badge.name}
                       className="h-10 w-10 shrink-0 rounded-lg object-contain"

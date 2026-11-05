@@ -46,7 +46,7 @@ function SocialGroupCard({ group, kind }: { group: SocialGroup; kind: "FRIEND" |
         {group.members.map((member) => (
           <div key={`${member.name}-${member.owner}`} className="rounded-xl border border-white/10 bg-black/20 p-2.5">
             <div className="flex items-center gap-2">
-              <img src={member.sprite} alt="" className="h-7 w-7 object-contain" />
+              <img loading="lazy" decoding="async" src={member.sprite} alt="" className="h-7 w-7 object-contain" />
               <p className="min-w-0 flex-1 truncate text-xs font-semibold text-white">{member.name} <span className="font-normal text-slate-500">· {member.owner}</span></p>
               <span className={`text-[10px] font-bold ${accent}`}>{member.score > 0 ? "+" : ""}{member.score}</span>
             </div>

@@ -105,7 +105,7 @@ export function ChaoticRerollPanel() {
               <button key={c.id} onClick={() => setSelected(c.id)} disabled={running}
                 className={`flex items-center gap-2 rounded-xl border p-2 text-left transition-colors ${selected === c.id ? "border-purple-400 bg-purple-500/15" : "border-border hover:border-slate-500"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(c.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(c.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
                 <span className="min-w-0 text-[11px]">
                   <span className="flex items-center gap-1"><b className="truncate text-white">{c.name}</b><span className="shrink-0 font-mono text-[9px] text-slate-500">#{shortMascotCode(c.id)}</span></span>
                   <span className="text-slate-400">Nv.{c.level} · Σ{c.total}</span>
@@ -166,7 +166,7 @@ export function ChaoticRerollPanel() {
               <div key={r.id} className="rounded-xl border border-border bg-slate-950/50 p-3">
                 <div className="flex items-center gap-2">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getStaticSpriteUrl(r.pokemonId)} alt="" className="h-8 w-8 object-contain [image-rendering:pixelated]" />
+                  <img loading="lazy" decoding="async" src={getStaticSpriteUrl(r.pokemonId)} alt="" className="h-8 w-8 object-contain [image-rendering:pixelated]" />
                   <p className="text-xs font-bold text-white">{r.name} <span className="font-mono text-[9px] text-slate-500">#{shortMascotCode(r.id)}</span></p>
                   <span className="ml-auto text-[10px] text-slate-500">Σ {sum(r.before)} → {sum(r.final)}</span>
                 </div>

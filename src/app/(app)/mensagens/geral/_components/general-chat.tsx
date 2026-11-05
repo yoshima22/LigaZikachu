@@ -155,7 +155,7 @@ export function GeneralChat({ me, initialMessages, compact = false, onBack }: Pr
             <div key={msg.id} className={`flex gap-2 ${isMine ? "flex-row-reverse" : "flex-row"}`}>
               {!isMine && (
                 msg.senderAvatar ? (
-                  <img src={msg.senderAvatar} alt="" className="mt-1 h-7 w-7 shrink-0 rounded-full object-cover" />
+                  <img loading="lazy" decoding="async" src={msg.senderAvatar} alt="" className="mt-1 h-7 w-7 shrink-0 rounded-full object-cover" />
                 ) : (
                   <div className="mt-1 flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-slate-800 text-[10px] text-slate-500">
                     {msg.senderName[0] ?? "?"}

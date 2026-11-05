@@ -84,7 +84,7 @@ function ItemPill({ item, canRemove, onRemove }: { item: WishlistItem; canRemove
       <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-slate-950/70 text-xl">
         {item.imageUrl ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={item.imageUrl} alt={item.name} className="h-full w-full object-contain" />
+          <img loading="lazy" decoding="async" src={item.imageUrl} alt={item.name} className="h-full w-full object-contain" />
         ) : getShopItemEmoji(item.type)}
       </div>
       <div className="min-w-0 flex-1">
@@ -210,7 +210,7 @@ export function PokemonWishlist({
                 {normalizedPokemonQuery && (pokemonResults.length > 0 ? pokemonResults.map((pokemon) => (
                   <button key={pokemon.id} type="button" onClick={() => addPokemon(pokemon)} disabled={isPending} className="flex items-center gap-2 rounded-xl border border-border bg-slate-950/70 px-3 py-2 text-left hover:border-[#FFCB05]/40 disabled:opacity-60">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={spriteUrl(pokemon.id)} alt={pokemon.name} className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <img loading="lazy" decoding="async" src={spriteUrl(pokemon.id)} alt={pokemon.name} className="h-8 w-8 object-contain" style={{ imageRendering: "pixelated" }} />
                     <span className="truncate text-xs font-semibold text-slate-100">{pokemon.name} <span className="text-slate-500">#{pokemon.id}</span></span>
                   </button>
                 )) : <p className="text-xs text-slate-500">Nenhum Pokemon encontrado.</p>)}
@@ -219,7 +219,7 @@ export function PokemonWishlist({
               <WishlistSearch label="Buscar item" value={itemQuery} onChange={setItemQuery} placeholder="Pedra, ovo, vitamina..." count={`${itemWishlist.length}/${MAX_ITEMS}`} pending={isPending}>
                 {normalizedItemQuery && (itemResults.length > 0 ? itemResults.map((item) => (
                   <button key={item.itemId} type="button" onClick={() => addItem(item)} disabled={isPending} className="flex items-center gap-2 rounded-xl border border-border bg-slate-950/70 px-3 py-2 text-left hover:border-cyan-400/40 disabled:opacity-60">
-                    <span className="flex h-8 w-8 items-center justify-center overflow-hidden text-lg">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-contain" /> : getShopItemEmoji(item.type)}</span>
+                    <span className="flex h-8 w-8 items-center justify-center overflow-hidden text-lg">{item.imageUrl ? <img loading="lazy" decoding="async" src={item.imageUrl} alt="" className="h-full w-full object-contain" /> : getShopItemEmoji(item.type)}</span>
                     <span className="min-w-0"><span className="block truncate text-xs font-semibold text-slate-100">{item.name}</span><span className="text-[10px] uppercase text-cyan-300/70">{item.rarity}</span></span>
                   </button>
                 )) : <p className="text-xs text-slate-500">Nenhum item encontrado.</p>)}

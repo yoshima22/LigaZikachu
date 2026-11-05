@@ -103,7 +103,7 @@ export function AbilityLineupPanel({
               <li key={m.id} className="flex items-start gap-2 rounded-xl border border-white/10 bg-slate-950/60 p-2">
                 <span className="mt-1 grid h-5 w-5 shrink-0 place-items-center rounded-full bg-cyan-300/15 text-[10px] font-black text-cyan-200">{index + 1}</span>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
+                <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain [image-rendering:pixelated]" />
                 <div className="min-w-0 flex-1">
                   <b className="block truncate text-[11px] text-white">{m.name}</b>
                   {onChangeAbility && m.options && m.options.length > 1 && (

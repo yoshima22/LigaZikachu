@@ -1052,7 +1052,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     <div key={member.id} className="rounded-xl border border-border/60 bg-slate-950/60 p-2.5">
                       <div className="flex items-center gap-2">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={getSpriteUrl(member.mascot.pokemonId, true)} alt="" className="h-8 w-8 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                      <img loading="lazy" decoding="async" src={getSpriteUrl(member.mascot.pokemonId, true)} alt="" className="h-8 w-8 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                       <div className="min-w-0 flex-1">
                         <p className="truncate text-[11px] font-semibold text-slate-200">
                           {member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId)}
@@ -1158,7 +1158,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                             {bot.mascots.map(m => (
                               <span key={m.id} className="flex items-center gap-1 rounded-full border border-green-500/20 bg-slate-950/50 px-2 py-0.5 text-[10px] text-slate-300">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                                <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-5 w-5 object-contain" style={{ imageRendering: "pixelated" }} />
+                                <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-5 w-5 object-contain" style={{ imageRendering: "pixelated" }} />
                                 {m.name} Nv.{m.level}
                               </span>
                             ))}
@@ -1255,7 +1255,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 <div key={m.id} className="flex items-center justify-between gap-2 rounded-xl border border-red-500/20 bg-red-500/5 p-3">
                   <div className="flex items-center gap-2">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                    <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
                     <span>
                       <span className="block text-xs font-semibold text-red-200">{m.nickname ?? getPokemonName(m.pokemonId)}</span>
                       <span className="text-[10px] text-slate-500">

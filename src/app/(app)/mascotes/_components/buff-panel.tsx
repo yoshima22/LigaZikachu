@@ -508,7 +508,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
                   </button>
                   {buff.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={buff.imageUrl} alt="" className="h-7 w-7 shrink-0 object-contain" />
+                    <img loading="lazy" decoding="async" src={buff.imageUrl} alt="" className="h-7 w-7 shrink-0 object-contain" />
                   ) : (
                     <span className="shrink-0 text-xl">{emoji}</span>
                   )}
@@ -559,7 +559,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
               }`}>
               {buff.imageUrl ? (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={buff.imageUrl} alt="" className="h-8 w-8 object-contain shrink-0 mt-0.5" />
+                <img loading="lazy" decoding="async" src={buff.imageUrl} alt="" className="h-8 w-8 object-contain shrink-0 mt-0.5" />
               ) : (
                 <span className="text-2xl shrink-0">{emoji}</span>
               )}

@@ -302,7 +302,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
                     {friends.map(r => (
                       <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-green-500/20 bg-green-500/5 px-2 py-1">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
+                        <img loading="lazy" decoding="async" src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
                         <span className="text-[10px] text-slate-300">
                           {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
                           <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>
@@ -319,7 +319,7 @@ export function MascotProfileCard({ mascot, isOwner, isAdmin = false }: Props) {
                     {rivals.map(r => (
                       <div key={r.id} className="flex items-center gap-1.5 rounded-lg border border-red-500/20 bg-red-500/5 px-2 py-1">
                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                        <img src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
+                        <img loading="lazy" decoding="async" src={getSpriteUrl(r.otherMascot.pokemonId)} alt="" width={18} height={18} style={{ imageRendering: "pixelated" }} />
                         <span className="text-[10px] text-slate-300">
                           {r.otherMascot.nickname ?? getPokemonName(r.otherMascot.pokemonId)}
                           <span className="text-slate-500"> ({r.otherMascot.player.displayName})</span>

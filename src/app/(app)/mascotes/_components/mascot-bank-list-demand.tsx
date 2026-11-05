@@ -365,11 +365,11 @@ function BankRow({
                 <span className={`truncate text-sm font-semibold ${statNameColor(mascot)}`}>{name}</span>
                 {originIcon && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={originIcon.url} alt={originIcon.label} title={`Origem: ${originIcon.label}`} className="h-4 w-4 shrink-0 object-contain" />
+                  <img loading="lazy" decoding="async" src={originIcon.url} alt={originIcon.label} title={`Origem: ${originIcon.label}`} className="h-4 w-4 shrink-0 object-contain" />
                 )}
                 {hungry && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={HUNGER_ICON_URL} alt="Com fome" title="Este mascote está com fome" className="h-4 w-4 shrink-0 object-contain" />
+                  <img loading="lazy" decoding="async" src={HUNGER_ICON_URL} alt="Com fome" title="Este mascote está com fome" className="h-4 w-4 shrink-0 object-contain" />
                 )}
                 <span className="shrink-0 font-mono text-[9px] text-slate-500" title={`Código único: #${shortMascotCode(mascot.id)}`}>#{shortMascotCode(mascot.id)}</span>
                 {mascot.isShiny && <span className="text-[10px] text-yellow-300" title="Shiny">*</span>}

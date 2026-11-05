@@ -157,7 +157,7 @@ export function AdminEggFoodPanel({
           <span>🍖 Comida: ×{foodCount}</span>
           <span>🍬 Doce: ×{sweetCount}</span>
           <span className="flex items-center gap-1">
-            <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
+            <img loading="lazy" decoding="async" src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="h-3.5 w-3.5 object-contain" />
             Doce Raro: ×{rareSweetCount}
           </span>
         </div>

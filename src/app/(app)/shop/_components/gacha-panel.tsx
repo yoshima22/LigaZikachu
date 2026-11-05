@@ -250,7 +250,7 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
       <div className="relative overflow-hidden rounded-3xl border border-slate-700/60 bg-gradient-to-br from-[#0b1027] via-[#131a3d] to-[#07142b]">
         {banner.imageUrl && (
           /* eslint-disable-next-line @next/next/no-img-element */
-          <img src={banner.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" />
+          <img loading="lazy" decoding="async" src={banner.imageUrl} alt="" className="absolute inset-0 h-full w-full object-cover opacity-80" />
         )}
         <div className="absolute inset-0 bg-gradient-to-r from-[#050b1f]/70 via-[#050b1f]/30 to-[#050b1f]/85" />
         {banner.mascotArtUrl && (
@@ -286,7 +286,7 @@ function PlayerScreen({ banner, missions, packs, wallet, ligaCash, icons }: Gach
                   {highlights.map((entry) => (
                     <div key={entry.id} className="flex w-20 flex-col items-center gap-1">
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img src={entryArt(entry, icons)!} alt="" className="h-16 w-16 object-contain drop-shadow" />
+                      <img loading="lazy" decoding="async" src={entryArt(entry, icons)!} alt="" className="h-16 w-16 object-contain drop-shadow" />
                       <span className="text-center text-[9px] leading-tight text-slate-200">{entry.label}</span>
                       <span className="text-[9px] uppercase tracking-wider" style={{ color: RARITY_COLOR[entry.rarity] }}>{RARITY_LABEL[entry.rarity]}</span>
                     </div>
@@ -380,7 +380,7 @@ function PullAnimation({ pull, icons, onClose }: { pull: { currency: Currency; r
               style={{ borderColor: RARITY_COLOR[result.rarity], background: `${RARITY_COLOR[result.rarity]}18`, animation: `gacha-reveal .45s ease-out ${1.4 + index * 0.12}s both` }}>
               {entryArt(result, icons) && (
                 /* eslint-disable-next-line @next/next/no-img-element */
-                <img src={entryArt(result, icons)!} alt="" className="h-12 w-12 object-contain" />
+                <img loading="lazy" decoding="async" src={entryArt(result, icons)!} alt="" className="h-12 w-12 object-contain" />
               )}
               <span className="text-[9px] leading-tight text-slate-200">{result.label}</span>
               <span className="text-[8px] uppercase" style={{ color: RARITY_COLOR[result.rarity] }}>{RARITY_LABEL[result.rarity]}</span>
@@ -424,7 +424,7 @@ function MissionList({ missions, icons }: { missions: GachaMissionDTO[]; icons: 
               <div className="flex shrink-0 items-center gap-2">
                 <span className="flex items-center gap-1 text-xs font-bold text-amber-200">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={mission.reward === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-5 w-5" />
+                  <img loading="lazy" decoding="async" src={mission.reward === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-5 w-5" />
                   +{mission.rewardAmount}
                 </span>
                 <button type="button" disabled={!done || mission.claimed || pending} onClick={() => claim(mission.id)}
@@ -460,7 +460,7 @@ function PackList({ packs, ligaCash, icons }: { packs: GachaPackDTO[]; ligaCash:
           <div key={pack.id} className="rounded-2xl border border-border bg-slate-900/60 p-4">
             <div className="flex items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={pack.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-10 w-10" />
+              <img loading="lazy" decoding="async" src={pack.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-10 w-10" />
               <div>
                 <p className="text-sm font-bold text-slate-100">{pack.name}</p>
                 <p className="text-xs text-slate-400">{pack.amount}{pack.bonus > 0 && <span className="text-emerald-300"> +{pack.bonus}</span>}</p>
@@ -710,7 +710,7 @@ function EntryRow({ entry, banner, shopItems, total, onSave, onDelete }: {
             {draft.pokemonId ? (
               <span className="flex shrink-0 items-center gap-1 text-[10px] text-slate-300">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(draft.pokemonId)} alt="" className="h-8 w-8 object-contain" />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(draft.pokemonId)} alt="" className="h-8 w-8 object-contain" />
                 #{draft.pokemonId}
               </span>
             ) : <span className="shrink-0 text-[10px] text-amber-300">escolha o mascote</span>}
@@ -765,7 +765,7 @@ function PityEditor({ banner, icons }: { banner: GachaBannerDTO; icons: GachaPan
           <div key={rule.id} className="flex items-center justify-between gap-3 rounded-xl border border-border/60 p-3 text-xs text-slate-300">
             <span className="flex items-center gap-2">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={rule.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-6 w-6" />
+              <img loading="lazy" decoding="async" src={rule.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="h-6 w-6" />
               A cada <strong>{rule.everyPulls}</strong> aberturas → <strong style={{ color: RARITY_COLOR[rule.rarity] }}>{RARITY_LABEL[rule.rarity]}</strong> ou superior
             </span>
             <button type="button" disabled={pending} onClick={() => startTransition(async () => { await deleteGachaPityAction(rule.id); })}
@@ -994,7 +994,7 @@ function PackRow({ pack, icons, onSave, onDelete }: {
   return (
     <div className="grid items-end gap-2 rounded-xl border border-border/60 p-3 md:grid-cols-[auto_1.4fr_.9fr_.6fr_.6fr_.8fr_auto]">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <img src={draft.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="mb-1 h-10 w-10" />
+      <img loading="lazy" decoding="async" src={draft.currency === "POKEBALL" ? icons.pokeball : icons.ultraball} alt="" className="mb-1 h-10 w-10" />
       <Field label="Nome"><input value={draft.name} onChange={(e) => set("name", e.target.value)} className={inputCls} /></Field>
       <Field label="Moeda">
         <select value={draft.currency} onChange={(e) => set("currency", e.target.value as Currency)} className={inputCls}>

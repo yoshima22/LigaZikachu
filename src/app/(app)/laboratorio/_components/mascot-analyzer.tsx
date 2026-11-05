@@ -247,7 +247,7 @@ export function MascotAnalyzer({
               {m.analyzed && m.ivRating && (
                 <span className="absolute right-1 top-1"><RatingBadge rating={m.ivRating} size="sm" /></span>
               )}
-              <img src={m.spriteUrl} alt="" className="mt-1 h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+              <img loading="lazy" decoding="async" src={m.spriteUrl} alt="" className="mt-1 h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
               <p className="line-clamp-1 w-full text-center text-[9px] font-semibold text-white">{m.nickname || m.name}</p>
               <p className="text-[9px] text-slate-500">Lv.{m.level}</p>
               <CodeChip id={m.id} />
@@ -805,7 +805,7 @@ function AnalysisResult({ analysis, mascot }: { analysis: MascotAnalysis; mascot
             <div key={form.pokemonId} className="flex items-center gap-2">
               {i > 0 && <ArrowRight size={14} className="text-slate-600" />}
               <div className={`flex flex-col items-center rounded-xl border p-2 ${form.pokemonId === a.finalPokemonId ? "border-purple-400/50 bg-purple-500/10" : "border-border bg-slate-900/40"}`}>
-                <img src={getStaticSpriteUrl(form.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(form.pokemonId)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
                 <p className="text-[10px] font-semibold text-slate-200">{form.name}</p>
                 <p className="text-[9px] text-slate-500">{form.level === 1 ? "Base" : `Nv.${form.level}`}</p>
               </div>

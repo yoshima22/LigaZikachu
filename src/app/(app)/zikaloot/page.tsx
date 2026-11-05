@@ -306,7 +306,7 @@ export default async function ZikaLootPage() {
                             <div key={i} className="flex items-center gap-2 rounded-xl border border-[#7AC74C]/30 bg-[#7AC74C]/10 px-3 py-2">
                               {card?.imageUrl ? (
                                 // eslint-disable-next-line @next/next/no-img-element
-                                <img
+                                <img loading="lazy" decoding="async"
                                   src={card.imageUrl}
                                   alt={card.displayName}
                                   className="h-16 w-12 rounded-lg object-cover shadow-md"

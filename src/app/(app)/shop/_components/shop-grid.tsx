@@ -459,7 +459,7 @@ function CompatibleSpecies({ ids, megaTargetId, isTm }: { ids: number[]; megaTar
             {list.map((x) => (
               <span key={x.id} className="flex items-center gap-1 rounded-md border border-white/10 bg-slate-950/70 pr-1.5 text-[10px] text-slate-200">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(x.id)} alt="" className="h-7 w-7 object-contain" style={{ imageRendering: "pixelated" }} />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(x.id)} alt="" className="h-7 w-7 object-contain" style={{ imageRendering: "pixelated" }} />
                 {x.name}
               </span>
             ))}

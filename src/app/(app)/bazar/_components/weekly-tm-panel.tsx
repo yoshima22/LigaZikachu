@@ -128,7 +128,7 @@ function CompatModal({ slot, onClose }: { slot: Slot; onClose: () => void }) {
     <Modal labelledBy={`compat-title-${slot.index}`} onClose={onClose} wide>
       <div className="flex shrink-0 items-start gap-3 border-b border-white/10 p-4">
         {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img src={slot.imageUrl ?? "/items/ability-tm.svg"} alt="" className="h-12 w-12 shrink-0 object-contain" />
+        <img loading="lazy" decoding="async" src={slot.imageUrl ?? "/items/ability-tm.svg"} alt="" className="h-12 w-12 shrink-0 object-contain" />
         <div className="min-w-0 flex-1">
           <h3 id={`compat-title-${slot.index}`} className="truncate text-base font-black text-white">Quem pode usar o {slot.name}</h3>
           <p className="mt-0.5 text-[11px] leading-snug text-slate-400">
@@ -189,7 +189,7 @@ function CompatModal({ slot, onClose }: { slot: Slot; onClose: () => void }) {
               {mine.map((m) => (
                 <li key={m.id} className={`flex items-center gap-3 rounded-xl border p-2.5 ${m.unlocked ? "border-white/10 bg-white/[.02] opacity-60" : "border-emerald-400/40 bg-emerald-400/[.06]"}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 shrink-0 object-contain [image-rendering:pixelated]" />
+                  <img loading="lazy" decoding="async" src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 shrink-0 object-contain [image-rendering:pixelated]" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-bold text-white">{m.nickname?.trim() || getPokemonName(m.pokemonId)}</p>
                     <p className="text-[10px] text-slate-400">{getPokemonName(m.pokemonId)} · Nv.{m.level}</p>
@@ -208,7 +208,7 @@ function CompatModal({ slot, onClose }: { slot: Slot; onClose: () => void }) {
             {species.map((x) => (
               <li key={x.id} className={`flex flex-col items-center rounded-xl border p-2 text-center ${ownedSpecies.has(x.id) ? "border-emerald-400/40 bg-emerald-400/[.05]" : "border-white/10 bg-white/[.02]"}`}>
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={getStaticSpriteUrl(x.id)} alt="" className="h-14 w-14 object-contain [image-rendering:pixelated]" />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(x.id)} alt="" className="h-14 w-14 object-contain [image-rendering:pixelated]" />
                 <p className="mt-1 w-full truncate text-[11px] font-bold text-white">{x.name}</p>
                 <p className="text-[9px] text-slate-500">#{x.id}</p>
                 {ownedSpecies.has(x.id) && <span className="mt-1 rounded bg-emerald-400/15 px-1.5 text-[8px] font-black text-emerald-300">Você tem</span>}
@@ -235,7 +235,7 @@ function ConfirmModal({
       <div className="p-5">
         <div className="flex items-center gap-3">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={slot.imageUrl ?? "/items/ability-tm.svg"} alt="" className="h-14 w-14 shrink-0 object-contain" />
+          <img loading="lazy" decoding="async" src={slot.imageUrl ?? "/items/ability-tm.svg"} alt="" className="h-14 w-14 shrink-0 object-contain" />
           <div className="min-w-0">
             <p className="text-[10px] font-black uppercase tracking-widest text-violet-300">Confirmar compra</p>
             <h3 id={`confirm-title-${slot.index}`} className="truncate text-lg font-black text-white">{slot.name}</h3>

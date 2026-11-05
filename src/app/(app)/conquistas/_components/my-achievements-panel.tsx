@@ -59,7 +59,7 @@ export function MyAchievementsPanel({ achievements }: Props) {
               <div key={a.id} className={`flex items-center gap-2 rounded-xl border px-3 py-2 ${rarityColors[a.rarity]}`}>
                 {a.iconUrl && (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={a.iconUrl} alt={a.name} className="h-5 w-5 object-contain" />
+                  <img loading="lazy" decoding="async" src={a.iconUrl} alt={a.name} className="h-5 w-5 object-contain" />
                 )}
                 <span className="text-sm font-semibold text-slate-200">{a.name}</span>
                 <button type="button" disabled={pending} onClick={() => toggle(a.id, true)}
@@ -88,7 +88,7 @@ export function MyAchievementsPanel({ achievements }: Props) {
             <div key={a.id} className={`flex items-center gap-3 rounded-xl border px-3 py-2.5 ${rarityColors[a.rarity]}`}>
               {a.iconUrl && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={a.iconUrl} alt="" className="h-7 w-7 object-contain shrink-0" />
+                <img loading="lazy" decoding="async" src={a.iconUrl} alt="" className="h-7 w-7 object-contain shrink-0" />
               )}
               <div className="min-w-0 flex-1">
                 <p className="text-sm font-semibold text-slate-200 truncate">{a.name}</p>

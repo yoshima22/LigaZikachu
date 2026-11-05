@@ -749,7 +749,7 @@ export function RefugeLocationScene({
             <div
               className={`rounded-2xl border p-1 backdrop-blur-sm ${mascot.own ? "border-cyan-300/60 bg-cyan-950/70 shadow-lg shadow-cyan-400/20" : "border-white/25 bg-slate-950/65"}`}
             >
-              <img
+              <img loading="lazy" decoding="async"
                 src={mascot.sprite}
                 alt={mascot.name}
                 className="h-16 w-16 object-contain drop-shadow-[0_5px_7px_rgba(0,0,0,.8)] sm:h-20 sm:w-20"
@@ -1017,7 +1017,7 @@ export function RefugeLocationScene({
                   key={mascot.id}
                   className={`flex items-center gap-2 rounded-xl border p-2 ${here ? "border-cyan-300/35 bg-cyan-300/[.08]" : "border-white/10 bg-white/[.025]"}`}
                 >
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={mascot.sprite}
                     alt=""
                     className="h-10 w-10 shrink-0 rounded-lg bg-slate-900 object-contain"
@@ -1303,13 +1303,13 @@ export function ImportantMomentsList({
             >
               <div className="flex items-center gap-3">
                 <div className="flex -space-x-2">
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={moment.spriteA}
                     alt=""
                     className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain"
                   />
                   {moment.spriteB && (
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={moment.spriteB}
                       alt=""
                       className="h-11 w-11 rounded-full border border-slate-700 bg-slate-950 object-contain"
@@ -2031,7 +2031,7 @@ export function BondDirectoryV2({ relations }: { relations: BondItem[] }) {
               >
                 <div className="grid items-center gap-3 sm:grid-cols-[1fr_auto_1fr_auto]">
                   <div className="flex min-w-0 items-center gap-3 rounded-xl border border-cyan-300/15 bg-cyan-300/[.05] p-3">
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={relation.spriteA}
                       alt=""
                       className="h-12 w-12 shrink-0 rounded-full bg-slate-900 object-contain"
@@ -2183,7 +2183,7 @@ export function SocialGroupsPager({ groups, kind }: { groups: SocialGroupItem[];
   const surface = friendly ? "border-emerald-300/20 bg-emerald-300/[.035]" : "border-rose-300/20 bg-rose-300/[.035]";
   const accent = friendly ? "text-emerald-300" : "text-rose-300";
   const effect = friendly ? "Bônus coletivo: reunidos fora do Treino, +10 pp de chance de recurso comum e de Momento coletivo." : "Bônus coletivo: reunidos no Treino, +10 pp de chance de recurso competitivo e de desafio coletivo.";
-  return <div className="space-y-3">{visible.map((group) => <article key={group.leader.name} className={`rounded-2xl border p-4 ${surface}`}><div className="flex items-center gap-3"><img src={group.leader.sprite} alt="" className="h-12 w-12 rounded-full border border-white/10 bg-slate-950 object-contain" /><div><p className={`text-[10px] font-black uppercase tracking-[.16em] ${accent}`}>{friendly ? "Ponto de encontro" : "Centro da disputa"}</p><p className="font-bold text-white">{friendly ? "Círculo" : "Clube"} de {group.leader.name}</p><p className="text-[10px] text-slate-400">{group.leader.owner}</p></div></div><p className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400"><strong className="text-white">Mascote central:</strong> possui dois ou mais vínculos compatíveis. Indisponível ou fora do local, ele pausa o grupo — sem apagar relações.</p><p className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400">{effect}</p><div className="mt-2 space-y-1.5">{group.members.map((member) => <div key={`${member.name}-${member.owner}`} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2"><img src={member.sprite} alt="" className="h-6 w-6 object-contain" /><p className="min-w-0 flex-1 truncate text-[10px] text-slate-300"><strong className="text-white">{member.name}</strong> · {member.owner}</p><span className={`text-[10px] font-bold ${accent}`}>{member.score > 0 ? "+" : ""}{member.score}</span></div>)}</div></article>)}{pages > 1 && <div className="flex items-center justify-center gap-3"><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronLeft size={14} /></button><span className="text-[10px] text-slate-500">Grupos {(safePage - 1) * perPage + 1}–{Math.min(groups.length, safePage * perPage)} de {groups.length}</span><button type="button" disabled={safePage >= pages} onClick={() => setPage(safePage + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronRight size={14} /></button></div>}</div>;
+  return <div className="space-y-3">{visible.map((group) => <article key={group.leader.name} className={`rounded-2xl border p-4 ${surface}`}><div className="flex items-center gap-3"><img loading="lazy" decoding="async" src={group.leader.sprite} alt="" className="h-12 w-12 rounded-full border border-white/10 bg-slate-950 object-contain" /><div><p className={`text-[10px] font-black uppercase tracking-[.16em] ${accent}`}>{friendly ? "Ponto de encontro" : "Centro da disputa"}</p><p className="font-bold text-white">{friendly ? "Círculo" : "Clube"} de {group.leader.name}</p><p className="text-[10px] text-slate-400">{group.leader.owner}</p></div></div><p className="mt-3 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400"><strong className="text-white">Mascote central:</strong> possui dois ou mais vínculos compatíveis. Indisponível ou fora do local, ele pausa o grupo — sem apagar relações.</p><p className="mt-2 rounded-xl border border-white/10 bg-black/20 p-2.5 text-[10px] leading-4 text-slate-400">{effect}</p><div className="mt-2 space-y-1.5">{group.members.map((member) => <div key={`${member.name}-${member.owner}`} className="flex items-center gap-2 rounded-xl border border-white/10 bg-black/20 p-2"><img loading="lazy" decoding="async" src={member.sprite} alt="" className="h-6 w-6 object-contain" /><p className="min-w-0 flex-1 truncate text-[10px] text-slate-300"><strong className="text-white">{member.name}</strong> · {member.owner}</p><span className={`text-[10px] font-bold ${accent}`}>{member.score > 0 ? "+" : ""}{member.score}</span></div>)}</div></article>)}{pages > 1 && <div className="flex items-center justify-center gap-3"><button type="button" disabled={safePage <= 1} onClick={() => setPage(safePage - 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronLeft size={14} /></button><span className="text-[10px] text-slate-500">Grupos {(safePage - 1) * perPage + 1}–{Math.min(groups.length, safePage * perPage)} de {groups.length}</span><button type="button" disabled={safePage >= pages} onClick={() => setPage(safePage + 1)} className="rounded-lg border border-white/10 p-2 disabled:opacity-25"><ChevronRight size={14} /></button></div>}</div>;
 }
 
 export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
@@ -2365,7 +2365,7 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
                 className="rounded-xl border border-white/10 bg-white/[.025] p-2"
               >
                 <div className="flex items-center gap-2">
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={relation.spriteA}
                     alt=""
                     className="h-9 w-9 rounded-full bg-slate-900 object-contain"
@@ -2380,7 +2380,7 @@ export function TrainerBondExplorer({ relations }: { relations: BondItem[] }) {
                       {relation.score} · {relation.interactions} interações
                     </p>
                   </div>
-                  <img
+                  <img loading="lazy" decoding="async"
                     src={relation.spriteB}
                     alt=""
                     className="h-9 w-9 rounded-full bg-slate-900 object-contain"

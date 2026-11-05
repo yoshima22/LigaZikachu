@@ -73,7 +73,7 @@ export function PackShelf({ packs, balance, isLoggedIn }: Props) {
               {pack.imageUrl && (
                 <div className="aspect-[2/1] w-full overflow-hidden">
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={pack.imageUrl} alt={pack.name} className="h-full w-full object-cover" />
+                  <img loading="lazy" decoding="async" src={pack.imageUrl} alt={pack.name} className="h-full w-full object-cover" />
                 </div>
               )}
               <div className="p-4 space-y-3">
@@ -126,7 +126,7 @@ export function PackShelf({ packs, balance, isLoggedIn }: Props) {
                 <div key={idx} className={`rounded-xl border p-2 text-center space-y-1 ${RARITY_COLORS[card.rarity]}`}>
                   {card.imageUrl ? (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img src={card.imageUrl} alt={card.displayName} className="w-full aspect-square object-contain" />
+                    <img loading="lazy" decoding="async" src={card.imageUrl} alt={card.displayName} className="w-full aspect-square object-contain" />
                   ) : (
                     <div className="aspect-square flex items-center justify-center text-xs text-slate-500">?</div>
                   )}

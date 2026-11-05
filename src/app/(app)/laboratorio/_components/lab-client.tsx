@@ -391,7 +391,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                       >
                         <X size={9} />
                       </button>
-                      <img src={slot.spriteUrl} alt="" className="h-10 w-10 object-contain" />
+                      <img loading="lazy" decoding="async" src={slot.spriteUrl} alt="" className="h-10 w-10 object-contain" />
                       <p className="line-clamp-1 w-full px-1 text-[9px] font-semibold text-white">
                         {slot.nickname || slot.name}
                       </p>
@@ -430,7 +430,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                     const sameGroup = filledSlots.filter((s) => s.pokemonId === b.mascot.pokemonId).length > 1;
                     return (
                       <div key={b.mascot.id + i} className="flex items-center gap-2 text-xs">
-                        <img src={b.mascot.spriteUrl} alt="" className="h-5 w-5 object-contain shrink-0" />
+                        <img loading="lazy" decoding="async" src={b.mascot.spriteUrl} alt="" className="h-5 w-5 object-contain shrink-0" />
                         <span className="text-slate-300 truncate min-w-0 flex-1">
                           {b.mascot.nickname || b.mascot.name}
                         </span>
@@ -539,7 +539,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
                         <span className="absolute right-1.5 top-1.5"><RatingBadge rating={m.ivRating} size="sm" /></span>
                       )}
                       <span className="absolute left-1.5 top-1.5"><TagChip tag={m.performanceTag} /></span>
-                      <img src={m.spriteUrl} alt="" className="mt-3 h-12 w-12 object-contain" />
+                      <img loading="lazy" decoding="async" src={m.spriteUrl} alt="" className="mt-3 h-12 w-12 object-contain" />
                       <p className="line-clamp-1 text-xs font-bold text-white">{m.nickname || m.name}{m.isShiny ? " ✨" : ""}</p>
                       <p className="flex items-center gap-1 text-[10px] text-slate-500">Lv.{m.level} <CodeChip id={m.id} /></p>
                       {m.personality && <p className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}{typeof m.battleWins === "number" ? ` · ${m.battleWins}V/${m.battleLosses ?? 0}D` : ""}</p>}
@@ -669,7 +669,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             <div className="mb-4 max-h-48 overflow-y-auto space-y-1.5">
               {breakdown.map((b, i) => (
                 <div key={b.mascot.id + i} className="flex items-center gap-3 rounded-xl border border-border bg-slate-800/60 px-3 py-2">
-                  <img src={b.mascot.spriteUrl} alt="" className="h-9 w-9 shrink-0 object-contain" />
+                  <img loading="lazy" decoding="async" src={b.mascot.spriteUrl} alt="" className="h-9 w-9 shrink-0 object-contain" />
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-xs font-bold text-white">{b.mascot.nickname || b.mascot.name}</p>
                     <p className="text-[10px] text-slate-400">Lv.{b.mascot.level} · {RARITY_LABEL[b.mascot.rarity]}</p>

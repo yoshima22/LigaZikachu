@@ -269,7 +269,7 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
             >
               {/* Sprite pequeno */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <img loading="lazy" decoding="async"
                 src={getSpriteUrl(entry.pokemonId, false)}
                 alt=""
                 width={36} height={36}
@@ -325,7 +325,7 @@ export default async function MascotRankingPage({ searchParams }: PageProps) {
 
               {/* Sprite */}
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+              <img loading="lazy" decoding="async"
                 src={getSpriteUrl(entry.pokemonId, false)}
                 alt={entry.nickname ?? getPokemonName(entry.pokemonId)}
                 width={48} height={48}

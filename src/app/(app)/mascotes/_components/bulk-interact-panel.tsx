@@ -251,7 +251,7 @@ export function BulkInteractPanel({ scope, mascotIds }: Props) {
                 }`}
               >
                 {opt.value === "RARE_SWEET" && (
-                  <img src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="mr-1 inline-block h-3 w-3 object-contain align-text-bottom" />
+                  <img loading="lazy" decoding="async" src={RARE_SWEET_IMAGE_URL} alt="" aria-hidden className="mr-1 inline-block h-3 w-3 object-contain align-text-bottom" />
                 )}
                 {opt.label}
               </button>

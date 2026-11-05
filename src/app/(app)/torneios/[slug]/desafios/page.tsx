@@ -199,7 +199,7 @@ export default async function DesafiosPage({
                   <div className="flex items-center gap-3 border-b border-border px-4 py-3">
                     {badge.imageUrl ? (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={badge.imageUrl} alt={badge.name} className="h-9 w-9 rounded-lg object-contain" />
+                      <img loading="lazy" decoding="async" src={badge.imageUrl} alt={badge.name} className="h-9 w-9 rounded-lg object-contain" />
                     ) : (
                       <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-[#FFCB05]/10">
                         <Award size={18} className="text-[#FFCB05]" />

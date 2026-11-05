@@ -549,7 +549,7 @@ export default async function PerfilPage() {
                 className="flex items-center gap-3 rounded-2xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 p-3"
               >
                 {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
+                <img loading="lazy" decoding="async"
                   src={playerBadge.badge.imageUrl}
                   alt={playerBadge.badge.name}
                   className="h-14 w-14 rounded-xl object-cover"

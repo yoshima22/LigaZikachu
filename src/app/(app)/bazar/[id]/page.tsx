@@ -152,7 +152,7 @@ function ProposalItemsInline({ items }: { items: ProposalOfferedItem[] }) {
             <div className="flex items-center gap-2.5">
               {item.pokemonId && (
                 // eslint-disable-next-line @next/next/no-img-element
-                <img src={getStaticSpriteUrl(item.pokemonId)} alt="" className="h-11 w-11 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                <img loading="lazy" decoding="async" src={getStaticSpriteUrl(item.pokemonId)} alt="" className="h-11 w-11 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
               )}
               <div className="min-w-0 flex-1">
                 <p className="flex items-center gap-1.5 text-xs font-black text-[#FFCB05]">
@@ -837,7 +837,7 @@ export default function BazarListingPage(): React.JSX.Element {
                       className="flex items-center gap-2 rounded-lg border border-border bg-slate-950/60 px-2 py-1.5"
                     >
                       {/* eslint-disable-next-line @next/next/no-img-element */}
-                      <img
+                      <img loading="lazy" decoding="async"
                         src={getStaticSpriteUrl(pokemonId)}
                         alt=""
                         className="h-8 w-8 shrink-0 object-contain"
@@ -861,7 +861,7 @@ export default function BazarListingPage(): React.JSX.Element {
                           <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden text-lg">
                             {item.imageUrl ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img src={item.imageUrl} alt="" className="h-full w-full object-contain" />
+                              <img loading="lazy" decoding="async" src={item.imageUrl} alt="" className="h-full w-full object-contain" />
                             ) : getShopItemEmoji(item.type)}
                           </span>
                           <span className="min-w-0">
@@ -1512,7 +1512,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                     className={`w-full text-left text-[11px] rounded-lg px-2 py-2 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                     {/* Static sprite — no GIF */}
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                    <img loading="lazy" decoding="async" src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-6 w-6 object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                     <span className="min-w-0 flex-1">
                       <span className="block truncate font-semibold">{label}<span className="ml-1 font-mono text-[9px] text-[#FFCB05]">#{shortMascotCode(m.id)}</span></span>
                       <span className="mt-0.5 block truncate text-[9px] text-slate-500">
@@ -1604,7 +1604,7 @@ function OfferItemsPicker({ onItemsChange, resetSignal = 0 }: { onItemsChange: (
                       className={`flex-1 text-left text-[11px] rounded-lg px-2 py-1.5 transition-colors flex items-center gap-2 ${sel ? "bg-[#FFCB05]/20 text-[#FFCB05]" : "text-slate-400 hover:bg-slate-800"}`}>
                       {item.imageUrl ? (
                         // eslint-disable-next-line @next/next/no-img-element
-                        <img src={item.imageUrl} alt="" className="h-5 w-5 object-contain shrink-0" />
+                        <img loading="lazy" decoding="async" src={item.imageUrl} alt="" className="h-5 w-5 object-contain shrink-0" />
                       ) : (
                         <span>{emoji}</span>
                       )}

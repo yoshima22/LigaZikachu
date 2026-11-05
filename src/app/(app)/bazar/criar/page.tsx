@@ -338,7 +338,7 @@ function CreateListingForm() {
                              }`}>
                              <div className="flex items-center gap-3">
                                {/* eslint-disable-next-line @next/next/no-img-element */}
-                               <img src={getSpriteUrl(m.pokemonId)} alt="" width={40} height={40} className="object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
+                               <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId)} alt="" width={40} height={40} className="object-contain shrink-0" style={{ imageRendering: "pixelated" }} />
                                <div className="min-w-0">
                                  <p className="text-sm font-semibold text-white truncate">
                                    {m.nickname ?? getPokemonName(m.pokemonId)}
@@ -425,7 +425,7 @@ function CreateListingForm() {
                           }`}>
                           {item.imageUrl ? (
                             // eslint-disable-next-line @next/next/no-img-element
-                            <img src={item.imageUrl} alt="" className="h-9 w-9 object-contain shrink-0" />
+                            <img loading="lazy" decoding="async" src={item.imageUrl} alt="" className="h-9 w-9 object-contain shrink-0" />
                           ) : (
                             <span className="text-xl shrink-0">{getShopItemEmoji(item.type)}</span>
                           )}

@@ -239,7 +239,7 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
           {imageUrl && (
             <div className="mt-4 flex items-center gap-3">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={imageUrl} alt="Preview da insignia" className="h-16 w-16 rounded-xl object-cover" />
+              <img loading="lazy" decoding="async" src={imageUrl} alt="Preview da insignia" className="h-16 w-16 rounded-xl object-cover" />
               <p className="text-xs text-slate-400">Preview carregado. A imagem sera salva junto da insignia.</p>
             </div>
           )}
@@ -256,7 +256,7 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
           <article key={badge.id} className="rounded-2xl border border-border bg-slate-950/70 p-4">
             <div className="flex gap-4">
               {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={badge.imageUrl} alt={badge.name} className="h-20 w-20 rounded-2xl object-cover" />
+              <img loading="lazy" decoding="async" src={badge.imageUrl} alt={badge.name} className="h-20 w-20 rounded-2xl object-cover" />
               <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-white">{badge.name}</h3>
                 <p className="mt-1 text-xs text-slate-400">{badge.tournamentName}</p>
@@ -327,7 +327,7 @@ export function BadgeAdminPanel({ tournaments, players, badges, admin }: BadgeAd
                 {editImageUrl && (
                   <div className="flex items-center gap-3">
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img src={editImageUrl} alt="Preview da nova imagem" className="h-14 w-14 rounded-xl object-cover" />
+                    <img loading="lazy" decoding="async" src={editImageUrl} alt="Preview da nova imagem" className="h-14 w-14 rounded-xl object-cover" />
                     <p className="text-xs text-slate-400">Nova imagem carregada.</p>
                   </div>
                 )}

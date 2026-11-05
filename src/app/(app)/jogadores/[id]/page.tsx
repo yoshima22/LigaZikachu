@@ -372,7 +372,7 @@ export default async function PlayerDetailPage({
               {equippedBanner?.item.imageUrl ? (
                 <>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={equippedBanner.item.imageUrl} alt="Banner"
+                  <img loading="lazy" decoding="async" src={equippedBanner.item.imageUrl} alt="Banner"
                     className="absolute inset-0 h-full w-full object-cover"
                     style={{
                       filter: `brightness(${Math.min(300, Math.max(50,
@@ -749,7 +749,7 @@ export default async function PlayerDetailPage({
                     className="flex items-center gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/10 p-3"
                   >
                     {/* eslint-disable-next-line @next/next/no-img-element */}
-                    <img
+                    <img loading="lazy" decoding="async"
                       src={playerBadge.badge.imageUrl}
                       alt={playerBadge.badge.name}
                       className="h-12 w-12 rounded-lg object-cover"
@@ -787,7 +787,7 @@ export default async function PlayerDetailPage({
                   >
                     {a.achievement.iconUrl && (
                       // eslint-disable-next-line @next/next/no-img-element
-                      <img src={a.achievement.iconUrl} alt="" className="h-4 w-4 object-contain" />
+                      <img loading="lazy" decoding="async" src={a.achievement.iconUrl} alt="" className="h-4 w-4 object-contain" />
                     )}
                     <span className="text-xs font-semibold text-slate-200">{a.achievement.name}</span>
                   </div>

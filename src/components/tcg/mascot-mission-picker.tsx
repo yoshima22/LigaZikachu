@@ -71,7 +71,7 @@ export function MascotMissionPicker({
                   onClick={() => { onChange(m.id); setQuery(""); setOpen(false); }}
                   className={`flex w-full items-center gap-3 rounded-lg px-2.5 py-1.5 text-left hover:bg-emerald-400/10 ${value === m.id ? "bg-emerald-400/10" : ""}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}
-                  <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+                  <img loading="lazy" decoding="async" src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-9 w-9 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
                   <span className="min-w-0">
                     <b className="block truncate text-xs text-white">{m.nickname?.trim() || species}</b>
                     <small className="block truncate text-[10px] text-slate-500">{species} · Nv.{m.level}</small>
@@ -87,7 +87,7 @@ export function MascotMissionPicker({
       {selected && (
         <div className="flex items-start gap-3 rounded-lg border border-slate-700/70 bg-slate-950/70 p-2.5">
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={selected.spriteUrl} alt={selected.displayName} className="h-12 w-12 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
+          <img loading="lazy" decoding="async" src={selected.spriteUrl} alt={selected.displayName} className="h-12 w-12 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
           <div className="min-w-0 flex-1">
             <p className="text-xs font-semibold text-white">{selected.displayName} <span className="font-normal text-slate-500">({selected.speciesName})</span></p>
             <p className="mt-0.5 text-[10px] leading-4 text-slate-500">Linha aceita: {selected.acceptedCardNames.join(", ")}</p>
