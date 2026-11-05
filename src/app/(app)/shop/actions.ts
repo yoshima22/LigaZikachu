@@ -6,6 +6,7 @@ import { invalidateShopCache } from "@/lib/shop-cache";
 import { getSessionPlayer } from "@/lib/session";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { ShopItemType, ShopItemRarity, ShopPromotionScope, TitleTheme, TitleEntranceEffect, ZikaCoinTxType, EggType, FoodType } from "@prisma/client";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
@@ -232,6 +233,7 @@ export async function createShopItem(
   try {
     const actor = await requireAdmin();
     const data = createItemSchema.parse(raw);
+    data.imageUrl = data.imageUrl ? await uploadDataUrlAsset(data.imageUrl, "shop", data.name) : data.imageUrl;
     await prisma.shopItem.create({
       data: {
         type: data.type, name: data.name, rarity: data.rarity, price: data.price,
@@ -262,6 +264,7 @@ export async function updateShopItem(
   try {
     await requireAdmin();
     const data = createItemSchema.parse(raw);
+    data.imageUrl = data.imageUrl ? await uploadDataUrlAsset(data.imageUrl, "shop", data.name) : data.imageUrl;
     await prisma.$transaction(async (tx) => {
       await tx.shopItem.update({
         where: { id: itemId },

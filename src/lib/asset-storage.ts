@@ -34,7 +34,22 @@ export async function uploadDataUrlAsset(dataUrl: string, folder: string, name: 
   const supabase = getStorageClient();
   if (!supabase) throw new Error("Storage nao configurado.");
 
-  const { buffer, mimeType, ext } = dataUrlToBuffer(dataUrl);
+  let { buffer, mimeType, ext } = dataUrlToBuffer(dataUrl);
+  // Todo upload do site vira WebP: grande -> máx. 1400px (q82); pequeno (sprite/ícone) -> sem perda. GIF segue animado.
+  // Se o sharp falhar, sobe o original. SVG não é rasterizado.
+  if (ext !== "svg") {
+    try {
+      const sharp = (await import("sharp")).default;
+      const img = sharp(buffer, { animated: true }).rotate();
+      const meta = await img.metadata();
+      const small = Math.max(meta.width ?? 0, meta.pageHeight ?? meta.height ?? 0) <= 512;
+      const out = await img
+        .resize({ width: 1400, withoutEnlargement: true })
+        .webp(small ? { lossless: true } : { quality: 82 })
+        .toBuffer();
+      if (out.length < buffer.length) { buffer = out; mimeType = "image/webp"; ext = "webp"; }
+    } catch { /* mantém o original */ }
+  }
   const storagePath = `${folder}/${slugify(name)}-${Date.now()}.${ext}`;
 
   let { error } = await supabase.storage

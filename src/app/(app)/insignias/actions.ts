@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
 
 const createBadgeSchema = z.object({
   tournamentId: z.string().min(1, "Selecione um torneio."),
@@ -60,7 +61,7 @@ export async function createLeagueBadgeAction(
       data: {
         tournamentId: tournament.id,
         name: data.name,
-        imageUrl: data.imageUrl,
+        imageUrl: await uploadDataUrlAsset(data.imageUrl, "insignias", data.name),
         createdById: actor.id
       }
     });
@@ -117,7 +118,7 @@ export async function updateLeagueBadgeAction(
         name: data.name,
         tournamentId: tournament.id,
         // Só troca a imagem se uma nova foi enviada.
-        ...(data.imageUrl ? { imageUrl: data.imageUrl } : {})
+        ...(data.imageUrl ? { imageUrl: await uploadDataUrlAsset(data.imageUrl, "insignias", data.name) } : {})
       }
     });
 

@@ -3,6 +3,7 @@
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { uploadDataUrlAsset } from "@/lib/asset-storage";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { rarityFromStats, generationFromId } from "@/lib/sticker-pack";
 import { PokemonRarity } from "@prisma/client";
@@ -108,6 +109,7 @@ export async function createStickerPack(raw: z.infer<typeof packSchema>): Promis
   try {
     await requireAdmin();
     const data = packSchema.parse(raw);
+    if (data.imageUrl) data.imageUrl = await uploadDataUrlAsset(data.imageUrl, "stickers/packs", data.name);
     await prisma.stickerPack.create({
       data: {
         ...data,
@@ -128,6 +130,7 @@ export async function updateStickerPack(packId: string, raw: z.infer<typeof pack
   try {
     await requireAdmin();
     const data = packSchema.parse(raw);
+    if (data.imageUrl) data.imageUrl = await uploadDataUrlAsset(data.imageUrl, "stickers/packs", data.name);
     await prisma.stickerPack.update({
       where: { id: packId },
       data: { ...data, description: data.description || null, imageUrl: data.imageUrl || null }
