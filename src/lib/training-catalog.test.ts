@@ -8,7 +8,7 @@ test("creates all tradable posture Marcos at the approved full price", () => {
   for (const item of TRAINING_MILESTONE_ITEMS) {
     assert.equal(item.price, 5000);
     assert.equal(item.name, `Marco de Postura - ${item.stanceName}`);
-    assert.equal(item.imageUrl, "/items/marco-de-postura.png");
+    assert.equal(item.imageUrl, "/items/marco-de-postura.webp");
     assert.equal(item.tradeable, true);
   }
 });

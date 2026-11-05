@@ -56,7 +56,7 @@ export function TrainingMilestonesLab() {
   return (
     <section className="rounded-2xl border border-amber-400/35 bg-amber-950/15 p-4 space-y-4">
       <div className="flex flex-wrap items-start gap-4">
-        <img src="/items/marco-de-postura.png" alt="Marco de Postura" className="h-20 w-20 rounded-xl object-cover" />
+        <img src="/items/marco-de-postura.webp" alt="Marco de Postura" className="h-20 w-20 rounded-xl object-cover" />
         <div>
           <h2 className="text-sm font-black text-amber-200">🏳️ Laboratório — Marcos de Postura</h2>
           <p className="mt-1 max-w-3xl text-xs text-amber-50/70">{view.persistenceNotice}</p>
