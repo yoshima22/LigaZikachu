@@ -736,9 +736,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   };
 
   const handleFavorite = () => {
+    // Otimista: a estrela troca na hora; se o servidor recusar (ex.: limite de favoritos), volta ao valor anterior.
+    const previousFavorite = localIsFavorite;
+    setLocalIsFavorite(!previousFavorite);
     startTransition(async () => {
       const r = await toggleFavoriteMascotAction(mascot.id);
-      if (r.error) toast.error(r.error);
+      if (r.error) { setLocalIsFavorite(previousFavorite); toast.error(r.error); }
       else {
         const nextFavorite = r.isFavorite === true;
         setLocalIsFavorite(nextFavorite);

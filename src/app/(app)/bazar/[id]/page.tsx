@@ -442,9 +442,11 @@ export default function BazarListingPage(): React.JSX.Element {
   };
 
   const handleFavorite = () => {
+    // Otimista: troca o coração na hora e desfaz se o servidor recusar.
+    setFavorited(f => !f);
     startTransition(async () => {
-      const r = await toggleFavorite(id);
-      if (!r.error) setFavorited(f => !f);
+      const r = await toggleFavorite(id).catch(() => ({ error: "Falha ao favoritar." }));
+      if (r.error) setFavorited(f => !f);
     });
   };
 
