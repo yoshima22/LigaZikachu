@@ -4,7 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 import {
-  ArrowLeft, Copy, Eye, EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MonitorX,
+  ArrowLeft, Camera, CameraOff, Copy, Eye, EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MonitorX,
   PhoneOff, Send, Users, Volume2, VolumeX, X,
 } from "lucide-react";
 import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
@@ -128,6 +128,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [chat, setChat] = useState<ChatLine[]>([]);
   const [draft, setDraft] = useState("");
   const [micOn, setMicOn] = useState(false);
+  const [cameraOn, setCameraOn] = useState(false);
+  const [startWithMic, setStartWithMic] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
   const [watching, setWatching] = useState<string[]>([]);
@@ -149,6 +151,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const peers = useRef(new Map<string, Peer>());
   const micStream = useRef<MediaStream | null>(null);
   const screenStream = useRef<MediaStream | null>(null);
+  const cameraStream = useRef<MediaStream | null>(null);
   const lastChatAt = useRef(0);
   const beat = useRef<number | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
@@ -312,8 +315,10 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     for (const id of [...peers.current.keys()]) closePeer(id);
     micStream.current?.getTracks().forEach((t) => t.stop());
     screenStream.current?.getTracks().forEach((t) => t.stop());
+    cameraStream.current?.getTracks().forEach((t) => t.stop());
     micStream.current = null;
     screenStream.current = null;
+    cameraStream.current = null;
     if (channel.current) void supabase.current?.removeChannel(channel.current);
     channel.current = null;
     memberState.current = { mic: false, sharing: false };
@@ -324,6 +329,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     setNeedsCode(false);
     setRelayMsg(null);
     setMicOn(false);
+    setCameraOn(false);
     setSharing(false);
     setMembers([]);
   }, [closePeer]);
@@ -425,6 +431,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         void fetch(`/api/salas/${code}/heartbeat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: topic.current, participantToken: participantToken.current, media: { micOn: memberState.current.mic, screenOn: memberState.current.sharing, cameraOn: false } }) }).catch(() => null);
       }, 60_000);
       setPhase("in");
+      if (startWithMic) await toggleMic();
     } catch (e) {
       leave();
       setError(e instanceof Error ? e.message : "Erro ao entrar.");
@@ -487,6 +494,21 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     } catch { /* usuário cancelou o seletor */ } finally { screenBusy.current = false; }
   };
 
+  const toggleCamera = async () => {
+    if (cameraStream.current) {
+      cameraStream.current.getTracks().forEach((track) => track.stop());
+      for (const peer of peers.current.values()) { peer.senders.screen.forEach((sender) => { try { peer.pc.removeTrack(sender); } catch {} }); peer.senders.screen = []; }
+      cameraStream.current = null; setCameraOn(false); setSharing(false); memberState.current.sharing = false; memberState.current.screenId = undefined; publishPresence(); return;
+    }
+    try {
+      if (screenStream.current) stopScreen();
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+      cameraStream.current = stream;
+      for (const peer of peers.current.values()) addLocalTracks(peer, "screen", stream);
+      setCameraOn(true); setSharing(true); memberState.current.sharing = true; memberState.current.screenId = stream.id; publishPresence();
+    } catch { setError("Não foi possível acessar a câmera. Verifique a permissão do navegador."); }
+  };
+
   const toggleWatch = (id: string) => {
     const on = !watchingRef.current.includes(id);
     updateWatching(on ? [...watchingRef.current, id] : watchingRef.current.filter((x) => x !== id));
@@ -525,6 +547,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
           <p className="text-sm text-slate-400">Sem cadastro. Escolha um apelido para entrar com voz, tela e chat.</p>
           <form onSubmit={(e) => { e.preventDefault(); if (phase !== "joining") void join(); }} className="space-y-4">
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" aria-label="Seu apelido" autoFocus autoComplete="nickname" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
+            <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={startWithMic} onChange={(e) => setStartWithMic(e.target.checked)} /> Entrar com microfone ligado</label>
             {hasPassword && (
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" aria-label="Senha da sala" autoComplete="off" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
             )}
@@ -651,6 +674,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       <footer className="fixed inset-x-0 bottom-3 z-20 flex justify-center gap-2 px-3">
         <div className="flex gap-2 rounded-full border border-slate-700 bg-slate-950/90 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
           <button onClick={toggleMic} aria-pressed={micOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${micOn ? "bg-emerald-500 text-slate-900" : "bg-slate-800 text-slate-200"}`}>{micOn ? <Mic size={16} /> : <MicOff size={16} />}<span className="hidden sm:inline">{micOn ? "Microfone ligado" : "Ligar microfone"}</span></button>
+          <button onClick={toggleCamera} aria-pressed={cameraOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${cameraOn ? "bg-cyan-300 text-slate-950" : "bg-slate-800 text-slate-200"}`}>{cameraOn ? <Camera size={16} /> : <CameraOff size={16} />}<span className="hidden sm:inline">{cameraOn ? "Parar câmera" : "Ligar câmera"}</span></button>
           <button onClick={toggleScreen} aria-pressed={sharing} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sharing ? "bg-[#FFCB05] text-slate-900" : "bg-slate-800 text-slate-200"}`}>{sharing ? <MonitorX size={16} /> : <MonitorUp size={16} />}<span className="hidden sm:inline">{sharing ? "Parar tela" : "Compartilhar tela"}</span></button>
           <button onClick={() => { leave(); setPhase("form"); }} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white"><PhoneOff size={16} /><span className="hidden sm:inline">Sair</span></button>
         </div>
