@@ -328,6 +328,10 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   }, [closePeer]);
 
   useEffect(() => leave, [leave]);
+  // Lembra o apelido usado da última vez neste aparelho.
+  useEffect(() => {
+    try { const saved = window.localStorage.getItem("zikachat:name"); if (saved) setName(saved); } catch { /* ignora */ }
+  }, []);
   useEffect(() => { chatEnd.current?.scrollIntoView({ block: "end" }); }, [chat]);
 
   // Reenvia o pedido de "assistir" a cada 4 s: garante que o outro lado o receba mesmo se chegou antes da conexão.
@@ -359,6 +363,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       if (!url || !key) throw new Error("Tempo real indisponível neste ambiente (chave do Supabase não configurada).");
       myId.current = crypto.randomUUID();
       myName.current = cleanName(name);
+      try { window.localStorage.setItem("zikachat:name", myName.current); } catch { /* sem armazenamento: segue sem lembrar */ }
       supabase.current ??= createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { params: { eventsPerSecond: 10 } } });
       const ch = supabase.current.channel(topic.current, { config: { broadcast: { self: false }, presence: { key: myId.current } } });
       channel.current = ch;
@@ -516,15 +521,17 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
           <p className="text-xs uppercase tracking-widest text-[#FFCB05]">ZikaChat</p>
           <h1 className="text-xl font-bold text-white">Entrar na {label}</h1>
           <p className="text-sm text-slate-400">Sem cadastro. Escolha um apelido para entrar com voz, tela e chat.</p>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" aria-label="Seu apelido" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-          {hasPassword && (
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" aria-label="Senha da sala" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
-          )}
-          {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-          <button onClick={join} disabled={phase === "joining" || (hasPassword && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">
-            {phase === "joining" ? "Entrando..." : "Entrar"}
-          </button>
-          <Link href="/salas" className="block text-center text-xs text-slate-500 hover:text-slate-300">Criar outra sala</Link>
+          <form onSubmit={(e) => { e.preventDefault(); if (phase !== "joining") void join(); }} className="space-y-4">
+            <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" aria-label="Seu apelido" autoFocus autoComplete="nickname" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
+            {hasPassword && (
+              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" aria-label="Senha da sala" autoComplete="off" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
+            )}
+            {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
+            <button type="submit" disabled={phase === "joining" || (hasPassword && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50">
+              {phase === "joining" ? "Entrando..." : "Entrar"}
+            </button>
+          </form>
+          <Link href="/salas" className="block text-center text-xs text-slate-400 hover:text-slate-200">Criar outra sala</Link>
         </div>
       </main>
     );
@@ -625,7 +632,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         </section>
 
         <aside className="flex h-80 flex-col rounded-xl border border-slate-700 bg-slate-900/70 lg:h-[calc(100vh-12rem)] lg:min-h-[24rem]">
-          <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
+          <div role="log" aria-live="polite" aria-label="Mensagens da sala" className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
             {chat.length === 0 && <p className="text-xs text-slate-500">O chat some quando a sala encerra.</p>}
             {chat.map((line) => (
               <p key={line.id} className="break-words"><span className={`font-semibold ${line.mine ? "text-[#FFCB05]" : "text-cyan-300"}`}>{line.name}:</span> <span className="text-slate-200">{line.text}</span></p>

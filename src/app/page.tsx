@@ -137,7 +137,7 @@ export default async function HomePage() {
               <Link href="/torneios" className={`rounded-lg px-2 py-2 text-sm text-slate-400 hover:text-white ${FOCUS}`}>Ver campeonatos →</Link>
             </div>
 
-            <p className="text-xs text-slate-500">Versão alpha: o app evolui toda semana.</p>
+            <p className="text-xs text-slate-400">Versão alpha: o app evolui toda semana.</p>
           </div>
 
           {/* Mascotes em destaque */}
@@ -247,12 +247,12 @@ export default async function HomePage() {
       </main>
 
       <footer className="border-t border-white/5 px-5 py-8">
-        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-xs text-slate-500">
+        <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-3 text-xs text-slate-400">
           <span>Liga Zikachu · versão alpha</span>
           <div className="flex gap-5">
-            <Link href="/salas" className={`rounded hover:text-slate-300 ${FOCUS}`}>ZikaChat</Link>
-            <Link href="/login" className={`rounded hover:text-slate-300 ${FOCUS}`}>Entrar</Link>
-            <Link href="/criar-conta" className={`rounded hover:text-slate-300 ${FOCUS}`}>Criar conta</Link>
+            <Link href="/salas" className={`rounded hover:text-white ${FOCUS}`}>ZikaChat</Link>
+            <Link href="/login" className={`rounded hover:text-white ${FOCUS}`}>Entrar</Link>
+            <Link href="/criar-conta" className={`rounded hover:text-white ${FOCUS}`}>Criar conta</Link>
           </div>
         </div>
       </footer>
