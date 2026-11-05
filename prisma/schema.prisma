@@ -1538,6 +1538,7 @@ model PlayerActivityLog {
   @@index([category, createdAt])
   @@index([entityType, entityId, createdAt])
   @@index([createdAt])
+  @@index([actorUserId])
   @@map("player_activity_logs")
 }
 
