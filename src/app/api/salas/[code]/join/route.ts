@@ -17,9 +17,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const room = await getActiveRoom(code);
   if (!room) return NextResponse.json({ error: "Sala não encontrada ou encerrada." }, { status: 404 });
 
-  const body = (await request.json().catch(() => ({}))) as { password?: unknown; name?: unknown };
+  const body = (await request.json().catch(() => ({}))) as { password?: unknown; name?: unknown; hostToken?: unknown };
   const password = typeof body.password === "string" ? body.password : "";
-  const joined = await joinQuickRoom({ code, name: body.name, passwordValid: !room.passwordHash || Boolean(password) && await verifyPassword(password, room.passwordHash) });
+  const joined = await joinQuickRoom({ code, name: body.name, hostToken: typeof body.hostToken === "string" ? body.hostToken : undefined, passwordValid: !room.passwordHash || Boolean(password) && await verifyPassword(password, room.passwordHash) });
   if ("error" in joined) return NextResponse.json({ error: joined.error === "FULL" ? "Sala cheia." : joined.error === "PASSWORD" ? "Senha incorreta." : "Sala não encontrada ou encerrada." }, { status: joined.error === "FULL" ? 409 : joined.error === "PASSWORD" ? 403 : 404 });
   return NextResponse.json({
     topic: roomTopic(room),
@@ -34,6 +34,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
     iceServers: STUN_SERVERS,
     participantId: joined.lease.id,
     participantToken: joined.participantToken,
-    isHost: Boolean(room.hostTokenHash && false),
+    isHost: joined.lease.isHost,
   });
 }

@@ -25,12 +25,14 @@ function activeLeaseCutoff(now = new Date()) { return new Date(now.getTime() - R
 export type PublicQuickRoom = { code: string; title: string; participants: number; cameras: number; screens: number };
 
 export async function createQuickRoom(input: { password?: string; title?: unknown; visibility?: unknown }) {
+  const active = await prisma.quickRoom.count({ where: { lastActiveAt: { gt: new Date(Date.now() - ROOM_IDLE_MS) } } });
+  if (active >= ROOM_GLOBAL_CAP) throw new Error("ROOM_CAPACITY_REACHED");
   const hostToken = randomBytes(24).toString("base64url");
   const room = await prisma.quickRoom.create({ data: { code: generateRoomCode(), topicSecret: randomBytes(16).toString("hex"), passwordHash: input.password || null, hostTokenHash: tokenHash(hostToken), title: cleanRoomTitle(input.title), visibility: roomVisibility(input.visibility), maxParticipants: ROOM_MAX_PARTICIPANTS }, select: { code: true, title: true, visibility: true } });
   return { ...room, hostToken };
 }
 
-export async function joinQuickRoom(input: { code: string; name?: unknown; passwordValid: boolean }) {
+export async function joinQuickRoom(input: { code: string; name?: unknown; passwordValid: boolean; hostToken?: string }) {
   const now = new Date(); const cutoff = activeLeaseCutoff(now);
   return prisma.$transaction(async (tx) => {
     await tx.quickRoomParticipantLease.deleteMany({ where: { lastSeenAt: { lt: cutoff } } });
@@ -40,7 +42,8 @@ export async function joinQuickRoom(input: { code: string; name?: unknown; passw
     const active = await tx.quickRoomParticipantLease.count({ where: { roomId: room.id, lastSeenAt: { gte: cutoff } } });
     if (active >= room.maxParticipants) return { error: "FULL" as const };
     const participantToken = randomBytes(24).toString("base64url");
-    const lease = await tx.quickRoomParticipantLease.create({ data: { roomId: room.id, tokenHash: tokenHash(participantToken), name: cleanName(input.name) }, select: { id: true, name: true } });
+    const isHost = Boolean(room.hostTokenHash && input.hostToken && tokenHash(input.hostToken) === room.hostTokenHash);
+    const lease = await tx.quickRoomParticipantLease.create({ data: { roomId: room.id, tokenHash: tokenHash(participantToken), name: cleanName(input.name), isHost }, select: { id: true, name: true, isHost: true } });
     await tx.quickRoom.update({ where: { id: room.id }, data: { lastActiveAt: now, publicLastSeenAt: room.visibility === "PUBLIC" ? now : undefined } });
     return { room, lease, participantToken };
   }, { isolationLevel: "Serializable" });

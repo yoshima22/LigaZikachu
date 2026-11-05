@@ -351,7 +351,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       const res = await fetch(`/api/salas/${code}/join`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password }),
+        body: JSON.stringify({ password, name, hostToken: sessionStorage.getItem("zikachat:host:" + code) ?? undefined }),
       });
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar na sala.");

@@ -14,6 +14,8 @@ export async function POST(request: Request) {
   const password = typeof body.password === "string" ? body.password.trim() : "";
   if (password.length > 72) return NextResponse.json({ error: "Senha muito longa (máx. 72)." }, { status: 400 });
 
-  const room = await createQuickRoom({ password: password ? await hashPassword(password) : undefined, title: body.title, visibility: body.visibility });
+  let room;
+  try { room = await createQuickRoom({ password: password ? await hashPassword(password) : undefined, title: body.title, visibility: body.visibility }); }
+  catch (error) { if (error instanceof Error && error.message === "ROOM_CAPACITY_REACHED") return NextResponse.json({ error: "Muitas salas ativas agora. Tente em alguns minutos." }, { status: 503 }); throw error; }
   return NextResponse.json({ code: room.code, label: roomLabel(room.code), title: room.title, visibility: room.visibility, hostToken: room.hostToken });
 }
