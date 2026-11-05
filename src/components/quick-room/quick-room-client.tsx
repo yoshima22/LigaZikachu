@@ -8,6 +8,7 @@ import {
   PhoneOff, Send, Users, Volume2, VolumeX, X,
 } from "lucide-react";
 import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
+import { formatRoomCode } from "@/lib/quick-room-code";
 
 type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string };
 type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boolean };
@@ -142,7 +143,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null);
   const [startWithMic, setStartWithMic] = useState(false);
   const [sharing, setSharing] = useState(false);
-  const [copied, setCopied] = useState(false);
+  const [copied, setCopied] = useState<"link" | "code" | null>(null);
   const [watching, setWatching] = useState<string[]>([]);
   const [needsCode, setNeedsCode] = useState(false);
   const [relayCode, setRelayCode] = useState("");
@@ -609,8 +610,14 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
   const copyLink = async () => {
     await navigator.clipboard.writeText(window.location.href).catch(() => null);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
+    setCopied("link");
+    window.setTimeout(() => setCopied(null), 1500);
+  };
+
+  const copyRoomCode = async () => {
+    await navigator.clipboard.writeText(formatRoomCode(code)).catch(() => null);
+    setCopied("code");
+    window.setTimeout(() => setCopied(null), 1500);
   };
 
   const hostAction = async (action: "HIDE" | "END") => {
@@ -679,7 +686,10 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             <Users size={16} /> <span className="font-bold text-white">{label}</span> · {members.length} na sala
           </div>
         </div>
-        <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied ? "Link copiado" : "Copiar link"}</button>
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex items-center gap-2 rounded-lg border border-[#FFCB05]/35 bg-[#FFCB05]/10 px-2.5 py-1.5 text-xs text-[#fff1ad]"><span className="hidden font-semibold sm:inline">Código da sala</span><code className="font-mono font-black tracking-widest text-white">{formatRoomCode(code)}</code><button onClick={copyRoomCode} aria-label="Copiar código da sala" className="rounded p-0.5 hover:bg-white/10"><Copy size={14} /></button></div>
+          <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied === "link" ? "Link copiado" : "Copiar link"}</button>
+        </div>
       </header>
 
       {isHost && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-3 text-sm text-slate-200"><span>Você é o anfitrião desta mesa{isHidden ? " oculta" : " pública"}.</span><div className="flex gap-2"><button disabled={isHidden} onClick={() => void hostAction("HIDE")} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50">{isHidden ? "Já está oculta" : "Ocultar da lista"}</button><button onClick={() => void hostAction("END")} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">Encerrar sala</button></div></div>}

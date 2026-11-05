@@ -21,6 +21,7 @@ function loadTypeScript(relativePath) {
 
 const roomCode = loadTypeScript("src/lib/quick-room-code.ts");
 const publicPolicy = loadTypeScript("src/lib/quick-room-public.ts");
+const roomClient = readFileSync(new URL("../src/components/quick-room/quick-room-client.tsx", import.meta.url), "utf8");
 
 test("normalizes formatted room codes without weakening canonical validation", () => {
   assert.equal(typeof roomCode.normalizeRoomCodeInput, "function");
@@ -34,13 +35,19 @@ test("formats the existing ten-character secret only for display", () => {
   assert.equal(roomCode.formatRoomCode("abcdefghjk"), "abcd-efgh-jk");
 });
 
-test("lists only fresh public rooms with people and active media", () => {
+test("lists fresh public rooms as soon as someone joins, even before media starts", () => {
   assert.ok(publicPolicy, "public room policy module should exist");
   const now = new Date("2026-11-05T12:00:00.000Z");
   const active = { visibility: "PUBLIC", activeParticipants: 2, activeMedia: 1, publicLastSeenAt: now };
   assert.equal(publicPolicy.isPublicLiveEligible(active, now), true);
   assert.equal(publicPolicy.isPublicLiveEligible({ ...active, visibility: "UNLISTED" }, now), false);
-  assert.equal(publicPolicy.isPublicLiveEligible({ ...active, activeMedia: 0 }, now), false);
+  assert.equal(publicPolicy.isPublicLiveEligible({ ...active, activeMedia: 0 }, now), true);
+});
+
+test("shows a formatted, copyable room code alongside the share link", () => {
+  assert.match(roomClient, /formatRoomCode/);
+  assert.match(roomClient, /Copiar código/);
+  assert.match(roomClient, /Código da sala/);
 });
 
 test("summarizes camera and screen activity without treating a muted microphone as a live source", () => {

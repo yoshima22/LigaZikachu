@@ -5,12 +5,11 @@ export type PublicRoomActivity = {
   publicLastSeenAt: Date | null;
 };
 
-/** Uma sala só merece vitrine quando o anfitrião a listou, há gente e mídia ao vivo. */
+/** Uma sala pública aparece na vitrine assim que alguém entra; vídeo e tela são detalhes opcionais do cartão. */
 export function isPublicLiveEligible(room: PublicRoomActivity, now: Date, staleAfterMs = 90_000): boolean {
   const lastSeenAt = room.publicLastSeenAt;
   return room.visibility === "PUBLIC"
     && room.activeParticipants > 0
-    && room.activeMedia > 0
     && Boolean(lastSeenAt)
     && now.getTime() - (lastSeenAt?.getTime() ?? 0) <= staleAfterMs;
 }
