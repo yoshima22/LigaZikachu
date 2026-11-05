@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { QuickRoomClient } from "@/components/quick-room/quick-room-client";
-import { getActiveRoom } from "@/lib/quick-room";
+import { getActiveRoom, roomLabel } from "@/lib/quick-room";
 
 export const dynamic = "force-dynamic";
 
@@ -27,5 +27,5 @@ export default async function QuickRoomPage({ params }: { params: Promise<{ code
     );
   }
 
-  return <QuickRoomClient code={room.code} hasPassword={Boolean(room.passwordHash)} />;
+  return <QuickRoomClient code={room.code} label={roomLabel(room.code)} hasPassword={Boolean(room.passwordHash)} />;
 }

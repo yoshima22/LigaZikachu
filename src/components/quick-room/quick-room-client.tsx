@@ -16,10 +16,14 @@ type Peer = {
   ignoreOffer: boolean;
   stream: MediaStream;
   senders: { mic: RTCRtpSender[]; screen: RTCRtpSender[] };
+  relayTimer?: number;
 };
 
 const MAX_CHAT = 200;
+// Em malha, quem compartilha a tela envia um fluxo para cada pessoa: divide um orçamento total de upload.
 const SCREEN_MAX_BITRATE = 1_500_000;
+const SCREEN_MIN_BITRATE = 200_000;
+const SCREEN_UPLOAD_BUDGET = 4_000_000;
 
 function cleanName(raw: string) {
   return raw.replace(/\s+/g, " ").trim().slice(0, 24) || `Visitante ${Math.floor(1000 + Math.random() * 9000)}`;
@@ -41,7 +45,7 @@ function RemoteMedia({ member, stream, version }: { member: Member; stream: Medi
   );
 }
 
-export function QuickRoomClient({ code, hasPassword }: { code: string; hasPassword: boolean }) {
+export function QuickRoomClient({ code, label, hasPassword }: { code: string; label: string; hasPassword: boolean }) {
   const [phase, setPhase] = useState<"form" | "joining" | "in">("form");
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -52,6 +56,10 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
   const [micOn, setMicOn] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [needsCode, setNeedsCode] = useState(false);
+  const [relayCode, setRelayCode] = useState("");
+  const [relayBusy, setRelayBusy] = useState(false);
+  const [relayMsg, setRelayMsg] = useState<string | null>(null);
   const [, setVersion] = useState(0); // força re-render quando faixas remotas mudam
   const version = useRef(0);
 
@@ -59,7 +67,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
   const myName = useRef("");
   const topic = useRef("");
   const iceServers = useRef<RTCIceServer[]>([]);
-  const maxParticipants = useRef(6);
+  const maxParticipants = useRef(13);
   const supabase = useRef<SupabaseClient | null>(null);
   const channel = useRef<RealtimeChannel | null>(null);
   const peers = useRef(new Map<string, Peer>());
@@ -69,6 +77,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
   const beat = useRef<number | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
   const memberState = useRef({ mic: false, sharing: false });
+  const relayOn = useRef(false);
 
   const bump = useCallback(() => { version.current += 1; setVersion(version.current); }, []);
 
@@ -83,6 +92,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
   const closePeer = useCallback((id: string) => {
     const peer = peers.current.get(id);
     if (!peer) return;
+    if (peer.relayTimer) window.clearTimeout(peer.relayTimer);
     peer.pc.onnegotiationneeded = null;
     peer.pc.onicecandidate = null;
     peer.pc.ontrack = null;
@@ -91,18 +101,61 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
     bump();
   }, [bump]);
 
-  const addLocalTracks = useCallback((peer: Peer, kind: "mic" | "screen", stream: MediaStream) => {
-    for (const track of stream.getTracks()) {
-      const sender = peer.pc.addTrack(track, stream);
-      peer.senders[kind].push(sender);
-      if (kind === "screen" && track.kind === "video") {
+  /** Reparte o orçamento de upload da tela entre os espectadores (com 12 pessoas, ~330 kbps cada). */
+  const applyScreenBitrate = useCallback(() => {
+    const viewers = Math.max(1, peers.current.size);
+    const bitrate = Math.round(Math.min(SCREEN_MAX_BITRATE, Math.max(SCREEN_MIN_BITRATE, SCREEN_UPLOAD_BUDGET / viewers)));
+    for (const peer of peers.current.values()) {
+      for (const sender of peer.senders.screen) {
+        if (sender.track?.kind !== "video") continue;
         const params = sender.getParameters();
         if (!params.encodings?.length) params.encodings = [{}];
-        params.encodings[0].maxBitrate = SCREEN_MAX_BITRATE;
+        if (params.encodings[0].maxBitrate === bitrate) continue;
+        params.encodings[0].maxBitrate = bitrate;
         void sender.setParameters(params).catch(() => null);
       }
     }
   }, []);
+
+  const addLocalTracks = useCallback((peer: Peer, kind: "mic" | "screen", stream: MediaStream) => {
+    for (const track of stream.getTracks()) {
+      const sender = peer.pc.addTrack(track, stream);
+      peer.senders[kind].push(sender);
+    }
+    applyScreenBitrate();
+  }, [applyScreenBitrate]);
+
+  /**
+   * Conexão reforçada (relay/TURN): só quando a direta falha. O servidor decide quem pode (login, código de
+   * convite da Liga ou código livre do admin). Sem permissão, o jogador é convidado a informar um código.
+   */
+  const requestRelay = useCallback(async (inviteCode?: string): Promise<boolean> => {
+    if (relayOn.current) return true;
+    try {
+      const res = await fetch(`/api/salas/${code}/turn`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ topic: topic.current, inviteCode }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.needsCode) setNeedsCode(true);
+        setRelayMsg(data.error ?? "Conexão reforçada indisponível.");
+        return false;
+      }
+      relayOn.current = true;
+      iceServers.current = data.iceServers;
+      setNeedsCode(false);
+      setRelayMsg(null);
+      for (const peer of peers.current.values()) {
+        peer.pc.setConfiguration({ iceServers: data.iceServers });
+        if (peer.pc.connectionState !== "connected") peer.pc.restartIce();
+      }
+      return true;
+    } catch {
+      return false;
+    }
+  }, [code]);
 
   const createPeer = useCallback((id: string): Peer => {
     const existing = peers.current.get(id);
@@ -127,14 +180,18 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
       event.track.onended = () => { peer.stream.removeTrack(event.track); bump(); };
       bump();
     };
-    pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") pc.restartIce(); };
+    pc.onconnectionstatechange = () => {
+      if (pc.connectionState === "failed") { void requestRelay(); pc.restartIce(); }
+    };
+    // Se em 12 s ainda não conectou, a rede provavelmente bloqueia a conexão direta: tenta o relay.
+    peer.relayTimer = window.setTimeout(() => { if (pc.connectionState !== "connected") void requestRelay(); }, 12_000);
 
     if (micStream.current) addLocalTracks(peer, "mic", micStream.current);
     if (screenStream.current) addLocalTracks(peer, "screen", screenStream.current);
     // Quem tem o menor id inicia: o canal de dados dispara a primeira negociação mesmo sem mídia.
     if (myId.current < id) pc.createDataChannel("keepalive");
     return peer;
-  }, [addLocalTracks, bump, sendSignal]);
+  }, [addLocalTracks, bump, requestRelay, sendSignal]);
 
   const onSignal = useCallback(async (payload: SignalPayload) => {
     if (payload.to !== myId.current) return;
@@ -167,6 +224,9 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
     if (channel.current) void supabase.current?.removeChannel(channel.current);
     channel.current = null;
     memberState.current = { mic: false, sharing: false };
+    relayOn.current = false;
+    setNeedsCode(false);
+    setRelayMsg(null);
     setMicOn(false);
     setSharing(false);
     setMembers([]);
@@ -188,11 +248,11 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
       if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar na sala.");
       topic.current = data.topic;
       iceServers.current = data.iceServers ?? [];
-      maxParticipants.current = data.maxParticipants ?? 6;
+      maxParticipants.current = data.maxParticipants ?? 13;
 
       const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
       const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
-      if (!url || !key) throw new Error("Tempo real indisponível.");
+      if (!url || !key) throw new Error("Tempo real indisponível neste ambiente (chave pública do Supabase não configurada).");
       myId.current = crypto.randomUUID();
       myName.current = cleanName(name);
       supabase.current ??= createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false }, realtime: { params: { eventsPerSecond: 10 } } });
@@ -227,6 +287,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
         const others = new Set(list.map((m) => m.id).filter((id) => id !== myId.current));
         for (const id of others) createPeer(id);
         for (const id of [...peers.current.keys()]) if (!others.has(id)) closePeer(id);
+        applyScreenBitrate();
       });
 
       await new Promise<void>((resolve, reject) => {
@@ -319,7 +380,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
       <main className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
         <div className="w-full space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
           <p className="text-xs uppercase tracking-widest text-[#FFCB05]">Sala rápida</p>
-          <h1 className="text-xl font-bold text-white">Entrar na sala</h1>
+          <h1 className="text-xl font-bold text-white">Entrar na {label}</h1>
           <p className="text-sm text-slate-400">Sem cadastro. Escolha um apelido para entrar com voz, tela e chat.</p>
           <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
           {hasPassword && (
@@ -329,7 +390,10 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
           <button onClick={join} disabled={phase === "joining" || (hasPassword && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">
             {phase === "joining" ? "Entrando..." : "Entrar"}
           </button>
-          <Link href="/salas" className="block text-center text-xs text-slate-500 hover:text-slate-300">Criar outra sala</Link>
+          <div className="flex justify-between text-xs text-slate-500">
+            <Link href="/" className="hover:text-slate-300">← Liga Zikachu</Link>
+            <Link href="/salas" className="hover:text-slate-300">Criar outra sala</Link>
+          </div>
         </div>
       </main>
     );
@@ -340,7 +404,7 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
     <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-3 sm:p-6">
       <header className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3">
         <div className="flex items-center gap-2 text-sm text-slate-300">
-          <Users size={16} /> {members.length} na sala · <span className="font-mono text-slate-400">{code}</span>
+          <Users size={16} /> <span className="font-bold text-white">{label}</span> · {members.length} na sala
         </div>
         <div className="flex items-center gap-2">
           <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied ? "Link copiado" : "Copiar link"}</button>
@@ -348,6 +412,22 @@ export function QuickRoomClient({ code, hasPassword }: { code: string; hasPasswo
       </header>
 
       {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</p>}
+
+      {(needsCode || relayMsg) && (
+        <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
+          <p>{needsCode ? "Não foi possível conectar direto com alguém na sala. Para ativar a conexão reforçada, informe um código de convite da Liga." : relayMsg}</p>
+          {needsCode && (
+            <form
+              onSubmit={async (e) => { e.preventDefault(); setRelayBusy(true); await requestRelay(relayCode); setRelayBusy(false); }}
+              className="flex gap-2"
+            >
+              <input value={relayCode} onChange={(e) => setRelayCode(e.target.value)} inputMode="numeric" maxLength={32} placeholder="Código de convite" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+              <button type="submit" disabled={relayBusy || !relayCode.trim()} className="rounded-lg bg-[#FFCB05] px-3 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">{relayBusy ? "..." : "Ativar"}</button>
+            </form>
+          )}
+          {relayMsg && needsCode && <p className="text-xs text-amber-300">{relayMsg}</p>}
+        </div>
+      )}
 
       <div className="grid flex-1 gap-3 lg:grid-cols-[1fr_320px]">
         <section className="space-y-3">

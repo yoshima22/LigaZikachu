@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { getActiveRoom, getIceServers, roomTopic } from "@/lib/quick-room";
+import { getActiveRoom, roomLabel, roomTopic, STUN_SERVERS } from "@/lib/quick-room";
 
 export const runtime = "nodejs";
 
@@ -30,6 +30,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   return NextResponse.json({
     topic: roomTopic(room),
     maxParticipants: room.maxParticipants,
-    iceServers: await getIceServers(),
+    label: roomLabel(room.code),
+    iceServers: STUN_SERVERS,
   });
 }

@@ -34,6 +34,7 @@ import {
   ScrollText,
   Dna,
   MapPinned,
+  Radio,
   Zap,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -67,6 +68,7 @@ const mainLinks = [
     adminOnly: false,
     tutorialId: undefined,
   },
+  { href: "/salas", label: "Salas (voz e tela)", icon: Radio, adminOnly: false, tutorialId: undefined },
 ];
 
 const combatLinks = [

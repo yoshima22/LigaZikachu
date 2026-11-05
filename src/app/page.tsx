@@ -18,6 +18,7 @@ import {
   Star,
   Package,
   Clock,
+  Radio,
 } from "lucide-react";
 
 export default async function HomePage() {
@@ -83,6 +84,12 @@ export default async function HomePage() {
                   <Button size="lg" variant="outline" className="border-slate-600 text-slate-300 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]">
                     <Trophy size={16} className="mr-2" />
                     Ver campeonatos
+                  </Button>
+                </Link>
+                <Link href="/salas">
+                  <Button size="lg" variant="outline" className="border-slate-600 text-slate-300 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]">
+                    <Radio size={16} className="mr-2" />
+                    Salas de voz e tela
                   </Button>
                 </Link>
               </div>

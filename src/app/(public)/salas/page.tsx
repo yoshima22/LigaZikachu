@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { CreateRoomForm } from "./create-room-form";
 
 export const metadata: Metadata = {
@@ -18,7 +19,8 @@ export default function QuickRoomHomePage() {
           </p>
         </div>
         <CreateRoomForm />
-        <p className="text-xs text-slate-500">Até 6 pessoas por sala. Quem tiver o link (e a senha, se houver) entra.</p>
+        <Link href="/" className="block text-xs text-slate-500 hover:text-slate-300">← Voltar para a Liga Zikachu</Link>
+        <p className="text-xs text-slate-500">Até 13 pessoas por sala (a tela fica mais leve quanto mais gente assiste). Quem tiver o link (e a senha, se houver) entra.</p>
       </div>
     </main>
   );

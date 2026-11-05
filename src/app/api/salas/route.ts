@@ -3,7 +3,7 @@ import { randomBytes } from "crypto";
 import { prisma } from "@/lib/prisma";
 import { hashPassword } from "@/lib/auth/password";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { generateRoomCode, ROOM_GLOBAL_CAP, ROOM_IDLE_MS, ROOM_MAX_PARTICIPANTS } from "@/lib/quick-room";
+import { generateRoomCode, roomLabel, ROOM_GLOBAL_CAP, ROOM_IDLE_MS, ROOM_MAX_PARTICIPANTS } from "@/lib/quick-room";
 
 export const runtime = "nodejs";
 
@@ -30,5 +30,5 @@ export async function POST(request: Request) {
     },
     select: { code: true },
   });
-  return NextResponse.json({ code: room.code });
+  return NextResponse.json({ code: room.code, label: roomLabel(room.code) });
 }
