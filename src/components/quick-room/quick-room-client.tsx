@@ -9,10 +9,11 @@ import {
 } from "lucide-react";
 import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
 
-type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string };
+type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string };
 type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boolean };
 type SignalPayload = { from: string; to: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
-type WatchPayload = { from: string; to: string; on: boolean };
+type MediaKind = "screen" | "camera";
+type WatchPayload = { from: string; to: string; source: MediaKind; on: boolean };
 type Peer = {
   pc: RTCPeerConnection;
   polite: boolean;
@@ -20,9 +21,9 @@ type Peer = {
   ignoreOffer: boolean;
   /** Streams recebidas deste participante, por id (voz e tela chegam em streams separadas). */
   streams: Map<string, MediaStream>;
-  senders: { mic: RTCRtpSender[]; screen: RTCRtpSender[] };
+  senders: { mic: RTCRtpSender[]; screen: RTCRtpSender[]; camera: RTCRtpSender[] };
   /** Este participante pediu para assistir a MINHA tela (só então eu envio vídeo para ele). */
-  viewing: boolean;
+  viewing: Record<MediaKind, boolean>;
   relayTimer?: number;
 };
 
@@ -31,6 +32,11 @@ const MAX_CHAT = 200;
 const SCREEN_MAX_BITRATE = 1_500_000;
 const SCREEN_MIN_BITRATE = 200_000;
 const SCREEN_UPLOAD_BUDGET = 4_000_000;
+const sourceKey = (id: string, source: MediaKind) => `${id}:${source}`;
+const parseSourceKey = (value: string): { id: string; source: MediaKind } | null => {
+  const match = /^(.*):(screen|camera)$/.exec(value);
+  return match ? { id: match[1], source: match[2] as MediaKind } : null;
+};
 
 function cleanName(raw: string) {
   return raw.replace(/\s+/g, " ").trim().slice(0, 24) || `Visitante ${Math.floor(1000 + Math.random() * 9000)}`;
@@ -38,7 +44,7 @@ function cleanName(raw: string) {
 
 /** Janela de uma tela compartilhada, no estilo de player: volume, tela cheia (botão ou duplo clique) e fechar. */
 function ScreenTile({ title, stream, ownPreview, version, onClose }: {
-  title: string; stream: MediaStream | undefined; ownPreview?: boolean; version: number; onClose: () => void;
+  title: string; stream: MediaStream | undefined; ownPreview?: boolean; version: number; onClose?: () => void;
 }) {
   const wrap = useRef<HTMLDivElement>(null);
   const video = useRef<HTMLVideoElement>(null);
@@ -81,7 +87,7 @@ function ScreenTile({ title, stream, ownPreview, version, onClose }: {
       )}
       <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-3 py-2 text-xs text-white">
         <span className="font-semibold">{title}</span>
-        <button onClick={onClose} aria-label={`Parar de assistir ${title}`} className="rounded-full bg-black/50 p-1.5 hover:bg-black/80"><X size={14} /></button>
+        {onClose && <button onClick={onClose} aria-label={`Parar de assistir ${title}`} className="rounded-full bg-black/50 p-1.5 hover:bg-black/80"><X size={14} /></button>}
       </div>
       <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
         {!ownPreview && (
@@ -129,6 +135,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [draft, setDraft] = useState("");
   const [micOn, setMicOn] = useState(false);
   const [cameraOn, setCameraOn] = useState(false);
+  const [isHost, setIsHost] = useState(false);
+  const [isHidden, setIsHidden] = useState(false);
   const [startWithMic, setStartWithMic] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -155,7 +163,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const lastChatAt = useRef(0);
   const beat = useRef<number | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
-  const memberState = useRef<{ mic: boolean; sharing: boolean; screenId?: string }>({ mic: false, sharing: false });
+  const memberState = useRef<{ mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string }>({ mic: false, sharing: false, camera: false });
   const relayOn = useRef(false);
   const watchingRef = useRef<string[]>([]);
   const knownSharers = useRef(new Set<string>());
@@ -167,8 +175,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const sendSignal = useCallback((to: string, body: { description?: RTCSessionDescriptionInit | null; candidate?: RTCIceCandidateInit }) => {
     void channel.current?.send({ type: "broadcast", event: "signal", payload: { from: myId.current, to, ...body } });
   }, []);
-  const sendWatch = useCallback((to: string, on: boolean) => {
-    void channel.current?.send({ type: "broadcast", event: "watch", payload: { from: myId.current, to, on } satisfies WatchPayload });
+  const sendWatch = useCallback((to: string, source: MediaKind, on: boolean) => {
+    void channel.current?.send({ type: "broadcast", event: "watch", payload: { from: myId.current, to, source, on } satisfies WatchPayload });
   }, []);
   const publishPresence = useCallback(() => {
     void channel.current?.track({ name: myName.current, ...memberState.current });
@@ -188,26 +196,35 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
   /** Liga/desliga o envio da minha tela para um participante e reparte o upload entre quem assiste. */
   const applyScreenState = useCallback((peer: Peer) => {
-    const viewers = [...peers.current.values()].filter((p) => p.viewing).length;
+    const viewers = [...peers.current.values()].filter((p) => p.viewing.screen).length;
     const bitrate = Math.round(Math.min(SCREEN_MAX_BITRATE, Math.max(SCREEN_MIN_BITRATE, SCREEN_UPLOAD_BUDGET / Math.max(1, viewers))));
     for (const sender of peer.senders.screen) {
       const params = sender.getParameters();
       if (!params.encodings?.length) continue; // ainda não negociado: reaplica quando a sinalização estabilizar
       const enc = params.encodings[0];
       const isVideo = sender.track?.kind === "video";
-      if (enc.active === peer.viewing && (!isVideo || enc.maxBitrate === bitrate)) continue;
-      enc.active = peer.viewing;
+      if (enc.active === peer.viewing.screen && (!isVideo || enc.maxBitrate === bitrate)) continue;
+      enc.active = peer.viewing.screen;
       if (isVideo) enc.maxBitrate = bitrate;
       void sender.setParameters(params).catch(() => null);
     }
   }, []);
   const applyAllScreenState = useCallback(() => {
-    for (const peer of peers.current.values()) applyScreenState(peer);
+    for (const peer of peers.current.values()) {
+      applyScreenState(peer);
+      for (const sender of peer.senders.camera) {
+        const params = sender.getParameters();
+        if (!params.encodings?.length || params.encodings[0].active === peer.viewing.camera) continue;
+        params.encodings[0].active = peer.viewing.camera;
+        void sender.setParameters(params).catch(() => null);
+      }
+    }
   }, [applyScreenState]);
 
-  const addLocalTracks = useCallback((peer: Peer, kind: "mic" | "screen", stream: MediaStream) => {
+  const addLocalTracks = useCallback((peer: Peer, kind: "mic" | "screen" | "camera", stream: MediaStream) => {
     for (const track of stream.getTracks()) peer.senders[kind].push(peer.pc.addTrack(track, stream));
     if (kind === "screen") applyScreenState(peer);
+    if (kind === "camera") applyAllScreenState();
   }, [applyScreenState]);
 
   /**
@@ -249,7 +266,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     // Negociação perfeita: o id maior é "educado" e cede quando as duas pontas oferecem ao mesmo tempo.
     const peer: Peer = {
       pc, polite: myId.current > id, makingOffer: false, ignoreOffer: false,
-      streams: new Map(), senders: { mic: [], screen: [] }, viewing: false,
+      streams: new Map(), senders: { mic: [], screen: [], camera: [] }, viewing: { screen: false, camera: false },
     };
     peers.current.set(id, peer);
 
@@ -278,6 +295,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
     if (micStream.current) addLocalTracks(peer, "mic", micStream.current);
     if (screenStream.current) addLocalTracks(peer, "screen", screenStream.current);
+    if (cameraStream.current) addLocalTracks(peer, "camera", cameraStream.current);
     // Quem tem o menor id inicia: o canal de dados dispara a primeira negociação mesmo sem mídia.
     if (myId.current < id) pc.createDataChannel("keepalive");
     return peer;
@@ -305,11 +323,22 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
   const onWatch = useCallback((payload: WatchPayload) => {
     if (payload.to !== myId.current) return;
-    createPeer(payload.from).viewing = !!payload.on;
+    const source = payload.source === "camera" ? "camera" : "screen";
+    createPeer(payload.from).viewing[source] = !!payload.on;
     applyAllScreenState();
   }, [applyAllScreenState, createPeer]);
 
   const leave = useCallback(() => {
+    const token = participantToken.current;
+    if (token) {
+      void fetch(`/api/salas/${code}/leave`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ participantToken: token }),
+        keepalive: true,
+      }).catch(() => null);
+    }
+    participantToken.current = "";
     if (beat.current) window.clearInterval(beat.current);
     beat.current = null;
     for (const id of [...peers.current.keys()]) closePeer(id);
@@ -321,7 +350,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     cameraStream.current = null;
     if (channel.current) void supabase.current?.removeChannel(channel.current);
     channel.current = null;
-    memberState.current = { mic: false, sharing: false };
+    memberState.current = { mic: false, sharing: false, camera: false };
     relayOn.current = false;
     knownSharers.current = new Set();
     watchingRef.current = [];
@@ -330,9 +359,10 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     setRelayMsg(null);
     setMicOn(false);
     setCameraOn(false);
+    setIsHidden(false);
     setSharing(false);
     setMembers([]);
-  }, [closePeer]);
+  }, [closePeer, code]);
 
   useEffect(() => leave, [leave]);
   // Lembra o apelido usado da última vez neste aparelho.
@@ -345,7 +375,10 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   useEffect(() => {
     if (phase !== "in") return;
     const iv = window.setInterval(() => {
-      for (const id of watchingRef.current) if (id !== myId.current) sendWatch(id, true);
+      for (const value of watchingRef.current) {
+        const watchedSource = parseSourceKey(value);
+        if (watchedSource && watchedSource.id !== myId.current) sendWatch(watchedSource.id, watchedSource.source, true);
+      }
     }, 4000);
     return () => window.clearInterval(iv);
   }, [phase, sendWatch]);
@@ -363,6 +396,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar na sala.");
       topic.current = data.topic;
       participantToken.current = data.participantToken ?? "";
+      setIsHost(Boolean(data.isHost));
       iceServers.current = data.iceServers ?? [];
       maxParticipants.current = data.maxParticipants ?? 13;
 
@@ -385,11 +419,11 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       });
       let firstSync = true;
       ch.on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean; screenId?: string }>>;
+        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean; screenId?: string; camera?: boolean; cameraId?: string }>>;
         // Cada track() novo acrescenta uma meta: vale a mais recente (a última).
         const list: Member[] = Object.entries(state).map(([id, metas]) => {
           const meta = metas[metas.length - 1];
-          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing, screenId: meta?.screenId };
+          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing, screenId: meta?.screenId, camera: !!meta?.camera, cameraId: meta?.cameraId };
         });
         if (firstSync) {
           firstSync = false;
@@ -409,9 +443,14 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         // Telas: quem parou de compartilhar sai da lista de assistidas; se nada está sendo assistido,
         // a primeira tela nova abre sozinha (o jogador pode fechar ou escolher outras).
         const sharerIds = new Set(list.filter((m) => m.sharing && m.id !== myId.current).map((m) => m.id));
-        let next = watchingRef.current.filter((id) => (id === myId.current ? memberState.current.sharing : sharerIds.has(id)));
+        const availableSources = new Set(list.flatMap((member) => [
+          ...(member.sharing ? [sourceKey(member.id, "screen")] : []),
+          ...(member.camera ? [sourceKey(member.id, "camera")] : []),
+        ]));
+        let next = watchingRef.current.filter((value) => availableSources.has(value));
         for (const id of sharerIds) {
-          if (!knownSharers.current.has(id) && next.length === 0) { next = [id]; sendWatch(id, true); }
+          const screen = sourceKey(id, "screen");
+          if (!knownSharers.current.has(id) && !next.some((value) => parseSourceKey(value)?.source === "screen")) { next = [...next, screen]; sendWatch(id, "screen", true); }
         }
         knownSharers.current = sharerIds;
         if (next.length !== watchingRef.current.length || next.some((id, i) => id !== watchingRef.current[i])) updateWatching(next);
@@ -427,9 +466,16 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         });
       });
       publishPresence();
-      beat.current = window.setInterval(() => {
-        void fetch(`/api/salas/${code}/heartbeat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: topic.current, participantToken: participantToken.current, media: { micOn: memberState.current.mic, screenOn: memberState.current.sharing, cameraOn: false } }) }).catch(() => null);
-      }, 60_000);
+      const keepAlive = async () => {
+        const response = await fetch(`/api/salas/${code}/heartbeat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: topic.current, participantToken: participantToken.current, media: { micOn: memberState.current.mic, screenOn: memberState.current.sharing, cameraOn: memberState.current.camera } }) }).catch(() => null);
+        if (response && !response.ok) {
+          leave();
+          setError("A sala foi encerrada pelo anfitrião ou expirou.");
+          setPhase("form");
+        }
+      };
+      void keepAlive();
+      beat.current = window.setInterval(() => { void keepAlive(); }, 60_000);
       setPhase("in");
       if (startWithMic) await toggleMic();
     } catch (e) {
@@ -474,7 +520,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     setSharing(false);
     memberState.current.sharing = false;
     memberState.current.screenId = undefined;
-    if (watchingRef.current.includes(myId.current)) updateWatching(watchingRef.current.filter((id) => id !== myId.current));
+    const ownScreen = sourceKey(myId.current, "screen");
+    if (watchingRef.current.includes(ownScreen)) updateWatching(watchingRef.current.filter((id) => id !== ownScreen));
     publishPresence();
   }, [publishPresence, updateWatching]);
 
@@ -494,25 +541,46 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     } catch { /* usuário cancelou o seletor */ } finally { screenBusy.current = false; }
   };
 
-  const toggleCamera = async () => {
+  const stopCamera = useCallback(() => {
     if (cameraStream.current) {
       cameraStream.current.getTracks().forEach((track) => track.stop());
-      for (const peer of peers.current.values()) { peer.senders.screen.forEach((sender) => { try { peer.pc.removeTrack(sender); } catch {} }); peer.senders.screen = []; }
-      cameraStream.current = null; setCameraOn(false); setSharing(false); memberState.current.sharing = false; memberState.current.screenId = undefined; publishPresence(); return;
+      for (const peer of peers.current.values()) {
+        peer.senders.camera.forEach((sender) => { try { peer.pc.removeTrack(sender); } catch { /* track já removida */ } });
+        peer.senders.camera = [];
+      }
+      cameraStream.current = null;
+      setCameraOn(false);
+      memberState.current.camera = false;
+      memberState.current.cameraId = undefined;
+      const ownCamera = sourceKey(myId.current, "camera");
+      if (watchingRef.current.includes(ownCamera)) updateWatching(watchingRef.current.filter((id) => id !== ownCamera));
+      publishPresence();
+    }
+  }, [publishPresence, updateWatching]);
+
+  const toggleCamera = async () => {
+    if (cameraStream.current) {
+      stopCamera();
+      return;
     }
     try {
-      if (screenStream.current) stopScreen();
       const stream = await navigator.mediaDevices.getUserMedia({ video: true });
       cameraStream.current = stream;
-      for (const peer of peers.current.values()) addLocalTracks(peer, "screen", stream);
-      setCameraOn(true); setSharing(true); memberState.current.sharing = true; memberState.current.screenId = stream.id; publishPresence();
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => { if (cameraStream.current === stream) stopCamera(); });
+      for (const peer of peers.current.values()) addLocalTracks(peer, "camera", stream);
+      setCameraOn(true);
+      memberState.current.camera = true;
+      memberState.current.cameraId = stream.id;
+      updateWatching([...watchingRef.current, sourceKey(myId.current, "camera")]);
+      publishPresence();
     } catch { setError("Não foi possível acessar a câmera. Verifique a permissão do navegador."); }
   };
 
-  const toggleWatch = (id: string) => {
-    const on = !watchingRef.current.includes(id);
-    updateWatching(on ? [...watchingRef.current, id] : watchingRef.current.filter((x) => x !== id));
-    if (id !== myId.current) sendWatch(id, on);
+  const toggleWatch = (id: string, source: MediaKind) => {
+    const key = sourceKey(id, source);
+    const on = !watchingRef.current.includes(key);
+    updateWatching(on ? [...watchingRef.current, key] : watchingRef.current.filter((value) => value !== key));
+    if (id !== myId.current) sendWatch(id, source, on);
   };
 
   const sendChat = () => {
@@ -529,6 +597,17 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     await navigator.clipboard.writeText(window.location.href).catch(() => null);
     setCopied(true);
     window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  const hostAction = async (action: "HIDE" | "END") => {
+    const hostToken = sessionStorage.getItem("zikachat:host:" + code);
+    if (!hostToken) return;
+    const response = await fetch(`/api/salas/${code}/host`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ hostToken, action }) });
+    if (!response.ok) { setError("Não foi possível atualizar os controles da sala."); return; }
+    if (action === "HIDE") { setIsHidden(true); setError("A sala foi ocultada da lista pública."); return; }
+    leave();
+    setError("Você encerrou a sala.");
+    setPhase("form");
   };
 
   const backButton = (
@@ -565,8 +644,16 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const others = members.filter((m) => m.id !== myId.current);
   const sharers = members.filter((m) => m.sharing);
   const watched = watching
-    .map((id) => members.find((m) => m.id === id))
+    .map((value) => parseSourceKey(value))
+    .filter((source): source is { id: string; source: MediaKind } => !!source && source.source === "screen")
+    .map(({ id }) => members.find((member) => member.id === id))
     .filter((m): m is Member => !!m);
+  const watchedCameras = watching
+    .map((value) => parseSourceKey(value))
+    .filter((source): source is { id: string; source: MediaKind } => !!source && source.source === "camera")
+    .map(({ id }) => members.find((member) => member.id === id))
+    .filter((m): m is Member => !!m);
+  const cameraMembers = members.filter((member) => member.camera);
   const gridCols = watched.length <= 1 ? "grid-cols-1" : watched.length <= 4 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3";
 
   return (
@@ -580,6 +667,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         </div>
         <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied ? "Link copiado" : "Copiar link"}</button>
       </header>
+
+      {isHost && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-3 text-sm text-slate-200"><span>Você é o anfitrião desta mesa{isHidden ? " oculta" : " pública"}.</span><div className="flex gap-2"><button disabled={isHidden} onClick={() => void hostAction("HIDE")} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50">{isHidden ? "Já está oculta" : "Ocultar da lista"}</button><button onClick={() => void hostAction("END")} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">Encerrar sala</button></div></div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</p>}
 
@@ -603,11 +692,11 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             {sharers.length === 0 && <span className="text-sm text-slate-500">Ninguém está compartilhando. Use “Compartilhar tela” para começar.</span>}
             {sharers.map((m) => {
               const isMe = m.id === myId.current;
-              const on = watching.includes(m.id);
+              const on = watching.includes(sourceKey(m.id, "screen"));
               return (
                 <button
                   key={m.id}
-                  onClick={() => toggleWatch(m.id)}
+                  onClick={() => toggleWatch(m.id, "screen")}
                   aria-pressed={on}
                   className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-600 text-slate-200 hover:border-slate-400"}`}
                 >
@@ -634,10 +723,25 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
                     ownPreview={isMe}
                     stream={isMe ? screenStream.current ?? undefined : peers.current.get(m.id)?.streams.get(m.screenId ?? "")}
                     version={version.current}
-                    onClose={() => toggleWatch(m.id)}
+                    onClose={() => toggleWatch(m.id, "screen")}
                   />
                 );
               })}
+            </div>
+          )}
+
+          {cameraMembers.length > 0 && (
+            <div>
+              <div className="mb-2 flex flex-wrap items-center gap-2"><p className="mr-1 text-xs font-semibold uppercase tracking-wide text-slate-400">Câmeras na mesa</p>{cameraMembers.map((member) => {
+                const on = watching.includes(sourceKey(member.id, "camera"));
+                return <button key={member.id} onClick={() => toggleWatch(member.id, "camera")} aria-pressed={on} className={`rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-cyan-300 bg-cyan-300/15 text-cyan-100" : "border-slate-600 text-slate-200 hover:border-slate-400"}`}>{member.id === myId.current ? "Sua câmera" : member.name}{on ? " · assistindo" : " · assistir"}</button>;
+              })}</div>
+              {watchedCameras.length > 0 && <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                {watchedCameras.map((member) => {
+                  const isMe = member.id === myId.current;
+                  return <ScreenTile key={member.id} title={isMe ? "Sua câmera" : member.name} ownPreview={isMe} stream={isMe ? cameraStream.current ?? undefined : peers.current.get(member.id)?.streams.get(member.cameraId ?? "")} version={version.current} onClose={() => toggleWatch(member.id, "camera")} />;
+                })}
+              </div>}
             </div>
           )}
 
@@ -650,7 +754,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             {members.map((m) => (
               <li key={m.id} className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-slate-300">
                 {m.mic ? <Mic size={12} className="text-emerald-400" /> : <MicOff size={12} className="text-slate-500" />}
-                {m.name}{m.id === myId.current ? " (você)" : ""}{m.sharing ? " · tela" : ""}
+                {m.name}{m.id === myId.current ? " (você)" : ""}{m.sharing ? " · tela" : ""}{m.camera ? " · câmera" : ""}
               </li>
             ))}
           </ul>

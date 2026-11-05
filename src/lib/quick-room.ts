@@ -22,31 +22,46 @@ function cleanName(value: unknown) { const name = typeof value === "string" ? va
 function roomVisibility(value: unknown): RoomVisibility { return value === "PUBLIC" ? "PUBLIC" : "UNLISTED"; }
 function activeLeaseCutoff(now = new Date()) { return new Date(now.getTime() - ROOM_LEASE_IDLE_MS); }
 
-export type PublicQuickRoom = { code: string; title: string; participants: number; cameras: number; screens: number };
+export type PublicQuickRoom = { publicId: string; title: string; participants: number; cameras: number; screens: number };
 
 export async function createQuickRoom(input: { password?: string; title?: unknown; visibility?: unknown }) {
   const active = await prisma.quickRoom.count({ where: { lastActiveAt: { gt: new Date(Date.now() - ROOM_IDLE_MS) } } });
   if (active >= ROOM_GLOBAL_CAP) throw new Error("ROOM_CAPACITY_REACHED");
   const hostToken = randomBytes(24).toString("base64url");
-  const room = await prisma.quickRoom.create({ data: { code: generateRoomCode(), topicSecret: randomBytes(16).toString("hex"), passwordHash: input.password || null, hostTokenHash: tokenHash(hostToken), title: cleanRoomTitle(input.title), visibility: roomVisibility(input.visibility), maxParticipants: ROOM_MAX_PARTICIPANTS }, select: { code: true, title: true, visibility: true } });
+  const room = await prisma.quickRoom.create({ data: { code: generateRoomCode(), publicId: randomBytes(12).toString("base64url"), topicSecret: randomBytes(16).toString("hex"), passwordHash: input.password || null, hostTokenHash: tokenHash(hostToken), title: cleanRoomTitle(input.title), visibility: roomVisibility(input.visibility), maxParticipants: ROOM_MAX_PARTICIPANTS }, select: { code: true, title: true, visibility: true } });
   return { ...room, hostToken };
 }
 
 export async function joinQuickRoom(input: { code: string; name?: unknown; passwordValid: boolean; hostToken?: string }) {
-  const now = new Date(); const cutoff = activeLeaseCutoff(now);
-  return prisma.$transaction(async (tx) => {
-    await tx.quickRoomParticipantLease.deleteMany({ where: { lastSeenAt: { lt: cutoff } } });
-    const room = await tx.quickRoom.findUnique({ where: { code: input.code } });
-    if (!room) return { error: "NOT_FOUND" as const };
-    if (!input.passwordValid) return { error: "PASSWORD" as const };
-    const active = await tx.quickRoomParticipantLease.count({ where: { roomId: room.id, lastSeenAt: { gte: cutoff } } });
-    if (active >= room.maxParticipants) return { error: "FULL" as const };
-    const participantToken = randomBytes(24).toString("base64url");
-    const isHost = Boolean(room.hostTokenHash && input.hostToken && tokenHash(input.hostToken) === room.hostTokenHash);
-    const lease = await tx.quickRoomParticipantLease.create({ data: { roomId: room.id, tokenHash: tokenHash(participantToken), name: cleanName(input.name), isHost }, select: { id: true, name: true, isHost: true } });
-    await tx.quickRoom.update({ where: { id: room.id }, data: { lastActiveAt: now, publicLastSeenAt: room.visibility === "PUBLIC" ? now : undefined } });
-    return { room, lease, participantToken };
-  }, { isolationLevel: "Serializable" });
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const now = new Date(); const cutoff = activeLeaseCutoff(now);
+    try {
+      return await prisma.$transaction(async (tx) => {
+        await tx.quickRoomParticipantLease.deleteMany({ where: { lastSeenAt: { lt: cutoff } } });
+        const room = await tx.quickRoom.findUnique({ where: { code: input.code } });
+        if (!room) return { error: "NOT_FOUND" as const };
+        if (!input.passwordValid) return { error: "PASSWORD" as const };
+        const active = await tx.quickRoomParticipantLease.count({ where: { roomId: room.id, lastSeenAt: { gte: cutoff } } });
+        if (active >= room.maxParticipants) return { error: "FULL" as const };
+        const participantToken = randomBytes(24).toString("base64url");
+        const isHost = Boolean(room.hostTokenHash && input.hostToken && tokenHash(input.hostToken) === room.hostTokenHash);
+        const lease = await tx.quickRoomParticipantLease.create({ data: { roomId: room.id, tokenHash: tokenHash(participantToken), name: cleanName(input.name), isHost }, select: { id: true, name: true, isHost: true } });
+        await tx.quickRoom.update({ where: { id: room.id }, data: { lastActiveAt: now, publicLastSeenAt: room.visibility === "PUBLIC" ? now : undefined } });
+        return { room, lease, participantToken };
+      }, { isolationLevel: "Serializable" });
+    } catch (error) {
+      if (!(typeof error === "object" && error && "code" in error && error.code === "P2034") || attempt === 2) throw error;
+    }
+  }
+  throw new Error("JOIN_TRANSACTION_FAILED");
+}
+
+/** Resolve o cartão público sem expor o código de convite no feed. */
+export async function resolvePublicQuickRoom(publicId: string) {
+  const room = await prisma.quickRoom.findUnique({ where: { publicId }, select: { code: true, visibility: true, publicLastSeenAt: true, participantLeases: { where: { lastSeenAt: { gte: activeLeaseCutoff() } }, select: { cameraOn: true, screenOn: true } } } });
+  if (!room) return null;
+  const activeMedia = countActiveMedia(room.participantLeases);
+  return isPublicLiveEligible({ visibility: room.visibility, activeParticipants: room.participantLeases.length, activeMedia, publicLastSeenAt: room.publicLastSeenAt }, new Date()) ? room.code : null;
 }
 
 export async function refreshQuickRoomLease(input: { code: string; participantToken: string; media?: LeaseMedia }) {
@@ -85,8 +100,8 @@ export async function reportQuickRoom(code: string, reason: "ABUSE" | "HARASSMEN
 
 export async function listPublicQuickRooms(limit = 12): Promise<PublicQuickRoom[]> {
   const now = new Date(); const cutoff = activeLeaseCutoff(now);
-  const rooms = await prisma.quickRoom.findMany({ where: { visibility: "PUBLIC", publicLastSeenAt: { gte: cutoff } }, orderBy: { publicLastSeenAt: "desc" }, take: Math.min(Math.max(limit, 1), 24), select: { code: true, title: true, visibility: true, publicLastSeenAt: true, participantLeases: { where: { lastSeenAt: { gte: cutoff } }, select: { cameraOn: true, screenOn: true } } } });
-  return rooms.flatMap((room) => { const cameras = room.participantLeases.filter((lease) => lease.cameraOn).length; const screens = room.participantLeases.filter((lease) => lease.screenOn).length; const activeMedia = countActiveMedia(room.participantLeases); if (!isPublicLiveEligible({ visibility: room.visibility, activeParticipants: room.participantLeases.length, activeMedia, publicLastSeenAt: room.publicLastSeenAt }, now)) return []; return [{ code: room.code, title: room.title ?? roomLabel(room.code), participants: room.participantLeases.length, cameras, screens }]; });
+  const rooms = await prisma.quickRoom.findMany({ where: { visibility: "PUBLIC", publicLastSeenAt: { gte: cutoff } }, orderBy: { publicLastSeenAt: "desc" }, take: Math.min(Math.max(limit, 1), 24), select: { code: true, publicId: true, title: true, visibility: true, publicLastSeenAt: true, participantLeases: { where: { lastSeenAt: { gte: cutoff } }, select: { cameraOn: true, screenOn: true } } } });
+  return rooms.flatMap((room) => { const cameras = room.participantLeases.filter((lease) => lease.cameraOn).length; const screens = room.participantLeases.filter((lease) => lease.screenOn).length; const activeMedia = countActiveMedia(room.participantLeases); if (!room.publicId || !isPublicLiveEligible({ visibility: room.visibility, activeParticipants: room.participantLeases.length, activeMedia, publicLastSeenAt: room.publicLastSeenAt }, now)) return []; return [{ publicId: room.publicId, title: room.title ?? roomLabel(room.code), participants: room.participantLeases.length, cameras, screens }]; });
 }
 
 /** Busca a sala; se estiver parada além do limite, apaga e devolve null. */

@@ -5427,6 +5427,7 @@ model QuickRoom {
   topicSecret     String
   passwordHash    String?
   hostTokenHash   String?
+  publicId        String?  @unique
   title           String?
   visibility      QuickRoomVisibility @default(UNLISTED)
   publicLastSeenAt DateTime?
