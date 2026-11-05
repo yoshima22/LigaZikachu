@@ -14,6 +14,7 @@ type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boo
 type SignalPayload = { from: string; to: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 type MediaKind = "screen" | "camera";
 type WatchPayload = { from: string; to: string; source: MediaKind; on: boolean };
+type LiveAlert = { id: string; name: string; source: MediaKind };
 type Peer = {
   pc: RTCPeerConnection;
   polite: boolean;
@@ -137,6 +138,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [cameraOn, setCameraOn] = useState(false);
   const [isHost, setIsHost] = useState(false);
   const [isHidden, setIsHidden] = useState(false);
+  const [hasCreatorToken, setHasCreatorToken] = useState(false);
+  const [liveAlert, setLiveAlert] = useState<LiveAlert | null>(null);
   const [startWithMic, setStartWithMic] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
@@ -167,6 +170,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const relayOn = useRef(false);
   const watchingRef = useRef<string[]>([]);
   const knownSharers = useRef(new Set<string>());
+  const knownSources = useRef(new Set<string>());
   const screenBusy = useRef(false);
 
   const bump = useCallback(() => { version.current += 1; setVersion(version.current); }, []);
@@ -353,6 +357,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     memberState.current = { mic: false, sharing: false, camera: false };
     relayOn.current = false;
     knownSharers.current = new Set();
+    knownSources.current = new Set();
     watchingRef.current = [];
     setWatching([]);
     setNeedsCode(false);
@@ -369,6 +374,9 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   useEffect(() => {
     try { const saved = window.localStorage.getItem("zikachat:name"); if (saved) setName(saved); } catch { /* ignora */ }
   }, []);
+  useEffect(() => {
+    try { setHasCreatorToken(Boolean(sessionStorage.getItem("zikachat:host:" + code))); } catch { /* armazenamento indisponível */ }
+  }, [code]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ block: "end" }); }, [chat]);
 
   // Reenvia o pedido de "assistir" a cada 4 s: garante que o outro lado o receba mesmo se chegou antes da conexão.
@@ -397,6 +405,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       topic.current = data.topic;
       participantToken.current = data.participantToken ?? "";
       setIsHost(Boolean(data.isHost));
+      if (data.isHost) setHasCreatorToken(true);
       iceServers.current = data.iceServers ?? [];
       maxParticipants.current = data.maxParticipants ?? 13;
 
@@ -443,10 +452,15 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
         // Telas: quem parou de compartilhar sai da lista de assistidas; se nada está sendo assistido,
         // a primeira tela nova abre sozinha (o jogador pode fechar ou escolher outras).
         const sharerIds = new Set(list.filter((m) => m.sharing && m.id !== myId.current).map((m) => m.id));
-        const availableSources = new Set(list.flatMap((member) => [
-          ...(member.sharing ? [sourceKey(member.id, "screen")] : []),
-          ...(member.camera ? [sourceKey(member.id, "camera")] : []),
-        ]));
+        const sourceOwners = list.flatMap((member) => [
+          ...(member.id !== myId.current && member.sharing ? [{ key: sourceKey(member.id, "screen"), id: member.id, name: member.name, source: "screen" as const }] : []),
+          ...(member.id !== myId.current && member.camera ? [{ key: sourceKey(member.id, "camera"), id: member.id, name: member.name, source: "camera" as const }] : []),
+        ]);
+        const availableSources = new Set([...sourceOwners.map((item) => item.key), ...(memberState.current.sharing ? [sourceKey(myId.current, "screen")] : []), ...(memberState.current.camera ? [sourceKey(myId.current, "camera")] : [])]);
+        const newlyLive = sourceOwners.find((item) => !knownSources.current.has(item.key));
+        if (newlyLive) setLiveAlert({ id: newlyLive.id, name: newlyLive.name, source: newlyLive.source });
+        if (liveAlert && !availableSources.has(sourceKey(liveAlert.id, liveAlert.source))) setLiveAlert(null);
+        knownSources.current = new Set(sourceOwners.map((item) => item.key));
         let next = watchingRef.current.filter((value) => availableSources.has(value));
         for (const id of sharerIds) {
           const screen = sourceKey(id, "screen");
@@ -627,11 +641,11 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
           <form onSubmit={(e) => { e.preventDefault(); if (phase !== "joining") void join(); }} className="space-y-4">
             <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" aria-label="Seu apelido" autoFocus autoComplete="nickname" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
             <label className="flex items-center gap-2 text-sm text-slate-300"><input type="checkbox" checked={startWithMic} onChange={(e) => setStartWithMic(e.target.checked)} /> Entrar com microfone ligado</label>
-            {hasPassword && (
+            {hasPassword && !hasCreatorToken && (
               <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" aria-label="Senha da sala" autoComplete="off" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05]" />
             )}
             {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
-            <button type="submit" disabled={phase === "joining" || (hasPassword && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50">
+            <button type="submit" disabled={phase === "joining" || (hasPassword && !hasCreatorToken && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white disabled:opacity-50">
               {phase === "joining" ? "Entrando..." : "Entrar"}
             </button>
           </form>
@@ -671,6 +685,8 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       {isHost && <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-4 py-3 text-sm text-slate-200"><span>Você é o anfitrião desta mesa{isHidden ? " oculta" : " pública"}.</span><div className="flex gap-2"><button disabled={isHidden} onClick={() => void hostAction("HIDE")} className="rounded-lg border border-white/15 px-3 py-1.5 text-xs font-semibold hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-50">{isHidden ? "Já está oculta" : "Ocultar da lista"}</button><button onClick={() => void hostAction("END")} className="rounded-lg bg-red-600 px-3 py-1.5 text-xs font-semibold text-white">Encerrar sala</button></div></div>}
 
       {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</p>}
+
+      {liveAlert && <button onClick={() => { toggleWatch(liveAlert.id, liveAlert.source); setLiveAlert(null); }} className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[#FFCB05]/50 bg-[#FFCB05] px-5 py-4 text-left text-slate-950 shadow-[0_18px_45px_-22px_rgba(255,203,5,.95)] transition hover:-translate-y-0.5"><span className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-[#FFCB05]">{liveAlert.source === "camera" ? <Camera size={20} /> : <MonitorUp size={20} />}</span><span><strong className="block text-sm">{liveAlert.name} ligou {liveAlert.source === "camera" ? "a câmera" : "uma transmissão"}</strong><span className="text-xs text-slate-700">Toque para assistir agora.</span></span></span><span className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white">Assistir</span></button>}
 
       {(needsCode || relayMsg) && (
         <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">

@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { verifyPassword } from "@/lib/auth/password";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { getActiveRoom, joinQuickRoom, roomLabel, roomTopic, STUN_SERVERS } from "@/lib/quick-room";
+import { getActiveRoom, isQuickRoomHost, joinQuickRoom, roomLabel, roomTopic, STUN_SERVERS } from "@/lib/quick-room";
 
 export const runtime = "nodejs";
 
@@ -19,7 +19,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
 
   const body = (await request.json().catch(() => ({}))) as { password?: unknown; name?: unknown; hostToken?: unknown };
   const password = typeof body.password === "string" ? body.password : "";
-  const joined = await joinQuickRoom({ code, name: body.name, hostToken: typeof body.hostToken === "string" ? body.hostToken : undefined, passwordValid: !room.passwordHash || Boolean(password) && await verifyPassword(password, room.passwordHash) });
+  const hostToken = typeof body.hostToken === "string" ? body.hostToken : undefined;
+  const isHost = isQuickRoomHost(room, hostToken);
+  const joined = await joinQuickRoom({ code, name: body.name, hostToken, passwordValid: isHost || !room.passwordHash || Boolean(password) && await verifyPassword(password, room.passwordHash) });
   if ("error" in joined) return NextResponse.json({ error: joined.error === "FULL" ? "Sala cheia." : joined.error === "PASSWORD" ? "Senha incorreta." : "Sala não encontrada ou encerrada." }, { status: joined.error === "FULL" ? 409 : joined.error === "PASSWORD" ? 403 : 404 });
   return NextResponse.json({
     topic: roomTopic(room),

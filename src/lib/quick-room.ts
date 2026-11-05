@@ -21,6 +21,9 @@ function cleanRoomTitle(value: unknown) { const title = typeof value === "string
 function cleanName(value: unknown) { const name = typeof value === "string" ? value.replace(/\s+/g, " ").trim() : ""; return name.slice(0, 24) || "Visitante " + String(Math.floor(1000 + Math.random() * 9000)); }
 function roomVisibility(value: unknown): RoomVisibility { return value === "PUBLIC" ? "PUBLIC" : "UNLISTED"; }
 function activeLeaseCutoff(now = new Date()) { return new Date(now.getTime() - ROOM_LEASE_IDLE_MS); }
+export function isQuickRoomHost(room: { hostTokenHash: string | null }, hostToken: unknown): boolean {
+  return typeof hostToken === "string" && Boolean(room.hostTokenHash) && tokenHash(hostToken) === room.hostTokenHash;
+}
 
 export type PublicQuickRoom = { publicId: string; title: string; participants: number; cameras: number; screens: number };
 
@@ -44,7 +47,7 @@ export async function joinQuickRoom(input: { code: string; name?: unknown; passw
         const active = await tx.quickRoomParticipantLease.count({ where: { roomId: room.id, lastSeenAt: { gte: cutoff } } });
         if (active >= room.maxParticipants) return { error: "FULL" as const };
         const participantToken = randomBytes(24).toString("base64url");
-        const isHost = Boolean(room.hostTokenHash && input.hostToken && tokenHash(input.hostToken) === room.hostTokenHash);
+        const isHost = isQuickRoomHost(room, input.hostToken);
         const lease = await tx.quickRoomParticipantLease.create({ data: { roomId: room.id, tokenHash: tokenHash(participantToken), name: cleanName(input.name), isHost }, select: { id: true, name: true, isHost: true } });
         await tx.quickRoom.update({ where: { id: room.id }, data: { lastActiveAt: now, publicLastSeenAt: room.visibility === "PUBLIC" ? now : undefined } });
         return { room, lease, participantToken };

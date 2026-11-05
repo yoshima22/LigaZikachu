@@ -92,7 +92,7 @@ export default async function HomePage() {
 
       {/* Barra superior */}
       <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a12]/75 backdrop-blur-md">
-        <nav aria-label="Principal" className="mx-auto flex h-14 max-w-6xl items-center justify-between px-5">
+        <nav aria-label="Principal" className="mx-auto flex h-14 max-w-7xl items-center justify-between px-5">
           <Link href="/" className={`flex items-center gap-2 rounded-md font-semibold text-white ${FOCUS}`}>
             <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#FFCB05] text-[#0a0a12]"><Sparkles size={15} /></span>
             Liga Zikachu
@@ -111,22 +111,23 @@ export default async function HomePage() {
 
       <main>
         {/* Hero */}
-        <section className="relative mx-auto grid max-w-6xl items-center gap-12 px-5 pb-20 pt-16 sm:pt-24 lg:grid-cols-[1.15fr_0.85fr]">
+        <section className="relative mx-auto max-w-7xl px-5 pb-16 pt-12 sm:pb-24 sm:pt-20">
+          <div aria-hidden className="absolute left-5 right-5 top-10 h-[calc(100%-5rem)] rounded-[2rem] border border-white/[.06] bg-[linear-gradient(115deg,rgba(255,203,5,.07),transparent_38%,rgba(61,125,202,.11))]" />
+          <div className="relative grid items-center gap-10 px-1 sm:px-7 lg:grid-cols-[1.05fr_.95fr] lg:px-10">
           <div className="space-y-7">
-            <Link href="/salas" className={`group inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/[0.04] py-1 pl-1 pr-3 text-xs text-slate-300 hover:border-[#FFCB05]/40 ${FOCUS}`}>
-              <span className="rounded-full bg-[#FFCB05] px-2 py-0.5 font-bold text-[#0a0a12]">Novo</span>
-              ZikaChat: voz, tela e chat sem cadastro
+            <Link href="/torneios" className={`group inline-flex items-center gap-2 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 py-1 pl-1 pr-3 text-xs font-semibold text-[#fff1ad] hover:border-[#FFCB05]/60 ${FOCUS}`}>
+              <span className="rounded-full bg-[#FFCB05] px-2 py-0.5 font-black text-[#0a0a12]">TCG</span>
+              Campeonato, comunidade e batalhas
               <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
 
-            <h1 className="text-4xl font-extrabold leading-[1.08] tracking-tight text-white sm:text-6xl">
-              A liga Pokémon da nossa comunidade.
-              <span className="mt-2 block text-[#FFCB05]">Torneios, mascotes e batalhas em um só lugar.</span>
+            <h1 className="max-w-3xl text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-6xl">
+              O seu próximo
+              <span className="block text-[#FFCB05]">confronto começa aqui.</span>
             </h1>
 
-            <p className="max-w-xl text-base leading-relaxed text-slate-400 sm:text-lg">
-              Dispute campeonatos, cuide dos seus mascotes, enfrente outros jogadores e suba no ranking.
-              Feito pela e para a Liga Zikachu.
+            <p className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
+              A Liga Zikachu reúne campeonatos TCG, mascotes, desafios e mesas ao vivo em uma comunidade feita para jogar junto.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -139,12 +140,15 @@ export default async function HomePage() {
               <Link href="/torneios" className={`rounded-lg px-2 py-2 text-sm text-slate-400 hover:text-white ${FOCUS}`}>Ver campeonatos →</Link>
             </div>
 
-            <p className="text-xs text-slate-400">Versão alpha: o app evolui toda semana.</p>
+            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-slate-400"><span>• Campeonato TCG</span><span>• Mascotes e batalhas</span><span>• ZikaChat sem cadastro</span></div>
           </div>
 
-          {/* Mascotes em destaque */}
-          <div aria-hidden className="relative mx-auto aspect-square w-full max-w-md rounded-[2rem] border border-white/10 bg-gradient-to-br from-white/[0.06] to-white/[0.01] shadow-2xl shadow-black/40">
-            <div className="absolute inset-6 rounded-[1.5rem] bg-[radial-gradient(circle_at_50%_40%,rgba(255,203,5,0.14),transparent_62%)]" />
+          <div aria-hidden className="relative mx-auto aspect-[1.06] w-full max-w-xl overflow-hidden rounded-[2rem] border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_50%_36%,rgba(255,203,5,.25),transparent_26%),linear-gradient(145deg,#182953,#0b1027_58%,#171126)] p-4 shadow-2xl shadow-black/50">
+            <div className="absolute inset-4 rounded-[1.45rem] border border-white/10" />
+            <div className="absolute inset-x-[18%] top-[15%] bottom-[15%] rounded-[50%] border border-[#FFCB05]/35 bg-[radial-gradient(ellipse_at_center,rgba(255,203,5,.18),transparent_66%)]" />
+            <div className="absolute left-7 top-7 rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 backdrop-blur"><p className="text-[10px] font-black uppercase tracking-[.2em] text-[#FFCB05]">Liga Arena</p><p className="mt-0.5 text-xs font-bold text-white">Temporada em jogo</p></div>
+            <div className="absolute bottom-7 right-7 rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-right backdrop-blur"><p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-200">Próximo passo</p><p className="mt-0.5 text-xs font-bold text-white">Escolha sua jornada</p></div>
+            <div className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-[#FFCB05] bg-slate-950 text-[#FFCB05] shadow-[0_0_45px_rgba(255,203,5,.5)]"><Swords size={30} /></div>
             {SPRITES.map((s) => (
               // eslint-disable-next-line @next/next/no-img-element
               <img
@@ -153,25 +157,18 @@ export default async function HomePage() {
                 alt=""
                 width={112}
                 height={112}
-                className={`home-float absolute object-contain drop-shadow-[0_10px_16px_rgba(0,0,0,0.45)] ${s.className}`}
+                className={`home-float absolute z-10 object-contain drop-shadow-[0_12px_18px_rgba(0,0,0,0.6)] ${s.className}`}
                 style={{ imageRendering: "pixelated", animationDelay: s.delay }}
               />
             ))}
           </div>
+          </div>
         </section>
 
-        <section className="mx-auto max-w-6xl px-5 py-12">
-          <Reveal>
-            <div className="grid overflow-hidden rounded-3xl border border-[#FFCB05]/20 bg-[radial-gradient(circle_at_80%_20%,rgba(61,125,202,.24),transparent_32%),linear-gradient(135deg,#171329,#090b18)] md:grid-cols-[1.15fr_.85fr]">
-              <div className="p-8 sm:p-12"><p className="text-xs font-black uppercase tracking-[.24em] text-[#FFCB05]">Campeonato TCG da Liga</p><h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">Uma comunidade que joga, compete e acompanha cada rodada.</h2><p className="mt-4 max-w-xl text-slate-400">Monte seu deck, encontre sua próxima partida e acompanhe o campeonato TCG que movimenta a Liga.</p><Link href="/torneios" className={`mt-7 inline-flex items-center gap-2 rounded-xl bg-[#FFCB05] px-5 py-3 text-sm font-black text-slate-950 ${FOCUS}`}>Conhecer o campeonato <ArrowRight size={16}/></Link></div>
-              <div aria-hidden className="relative min-h-56 bg-[linear-gradient(135deg,rgba(255,203,5,.13),transparent_45%)]"><div className="absolute left-10 top-10 h-36 w-28 rotate-[-10deg] rounded-2xl border border-white/20 bg-white/10 shadow-2xl"/><div className="absolute bottom-8 right-12 h-40 w-28 rotate-[12deg] rounded-2xl border border-[#FFCB05]/35 bg-[#FFCB05]/10 shadow-2xl"/></div>
-            </div>
-          </Reveal>
-        </section>
-
-        <section className="mx-auto max-w-6xl px-5 py-12">
-          <Reveal><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.24em] text-cyan-200">ZikaChat · sem conta</p><h2 className="mt-2 text-3xl font-black text-white">A comunidade também está ao vivo.</h2><p className="mt-2 max-w-xl text-slate-400">Entre com um código ou abra sua própria mesa com voz, chat, câmera e telas escolhidas por você.</p></div><Link href="/salas" className={`inline-flex items-center gap-2 rounded-xl border border-[#FFCB05]/40 px-5 py-3 font-bold text-[#FFCB05] ${FOCUS}`}>Abrir ZikaChat <Radio size={16}/></Link></div></Reveal>
-          {liveRooms.length > 0 && <div className="mt-6 grid gap-4 md:grid-cols-3">{liveRooms.map((room) => <Link key={room.publicId} href="/salas" className={`rounded-2xl border border-white/10 bg-white/[.035] p-5 transition hover:-translate-y-1 hover:border-[#FFCB05]/40 ${FOCUS}`}><p className="text-xs font-bold text-red-300">● AO VIVO</p><h3 className="mt-2 truncate font-black text-white">{room.title}</h3><p className="mt-3 text-xs text-slate-400">{room.participants} conectados · {room.cameras + room.screens} fontes ativas</p></Link>)}</div>}
+        <section className="mx-auto grid max-w-7xl gap-5 px-5 py-12 lg:grid-cols-2">
+          <Reveal><Link href="/torneios" className={`group block h-full overflow-hidden rounded-3xl border border-[#FFCB05]/25 bg-[linear-gradient(135deg,#21192b,#12162d)] p-8 transition hover:-translate-y-1 hover:border-[#FFCB05]/55 sm:p-10 ${FOCUS}`}><p className="text-xs font-black uppercase tracking-[.24em] text-[#FFCB05]">Campeonato TCG da Liga</p><h2 className="mt-4 max-w-md text-3xl font-black leading-tight text-white">Monte seu deck. Suba no ranking.</h2><p className="mt-4 max-w-md leading-relaxed text-slate-300">Acompanhe rodadas, desafie jogadores e viva o campeonato que movimenta a Liga.</p><span className="mt-7 inline-flex items-center gap-2 text-sm font-black text-[#FFCB05]">Conhecer o campeonato <ArrowRight size={16} className="transition-transform group-hover:translate-x-1" /></span></Link></Reveal>
+          <Reveal delay={90}><Link href="/salas" className={`group block h-full overflow-hidden rounded-3xl border border-cyan-200/20 bg-[linear-gradient(135deg,#102633,#10172b)] p-8 transition hover:-translate-y-1 hover:border-cyan-200/55 sm:p-10 ${FOCUS}`}><p className="text-xs font-black uppercase tracking-[.24em] text-cyan-200">ZikaChat · sem conta</p><h2 className="mt-4 max-w-md text-3xl font-black leading-tight text-white">A mesa da comunidade está aberta.</h2><p className="mt-4 max-w-md leading-relaxed text-slate-300">Abra uma sala, entre por código e escolha as câmeras ou telas que quer assistir.</p><span className="mt-7 inline-flex items-center gap-2 text-sm font-black text-cyan-200">Abrir ZikaChat <Radio size={16} className="transition-transform group-hover:translate-x-1" /></span></Link></Reveal>
+          {liveRooms.length > 0 && <div className="lg:col-span-2"><p className="mb-3 text-xs font-black uppercase tracking-[.24em] text-red-300">● AO VIVO AGORA</p><div className="grid gap-4 md:grid-cols-3">{liveRooms.map((room) => <Link key={room.publicId} href="/salas" className={`rounded-2xl border border-white/10 bg-white/[.035] p-5 transition hover:-translate-y-1 hover:border-[#FFCB05]/40 ${FOCUS}`}><h3 className="truncate font-black text-white">{room.title}</h3><p className="mt-3 text-xs text-slate-400">{room.participants} conectados · {room.cameras + room.screens} fontes ativas</p></Link>)}</div></div>}
         </section>
 
         {/* Novidades */}
