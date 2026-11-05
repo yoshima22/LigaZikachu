@@ -3083,6 +3083,7 @@ model MascotBondMemory {
   @@index([mascotAId, createdAt])
   @@index([mascotBId, createdAt])
   @@index([sourceType, sourceId])
+  @@index([sourceType, createdAt])
   @@map("mascot_bond_memories")
 }
 
@@ -3215,6 +3216,7 @@ model MascotBuff {
   mascot    Mascot         @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@index([mascotId, expiresAt])
+  @@index([type, expiresAt])
   @@map("mascot_buffs")
 }
 
