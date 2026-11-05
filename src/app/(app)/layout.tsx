@@ -509,7 +509,7 @@ export default async function AppLayout({
         >
           {children}
         </main>
-        <FcmTokenRegistrar />
+        <FcmTokenRegistrar userId={user.id} />
         <AchievementNotifier />
         <SpecMiniPlayer />
         <SpecBroadcastControlDock />

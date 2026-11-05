@@ -2,19 +2,25 @@
 
 import { useEffect } from "react";
 
-export function FcmTokenRegistrar() {
+export function FcmTokenRegistrar({ userId }: { userId: string }) {
   useEffect(() => {
     const getBridge = () =>
       (window as unknown as { AndroidBridge?: { getFcmToken(): string } }).AndroidBridge;
 
     const register = async (token: string) => {
       try {
+        if (localStorage.getItem("lz_fcm_registered") === `${userId}:${token}`) return; // já registrado neste aparelho
+      } catch { /* sem localStorage: registra normalmente */ }
+      try {
         const res = await fetch("/api/fcm-token", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ token })
         });
-        if (res.ok) console.log("[FCM] Token registrado com sucesso");
+        if (res.ok) {
+          try { localStorage.setItem("lz_fcm_registered", `${userId}:${token}`); } catch { /* ignora */ }
+          console.log("[FCM] Token registrado com sucesso");
+        }
       } catch (e) {
         console.warn("[FCM] Falha ao registrar token:", e);
       }
@@ -50,7 +56,7 @@ export function FcmTokenRegistrar() {
 
     // Primeira tentativa imediata, depois a cada 5s
     attempt();
-  }, []);
+  }, [userId]);
 
   return null;
 }

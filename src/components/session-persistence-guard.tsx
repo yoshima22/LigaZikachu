@@ -34,9 +34,13 @@ async function restoreSession(token: string): Promise<boolean> {
 export function SessionPersistenceGuard() {
   useEffect(() => {
     let busy = false;
+    let lastRunAt = 0;
 
     const onResume = async () => {
       if (busy || document.visibilityState !== "visible") return;
+      // visibilitychange e focus disparam juntos ao voltar para a aba: uma checagem a cada 10 s basta.
+      if (Date.now() - lastRunAt < 10_000) return;
+      lastRunAt = Date.now();
       busy = true;
 
       try {
@@ -59,10 +63,12 @@ export function SessionPersistenceGuard() {
 
     const onVis = () => { if (document.visibilityState === "visible") void onResume(); };
     document.addEventListener("visibilitychange", onVis);
-    window.addEventListener("focus", () => void onResume());
+    const onFocus = () => void onResume();
+    window.addEventListener("focus", onFocus);
 
     return () => {
       document.removeEventListener("visibilitychange", onVis);
+      window.removeEventListener("focus", onFocus);
     };
   }, []);
 

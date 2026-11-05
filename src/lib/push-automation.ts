@@ -21,10 +21,9 @@ function brt(now: Date) {
 }
 
 async function claim(eventKey: string) {
-  try {
-    await prisma.pushNotificationMarker.create({ data: { eventKey } });
-    return true;
-  } catch { return false; }
+  // skipDuplicates = ON CONFLICT DO NOTHING: não gera erro de unique no log do banco a cada tick do cron.
+  const { count } = await prisma.pushNotificationMarker.createMany({ data: [{ eventKey }], skipDuplicates: true });
+  return count === 1;
 }
 
 async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string, category: NotifCategory) {

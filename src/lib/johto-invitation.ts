@@ -282,12 +282,8 @@ export async function runJohtoInvitationLaunch(now = new Date()): Promise<{ sent
   for (const recipient of recipients) {
     if (recipient.pushSentAt) continue;
     const eventKey = `johto-invitation:${campaign.id}:${recipient.id}`;
-    try {
-      await prisma.pushNotificationMarker.create({ data: { eventKey } });
-    } catch (error) {
-      if (typeof error === "object" && error !== null && "code" in error && error.code === "P2002") continue;
-      throw error;
-    }
+    const { count: claimed } = await prisma.pushNotificationMarker.createMany({ data: [{ eventKey }], skipDuplicates: true });
+    if (claimed === 0) continue;
     try {
       const result = await sendNotificationToUsers([recipient.player.userId], {
         ...JOHTO_INVITATION_PUSH,
