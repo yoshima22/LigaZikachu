@@ -3,24 +3,31 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
-import { Copy, Mic, MicOff, MonitorUp, MonitorX, PhoneOff, Send, Users } from "lucide-react";
+import {
+  ArrowLeft, Copy, Eye, EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MonitorX,
+  PhoneOff, Send, Users, Volume2, VolumeX, X,
+} from "lucide-react";
 import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
 
-type Member = { id: string; name: string; mic: boolean; sharing: boolean };
+type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string };
 type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boolean };
 type SignalPayload = { from: string; to: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
+type WatchPayload = { from: string; to: string; on: boolean };
 type Peer = {
   pc: RTCPeerConnection;
   polite: boolean;
   makingOffer: boolean;
   ignoreOffer: boolean;
-  stream: MediaStream;
+  /** Streams recebidas deste participante, por id (voz e tela chegam em streams separadas). */
+  streams: Map<string, MediaStream>;
   senders: { mic: RTCRtpSender[]; screen: RTCRtpSender[] };
+  /** Este participante pediu para assistir a MINHA tela (só então eu envio vídeo para ele). */
+  viewing: boolean;
   relayTimer?: number;
 };
 
 const MAX_CHAT = 200;
-// Em malha, quem compartilha a tela envia um fluxo para cada pessoa: divide um orçamento total de upload.
+// Em malha, quem compartilha envia um fluxo por espectador: divide um orçamento total de upload entre quem assiste.
 const SCREEN_MAX_BITRATE = 1_500_000;
 const SCREEN_MIN_BITRATE = 200_000;
 const SCREEN_UPLOAD_BUDGET = 4_000_000;
@@ -29,23 +36,90 @@ function cleanName(raw: string) {
   return raw.replace(/\s+/g, " ").trim().slice(0, 24) || `Visitante ${Math.floor(1000 + Math.random() * 9000)}`;
 }
 
-/** Mídia remota de um participante: o <video> sempre toca o áudio e só fica visível quando há tela ao vivo. */
-function RemoteMedia({ member, stream, version }: { member: Member; stream: MediaStream | undefined; version: number }) {
+/** Janela de uma tela compartilhada, no estilo de player: volume, tela cheia (botão ou duplo clique) e fechar. */
+function ScreenTile({ title, stream, ownPreview, version, onClose }: {
+  title: string; stream: MediaStream | undefined; ownPreview?: boolean; version: number; onClose: () => void;
+}) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const video = useRef<HTMLVideoElement>(null);
+  const [volume, setVolume] = useState(1);
+  const [muted, setMuted] = useState(!!ownPreview);
+  const [full, setFull] = useState(false);
   const hasVideo = !!stream?.getVideoTracks().some((t) => t.readyState === "live" && !t.muted);
+
+  useEffect(() => {
+    const el = video.current;
+    if (el && stream && el.srcObject !== stream) el.srcObject = stream;
+    if (el) { el.volume = volume; el.muted = muted; }
+  });
+  useEffect(() => {
+    const onChange = () => setFull(document.fullscreenElement === wrap.current);
+    document.addEventListener("fullscreenchange", onChange);
+    return () => document.removeEventListener("fullscreenchange", onChange);
+  }, []);
+
+  const toggleFull = () => {
+    if (document.fullscreenElement) { void document.exitFullscreen(); return; }
+    const el = wrap.current as (HTMLDivElement & { webkitRequestFullscreen?: () => void }) | null;
+    if (el?.requestFullscreen) void el.requestFullscreen();
+    else (video.current as (HTMLVideoElement & { webkitEnterFullscreen?: () => void }) | null)?.webkitEnterFullscreen?.(); // iOS
+  };
+
   return (
-    <div className={`overflow-hidden rounded-xl border border-slate-700 bg-slate-950 ${hasVideo ? "" : "hidden"}`} data-v={version}>
+    <div ref={wrap} data-v={version} className={`group relative overflow-hidden bg-black ${full ? "flex h-screen items-center" : "rounded-2xl border border-slate-700 shadow-lg shadow-black/30"}`}>
       <video
+        ref={video}
         autoPlay
         playsInline
-        ref={(el) => { if (el && stream && el.srcObject !== stream) el.srcObject = stream; }}
-        className="aspect-video w-full bg-black object-contain"
+        onDoubleClick={toggleFull}
+        className={`w-full bg-black object-contain ${full ? "h-full" : "aspect-video"}`}
       />
-      <p className="px-2 py-1 text-xs text-slate-300">Tela de {member.name}</p>
+      {!hasVideo && (
+        <div className="pointer-events-none absolute inset-0 flex items-center justify-center bg-slate-950/80 text-sm text-slate-300">
+          Conectando à tela de {title}…
+        </div>
+      )}
+      <div className="absolute inset-x-0 top-0 flex items-center justify-between bg-gradient-to-b from-black/70 to-transparent px-3 py-2 text-xs text-white">
+        <span className="font-semibold">{title}</span>
+        <button onClick={onClose} aria-label={`Parar de assistir ${title}`} className="rounded-full bg-black/50 p-1.5 hover:bg-black/80"><X size={14} /></button>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 flex items-center gap-2 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 sm:group-focus-within:opacity-100">
+        {!ownPreview && (
+          <>
+            <button onClick={() => setMuted((m) => !m)} aria-label={muted ? "Ativar som" : "Silenciar"} className="rounded-full p-1.5 text-white hover:bg-white/20">
+              {muted || volume === 0 ? <VolumeX size={16} /> : <Volume2 size={16} />}
+            </button>
+            <input
+              type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume}
+              onChange={(e) => { const v = Number(e.target.value); setVolume(v); setMuted(v === 0); }}
+              aria-label="Volume" className="h-1 w-24 accent-[#FFCB05]"
+            />
+          </>
+        )}
+        <button onClick={toggleFull} aria-label={full ? "Sair da tela cheia" : "Tela cheia"} className="ml-auto rounded-full p-1.5 text-white hover:bg-white/20">
+          {full ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
+        </button>
+      </div>
     </div>
   );
 }
 
-export function QuickRoomClient({ code, label, hasPassword }: { code: string; label: string; hasPassword: boolean }) {
+/** Voz de um participante: toca as streams que não são a tela (a tela só toca quando está sendo assistida). */
+function VoiceAudio({ streams, screenId, version }: { streams: Map<string, MediaStream>; screenId?: string; version: number }) {
+  const voices = [...streams.entries()].filter(([id, s]) => id !== screenId && s.getAudioTracks().length > 0);
+  return (
+    <span data-v={version} hidden>
+      {voices.map(([id, s]) => (
+        <audio key={id} autoPlay ref={(el) => { if (el && el.srcObject !== s) el.srcObject = s; }} />
+      ))}
+    </span>
+  );
+}
+
+export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: string; label: string; hasPassword: boolean; isMember: boolean }) {
+  const backHref = isMember ? "/dashboard" : "/";
+  const backLabel = isMember ? "Voltar à Liga" : "Página inicial";
+
   const [phase, setPhase] = useState<"form" | "joining" | "in">("form");
   const [error, setError] = useState<string | null>(null);
   const [name, setName] = useState("");
@@ -56,6 +130,7 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
   const [micOn, setMicOn] = useState(false);
   const [sharing, setSharing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [watching, setWatching] = useState<string[]>([]);
   const [needsCode, setNeedsCode] = useState(false);
   const [relayCode, setRelayCode] = useState("");
   const [relayBusy, setRelayBusy] = useState(false);
@@ -76,15 +151,21 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
   const lastChatAt = useRef(0);
   const beat = useRef<number | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
-  const memberState = useRef({ mic: false, sharing: false });
+  const memberState = useRef<{ mic: boolean; sharing: boolean; screenId?: string }>({ mic: false, sharing: false });
   const relayOn = useRef(false);
+  const watchingRef = useRef<string[]>([]);
+  const knownSharers = useRef(new Set<string>());
+  const screenBusy = useRef(false);
 
   const bump = useCallback(() => { version.current += 1; setVersion(version.current); }, []);
+  const updateWatching = useCallback((next: string[]) => { watchingRef.current = next; setWatching(next); }, []);
 
   const sendSignal = useCallback((to: string, body: { description?: RTCSessionDescriptionInit | null; candidate?: RTCIceCandidateInit }) => {
     void channel.current?.send({ type: "broadcast", event: "signal", payload: { from: myId.current, to, ...body } });
   }, []);
-
+  const sendWatch = useCallback((to: string, on: boolean) => {
+    void channel.current?.send({ type: "broadcast", event: "watch", payload: { from: myId.current, to, on } satisfies WatchPayload });
+  }, []);
   const publishPresence = useCallback(() => {
     void channel.current?.track({ name: myName.current, ...memberState.current });
   }, []);
@@ -101,29 +182,29 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     bump();
   }, [bump]);
 
-  /** Reparte o orçamento de upload da tela entre os espectadores (com 12 pessoas, ~330 kbps cada). */
-  const applyScreenBitrate = useCallback(() => {
-    const viewers = Math.max(1, peers.current.size);
-    const bitrate = Math.round(Math.min(SCREEN_MAX_BITRATE, Math.max(SCREEN_MIN_BITRATE, SCREEN_UPLOAD_BUDGET / viewers)));
-    for (const peer of peers.current.values()) {
-      for (const sender of peer.senders.screen) {
-        if (sender.track?.kind !== "video") continue;
-        const params = sender.getParameters();
-        if (!params.encodings?.length) params.encodings = [{}];
-        if (params.encodings[0].maxBitrate === bitrate) continue;
-        params.encodings[0].maxBitrate = bitrate;
-        void sender.setParameters(params).catch(() => null);
-      }
+  /** Liga/desliga o envio da minha tela para um participante e reparte o upload entre quem assiste. */
+  const applyScreenState = useCallback((peer: Peer) => {
+    const viewers = [...peers.current.values()].filter((p) => p.viewing).length;
+    const bitrate = Math.round(Math.min(SCREEN_MAX_BITRATE, Math.max(SCREEN_MIN_BITRATE, SCREEN_UPLOAD_BUDGET / Math.max(1, viewers))));
+    for (const sender of peer.senders.screen) {
+      const params = sender.getParameters();
+      if (!params.encodings?.length) continue; // ainda não negociado: reaplica quando a sinalização estabilizar
+      const enc = params.encodings[0];
+      const isVideo = sender.track?.kind === "video";
+      if (enc.active === peer.viewing && (!isVideo || enc.maxBitrate === bitrate)) continue;
+      enc.active = peer.viewing;
+      if (isVideo) enc.maxBitrate = bitrate;
+      void sender.setParameters(params).catch(() => null);
     }
   }, []);
+  const applyAllScreenState = useCallback(() => {
+    for (const peer of peers.current.values()) applyScreenState(peer);
+  }, [applyScreenState]);
 
   const addLocalTracks = useCallback((peer: Peer, kind: "mic" | "screen", stream: MediaStream) => {
-    for (const track of stream.getTracks()) {
-      const sender = peer.pc.addTrack(track, stream);
-      peer.senders[kind].push(sender);
-    }
-    applyScreenBitrate();
-  }, [applyScreenBitrate]);
+    for (const track of stream.getTracks()) peer.senders[kind].push(peer.pc.addTrack(track, stream));
+    if (kind === "screen") applyScreenState(peer);
+  }, [applyScreenState]);
 
   /**
    * Conexão reforçada (relay/TURN): só quando a direta falha. O servidor decide quem pode (login, código de
@@ -162,7 +243,10 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     if (existing) return existing;
     const pc = new RTCPeerConnection({ iceServers: iceServers.current });
     // Negociação perfeita: o id maior é "educado" e cede quando as duas pontas oferecem ao mesmo tempo.
-    const peer: Peer = { pc, polite: myId.current > id, makingOffer: false, ignoreOffer: false, stream: new MediaStream(), senders: { mic: [], screen: [] } };
+    const peer: Peer = {
+      pc, polite: myId.current > id, makingOffer: false, ignoreOffer: false,
+      streams: new Map(), senders: { mic: [], screen: [] }, viewing: false,
+    };
     peers.current.set(id, peer);
 
     pc.onicecandidate = (event) => { if (event.candidate) sendSignal(id, { candidate: event.candidate.toJSON() }); };
@@ -173,11 +257,13 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
         sendSignal(id, { description: pc.localDescription });
       } catch { /* a próxima negociação tenta de novo */ } finally { peer.makingOffer = false; }
     };
+    pc.onsignalingstatechange = () => { if (pc.signalingState === "stable") applyAllScreenState(); };
     pc.ontrack = (event) => {
-      if (!peer.stream.getTracks().includes(event.track)) peer.stream.addTrack(event.track);
+      const stream = event.streams[0] ?? new MediaStream([event.track]);
+      peer.streams.set(stream.id, stream);
       event.track.onmute = bump;
       event.track.onunmute = bump;
-      event.track.onended = () => { peer.stream.removeTrack(event.track); bump(); };
+      event.track.onended = () => { stream.removeTrack(event.track); bump(); };
       bump();
     };
     pc.onconnectionstatechange = () => {
@@ -191,7 +277,7 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     // Quem tem o menor id inicia: o canal de dados dispara a primeira negociação mesmo sem mídia.
     if (myId.current < id) pc.createDataChannel("keepalive");
     return peer;
-  }, [addLocalTracks, bump, requestRelay, sendSignal]);
+  }, [addLocalTracks, applyAllScreenState, bump, requestRelay, sendSignal]);
 
   const onSignal = useCallback(async (payload: SignalPayload) => {
     if (payload.to !== myId.current) return;
@@ -213,6 +299,12 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     } catch { /* sinal fora de ordem: a renegociação corrige */ }
   }, [createPeer, sendSignal]);
 
+  const onWatch = useCallback((payload: WatchPayload) => {
+    if (payload.to !== myId.current) return;
+    createPeer(payload.from).viewing = !!payload.on;
+    applyAllScreenState();
+  }, [applyAllScreenState, createPeer]);
+
   const leave = useCallback(() => {
     if (beat.current) window.clearInterval(beat.current);
     beat.current = null;
@@ -225,6 +317,9 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     channel.current = null;
     memberState.current = { mic: false, sharing: false };
     relayOn.current = false;
+    knownSharers.current = new Set();
+    watchingRef.current = [];
+    setWatching([]);
     setNeedsCode(false);
     setRelayMsg(null);
     setMicOn(false);
@@ -234,6 +329,15 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
 
   useEffect(() => leave, [leave]);
   useEffect(() => { chatEnd.current?.scrollIntoView({ block: "end" }); }, [chat]);
+
+  // Reenvia o pedido de "assistir" a cada 4 s: garante que o outro lado o receba mesmo se chegou antes da conexão.
+  useEffect(() => {
+    if (phase !== "in") return;
+    const iv = window.setInterval(() => {
+      for (const id of watchingRef.current) if (id !== myId.current) sendWatch(id, true);
+    }, 4000);
+    return () => window.clearInterval(iv);
+  }, [phase, sendWatch]);
 
   const join = async () => {
     setError(null);
@@ -260,6 +364,7 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
       channel.current = ch;
 
       ch.on("broadcast", { event: "signal" }, ({ payload }) => void onSignal(payload as SignalPayload));
+      ch.on("broadcast", { event: "watch" }, ({ payload }) => onWatch(payload as WatchPayload));
       ch.on("broadcast", { event: "chat" }, ({ payload }) => {
         const line = payload as ChatLine;
         if (typeof line?.text !== "string") return;
@@ -267,11 +372,11 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
       });
       let firstSync = true;
       ch.on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean }>>;
+        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean; screenId?: string }>>;
         // Cada track() novo acrescenta uma meta: vale a mais recente (a última).
         const list: Member[] = Object.entries(state).map(([id, metas]) => {
           const meta = metas[metas.length - 1];
-          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing };
+          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing, screenId: meta?.screenId };
         });
         if (firstSync) {
           firstSync = false;
@@ -287,7 +392,18 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
         const others = new Set(list.map((m) => m.id).filter((id) => id !== myId.current));
         for (const id of others) createPeer(id);
         for (const id of [...peers.current.keys()]) if (!others.has(id)) closePeer(id);
-        applyScreenBitrate();
+
+        // Telas: quem parou de compartilhar sai da lista de assistidas; se nada está sendo assistido,
+        // a primeira tela nova abre sozinha (o jogador pode fechar ou escolher outras).
+        const sharerIds = new Set(list.filter((m) => m.sharing && m.id !== myId.current).map((m) => m.id));
+        let next = watchingRef.current.filter((id) => (id === myId.current ? memberState.current.sharing : sharerIds.has(id)));
+        for (const id of sharerIds) {
+          if (!knownSharers.current.has(id) && next.length === 0) { next = [id]; sendWatch(id, true); }
+        }
+        knownSharers.current = sharerIds;
+        if (next.length !== watchingRef.current.length || next.some((id, i) => id !== watchingRef.current[i])) updateWatching(next);
+        applyAllScreenState();
+        bump();
       });
 
       await new Promise<void>((resolve, reject) => {
@@ -343,11 +459,15 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     screenStream.current = null;
     setSharing(false);
     memberState.current.sharing = false;
+    memberState.current.screenId = undefined;
+    if (watchingRef.current.includes(myId.current)) updateWatching(watchingRef.current.filter((id) => id !== myId.current));
     publishPresence();
-  }, [publishPresence]);
+  }, [publishPresence, updateWatching]);
 
   const toggleScreen = async () => {
     if (screenStream.current) { stopScreen(); return; }
+    if (screenBusy.current) return; // evita dois seletores/compartilhamentos num duplo clique
+    screenBusy.current = true;
     try {
       const stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(1280, 720, 15));
       screenStream.current = stream;
@@ -355,8 +475,15 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
       for (const peer of peers.current.values()) addLocalTracks(peer, "screen", stream);
       setSharing(true);
       memberState.current.sharing = true;
+      memberState.current.screenId = stream.id;
       publishPresence();
-    } catch { /* usuário cancelou o seletor */ }
+    } catch { /* usuário cancelou o seletor */ } finally { screenBusy.current = false; }
+  };
+
+  const toggleWatch = (id: string) => {
+    const on = !watchingRef.current.includes(id);
+    updateWatching(on ? [...watchingRef.current, id] : watchingRef.current.filter((x) => x !== id));
+    if (id !== myId.current) sendWatch(id, on);
   };
 
   const sendChat = () => {
@@ -375,40 +502,51 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
     window.setTimeout(() => setCopied(false), 1500);
   };
 
+  const backButton = (
+    <Link href={backHref} className="inline-flex items-center gap-1.5 rounded-lg border border-slate-600 bg-slate-900/80 px-3 py-1.5 text-sm font-semibold text-slate-100 hover:border-[#FFCB05]/60 hover:text-[#FFCB05]">
+      <ArrowLeft size={16} /> {backLabel}
+    </Link>
+  );
+
   if (phase !== "in") {
     return (
-      <main className="mx-auto flex min-h-screen max-w-md items-center px-6 py-12">
-        <div className="w-full space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
+      <main className="mx-auto flex min-h-screen max-w-md flex-col justify-center gap-4 px-6 py-8">
+        <div>{backButton}</div>
+        <div className="space-y-4 rounded-2xl border border-slate-700 bg-slate-900/70 p-6">
           <p className="text-xs uppercase tracking-widest text-[#FFCB05]">ZikaChat</p>
           <h1 className="text-xl font-bold text-white">Entrar na {label}</h1>
           <p className="text-sm text-slate-400">Sem cadastro. Escolha um apelido para entrar com voz, tela e chat.</p>
-          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+          <input value={name} onChange={(e) => setName(e.target.value)} maxLength={24} placeholder="Seu apelido" aria-label="Seu apelido" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
           {hasPassword && (
-            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Senha da sala" aria-label="Senha da sala" className="w-full rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
           )}
           {error && <p role="alert" className="text-sm text-red-400">{error}</p>}
           <button onClick={join} disabled={phase === "joining" || (hasPassword && !password)} className="w-full rounded-lg bg-[#FFCB05] px-4 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">
             {phase === "joining" ? "Entrando..." : "Entrar"}
           </button>
-          <div className="flex justify-between text-xs text-slate-500">
-            <Link href="/" className="hover:text-slate-300">← Liga Zikachu</Link>
-            <Link href="/salas" className="hover:text-slate-300">Criar outra sala</Link>
-          </div>
+          <Link href="/salas" className="block text-center text-xs text-slate-500 hover:text-slate-300">Criar outra sala</Link>
         </div>
       </main>
     );
   }
 
   const others = members.filter((m) => m.id !== myId.current);
+  const sharers = members.filter((m) => m.sharing);
+  const watched = watching
+    .map((id) => members.find((m) => m.id === id))
+    .filter((m): m is Member => !!m);
+  const gridCols = watched.length <= 1 ? "grid-cols-1" : watched.length <= 4 ? "grid-cols-1 md:grid-cols-2" : "grid-cols-1 md:grid-cols-2 xl:grid-cols-3";
+
   return (
-    <main className="mx-auto flex min-h-screen max-w-6xl flex-col gap-3 p-3 sm:p-6">
-      <header className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-4 py-3">
-        <div className="flex items-center gap-2 text-sm text-slate-300">
-          <Users size={16} /> <span className="font-bold text-white">{label}</span> · {members.length} na sala
+    <main className="mx-auto flex min-h-screen max-w-7xl flex-col gap-3 p-3 pb-24 sm:p-5">
+      <header className="flex flex-wrap items-center justify-between gap-2 rounded-xl border border-slate-700 bg-slate-900/70 px-3 py-2.5">
+        <div className="flex items-center gap-3">
+          {backButton}
+          <div className="flex items-center gap-2 text-sm text-slate-300">
+            <Users size={16} /> <span className="font-bold text-white">{label}</span> · {members.length} na sala
+          </div>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied ? "Link copiado" : "Copiar link"}</button>
-        </div>
+        <button onClick={copyLink} className="inline-flex items-center gap-1 rounded-lg border border-slate-600 px-3 py-1.5 text-xs text-slate-200 hover:bg-slate-800"><Copy size={14} />{copied ? "Link copiado" : "Copiar link"}</button>
       </header>
 
       {error && <p role="alert" className="rounded-lg border border-red-500/30 bg-red-950/30 px-3 py-2 text-sm text-red-300">{error}</p>}
@@ -417,11 +555,8 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
         <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
           <p>{needsCode ? "Não foi possível conectar direto com alguém na sala. Para ativar a conexão reforçada, informe um código de convite da Liga." : relayMsg}</p>
           {needsCode && (
-            <form
-              onSubmit={async (e) => { e.preventDefault(); setRelayBusy(true); await requestRelay(relayCode); setRelayBusy(false); }}
-              className="flex gap-2"
-            >
-              <input value={relayCode} onChange={(e) => setRelayCode(e.target.value)} inputMode="numeric" maxLength={32} placeholder="Código de convite" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <form onSubmit={async (e) => { e.preventDefault(); setRelayBusy(true); await requestRelay(relayCode); setRelayBusy(false); }} className="flex gap-2">
+              <input value={relayCode} onChange={(e) => setRelayCode(e.target.value)} inputMode="numeric" maxLength={32} placeholder="Código de convite" aria-label="Código de convite" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
               <button type="submit" disabled={relayBusy || !relayCode.trim()} className="rounded-lg bg-[#FFCB05] px-3 py-2 text-sm font-bold text-slate-900 disabled:opacity-50">{relayBusy ? "..." : "Ativar"}</button>
             </form>
           )}
@@ -429,18 +564,56 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
         </div>
       )}
 
-      <div className="grid flex-1 gap-3 lg:grid-cols-[1fr_320px]">
-        <section className="space-y-3">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sharing && screenStream.current && (
-              <div className="overflow-hidden rounded-xl border border-[#FFCB05]/40 bg-slate-950">
-                <video autoPlay muted playsInline ref={(el) => { if (el && screenStream.current && el.srcObject !== screenStream.current) el.srcObject = screenStream.current; }} className="aspect-video w-full bg-black object-contain" />
-                <p className="px-2 py-1 text-xs text-slate-300">Sua tela</p>
-              </div>
-            )}
-            {others.map((m) => <RemoteMedia key={m.id} member={m} stream={peers.current.get(m.id)?.stream} version={version.current} />)}
+      <div className="grid flex-1 gap-3 lg:grid-cols-[1fr_340px]">
+        <section className="min-w-0 space-y-3">
+          <div className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-700 bg-slate-900/50 px-3 py-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-slate-400">Telas ao vivo</span>
+            {sharers.length === 0 && <span className="text-sm text-slate-500">Ninguém está compartilhando. Use “Compartilhar tela” para começar.</span>}
+            {sharers.map((m) => {
+              const isMe = m.id === myId.current;
+              const on = watching.includes(m.id);
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => toggleWatch(m.id)}
+                  aria-pressed={on}
+                  className={`inline-flex items-center gap-1.5 rounded-full border px-3 py-1 text-xs font-semibold transition-colors ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 text-[#FFCB05]" : "border-slate-600 text-slate-200 hover:border-slate-400"}`}
+                >
+                  {on ? <Eye size={14} /> : <EyeOff size={14} />}
+                  {isMe ? "Sua tela" : m.name}
+                  <span className="font-normal opacity-70">{on ? "assistindo" : "assistir"}</span>
+                </button>
+              );
+            })}
           </div>
-          {others.length === 0 && !sharing && <p className="rounded-xl border border-dashed border-slate-700 p-6 text-center text-sm text-slate-500">Você está sozinho. Copie o link e convide alguém.</p>}
+
+          {watched.length === 0 ? (
+            <div className="flex aspect-video max-h-[60vh] w-full items-center justify-center rounded-2xl border border-dashed border-slate-700 bg-slate-950/60 p-6 text-center text-sm text-slate-500">
+              {sharers.length > 0 ? "Escolha uma tela em “Telas ao vivo” para assistir." : others.length === 0 ? "Você está sozinho. Copie o link e convide alguém." : "Quando alguém compartilhar a tela, ela aparece aqui."}
+            </div>
+          ) : (
+            <div className={`grid gap-3 ${gridCols}`}>
+              {watched.map((m) => {
+                const isMe = m.id === myId.current;
+                return (
+                  <ScreenTile
+                    key={m.id}
+                    title={isMe ? "Sua tela" : m.name}
+                    ownPreview={isMe}
+                    stream={isMe ? screenStream.current ?? undefined : peers.current.get(m.id)?.streams.get(m.screenId ?? "")}
+                    version={version.current}
+                    onClose={() => toggleWatch(m.id)}
+                  />
+                );
+              })}
+            </div>
+          )}
+
+          {others.map((m) => {
+            const peer = peers.current.get(m.id);
+            return peer ? <VoiceAudio key={m.id} streams={peer.streams} screenId={m.screenId} version={version.current} /> : null;
+          })}
+
           <ul className="flex flex-wrap gap-2 text-xs">
             {members.map((m) => (
               <li key={m.id} className="inline-flex items-center gap-1 rounded-full border border-slate-700 bg-slate-900 px-3 py-1 text-slate-300">
@@ -451,7 +624,7 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
           </ul>
         </section>
 
-        <aside className="flex h-[60vh] flex-col rounded-xl border border-slate-700 bg-slate-900/70 lg:h-auto">
+        <aside className="flex h-80 flex-col rounded-xl border border-slate-700 bg-slate-900/70 lg:h-[calc(100vh-12rem)] lg:min-h-[24rem]">
           <div className="flex-1 space-y-2 overflow-y-auto p-3 text-sm">
             {chat.length === 0 && <p className="text-xs text-slate-500">O chat some quando a sala encerra.</p>}
             {chat.map((line) => (
@@ -460,16 +633,18 @@ export function QuickRoomClient({ code, label, hasPassword }: { code: string; la
             <div ref={chatEnd} />
           </div>
           <form onSubmit={(e) => { e.preventDefault(); sendChat(); }} className="flex gap-2 border-t border-slate-700 p-2">
-            <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={500} placeholder="Mensagem" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+            <input value={draft} onChange={(e) => setDraft(e.target.value)} maxLength={500} placeholder="Mensagem" aria-label="Mensagem" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
             <button type="submit" aria-label="Enviar" className="rounded-lg bg-[#FFCB05] px-3 text-slate-900"><Send size={16} /></button>
           </form>
         </aside>
       </div>
 
-      <footer className="sticky bottom-3 flex justify-center gap-2">
-        <button onClick={toggleMic} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${micOn ? "bg-emerald-500 text-slate-900" : "bg-slate-800 text-slate-200"}`}>{micOn ? <Mic size={16} /> : <MicOff size={16} />}{micOn ? "Microfone ligado" : "Ligar microfone"}</button>
-        <button onClick={toggleScreen} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sharing ? "bg-[#FFCB05] text-slate-900" : "bg-slate-800 text-slate-200"}`}>{sharing ? <MonitorX size={16} /> : <MonitorUp size={16} />}{sharing ? "Parar tela" : "Compartilhar tela"}</button>
-        <button onClick={() => { leave(); setPhase("form"); }} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white"><PhoneOff size={16} />Sair</button>
+      <footer className="fixed inset-x-0 bottom-3 z-20 flex justify-center gap-2 px-3">
+        <div className="flex gap-2 rounded-full border border-slate-700 bg-slate-950/90 p-1.5 shadow-xl shadow-black/40 backdrop-blur">
+          <button onClick={toggleMic} aria-pressed={micOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${micOn ? "bg-emerald-500 text-slate-900" : "bg-slate-800 text-slate-200"}`}>{micOn ? <Mic size={16} /> : <MicOff size={16} />}<span className="hidden sm:inline">{micOn ? "Microfone ligado" : "Ligar microfone"}</span></button>
+          <button onClick={toggleScreen} aria-pressed={sharing} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sharing ? "bg-[#FFCB05] text-slate-900" : "bg-slate-800 text-slate-200"}`}>{sharing ? <MonitorX size={16} /> : <MonitorUp size={16} />}<span className="hidden sm:inline">{sharing ? "Parar tela" : "Compartilhar tela"}</span></button>
+          <button onClick={() => { leave(); setPhase("form"); }} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white"><PhoneOff size={16} /><span className="hidden sm:inline">Sair</span></button>
+        </div>
       </footer>
     </main>
   );
