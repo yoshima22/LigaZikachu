@@ -9,7 +9,9 @@ export function FcmTokenRegistrar({ userId }: { userId: string }) {
 
     const register = async (token: string) => {
       try {
-        if (localStorage.getItem("lz_fcm_registered") === `${userId}:${token}`) return; // já registrado neste aparelho
+        // Já registrado neste aparelho nas últimas 24 h: não reenvia (depois disso reenvia, caso o servidor tenha apagado o token).
+        const [mark, at] = (localStorage.getItem("lz_fcm_registered") ?? "").split("|");
+        if (mark === `${userId}:${token}` && Date.now() - Number(at) < 24 * 60 * 60_000) return;
       } catch { /* sem localStorage: registra normalmente */ }
       try {
         const res = await fetch("/api/fcm-token", {
@@ -18,7 +20,7 @@ export function FcmTokenRegistrar({ userId }: { userId: string }) {
           body: JSON.stringify({ token })
         });
         if (res.ok) {
-          try { localStorage.setItem("lz_fcm_registered", `${userId}:${token}`); } catch { /* ignora */ }
+          try { localStorage.setItem("lz_fcm_registered", `${userId}:${token}|${Date.now()}`); } catch { /* ignora */ }
           console.log("[FCM] Token registrado com sucesso");
         }
       } catch (e) {
