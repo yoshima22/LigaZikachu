@@ -2,47 +2,50 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import type { ReactNode } from "react";
 import {
-  ArrowRight, Crown, Gift, Layers, Link2, Radio, Shield, Sparkles, Swords, Trophy, Tv, TrendingUp,
+  ArrowRight, BookOpen, CirclePlay, Gift, Layers, Radio, Swords, Trophy, Tv, Zap,
 } from "lucide-react";
 import { auth } from "@/auth";
 import { getManualSessionUser } from "@/lib/manual-session";
 import { AutoRestoreSession } from "@/components/auth/auto-restore-session";
 import { Reveal } from "@/components/home/reveal";
+import { WeeklyReplayPreview } from "@/components/home/weekly-replay-preview";
 import { listPublicQuickRooms } from "@/lib/quick-room";
+import { getPublicWeeklyReplay } from "@/lib/public-weekly-replay-server";
+import { SITE_LOGO_URL } from "@/lib/site-theme-assets";
 
 // Só aparecem aqui modos já abertos aos jogadores (Torre dos Rebeldes e World Mode ainda são de admin).
 const FEATURES: Array<{
-  title: string; text: string; tag?: string; icon: ReactNode; href?: string; cta?: string; wide?: boolean;
+  title: string; text: string; tag?: string; icon: ReactNode; href?: string; cta?: string;
 }> = [
   {
-    title: "ZikaChat",
-    text: "Salas de voz, chat e compartilhamento de tela para qualquer pessoa com o link. Sem cadastro, até 13 pessoas, e você escolhe quais telas assistir.",
-    tag: "Novo", icon: <Radio size={20} />, href: "/salas", cta: "Criar uma sala", wide: true,
+    title: "Campeonato TCG",
+    text: "Acompanhe o campeonato, registre seu deck e jogue as rodadas com a comunidade da Liga.",
+    tag: "TCG", icon: <Trophy size={20} />, href: "/torneios", cta: "Ver campeonato",
   },
   {
-    title: "Posturas de combate",
-    text: "Cumpra jornadas de treino com seus mascotes e desbloqueie 13 posturas, cada uma com efeito próprio nas batalhas.",
-    tag: "Novo", icon: <Shield size={20} />,
+    title: "Liga Semanal",
+    text: "Escalone seu time e acompanhe os confrontos automáticos que movimentam a temporada.",
+    tag: "Liga", icon: <Swords size={20} />,
+  },
+  {
+    title: "Liga Rush",
+    text: "Partidas rápidas para testar a formação, ganhar ritmo e voltar direto para a ação.",
+    tag: "Rápida", icon: <Zap size={20} />,
+  },
+  {
+    title: "ZikaChat",
+    text: "Voz, chat, câmera e tela compartilhada para qualquer pessoa com o código da sala.",
+    tag: "Livre", icon: <Radio size={20} />, href: "/salas", cta: "Abrir ZikaChat",
   },
   {
     title: "Zika TV",
-    text: "Transmissões ao vivo da Liga: acompanhe partidas e lives sem sair do app.",
+    text: "Assista às mesas e transmissões da comunidade sem sair da Liga.",
     icon: <Tv size={20} />,
   },
   {
-    title: "Laços",
-    text: "Vínculos entre mascotes que evoluem com o tempo e geram efeitos e histórias.",
-    tag: "Alpha", icon: <Link2 size={20} />,
-  },
-  {
     title: "Arena Draft",
-    text: "Escolha seus mascotes em um draft e desafie outros jogadores em partidas rápidas.",
+    text: "Escolha seu elenco no draft e entre em disputas rápidas com estratégia a cada rodada.",
     tag: "Beta", icon: <Layers size={20} />,
-  },
-  {
-    title: "Líderes de Johto",
-    text: "Evento da comunidade contra os líderes de Johto, com ranking de dano e replays.",
-    tag: "Beta", icon: <Crown size={20} />,
   },
 ];
 
@@ -52,18 +55,10 @@ const STEPS = [
   { n: "03", title: "Dispute e suba no ranking", text: "Torneios, Liga Semanal e Top do Dia valem posição no ranking e premiações." },
 ];
 
-const COMPETE = [
-  { icon: <Trophy size={18} />, title: "Ranking Geral", text: "A pontuação da temporada, atualizada a cada partida validada." },
-  { icon: <TrendingUp size={18} />, title: "Top do Dia", text: "Quem mais brilhou hoje, com destaque para os melhores do dia." },
-  { icon: <Gift size={18} />, title: "Premiações com códigos", text: "Códigos de booster entregues direto na sua Caixa de Presentes." },
-];
-
-const SPRITES = [
-  { id: 25, className: "left-[6%] top-[10%] h-24 w-24", delay: "0s" },
-  { id: 6, className: "right-[6%] top-[4%] h-28 w-28", delay: "-1.4s" },
-  { id: 94, className: "left-[34%] top-[38%] h-24 w-24", delay: "-2.6s" },
-  { id: 448, className: "left-[4%] bottom-[6%] h-24 w-24", delay: "-0.8s" },
-  { id: 133, className: "right-[8%] bottom-[8%] h-24 w-24", delay: "-2s" },
+const TCG_HIGHLIGHTS = [
+  { icon: <BookOpen size={18} />, title: "Decks e rodadas", text: "Registre suas listas, acompanhe a semana e encontre as partidas do campeonato." },
+  { icon: <Trophy size={18} />, title: "Ranking do campeonato", text: "Cada resultado validado organiza a disputa e deixa clara a corrida pelo topo." },
+  { icon: <Gift size={18} />, title: "Códigos e premiações", text: "A Liga entrega as recompensas do TCG pela sua Caixa de Presentes." },
 ];
 
 const FOCUS = "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#FFCB05] focus-visible:ring-offset-2 focus-visible:ring-offset-[#0a0a12]";
@@ -73,14 +68,17 @@ export default async function HomePage() {
   if (session?.user) redirect("/dashboard");
   const manualUser = await getManualSessionUser();
   if (manualUser) redirect("/dashboard");
-  const liveRooms = await listPublicQuickRooms(3).catch(() => []);
+  const [liveRooms, weeklyReplay] = await Promise.all([
+    listPublicQuickRooms(3).catch(() => []),
+    getPublicWeeklyReplay(),
+  ]);
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[#0a0a12] text-slate-200">
       <style>{`
-        @keyframes home-float { 0%,100% { transform: translateY(0) } 50% { transform: translateY(-10px) } }
-        .home-float { animation: home-float 5.5s ease-in-out infinite; }
-        @media (prefers-reduced-motion: reduce) { .home-float { animation: none; } }
+        @keyframes home-glow { 0%,100% { opacity: .35; transform: scale(.92); } 50% { opacity: .8; transform: scale(1.06); } }
+        .home-hero-glow { animation: home-glow 6s ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .home-hero-glow { animation: none; } }
       `}</style>
       <AutoRestoreSession />
 
@@ -91,20 +89,21 @@ export default async function HomePage() {
       </div>
 
       {/* Barra superior */}
-      <header className="sticky top-0 z-30 border-b border-white/5 bg-[#0a0a12]/75 backdrop-blur-md">
-        <nav aria-label="Principal" className="mx-auto flex h-14 max-w-7xl items-center justify-between px-5">
-          <Link href="/" className={`flex items-center gap-2 rounded-md font-semibold text-white ${FOCUS}`}>
-            <span className="flex h-7 w-7 items-center justify-center rounded-lg bg-[#FFCB05] text-[#0a0a12]"><Sparkles size={15} /></span>
-            Liga Zikachu
+      <header className="sticky top-0 z-30 border-b border-[#FFCB05]/20 bg-[#0d1020]/90 shadow-[0_10px_35px_rgba(0,0,0,.22)] backdrop-blur-xl">
+        <div aria-hidden className="h-0.5 bg-gradient-to-r from-transparent via-[#FFCB05] to-transparent opacity-75" />
+        <nav aria-label="Principal" className="mx-auto flex h-16 max-w-7xl items-center justify-between gap-4 px-5">
+          <Link href="/" className={`group flex min-w-0 items-center rounded-md ${FOCUS}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img className="site-brand-logo w-[142px] transition duration-300 group-hover:brightness-110 sm:w-[174px]" src={SITE_LOGO_URL} alt="Liga Zikachu" width={600} height={200} />
           </Link>
-          <div className="hidden items-center gap-6 text-sm text-slate-400 md:flex">
-            <a href="#novidades" className={`rounded-md hover:text-white ${FOCUS}`}>Novidades</a>
-            <a href="#como-funciona" className={`rounded-md hover:text-white ${FOCUS}`}>Como funciona</a>
-            <Link href="/salas" className={`rounded-md hover:text-white ${FOCUS}`}>ZikaChat</Link>
+          <div className="hidden items-center gap-1 rounded-full border border-white/10 bg-slate-950/45 p-1 text-sm text-slate-400 lg:flex">
+            <a href="#novidades" className={`rounded-full px-3 py-1.5 transition hover:bg-white/[.07] hover:text-white ${FOCUS}`}>Novidades</a>
+            <a href="#tcg" className={`rounded-full px-3 py-1.5 transition hover:bg-white/[.07] hover:text-white ${FOCUS}`}>Campeonato TCG</a>
+            <Link href="/salas" className={`rounded-full px-3 py-1.5 transition hover:bg-white/[.07] hover:text-white ${FOCUS}`}>ZikaChat</Link>
           </div>
           <div className="flex items-center gap-2">
-            <Link href="/criar-conta" className={`hidden rounded-lg px-3 py-1.5 text-sm text-slate-300 hover:text-white sm:inline-block ${FOCUS}`}>Criar conta</Link>
-            <Link href="/login" className={`rounded-lg bg-[#FFCB05] px-4 py-1.5 text-sm font-semibold text-[#0a0a12] hover:bg-[#ffd633] ${FOCUS}`}>Entrar</Link>
+            <Link href="/criar-conta" className={`hidden rounded-lg px-3 py-2 text-sm font-semibold text-slate-300 transition hover:text-white sm:inline-block ${FOCUS}`}>Criar conta</Link>
+            <Link href="/login" className={`rounded-xl bg-[#FFCB05] px-4 py-2 text-sm font-black text-[#0a0a12] shadow-[0_6px_18px_rgba(255,203,5,.2)] transition hover:-translate-y-0.5 hover:bg-[#ffd633] ${FOCUS}`}>Entrar</Link>
           </div>
         </nav>
       </header>
@@ -113,21 +112,22 @@ export default async function HomePage() {
         {/* Hero */}
         <section className="relative mx-auto max-w-7xl px-5 pb-16 pt-12 sm:pb-24 sm:pt-20">
           <div aria-hidden className="absolute left-5 right-5 top-10 h-[calc(100%-5rem)] rounded-[2rem] border border-white/[.06] bg-[linear-gradient(115deg,rgba(255,203,5,.07),transparent_38%,rgba(61,125,202,.11))]" />
-          <div className="relative grid items-center gap-10 px-1 sm:px-7 lg:grid-cols-[1.05fr_.95fr] lg:px-10">
-          <div className="space-y-7">
+          <div aria-hidden className="home-hero-glow absolute right-[12%] top-[12%] h-48 w-48 rounded-full bg-[#FFCB05]/10 blur-[70px]" />
+          <div className="relative grid items-center gap-10 px-1 sm:px-7 lg:grid-cols-[.94fr_1.06fr] lg:px-10">
+          <div className="space-y-7 lg:py-4">
             <Link href="/torneios" className={`group inline-flex items-center gap-2 rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 py-1 pl-1 pr-3 text-xs font-semibold text-[#fff1ad] hover:border-[#FFCB05]/60 ${FOCUS}`}>
               <span className="rounded-full bg-[#FFCB05] px-2 py-0.5 font-black text-[#0a0a12]">TCG</span>
               Campeonato, comunidade e batalhas
               <ArrowRight size={13} className="transition-transform group-hover:translate-x-0.5" />
             </Link>
 
-            <h1 className="max-w-3xl text-4xl font-black leading-[1.02] tracking-tight text-white sm:text-6xl">
-              O seu próximo
-              <span className="block text-[#FFCB05]">confronto começa aqui.</span>
+            <h1 className="max-w-[11ch] text-5xl font-black leading-[.96] tracking-[-.045em] text-white sm:text-6xl lg:text-7xl">
+              A sua jornada
+              <span className="block text-[#FFCB05]">começa na Liga.</span>
             </h1>
 
             <p className="max-w-2xl text-base leading-relaxed text-slate-300 sm:text-lg">
-              A Liga Zikachu reúne campeonatos TCG, mascotes, desafios e mesas ao vivo em uma comunidade feita para jogar junto.
+              Campeonato TCG, Liga Semanal, Liga Rush e mesas ao vivo em uma comunidade feita para jogar junto.
             </p>
 
             <div className="flex flex-wrap items-center gap-3">
@@ -140,28 +140,10 @@ export default async function HomePage() {
               <Link href="/torneios" className={`rounded-lg px-2 py-2 text-sm text-slate-400 hover:text-white ${FOCUS}`}>Ver campeonatos →</Link>
             </div>
 
-            <div className="flex flex-wrap gap-x-6 gap-y-2 text-xs font-semibold text-slate-400"><span>• Campeonato TCG</span><span>• Mascotes e batalhas</span><span>• ZikaChat sem cadastro</span></div>
+            <div className="flex flex-wrap gap-x-5 gap-y-2 text-xs font-semibold text-slate-400"><span>• Campeonato TCG</span><span>• Liga Semanal e Rush</span><span>• ZikaChat sem cadastro</span></div>
           </div>
 
-          <div aria-hidden className="relative mx-auto aspect-[1.06] w-full max-w-xl overflow-hidden rounded-[2rem] border border-[#FFCB05]/25 bg-[radial-gradient(circle_at_50%_36%,rgba(255,203,5,.25),transparent_26%),linear-gradient(145deg,#182953,#0b1027_58%,#171126)] p-4 shadow-2xl shadow-black/50">
-            <div className="absolute inset-4 rounded-[1.45rem] border border-white/10" />
-            <div className="absolute inset-x-[18%] top-[15%] bottom-[15%] rounded-[50%] border border-[#FFCB05]/35 bg-[radial-gradient(ellipse_at_center,rgba(255,203,5,.18),transparent_66%)]" />
-            <div className="absolute left-7 top-7 rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 backdrop-blur"><p className="text-[10px] font-black uppercase tracking-[.2em] text-[#FFCB05]">Liga Arena</p><p className="mt-0.5 text-xs font-bold text-white">Temporada em jogo</p></div>
-            <div className="absolute bottom-7 right-7 rounded-xl border border-white/15 bg-slate-950/80 px-3 py-2 text-right backdrop-blur"><p className="text-[10px] font-black uppercase tracking-[.2em] text-cyan-200">Próximo passo</p><p className="mt-0.5 text-xs font-bold text-white">Escolha sua jornada</p></div>
-            <div className="absolute left-1/2 top-1/2 flex h-20 w-20 -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full border-4 border-[#FFCB05] bg-slate-950 text-[#FFCB05] shadow-[0_0_45px_rgba(255,203,5,.5)]"><Swords size={30} /></div>
-            {SPRITES.map((s) => (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
-                key={s.id}
-                src={`/sprites/pokemon/${s.id}.png`}
-                alt=""
-                width={112}
-                height={112}
-                className={`home-float absolute z-10 object-contain drop-shadow-[0_12px_18px_rgba(0,0,0,0.6)] ${s.className}`}
-                style={{ imageRendering: "pixelated", animationDelay: s.delay }}
-              />
-            ))}
-          </div>
+          <WeeklyReplayPreview replay={weeklyReplay} />
           </div>
         </section>
 
@@ -173,14 +155,14 @@ export default async function HomePage() {
 
         {/* Novidades */}
         <section id="novidades" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-16">
-          <Reveal>
+          <div className="grid gap-4 md:grid-cols-3"><Reveal className="md:col-span-2">
             <p className="text-sm font-semibold text-[#FFCB05]">Novidades</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl">O que a Liga ganhou recentemente</h2>
-          </Reveal>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">O que a Liga ganhou recentemente</h2>
+          </Reveal></div>
           <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {FEATURES.map((f, i) => {
               const card = (
-                <div className={`group flex h-full flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition-colors hover:border-white/20 hover:bg-white/[0.05] ${f.wide ? "lg:col-span-2" : ""}`}>
+                <div className="group flex h-full flex-col gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-6 transition duration-300 hover:-translate-y-1 hover:border-[#FFCB05]/35 hover:bg-white/[0.055]">
                   <div className="flex items-center justify-between">
                     <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FFCB05]/10 text-[#FFCB05]">{f.icon}</span>
                     {f.tag && <span className="rounded-full border border-white/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-slate-300">{f.tag}</span>}
@@ -195,7 +177,7 @@ export default async function HomePage() {
                 </div>
               );
               return (
-                <Reveal key={f.title} delay={(i % 3) * 80} className={f.wide ? "lg:col-span-2" : ""}>
+                <Reveal key={f.title} delay={(i % 3) * 80}>
                   {f.href ? <Link href={f.href} className={`block h-full rounded-2xl ${FOCUS}`}>{card}</Link> : card}
                 </Reveal>
               );
@@ -205,10 +187,10 @@ export default async function HomePage() {
 
         {/* Como funciona */}
         <section id="como-funciona" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-16">
-          <Reveal>
+          <div className="grid gap-4 md:grid-cols-3"><Reveal className="md:col-span-2">
             <p className="text-sm font-semibold text-[#FFCB05]">Como funciona</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl">Três passos para entrar no jogo</h2>
-          </Reveal>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">Três passos para entrar no jogo</h2>
+          </Reveal></div>
           <ol className="mt-10 grid gap-4 md:grid-cols-3">
             {STEPS.map((s, i) => (
               <Reveal key={s.n} delay={i * 90}>
@@ -222,14 +204,15 @@ export default async function HomePage() {
           </ol>
         </section>
 
-        {/* Competição */}
-        <section className="mx-auto max-w-6xl px-5 py-16">
-          <Reveal>
-            <p className="text-sm font-semibold text-[#FFCB05]">Competição</p>
-            <h2 className="mt-2 max-w-2xl text-3xl font-bold tracking-tight text-white sm:text-4xl">Cada partida conta</h2>
-          </Reveal>
+        {/* Campeonato TCG */}
+        <section id="tcg" className="mx-auto max-w-6xl scroll-mt-20 px-5 py-16">
+          <div className="grid gap-4 md:grid-cols-3"><Reveal className="md:col-span-2">
+            <p className="text-sm font-semibold text-[#FFCB05]">Campeonato TCG</p>
+            <h2 className="mt-2 text-3xl font-bold tracking-tight text-white sm:text-4xl">O card game também<span className="block">tem sua casa na Liga</span></h2>
+            <p className="mt-4 leading-relaxed text-slate-400">Do deck à premiação, o campeonato reúne as ferramentas para acompanhar e jogar cada rodada com a comunidade.</p>
+          </Reveal></div>
           <div className="mt-10 grid gap-4 md:grid-cols-3">
-            {COMPETE.map((c, i) => (
+            {TCG_HIGHLIGHTS.map((c, i) => (
               <Reveal key={c.title} delay={i * 90}>
                 <div className="flex h-full gap-4 rounded-2xl border border-white/10 bg-gradient-to-br from-white/[0.05] to-transparent p-6">
                   <span className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-white/[0.06] text-[#FFCB05]">{c.icon}</span>
@@ -241,6 +224,19 @@ export default async function HomePage() {
               </Reveal>
             ))}
           </div>
+        </section>
+
+        {/* Jogo da Liga */}
+        <section className="mx-auto max-w-6xl px-5 py-8 sm:py-16">
+          <Reveal>
+            <div className="relative overflow-hidden rounded-3xl border border-cyan-200/15 bg-[linear-gradient(125deg,rgba(14,39,58,.86),rgba(18,16,38,.95))] p-7 sm:p-10">
+              <div aria-hidden className="absolute -right-14 -top-16 h-56 w-56 rounded-full bg-cyan-300/10 blur-3xl" />
+              <div className="relative grid items-center gap-8 lg:grid-cols-[1.2fr_.8fr]">
+                <div><p className="text-xs font-black uppercase tracking-[.24em] text-cyan-200">O jogo da Liga</p><h2 className="mt-3 max-w-xl text-3xl font-black leading-tight text-white sm:text-4xl">Monte seu time e transforme cada turno em estratégia.</h2><p className="mt-4 max-w-xl leading-relaxed text-slate-300">Treine seus mascotes, escolha posturas e leve sua formação para a Liga Semanal ou para a velocidade da Liga Rush. Os replays deixam a evolução do time visível.</p><Link href="/login" className={`mt-7 inline-flex items-center gap-2 rounded-xl border border-cyan-200/25 bg-cyan-200/10 px-4 py-2.5 text-sm font-black text-cyan-100 transition hover:-translate-y-0.5 hover:bg-cyan-200/15 ${FOCUS}`}>Conhecer o jogo <ArrowRight size={16} /></Link></div>
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-1"><div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4"><Swords size={19} className="text-[#FFCB05]" /><h3 className="mt-3 font-black text-white">Liga Semanal</h3><p className="mt-1 text-sm leading-relaxed text-slate-400">Confrontos programados e ranking para acompanhar a temporada.</p></div><div className="rounded-2xl border border-white/10 bg-slate-950/30 p-4"><CirclePlay size={19} className="text-cyan-200" /><h3 className="mt-3 font-black text-white">Liga Rush</h3><p className="mt-1 text-sm leading-relaxed text-slate-400">Ritmo rápido para experimentar novas formações.</p></div></div>
+              </div>
+            </div>
+          </Reveal>
         </section>
 
         {/* Chamada final */}

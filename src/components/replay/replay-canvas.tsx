@@ -70,7 +70,7 @@ const ORB = new Set(["fire", "grass", "poison", "ghost", "fairy", "dark", "bug"]
 
 type Phase = "windup" | "strike" | "recover";
 
-export function ReplayCanvas({ data }: { data: ReplayData }) {
+export function ReplayCanvas({ data, compact = false, hideLabels = false, loop: shouldLoop = false }: { data: ReplayData; compact?: boolean; hideLabels?: boolean; loop?: boolean }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const [playing, setPlaying] = useState(true);
   const [speed, setSpeed] = useState(1.5); // começa em 1,5×; o jogador ajusta nos botões
@@ -166,14 +166,19 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
     let last = performance.now();
 
     const loop = (now: number) => {
-      const st = stateRef.current!;
+      let st = stateRef.current!;
+      if (shouldLoop && st.done && st.doneT > 1400) {
+        st = initState();
+        stateRef.current = st;
+        setCurrentLog(0);
+      }
       st.conds = condsRef.current;
       const dt = Math.min(48, now - last) * speedRef.current;
       last = now;
       try {
         if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
         if (st.requestPause) { st.requestPause = false; playRef.current = false; setPlaying(false); }
-        draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null);
+        draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null, hideLabels);
       } catch (err) {
         // Nunca deixa um frame ruim matar o replay: descarta o transitório e segue.
         console.error("[replay] frame error, pulando cena", err);
@@ -224,12 +229,12 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
 
   return (
     <div className="space-y-3">
-      <div className="relative flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020]">
-        <canvas ref={canvasRef} width={920} height={440} className="block h-auto w-auto" style={{ maxWidth: "100%", maxHeight: "72vh" }} />
-        {showAbilities && <AbilitiesCard teams={data.teams} sideNames={data.sideNames ?? { A: "Equipe 1", B: "Equipe 2" }} onClose={closeAbilities}
+      <div className={`relative flex justify-center overflow-hidden rounded-xl border border-slate-700 bg-[#0b1020] ${compact ? "shadow-[0_18px_45px_rgba(0,0,0,.35)]" : ""}`}>
+        <canvas ref={canvasRef} width={920} height={440} className={`block h-auto ${compact ? "w-full" : "w-auto"}`} style={{ maxWidth: "100%", maxHeight: compact ? undefined : "72vh" }} />
+        {!compact && showAbilities && <AbilitiesCard teams={data.teams} sideNames={data.sideNames ?? { A: "Equipe 1", B: "Equipe 2" }} onClose={closeAbilities}
           unrecorded={!data.teams.some((c) => c.ability) && data.turns.some((t) => t.action === "ABILITY")} />}
       </div>
-      <StatusStrip teams={data.teams} statuses={statuses} turnIdx={currentLog} />
+      {!compact && <><StatusStrip teams={data.teams} statuses={statuses} turnIdx={currentLog} />
       <div className="flex flex-wrap items-center gap-2">
         <button onClick={() => setPlaying((p) => !p)} className="rounded-lg bg-[#FFCB05] px-4 py-1.5 text-xs font-bold text-[#1A1A2E]">
           {playing ? "❚❚ Pausar" : "▶ Reproduzir"}
@@ -249,7 +254,7 @@ export function ReplayCanvas({ data }: { data: ReplayData }) {
           ))}
         </div>
       </div>
-      <CurrentActionCaption turn={data.turns[currentLog]} teams={data.teams} />
+      <CurrentActionCaption turn={data.turns[currentLog]} teams={data.teams} /></>}
     </div>
   );
 }
@@ -671,7 +676,7 @@ function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
 
 // ────────────────────────── desenho ──────────────────────────
-function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>, winnerName: string | null) {
+function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>, winnerName: string | null, hideLabels: boolean) {
   const { W, H } = st;
   ctx.save();
   if (st.shake > 0) ctx.translate((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake);
@@ -766,7 +771,7 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   // atores
   const ordered = Object.values(st.actors).sort((a, b) => a.y - b.y);
   const now = performance.now();
-  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex, st.conds[a.c.id] ?? [], now);
+  for (const a of ordered) drawActor(ctx, a, sprites[a.c.id], tex, st.conds[a.c.id] ?? [], now, hideLabels);
 
   // pops de dano/cura
   // Texto flutuante legível: no máx. 220px de largura (encolhe até 12px e corta
@@ -791,7 +796,7 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
   const visibleKo = st.koBanners.slice(-3);
   visibleKo.forEach((k, idx) => {
     const a = st.actors[k.id];
-    if (a) drawKoBanner(ctx, W, a.c, sprites[k.id], k.t, KO_LIFE, idx);
+    if (a) drawKoBanner(ctx, W, a.c, sprites[k.id], k.t, KO_LIFE, idx, hideLabels);
   });
   st.koBanners.forEach((k) => { k.t += dt; });
 
@@ -810,7 +815,7 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 }
 
 // Barra de NOCAUTE no topo: desliza, mostra sprite + nome, e some.
-function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, img: HTMLImageElement | undefined, t: number, life: number, idx: number) {
+function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, img: HTMLImageElement | undefined, t: number, life: number, idx: number, hideLabel: boolean) {
   const p = t / life;
   const slide = Math.min(1, t / 220);          // entrada deslizando
   const out = Math.max(0, (p - 0.78) / 0.22);  // saída
@@ -836,6 +841,7 @@ function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, im
   const avail = x + bw - 10 - tx; // largura útil p/ o texto
   ctx.fillStyle = "#ffd7d7"; ctx.font = "bold 10px 'Jost', system-ui, sans-serif";
   ctx.fillText("✖ NOCAUTE", tx, y + 16);
+  if (hideLabel) { ctx.restore(); return; }
   // nome: reduz a fonte até caber; trunca com reticências se ainda passar
   ctx.fillStyle = "#ffffff";
   let fs = 15;
@@ -1135,7 +1141,7 @@ function drawRecall(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageEleme
   }
 }
 
-function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, tex: Record<string, HTMLImageElement>, conds: CondKind[] = [], now = 0) {
+function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElement | undefined, tex: Record<string, HTMLImageElement>, conds: CondKind[] = [], now = 0, hideLabel = false) {
   // escala por profundidade: quem está mais à frente (y maior) aparece maior
   const dz = 0.82 + (a.y / ARENA_H) * 0.26;
   const S = 72 * dz;
@@ -1192,7 +1198,7 @@ function drawActor(ctx: CanvasRenderingContext2D, a: Actor, img: HTMLImageElemen
   // nome + barra de HP
   ctx.textAlign = "center";
   ctx.font = "11px 'Jost', system-ui, sans-serif"; ctx.fillStyle = "#cbd5e1";
-  ctx.fillText(a.c.name, x, y - 46);
+  if (!hideLabel) ctx.fillText(a.c.name, x, y - 46);
   const bw = 52, bh = 6, bx = x - bw / 2, by = y - 42;
   ctx.fillStyle = "rgba(0,0,0,0.5)"; ctx.fillRect(bx, by, bw, bh);
   const frac = Math.max(0, a.shownHp / a.c.maxHp);
