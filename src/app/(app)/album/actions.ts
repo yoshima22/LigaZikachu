@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser } from "@/lib/auth/permissions";
@@ -228,15 +229,19 @@ export async function sendStickerGift(cardId: string, targetPlayerId: string): P
     ]);
 
     // Notificar destinatário
-    const targetUser = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { userId: true, displayName: true } });
-    if (targetUser) {
+    // Em segundo plano (after): a resposta não espera a consulta nem o envio do push.
+    const senderName = player.displayName;
+    const cardName = sticker.card.displayName;
+    after(async () => {
+      const targetUser = await prisma.player.findUnique({ where: { id: targetPlayerId }, select: { userId: true } });
+      if (!targetUser) return;
       await sendNotificationToUser(targetUser.userId, {
         title: "🎴 Figurinha recebida!",
-        body: `${player.displayName} te enviou ${sticker.card.displayName}. Verifique sua Caixa de Presentes!`,
+        body: `${senderName} te enviou ${cardName}. Verifique sua Caixa de Presentes!`,
         url: "/caixa-de-presentes",
         category: "OUTROS"
       });
-    }
+    });
 
     revalidatePath("/album");
     void onGiftSent(player.id).catch(() => {});

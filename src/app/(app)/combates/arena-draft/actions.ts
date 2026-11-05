@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
@@ -784,12 +785,12 @@ export async function createDraftChallengeAction(
       },
     });
     revalidatePath("/combates/arena-draft");
-    await sendNotificationToUser(target.userId, {
+    after(() => sendNotificationToUser(target.userId, {
       title: "Novo desafio na Arena Draft",
       body: `${player.displayName} quer enfrentar você. O convite expira em 10 minutos.`,
       url: "/combates/arena-draft",
       category: "ARENA",
-    }).catch(() => null);
+    }).catch(() => null));
     return {
       success: "Desafio enviado. Ele expira em 10 minutos.",
       matchId: match.id,

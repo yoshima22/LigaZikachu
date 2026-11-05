@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -273,12 +274,12 @@ export async function runDraw(lootId: string): Promise<{ drawnNumber: number; wi
       void onLootWon(winningPick.player.id).catch(() => {});
 
       // Push notification para o vencedor
-      await sendNotificationToUser(winningPick.player.userId, {
+      after(() => sendNotificationToUser(winningPick.player.userId, {
         title: "🏆 Você ganhou na ZikaLoot!",
         body: `Número ${drawnNumber} sorteado em "${loot.name}". Verifique sua Caixa de Presentes!`,
         url: "/caixa-de-presentes",
         category: "OUTROS"
-      });
+      }).catch(() => null));
 
       revalidatePath("/zikaloot");
       return { drawnNumber, winner: winningPick.player.displayName };

@@ -1,5 +1,6 @@
 "use server";
 
+import { after } from "next/server";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
@@ -186,18 +187,22 @@ export async function createChallenge(
     });
 
     // Notificar jogador desafiado
-    const challengedPlayer = await prisma.player.findUnique({
-      where: { id: data.challengedId },
-      select: { userId: true, displayName: true }
-    });
-    if (challengedPlayer) {
+    const challengerName = player.displayName;
+    const tournamentName = tournament.name;
+    const tournamentSlug = tournament.slug;
+    after(async () => {
+      const challengedPlayer = await prisma.player.findUnique({
+        where: { id: data.challengedId },
+        select: { userId: true }
+      });
+      if (!challengedPlayer) return;
       await sendNotificationToUser(challengedPlayer.userId, {
         title: "⚔️ Você foi desafiado!",
-        body: `${player.displayName} te desafiou em ${tournament.name}. Verifique a aba de Desafios!`,
-        url: `/torneios/${tournament.slug}/desafios`,
+        body: `${challengerName} te desafiou em ${tournamentName}. Verifique a aba de Desafios!`,
+        url: `/torneios/${tournamentSlug}/desafios`,
         category: "OUTROS"
       });
-    }
+    });
 
     revalidatePath(`/torneios/${tournament.slug}/desafios`);
     return {};
