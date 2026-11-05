@@ -3184,6 +3184,7 @@ model MascotExpedition {
   mascot     Mascot           @relation(fields: [mascotId], references: [id], onDelete: Cascade)
 
   @@index([mascotId])
+  @@index([status, finishAt])
   @@map("mascot_expeditions")
 }
 
