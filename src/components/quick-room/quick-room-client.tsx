@@ -141,6 +141,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const myId = useRef("");
   const myName = useRef("");
   const topic = useRef("");
+  const participantToken = useRef("");
   const iceServers = useRef<RTCIceServer[]>([]);
   const maxParticipants = useRef(13);
   const supabase = useRef<SupabaseClient | null>(null);
@@ -355,6 +356,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       const data = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(data.error ?? "Não foi possível entrar na sala.");
       topic.current = data.topic;
+      participantToken.current = data.participantToken ?? "";
       iceServers.current = data.iceServers ?? [];
       maxParticipants.current = data.maxParticipants ?? 13;
 
@@ -420,7 +422,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       });
       publishPresence();
       beat.current = window.setInterval(() => {
-        void fetch(`/api/salas/${code}/heartbeat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: topic.current }) }).catch(() => null);
+        void fetch(`/api/salas/${code}/heartbeat`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ topic: topic.current, participantToken: participantToken.current, media: { micOn: memberState.current.mic, screenOn: memberState.current.sharing, cameraOn: false } }) }).catch(() => null);
       }, 60_000);
       setPhase("in");
     } catch (e) {

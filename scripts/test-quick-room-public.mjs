@@ -43,3 +43,10 @@ test("lists only fresh public rooms with people and active media", () => {
   assert.equal(publicPolicy.isPublicLiveEligible({ ...active, activeMedia: 0 }, now), false);
 });
 
+test("summarizes camera and screen activity without treating a muted microphone as a live source", () => {
+  assert.equal(typeof publicPolicy.countActiveMedia, "function");
+  assert.equal(publicPolicy.countActiveMedia([{ micOn: true, cameraOn: false, screenOn: false }]), 0);
+  assert.equal(publicPolicy.countActiveMedia([{ micOn: false, cameraOn: true, screenOn: false }]), 1);
+  assert.equal(publicPolicy.countActiveMedia([{ micOn: false, cameraOn: true, screenOn: true }]), 2);
+});
+

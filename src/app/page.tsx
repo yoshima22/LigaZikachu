@@ -8,6 +8,7 @@ import { auth } from "@/auth";
 import { getManualSessionUser } from "@/lib/manual-session";
 import { AutoRestoreSession } from "@/components/auth/auto-restore-session";
 import { Reveal } from "@/components/home/reveal";
+import { listPublicQuickRooms } from "@/lib/quick-room";
 
 // Só aparecem aqui modos já abertos aos jogadores (Torre dos Rebeldes e World Mode ainda são de admin).
 const FEATURES: Array<{
@@ -72,6 +73,7 @@ export default async function HomePage() {
   if (session?.user) redirect("/dashboard");
   const manualUser = await getManualSessionUser();
   if (manualUser) redirect("/dashboard");
+  const liveRooms = await listPublicQuickRooms(3).catch(() => []);
 
   return (
     <div className="relative min-h-screen overflow-x-clip bg-[#0a0a12] text-slate-200">
@@ -156,6 +158,20 @@ export default async function HomePage() {
               />
             ))}
           </div>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-5 py-12">
+          <Reveal>
+            <div className="grid overflow-hidden rounded-3xl border border-[#FFCB05]/20 bg-[radial-gradient(circle_at_80%_20%,rgba(61,125,202,.24),transparent_32%),linear-gradient(135deg,#171329,#090b18)] md:grid-cols-[1.15fr_.85fr]">
+              <div className="p-8 sm:p-12"><p className="text-xs font-black uppercase tracking-[.24em] text-[#FFCB05]">Campeonato TCG da Liga</p><h2 className="mt-4 text-3xl font-black tracking-tight text-white sm:text-4xl">Uma comunidade que joga, compete e acompanha cada rodada.</h2><p className="mt-4 max-w-xl text-slate-400">Monte seu deck, encontre sua próxima partida e acompanhe o campeonato TCG que movimenta a Liga.</p><Link href="/torneios" className={`mt-7 inline-flex items-center gap-2 rounded-xl bg-[#FFCB05] px-5 py-3 text-sm font-black text-slate-950 ${FOCUS}`}>Conhecer o campeonato <ArrowRight size={16}/></Link></div>
+              <div aria-hidden className="relative min-h-56 bg-[linear-gradient(135deg,rgba(255,203,5,.13),transparent_45%)]"><div className="absolute left-10 top-10 h-36 w-28 rotate-[-10deg] rounded-2xl border border-white/20 bg-white/10 shadow-2xl"/><div className="absolute bottom-8 right-12 h-40 w-28 rotate-[12deg] rounded-2xl border border-[#FFCB05]/35 bg-[#FFCB05]/10 shadow-2xl"/></div>
+            </div>
+          </Reveal>
+        </section>
+
+        <section className="mx-auto max-w-6xl px-5 py-12">
+          <Reveal><div className="flex flex-wrap items-end justify-between gap-4"><div><p className="text-xs font-black uppercase tracking-[.24em] text-cyan-200">ZikaChat · sem conta</p><h2 className="mt-2 text-3xl font-black text-white">A comunidade também está ao vivo.</h2><p className="mt-2 max-w-xl text-slate-400">Entre com um código ou abra sua própria mesa com voz, chat, câmera e telas escolhidas por você.</p></div><Link href="/salas" className={`inline-flex items-center gap-2 rounded-xl border border-[#FFCB05]/40 px-5 py-3 font-bold text-[#FFCB05] ${FOCUS}`}>Abrir ZikaChat <Radio size={16}/></Link></div></Reveal>
+          {liveRooms.length > 0 && <div className="mt-6 grid gap-4 md:grid-cols-3">{liveRooms.map((room) => <Link key={room.code} href={`/salas/${room.code}`} className={`rounded-2xl border border-white/10 bg-white/[.035] p-5 transition hover:-translate-y-1 hover:border-[#FFCB05]/40 ${FOCUS}`}><p className="text-xs font-bold text-red-300">● AO VIVO</p><h3 className="mt-2 truncate font-black text-white">{room.title}</h3><p className="mt-3 text-xs text-slate-400">{room.participants} conectados · {room.cameras + room.screens} fontes ativas</p></Link>)}</div>}
         </section>
 
         {/* Novidades */}

@@ -1,8 +1,7 @@
 import { NextResponse } from "next/server";
-import { prisma } from "@/lib/prisma";
 import { verifyPassword } from "@/lib/auth/password";
 import { clientIp, rateLimit } from "@/lib/rate-limit";
-import { getActiveRoom, roomLabel, roomTopic, STUN_SERVERS } from "@/lib/quick-room";
+import { getActiveRoom, joinQuickRoom, roomLabel, roomTopic, STUN_SERVERS } from "@/lib/quick-room";
 
 export const runtime = "nodejs";
 
@@ -18,15 +17,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
   const room = await getActiveRoom(code);
   if (!room) return NextResponse.json({ error: "Sala não encontrada ou encerrada." }, { status: 404 });
 
-  if (room.passwordHash) {
-    const body = (await request.json().catch(() => ({}))) as { password?: unknown };
-    const password = typeof body.password === "string" ? body.password : "";
-    if (!password || !(await verifyPassword(password, room.passwordHash))) {
-      return NextResponse.json({ error: "Senha incorreta." }, { status: 403 });
-    }
-  }
-
-  await prisma.quickRoom.update({ where: { id: room.id }, data: { lastActiveAt: new Date() } });
+  const body = (await request.json().catch(() => ({}))) as { password?: unknown; name?: unknown };
+  const password = typeof body.password === "string" ? body.password : "";
+  const joined = await joinQuickRoom({ code, name: body.name, passwordValid: !room.passwordHash || Boolean(password) && await verifyPassword(password, room.passwordHash) });
+  if ("error" in joined) return NextResponse.json({ error: joined.error === "FULL" ? "Sala cheia." : joined.error === "PASSWORD" ? "Senha incorreta." : "Sala não encontrada ou encerrada." }, { status: joined.error === "FULL" ? 409 : joined.error === "PASSWORD" ? 403 : 404 });
   return NextResponse.json({
     topic: roomTopic(room),
     maxParticipants: room.maxParticipants,
@@ -38,5 +32,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ cod
       key: process.env.SUPABASE_PUBLISHABLE_KEY ?? process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? null,
     },
     iceServers: STUN_SERVERS,
+    participantId: joined.lease.id,
+    participantToken: joined.participantToken,
+    isHost: Boolean(room.hostTokenHash && false),
   });
 }
