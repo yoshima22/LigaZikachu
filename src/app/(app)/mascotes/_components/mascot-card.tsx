@@ -675,12 +675,9 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const refuge = refugeStatus(mascot);
   const arenaLocked = !!arena?.locked || !!refuge?.locked;
 
-  // Tick local — atualiza a cada segundo para que cooldowns reflitam imediatamente após a interação
+  // Relógio local dos cooldowns. O intervalo de 1 s só roda enquanto há cooldown ativo
+  // (antes ele re-renderizava este card gigante a cada segundo, para sempre, em todos os cards).
   const [nowMs, setNowMs] = useState(() => Date.now());
-  useEffect(() => {
-    const iv = setInterval(() => setNowMs(Date.now()), 1000);
-    return () => clearInterval(iv);
-  }, []);
 
   // Semeia o Map de cooldown a partir do servidor (sobrevive a refresh de pagina).
   // Brincar e carinho possuem cooldowns independentes.
@@ -709,6 +706,12 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const petOnCooldown  = (_pettedAt.get(mascot.id) ?? 0) > 0 && petEndMs  > nowMs;
   const playCooldownRemaining = Math.max(0, playEndMs - nowMs);
   const petCooldownRemaining  = Math.max(0, petEndMs  - nowMs);
+  const cooldownActive = playOnCooldown || petOnCooldown;
+  useEffect(() => {
+    if (!cooldownActive) return;
+    const iv = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(iv);
+  }, [cooldownActive]);
 
   // Button availability — usa estado otimista local (localMood, localHappiness)
   const inExpedition = !!expedition && !claimable;
