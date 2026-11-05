@@ -49,27 +49,30 @@ async function checkAutomaticAchievements(
     }
   });
 
-  for (const achievement of achievements) {
-    const rule = achievement.rules[0];
-    if (!rule) continue;
+  if (achievements.length === 0) return;
 
-    // Verificar se já possui (para não repetíveis)
-    if (!achievement.isRepeatable) {
-      const alreadyHas = await prisma.playerAchievement.findFirst({
-        where: { achievementId: achievement.id, playerId, seasonId: seasonId ?? null }
-      });
-      if (alreadyHas) continue;
-    }
+  // Uma consulta para "já possui" de todas as conquistas não repetíveis (antes: 1 por conquista).
+  const nonRepeatableIds = achievements.filter((a) => !a.isRepeatable).map((a) => a.id);
+  const owned = new Set(
+    nonRepeatableIds.length
+      ? (await prisma.playerAchievement.findMany({
+          where: { achievementId: { in: nonRepeatableIds }, playerId, seasonId: seasonId ?? null },
+          select: { achievementId: true },
+        })).map((row) => row.achievementId)
+      : []
+  );
+  const pending = achievements.filter((a) => a.rules[0] && !owned.has(a.id));
+  if (pending.length === 0) return;
 
-    // Calcular progresso atual
-    const agg = await prisma.achievementEvent.aggregate({
-      where: { playerId, eventType, seasonId: seasonId ?? undefined },
-      _sum: { value: true }
-    });
-    const progress = agg._sum.value ?? 0;
+  // O progresso é o mesmo para todas (mesmo jogador, evento e temporada): soma uma vez só.
+  const agg = await prisma.achievementEvent.aggregate({
+    where: { playerId, eventType, seasonId: seasonId ?? undefined },
+    _sum: { value: true }
+  });
+  const progress = agg._sum.value ?? 0;
 
-    if (progress >= rule.targetValue) {
-      // Desbloquear conquista
+  for (const achievement of pending) {
+    if (progress >= achievement.rules[0].targetValue) {
       await unlockAchievement(playerId, achievement.id, seasonId, progress, achievement.rewards);
     }
   }

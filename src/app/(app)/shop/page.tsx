@@ -40,8 +40,13 @@ async function ensureCoreMascotItems() {
     { type: "ANTIDOTE", name: "Antídoto", description: "Cura imediatamente um mascote doente. A doença reduz todos os atributos em 40% e pode se espalhar entre seus mascotes.", price: 300 },
     { type: "FIRST_AID_KIT", name: "Kit de Primeiros Socorros", description: "Cura a doença de todos os mascotes da conta de uma vez. Eles voltam saudáveis, porém com fome.", price: 3000 },
   ];
+  // Uma consulta para os dois itens (antes: 1 findFirst por item a cada render da loja).
+  const found = await prisma.shopItem.findMany({
+    where: { type: { in: items.map((item) => item.type) as never[] } },
+    select: { id: true, type: true, name: true, description: true, price: true, active: true, inventoryEnabled: true },
+  });
   for (const item of items) {
-    const existing = await prisma.shopItem.findFirst({ where: { type: item.type as never }, select: { id: true, name: true, description: true, price: true, active: true, inventoryEnabled: true } });
+    const existing = found.find((row) => row.type === item.type);
     if (!existing) {
       await prisma.shopItem.create({ data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
       await invalidateShopCache();
