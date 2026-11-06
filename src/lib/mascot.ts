@@ -1459,7 +1459,12 @@ function rollBuffItemType(durationKey: ExpeditionDuration, luckBuff = false): st
   return type;
 }
 
-const LUCK_BONUS_CHANCE = 0.25;
+/** Chance de o Amuleto da Sorte ativar o bônus, por duração da expedição. */
+const LUCK_BONUS_CHANCE_BY_DURATION: Record<string, number> = { "30min": 0.15, "1h": 0.20, "3h": 0.25, "6h": 0.25 };
+const luckBonusChance = (durationKey: ExpeditionDuration) => LUCK_BONUS_CHANCE_BY_DURATION[durationKey] ?? 0.25;
+
+/** Chance de uma expedição render Política de Fraqueza a quem não tem nenhuma (só troca recompensa fraca). */
+const WEAKNESS_POLICY_DROP_CHANCE = 0.04;
 
 /** Ovo da Sorte: 55% +20%, 30% +40%, 12% +80%, 3% +150% (média ≈ +37%). */
 function rollLuckyEggPct(): number {
@@ -1478,12 +1483,12 @@ function applyLuckBonus(reward: ExpeditionReward, durationKey: ExpeditionDuratio
       if (Math.random() < labChance) return { ...reward, eggType: "LAB", luckNote: "🍀 Sorte extraordinária! O ovo veio de Laboratório." };
     }
     const next = reward.eggType === "COMMON" ? "RARE" : reward.eggType === "RARE" ? "SPECIAL" : null;
-    if (next && Math.random() < LUCK_BONUS_CHANCE) {
+    if (next && Math.random() < luckBonusChance(durationKey)) {
       return { ...reward, eggType: next, luckNote: `🍀 Sorte! O ovo subiu de raridade (${next === "RARE" ? "Raro" : "Especial"}).` };
     }
     return reward;
   }
-  if (Math.random() >= LUCK_BONUS_CHANCE) return reward;
+  if (Math.random() >= luckBonusChance(durationKey)) return reward;
   if (reward.type === "FOOD") return { ...reward, quantity: reward.quantity * 2, luckNote: "🍀 Sorte! Quantidade dobrada pelo Amuleto da Sorte." };
   if (reward.type === "COINS") return { ...reward, amount: Math.round(reward.amount * 1.5), luckNote: "🍀 Sorte! +50% de ZikaCoins pelo Amuleto da Sorte." };
   if (reward.type === "BUFF_ITEM") return { ...reward, quantity: 2, luckNote: "🍀 Sorte! Você recebeu 2 unidades pelo Amuleto da Sorte." };
@@ -1946,6 +1951,16 @@ export async function claimExpedition(
     } else if (pers === "CURIOUS" && mode === "ITEMS" && isCommonFoodOnly) {
       baseReward = await reroll();
     }
+  }
+
+  // Política de Fraqueza: quem não tem nenhuma pode ganhá-la no lugar de uma recompensa fraca.
+  if (baseReward && (baseReward.type === "NOTHING" || baseReward.type === "COINS" || baseReward.type === "FOOD")
+    && Math.random() < WEAKNESS_POLICY_DROP_CHANCE) {
+    const policy = await prisma.shopItem.findFirst({ where: { type: "WEAKNESS_POLICY" }, select: { id: true } });
+    const owned = policy
+      ? await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId, itemId: policy.id } }, select: { quantity: true } })
+      : null;
+    if (policy && !(owned && owned.quantity > 0)) baseReward = { type: "BUFF_ITEM", shopItemType: "WEAKNESS_POLICY" };
   }
 
   // EXP: base × duração × nível × bônus social
@@ -3637,6 +3652,7 @@ export async function applyRainbowFeather(
   expectedEggTier?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB",
   tx?: Prisma.TransactionClient,
   adminLabOriginOverride = false,
+  resetEggTierOverride?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB",
 ) {
   const db = tx ?? prisma;
   const mascot = await db.mascot.findUnique({ where: { id: mascotId } });
@@ -3646,11 +3662,11 @@ export async function applyRainbowFeather(
   if (adminLabOriginOverride && (mascot.hatchedFromEggType || mascot.hatchedFromEggOrigin)) {
     throw new Error("Esta Pena especial só pode ser usada em mascotes sem ovo de origem registrado.");
   }
-  const eggTypeKey = adminLabOriginOverride
+  const eggTypeKey = resetEggTierOverride ?? (adminLabOriginOverride
     ? "LAB"
     : mascot.hatchedFromEggType
     ? getEggStatTypeKey(mascot.hatchedFromEggType, mascot.hatchedFromEggOrigin)
-    : "RARE";
+    : "RARE");
   const actualEggTier =
     eggTypeKey === "CELESTIAL" ? "CELESTIAL" :
     eggTypeKey === "LAB" ? "LAB" :

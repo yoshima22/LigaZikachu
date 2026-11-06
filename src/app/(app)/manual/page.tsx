@@ -687,7 +687,7 @@ export default async function ManualPage() {
             rows={[
               [
                 "🍀 Amuleto da Sorte",
-                "Por 6h: dobra a sorte da expedição; 25% de chance de subir a raridade do ovo (Comum→Raro, Raro→Especial), dobrar comida/doce/item ou render +50% de moedas; +50% de chance de Pedra de Mega nas expedições de Itens; em expedições de 6h com sorte ≥ 150, o Ovo Especial pode virar Ovo de Laboratório (0,5% a 3%). O resultado avisa quando o bônus acontece.",
+                "Por 6h: dobra a sorte da expedição; 15% (30 min), 20% (1h) ou 25% (3h e 6h) de chance de subir a raridade do ovo (Comum→Raro, Raro→Especial), dobrar comida/doce/item ou render +50% de moedas; +50% de chance de Pedra de Mega nas expedições de Itens; em expedições de 6h com sorte ≥ 150, o Ovo Especial pode virar Ovo de Laboratório (0,5% a 3%). O resultado avisa quando o bônus acontece.",
               ],
               [
                 "💊 Proteína Zika",
@@ -765,7 +765,7 @@ export default async function ManualPage() {
               ],
               [
                 "Amuleto da Sorte",
-                "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2. Além disso, cada drop tem 25% de chance de vir melhor (ovo de raridade maior, quantidade dobrada ou +50% de moedas).",
+                "Dobra o valor de sorte usado na expedição. Um mascote Nv.25 com 60 Instinto rola como se tivesse 130 de sorte: (60 + 5) × 2. Além disso, cada drop tem 15% (30 min), 20% (1h) ou 25% (3h e 6h) de chance de vir melhor (ovo de raridade maior, quantidade dobrada ou +50% de moedas).",
               ],
               [
                 "Mega Stone",
