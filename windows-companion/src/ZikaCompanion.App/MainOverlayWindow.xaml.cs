@@ -86,10 +86,11 @@ public partial class MainOverlayWindow : Window
         _lastFrame = stamp;
         _model.Advance();
         if (!_model.IsWalking || _dragWindowStart is not null || Mascot.ContextMenu.IsOpen) return;
-        var area = ToLogicalArea(Forms.Screen.FromHandle(_handle));
-        var next = _model.WalkPosition(new Point(Left, Top), new Size(Width, Height), area,
+        var area = CurrentArea();
+        var next = _model.WalkVisualPosition(new Point(Left, Top), VisualBounds(), area,
             TimeSpan.FromSeconds(Math.Min(.1, elapsed.TotalSeconds)));
         Place(next, area);
+        UpdateMascot();
     }
 
     private Rect ToLogicalArea(Forms.Screen screen)

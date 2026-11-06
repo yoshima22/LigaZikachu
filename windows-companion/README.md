@@ -44,16 +44,18 @@ O simulador também gera um evento a cada 30 segundos, alternando os três tipos
 
 ## Arte e som temporários
 
-Os arquivos `src/ZikaCompanion.App/Assets/*-placeholder.gif` são **placeholders somente para testes locais**, obtidos do repositório PokeAPI/sprites, sprites animados de Pokémon Black/White (Geração V):
+> **PRIVATE STUDY ONLY / DO NOT DISTRIBUTE — ESTUDO PRIVADO APENAS / NÃO DISTRIBUIR.**
 
-- [Pikachu — 25](https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/25.gif): `pikachu-placeholder.gif`.
-- [Bulbasaur — 1](https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/1.gif): `bulbasaur-placeholder.gif`.
-- [Charmander — 4](https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/4.gif): `charmander-placeholder.gif`.
-- [Squirtle — 7](https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/7.gif): `squirtle-placeholder.gif`.
+Os GIFs locais são recortes dos sprites de ação do projeto [SpriteCollab](https://github.com/PMDCollab/SpriteCollab), criados a partir dos arquivos abaixo. Os personagens Pokémon e seus direitos pertencem a seus respectivos titulares, incluindo Pokémon / Nintendo / Game Freak / Creatures. A disponibilidade pública dos arquivos não concede licença de distribuição; estes recursos foram autorizados apenas para este protótipo privado de estudo.
 
-Créditos dos sprites e personagens: Pokémon / Nintendo / Game Freak / Creatures; distribuição de referência: PokeAPI/sprites. Os GIFs foram baixados durante o desenvolvimento e são incluídos como recursos no executável; não são buscados na internet durante a execução. Este uso temporário não concede licença para distribuição comercial.
+Foram extraídas as linhas de direção para Idle, Walk e Sleep; os tempos seguem `AnimData.xml` (60 quadros por segundo), arredondados para a resolução de GIF. Os arquivos originais e metadados usados, fixados no commit `dd47c4644177ca1136513ead54e11ace689733b5`, são:
 
-`LocalGifAnimation.cs` decodifica os quadros e seus tempos usando os recursos desktop do .NET 8 e os anima no WPF, sem pacote adicional. O SVG antigo permanece apenas como referência histórica, sem uso na interface. O som é substituível em `Services/AudioAlertService.cs`.
+- Bulbasaur: [AnimData.xml](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0001/AnimData.xml), [Idle-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0001/Idle-Anim.png), [Walk-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0001/Walk-Anim.png), [Sleep-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0001/Sleep-Anim.png).
+- Charmander: [AnimData.xml](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0004/AnimData.xml), [Idle-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0004/Idle-Anim.png), [Walk-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0004/Walk-Anim.png), [Sleep-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0004/Sleep-Anim.png).
+- Squirtle: [AnimData.xml](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0007/AnimData.xml), [Idle-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0007/Idle-Anim.png), [Walk-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0007/Walk-Anim.png), [Sleep-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0007/Sleep-Anim.png).
+- Pikachu: [AnimData.xml](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0025/AnimData.xml), [Idle-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0025/Idle-Anim.png), [Walk-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0025/Walk-Anim.png), [Sleep-Anim.png](https://raw.githubusercontent.com/PMDCollab/SpriteCollab/dd47c4644177ca1136513ead54e11ace689733b5/sprite/0025/Sleep-Anim.png).
+
+Os GIFs são recursos incorporados ao executável; nenhuma imagem é buscada na rede durante a execução. Alert, Happy e Dragging usam Idle. `LocalGifAnimation.cs` decodifica os quadros no WPF. O SVG antigo permanece apenas como referência histórica, sem uso na interface. O som é substituível em `Services/AudioAlertService.cs`.
 
 ## Validar
 

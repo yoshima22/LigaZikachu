@@ -27,16 +27,16 @@ public sealed class MascotSelectionTests
                 Assert.Equal(new[] { "Pikachu", "Bulbasaur", "Charmander", "Squirtle" }, choices.Select(item => (string)item.Header));
                 Assert.Equal(new[] { "Pikachu" }, choices.Where(item => item.IsChecked).Select(item => (string)item.Header));
                 Assert.Equal(25, model.SelectedMascot.Number);
-                AssertBundledFrame(image, "pikachu-placeholder.gif");
+                AssertBundledFrame(image, "0025-idle.gif");
             }
             finally { window.Close(); }
         });
     }
 
     [Theory]
-    [InlineData("Bulbasaur", 1, "bulbasaur-placeholder.gif")]
-    [InlineData("Charmander", 4, "charmander-placeholder.gif")]
-    [InlineData("Squirtle", 7, "squirtle-placeholder.gif")]
+    [InlineData("Bulbasaur", 1, "0001-idle.gif")]
+    [InlineData("Charmander", 4, "0004-idle.gif")]
+    [InlineData("Squirtle", 7, "0007-idle.gif")]
     public void ChoosingMascotImmediatelyReplacesBundledFramesAndPreservesLocalState(string name, int number, string asset)
     {
         OnSta(() =>
@@ -61,7 +61,7 @@ public sealed class MascotSelectionTests
                 Assert.True(model.HasBalloon);
                 Assert.Equal("Preservar este balão", model.BalloonMessage);
                 choices.Single(item => (string)item.Header == "Pikachu").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
-                AssertBundledFrame(image, "pikachu-placeholder.gif");
+                AssertBundledFrame(image, "0025-idle.gif");
                 Assert.Equal(25, model.SelectedMascot.Number);
                 Assert.Equal(new[] { "Pikachu" }, choices.Where(item => item.IsChecked).Select(item => (string)item.Header));
             }
@@ -89,7 +89,7 @@ public sealed class MascotSelectionTests
                 model.TogglePause();
                 trayChoices.Single(item => item.Text == "Squirtle").PerformClick();
                 var image = (Image)window.FindName("Mascot");
-                AssertBundledFrame(image, "squirtle-placeholder.gif");
+                AssertBundledFrame(image, "0007-idle.gif");
                 Assert.True(model.IsPaused);
                 Assert.Equal(new[] { "Squirtle" }, Choices(image).Where(item => item.IsChecked).Select(item => (string)item.Header));
                 Assert.Equal(new[] { "Squirtle" }, trayChoices.Where(item => item.Checked).Select(item => item.Text));
@@ -98,6 +98,48 @@ public sealed class MascotSelectionTests
             }
             finally { window.Close(); }
         });
+    }
+
+    [Fact]
+    public void BehaviorAndSelectionImmediatelyReplaceDisplayedFrame()
+    {
+        OnSta(() =>
+        {
+            var now = DateTimeOffset.UnixEpoch;
+            var model = new OverlayViewModel(new AlertQueue(new AudioAlertService(() => { })), () => now);
+            var window = new MainOverlayWindow(model);
+            try
+            {
+                var image = (Image)window.FindName("Mascot");
+                AssertBundledFrame(image, "0025-idle.gif");
+                now = now.AddSeconds(8); model.Advance();
+                AssertBundledFrame(image, "0025-walk-left.gif");
+                model.SelectMascot(7);
+                AssertBundledFrame(image, "0007-walk-left.gif");
+                now = now.AddSeconds(16); model.Advance();
+                AssertBundledFrame(image, "0007-sleep.gif");
+                model.SelectMascot(4);
+                AssertBundledFrame(image, "0004-sleep.gif");
+                model.Wake();
+                AssertBundledFrame(image, "0004-idle.gif");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    [Fact]
+    public void BehaviorMapsToDistinctLocalAnimationsForEveryMascot()
+    {
+        foreach (var mascot in MascotCatalog.All)
+        {
+            var idle = MascotCatalog.AssetFor(mascot, CompanionBehavior.Idle, -1);
+            var walk = MascotCatalog.AssetFor(mascot, CompanionBehavior.Walk, -1);
+            var sleep = MascotCatalog.AssetFor(mascot, CompanionBehavior.Sleep, -1);
+            Assert.Equal($"Assets/{mascot.Number:D4}-idle.gif", idle);
+            Assert.Equal($"Assets/{mascot.Number:D4}-walk-left.gif", walk);
+            Assert.Equal($"Assets/{mascot.Number:D4}-walk-right.gif", MascotCatalog.AssetFor(mascot, CompanionBehavior.Walk, 1));
+            Assert.Equal($"Assets/{mascot.Number:D4}-sleep.gif", sleep);
+        }
     }
 
     private static MenuItem[] Choices(Image image)

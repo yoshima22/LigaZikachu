@@ -298,7 +298,7 @@ public sealed class OverlayPolicyTests
                 timer.Tick += (_, _) =>
                 {
                     frames.Add(mascot.Source);
-                    if (elapsed.ElapsedMilliseconds >= 500) frame.Continue = false;
+                    if (elapsed.ElapsedMilliseconds >= 1000) frame.Continue = false;
                 };
                 try { timer.Start(); Dispatcher.PushFrame(frame); }
                 finally { timer.Stop(); }

@@ -8,10 +8,10 @@ namespace ZikaCompanion.Tests;
 public class ActionAreaTests
 {
     [Fact]
-    public void UnverifiedActionsUseExistingLocalSpriteForEachSpecies()
+    public void OtherActionsUseIdleSpriteForEachSpecies()
     {
         foreach (var mascot in MascotCatalog.All)
-        foreach (var action in new[] { CompanionBehavior.Idle, CompanionBehavior.Walk, CompanionBehavior.Sleep, CompanionBehavior.Alert, CompanionBehavior.Dragging })
+        foreach (var action in new[] { CompanionBehavior.Idle, CompanionBehavior.Alert, CompanionBehavior.Happy, CompanionBehavior.Dragging })
             Assert.Equal(mascot.AssetPath, MascotCatalog.AssetFor(mascot, action, 1));
     }
 
