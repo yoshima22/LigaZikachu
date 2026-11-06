@@ -196,6 +196,9 @@ model User {
   raidNotifications         UserRaidNotification[]
   raidPasswordStamps        RaidPasswordStamp[]
 
+  companionAuthorizations CompanionAuthorization[]
+  companionDevices CompanionDevice[]
+
   @@map("users")
 }
 
@@ -5475,3 +5478,29 @@ model QuickRoomReport {
   @@index([roomId, createdAt])
   @@map("quick_room_reports")
 }
+
+model CompanionAuthorization {
+  id             String    @id @default(cuid())
+  deviceCodeHash String    @unique
+  userCodeHash   String    @unique
+  userId         String?
+  expiresAt      DateTime
+  consumedAt     DateTime?
+  createdAt      DateTime  @default(now())
+  user           User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([expiresAt])
+  @@map("companion_authorizations")
+}
+
+model CompanionDevice {
+  id               String    @id
+  userId           String
+  refreshHash      String    @unique
+  refreshExpiresAt DateTime
+  revokedAt        DateTime?
+  createdAt        DateTime  @default(now())
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  @@index([userId])
+  @@map("companion_devices")
+}
+
