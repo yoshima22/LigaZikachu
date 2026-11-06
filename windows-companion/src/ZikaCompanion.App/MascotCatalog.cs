@@ -8,7 +8,8 @@ public static class MascotCatalog
     {
         var action = behavior switch
         {
-            CompanionBehavior.Walk => direction < 0 ? "walk-left" : "walk-right",
+            // The extracted overworld resources have their left/right names reversed.
+            CompanionBehavior.Walk => direction < 0 ? "walk-right" : "walk-left",
             CompanionBehavior.Sleep => "sleep",
             _ => "idle"
         };

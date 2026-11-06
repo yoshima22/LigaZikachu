@@ -24,8 +24,13 @@ public partial class MainOverlayWindow : Window
     private bool _dragMoved;
     private bool _positioning;
     private string? _animationPath;
-    private Point? _dragWindowStart;
+    private Point? _dragMascotStart;
     private Point _dragPointerStart;
+    private Point _mascotPosition;
+    private Point _windowPosition;
+    private readonly Dictionary<BitmapSource, Rect> _frameBounds = new();
+    private readonly DependencyPropertyDescriptor _sourceDescriptor;
+    private bool _updatingMascot;
 
     public MainOverlayWindow(OverlayViewModel model)
     {
@@ -40,10 +45,16 @@ public partial class MainOverlayWindow : Window
         }
         _model.PropertyChanged += ModelChanged;
         UpdateMascot();
+        _sourceDescriptor = DependencyPropertyDescriptor.FromProperty(Image.SourceProperty, typeof(Image));
+        _sourceDescriptor.AddValueChanged(Mascot, FrameChanged);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         _timer.Tick += Animate;
         SourceInitialized += InitializeNativeWindow;
-        LocationChanged += (_, _) => ClampToCurrentMonitor();
+        LocationChanged += (_, _) =>
+        {
+            if (_handle == IntPtr.Zero || _positioning) return;
+            Place(_mascotPosition + (new Point(Left, Top) - _windowPosition), CurrentArea());
+        };
         Closed += OnClosed;
     }
 
@@ -52,20 +63,44 @@ public partial class MainOverlayWindow : Window
         var screen = Forms.Screen.PrimaryScreen;
         if (screen is null || _handle == IntPtr.Zero) return;
         var area = ToLogicalArea(screen);
-        Place(new Point(area.Right - Width - 24, area.Bottom - Height - 12), _model.ActionAreaOr(area));
+        var size = FrameBounds().Size;
+        Place(new Point(area.Right - size.Width - 24, area.Bottom - size.Height - 12), _model.ActionAreaOr(area));
     }
 
     private void ModelChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (args.PropertyName is nameof(OverlayViewModel.SelectedMascot) or nameof(OverlayViewModel.Behavior)) UpdateMascot();
+        if (_handle != IntPtr.Zero && args.PropertyName == nameof(OverlayViewModel.HasBalloon)) ClampToCurrentMonitor();
     }
 
     private void UpdateMascot()
     {
         var path = MascotCatalog.AssetFor(_model.SelectedMascot, _model.Behavior, _model.WalkDirection);
-        if (_animationPath != path) { LocalGifAnimation.Start(Mascot, path); _animationPath = path; }
+        if (_animationPath != path)
+        {
+            _updatingMascot = true;
+            try
+            {
+                LocalGifAnimation.Start(Mascot, path);
+                _animationPath = path;
+                _frameBounds.Clear();
+                if (Mascot.Source is BitmapSource frame)
+                {
+                    var scale = Math.Min(118d / frame.PixelWidth, 136d / frame.PixelHeight);
+                    Mascot.Width = frame.PixelWidth * scale;
+                    Mascot.Height = frame.PixelHeight * scale;
+                }
+            }
+            finally { _updatingMascot = false; }
+            if (_handle != IntPtr.Zero) ClampToCurrentMonitor();
+        }
         foreach (var item in MascotChoices.Items.OfType<MenuItem>())
             item.IsChecked = (int)item.Tag == _model.SelectedMascot.Number;
+    }
+
+    private void FrameChanged(object? sender, EventArgs args)
+    {
+        if (!_updatingMascot) ClampToCurrentMonitor();
     }
 
     private void InitializeNativeWindow(object? sender, EventArgs args)
@@ -85,12 +120,12 @@ public partial class MainOverlayWindow : Window
         var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_lastFrame, stamp);
         _lastFrame = stamp;
         _model.Advance();
-        if (!_model.IsWalking || _dragWindowStart is not null || Mascot.ContextMenu.IsOpen) return;
         var area = CurrentArea();
-        var next = _model.WalkVisualPosition(new Point(Left, Top), VisualBounds(), area,
-            TimeSpan.FromSeconds(Math.Min(.1, elapsed.TotalSeconds)));
-        Place(next, area);
+        if (_model.IsWalking && _dragMascotStart is null && !Mascot.ContextMenu.IsOpen)
+            _mascotPosition = _model.WalkVisualPosition(_mascotPosition, new Rect(new Point(), FrameBounds().Size), area,
+                TimeSpan.FromSeconds(Math.Min(.1, elapsed.TotalSeconds)));
         UpdateMascot();
+        Place(_mascotPosition, area);
     }
 
     private Rect ToLogicalArea(Forms.Screen screen)
@@ -103,7 +138,7 @@ public partial class MainOverlayWindow : Window
     private void ClampToCurrentMonitor()
     {
         if (_handle == IntPtr.Zero || _positioning) return;
-        Place(new Point(Left, Top), CurrentArea());
+        Place(_mascotPosition, CurrentArea());
     }
 
     private void Place(Point requested, Rect area)
@@ -111,9 +146,34 @@ public partial class MainOverlayWindow : Window
         _positioning = true;
         try
         {
-            var position = OverlayViewModel.ClampVisualPosition(requested, VisualBounds(), area);
-            Left = position.X;
-            Top = position.Y;
+            var frame = FrameBounds();
+            var visual = new Rect(new Point(), frame.Size);
+            _mascotPosition = OverlayViewModel.ClampVisualPosition(requested, visual, area);
+            // Keep the native window on-screen too. The bounce moves the compact window;
+            // its opposite image offset avoids clipping the sprite's animated pixels.
+            var position = OverlayViewModel.ClampVisualPosition(_mascotPosition + new Vector(0, Bob.Y), visual, area);
+            var toDevice = HwndSource.FromHwnd(_handle)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
+            var physicalPosition = toDevice.Transform(position);
+            var monitor = ToLogicalArea(Forms.Screen.FromPoint(new System.Drawing.Point(
+                (int)physicalPosition.X, (int)physicalPosition.Y)));
+            var above = _model.HasBalloon && position.Y - monitor.Top >= 150;
+            var windowLeft = _model.HasBalloon
+                ? Math.Clamp(position.X + frame.Width - 340, monitor.Left, Math.Max(monitor.Left, monitor.Right - 340))
+                : position.X;
+            var windowTop = above ? position.Y - 150 : position.Y;
+            var mascotX = position.X - windowLeft;
+            var mascotY = position.Y - windowTop;
+            Width = _model.HasBalloon ? 340 : frame.Width;
+            Height = frame.Height + (_model.HasBalloon ? 150 : 0);
+            Mascot.Margin = new Thickness(mascotX - frame.X, mascotY - frame.Y - Bob.Y, 0, 0);
+            Balloon.Margin = new Thickness(8, above ? 8 : frame.Height + 12, 0, 0);
+            BalloonTail.Margin = new Thickness(Math.Clamp(mascotX + frame.Width / 2 - 12, 12, 304),
+                above ? 130 : frame.Height, 0, 0);
+            BalloonTail.RenderTransform = new RotateTransform(above ? 0 : 180);
+            SleepIndicator.Margin = new Thickness(0, mascotY + 7, 0, 0);
+            _windowPosition = new Point(windowLeft, windowTop);
+            Left = windowLeft;
+            Top = windowTop;
         }
         finally { _positioning = false; }
     }
@@ -169,16 +229,16 @@ public partial class MainOverlayWindow : Window
     {
         if (args.ChangedButton != MouseButton.Left) return;
         _dragMoved = false;
-        _dragWindowStart = new Point(Left, Top);
+        _dragMascotStart = _mascotPosition;
         _dragPointerStart = PointerPosition();
         if (Mascot.CaptureMouse()) _model.BeginDrag();
-        else _dragWindowStart = null;
+        else _dragMascotStart = null;
         args.Handled = true;
     }
 
     private void MoveMascot(object sender, MouseEventArgs args)
     {
-        if (_dragWindowStart is not { } start)
+        if (_dragMascotStart is not { } start)
         {
             if (_model.IsSleeping) _model.Wake();
             return;
@@ -192,16 +252,15 @@ public partial class MainOverlayWindow : Window
         if (!_dragMoved) return;
         var screen = Forms.Screen.FromPoint(new System.Drawing.Point((int)pointer.X, (int)pointer.Y));
         var area = ToLogicalArea(screen);
-        var position = OverlayViewModel.DragPosition(start, new Point(), new Point(delta.X, delta.Y), new Size(Width, Height), area);
-        Place(position, area);
+        Place(start + delta, _model.ActionAreaOr(area));
         args.Handled = true;
     }
 
     private void EndMascotDrag(object sender, MouseEventArgs args)
     {
-        if (_dragWindowStart is null) return;
+        if (_dragMascotStart is null) return;
         var wasClick = !_dragMoved && args is MouseButtonEventArgs { ChangedButton: MouseButton.Left };
-        _dragWindowStart = null;
+        _dragMascotStart = null;
         if (Mascot.IsMouseCaptured) Mascot.ReleaseMouseCapture();
         _model.EndDrag(wasClick);
     }
@@ -216,12 +275,12 @@ public partial class MainOverlayWindow : Window
 
     private Rect CurrentArea() => _model.ActionAreaOr(ToLogicalArea(Forms.Screen.FromHandle(_handle)));
 
-    // The image box is much smaller than the transparent overlay; use the opaque pixels
-    // of the current frame so that neither transparent margin blocks the action area.
-    private Rect VisualBounds()
+    // Measure the opaque frame in the fixed image box, independently of the window.
+    // Layout subtracts this offset so reaching an edge never requires an off-screen HWND.
+    private Rect FrameBounds()
     {
-        if (Mascot.Source is not BitmapSource frame || Mascot.ActualWidth <= 0 || Mascot.ActualHeight <= 0)
-            return new Rect(198, 157, 118, 136);
+        if (Mascot.Source is not BitmapSource frame) return new Rect(0, 0, Mascot.Width, Mascot.Height);
+        if (_frameBounds.TryGetValue(frame, out var cached)) return cached;
         var pixels = new byte[frame.PixelWidth * frame.PixelHeight * 4];
         frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
         var left = frame.PixelWidth; var top = frame.PixelHeight; var right = -1; var bottom = -1;
@@ -229,12 +288,13 @@ public partial class MainOverlayWindow : Window
         for (var x = 0; x < frame.PixelWidth; x++)
             if (pixels[(y * frame.PixelWidth + x) * 4 + 3] != 0)
             { left = Math.Min(left, x); top = Math.Min(top, y); right = Math.Max(right, x); bottom = Math.Max(bottom, y); }
-        if (right < left) return new Rect(198, 157, 118, 136);
-        var scale = Math.Min(Mascot.ActualWidth / frame.PixelWidth, Mascot.ActualHeight / frame.PixelHeight);
-        var origin = Mascot.TranslatePoint(new Point(), this);
-        return new Rect(origin.X + (Mascot.ActualWidth - frame.PixelWidth * scale) / 2 + left * scale,
-            origin.Y + (Mascot.ActualHeight - frame.PixelHeight * scale) / 2 + top * scale,
+        if (right < left) return new Rect(0, 0, Mascot.Width, Mascot.Height);
+        var scale = Math.Min(Mascot.Width / frame.PixelWidth, Mascot.Height / frame.PixelHeight);
+        var result = new Rect((Mascot.Width - frame.PixelWidth * scale) / 2 + left * scale,
+            (Mascot.Height - frame.PixelHeight * scale) / 2 + top * scale,
             (right - left + 1) * scale, (bottom - top + 1) * scale);
+        _frameBounds.Add(frame, result);
+        return result;
     }
 
     public void DefineActionArea()
@@ -242,7 +302,7 @@ public partial class MainOverlayWindow : Window
         if (_handle == IntPtr.Zero) return;
         var selector = new AreaSelector(ToLogicalArea(Forms.Screen.FromHandle(_handle)));
         selector.ShowDialog();
-        if (selector.SelectedArea is { } area) { _model.SetActionArea(area); Place(new Point(Left, Top), area); }
+        if (selector.SelectedArea is { } area) { _model.SetActionArea(area); Place(_mascotPosition, area); }
     }
     public void ResetActionArea() { _model.ResetActionArea(); ClampToCurrentMonitor(); }
     private void DefineArea(object sender, RoutedEventArgs args) => DefineActionArea();
@@ -258,6 +318,7 @@ public partial class MainOverlayWindow : Window
     {
         _timer.Stop();
         _model.PropertyChanged -= ModelChanged;
+        _sourceDescriptor.RemoveValueChanged(Mascot, FrameChanged);
         Mascot.BeginAnimation(Image.SourceProperty, null);
         if (_handle != IntPtr.Zero) HwndSource.FromHwnd(_handle)?.RemoveHook(WindowMessages);
     }

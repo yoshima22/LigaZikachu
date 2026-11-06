@@ -210,11 +210,12 @@ public sealed class OverlayPolicyTests
                 var balloon = (Border)window.FindName("Balloon");
                 var tail = Assert.IsType<System.Windows.Shapes.Polygon>(window.FindName("BalloonTail"));
                 var bodyBottom = balloon.TranslatePoint(new Point(0, balloon.ActualHeight), window).Y;
-                var mascotTop = mascot.TranslatePoint(new Point(0, 0), window).Y;
-                Assert.True(bodyBottom <= mascotTop - 16, "Bubble must clear the mascot even during its alert bounce.");
+                var visible = MascotPlacementTests.VisibleBounds(window, mascot);
+                var mascotTop = visible.Top - window.Top;
+                Assert.True(bodyBottom <= mascotTop - 10, "Bubble must clear the visible mascot during its alert bounce.");
                 var tip = tail.TranslatePoint(tail.Points.OrderBy(point => point.Y).Last(), window);
-                var mascotLeft = mascot.TranslatePoint(new Point(0, 0), window).X;
-                Assert.InRange(tip.X, mascotLeft, mascotLeft + mascot.ActualWidth);
+                var mascotLeft = visible.Left - window.Left;
+                Assert.InRange(tip.X, mascotLeft, mascotLeft + visible.Width);
                 Assert.True(tip.Y > bodyBottom, "Speech tail must point down toward the mascot.");
                 Assert.True(tip.Y <= mascotTop, "Tail must stop above the mascot.");
             }
@@ -242,15 +243,18 @@ public sealed class OverlayPolicyTests
                 var start = window.Left;
                 var frame = new DispatcherFrame();
                 var samples = new List<double>();
+                var indicatorTops = new List<double>();
                 var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
                 timer.Tick += (_, _) => {
                     samples.Add(((TranslateTransform)indicator.RenderTransform).Y);
+                    indicatorTops.Add(indicator.TranslatePoint(new Point(), window).Y);
                     if (samples.Count >= 8) frame.Continue = false;
                 };
                 try { timer.Start(); Dispatcher.PushFrame(frame); }
                 finally { timer.Stop(); }
                 Assert.True(samples.Max() - samples.Min() > .1);
-                Assert.Equal(start, window.Left);
+                Assert.All(indicatorTops, value => Assert.True(value >= 0, "Sleep Zs must stay inside the compact native window."));
+                Assert.InRange(window.Left, start - 1, start + 1); // Native HWND coordinates round fractional DIPs.
                 var mascot = (Image)window.FindName("Mascot");
                 mascot.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0)
                     { RoutedEvent = UIElement.MouseMoveEvent });

@@ -113,9 +113,9 @@ public sealed class MascotSelectionTests
                 var image = (Image)window.FindName("Mascot");
                 AssertBundledFrame(image, "0025-idle.gif");
                 now = now.AddSeconds(8); model.Advance();
-                AssertBundledFrame(image, "0025-walk-left.gif");
+                AssertBundledFrame(image, "0025-walk-right.gif");
                 model.SelectMascot(7);
-                AssertBundledFrame(image, "0007-walk-left.gif");
+                AssertBundledFrame(image, "0007-walk-right.gif");
                 now = now.AddSeconds(16); model.Advance();
                 AssertBundledFrame(image, "0007-sleep.gif");
                 model.SelectMascot(4);
@@ -136,8 +136,8 @@ public sealed class MascotSelectionTests
             var walk = MascotCatalog.AssetFor(mascot, CompanionBehavior.Walk, -1);
             var sleep = MascotCatalog.AssetFor(mascot, CompanionBehavior.Sleep, -1);
             Assert.Equal($"Assets/{mascot.Number:D4}-idle.gif", idle);
-            Assert.Equal($"Assets/{mascot.Number:D4}-walk-left.gif", walk);
-            Assert.Equal($"Assets/{mascot.Number:D4}-walk-right.gif", MascotCatalog.AssetFor(mascot, CompanionBehavior.Walk, 1));
+            Assert.Equal($"Assets/{mascot.Number:D4}-walk-right.gif", walk);
+            Assert.Equal($"Assets/{mascot.Number:D4}-walk-left.gif", MascotCatalog.AssetFor(mascot, CompanionBehavior.Walk, 1));
             Assert.Equal($"Assets/{mascot.Number:D4}-sleep.gif", sleep);
         }
     }
