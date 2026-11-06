@@ -5502,6 +5502,7 @@ model CompanionDevice {
   createdAt        DateTime  @default(now())
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   events           CompanionEvent[]
+  actionAudits     CompanionActionAudit[]
   @@index([userId])
   @@map("companion_devices")
 }
@@ -5518,8 +5519,25 @@ model CompanionEvent {
   actions   Json
   createdAt DateTime @default(now())
   device    CompanionDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  actionAudits CompanionActionAudit[]
   @@unique([deviceId, dedupeKey])
   @@index([deviceId, id])
   @@map("companion_events")
 }
+
+
+model CompanionActionAudit {
+  deviceId  String
+  eventId   BigInt
+  actionId  String
+  result    String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @default(now())
+  device    CompanionDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  event     CompanionEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  @@id([deviceId, eventId, actionId])
+  @@map("companion_action_audit")
+}
+
+
 
