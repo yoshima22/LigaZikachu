@@ -7,6 +7,7 @@ import { getOriginFusionRecipe, validateLabStarFusion } from "@/lib/lab-rarity-m
 
 export type MachineMascot = {
   id: string;
+  pokemonId: number;
   name: string;
   nickname: string | null;
   level: number;
@@ -35,6 +36,7 @@ type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string } | { ok: false
 function planFusion(sel: MachineMascot[]): Plan {
   if (sel.length < 2) return { ok: false, reason: "Escolha o mascote mantido e os que serão consumidos." };
   const [keep, ...rest] = sel;
+  if (rest.some((m) => m.pokemonId !== keep.pokemonId || m.eggType !== keep.eggType)) return { ok: false, reason: "Todos precisam ser o mesmo Pokémon e da mesma origem." };
   if (sel.length === 2) {
     try {
       const next = validateLabStarFusion({
@@ -166,9 +168,11 @@ export function RarityMachine({
         <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
           {visible.map((m) => {
             const idx = ids.indexOf(m.id);
+            const first = selected[0];
+            const blocked = idx < 0 && !!first && (m.pokemonId !== first.pokemonId || m.eggType !== first.eggType);
             return (
-              <button key={m.id} type="button" onClick={() => toggle(m.id)}
-                className={`relative flex flex-col items-center rounded-xl border p-2 text-center transition hover:-translate-y-0.5 ${idx >= 0 ? "border-fuchsia-300 bg-fuchsia-500/15 shadow-[0_0_14px_rgba(217,70,239,0.3)]" : "border-slate-700/70 bg-slate-950/40 hover:border-slate-500"}`}>
+              <button key={m.id} type="button" disabled={blocked} onClick={() => toggle(m.id)}
+                className={`relative ${blocked ? "opacity-25" : ""} flex flex-col items-center rounded-xl border p-2 text-center transition hover:-translate-y-0.5 ${idx >= 0 ? "border-fuchsia-300 bg-fuchsia-500/15 shadow-[0_0_14px_rgba(217,70,239,0.3)]" : "border-slate-700/70 bg-slate-950/40 hover:border-slate-500"}`}>
                 {idx >= 0 && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-fuchsia-400 text-[10px] font-black text-slate-950">{idx + 1}</span>}
                 <img src={m.spriteUrl} alt="" loading="lazy" className="h-12 w-12 object-contain [image-rendering:pixelated]" />
                 <p className="mt-1 w-full truncate text-[11px] font-semibold text-white">{m.isShiny ? "✨ " : ""}{label(m)}</p>

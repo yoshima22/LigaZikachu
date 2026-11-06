@@ -260,6 +260,7 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
       const survivor = all.find((m) => m.id === input.survivorId);
       const consumed = all.filter((m) => m.id !== input.survivorId);
       if (!survivor || consumed.length !== input.consumedIds.length || [...all].some((m) => m.operationsLocked || m.bazarListed || m.arenaState !== "FREE" || m.primordialBoundPlayerId)) throw new Error("Um dos mascotes não está disponível para a máquina.");
+      if (consumed.some((m) => m.pokemonId !== survivor.pokemonId)) throw new Error("Todos os mascotes precisam ser o mesmo Pokémon.");
       if (input.mode === "STAR") {
         if (consumed.length !== 1) throw new Error("A fusão de estrelas usa dois mascotes.");
         const stars = validateLabStarFusion({ survivorOrigin: survivor.hatchedFromEggType, survivorLevel: survivor.level, survivorStars: survivor.labStars, consumedOrigin: consumed[0].hatchedFromEggType, consumedLevel: consumed[0].level, consumedStars: consumed[0].labStars });
