@@ -30,6 +30,9 @@ import {
 } from "@/lib/arena-z";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 import { sendNotificationToUser } from "@/lib/notifications";
+import { pilotEnabled } from "@/lib/companion/pilot";
+import { arenaAttackEvent } from "@/lib/companion/events";
+import { publishCompanionNotification } from "@/lib/companion/event-store";
 import { trackGachaObjective } from "@/lib/gacha";
 import { getPokemonTypes } from "@/lib/mascot-data";
 
@@ -286,13 +289,19 @@ export async function runPvpBattleAction(attackTeamId: string, defenseTeamId: st
         : result.result === "ATTACKER_WIN"
           ? "Seu time foi derrotado."
           : "O combate terminou empatado.";
-      after(() => sendNotificationToUser(defenseOwner.player.userId, {
-        title: "Seu time foi atacado na Arena-Z!",
-        body: `${result.playerTeamName} atacou sua equipe. ${outcome}`,
-        url: "/arena-z",
-        data: { source: "arena-z-defense", attackTeamId, defenseTeamId },
-        category: "ARENA",
-      }).catch(() => undefined));
+      after(async () => {
+        if (result.battleId && pilotEnabled()) {
+          const event = arenaAttackEvent(result.battleId, result.playerTeamName, outcome);
+          await publishCompanionNotification([defenseOwner.player.userId], event, event, "ARENA").catch(() => undefined);
+        }
+        await sendNotificationToUser(defenseOwner.player.userId, {
+          title: "Seu time foi atacado na Arena-Z!",
+          body: `${result.playerTeamName} atacou sua equipe. ${outcome}`,
+          url: "/arena-z",
+          data: { source: "arena-z-defense", attackTeamId, defenseTeamId },
+          category: "ARENA",
+        }).catch(() => undefined);
+      });
     }
     // Revalidação feita pelo cliente ao fechar o modal
     return { result };

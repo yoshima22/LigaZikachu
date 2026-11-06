@@ -58,3 +58,66 @@ test('aborting the request closes the stream and stops the heartbeat', async () 
   assert.equal(stopped, true);
 });
 
+
+test('companion push respects category and cooldown', async () => {
+  const { companionPreferenceAllows } = await import('./events');
+  const now = 1_800_000;
+  assert.equal(companionPreferenceAllows({ categories: { MASCOTES: { push: false } } }, null, 'MASCOTES', now), false);
+  assert.equal(companionPreferenceAllows({ cooldownMinutes: 5 }, new Date(now - 60_000), 'ARENA', now), false);
+  assert.equal(companionPreferenceAllows(null, null, 'ARENA', now), true);
+  assert.equal(companionPreferenceAllows(null, null, 'WEEKLY_TICKER', now), true);
+});
+
+test('expedition marker is claimed only after durable companion event succeeds', async () => {
+  const { sendReactiveOnce } = await import('./events');
+  const steps: string[] = [];
+  await assert.rejects(sendReactiveOnce(async () => { steps.push('event'); throw Error('db'); }, async () => { steps.push('claim'); return true; }, async () => { steps.push('push'); return 1; }));
+  assert.deepEqual(steps, ['event']);
+  assert.equal(await sendReactiveOnce(async () => { steps.push('event'); }, async () => { steps.push('claim'); return true; }, async () => { steps.push('push'); return 1; }), 1);
+  assert.deepEqual(steps, ['event', 'event', 'claim', 'push']);
+});
+
+test('SSE route scopes replay to the authorized device and rechecks revocation', async () => {
+  const { eventsResponse } = await import('./http');
+  let active = true;
+  let heartbeat: (() => void) | undefined;
+  const request = new Request('http://localhost/api/companion/events', { headers: { 'last-event-id': '4' } });
+  const response = await eventsResponse(request, {
+    authorize: async () => active ? { userId: 'u1', deviceId: 'd1' } : null,
+    read: async (device, cursor) => { assert.equal(device, 'd1'); assert.equal(cursor, '4'); return [{ eventId: '5', type: 'EXPEDITION_COMPLETED', title: 'Done', body: 'Ready', route: '/mascotes', actions: [] }]; },
+    schedule: fn => { heartbeat = fn; return () => {}; },
+  });
+  assert.equal(response.status, 200);
+  assert.match(response.headers.get('content-type')!, /text\/event-stream/);
+  const reader = response.body!.getReader();
+  assert.match(new TextDecoder().decode((await reader.read()).value), /id: 5\n/);
+  active = false; heartbeat!();
+  assert.equal((await reader.read()).done, true);
+});
+
+test('profile route rejects invalid credentials and exposes only the authorized account', async () => {
+  const { profileResponse } = await import('./http');
+  const request = new Request('http://localhost/api/companion/profile');
+  assert.equal((await profileResponse(request, async () => null, async () => { throw Error('must not read'); })).status, 404);
+  const response = await profileResponse(request, async () => ({ userId: 'u1', deviceId: 'd1' }), async id => { assert.equal(id, 'u1'); return { userId: 'u1', displayName: 'Player', avatarUrl: null }; });
+  assert.deepEqual(await response.json(), { userId: 'u1', displayName: 'Player', avatarUrl: null });
+  assert.equal(response.headers.get('cache-control'), 'no-store');
+});
+
+test('maps actual Arena attacks and weekly ticker publications to their correct routes', async () => {
+  const { arenaAttackEvent, weeklyTickerEvent } = await import('./events');
+  assert.deepEqual(arenaAttackEvent('battle-7', 'Team', 'Defeated'), { type: 'ARENA_ATTACKED', key: 'arena-attack:battle-7', title: 'Seu time foi atacado na Arena-Z!', body: 'Team atacou sua equipe. Defeated', url: '/arena-z', actions: [] });
+  assert.equal(weeklyTickerEvent('ARENA_PVP_WIN', 'id', 'text', '/arena-z'), null);
+  const event = weeklyTickerEvent('WEEKLY_LEAGUE_BATTLE', 'id', 'text', '/combates/liga-semanal');
+  assert.equal(event?.type, 'LEAGUE_EVENT_UPDATE');
+  assert.equal(event?.url, '/combates/liga-semanal');
+  assert.notEqual(event?.key, weeklyTickerEvent('WEEKLY_LEAGUE_BATTLE', 'id', 'changed', '/combates/liga-semanal')?.key);
+  assert.equal(event?.key, weeklyTickerEvent('WEEKLY_LEAGUE_BATTLE', 'id', 'text', '/combates/liga-semanal')?.key);
+});
+
+test('weekly ticker preference is per device and defaults to enabled', async () => {
+  const { companionDeviceAllows } = await import('./events');
+  assert.equal(companionDeviceAllows({ weeklyTickerEnabled: true }, 'WEEKLY_TICKER'), true);
+  assert.equal(companionDeviceAllows({ weeklyTickerEnabled: false }, 'WEEKLY_TICKER'), false);
+  assert.equal(companionDeviceAllows({ weeklyTickerEnabled: false }, 'ARENA'), true);
+});

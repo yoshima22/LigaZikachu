@@ -4685,6 +4685,7 @@ export async function runPvpBattle(
   );
 
   return {
+    battleId: pvpBattleId,
     result: combat.result,
     attackerWon,
     isTrainingBattle,

@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { pilotEnabled } from "@/lib/companion/pilot";
+import { weeklyTickerEvent } from "@/lib/companion/events";
+import { publishCompanionNotification } from "@/lib/companion/event-store";
 
 export type LeagueTickerItem = {
   id: string;
@@ -28,8 +31,9 @@ export async function publishLeagueTicker(input: PublishLeagueTickerInput): Prom
   const now = new Date();
   const expiresAt = new Date(now.getTime() + Math.max(1, input.ttlHours ?? 12) * 3_600_000);
   try {
+    let tickerId: string;
     if (input.eventKey) {
-      await prisma.leagueTickerEvent.upsert({
+      const saved = await prisma.leagueTickerEvent.upsert({
         where: { eventKey: input.eventKey },
         create: {
           type: input.type,
@@ -47,8 +51,9 @@ export async function publishLeagueTicker(input: PublishLeagueTickerInput): Prom
           expiresAt,
         },
       });
+      tickerId = saved.id;
     } else {
-      await prisma.leagueTickerEvent.create({
+      const saved = await prisma.leagueTickerEvent.create({
         data: {
           type: input.type,
           message,
@@ -57,6 +62,14 @@ export async function publishLeagueTicker(input: PublishLeagueTickerInput): Prom
           expiresAt,
         },
       });
+      tickerId = saved.id;
+    }
+    if (pilotEnabled()) {
+      const event = weeklyTickerEvent(input.type, tickerId, message, input.href);
+      if (event) {
+        const userIds = (process.env.ZIKACOMPANION_PILOT_USER_IDS ?? '').split(',').map(id => id.trim()).filter(Boolean);
+        await publishCompanionNotification(userIds, event, event, 'WEEKLY_TICKER').catch(() => undefined);
+      }
     }
     if (Math.random() < 0.05) {
       const expired = await prisma.leagueTickerEvent.findMany({

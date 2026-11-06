@@ -1,4 +1,7 @@
 import { prisma } from "@/lib/prisma";
+import { pilotEnabled } from "@/lib/companion/pilot";
+import { publishCompanionNotification } from "@/lib/companion/event-store";
+import { sendReactiveOnce } from "@/lib/companion/events";
 import { sendNotificationToUsers } from "@/lib/notifications";
 import { getPokemonName } from "@/lib/mascot-data";
 import type { NotifCategory } from "@/lib/notification-preferences";
@@ -26,10 +29,26 @@ async function claim(eventKey: string) {
   return count === 1;
 }
 
+class CompanionEmissionError extends Error {}
+
 async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string, category: NotifCategory, companion?: { type: "EXPEDITION_COMPLETED"; key: string; actions: string[] }) {
-  if (!userIds.length || !(await claim(eventKey))) return 0;
-  const result = await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey }, category, companion });
-  return result.sent;
+  if (!userIds.length) return 0;
+  try {
+    return await sendReactiveOnce(
+      async () => {
+        if (companion && pilotEnabled()) {
+          try { await publishCompanionNotification(userIds, companion, { title, body, url }, category); }
+          catch (error) { throw new CompanionEmissionError("Companion event creation failed", { cause: error }); }
+        }
+      },
+      () => claim(eventKey),
+      async () => (await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey }, category })).sent,
+    );
+  } catch (error) {
+    if (!(error instanceof CompanionEmissionError)) throw error;
+    console.error("[PushAutomation] Companion event creation failed", { eventKey, error });
+    return 0;
+  }
 }
 
 export async function runPushAutomation(now = new Date()) {
@@ -97,6 +116,8 @@ export async function runPushAutomation(now = new Date()) {
   await prisma.pushNotificationMarker.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 45 * 24 * 60 * 60_000) } } });
   return { success: true, sent };
 }
+
+
 
 
 

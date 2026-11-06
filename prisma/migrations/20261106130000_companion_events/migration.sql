@@ -1,3 +1,5 @@
+ALTER TABLE "companion_devices" ADD COLUMN "weeklyTickerEnabled" BOOLEAN NOT NULL DEFAULT true;
+
 CREATE TABLE "companion_events" (
   "id" BIGSERIAL PRIMARY KEY,
   "deviceId" TEXT NOT NULL REFERENCES "companion_devices"("id") ON DELETE CASCADE,
