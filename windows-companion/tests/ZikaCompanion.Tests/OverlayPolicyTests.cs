@@ -31,17 +31,14 @@ public sealed class OverlayPolicyTests
     }
 
     [Fact]
-    public void IdlePassesClicksThroughAndLiveBalloonCanBeDismissed()
+    public void LiveBalloonCanBeDismissed()
     {
         var model = new OverlayViewModel(SilentQueue());
-        Assert.True(model.IsClickThrough);
         model.AcceptEvent(Event("one"));
-        Assert.False(model.IsClickThrough);
         Assert.True(model.HasBalloon);
         Assert.Equal("Teste local", model.BalloonTitle);
         model.DismissBalloon();
         Assert.False(model.HasBalloon);
-        Assert.True(model.IsClickThrough);
     }
 
     [Fact]
@@ -74,6 +71,17 @@ public sealed class OverlayPolicyTests
         Assert.Equal(new Point(expectedX, expectedY), result);
     }
 
+    [Theory]
+    [InlineData(370, 350, 120, 150)]
+    [InlineData(-500, -500, 0, 0)]
+    [InlineData(3000, 3000, 1580, 780)]
+    public void DragPreservesGrabOffsetAndClampsAtWorkArea(double pointerX, double pointerY, double expectedX, double expectedY)
+    {
+        var result = OverlayViewModel.DragPosition(new Point(100, 200), new Point(350, 400),
+            new Point(pointerX, pointerY), new Size(340, 260), new Rect(0, 0, 1920, 1040));
+        Assert.Equal(new Point(expectedX, expectedY), result);
+    }
+
     [Fact]
     public void PausedEventsResumeAsOneSilentSummaryWithoutReplay()
     {
@@ -83,7 +91,6 @@ public sealed class OverlayPolicyTests
         model.AcceptEvent(Event("one"));
         model.AcceptEvent(Event("two"));
         Assert.False(model.HasBalloon);
-        Assert.True(model.IsClickThrough);
         model.TogglePause();
         Assert.True(model.HasBalloon);
         Assert.Contains("2", model.BalloonTitle);
@@ -105,7 +112,6 @@ public sealed class OverlayPolicyTests
         model.AcceptEvent(Event("one"));
         Assert.True(model.IsMuted);
         Assert.True(model.HasBalloon);
-        Assert.False(model.IsClickThrough);
         Assert.Equal(0, sounds);
     }
 
@@ -131,7 +137,7 @@ public sealed class OverlayPolicyTests
     }
 
     [Fact]
-    public void NativeWindowPassesIdleClicksAndCloseButtonReturnsItToClickThrough()
+    public void NativeHitTestKeepsMascotInteractiveAndPassesTransparentSpaceThrough()
     {
         OnSta(() =>
         {
@@ -140,19 +146,118 @@ public sealed class OverlayPolicyTests
             window.Show();
             window.UpdateLayout();
             var handle = new WindowInteropHelper(window).Handle;
-            Assert.NotEqual(0, GetWindowLong(handle, -20) & 0x20);
+            Assert.Equal(0, GetWindowLong(handle, -20) & 0x20);
             Assert.NotEqual(0, GetWindowLong(handle, -20) & 0x08000000);
             Assert.NotEqual(0, GetWindowLong(handle, -20) & 0x80);
+            var mascot = ((Grid)window.Content).Children.OfType<Image>().Single();
+            Assert.True(mascot.IsHitTestVisible);
+            Assert.Equal(1, HitTest(window, handle, mascot.TranslatePoint(new Point(mascot.ActualWidth / 2, mascot.ActualHeight / 2), window)));
+            Assert.Equal(-1, HitTest(window, handle, mascot.TranslatePoint(new Point(1, 1), window)));
+            Assert.Equal(-1, HitTest(window, handle, new Point(2, window.Height - 2)));
             model.AcceptEvent(Event("native"));
             window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
             window.UpdateLayout();
             Assert.Equal(0, GetWindowLong(handle, -20) & 0x20);
             var balloon = (Border)window.FindName("Balloon");
+            Assert.Equal(1, HitTest(window, handle, balloon.TranslatePoint(new Point(30, 30), window)));
             var content = (Grid)balloon.Child;
             content.Children.OfType<Button>().Single().RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
             Assert.False(model.HasBalloon);
-            Assert.NotEqual(0, GetWindowLong(handle, -20) & 0x20);
+            Assert.Equal(0, GetWindowLong(handle, -20) & 0x20);
+            Assert.Equal(-1, HitTest(window, handle, new Point(30, 30)));
             window.Close();
+        });
+    }
+
+    [Fact]
+    public void MascotMenuProvidesPauseMuteRestoreAndExitWithoutTray()
+    {
+        OnSta(() =>
+        {
+            var model = new OverlayViewModel(SilentQueue());
+            var window = new MainOverlayWindow(model);
+            var closed = false;
+            window.Closed += (_, _) => closed = true;
+            var mascot = ((Grid)window.Content).Children.OfType<Image>().Single();
+            var menu = mascot.ContextMenu;
+            Assert.NotNull(menu);
+            var items = menu.Items.OfType<MenuItem>().ToArray();
+            items.Single(item => (string)item.Header == "Pausar / Retomar").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(model.IsPaused);
+            items.Single(item => (string)item.Header == "Silenciar / Ativar áudio").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(model.IsMuted);
+            Assert.Contains(items, item => (string)item.Header == "Restaurar no monitor principal");
+            items.Single(item => (string)item.Header == "Sair").RaiseEvent(new RoutedEventArgs(MenuItem.ClickEvent));
+            Assert.True(closed);
+            Assert.False(window.IsVisible);
+            window.Close();
+        });
+    }
+
+    [Fact]
+    public void SpeechBubbleTailPointsToMascotAndBodyClearsItsLargestBounce()
+    {
+        OnSta(() =>
+        {
+            var model = new OverlayViewModel(SilentQueue());
+            model.AcceptEvent(Event("anchor"));
+            var window = new MainOverlayWindow(model);
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var mascot = ((Grid)window.Content).Children.OfType<Image>().Single();
+                var balloon = (Border)window.FindName("Balloon");
+                var tail = Assert.IsType<System.Windows.Shapes.Polygon>(window.FindName("BalloonTail"));
+                var bodyBottom = balloon.TranslatePoint(new Point(0, balloon.ActualHeight), window).Y;
+                var mascotTop = mascot.TranslatePoint(new Point(0, 0), window).Y;
+                Assert.True(bodyBottom <= mascotTop - 16, "Bubble must clear the mascot even during its alert bounce.");
+                var tip = tail.TranslatePoint(tail.Points.OrderBy(point => point.Y).Last(), window);
+                var mascotLeft = mascot.TranslatePoint(new Point(0, 0), window).X;
+                Assert.InRange(tip.X, mascotLeft, mascotLeft + mascot.ActualWidth);
+                Assert.True(tip.Y > bodyBottom, "Speech tail must point down toward the mascot.");
+                Assert.True(tip.Y <= mascotTop, "Tail must stop above the mascot.");
+            }
+            finally { window.Close(); }
+        });
+    }
+
+    private static long HitTest(Window window, IntPtr handle, Point logicalPoint)
+    {
+        var point = window.PointToScreen(logicalPoint);
+        var packed = (int)(ushort)(short)point.X | ((int)(ushort)(short)point.Y << 16);
+        return SendMessage(handle, 0x0084, IntPtr.Zero, new IntPtr(packed)).ToInt64();
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern IntPtr SendMessage(IntPtr handle, int message, IntPtr wParam, IntPtr lParam);
+
+    [Fact]
+    public void MascotUsesLocallyDecodedAnimatedBitmapFrames()
+    {
+        OnSta(() =>
+        {
+            var window = new MainOverlayWindow(new OverlayViewModel(SilentQueue()));
+            try
+            {
+                window.Show();
+                window.UpdateLayout();
+                var mascot = ((Grid)window.Content).Children.OfType<Image>().Single();
+                Assert.IsAssignableFrom<System.Windows.Media.Imaging.BitmapSource>(mascot.Source);
+                var frames = new HashSet<ImageSource>();
+                var frame = new DispatcherFrame();
+                var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(30) };
+                var elapsed = Stopwatch.StartNew();
+                timer.Tick += (_, _) =>
+                {
+                    frames.Add(mascot.Source);
+                    if (elapsed.ElapsedMilliseconds >= 500) frame.Continue = false;
+                };
+                try { timer.Start(); Dispatcher.PushFrame(frame); }
+                finally { timer.Stop(); }
+                Assert.True(frames.Count > 1, "Bundled GIF must advance through multiple bitmap frames.");
+            }
+            finally { window.Close(); }
         });
     }
 

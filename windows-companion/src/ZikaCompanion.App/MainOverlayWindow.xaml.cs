@@ -1,7 +1,10 @@
-using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Interop;
+using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -18,18 +21,20 @@ public partial class MainOverlayWindow : Window
     private IntPtr _handle;
     private double _direction = -1;
     private bool _positioning;
+    private Point? _dragWindowStart;
+    private Point _dragPointerStart;
 
     public MainOverlayWindow(OverlayViewModel model)
     {
         InitializeComponent();
         _model = model;
         DataContext = model;
+        LocalGifAnimation.Start(Mascot);
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         _timer.Tick += Animate;
         SourceInitialized += InitializeNativeWindow;
         LocationChanged += (_, _) => ClampToCurrentMonitor();
         Closed += OnClosed;
-        _model.PropertyChanged += ModelChanged;
     }
 
     public void RestoreToPrimaryMonitor()
@@ -43,29 +48,18 @@ public partial class MainOverlayWindow : Window
     private void InitializeNativeWindow(object? sender, EventArgs args)
     {
         _handle = new WindowInteropHelper(this).Handle;
-        UpdateClickThrough();
+        // Layered-window alpha and WM_NCHITTEST decide per pixel; never disable the mascot.
+        var style = GetWindowLong(_handle, ExtendedStyle) | ToolWindowStyle | NoActivateStyle;
+        SetWindowLong(_handle, ExtendedStyle, style & ~TransparentStyle);
         HwndSource.FromHwnd(_handle)?.AddHook(WindowMessages);
         RestoreToPrimaryMonitor();
         _timer.Start();
     }
 
-    private void ModelChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (args.PropertyName == nameof(OverlayViewModel.IsClickThrough)) UpdateClickThrough();
-    }
-
-    private void UpdateClickThrough()
-    {
-        if (_handle == IntPtr.Zero) return;
-        var style = GetWindowLong(_handle, ExtendedStyle) | ToolWindowStyle | NoActivateStyle;
-        style = _model.IsClickThrough ? style | TransparentStyle : style & ~TransparentStyle;
-        SetWindowLong(_handle, ExtendedStyle, style);
-    }
-
     private void Animate(object? sender, EventArgs args)
     {
         _model.Advance();
-        if (!_model.IsWalking) return;
+        if (!_model.IsWalking || _dragWindowStart is not null || Mascot.ContextMenu.IsOpen) return;
         var area = ToLogicalArea(Forms.Screen.FromHandle(_handle));
         var next = Left + _direction * 1.3;
         if (next <= area.Left || next >= area.Right - Width) _direction *= -1;
@@ -99,6 +93,13 @@ public partial class MainOverlayWindow : Window
 
     private IntPtr WindowMessages(IntPtr hwnd, int message, IntPtr wParam, IntPtr lParam, ref bool handled)
     {
+        if (message == 0x0084) // WM_NCHITTEST uses physical screen coordinates, including negative monitors.
+        {
+            var packed = lParam.ToInt64();
+            var point = PointFromScreen(new Point((short)(packed & 0xffff), (short)((packed >> 16) & 0xffff)));
+            handled = true;
+            return new IntPtr(IsInteractiveAt(point) ? 1 : -1); // HTCLIENT / HTTRANSPARENT
+        }
         // Re-clamp after work-area, display, and DPI changes; defer until WPF updates its transform.
         if (message is 0x001A or 0x007E or 0x02E0) Dispatcher.BeginInvoke(ClampToCurrentMonitor);
         // A balloon can be clicked without stealing focus from the user's foreground app.
@@ -106,12 +107,84 @@ public partial class MainOverlayWindow : Window
         return IntPtr.Zero;
     }
 
+    private bool IsInteractiveAt(Point point)
+    {
+        var hit = InputHitTest(point) as DependencyObject;
+        while (hit is not null)
+        {
+            if (hit == Mascot) return IsMascotPixelAt(point);
+            if (hit == Balloon || hit == BalloonTail) return true;
+            hit = VisualTreeHelper.GetParent(hit);
+        }
+        return false;
+    }
+
+    private bool IsMascotPixelAt(Point windowPoint)
+    {
+        if (Mascot.Source is not BitmapSource frame) return false;
+        var point = TranslatePoint(windowPoint, Mascot);
+        var scale = Math.Min(Mascot.ActualWidth / frame.PixelWidth, Mascot.ActualHeight / frame.PixelHeight);
+        var x = (point.X - (Mascot.ActualWidth - frame.PixelWidth * scale) / 2) / scale;
+        var y = (point.Y - (Mascot.ActualHeight - frame.PixelHeight * scale) / 2) / scale;
+        if (x < 0 || y < 0 || x >= frame.PixelWidth || y >= frame.PixelHeight) return false;
+        var pixel = new byte[4];
+        frame.CopyPixels(new Int32Rect((int)x, (int)y, 1, 1), pixel, 4, 0);
+        return pixel[3] != 0;
+    }
+
+    private Point PointerPosition()
+    {
+        GetCursorPos(out var position);
+        return new Point(position.X, position.Y);
+    }
+
+    private void BeginMascotDrag(object sender, MouseButtonEventArgs args)
+    {
+        if (args.ChangedButton != MouseButton.Left) return;
+        _dragWindowStart = new Point(Left, Top);
+        _dragPointerStart = PointerPosition();
+        if (!Mascot.CaptureMouse()) _dragWindowStart = null;
+        args.Handled = true;
+    }
+
+    private void MoveMascot(object sender, MouseEventArgs args)
+    {
+        if (_dragWindowStart is not { } start) return;
+        if (args.LeftButton != MouseButtonState.Pressed) { EndMascotDrag(sender, args); return; }
+        var pointer = PointerPosition();
+        var transform = HwndSource.FromHwnd(_handle)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
+        var delta = transform.Transform(pointer - _dragPointerStart);
+        var screen = Forms.Screen.FromPoint(new System.Drawing.Point((int)pointer.X, (int)pointer.Y));
+        var area = ToLogicalArea(screen);
+        var position = OverlayViewModel.DragPosition(start, new Point(), new Point(delta.X, delta.Y), new Size(Width, Height), area);
+        Place(position, area);
+        args.Handled = true;
+    }
+
+    private void EndMascotDrag(object sender, MouseEventArgs args)
+    {
+        _dragWindowStart = null;
+        if (Mascot.IsMouseCaptured) Mascot.ReleaseMouseCapture();
+    }
+
+    private void OpenMascotMenu(object sender, RoutedEventArgs args)
+    {
+        var items = Mascot.ContextMenu.Items.OfType<MenuItem>().ToArray();
+        items[0].IsChecked = _model.IsPaused;
+        items[1].IsChecked = _model.IsMuted;
+    }
+
+    private void TogglePause(object sender, RoutedEventArgs args) => _model.TogglePause();
+    private void ToggleMute(object sender, RoutedEventArgs args) => _model.ToggleMute();
+    private void RestoreMascot(object sender, RoutedEventArgs args) => RestoreToPrimaryMonitor();
+    private void ExitCompanion(object sender, RoutedEventArgs args) => Close();
+
     private void DismissBalloon(object sender, RoutedEventArgs args) => _model.DismissBalloon();
 
     private void OnClosed(object? sender, EventArgs args)
     {
         _timer.Stop();
-        _model.PropertyChanged -= ModelChanged;
+        Mascot.BeginAnimation(Image.SourceProperty, null);
         if (_handle != IntPtr.Zero) HwndSource.FromHwnd(_handle)?.RemoveHook(WindowMessages);
     }
 
@@ -119,4 +192,9 @@ public partial class MainOverlayWindow : Window
     private static extern int GetWindowLong(IntPtr handle, int index);
     [DllImport("user32.dll", EntryPoint = "SetWindowLongW")]
     private static extern int SetWindowLong(IntPtr handle, int index, int value);
+    [StructLayout(LayoutKind.Sequential)]
+    private struct NativePoint { public int X; public int Y; }
+    [DllImport("user32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool GetCursorPos(out NativePoint point);
 }

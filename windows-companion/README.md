@@ -19,7 +19,9 @@ dotnet build windows-companion/ZikaCompanion.sln -c Release
 .\windows-companion\src\ZikaCompanion.App\bin\Release\net8.0-windows\ZikaCompanion.App.exe
 ```
 
-O mascote aparece sobre a área de trabalho, acima da barra de tarefas do monitor principal. Ele alterna repouso e caminhada e não bloqueia cliques enquanto está ocioso. Os balões ficam visíveis por oito segundos, aceitam interação e têm um botão **×** para fechar. Um novo aviso aguarda o anterior terminar. A janela não aparece na barra de tarefas nem toma o foco do aplicativo em uso.
+O Pikachu aparece sobre a área de trabalho, acima da barra de tarefas do monitor principal. Ele alterna repouso e caminhada. **Arraste o mascote com o botão esquerdo** para movê-lo; **clique com o botão direito no mascote** para abrir Pausar/Retomar, Silenciar/Ativar áudio, Restaurar no monitor principal e Sair. A caminhada para durante o arrasto ou enquanto esse menu está aberto. A posição respeita a área útil do monitor.
+
+Somente os pixels visíveis do mascote e o balão visível aceitam cliques: o espaço transparente continua deixando clicar nos aplicativos atrás dele, inclusive enquanto há um aviso. O balão fica acima do mascote, com uma cauda apontando para ele e espaço para a animação sem cobrir seu rosto. Os avisos ficam visíveis por oito segundos e têm um botão **×** para fechar. Um novo aviso aguarda o anterior terminar. A janela não aparece na barra de tarefas nem toma o foco do aplicativo em uso.
 
 ## Usar a bandeja
 
@@ -35,7 +37,9 @@ O simulador também gera um evento a cada 30 segundos, alternando os três tipos
 
 ## Arte e som temporários
 
-`src/ZikaCompanion.App/Assets/placeholder-mascot.svg` é o desenho vetorial local de referência. Como WPF não renderiza SVG nativamente, a imagem usada está no recurso `Mascot` (`DrawingImage`) em `MainOverlayWindow.xaml`; ao trocar a arte, atualize esse recurso ou use um arquivo de imagem local. Nenhuma arte é baixada. O som é substituível em `Services/AudioAlertService.cs`.
+`src/ZikaCompanion.App/Assets/pikachu-placeholder.gif` é um **placeholder somente para testes locais**, obtido do repositório [PokeAPI/sprites — Pikachu animado de Pokémon Black/White](https://raw.githubusercontent.com/PokeAPI/sprites/master/sprites/pokemon/versions/generation-v/black-white/animated/25.gif). Créditos do sprite e personagem: Pokémon / Nintendo / Game Freak / Creatures; distribuição de referência: PokeAPI/sprites. O arquivo é incluído como recurso no executável e não é buscado na internet durante a execução. Este uso temporário não concede licença para distribuição comercial.
+
+`LocalGifAnimation.cs` decodifica os quadros e seus tempos usando os recursos desktop do .NET 8 e os anima no WPF, sem pacote adicional. O SVG antigo permanece apenas como referência histórica, sem uso na interface. O som é substituível em `Services/AudioAlertService.cs`.
 
 ## Validar
 
@@ -44,4 +48,4 @@ dotnet test windows-companion/tests/ZikaCompanion.Tests/ZikaCompanion.Tests.cspr
 dotnet build windows-companion/ZikaCompanion.sln -c Release
 ```
 
-Os testes cobrem isolamento, simulação, fila, áudio, duração dos balões, pausa/resumo, limites de posição e estilos nativos de clique. Testes de janela usam STA e precisam de Windows. A aparência e o posicionamento em monitores com escalas diferentes também devem ser conferidos visualmente no ambiente de destino.
+Os testes cobrem isolamento, simulação, fila, áudio, duração dos balões, pausa/resumo, cálculo de arrasto e limites de posição, hit testing nativo, menus, ancoragem do balão e avanço real dos quadros da imagem. Testes de janela usam STA e precisam de Windows. A aparência, o arrasto e o posicionamento em monitores com escalas diferentes também devem ser conferidos visualmente no ambiente de destino.
