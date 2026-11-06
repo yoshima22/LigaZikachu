@@ -1,0 +1,52 @@
+  ZikaCompanion.App -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\src\ZikaCompanion.App\bin\Debug\net8.0-windows\ZikaCompanion.App.dll
+  ZikaCompanion.Tests -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll
+Execução de teste para C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll (.NETCoreApp,Version=v8.0)
+1 arquivos de teste no total corresponderam ao padrão especificado.
+[xUnit.net 00:00:00.01] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 8.0.29)
+[xUnit.net 00:00:12.54]   Discovering: ZikaCompanion.Tests
+[xUnit.net 00:00:12.82]   Discovered:  ZikaCompanion.Tests
+[xUnit.net 00:00:12.83]   Starting:    ZikaCompanion.Tests
+  Aprovado ZikaCompanion.Tests.PrototypeIsolationTests.AppHasNoProjectReferences [647 ms]
+  Aprovado ZikaCompanion.Tests.CompanionBehaviorTests.InactivityStopsWalkingEvenAtTheNextWalkPhase [640 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.ResumingAllowsNewLiveAlertsWithoutReplayingRetainedEvents [651 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.ClickWakesAndPlaysBrieflyThenReturnsToIdle [638 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.PauseStopsAutonomousActivityAndRetainsLocalEvents [< 1 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.LiveAlertsAreFifoAndOnlyUnmutedDeliveryPlaysSound [1 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.AlertInterruptsSleepPlayAndDragWithoutLosingDragSession [< 1 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.IdleWalkAndConfigurableSleepUseInjectedTime [< 1 ms]
+  Aprovado ZikaCompanion.Tests.PrototypeIsolationTests.AppHasNoHttpClientPackage [8 ms]
+  Aprovado ZikaCompanion.Tests.PrototypeIsolationTests.AppTargetsNet8Windows [< 1 ms]
+  Aprovado ZikaCompanion.Tests.SimulatedEventServiceTests.ManualTriggersProduceFreshEventsWithoutStartingTimer [659 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.WalkingTurnsAtBothEdgesAndKeepsVerticalPositionOnNegativeMonitor [17 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.DragReleaseDoesNotPlayButClickReleaseDoes [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PausingVisibleAlertRetainsItInOneSilentResumeSummary(hasPending: True, expectedTitle: "2 eventos durante a pausa") [671 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PausingVisibleAlertRetainsItInOneSilentResumeSummary(hasPending: False, expectedTitle: "1 eventos durante a pausa") [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.DragPreservesGrabOffsetAndClampsAtWorkArea(pointerX: 3000, pointerY: 3000, expectedX: 1580, expectedY: 780) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.PauseAndQuietRetainEventsUntilOneSilentSummary(paused: False, quiet: True) [21 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.PauseAndQuietRetainEventsUntilOneSilentSummary(paused: True, quiet: True) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.PauseAndQuietRetainEventsUntilOneSilentSummary(paused: True, quiet: False) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.AlertQueueTests.DuplicateIdsAreSuppressedBeforeAndAfterDelivery [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.DragPreservesGrabOffsetAndClampsAtWorkArea(pointerX: 370, pointerY: 350, expectedX: 120, expectedY: 150) [2 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.DragPreservesGrabOffsetAndClampsAtWorkArea(pointerX: -500, pointerY: -500, expectedX: 0, expectedY: 0) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.BalloonLastsEightSecondsAndThenDisplaysNextQueuedEvent [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.WalkingAlternatesWithIdleAndStopsWhilePausedOrAlerting [2 ms]
+  Aprovado ZikaCompanion.Tests.SimulatedEventServiceTests.StartedTimerEmitsAllThreeLocalEventTypesWithUniqueIds [67 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.NativeHitTestKeepsMascotInteractiveAndPassesTransparentSpaceThrough [9 s]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.MascotUsesLocallyDecodedAnimatedBitmapFrames [1 s]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.WindowStaysAboveDesktopWithoutTaskbarOrActivation [226 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.MuteSuppressesLiveAudioWhileKeepingBalloonInteractive [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.SpeechBubbleTailPointsToMascotAndBodyClearsItsLargestBounce [978 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PausedEventsResumeAsOneSilentSummaryWithoutReplay [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.IdleBreathingRestartsAfterAlertIsDismissed [1 s]
+[xUnit.net 00:00:29.14]   Finished:    ZikaCompanion.Tests
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.SleepIndicatorFloatsAndMouseMovementWakesMascot [738 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PositionIsClampedToMonitorWorkArea(x: 1000, y: -1000, left: -1920, top: -120, width: 1920, height: 1080, expectedX: -340, expectedY: -120) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PositionIsClampedToMonitorWorkArea(x: -2000, y: 900, left: 0, top: 0, width: 1920, height: 1040, expectedX: 0, expectedY: 780) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.PositionIsClampedToMonitorWorkArea(x: 80, y: 80, left: 0, top: 0, width: 200, height: 100, expectedX: 0, expectedY: 0) [< 1 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.MascotMenuProvidesPauseMuteRestoreAndExitWithoutTray [587 ms]
+  Aprovado ZikaCompanion.Tests.OverlayPolicyTests.LiveBalloonCanBeDismissed [< 1 ms]
+
+Execução de Teste Bem-sucedida.
+Total de testes: 38
+     Aprovados: 38
+Tempo total: 35,7475 Segundos

@@ -1,0 +1,6 @@
+  ZikaCompanion.App -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\src\ZikaCompanion.App\bin\Debug\net8.0-windows\ZikaCompanion.App.dll
+  ZikaCompanion.Tests -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll
+Execução de teste para C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll (.NETCoreApp,Version=v8.0)
+1 arquivos de teste no total corresponderam ao padrão especificado.
+
+Aprovado!  – Com falha:     0, Aprovado:     1, Ignorado:     0, Total:     1, Duração: 269 ms - ZikaCompanion.Tests.dll (net8.0)

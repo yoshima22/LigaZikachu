@@ -222,6 +222,53 @@ public sealed class OverlayPolicyTests
         });
     }
 
+    [Fact]
+    public void SleepIndicatorFloatsAndMouseMovementWakesMascot()
+    {
+        OnSta(() =>
+        {
+            var now = DateTimeOffset.UnixEpoch;
+            var model = new OverlayViewModel(SilentQueue(), () => now);
+            var window = new MainOverlayWindow(model);
+            try
+            {
+                window.Show();
+                now = now.AddSeconds(24);
+                model.Advance();
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                var indicator = Assert.IsType<TextBlock>(window.FindName("SleepIndicator"));
+                Assert.Equal(Visibility.Visible, indicator.Visibility);
+                Assert.False(indicator.IsHitTestVisible);
+                var start = window.Left;
+                var frame = new DispatcherFrame();
+                var samples = new List<double>();
+                var timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(40) };
+                timer.Tick += (_, _) => {
+                    samples.Add(((TranslateTransform)indicator.RenderTransform).Y);
+                    if (samples.Count >= 8) frame.Continue = false;
+                };
+                try { timer.Start(); Dispatcher.PushFrame(frame); }
+                finally { timer.Stop(); }
+                Assert.True(samples.Max() - samples.Min() > .1);
+                Assert.Equal(start, window.Left);
+                var mascot = (Image)window.FindName("Mascot");
+                mascot.RaiseEvent(new System.Windows.Input.MouseEventArgs(System.Windows.Input.Mouse.PrimaryDevice, 0)
+                    { RoutedEvent = UIElement.MouseMoveEvent });
+                Assert.Equal(CompanionBehavior.Idle, model.Behavior);
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                Assert.Equal(Visibility.Collapsed, indicator.Visibility);
+                model.Play();
+                Assert.True(model.IsHappy);
+                model.AcceptEvent(Event("sleep-alert"));
+                Assert.Equal(CompanionBehavior.Alert, model.Behavior);
+                window.Dispatcher.Invoke(() => { }, DispatcherPriority.Render);
+                Assert.Equal(Visibility.Collapsed, indicator.Visibility);
+                Assert.Equal(Visibility.Visible, ((Border)window.FindName("Balloon")).Visibility);
+            }
+            finally { window.Close(); }
+        });
+    }
+
     private static long HitTest(Window window, IntPtr handle, Point logicalPoint)
     {
         var point = window.PointToScreen(logicalPoint);

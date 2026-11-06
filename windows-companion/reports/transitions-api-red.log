@@ -1,0 +1,2 @@
+  ZikaCompanion.App -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\src\ZikaCompanion.App\bin\Debug\net8.0-windows\ZikaCompanion.App.dll
+C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\CompanionTransitionTests.cs(12,36): error CS0246: O nome do tipo ou do namespace "BehaviorTiming" não pode ser encontrado (está faltando uma diretiva using ou uma referência de assembly?) [C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\ZikaCompanion.Tests.csproj]

@@ -1,0 +1,62 @@
+  ZikaCompanion.App -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\src\ZikaCompanion.App\bin\Debug\net8.0-windows\ZikaCompanion.App.dll
+  ZikaCompanion.Tests -> C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll
+Execução de teste para C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\bin\Debug\net8.0-windows\ZikaCompanion.Tests.dll (.NETCoreApp,Version=v8.0)
+1 arquivos de teste no total corresponderam ao padrão especificado.
+[xUnit.net 00:00:00.00] xUnit.net VSTest Adapter v2.8.2+699d445a1a (64-bit .NET 8.0.29)
+[xUnit.net 00:00:01.72]   Discovering: ZikaCompanion.Tests
+[xUnit.net 00:00:02.38]   Discovered:  ZikaCompanion.Tests
+[xUnit.net 00:00:02.44]   Starting:    ZikaCompanion.Tests
+[xUnit.net 00:00:04.67]     ZikaCompanion.Tests.CompanionTransitionTests.ClickWakesAndPlaysBrieflyThenReturnsToIdle [FAIL]
+[xUnit.net 00:00:04.69]       Assert.Equal() Failure: Values differ
+[xUnit.net 00:00:04.69]       Expected: Idle
+[xUnit.net 00:00:04.69]       Actual:   Happy
+[xUnit.net 00:00:04.69]       Stack Trace:
+[xUnit.net 00:00:04.69]         C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\CompanionTransitionTests.cs(48,0): at ZikaCompanion.Tests.CompanionTransitionTests.ClickWakesAndPlaysBrieflyThenReturnsToIdle()
+[xUnit.net 00:00:04.69]            at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+[xUnit.net 00:00:04.69]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Com falha ZikaCompanion.Tests.CompanionTransitionTests.ClickWakesAndPlaysBrieflyThenReturnsToIdle [1 s]
+  Mensagem de erro:
+   Assert.Equal() Failure: Values differ
+Expected: Idle
+Actual:   Happy
+  Rastreamento de pilha:
+     at ZikaCompanion.Tests.CompanionTransitionTests.ClickWakesAndPlaysBrieflyThenReturnsToIdle() in C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\CompanionTransitionTests.cs:line 48
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.PauseStopsAutonomousActivityAndRetainsLocalEvents [21 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.AlertInterruptsSleepPlayAndDragWithoutLosingDragSession [< 1 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.IdleWalkAndConfigurableSleepUseInjectedTime [64 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.WalkingTurnsAtBothEdgesAndKeepsVerticalPositionOnNegativeMonitor [126 ms]
+  Aprovado ZikaCompanion.Tests.CompanionTransitionTests.DragReleaseDoesNotPlayButClickReleaseDoes [< 1 ms]
+[xUnit.net 00:00:28.83]     ZikaCompanion.Tests.OverlayPolicyTests.SleepIndicatorFloatsAndMouseMovementWakesMascot [FAIL]
+[xUnit.net 00:00:28.83]       Assert.IsType() Failure: Value is null
+[xUnit.net 00:00:28.83]       Expected: typeof(System.Windows.Controls.TextBlock)
+[xUnit.net 00:00:28.83]       Actual:   null
+[xUnit.net 00:00:28.83]       Stack Trace:
+[xUnit.net 00:00:28.83]         C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs(239,0): at ZikaCompanion.Tests.OverlayPolicyTests.<>c.<SleepIndicatorFloatsAndMouseMovementWakesMascot>b__11_0()
+[xUnit.net 00:00:28.83]         C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs(405,0): at ZikaCompanion.Tests.OverlayPolicyTests.<>c__DisplayClass21_0.<OnSta>b__0()
+[xUnit.net 00:00:28.83]         --- End of stack trace from previous location ---
+[xUnit.net 00:00:28.83]         C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs(409,0): at ZikaCompanion.Tests.OverlayPolicyTests.OnSta(Action action)
+[xUnit.net 00:00:28.83]         C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs(228,0): at ZikaCompanion.Tests.OverlayPolicyTests.SleepIndicatorFloatsAndMouseMovementWakesMascot()
+[xUnit.net 00:00:28.83]            at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+[xUnit.net 00:00:28.83]            at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+[xUnit.net 00:00:28.86]   Finished:    ZikaCompanion.Tests
+  Com falha ZikaCompanion.Tests.OverlayPolicyTests.SleepIndicatorFloatsAndMouseMovementWakesMascot [26 s]
+  Mensagem de erro:
+   Assert.IsType() Failure: Value is null
+Expected: typeof(System.Windows.Controls.TextBlock)
+Actual:   null
+  Rastreamento de pilha:
+     at ZikaCompanion.Tests.OverlayPolicyTests.<>c.<SleepIndicatorFloatsAndMouseMovementWakesMascot>b__11_0() in C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs:line 239
+   at ZikaCompanion.Tests.OverlayPolicyTests.<>c__DisplayClass21_0.<OnSta>b__0() in C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs:line 405
+--- End of stack trace from previous location ---
+   at ZikaCompanion.Tests.OverlayPolicyTests.OnSta(Action action) in C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs:line 409
+   at ZikaCompanion.Tests.OverlayPolicyTests.SleepIndicatorFloatsAndMouseMovementWakesMascot() in C:\Users\LuizAguiar\projects\liga-zikachu\windows-companion\tests\ZikaCompanion.Tests\OverlayPolicyTests.cs:line 228
+   at System.RuntimeMethodHandle.InvokeMethod(Object target, Void** arguments, Signature sig, Boolean isConstructor)
+   at System.Reflection.MethodBaseInvoker.InvokeWithNoArgs(Object obj, BindingFlags invokeAttr)
+
+Falha na Execução de Teste.
+Total de testes: 7
+     Aprovados: 5
+     Com falha: 2
+Tempo total: 32,0133 Segundos

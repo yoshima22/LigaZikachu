@@ -19,7 +19,8 @@ public partial class MainOverlayWindow : Window
     private readonly OverlayViewModel _model;
     private readonly DispatcherTimer _timer;
     private IntPtr _handle;
-    private double _direction = -1;
+    private long _lastFrame = System.Diagnostics.Stopwatch.GetTimestamp();
+    private bool _dragMoved;
     private bool _positioning;
     private Point? _dragWindowStart;
     private Point _dragPointerStart;
@@ -58,12 +59,15 @@ public partial class MainOverlayWindow : Window
 
     private void Animate(object? sender, EventArgs args)
     {
+        var stamp = System.Diagnostics.Stopwatch.GetTimestamp();
+        var elapsed = System.Diagnostics.Stopwatch.GetElapsedTime(_lastFrame, stamp);
+        _lastFrame = stamp;
         _model.Advance();
         if (!_model.IsWalking || _dragWindowStart is not null || Mascot.ContextMenu.IsOpen) return;
         var area = ToLogicalArea(Forms.Screen.FromHandle(_handle));
-        var next = Left + _direction * 1.3;
-        if (next <= area.Left || next >= area.Right - Width) _direction *= -1;
-        Place(new Point(next, Top), area);
+        var next = _model.WalkPosition(new Point(Left, Top), new Size(Width, Height), area,
+            TimeSpan.FromSeconds(Math.Min(.1, elapsed.TotalSeconds)));
+        Place(next, area);
     }
 
     private Rect ToLogicalArea(Forms.Screen screen)
@@ -141,19 +145,28 @@ public partial class MainOverlayWindow : Window
     private void BeginMascotDrag(object sender, MouseButtonEventArgs args)
     {
         if (args.ChangedButton != MouseButton.Left) return;
+        _dragMoved = false;
         _dragWindowStart = new Point(Left, Top);
         _dragPointerStart = PointerPosition();
-        if (!Mascot.CaptureMouse()) _dragWindowStart = null;
+        if (Mascot.CaptureMouse()) _model.BeginDrag();
+        else _dragWindowStart = null;
         args.Handled = true;
     }
 
     private void MoveMascot(object sender, MouseEventArgs args)
     {
-        if (_dragWindowStart is not { } start) return;
+        if (_dragWindowStart is not { } start)
+        {
+            if (_model.IsSleeping) _model.Wake();
+            return;
+        }
         if (args.LeftButton != MouseButtonState.Pressed) { EndMascotDrag(sender, args); return; }
         var pointer = PointerPosition();
         var transform = HwndSource.FromHwnd(_handle)?.CompositionTarget?.TransformFromDevice ?? Matrix.Identity;
         var delta = transform.Transform(pointer - _dragPointerStart);
+        _dragMoved |= Math.Abs(delta.X) >= SystemParameters.MinimumHorizontalDragDistance ||
+            Math.Abs(delta.Y) >= SystemParameters.MinimumVerticalDragDistance;
+        if (!_dragMoved) return;
         var screen = Forms.Screen.FromPoint(new System.Drawing.Point((int)pointer.X, (int)pointer.Y));
         var area = ToLogicalArea(screen);
         var position = OverlayViewModel.DragPosition(start, new Point(), new Point(delta.X, delta.Y), new Size(Width, Height), area);
@@ -163,12 +176,16 @@ public partial class MainOverlayWindow : Window
 
     private void EndMascotDrag(object sender, MouseEventArgs args)
     {
+        if (_dragWindowStart is null) return;
+        var wasClick = !_dragMoved && args is MouseButtonEventArgs { ChangedButton: MouseButton.Left };
         _dragWindowStart = null;
         if (Mascot.IsMouseCaptured) Mascot.ReleaseMouseCapture();
+        _model.EndDrag(wasClick);
     }
 
     private void OpenMascotMenu(object sender, RoutedEventArgs args)
     {
+        _model.Wake();
         var items = Mascot.ContextMenu.Items.OfType<MenuItem>().ToArray();
         items[0].IsChecked = _model.IsPaused;
         items[1].IsChecked = _model.IsMuted;
