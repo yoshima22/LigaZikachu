@@ -1,4 +1,6 @@
 import { prisma } from "@/lib/prisma";
+import { pilotEnabled } from "@/lib/companion/pilot";
+import { publishCompanionNotification, type CompanionNotification } from "@/lib/companion/event-store";
 import { parseNotificationSettings, isWithinPushCooldown, type NotifCategory } from "@/lib/notification-preferences";
 
 export type NotificationPayload = {
@@ -8,6 +10,7 @@ export type NotificationPayload = {
   url?: string;
   /** Categoria para respeitar as preferências do jogador. Sem categoria = envia sempre. */
   category?: NotifCategory;
+  companion?: CompanionNotification;
 };
 
 // Filtra destinatários de push pelas preferências (categoria desligada ou dentro
@@ -176,6 +179,7 @@ export async function sendNotificationToUser(
 
   const allowed = await allowPushUserIds([userId], payload.category);
   if (allowed && allowed.length === 0) return { configured: true, tokenCount: 0, sent: 0, failed: 0 };
+  if (payload.companion && pilotEnabled()) await publishCompanionNotification(allowed ?? [userId], payload.companion, payload).catch(() => undefined);
 
   let tokens: { token: string }[] = [];
   try {
@@ -211,6 +215,7 @@ export async function sendNotificationToUsers(
 
   const allowedUserIds = await allowPushUserIds(userIds, payload.category);
   if (allowedUserIds && allowedUserIds.length === 0) return { configured: true, users: 0, tokenCount: 0, sent: 0, failed: 0 };
+  if (payload.companion && allowedUserIds && pilotEnabled()) await publishCompanionNotification(allowedUserIds, payload.companion, payload).catch(() => undefined);
 
   const tokens = await prisma.userFcmToken.findMany({
     where: allowedUserIds ? { userId: { in: [...new Set(allowedUserIds)] } } : undefined,
@@ -243,3 +248,4 @@ export async function sendNotificationToPlayers(
     players.map((p) => sendNotificationToUser(p.userId, payload))
   );
 }
+

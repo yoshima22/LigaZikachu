@@ -26,9 +26,9 @@ async function claim(eventKey: string) {
   return count === 1;
 }
 
-async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string, category: NotifCategory) {
+async function sendOnce(eventKey: string, userIds: string[], title: string, body: string, url: string, category: NotifCategory, companion?: { type: "EXPEDITION_COMPLETED"; key: string; actions: string[] }) {
   if (!userIds.length || !(await claim(eventKey))) return 0;
-  const result = await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey }, category });
+  const result = await sendNotificationToUsers(userIds, { title, body, url, data: { eventKey }, category, companion });
   return result.sent;
 }
 
@@ -51,7 +51,7 @@ export async function runPushAutomation(now = new Date()) {
       sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Férias concluídas!", `${name} voltou das férias com o Professor Carvalho e já pode ser recebido.`, "/mascotes", "MASCOTES");
     } else {
       const label = EXPEDITION_LABELS[mode] ?? "Padrão";
-      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição ${label}. As recompensas estão prontas.`, "/mascotes", "MASCOTES");
+      sent += await sendOnce(`expedition-ready:${expedition.id}`, [expedition.mascot.player.userId], "Expedição concluída!", `${name} voltou da expedição ${label}. As recompensas estão prontas.`, "/mascotes", "MASCOTES", { type: "EXPEDITION_COMPLETED", key: `expedition-ready:${expedition.id}`, actions: ["COLLECT_EXPEDITION"] });
     }
   }
 
@@ -97,3 +97,6 @@ export async function runPushAutomation(now = new Date()) {
   await prisma.pushNotificationMarker.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - 45 * 24 * 60 * 60_000) } } });
   return { success: true, sent };
 }
+
+
+

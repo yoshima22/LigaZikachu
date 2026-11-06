@@ -5500,7 +5500,25 @@ model CompanionDevice {
   revokedAt        DateTime?
   createdAt        DateTime  @default(now())
   user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  events           CompanionEvent[]
   @@index([userId])
   @@map("companion_devices")
+}
+
+
+model CompanionEvent {
+  id        BigInt   @id @default(autoincrement())
+  deviceId  String
+  dedupeKey String
+  type      String
+  title     String
+  body      String
+  route     String
+  actions   Json
+  createdAt DateTime @default(now())
+  device    CompanionDevice @relation(fields: [deviceId], references: [id], onDelete: Cascade)
+  @@unique([deviceId, dedupeKey])
+  @@index([deviceId, id])
+  @@map("companion_events")
 }
 
