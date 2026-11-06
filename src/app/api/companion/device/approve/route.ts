@@ -6,7 +6,8 @@ import { clientIp, rateLimit } from "@/lib/rate-limit";
 
 async function allowedUser() {
   const session = await getAppSession().catch(() => null);
-  return pilotAllowed(session?.user?.id) ? session!.user!.id : null;
+  const id = session?.user?.id;
+  return id && pilotAllowed(id) && await companionStore.isEligible(id) ? id : null;
 }
 const headers = { "Cache-Control": "no-store", "Content-Security-Policy": "default-src 'none'; form-action 'self'; base-uri 'none'; frame-ancestors 'none'", "X-Content-Type-Options": "nosniff" };
 export async function GET() {
@@ -24,3 +25,4 @@ export async function POST(request: Request) {
   const approved = await approveAuthorization(companionStore, code, userId);
   return new Response(approved ? "Dispositivo autorizado. Pode voltar ao aplicativo." : "Código inválido ou expirado.", { status: approved ? 200 : 400, headers });
 }
+

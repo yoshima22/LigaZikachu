@@ -16,3 +16,15 @@ test("access tokens expire after 15 minutes and reject tampering", () => {
   assert.equal(verifyAccessToken(tokens.accessToken + "x", "secret", 1_000_001), null);
   assert.equal(tokens.refreshExpiresAt.getTime(), 1_000_000 + 30 * 24 * 60 * 60 * 1000);
 });
+
+import { authenticateAccess } from "./auth";
+test("protected authorization checks current account status and device revocation", async () => {
+  const { accessToken } = issueTokens("device", "user", "secret", 1_000_000);
+  const lookup = async () => ({ id: "device", userId: "user", revokedAt: null, user: { status: "ACTIVE" } });
+  assert.deepEqual(await authenticateAccess(accessToken, "secret", lookup, () => true, 1_000_001), { deviceId: "device", userId: "user" });
+  for (const status of ["SUSPENDED", "REJECTED"]) {
+    assert.equal(await authenticateAccess(accessToken, "secret", async () => ({ ...(await lookup()), user: { status } }), () => true, 1_000_001), null);
+  }
+  assert.equal(await authenticateAccess(accessToken, "secret", async () => ({ ...(await lookup()), revokedAt: new Date() }), () => true, 1_000_001), null);
+  assert.equal(await authenticateAccess(accessToken, "secret", lookup, () => false, 1_000_001), null);
+});

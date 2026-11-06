@@ -23,3 +23,19 @@ export function verifyAccessToken(token: string, secret: string, now = Date.now(
     return { deviceId: data.deviceId, userId: data.userId };
   } catch { return null; }
 }
+
+export function eligibleStatus(status: string | null | undefined): boolean {
+  return status === "ACTIVE" || status === "PENDING_APPROVAL";
+}
+
+type AccessDevice = { id: string; userId: string; revokedAt: Date | null; user: { status: string } };
+export async function authenticateAccess(
+  token: string, secret: string, lookup: (id: string) => Promise<AccessDevice | null>,
+  allowed: (userId: string) => boolean, now = Date.now()
+): Promise<{ deviceId: string; userId: string } | null> {
+  const identity = verifyAccessToken(token, secret, now);
+  if (!identity || !allowed(identity.userId)) return null;
+  const device = await lookup(identity.deviceId);
+  if (!device || device.id !== identity.deviceId || device.userId !== identity.userId || device.revokedAt || !eligibleStatus(device.user.status)) return null;
+  return identity;
+}
