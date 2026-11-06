@@ -10,6 +10,7 @@ import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
 import { ChaoticRerollPanel } from "./chaotic-reroll-panel";
 import { CodeChip, EggChip, StatStrip, TagChip, type MascotStats } from "./mascot-chips";
 import { PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { DraCleideLabHeader } from "./dra-cleide-lab-header";
 
 type LabMascot = {
   id: string;
@@ -265,19 +266,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
 
   return (
     <div className="mx-auto max-w-3xl px-4 py-6">
-      {/* Header */}
-      <div className="mb-5 flex items-center gap-3">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-[#FFCB05]/10 text-2xl">🧪</div>
-        <div>
-          <h1 className="text-xl font-bold text-white">Laboratório do Prof. Enguiça</h1>
-          <p className="text-sm text-slate-400">Recicle mascotes e troque Pó de Criação ou comida por recompensas.</p>
-        </div>
-        <div className="ml-auto flex items-center gap-2 rounded-2xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-4 py-2">
-          <span className="text-lg">🧫</span>
-          <span className="text-base font-bold text-[#FFCB05]">{dust}</span>
-          <span className="text-xs text-slate-400">Pó de Criação</span>
-        </div>
-      </div>
+      <DraCleideLabHeader dust={dust} />
 
       {/* Guide sections */}
       <div className="mb-5 space-y-2">
