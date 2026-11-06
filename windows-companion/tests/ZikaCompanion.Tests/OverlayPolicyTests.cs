@@ -346,58 +346,8 @@ public sealed class OverlayPolicyTests
         Assert.Equal(2, sounds);
     }
 
-    [Fact]
-    public void IdleBreathingRestartsAfterAlertIsDismissed()
-    {
-        OnSta(() =>
-        {
-            var model = new OverlayViewModel(SilentQueue(), () => DateTimeOffset.UnixEpoch);
-            var window = new MainOverlayWindow(model);
-            try
-            {
-                Assert.True(model.IsIdle);
-                window.Show();
-                window.UpdateLayout();
-                var mascot = ((Grid)window.Content).Children.OfType<Image>().Single();
-                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-                AssertMascotMoves(mascot, alerting: false);
-                model.AcceptEvent(Event("animation"));
-                Assert.False(model.IsIdle);
-                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-                AssertMascotMoves(mascot, alerting: true);
-                model.DismissBalloon();
-                Assert.True(model.IsIdle);
-                window.Dispatcher.Invoke(() => { }, System.Windows.Threading.DispatcherPriority.Render);
-                AssertMascotMoves(mascot, alerting: false);
-            }
-            finally { window.Close(); }
-        });
-    }
-
     [DllImport("user32.dll", EntryPoint = "GetWindowLongW")]
     private static extern int GetWindowLong(IntPtr handle, int index);
-
-    private static void AssertMascotMoves(Image mascot, bool alerting)
-    {
-        var samples = new List<double>();
-        var elapsed = Stopwatch.StartNew();
-        var frame = new DispatcherFrame();
-        var timer = new DispatcherTimer(DispatcherPriority.Render) { Interval = TimeSpan.FromMilliseconds(20) };
-        timer.Tick += (_, _) =>
-        {
-            samples.Add(((TranslateTransform)mascot.RenderTransform).Y);
-            if (elapsed.Elapsed >= TimeSpan.FromMilliseconds(350)) frame.Continue = false;
-        };
-        try
-        {
-            timer.Start();
-            Dispatcher.PushFrame(frame);
-        }
-        finally { timer.Stop(); }
-        Assert.True(samples.Max() - samples.Min() > 0.1, "The mascot must keep moving during each animation phase.");
-        if (alerting) Assert.True(samples.Min() < -6, "The alert must use its larger bounce.");
-        else Assert.All(samples, value => Assert.InRange(value, -3.01, 0.01));
-    }
 
     private static AlertQueue SilentQueue() => new(new AudioAlertService(() => { }));
     private static CompanionEvent Event(string id) => new(id, CompanionEventType.EXPEDITION_COMPLETED,

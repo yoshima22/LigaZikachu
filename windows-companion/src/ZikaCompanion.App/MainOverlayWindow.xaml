@@ -47,7 +47,7 @@
             </TextBlock.Style>
         </TextBlock>
         <Image x:Name="Mascot" Width="118" Height="136" Stretch="Fill" HorizontalAlignment="Left" VerticalAlignment="Top"
-               RenderTransformOrigin="0.5,1" Cursor="SizeAll" ToolTip="Clique para brincar • arraste para mover • botão direito para opções"
+               RenderOptions.BitmapScalingMode="NearestNeighbor" Cursor="SizeAll" ToolTip="Clique para brincar • arraste para mover • botão direito para opções"
                MouseLeftButtonDown="BeginMascotDrag" MouseMove="MoveMascot" MouseLeftButtonUp="EndMascotDrag" LostMouseCapture="EndMascotDrag">
             <Image.ContextMenu>
                 <ContextMenu Opened="OpenMascotMenu">
@@ -61,44 +61,11 @@
                     <MenuItem Header="Sair" Click="ExitCompanion"/>
                 </ContextMenu>
             </Image.ContextMenu>
-            <Image.RenderTransform><TranslateTransform x:Name="Bob"/></Image.RenderTransform>
             <Image.Style>
                 <Style TargetType="Image">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsIdle}" Value="True">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard x:Name="IdleMotion"><Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="-3" Duration="0:0:1.2"/>
-                                </Storyboard></BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                            <DataTrigger.ExitActions><RemoveStoryboard BeginStoryboardName="IdleMotion"/></DataTrigger.ExitActions>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsWalking}" Value="True">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard x:Name="WalkMotion"><Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="-9" Duration="0:0:0.18"/>
-                                </Storyboard></BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                            <DataTrigger.ExitActions><RemoveStoryboard BeginStoryboardName="WalkMotion"/></DataTrigger.ExitActions>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding IsHappy}" Value="True">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard x:Name="HappyMotion"><Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="-13" Duration="0:0:0.16"/>
-                                </Storyboard></BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                            <DataTrigger.ExitActions><RemoveStoryboard BeginStoryboardName="HappyMotion"/></DataTrigger.ExitActions>
-                        </DataTrigger>
                         <DataTrigger Binding="{Binding IsSleeping}" Value="True">
                             <Setter Property="Opacity" Value="0.8"/>
-                        </DataTrigger>
-                        <DataTrigger Binding="{Binding HasBalloon}" Value="True">
-                            <DataTrigger.EnterActions>
-                                <BeginStoryboard x:Name="AlertMotion"><Storyboard RepeatBehavior="Forever" AutoReverse="True">
-                                    <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="-16" Duration="0:0:0.3"/>
-                                </Storyboard></BeginStoryboard>
-                            </DataTrigger.EnterActions>
-                            <DataTrigger.ExitActions><RemoveStoryboard BeginStoryboardName="AlertMotion"/></DataTrigger.ExitActions>
                         </DataTrigger>
                         <DataTrigger Binding="{Binding IsPaused}" Value="True">
                             <Setter Property="Opacity" Value="0.55"/>

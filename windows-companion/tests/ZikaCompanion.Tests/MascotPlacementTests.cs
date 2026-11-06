@@ -96,7 +96,8 @@ public sealed class MascotPlacementTests
             {
                 window.Show(); window.UpdateLayout();
                 var image = (Image)window.FindName("Mascot");
-                var before = VisibleBounds(window, image);
+                window.Left = 500; window.Top = 300; window.UpdateLayout();
+                var before = image.PointToScreen(new Point());
                 // Simulate an animation frame whose opaque pixels occupy another part of the same canvas.
                 var pixels = new byte[32 * 32 * 4];
                 pixels[(4 * 32 + 3) * 4 + 3] = 255;
@@ -105,11 +106,12 @@ public sealed class MascotPlacementTests
                 image.BeginAnimation(Image.SourceProperty, null);
                 image.Source = frame;
                 window.UpdateLayout();
-                var after = VisibleBounds(window, image);
-                Assert.InRange(after.Left, before.Left - 1, before.Left + 1); // HWND positioning rounds fractional DIPs.
-                Assert.InRange(after.Top, before.Top - 1, before.Top + 1);
-                Assert.True(after.Left >= window.Left && after.Top >= window.Top);
-                Assert.True(after.Right <= window.Left + window.Width + .01 && after.Bottom <= window.Top + window.Height + .01);
+                var after = image.PointToScreen(new Point());
+                Assert.InRange(after.X, before.X - 1, before.X + 1); // HWND positioning rounds fractional DIPs.
+                Assert.InRange(after.Y, before.Y - 1, before.Y + 1);
+                var visible = VisibleBounds(window, image);
+                Assert.True(visible.Left >= window.Left && visible.Top >= window.Top);
+                Assert.True(visible.Right <= window.Left + window.Width + .01 && visible.Bottom <= window.Top + window.Height + .01);
             }
             finally { window.Close(); }
         });

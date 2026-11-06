@@ -64,7 +64,8 @@ public partial class MainOverlayWindow : Window
         if (screen is null || _handle == IntPtr.Zero) return;
         var area = ToLogicalArea(screen);
         var size = FrameBounds().Size;
-        Place(new Point(area.Right - size.Width - 24, area.Bottom - size.Height - 12), _model.ActionAreaOr(area));
+        var frame = FrameBounds();
+        Place(new Point(area.Right - size.Width - 24 - frame.X, area.Bottom - size.Height - 12 - frame.Y), _model.ActionAreaOr(area));
     }
 
     private void ModelChanged(object? sender, PropertyChangedEventArgs args)
@@ -122,7 +123,7 @@ public partial class MainOverlayWindow : Window
         _model.Advance();
         var area = CurrentArea();
         if (_model.IsWalking && _dragMascotStart is null && !Mascot.ContextMenu.IsOpen)
-            _mascotPosition = _model.WalkVisualPosition(_mascotPosition, new Rect(new Point(), FrameBounds().Size), area,
+            _mascotPosition = _model.WalkVisualPosition(_mascotPosition, FrameBounds(), area,
                 TimeSpan.FromSeconds(Math.Min(.1, elapsed.TotalSeconds)));
         UpdateMascot();
         Place(_mascotPosition, area);
@@ -147,11 +148,9 @@ public partial class MainOverlayWindow : Window
         try
         {
             var frame = FrameBounds();
-            var visual = new Rect(new Point(), frame.Size);
-            _mascotPosition = OverlayViewModel.ClampVisualPosition(requested, visual, area);
-            // Keep the native window on-screen too. The bounce moves the compact window;
-            // its opposite image offset avoids clipping the sprite's animated pixels.
-            var position = OverlayViewModel.ClampVisualPosition(_mascotPosition + new Vector(0, Bob.Y), visual, area);
+            _mascotPosition = OverlayViewModel.ClampVisualPosition(requested, frame, area);
+            // Keep the image origin stable while sizing the native window to visible pixels.
+            var position = _mascotPosition + new Vector(frame.X, frame.Y);
             var toDevice = HwndSource.FromHwnd(_handle)?.CompositionTarget?.TransformToDevice ?? Matrix.Identity;
             var physicalPosition = toDevice.Transform(position);
             var monitor = ToLogicalArea(Forms.Screen.FromPoint(new System.Drawing.Point(
@@ -165,7 +164,7 @@ public partial class MainOverlayWindow : Window
             var mascotY = position.Y - windowTop;
             Width = _model.HasBalloon ? 340 : frame.Width;
             Height = frame.Height + (_model.HasBalloon ? 150 : 0);
-            Mascot.Margin = new Thickness(mascotX - frame.X, mascotY - frame.Y - Bob.Y, 0, 0);
+            Mascot.Margin = new Thickness(mascotX - frame.X, mascotY - frame.Y, 0, 0);
             Balloon.Margin = new Thickness(8, above ? 8 : frame.Height + 12, 0, 0);
             BalloonTail.Margin = new Thickness(Math.Clamp(mascotX + frame.Width / 2 - 12, 12, 304),
                 above ? 130 : frame.Height, 0, 0);
