@@ -41,7 +41,7 @@
             <Image.Style>
                 <Style TargetType="Image">
                     <Style.Triggers>
-                        <DataTrigger Binding="{Binding IsWalking}" Value="False">
+                        <DataTrigger Binding="{Binding IsIdle}" Value="True">
                             <DataTrigger.EnterActions>
                                 <BeginStoryboard x:Name="IdleMotion"><Storyboard RepeatBehavior="Forever" AutoReverse="True">
                                     <DoubleAnimation Storyboard.TargetProperty="(UIElement.RenderTransform).(TranslateTransform.Y)" From="0" To="-3" Duration="0:0:1.2"/>
