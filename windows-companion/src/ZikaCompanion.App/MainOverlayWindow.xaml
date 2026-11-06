@@ -54,6 +54,8 @@
                     <MenuItem Header="Pausar / Retomar" Click="TogglePause"/>
                     <MenuItem Header="Silenciar / Ativar áudio" Click="ToggleMute"/>
                     <MenuItem x:Name="MascotChoices" Header="Escolher mascote"/>
+                    <MenuItem Header="Definir área de ação" Click="DefineArea"/>
+                    <MenuItem Header="Tela inteira" Click="ResetArea"/>
                     <MenuItem Header="Restaurar no monitor principal" Click="RestoreMascot"/>
                     <Separator/>
                     <MenuItem Header="Sair" Click="ExitCompanion"/>

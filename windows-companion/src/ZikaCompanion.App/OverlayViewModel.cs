@@ -144,6 +144,27 @@ public sealed class OverlayViewModel : INotifyPropertyChanged
         Notify(nameof(IsMuted));
     }
 
+    private Rect? _actionArea;
+    public void SetActionArea(Rect area)
+    {
+        if (area.IsEmpty || area.Width <= 0 || area.Height <= 0) throw new ArgumentOutOfRangeException(nameof(area));
+        _actionArea = area;
+    }
+    public void ResetActionArea() => _actionArea = null;
+    public Rect ActionAreaOr(Rect monitor) => _actionArea ?? monitor;
+
+    public static Point ClampVisualPosition(Point requested, Rect visual, Rect area) => new(
+        Math.Clamp(requested.X, area.Left - visual.Left, Math.Max(area.Left - visual.Left, area.Right - visual.Right)),
+        Math.Clamp(requested.Y, area.Top - visual.Top, Math.Max(area.Top - visual.Top, area.Bottom - visual.Bottom)));
+
+    public Point WalkVisualPosition(Point current, Rect visual, Rect area, TimeSpan elapsed)
+    {
+        if (!IsWalking) return current;
+        var next = current.X + WalkDirection * _timing.WalkPixelsPerSecond * Math.Max(0, elapsed.TotalSeconds);
+        if (next <= area.Left - visual.Left) WalkDirection = 1;
+        else if (next >= area.Right - visual.Right) WalkDirection = -1;
+        return ClampVisualPosition(new Point(next, current.Y), visual, area);
+    }
     public static Point ClampPosition(Point requested, Size overlaySize, Rect workArea) => new(
         Math.Clamp(requested.X, workArea.Left, Math.Max(workArea.Left, workArea.Right - overlaySize.Width)),
         Math.Clamp(requested.Y, workArea.Top, Math.Max(workArea.Top, workArea.Bottom - overlaySize.Height)));

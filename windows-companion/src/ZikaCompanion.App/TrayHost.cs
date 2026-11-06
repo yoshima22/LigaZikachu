@@ -42,6 +42,8 @@ public sealed class TrayHost : IDisposable
             mascots.DropDownItems.Add(choice);
         }
         menu.Items.Add(mascots);
+        AddCommand(menu, "Definir área de ação", window.DefineActionArea);
+        AddCommand(menu, "Tela inteira", window.ResetActionArea);
         AddCommand(menu, "Restaurar no monitor principal", window.RestoreToPrimaryMonitor);
         menu.Items.Add(new Forms.ToolStripSeparator());
         AddCommand(menu, "Sair", () => System.Windows.Application.Current.Shutdown());

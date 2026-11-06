@@ -23,6 +23,7 @@ public partial class MainOverlayWindow : Window
     private long _lastFrame = System.Diagnostics.Stopwatch.GetTimestamp();
     private bool _dragMoved;
     private bool _positioning;
+    private string? _animationPath;
     private Point? _dragWindowStart;
     private Point _dragPointerStart;
 
@@ -51,17 +52,18 @@ public partial class MainOverlayWindow : Window
         var screen = Forms.Screen.PrimaryScreen;
         if (screen is null || _handle == IntPtr.Zero) return;
         var area = ToLogicalArea(screen);
-        Place(new Point(area.Right - Width - 24, area.Bottom - Height - 12), area);
+        Place(new Point(area.Right - Width - 24, area.Bottom - Height - 12), _model.ActionAreaOr(area));
     }
 
     private void ModelChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (args.PropertyName == nameof(OverlayViewModel.SelectedMascot)) UpdateMascot();
+        if (args.PropertyName is nameof(OverlayViewModel.SelectedMascot) or nameof(OverlayViewModel.Behavior)) UpdateMascot();
     }
 
     private void UpdateMascot()
     {
-        LocalGifAnimation.Start(Mascot, _model.SelectedMascot.AssetPath);
+        var path = MascotCatalog.AssetFor(_model.SelectedMascot, _model.Behavior, _model.WalkDirection);
+        if (_animationPath != path) { LocalGifAnimation.Start(Mascot, path); _animationPath = path; }
         foreach (var item in MascotChoices.Items.OfType<MenuItem>())
             item.IsChecked = (int)item.Tag == _model.SelectedMascot.Number;
     }
@@ -92,7 +94,7 @@ public partial class MainOverlayWindow : Window
 
     private Rect ToLogicalArea(Forms.Screen screen)
     {
-        var area = screen.WorkingArea;
+        var area = screen.Bounds;
         var transform = HwndSource.FromHwnd(_handle)?.CompositionTarget?.TransformFromDevice ?? System.Windows.Media.Matrix.Identity;
         return new Rect(transform.Transform(new Point(area.Left, area.Top)), transform.Transform(new Point(area.Right, area.Bottom)));
     }
@@ -100,7 +102,7 @@ public partial class MainOverlayWindow : Window
     private void ClampToCurrentMonitor()
     {
         if (_handle == IntPtr.Zero || _positioning) return;
-        Place(new Point(Left, Top), ToLogicalArea(Forms.Screen.FromHandle(_handle)));
+        Place(new Point(Left, Top), CurrentArea());
     }
 
     private void Place(Point requested, Rect area)
@@ -108,7 +110,7 @@ public partial class MainOverlayWindow : Window
         _positioning = true;
         try
         {
-            var position = OverlayViewModel.ClampPosition(requested, new Size(Width, Height), area);
+            var position = OverlayViewModel.ClampVisualPosition(requested, VisualBounds(), area);
             Left = position.X;
             Top = position.Y;
         }
@@ -211,6 +213,39 @@ public partial class MainOverlayWindow : Window
         items[1].IsChecked = _model.IsMuted;
     }
 
+    private Rect CurrentArea() => _model.ActionAreaOr(ToLogicalArea(Forms.Screen.FromHandle(_handle)));
+
+    // The image box is much smaller than the transparent overlay; use the opaque pixels
+    // of the current frame so that neither transparent margin blocks the action area.
+    private Rect VisualBounds()
+    {
+        if (Mascot.Source is not BitmapSource frame || Mascot.ActualWidth <= 0 || Mascot.ActualHeight <= 0)
+            return new Rect(198, 157, 118, 136);
+        var pixels = new byte[frame.PixelWidth * frame.PixelHeight * 4];
+        frame.CopyPixels(pixels, frame.PixelWidth * 4, 0);
+        var left = frame.PixelWidth; var top = frame.PixelHeight; var right = -1; var bottom = -1;
+        for (var y = 0; y < frame.PixelHeight; y++)
+        for (var x = 0; x < frame.PixelWidth; x++)
+            if (pixels[(y * frame.PixelWidth + x) * 4 + 3] != 0)
+            { left = Math.Min(left, x); top = Math.Min(top, y); right = Math.Max(right, x); bottom = Math.Max(bottom, y); }
+        if (right < left) return new Rect(198, 157, 118, 136);
+        var scale = Math.Min(Mascot.ActualWidth / frame.PixelWidth, Mascot.ActualHeight / frame.PixelHeight);
+        var origin = Mascot.TranslatePoint(new Point(), this);
+        return new Rect(origin.X + (Mascot.ActualWidth - frame.PixelWidth * scale) / 2 + left * scale,
+            origin.Y + (Mascot.ActualHeight - frame.PixelHeight * scale) / 2 + top * scale,
+            (right - left + 1) * scale, (bottom - top + 1) * scale);
+    }
+
+    public void DefineActionArea()
+    {
+        if (_handle == IntPtr.Zero) return;
+        var selector = new AreaSelector(ToLogicalArea(Forms.Screen.FromHandle(_handle)));
+        selector.ShowDialog();
+        if (selector.SelectedArea is { } area) { _model.SetActionArea(area); Place(new Point(Left, Top), area); }
+    }
+    public void ResetActionArea() { _model.ResetActionArea(); ClampToCurrentMonitor(); }
+    private void DefineArea(object sender, RoutedEventArgs args) => DefineActionArea();
+    private void ResetArea(object sender, RoutedEventArgs args) => ResetActionArea();
     private void TogglePause(object sender, RoutedEventArgs args) => _model.TogglePause();
     private void ToggleMute(object sender, RoutedEventArgs args) => _model.ToggleMute();
     private void RestoreMascot(object sender, RoutedEventArgs args) => RestoreToPrimaryMonitor();
