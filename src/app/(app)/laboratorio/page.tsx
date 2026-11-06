@@ -118,6 +118,7 @@ export default async function LaboratorioPage() {
       initialFoodTrades={data.foodTrades}
       initialCoinBalance={data.coinBalance}
       analysisCost={data.analysisCost}
+      canUseRarityMachine={data.canUseRarityMachine}
     />
   );
 }

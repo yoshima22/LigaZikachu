@@ -3,7 +3,7 @@
 import { FRESH_WATER_IMAGE } from "@/lib/item-image-assets";
 import { useState, useTransition, useMemo, useEffect } from "react";
 import { Search, Loader2, FlaskConical, ShoppingBag, X, ChevronDown, ChevronUp, Plus, Microscope } from "lucide-react";
-import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction, tradeFoodInLabAction } from "../actions";
+import { recycleMascotsAction, tradeDustForCoinsAction, tradeDustForEggAction, tradeDustForMonthlyItemAction, tradeFoodInLabAction, fuseMascotsInLabAction, buyLabMutationAction } from "../actions";
 import type { MascotRarity } from "../rarity";
 import { calculateLabDust, getLabDustBase, getLabDustMultiplier } from "../dust";
 import { MascotAnalyzer, RatingBadge } from "./mascot-analyzer";
@@ -32,6 +32,8 @@ type LabMascot = {
   stats?: MascotStats;
   personality?: string;
   eggOrigin?: string | null;
+  eggType?: string | null;
+  labStars?: number;
   battleWins?: number;
   battleLosses?: number;
   happiness?: number;
@@ -81,6 +83,7 @@ interface Props {
   initialFoodTrades: FoodTrades;
   initialCoinBalance: number;
   analysisCost: number;
+  canUseRarityMachine: boolean;
 }
 
 // ── Guide section ─────────────────────────────────────────────────────────────
@@ -121,8 +124,9 @@ function calcSlotDust(slots: LabMascot[]): { total: number; breakdown: { mascot:
 }
 
 // ── Main component ────────────────────────────────────────────────────────────
-export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialFoodTrades, initialCoinBalance, analysisCost }: Props) {
-  const [tab, setTab] = useState<"recycle" | "shop" | "analyze" | "caotico">("recycle");
+export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, initialMonthlyUsage, weeklyEvolutionStone, limits, costs, monthlyCosts, initialFoodTrades, initialCoinBalance, analysisCost, canUseRarityMachine }: Props) {
+  const [tab, setTab] = useState<"recycle" | "shop" | "analyze" | "caotico" | "machine">("recycle");
+  const [machineIds, setMachineIds] = useState<string[]>([]);
   const rerollOpen = Date.now() < new Date("2026-08-27T00:00:00-03:00").getTime();
   const [dust, setDust] = useState(initialDust);
   const [coinBalance, setCoinBalance] = useState(initialCoinBalance);
@@ -336,7 +340,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
 
       {/* Tabs — preenchem a largura, alinhados com o conteúdo acima, sem scroll */}
       <div className="mb-6 flex gap-1.5">
-        {(["recycle", "shop", "analyze", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
+        {(["recycle", "shop", "analyze", "machine", ...(rerollOpen ? ["caotico"] as const : [])] as const).map((t) => (
           <button key={t} onClick={() => setTab(t)}
             className={`flex flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-lg px-2 py-1.5 text-xs font-semibold transition-colors ${
               tab === t ? "bg-[#FFCB05] text-[#1A1A2E]" : t === "caotico" ? "border border-purple-400/50 text-purple-200 hover:text-white" : "border border-border text-slate-400 hover:text-white"
@@ -345,12 +349,21 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             {t === "recycle" ? <><FlaskConical size={13} /> Reciclar</>
               : t === "shop" ? <><ShoppingBag size={13} /> Loja de Pó</>
               : t === "analyze" ? <><Microscope size={13} /> Análise</>
+              : t === "machine" ? <>🧬 <span className="hidden sm:inline">Máquina </span>{canUseRarityMachine ? "Raridade" : "Parada"}</>
               : <>🌀 <span className="hidden sm:inline">Re-roll </span>Caótico</>}
           </button>
         ))}
       </div>
 
       {tab === "caotico" && <ChaoticRerollPanel />}
+
+      {tab === "machine" && (canUseRarityMachine ? (
+        <div className="space-y-3 rounded-2xl border border-fuchsia-400/35 bg-fuchsia-950/15 p-5">
+          <div><p className="text-xs font-bold uppercase tracking-widest text-fuchsia-300">Teste administrativo</p><h2 className="mt-1 text-lg font-bold text-white">Máquina de Raridade</h2><p className="mt-1 text-xs text-slate-400">O primeiro selecionado é o <b>Mascote mantido</b>; os demais são <b>Consumidos</b>. Três da mesma origem fazem a fusão normal. Dois LAB Lv.100 com a mesma estrela fazem a fusão de estrelas.</p></div>
+          <div className="max-h-72 space-y-1 overflow-auto">{mascots.filter(m => m.recyclable).map(m => <button key={m.id} type="button" onClick={() => setMachineIds(p => p.includes(m.id) ? p.filter(id => id !== m.id) : p.length < 3 ? [...p, m.id] : p)} className={`flex w-full items-center gap-2 rounded-lg border p-2 text-left text-xs ${machineIds.includes(m.id) ? "border-fuchsia-300 bg-fuchsia-500/15" : "border-slate-700"}`}><img src={m.spriteUrl} alt="" className="h-7 w-7 object-contain"/><span className="flex-1">{m.nickname || m.name} · {m.eggOrigin || "Sem origem"} · Lv.{m.level} {m.eggType === "LAB" ? `· ${Math.max(1,m.labStars||0)}★` : ""}</span><span>{machineIds.indexOf(m.id) === 0 ? "Mantido" : machineIds.includes(m.id) ? "Consumido" : ""}</span></button>)}</div>
+          <button disabled={machineIds.length < 2 || isPending} onClick={() => start(async () => { const selected = mascots.filter(m => machineIds.includes(m.id)); const star = selected.length === 2 && selected.every(m => m.eggType === "LAB" && m.level === 100 && Math.max(1,m.labStars||0) === Math.max(1,selected[0].labStars||0)); const res = await fuseMascotsInLabAction({ mode: star ? "STAR" : "ORIGIN", survivorId: machineIds[0], consumedIds: machineIds.slice(1) }); if (!res.ok) return showFeedback(false,res.error); setMachineIds([]); showFeedback(true,"Fusão concluída. Atualize a página para ver os novos atributos."); })} className="rounded-xl bg-fuchsia-400 px-4 py-2 text-sm font-bold text-slate-950 disabled:opacity-40">Confirmar fusão</button>
+        </div>
+      ) : <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 text-center"><p className="text-lg font-bold text-slate-200">Máquina Parada</p><p className="mt-2 text-sm text-slate-500">A máquina de raridade está em testes e ainda não está disponível.</p></div>)}
 
       {/* ── ANALYZE TAB ── */}
       {tab === "analyze" && (
@@ -571,6 +584,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
       {/* ── SHOP TAB ── */}
       {tab === "shop" && (
         <div className="space-y-3">
+          <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-950/15 p-4"><p className="text-xs font-bold uppercase tracking-widest text-fuchsia-300">Mutações Genéticas</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{([['GENETIC_MUTATION_RARE','Mutação Genética Rara',50],['GENETIC_MUTATION_EVENT','Mutação Genética de Evento',100],['GENETIC_MUTATION_SPECIAL','Mutação Genética Especial',150],['GENETIC_MUTATION_LAB','Mutação Genética de Laboratório',200]] as const).map(([type,name,cost]) => <button key={type} disabled={!canUseRarityMachine || dust < cost || isPending} onClick={() => start(async()=>{const r=await buyLabMutationAction(type);if(!r.ok)return showFeedback(false,r.error);setDust(d=>d-cost);showFeedback(true,`${name} comprada.`)})} className="rounded-xl border border-fuchsia-400/25 bg-slate-950/40 p-3 text-left text-xs disabled:opacity-40"><span className="mr-2">🧬</span><b className="text-white">{name}</b><span className="block mt-1 text-fuchsia-200">🧫 {cost} Pó de Criação</span></button>)}</div>{!canUseRarityMachine && <p className="mt-2 text-[11px] text-slate-500">Disponível para testes administrativos.</p>}</div>
           <p className="mb-4 text-xs text-slate-500">
             Troque Pó de Criação por recompensas. Os limites semanais reiniciam na segunda-feira; os mensais, no dia 01.
           </p>

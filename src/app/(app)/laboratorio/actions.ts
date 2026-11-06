@@ -16,6 +16,9 @@ import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-even
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
+import { isAdmin } from "@/lib/auth/permissions";
+import { applyRainbowFeather } from "@/lib/mascot";
+import { getOriginFusionRecipe, validateLabStarFusion, type GeneticMutationType } from "@/lib/lab-rarity-machine";
 
 // A primeira análise desbloqueia simulações gratuitas permanentes para o mascote.
 const ANALYSIS_COST = 100;
@@ -108,6 +111,7 @@ async function getOrCreateMonthlyUsage(playerId: string) {
 // ── Page data ─────────────────────────────────────────────────────────────────
 export async function getLabDataAction() {
   const me = await requirePlayer();
+  const sessionUser = await getSessionUser();
 
   const [player, mascots, weeklyUsage, monthlyUsage, foodItems] = await Promise.all([
     prisma.player.findUnique({
@@ -122,7 +126,7 @@ export async function getLabDataAction() {
         operationsLocked: true, primordialBoundPlayerId: true,
         analyzedAt: true, ivRating: true, ivScore: true, performanceTag: true,
         statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
-        personality: true, hatchedFromEggType: true, hatchedFromEggOrigin: true, battleWins: true, battleLosses: true, happiness: true,
+        personality: true, hatchedFromEggType: true, hatchedFromEggOrigin: true, labStars: true, battleWins: true, battleLosses: true, happiness: true,
       },
       orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
     }),
@@ -175,6 +179,8 @@ export async function getLabDataAction() {
       },
       personality: m.personality as string,
       eggOrigin: getHatchedEggLabel(m.hatchedFromEggType, m.hatchedFromEggOrigin),
+      eggType: m.hatchedFromEggType,
+      labStars: m.labStars,
       battleWins: m.battleWins,
       battleLosses: m.battleLosses,
       happiness: m.happiness,
@@ -186,6 +192,7 @@ export async function getLabDataAction() {
     creationDust: player?.creationDust ?? 0,
     coinBalance: wallet.balance,
     analysisCost: ANALYSIS_COST,
+    canUseRarityMachine: Boolean(sessionUser && isAdmin(sessionUser.role)),
     mascots: mascotList,
     weeklyUsage: {
       coinsTraded: weeklyUsage.coinsTraded,
@@ -214,6 +221,65 @@ export async function getLabDataAction() {
       limits: FOOD_TRADE_LIMITS,
     },
   };
+}
+
+const MUTATION_ITEMS: Record<GeneticMutationType, { name: string; description: string; cost: number }> = {
+  GENETIC_MUTATION_RARE: { name: "Mutação Genética Rara", description: "Necessária para fundir mascotes Comuns em Raros.", cost: 50 },
+  GENETIC_MUTATION_EVENT: { name: "Mutação Genética de Evento", description: "Necessária para fundir mascotes Raros em de Evento.", cost: 100 },
+  GENETIC_MUTATION_SPECIAL: { name: "Mutação Genética Especial", description: "Necessária para fundir mascotes de Evento em Especiais.", cost: 150 },
+  GENETIC_MUTATION_LAB: { name: "Mutação Genética de Laboratório", description: "Necessária para fundir mascotes Especiais em de Laboratório.", cost: 200 },
+};
+
+async function requireLabAdmin() {
+  const user = await getSessionUser();
+  if (!user || !isAdmin(user.role)) throw new Error("A Máquina de Raridade está disponível apenas para administradores.");
+  return requirePlayer();
+}
+
+export async function buyLabMutationAction(type: GeneticMutationType) {
+  const me = await requireLabAdmin();
+  const config = MUTATION_ITEMS[type];
+  if (!config) return { ok: false as const, error: "Mutação inválida." };
+  try {
+    await prisma.$transaction(async (tx) => {
+      const item = await tx.shopItem.upsert({ where: { id: `lab-${type.toLowerCase()}` }, create: { id: `lab-${type.toLowerCase()}`, type, name: config.name, description: config.description, imageUrl: "/mascot/egg-common.webp", price: 0, active: false }, update: {} });
+      const debited = await tx.player.updateMany({ where: { id: me.id, creationDust: { gte: config.cost } }, data: { creationDust: { decrement: config.cost } } });
+      if (!debited.count) throw new Error("Pó de Criação insuficiente.");
+      await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: me.id, itemId: item.id } }, create: { playerId: me.id, itemId: item.id, quantity: 1, source: "LAB_MUTATION" }, update: { quantity: { increment: 1 } } });
+    });
+    return { ok: true as const, cost: config.cost };
+  } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : "Não foi possível comprar a mutação." }; }
+}
+
+export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; survivorId: string; consumedIds: string[] }) {
+  const me = await requireLabAdmin();
+  if (new Set([input.survivorId, ...input.consumedIds]).size !== input.consumedIds.length + 1) return { ok: false as const, error: "Selecione mascotes diferentes." };
+  try {
+    const result = await prisma.$transaction(async (tx) => {
+      const all = await tx.mascot.findMany({ where: { playerId: me.id, id: { in: [input.survivorId, ...input.consumedIds] } } });
+      const survivor = all.find((m) => m.id === input.survivorId);
+      const consumed = all.filter((m) => m.id !== input.survivorId);
+      if (!survivor || consumed.length !== input.consumedIds.length || [...all].some((m) => m.operationsLocked || m.bazarListed || m.arenaState !== "FREE" || m.primordialBoundPlayerId)) throw new Error("Um dos mascotes não está disponível para a máquina.");
+      if (input.mode === "STAR") {
+        if (consumed.length !== 1) throw new Error("A fusão de estrelas usa dois mascotes.");
+        const stars = validateLabStarFusion({ survivorOrigin: survivor.hatchedFromEggType, survivorLevel: survivor.level, survivorStars: survivor.labStars, consumedOrigin: consumed[0].hatchedFromEggType, consumedLevel: consumed[0].level, consumedStars: consumed[0].labStars });
+        await tx.mascot.update({ where: { id: survivor.id }, data: { labStars: stars, statForce: { increment: 5 }, statAgility: { increment: 5 }, statCharisma: { increment: 5 }, statInstinct: { increment: 5 }, statVitality: { increment: 5 } } });
+      } else {
+        if (consumed.length !== 2) throw new Error("A fusão de origem usa três mascotes.");
+        const recipe = getOriginFusionRecipe(survivor.hatchedFromEggType);
+        if (!recipe || consumed.some((m) => m.hatchedFromEggType !== recipe.sourceOrigin)) throw new Error("Os três mascotes precisam ter a mesma origem compatível.");
+        const item = await tx.shopItem.findFirst({ where: { type: recipe.mutationType } });
+        if (!item) throw new Error("Mutação Genética não encontrada.");
+        const used = await tx.playerInventory.updateMany({ where: { playerId: me.id, itemId: item.id, quantity: { gte: 1 } }, data: { quantity: { decrement: 1 } } });
+        if (!used.count) throw new Error("Você não possui a Mutação Genética necessária.");
+        await applyRainbowFeather(me.id, survivor.id, recipe.resultOrigin, tx, false, recipe.resultOrigin);
+        await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: recipe.resultOrigin === "LAB" ? 1 : 0 } });
+      }
+      await tx.mascot.deleteMany({ where: { id: { in: consumed.map((m) => m.id) } } });
+      return { survivorId: survivor.id };
+    }, { isolationLevel: "Serializable" });
+    return { ok: true as const, ...result };
+  } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : "Não foi possível concluir a fusão." }; }
 }
 
 // ── Trocas de comida ────────────────────────────────────────────────────────

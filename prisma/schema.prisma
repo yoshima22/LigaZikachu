@@ -1880,6 +1880,10 @@ enum ShopItemType {
   MASCOT_BUFF_HAPPY
   MASCOT_BUFF_LUCK
   MASCOT_BUFF_MOOD
+  GENETIC_MUTATION_RARE
+  GENETIC_MUTATION_EVENT
+  GENETIC_MUTATION_SPECIAL
+  GENETIC_MUTATION_LAB
   TRAINING_MILESTONE_EXECUTOR
   TRAINING_MILESTONE_COMMANDER
   TRAINING_MILESTONE_PURIFIER
@@ -2829,6 +2833,7 @@ model Mascot {
   preferredCombatRole       String?
   // Habilidade passiva: a oculta só fica disponível (modo Padrão) depois do TM correspondente.
   hiddenAbilityUnlocked     Boolean                   @default(false)
+  labStars                  Int                       @default(0)
   // Habilidade escolhida pelo jogador (slug do PokeAPI); se null, vale a padrão da espécie.
   abilityChoice             String?
   player                    Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
