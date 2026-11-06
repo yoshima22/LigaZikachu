@@ -16,6 +16,7 @@ public sealed class TrayHost : IDisposable
     private readonly Dispatcher _dispatcher;
     private readonly Forms.ToolStripMenuItem _pause;
     private readonly Forms.ToolStripMenuItem _mute;
+    private readonly Dictionary<int, Forms.ToolStripMenuItem> _mascotChoices = new();
     private bool _disposed;
 
     public TrayHost(MainOverlayWindow window, OverlayViewModel model, SimulatedEventService simulator)
@@ -32,6 +33,15 @@ public sealed class TrayHost : IDisposable
         menu.Items.Add(new Forms.ToolStripSeparator());
         _pause = AddCommand(menu, "Pausar", model.TogglePause);
         _mute = AddCommand(menu, "Silenciar áudio", model.ToggleMute);
+        var mascots = new Forms.ToolStripMenuItem("Escolher mascote");
+        foreach (var mascot in MascotCatalog.All)
+        {
+            var choice = new Forms.ToolStripMenuItem(mascot.Name) { Checked = mascot.Number == model.SelectedMascot.Number };
+            choice.Click += (_, _) => _dispatcher.Invoke(() => model.SelectMascot(mascot.Number));
+            _mascotChoices.Add(mascot.Number, choice);
+            mascots.DropDownItems.Add(choice);
+        }
+        menu.Items.Add(mascots);
         AddCommand(menu, "Restaurar no monitor principal", window.RestoreToPrimaryMonitor);
         menu.Items.Add(new Forms.ToolStripSeparator());
         AddCommand(menu, "Sair", () => System.Windows.Application.Current.Shutdown());
@@ -73,6 +83,9 @@ public sealed class TrayHost : IDisposable
             _pause.Checked = _model.IsPaused;
         }
         if (args.PropertyName == nameof(OverlayViewModel.IsMuted)) _mute.Checked = _model.IsMuted;
+        if (args.PropertyName == nameof(OverlayViewModel.SelectedMascot))
+            foreach (var (number, item) in _mascotChoices)
+                item.Checked = number == _model.SelectedMascot.Number;
     }
 
     public void Dispose()

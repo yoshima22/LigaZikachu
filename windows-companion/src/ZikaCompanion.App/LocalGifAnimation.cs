@@ -10,10 +10,10 @@ namespace ZikaCompanion.App;
 
 internal static class LocalGifAnimation
 {
-    public static void Start(Image target)
+    public static void Start(Image target, string assetPath)
     {
         // Pack resource only: loading the mascot never opens a network connection.
-        using var resource = Application.GetResourceStream(new Uri("/ZikaCompanion.App;component/Assets/pikachu-placeholder.gif", UriKind.Relative)).Stream;
+        using var resource = Application.GetResourceStream(new Uri($"/ZikaCompanion.App;component/{assetPath}", UriKind.Relative)).Stream;
         using var gif = System.Drawing.Image.FromStream(resource);
         var frameCount = gif.GetFrameCount(FrameDimension.Time);
         var delays = gif.GetPropertyItem(0x5100)?.Value;
@@ -39,6 +39,9 @@ internal static class LocalGifAnimation
             elapsed += TimeSpan.FromMilliseconds(Math.Max(2, delay) * 10);
         }
         animation.Duration = elapsed;
+        // Replace both the previous clock and its base frame immediately, before the next render tick.
+        target.BeginAnimation(Image.SourceProperty, null);
+        target.Source = (ImageSource)animation.KeyFrames[0].Value;
         target.BeginAnimation(Image.SourceProperty, animation);
     }
 }

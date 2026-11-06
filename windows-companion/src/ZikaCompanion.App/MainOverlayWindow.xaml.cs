@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
@@ -30,7 +31,14 @@ public partial class MainOverlayWindow : Window
         InitializeComponent();
         _model = model;
         DataContext = model;
-        LocalGifAnimation.Start(Mascot);
+        foreach (var mascot in MascotCatalog.All)
+        {
+            var item = new MenuItem { Header = mascot.Name, Tag = mascot.Number, IsCheckable = true };
+            item.Click += (_, _) => _model.SelectMascot(mascot.Number);
+            MascotChoices.Items.Add(item);
+        }
+        _model.PropertyChanged += ModelChanged;
+        UpdateMascot();
         _timer = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(33) };
         _timer.Tick += Animate;
         SourceInitialized += InitializeNativeWindow;
@@ -44,6 +52,18 @@ public partial class MainOverlayWindow : Window
         if (screen is null || _handle == IntPtr.Zero) return;
         var area = ToLogicalArea(screen);
         Place(new Point(area.Right - Width - 24, area.Bottom - Height - 12), area);
+    }
+
+    private void ModelChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName == nameof(OverlayViewModel.SelectedMascot)) UpdateMascot();
+    }
+
+    private void UpdateMascot()
+    {
+        LocalGifAnimation.Start(Mascot, _model.SelectedMascot.AssetPath);
+        foreach (var item in MascotChoices.Items.OfType<MenuItem>())
+            item.IsChecked = (int)item.Tag == _model.SelectedMascot.Number;
     }
 
     private void InitializeNativeWindow(object? sender, EventArgs args)
@@ -201,6 +221,7 @@ public partial class MainOverlayWindow : Window
     private void OnClosed(object? sender, EventArgs args)
     {
         _timer.Stop();
+        _model.PropertyChanged -= ModelChanged;
         Mascot.BeginAnimation(Image.SourceProperty, null);
         if (_handle != IntPtr.Zero) HwndSource.FromHwnd(_handle)?.RemoveHook(WindowMessages);
     }

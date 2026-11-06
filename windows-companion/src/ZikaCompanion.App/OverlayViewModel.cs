@@ -31,6 +31,14 @@ public sealed class OverlayViewModel : INotifyPropertyChanged
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
+    public MascotOption SelectedMascot { get; private set; } = MascotCatalog.All[0];
+
+    public void SelectMascot(int number)
+    {
+        SelectedMascot = MascotCatalog.All.Single(mascot => mascot.Number == number);
+        Notify(nameof(SelectedMascot));
+    }
+
     public bool HasBalloon => _balloonUntil is not null;
     public bool IsPaused => _queue.IsPaused;
     public bool IsMuted => _queue.IsMuted;
