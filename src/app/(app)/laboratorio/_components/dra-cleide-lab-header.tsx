@@ -11,14 +11,17 @@ export function DraCleideLabHeader({ dust }: Props) {
       <img
         src="/images/dra-cleide-lab-hero.png"
         alt="Dra. Cleide Combustão preparando uma experiência"
-        className="pointer-events-none absolute bottom-0 left-0 hidden w-[265px] max-w-none object-contain drop-shadow-[12px_0_20px_rgba(0,0,0,0.65)] md:block"
+        className="pointer-events-none absolute bottom-2 left-3 hidden h-[250px] w-auto max-w-none object-contain drop-shadow-[12px_0_20px_rgba(0,0,0,0.65)] md:block"
       />
 
-      <div className="relative min-h-[164px] px-5 py-5 md:ml-[190px] md:pl-2">
+      <div className="relative min-h-[260px] px-5 py-5 md:ml-[180px] md:pl-2">
         <div className="flex flex-wrap items-start justify-between gap-3">
           <div className="max-w-md">
-            <p className="text-[10px] font-black uppercase tracking-[0.28em] text-fuchsia-200">Pesquisa, misturo, testo…</p>
-            <h1 className="mt-1 text-xl font-black text-white sm:text-2xl">Laboratório da Dra. Cleide</h1>
+            <p className="text-[10px] font-black uppercase tracking-[0.22em] text-fuchsia-200">Pesquisas, Misturas e análises</p>
+            <h1 className="mt-1 text-lg font-black leading-tight text-white sm:text-xl">
+              Laboratório <span className="text-violet-200/60 line-through decoration-fuchsia-300 decoration-2">do Prof. Enguiça</span>{" "}
+              <span className="text-[#FFCB05]">da Dra. Cleide Combustão</span>
+            </h1>
             <p className="mt-1 text-sm leading-relaxed text-violet-100/75">Recicle mascotes e transforme cada descoberta em novas experiências.</p>
           </div>
           <div className="rounded-2xl border border-yellow-300/45 bg-slate-950/55 px-4 py-2 shadow-[0_0_18px_rgba(250,204,21,0.12)] backdrop-blur-sm">

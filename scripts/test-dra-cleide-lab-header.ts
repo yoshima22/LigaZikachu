@@ -16,6 +16,10 @@ const labClient = readFileSync(labClientPath, "utf8");
 assert.match(header, /src="\/images\/dra-cleide-lab-hero\.png"/, "header should render the local Dra. Cleide artwork");
 assert.match(header, /pointer-events-none/, "decorative artwork should not intercept interactions");
 assert.match(header, /hidden\b[\s\S]*\bmd:block/, "artwork should be hidden on mobile layouts");
+assert.match(header, /h-\[250px\]/, "artwork should fit fully inside the laboratory header");
+assert.match(header, /Pesquisas, Misturas e análises/, "header should use the revised laboratory eyebrow text");
+assert.match(header, /do Prof\. Enguiça/, "header should retain the crossed-out former laboratory owner");
+assert.match(header, /da Dra\. Cleide Combustão/, "header should name Dra. Cleide as the laboratory owner");
 assert.match(labClient, /DraCleideLabHeader/, "LabClient should render the themed header");
 assert.match(labClient, /<DraCleideLabHeader dust=\{dust\}\s*\/>/, "the header should receive live dust state");
 
