@@ -1,6 +1,6 @@
 # ZikaCompanion — protótipo local
 
-Aplicativo Windows independente para experimentar um mascote animado e avisos simulados. **Este protótipo não acessa a Liga Zikachu, não usa contas ou dados do jogo e não pode ser visto pelos jogadores.** Nada é enviado ao site, ao backend ou ao transmissor. Não há HTTP, login ou configurações de rede.
+Aplicativo Windows independente para experimentar um mascote animado. Sem conta vinculada, usa avisos simulados locais. O piloto privado opcional conecta a conta pela autorização no navegador.
 
 ## Executar
 
@@ -40,7 +40,7 @@ O simulador também gera um evento a cada 30 segundos, alternando os três tipos
 
 `OverlayViewModel.Behavior` expõe a máquina de estados Idle, Walk, Sleep, Alert, Happy e Dragging. A prioridade é Alert → Dragging → pausa → Happy → Sleep → Walk/Idle. Pausar mantém o mascote parado em Idle e preserva a fila de eventos. Eventos simulados acordam o mascote; enquanto pausado, o aviso só aparece no resumo ao retomar. Interação ou fim do alerta reinicia o intervalo de inatividade. O passeio conserva a altura de referência; o movimento visual vem dos quadros locais, sem saltos artificiais aplicados à imagem.
 
-`BehaviorTiming` permite configurar `IdleFor`, `WalkFor`, `SleepAfter`, `HappyFor` e `WalkPixelsPerSecond` no construtor do modelo. Os testes injetam um relógio e avançam o tempo sem esperas reais para provar as transições. A configuração é por código neste protótipo. O evento automático a cada 30 segundos também reinicia a inatividade, portanto o sono padrão ocorre entre esses eventos. Tudo continua **somente local e simulado**, sem conexão com o jogo, servidor, contas ou jogadores.
+`BehaviorTiming` permite configurar `IdleFor`, `WalkFor`, `SleepAfter`, `HappyFor` e `WalkPixelsPerSecond` no construtor do modelo. Os testes injetam um relógio e avançam o tempo sem esperas reais para provar as transições. A configuração é por código neste protótipo. O evento automático a cada 30 segundos também reinicia a inatividade, portanto o sono padrão ocorre entre esses eventos. Sem conta vinculada, os eventos continuam locais e simulados.
 
 ## Arte e som temporários
 
@@ -73,3 +73,10 @@ Em **Definir área de ação**, arraste um retângulo no monitor em que o mascot
 Os GIFs incorporados têm animações distintas de Idle, Walk e Sleep para as quatro espécies. Os nomes dos recursos extraídos de caminhada ficaram invertidos em relação ao desenho: `walk-right.gif` mostra o mascote voltado para a esquerda, e `walk-left.gif` para a direita. O catálogo compensa essa diferença ao selecionar o recurso conforme o movimento. A proveniência e as restrições de estudo privado acima continuam aplicáveis.
 
 Cada espécie usa uma tela comum para Idle, as duas direções de Walk e Sleep. O pré-processamento calcula a união dos pixels visíveis de todos os quadros de cada ação, alinha essa união pelo centro inferior e preserva os pixels e tempos originais; não alinha cada quadro separadamente, preservando o movimento da animação. A escala usa vizinho mais próximo. A posição da origem da imagem é mantida ao trocar quadros, enquanto os limites visíveis continuam limitados à área de ação. Para regenerar os GIFs a partir dos recortes originais, use `python windows-companion/tools/normalize_animations.py DIRETORIO_ORIGINAL DIRETORIO_DESTINO` com Pillow instalado; não use os GIFs já normalizados como entrada. O aplicativo carrega apenas os arquivos incorporados e não precisa de Python ou rede.
+
+
+## Piloto privado
+
+Configure `ZIKACOMPANION_BASE_URL` com a origem HTTPS do servidor do piloto antes de iniciar o aplicativo. Na bandeja, selecione **Vincular conta**; o código é copiado para a área de transferência e deve ser colado na página aberta no navegador. A conta precisa estar autorizada no piloto. O token de renovação é criptografado pelo DPAPI para o usuário Windows atual em `%LOCALAPPDATA%\ZikaCompanion\session.dat`.
+
+Ao conectar, os eventos reais substituem os simulados. O botão **Abrir site** abre a rota do evento. Quando oferecida, **Coletar expedição** solicita confirmação antes de executar. **Desconectar conta** apaga a sessão local e retorna ao simulador; a revogação do dispositivo no servidor deve ser feita separadamente. A disponibilidade do piloto depende da configuração do servidor.

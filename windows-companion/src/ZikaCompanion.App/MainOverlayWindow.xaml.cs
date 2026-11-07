@@ -311,6 +311,22 @@ public partial class MainOverlayWindow : Window
     private void RestoreMascot(object sender, RoutedEventArgs args) => RestoreToPrimaryMonitor();
     private void ExitCompanion(object sender, RoutedEventArgs args) => Close();
 
+    public event Action<ZikaCompanion.App.Domain.CompanionEvent>? ActionConfirmed;
+    public event Action<ZikaCompanion.App.Domain.CompanionEvent>? RouteRequested;
+    private void OpenEventRoute(object sender, RoutedEventArgs args)
+    {
+        if (_model.RouteEvent is { } item) RouteRequested?.Invoke(item);
+    }
+    private void ConfirmAction(object sender, RoutedEventArgs args)
+    {
+        var item = _model.ActionEvent;
+        if (item is null) return;
+        if (System.Windows.MessageBox.Show("Coletar a recompensa desta expedição?", "Confirmar ação", MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+        {
+            ActionConfirmed?.Invoke(item);
+            _model.DismissBalloon();
+        }
+    }
     private void DismissBalloon(object sender, RoutedEventArgs args) => _model.DismissBalloon();
 
     private void OnClosed(object? sender, EventArgs args)

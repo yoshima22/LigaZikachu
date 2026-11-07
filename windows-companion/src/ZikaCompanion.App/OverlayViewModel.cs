@@ -100,6 +100,11 @@ public sealed class OverlayViewModel : INotifyPropertyChanged
 
     public string BalloonTitle { get; private set; } = "";
     public string BalloonMessage { get; private set; } = "";
+    public CompanionEvent? ActionEvent => _activeAlert is { IsSummary: false, Events.Count: 1 } alert &&
+        alert.Events[0].Actions?.Contains("COLLECT_EXPEDITION") == true ? alert.Events[0] : null;
+    public bool HasAction => ActionEvent is not null;
+    public CompanionEvent? RouteEvent => _activeAlert is { IsSummary: false, Events.Count: 1 } alert && !string.IsNullOrEmpty(alert.Events[0].Route) ? alert.Events[0] : null;
+    public bool HasRoute => RouteEvent is not null;
 
     public void AcceptEvent(CompanionEvent item)
     {
@@ -208,6 +213,8 @@ public sealed class OverlayViewModel : INotifyPropertyChanged
         Notify(nameof(IsIdle));
         Notify(nameof(BalloonTitle));
         Notify(nameof(BalloonMessage));
+        Notify(nameof(HasAction));
+        Notify(nameof(HasRoute));
     }
 
     private void Notify([CallerMemberName] string? property = null) =>

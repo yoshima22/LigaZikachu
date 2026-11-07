@@ -19,7 +19,11 @@
                 <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
                     <TextBlock Text="{Binding BalloonMessage}" Foreground="#4F456C" FontSize="13" TextWrapping="Wrap"/>
                 </ScrollViewer>
-                <TextBlock Grid.Row="2" Text="SIMULAÇÃO LOCAL • fecha em 8 s" FontSize="10" Foreground="#777080" Margin="0,5,0,0"/>
+                <StackPanel Grid.Row="2" Orientation="Horizontal">
+                    <TextBlock Text="Fecha em 8 s" FontSize="10" Foreground="#777080" Margin="0,5,10,0"/>
+                    <Button Content="Abrir site" Click="OpenEventRoute" Margin="0,0,5,0" Visibility="{Binding HasRoute, Converter={StaticResource VisibleWhenTrue}}"/>
+                    <Button Content="Coletar expedi&#231;&#227;o" Click="ConfirmAction" Visibility="{Binding HasAction, Converter={StaticResource VisibleWhenTrue}}"/>
+                </StackPanel>
             </Grid>
         </Border>
         <Polygon x:Name="BalloonTail" Panel.ZIndex="1" Points="0,0 22,0 19,18" Fill="#FFFCF7" Stroke="#4F456C" StrokeThickness="2"
