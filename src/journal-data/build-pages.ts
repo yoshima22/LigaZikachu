@@ -10,11 +10,25 @@ import type { BookPage } from "@/app/(app)/journal/_components/journal-book";
 
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
+// A lista de cartas é igual para todos: guarda em memória por 10 min para não reler 1025 linhas a cada visita.
+type CardRow = { nationalId: number; displayName: string; imageUrl: string | null; generation: number; types: string[]; rarity: string };
+let cardsCache: { at: number; rows: CardRow[] } | null = null;
+async function getCards(): Promise<CardRow[]> {
+  if (cardsCache && Date.now() - cardsCache.at < 10 * 60_000) return cardsCache.rows;
+  const rows = await prisma.pokemonCard.findMany({
+    where: { active: true },
+    orderBy: { nationalId: "asc" },
+    select: { nationalId: true, displayName: true, imageUrl: true, generation: true, types: true, rarity: true }
+  });
+  cardsCache = { at: Date.now(), rows };
+  return rows;
+}
+
 /** Monta as 1025 páginas do Journal para um usuário (server-only). */
 export async function buildJournalPages(userId: string, revealAll: boolean): Promise<BookPage[]> {
   const player = await prisma.player.findUnique({ where: { userId }, select: { id: true } });
 
-  const [dex, owned, stickers, genTotals, cards] = await Promise.all([
+  const [dex, owned, stickers, cards] = await Promise.all([
     player ? prisma.playerPokemonDex.findMany({ where: { playerId: player.id }, select: { pokemonId: true } }) : [],
     // Mascotes que o jogador tem agora (cobre quem ainda não abriu o álbum para sincronizar a Pokédex).
     player ? prisma.mascot.findMany({ where: { playerId: player.id }, distinct: ["pokemonId"], select: { pokemonId: true } }) : [],
@@ -24,19 +38,17 @@ export async function buildJournalPages(userId: string, revealAll: boolean): Pro
           select: { card: { select: { nationalId: true, generation: true } } }
         })
       : [],
-    prisma.pokemonCard.groupBy({ by: ["generation"], where: { active: true }, _count: { id: true } }),
-    prisma.pokemonCard.findMany({
-      where: { active: true },
-      orderBy: { nationalId: "asc" },
-      select: { nationalId: true, displayName: true, imageUrl: true, generation: true, types: true, rarity: true }
-    })
+    getCards()
   ]);
+
+  const genTotals: Record<number, number> = {};
+  for (const c of cards) genTotals[c.generation] = (genTotals[c.generation] ?? 0) + 1;
 
   const ctx: UnlockContext = {
     // Mascote de forma (mega, regional, Unown...) conta como a espécie base.
     mascotIds: new Set([...dex, ...owned].map((d) => (formSpecies as Record<string, number>)[d.pokemonId] ?? d.pokemonId)),
     stickerIds: new Set(stickers.map((s) => s.card.nationalId)),
-    gens: Object.fromEntries(genTotals.map((g) => [g.generation, { owned: 0, total: g._count.id }]))
+    gens: Object.fromEntries(Object.entries(genTotals).map(([g, total]) => [g, { owned: 0, total }]))
   };
   for (const s of stickers) if (ctx.gens[s.card.generation]) ctx.gens[s.card.generation].owned++;
 

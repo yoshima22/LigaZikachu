@@ -10,6 +10,7 @@ import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 import { AlbumCollection } from "./_components/album-collection";
 import { PackShelf } from "./_components/pack-shelf";
 import { JournalLauncher } from "./_components/journal-launcher";
+import { JOURNAL_PUBLIC } from "@/journal-data/config";
 import type { Prisma } from "@prisma/client";
 
 export const dynamic = "force-dynamic";
@@ -233,7 +234,7 @@ export default async function AlbumPage({
                 {wallet.balance.toLocaleString("pt-BR")} ZC
               </Link>
             )}
-            {admin && <JournalLauncher />}
+            {(admin || JOURNAL_PUBLIC) && <JournalLauncher />}
             {admin && (
               <Link href="/album/admin" className="flex items-center gap-1.5 rounded-lg border border-border px-3 py-2 text-xs text-slate-400 hover:text-slate-200">
                 <Settings size={14} /> Admin
