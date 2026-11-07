@@ -39,7 +39,6 @@ export type FusedSnapshot = {
   stats: MascotStats; eventBonusStat: string | null; eventBonusValue: number | null;
 };
 const SORTS = { level: "Maior nível", total: "Maior status total", name: "Nome (A–Z)" } as const;
-const stars = (m: MachineMascot) => Math.max(1, m.labStars || 0);
 const label = (m: MachineMascot) => m.nickname || m.name;
 
 type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string; cost: number } | { ok: false; reason: string };
@@ -54,7 +53,7 @@ function planFusion(sel: MachineMascot[]): Plan {
         survivorOrigin: keep.eggType, survivorLevel: keep.level, survivorStars: keep.labStars ?? 0,
         consumedOrigin: rest[0].eggType, consumedLevel: rest[0].level, consumedStars: rest[0].labStars ?? 0,
       });
-      return { ok: true, mode: "STAR", summary: `${stars(keep)}★ → ${next}★ (+5 em todos os atributos) · sem custo`, cost: 0 };
+      return { ok: true, mode: "STAR", summary: `${keep.labStars ?? 0}★ → ${next}★ (+5 em todos os atributos) · sem custo`, cost: 0 };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : "Fusão inválida." };
     }

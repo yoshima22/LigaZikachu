@@ -33,9 +33,10 @@ export function validateLabStarFusion(input: {
 }): number {
   if (input.survivorOrigin !== "LAB" || input.consumedOrigin !== "LAB") throw new Error("Os dois mascotes precisam ser de origem Laboratório.");
   if (input.survivorLevel !== 100 || input.consumedLevel !== 100) throw new Error("Os dois mascotes precisam estar no nível 100.");
-  const stars = Math.max(1, input.survivorStars);
+  // 0★ é o LAB atual (sem estrelas). O consumido precisa ter pelo menos as estrelas do mantido.
+  const stars = Math.max(0, input.survivorStars);
   if (stars >= 5) throw new Error("Este mascote já possui 5 estrelas.");
-  if (stars !== Math.max(1, input.consumedStars)) throw new Error("Os dois mascotes precisam ter a mesma quantidade de estrelas.");
+  if (Math.max(0, input.consumedStars) < stars) throw new Error(`O mascote consumido precisa ter pelo menos ${stars} estrela(s).`);
   return stars + 1;
 }
 

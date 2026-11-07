@@ -10,6 +10,12 @@ test("maps each origin fusion to its next origin and mutation", () => {
   assert.equal(getOriginFusionRecipe("LAB"), null);
 });
 
+test("Lab 0 stars goes to 1 and consumed needs at least the survivor stars", () => {
+  assert.equal(validateLabStarFusion({ survivorOrigin: "LAB", survivorLevel: 100, survivorStars: 0, consumedOrigin: "LAB", consumedLevel: 100, consumedStars: 0 }), 1);
+  assert.equal(validateLabStarFusion({ survivorOrigin: "LAB", survivorLevel: 100, survivorStars: 1, consumedOrigin: "LAB", consumedLevel: 100, consumedStars: 3 }), 2);
+  assert.throws(() => validateLabStarFusion({ survivorOrigin: "LAB", survivorLevel: 100, survivorStars: 2, consumedOrigin: "LAB", consumedLevel: 100, consumedStars: 1 }), /pelo menos 2/i);
+});
+
 test("upgrades equal level 100 Lab stars and rejects invalid pairs", () => {
   assert.equal(validateLabStarFusion({ survivorOrigin: "LAB", survivorLevel: 100, survivorStars: 2, consumedOrigin: "LAB", consumedLevel: 100, consumedStars: 2 }), 3);
   assert.throws(() => validateLabStarFusion({ survivorOrigin: "LAB", survivorLevel: 99, survivorStars: 1, consumedOrigin: "LAB", consumedLevel: 100, consumedStars: 1 }), /nível 100/i);
