@@ -350,12 +350,15 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
       {tab === "machine" && (canUseRarityMachine ? (
         <RarityMachine
           mascots={mascots}
-          onFused={({ survivorId, consumedIds, survivor }) =>
+          dust={dust}
+          onFused={({ survivorId, consumedIds, survivor, cost }) => {
+            if (cost) setDust((d) => d - cost);
             setMascots((prev) => prev.filter((m) => !consumedIds.includes(m.id)).map((m) => {
               if (m.id !== survivorId) return m;
               const { eventBonusStat: _s, eventBonusValue: _v, ...fresh } = survivor;
               return { ...m, ...fresh };
-            }))}
+            }));
+          }}
         />
       ) : <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 text-center"><p className="text-lg font-bold text-slate-200">Máquina Parada</p><p className="mt-2 text-sm text-slate-500">A máquina de raridade está em testes e ainda não está disponível.</p></div>)}
 

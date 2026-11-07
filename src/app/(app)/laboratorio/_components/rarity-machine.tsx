@@ -42,7 +42,7 @@ const SORTS = { level: "Maior nível", total: "Maior status total", name: "Nome 
 const stars = (m: MachineMascot) => Math.max(1, m.labStars || 0);
 const label = (m: MachineMascot) => m.nickname || m.name;
 
-type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string } | { ok: false; reason: string };
+type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string; cost: number } | { ok: false; reason: string };
 
 function planFusion(sel: MachineMascot[]): Plan {
   if (sel.length < 2) return { ok: false, reason: "Escolha o mascote mantido e os que serão consumidos." };
@@ -54,7 +54,7 @@ function planFusion(sel: MachineMascot[]): Plan {
         survivorOrigin: keep.eggType, survivorLevel: keep.level, survivorStars: keep.labStars ?? 0,
         consumedOrigin: rest[0].eggType, consumedLevel: rest[0].level, consumedStars: rest[0].labStars ?? 0,
       });
-      return { ok: true, mode: "STAR", summary: `${stars(keep)}★ → ${next}★ (+5 em todos os atributos)` };
+      return { ok: true, mode: "STAR", summary: `${stars(keep)}★ → ${next}★ (+5 em todos os atributos) · sem custo`, cost: 0 };
     } catch (e) {
       return { ok: false, reason: e instanceof Error ? e.message : "Fusão inválida." };
     }
@@ -62,14 +62,15 @@ function planFusion(sel: MachineMascot[]): Plan {
   const recipe = getOriginFusionRecipe(keep.eggType);
   if (!recipe) return { ok: false, reason: "A origem do mascote mantido não evolui mais." };
   if (rest.some((m) => m.eggType !== recipe.sourceOrigin)) return { ok: false, reason: `Os três precisam ter origem ${ORIGIN_LABEL[recipe.sourceOrigin]}.` };
-  return { ok: true, mode: "ORIGIN", summary: `${ORIGIN_LABEL[recipe.sourceOrigin]} → ${ORIGIN_LABEL[recipe.resultOrigin]} (gasta 1 Mutação Genética)` };
+  return { ok: true, mode: "ORIGIN", summary: `${ORIGIN_LABEL[recipe.sourceOrigin]} → ${ORIGIN_LABEL[recipe.resultOrigin]} · custa ${recipe.mutationCost} Pó de Criação`, cost: recipe.mutationCost };
 }
 
 export function RarityMachine({
-  mascots, onFused,
+  mascots, dust, onFused,
 }: {
   mascots: MachineMascot[];
-  onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR"; survivor: FusedSnapshot }) => void;
+  dust: number;
+  onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR"; survivor: FusedSnapshot; cost: number }) => void;
 }) {
   const [ids, setIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
@@ -108,6 +109,7 @@ export function RarityMachine({
   async function run() {
     if (!plan.ok || anim) return;
     const [keep, ...eaten] = selected;
+    if (dust < plan.cost) return setError(`Pó de Criação insuficiente: a fusão custa ${plan.cost} e você tem ${dust}.`);
     setError(null);
     setAnim({ phase: "charge", keep, eaten, summary: plan.summary, mode: plan.mode });
     const [res] = await Promise.all([
@@ -116,7 +118,7 @@ export function RarityMachine({
     ]);
     if (!res.ok) { setAnim(null); setError(res.error); return; }
     setAnim({ phase: "reveal", keep, eaten, summary: plan.summary, mode: plan.mode, result: res.survivor });
-    onFused({ survivorId: keep.id, consumedIds: eaten.map((m) => m.id), mode: plan.mode, survivor: res.survivor });
+    onFused({ survivorId: keep.id, consumedIds: eaten.map((m) => m.id), mode: plan.mode, survivor: res.survivor, cost: res.cost });
     setIds([]);
   }
 
@@ -139,6 +141,7 @@ export function RarityMachine({
       <div className="relative overflow-hidden rounded-3xl border border-fuchsia-400/35 bg-[radial-gradient(circle_at_20%_0%,rgba(217,70,239,0.25),transparent_45%),radial-gradient(circle_at_90%_100%,rgba(250,204,21,0.12),transparent_40%),rgba(15,23,42,0.92)] p-5">
         <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-fuchsia-300">Teste administrativo</p>
         <h2 className="mt-1 font-pixel text-xl text-white">Máquina de Raridade</h2>
+        <p className="mt-1 text-xs font-bold text-fuchsia-200">🧫 Seu Pó de Criação: {dust}</p>
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-400">
           O 1º escolhido é o <b className="text-fuchsia-200">mantido</b>; os outros são <b className="text-rose-300">consumidos</b>.
           Três da mesma origem sobem de origem. Dois LAB Lv.100 com a mesma estrela ganham ★.
@@ -170,7 +173,7 @@ export function RarityMachine({
         </div>
 
         <div className="mt-4 flex flex-col items-center gap-2">
-          <p className={`text-center text-xs ${plan.ok ? "text-fuchsia-200" : "text-slate-500"}`}>{plan.ok ? plan.summary : plan.reason}</p>
+          <p className={`text-center text-xs ${plan.ok ? (dust < plan.cost ? "text-red-300" : "text-fuchsia-200") : "text-slate-500"}`}>{plan.ok ? plan.summary : plan.reason}</p>
           {error && <p className="rounded-lg border border-red-500/40 bg-red-500/10 px-3 py-1.5 text-xs text-red-300">✗ {error}</p>}
           <button type="button" disabled={!plan.ok || !!anim} onClick={run}
             className="flex items-center gap-2 rounded-xl bg-gradient-to-r from-fuchsia-400 to-amber-300 px-6 py-2.5 text-sm font-black text-slate-950 shadow-[0_0_24px_rgba(217,70,239,0.35)] transition hover:brightness-110 disabled:opacity-40 disabled:shadow-none">
@@ -181,33 +184,31 @@ export function RarityMachine({
 
       {/* Seletor */}
       <div className="rounded-3xl border border-slate-800 bg-slate-900/50 p-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <div className="relative min-w-[160px] flex-1">
+        <div className="grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
+          <div className="relative col-span-2 sm:col-span-3 lg:col-span-4">
             <Search size={13} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500" />
             <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Buscar mascote…"
               className="w-full rounded-lg border border-slate-700 bg-slate-950/70 py-1.5 pl-8 pr-3 text-xs text-white outline-none focus:border-fuchsia-400" />
           </div>
-          <select value={origin} onChange={(e) => setOrigin(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
-            <option value="">Todas as origens</option>
+          <select value={origin} onChange={(e) => setOrigin(e.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
+            <option value="">Origem: todas</option>
             {Object.entries(ORIGIN_LABEL).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
-          <button type="button" onClick={() => setOnly100((v) => !v)}
-            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${only100 ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400"}`}>Lv.100</button>
-        </div>
-        <div className="mt-2 flex flex-wrap gap-2">
           {[
             [tag, setTag, "Desempenho: todos", [["FORTE", "💪 Forte"], ["NEUTRO", "⚖️ Neutro"], ["RUIM", "👎 Ruim"], ["PESSIMO", "🗑️ Péssimo"]]],
             [personality, setPersonality, "Personalidade: todas", Object.entries(PERSONALITY_LABEL)],
             [starsF, setStarsF, "Estrelas: todas", [1, 2, 3, 4, 5].map((n) => [String(n), n + "★ (LAB)"])],
           ].map(([val, set, ph, opts], i) => (
-            <select key={i} value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
+            <select key={i} value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
               <option value="">{ph as string}</option>
               {(opts as string[][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           ))}
-          <select value={sort} onChange={(e) => setSort(e.target.value as keyof typeof SORTS)} className="rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
+          <select value={sort} onChange={(e) => setSort(e.target.value as keyof typeof SORTS)} className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
             {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
           </select>
+          <button type="button" onClick={() => setOnly100((v) => !v)}
+            className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${only100 ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400"}`}>Somente Lv.100</button>
         </div>
 
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
@@ -220,12 +221,15 @@ export function RarityMachine({
                 className={`relative ${blocked ? "opacity-25" : ""} flex flex-col items-center rounded-xl border p-2 text-center transition hover:-translate-y-0.5 ${idx >= 0 ? "border-fuchsia-300 bg-fuchsia-500/15 shadow-[0_0_14px_rgba(217,70,239,0.3)]" : "border-slate-700/70 bg-slate-950/40 hover:border-slate-500"}`}>
                 {idx >= 0 && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-fuchsia-400 text-[10px] font-black text-slate-950">{idx + 1}</span>}
                 <img src={m.spriteUrl} alt="" loading="lazy" className="h-12 w-12 object-contain [image-rendering:pixelated]" />
-                <p className="mt-1 w-full truncate text-[11px] font-semibold text-white">{m.isShiny ? "✨ " : ""}{label(m)}</p>
+                <div className="mt-1 flex w-full items-center justify-center gap-1">
+                  <p className="truncate text-[11px] font-semibold text-white">{m.isShiny ? "✨ " : ""}{label(m)}</p>
+                  <CodeChip id={m.id} />
+                </div>
                 <TagChip tag={m.performanceTag} />
                 <span className={`mt-0.5 rounded-full border px-1.5 py-px text-[9px] font-bold ${ORIGIN_COLOR[m.eggType ?? ""] ?? "border-slate-700 text-slate-500"}`}>
                   {ORIGIN_LABEL[m.eggType ?? ""] ?? "—"}{m.eggType === "LAB" ? ` ${stars(m)}★` : ""}
                 </span>
-                <span className="flex items-center gap-1 text-[10px] text-slate-500">Lv.{m.level} <CodeChip id={m.id} /></span>
+                <span className="text-[10px] text-slate-500">Lv.{m.level}</span>
                 {m.personality && <span className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
                 <StatStrip stats={m.stats} />
               </button>

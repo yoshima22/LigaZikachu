@@ -255,6 +255,7 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
   const me = await requireLabAdmin();
   if (new Set([input.survivorId, ...input.consumedIds]).size !== input.consumedIds.length + 1) return { ok: false as const, error: "Selecione mascotes diferentes." };
   try {
+    let cost = 0;
     const result = await prisma.$transaction(async (tx) => {
       const all = await tx.mascot.findMany({ where: { playerId: me.id, id: { in: [input.survivorId, ...input.consumedIds] } } });
       const survivor = all.find((m) => m.id === input.survivorId);
@@ -269,10 +270,9 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
         if (consumed.length !== 2) throw new Error("A fusão de origem usa três mascotes.");
         const recipe = getOriginFusionRecipe(survivor.hatchedFromEggType);
         if (!recipe || consumed.some((m) => m.hatchedFromEggType !== recipe.sourceOrigin)) throw new Error("Os três mascotes precisam ter a mesma origem compatível.");
-        const item = await tx.shopItem.findFirst({ where: { type: recipe.mutationType } });
-        if (!item) throw new Error("Você não possui a Mutação Genética necessária. Compre na aba Loja de Pó.");
-        const used = await tx.playerInventory.updateMany({ where: { playerId: me.id, itemId: item.id, quantity: { gte: 1 } }, data: { quantity: { decrement: 1 } } });
-        if (!used.count) throw new Error("Você não possui a Mutação Genética necessária.");
+        const debited = await tx.player.updateMany({ where: { id: me.id, creationDust: { gte: recipe.mutationCost } }, data: { creationDust: { decrement: recipe.mutationCost } } });
+        if (!debited.count) throw new Error(`Pó de Criação insuficiente: a fusão custa ${recipe.mutationCost}.`);
+        cost = recipe.mutationCost;
         await applyRainbowFeather(me.id, survivor.id, recipe.resultOrigin, tx, false, recipe.resultOrigin);
         await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: recipe.resultOrigin === "LAB" ? 1 : 0 } });
       }
@@ -280,6 +280,7 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
       const f = await tx.mascot.findUniqueOrThrow({ where: { id: survivor.id } });
       return {
         survivorId: survivor.id,
+        cost,
         survivor: {
           pokemonId: f.pokemonId, name: getPokemonName(f.pokemonId),
           spriteUrl: f.isShiny ? getShinySprite(f.pokemonId) : getStaticSpriteUrl(f.pokemonId),
