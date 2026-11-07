@@ -3,12 +3,15 @@ import { BookMarked, Eye } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { JOURNAL_CHAPTERS } from "@/journal-data/chapters";
-import { describeRule, isEntryUnlocked, type UnlockContext } from "@/journal-data/unlock";
 import { GEN_INFO, buildAutoEntry } from "@/journal-data/auto";
-import { JournalBook, type BookSpread } from "./_components/journal-book";
+import { describeRule, isEntryUnlocked, type UnlockContext } from "@/journal-data/unlock";
+import type { UnlockRule } from "@/journal-data/types";
+import { JournalBook, type BookPage } from "./_components/journal-book";
 
 export const dynamic = "force-dynamic";
 export const metadata = { title: "Journal | Liga Zikachu" };
+
+const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export default async function JournalPage({ searchParams }: { searchParams: Promise<{ tudo?: string }> }) {
   // Protótipo: só admins (inclui visão completa). Abrir ao público = trocar por getAppSession.
@@ -16,7 +19,6 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
   const revealAll = sp.tudo === "1";
 
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
-  const pokemonIds = [...new Set(JOURNAL_CHAPTERS.flatMap((c) => c.entries.map((e) => e.pokemonId)))];
 
   const [dex, stickers, genTotals, cards] = await Promise.all([
     player ? prisma.playerPokemonDex.findMany({ where: { playerId: player.id }, select: { pokemonId: true } }) : [],
@@ -40,52 +42,40 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
     gens: Object.fromEntries(genTotals.map((g) => [g.generation, { owned: 0, total: g._count.id }]))
   };
   for (const s of stickers) if (ctx.gens[s.card.generation]) ctx.gens[s.card.generation].owned++;
-  const cardById = new Map(cards.map((c) => [c.nationalId, c]));
 
-  const spreads: BookSpread[] = JOURNAL_CHAPTERS.flatMap((chapter) =>
-    chapter.entries.map((entry) => {
-      const unlocked = revealAll || isEntryUnlocked(entry.unlock, ctx);
-      const card = cardById.get(entry.pokemonId);
-      return {
-        id: entry.id,
-        chapterTitle: chapter.title,
-        accent: chapter.accent,
-        locked: !unlocked,
-        number: entry.pokemonId,
-        pokemonName: unlocked ? card?.displayName ?? null : null,
-        title: unlocked ? entry.title : null,
-        story: unlocked ? entry.story : [],
-        facts: unlocked ? entry.facts ?? [] : [],
-        art: unlocked ? entry.art ?? null : null,
-        imageUrl: card?.imageUrl ?? null,
-        hints: unlocked ? [] : entry.unlock.map(describeRule)
-      };
-    })
+  // Registros escritos à mão, por Pokémon.
+  const curated = new Map(
+    JOURNAL_CHAPTERS.flatMap((chapter) => chapter.entries.map((entry) => [entry.pokemonId, { chapter, entry }] as const))
   );
-  // Todo Pokémon sem registro escrito à mão ganha uma página automática (por geração).
-  const curated = new Set(pokemonIds);
-  for (const card of cards) {
-    if (curated.has(card.nationalId)) continue;
+
+  // Uma página por Pokémon (1:1 com as figurinhas), na ordem da Pokédex.
+  const pages: BookPage[] = cards.map((card) => {
     const gen = GEN_INFO[card.generation];
-    const unlocked = revealAll || isEntryUnlocked(
-      [{ type: "mascot", pokemonId: card.nationalId }, { type: "sticker", pokemonId: card.nationalId }], ctx);
-    const auto = buildAutoEntry(card);
-    spreads.push({
-      id: `auto-${card.nationalId}`,
-      chapterTitle: `Registro Geral — ${gen?.region ?? "Outras terras"} (Geração ${card.generation})`,
-      accent: gen?.accent ?? "#c9a24a",
+    const hand = curated.get(card.nationalId);
+    const rules: UnlockRule[] = hand?.entry.unlock ?? [
+      { type: "mascot", pokemonId: card.nationalId },
+      { type: "sticker", pokemonId: card.nationalId }
+    ];
+    const unlocked = revealAll || isEntryUnlocked(rules, ctx);
+    const content = hand ? { title: hand.entry.title, story: hand.entry.story, facts: hand.entry.facts ?? [] } : buildAutoEntry(card);
+    return {
+      id: hand?.entry.id ?? `auto-${card.nationalId}`,
+      generation: card.generation,
+      region: gen?.region ?? "Outras terras",
+      chapterTitle: hand ? hand.chapter.title : `${gen?.region ?? "Outras terras"} · Geração ${card.generation}`,
+      accent: hand ? hand.chapter.accent : gen?.accent ?? "#c9a24a",
       locked: !unlocked,
       number: card.nationalId,
-      pokemonName: unlocked ? card.displayName.charAt(0).toUpperCase() + card.displayName.slice(1) : null,
-      title: unlocked ? auto.title : null,
-      story: unlocked ? auto.story : [],
-      facts: unlocked ? auto.facts : [],
-      art: null,
+      pokemonName: unlocked ? cap(card.displayName) : null,
+      title: unlocked ? content.title : null,
+      story: unlocked ? content.story : [],
+      facts: unlocked ? content.facts : [],
+      art: unlocked ? hand?.entry.art ?? null : null,
       imageUrl: card.imageUrl,
-      hints: unlocked ? [] : [`Ter o mascote #${card.nationalId}`, `Ter a figurinha #${card.nationalId}`]
-    });
-  }
-  const unlockedCount = spreads.filter((s) => !s.locked).length;
+      hints: unlocked ? [] : rules.map(describeRule)
+    };
+  });
+  const unlockedCount = pages.filter((p) => !p.locked).length;
 
   return (
     <div className="space-y-6">
@@ -96,7 +86,8 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           </p>
           <h1 className="mt-2 font-pixel text-lg leading-snug text-[#FFCB05]">Journal</h1>
           <p className="mt-2 text-sm text-slate-400">
-            {unlockedCount} de {spreads.length} registros desbloqueados. Use as setas do teclado ou os botões para virar a página.
+            {unlockedCount} de {pages.length} páginas desbloqueadas — uma por Pokémon, aberta pela figurinha ou pelo mascote.
+            Use os marcadores, as setas do teclado ou o campo de página.
           </p>
         </div>
         <Link
@@ -107,7 +98,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
         </Link>
       </div>
 
-      <JournalBook spreads={spreads} />
+      <JournalBook pages={pages} />
     </div>
   );
 }
