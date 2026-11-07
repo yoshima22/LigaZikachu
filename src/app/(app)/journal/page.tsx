@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { JOURNAL_CHAPTERS } from "@/journal-data/chapters";
 import { describeRule, isEntryUnlocked, type UnlockContext } from "@/journal-data/unlock";
+import { GEN_INFO, buildAutoEntry } from "@/journal-data/auto";
 import { JournalBook, type BookSpread } from "./_components/journal-book";
 
 export const dynamic = "force-dynamic";
@@ -27,8 +28,9 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
       : [],
     prisma.pokemonCard.groupBy({ by: ["generation"], where: { active: true }, _count: { id: true } }),
     prisma.pokemonCard.findMany({
-      where: { nationalId: { in: pokemonIds } },
-      select: { nationalId: true, displayName: true, imageUrl: true }
+      where: { active: true },
+      orderBy: { nationalId: "asc" },
+      select: { nationalId: true, displayName: true, imageUrl: true, generation: true, types: true, rarity: true }
     })
   ]);
 
@@ -60,6 +62,29 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
       };
     })
   );
+  // Todo Pokémon sem registro escrito à mão ganha uma página automática (por geração).
+  const curated = new Set(pokemonIds);
+  for (const card of cards) {
+    if (curated.has(card.nationalId)) continue;
+    const gen = GEN_INFO[card.generation];
+    const unlocked = revealAll || isEntryUnlocked(
+      [{ type: "mascot", pokemonId: card.nationalId }, { type: "sticker", pokemonId: card.nationalId }], ctx);
+    const auto = buildAutoEntry(card);
+    spreads.push({
+      id: `auto-${card.nationalId}`,
+      chapterTitle: `Registro Geral — ${gen?.region ?? "Outras terras"} (Geração ${card.generation})`,
+      accent: gen?.accent ?? "#c9a24a",
+      locked: !unlocked,
+      number: card.nationalId,
+      pokemonName: unlocked ? card.displayName.charAt(0).toUpperCase() + card.displayName.slice(1) : null,
+      title: unlocked ? auto.title : null,
+      story: unlocked ? auto.story : [],
+      facts: unlocked ? auto.facts : [],
+      art: null,
+      imageUrl: card.imageUrl,
+      hints: unlocked ? [] : [`Ter o mascote #${card.nationalId}`, `Ter a figurinha #${card.nationalId}`]
+    });
+  }
   const unlockedCount = spreads.filter((s) => !s.locked).length;
 
   return (

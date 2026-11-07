@@ -129,6 +129,7 @@ function RightPage({ s, index }: { s: BookSpread; index: number }) {
 
 export function JournalBook({ spreads }: { spreads: BookSpread[] }) {
   const [index, setIndex] = useState(0);
+  const [pageText, setPageText] = useState("");
   const [flip, setFlip] = useState<{ dir: 1 | -1; go: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const total = spreads.length;
@@ -233,9 +234,34 @@ export function JournalBook({ spreads }: { spreads: BookSpread[] }) {
         >
           <ChevronLeft size={14} /> Anterior
         </button>
-        <span>
-          Registro {index + 1} de {total}
-        </span>
+        <form
+          className="flex items-center gap-2"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const n = Number.parseInt(pageText, 10);
+            if (!Number.isFinite(n) || flip) return;
+            setIndex(Math.min(total - 1, Math.max(0, Math.floor((n - 1) / 2))));
+            setPageText("");
+          }}
+        >
+          <span>
+            Páginas {index * 2 + 1}–{index * 2 + 2} de {total * 2}
+          </span>
+          <input
+            type="number"
+            min={1}
+            max={total * 2}
+            value={pageText}
+            onChange={(e) => setPageText(e.target.value)}
+            onKeyDown={(e) => e.stopPropagation()}
+            placeholder="Ir para…"
+            aria-label="Número da página"
+            className="w-24 rounded-lg border border-border bg-slate-950 px-2 py-2 text-center text-xs text-slate-100 outline-none focus:border-[#FFCB05]"
+          />
+          <button type="submit" className="rounded-lg border border-border px-3 py-2 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05]">
+            Ir
+          </button>
+        </form>
         <button
           type="button"
           onClick={() => turn(1)}
