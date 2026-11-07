@@ -1046,7 +1046,7 @@ export async function createMascotForPlayerAction(opts: {
     const qty = Math.max(1, Math.min(50, Math.trunc(opts.quantity ?? 1)));
     const origins = ["COMMON", "RARE", "EVENT", "SPECIAL", "LAB", "CELESTIAL"];
     if (opts.originType && !origins.includes(opts.originType)) return { ok: false, error: "Origem inválida." };
-    const labStars = opts.originType === "LAB" ? Math.max(1, Math.min(5, Math.trunc(opts.labStars ?? 1))) : 0;
+    const labStars = opts.originType === "LAB" ? Math.max(0, Math.min(5, Math.trunc(opts.labStars ?? 0))) : 0;
     const extraPts = Math.max(0, Math.floor(opts.extraRandomPoints ?? 0));
     const snapshot = await (await import("@/lib/species-registry")).getSpeciesSnapshot(opts.pokemonId);
 

@@ -138,7 +138,7 @@ export function RarityMachine({
       (!q || label(m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) &&
       (!origin || m.eggType === origin) && (!only100 || m.level === 100) &&
       (!tag || (m.performanceTag ?? "NEUTRO") === tag) && (!personality || m.personality === personality) &&
-      (!starsF || (m.eggType === "LAB" && stars(m) === Number(starsF))));
+      (!starsF || (m.eggType === "LAB" && (m.labStars ?? 0) === Number(starsF))));
     const total = (m: MachineMascot) => (m.stats ? statsTotal(m.stats) : 0);
     return list.sort((a, b) => sort === "name" ? label(a).localeCompare(label(b)) : sort === "total" ? total(b) - total(a) : b.level - a.level);
   }, [pool, search, origin, only100, tag, personality, starsF, sort]);
@@ -211,7 +211,7 @@ export function RarityMachine({
                     <img src={m.spriteUrl} alt="" className="rm-bob mt-3 h-16 w-16 object-contain [image-rendering:pixelated]" />
                     <p className="mt-1 max-w-full truncate text-xs font-bold text-white">{label(m)}</p>
                     <TagChip tag={m.performanceTag} />
-                    <p className="text-[10px] text-slate-400">{ORIGIN_LABEL[m.eggType ?? ""] ?? "Sem origem"} · Lv.{m.level}{m.eggType === "LAB" ? ` · ${stars(m)}★` : ""}</p>
+                    <p className="text-[10px] text-slate-400">{ORIGIN_LABEL[m.eggType ?? ""] ?? "Sem origem"} · Lv.{m.level}{m.eggType === "LAB" && (m.labStars ?? 0) > 0 ? ` · ${m.labStars}★` : ""}</p>
                     {!keeper && <button type="button" onClick={() => makeKeeper(m.id)} className="mt-1 text-[10px] text-fuchsia-300 underline">tornar mantido</button>}
                   </>
                 ) : <p className="text-2xl text-slate-700">＋</p>}
@@ -245,7 +245,7 @@ export function RarityMachine({
           {[
             [tag, setTag, "Desempenho: todos", [["FORTE", "💪 Forte"], ["NEUTRO", "⚖️ Neutro"], ["RUIM", "👎 Ruim"], ["PESSIMO", "🗑️ Péssimo"]]],
             [personality, setPersonality, "Personalidade: todas", Object.entries(PERSONALITY_LABEL)],
-            [starsF, setStarsF, "Estrelas: todas", [1, 2, 3, 4, 5].map((n) => [String(n), n + "★ (LAB)"])],
+            [starsF, setStarsF, "Estrelas: todas", [["0", "LAB sem estrelas"], ...[1, 2, 3, 4, 5].map((n) => [String(n), n + "★ (LAB)"])]],
           ].map(([val, set, ph, opts], i) => (
             <select key={i} value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
               <option value="">{ph as string}</option>
@@ -275,7 +275,7 @@ export function RarityMachine({
                 </div>
                 <TagChip tag={m.performanceTag} />
                 <span className={`mt-0.5 rounded-full border px-1.5 py-px text-[9px] font-bold ${ORIGIN_COLOR[m.eggType ?? ""] ?? "border-slate-700 text-slate-500"}`}>
-                  {ORIGIN_LABEL[m.eggType ?? ""] ?? "—"}{m.eggType === "LAB" ? ` ${stars(m)}★` : ""}
+                  {ORIGIN_LABEL[m.eggType ?? ""] ?? "—"}{m.eggType === "LAB" && (m.labStars ?? 0) > 0 ? ` ${m.labStars}★` : ""}
                 </span>
                 <span className="text-[10px] text-slate-500">Lv.{m.level}</span>
                 {m.personality && <span className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
