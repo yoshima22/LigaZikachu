@@ -47,11 +47,12 @@ function planFusion(sel: MachineMascot[]): Plan {
   if (sel.length < 2) return { ok: false, reason: "Escolha o mascote mantido e os que serão consumidos." };
   const [keep, ...rest] = sel;
   if (rest.some((m) => m.pokemonId !== keep.pokemonId || m.eggType !== keep.eggType)) return { ok: false, reason: "Todos precisam ser o mesmo Pokémon e da mesma origem." };
-  if (sel.length === 2) {
+  if (keep.eggType === "LAB") {
     try {
-      const next = validateLabStarFusion({
+      let next = 0;
+      for (const c of rest) next = validateLabStarFusion({
         survivorOrigin: keep.eggType, survivorLevel: keep.level, survivorStars: keep.labStars ?? 0,
-        consumedOrigin: rest[0].eggType, consumedLevel: rest[0].level, consumedStars: rest[0].labStars ?? 0,
+        consumedOrigin: c.eggType, consumedLevel: c.level, consumedStars: c.labStars ?? 0,
       });
       return { ok: true, mode: "STAR", summary: `${keep.labStars ?? 0}★ → ${next}★ (+5 em todos os atributos) · sem custo`, cost: 0 };
     } catch (e) {
@@ -59,6 +60,7 @@ function planFusion(sel: MachineMascot[]): Plan {
     }
   }
   const recipe = getOriginFusionRecipe(keep.eggType);
+  if (sel.length !== 3) return { ok: false, reason: "A fusão de origem usa 3 mascotes (1 mantido + 2 consumidos)." };
   if (!recipe) return { ok: false, reason: "A origem do mascote mantido não evolui mais." };
   if (rest.some((m) => m.eggType !== recipe.sourceOrigin)) return { ok: false, reason: `Os três precisam ter origem ${ORIGIN_LABEL[recipe.sourceOrigin]}.` };
   return { ok: true, mode: "ORIGIN", summary: `${ORIGIN_LABEL[recipe.sourceOrigin]} → ${ORIGIN_LABEL[recipe.resultOrigin]} · custa ${recipe.mutationCost} Pó de Criação`, cost: recipe.mutationCost };
