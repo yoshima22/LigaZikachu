@@ -1,59 +1,18 @@
-/** Curiosidades de anime e filmes — só fatos conhecidos e seguros. Expanda por Pokémon (id nacional). */
+/**
+ * Curiosidades de anime, filmes e jogos por Pokémon (id nacional), uma geração por arquivo em ./facts.
+ * Regra: só entra fato confirmado. Expanda por geração; os dados da Pokédex (evolução, medidas...) vêm do script.
+ */
+import { GEN1_FACTS } from "./facts/gen1";
+import { GEN2_FACTS } from "./facts/gen2";
+import { GEN3_FACTS } from "./facts/gen3";
+import { GEN4_FACTS } from "./facts/gen4";
+import { GEN5_FACTS } from "./facts/gen5";
+import { GEN6_FACTS } from "./facts/gen6";
+import { GEN7_FACTS } from "./facts/gen7";
+import { GEN8_FACTS } from "./facts/gen8";
+import { GEN9_FACTS } from "./facts/gen9";
+
 export const ANIME_FACTS: Record<number, string[]> = {
-  // — Geração 1 —
-  3: ["Em Pokémon: O Filme 1, um clone de Venusaur enfrenta o original."],
-  6: [
-    "No anime, o Charizard de Ash demorou a obedecê-lo, mas virou um dos pilares da equipe.",
-    "Em Pokémon: O Filme 1, um clone de Charizard enfrenta o original."
-  ],
-  9: [
-    "No anime, Blastoise é o Pokémon de Gary Oak, rival de Ash.",
-    "Em Pokémon: O Filme 1, um clone de Blastoise enfrenta o original."
-  ],
-  10: ["O primeiro Pokémon capturado por Ash no anime foi um Caterpie, que evoluiu até Butterfree."],
-  21: ["No anime, um bando furioso de Spearow persegue Ash e Pikachu logo nos primeiros episódios."],
-  23: ["No anime, Ekans é de Jessie, da Equipe Rocket, e evolui para Arbok."],
-  26: ["No anime, o Raichu do Tenente Surge vence o Pikachu de Ash na primeira batalha em Vermilion."],
-  35: ["No anime, Ash e seus amigos encontram uma comunidade de Clefairy no Monte Moon."],
-  53: ["No anime, Persian é o Pokémon de Giovanni, chefe da Equipe Rocket."],
-  71: ["No anime, o Victreebel de James costuma morder a cabeça dele."],
-  74: ["No anime, Brock tem um Geodude entre os seus primeiros Pokémon."],
-  113: ["No anime, a Chansey ajuda a enfermeira Joy a cuidar dos Pokémon feridos."],
-  122: ["No anime, Mr. Mime é o Pokémon que ajuda nas tarefas de casa de Delia, mãe de Ash."],
-  123: ["No anime, Tracey, ajudante do professor Oak, tem um Scyther."],
-  128: ["No anime, Ash captura 30 Tauros na Zona Safári."],
-  134: ["No anime, Rainer, um dos irmãos Eevee, é um Vaporeon."],
-  135: ["No anime, Sparky, um dos irmãos Eevee, é um Jolteon."],
-  136: ["No anime, Pyro, um dos irmãos Eevee, é um Flareon."],
-  137: ["O episódio \"Dennou Senshi Porygon\" (1997) teve flashes de luz que causaram mal-estar em espectadores no Japão e foi retirado do ar."],
-  12: ["No anime, o Butterfree de Ash se despede para seguir com o bando e formar família (\"Bye Bye Butterfree\")."],
-  18: ["No anime, o Pidgeot de Ash fica em Kanto para proteger um bando de Pidgey."],
-  24: ["No anime, Arbok é o parceiro de Jessie, da Equipe Rocket."],
-  39: ["No anime, Jigglypuff canta para todos dormirem e, ao ver que adormeceram, rabisca o rosto deles."],
-  52: ["No anime, o Meowth da Equipe Rocket aprendeu a falar a língua humana sozinho."],
-  54: ["No anime, o Psyduck de Misty costuma sair da Poké Bola sozinho nas horas menos oportunas."],
-  95: ["No anime, o Onix é um dos Pokémon mais fortes de Brock, líder do Ginásio de Pewter."],
-  110: ["No anime, Weezing é o parceiro de James, da Equipe Rocket."],
-  120: ["No anime, o Staryu de Misty a acompanha desde o início da jornada."],
-  131: ["No anime, o Lapras de Ash o acompanha nas Ilhas Laranja antes de voltar para o seu grupo."],
-  143: ["No anime, Ash conquista um Snorlax nas Ilhas Laranja."],
-  151: ["Mew aparece em Pokémon: O Filme 1 (Mewtwo Contra-Ataca) e em Lucario e o Mistério de Mew."],
-  175: ["No anime, o Togepi de Misty nasce do ovo que Ash encontrou e a segue como se ela fosse sua mãe."],
-  202: ["Na Equipe Rocket, Wobbuffet ficou famoso por dizer apenas o próprio nome."],
-  249: ["Lugia é o protagonista de Pokémon: O Filme 2000, ao lado das aves lendárias."],
-  251: ["Celebi aparece em Pokémon 4Ever (2001)."],
-  384: ["Rayquaza aparece em Pokémon: Destiny Deoxys (2004)."],
-  386: ["Deoxys é o protagonista de Pokémon: Destiny Deoxys (2004)."],
-  448: ["Lucario protagoniza Pokémon: Lucario e o Mistério de Mew (2005)."],
-  483: ["Dialga aparece em Pokémon: The Rise of Darkrai (2007), ao lado de Palkia."],
-  484: ["Palkia aparece em Pokémon: The Rise of Darkrai (2007), ao lado de Dialga."],
-  487: ["Giratina protagoniza Pokémon: Giratina and the Sky Warrior (2008)."],
-  491: ["Darkrai tem papel central em Pokémon: The Rise of Darkrai (2007)."],
-  493: ["Arceus protagoniza Pokémon: Arceus and the Jewel of Life (2009)."],
-  571: ["Zoroark protagoniza Pokémon: Zoroark, Master of Illusions (2010)."],
-  658: ["No anime, o Greninja de Ash alcança a forma Ash-Greninja, fruto do vínculo com o treinador."],
-  719: ["Diancie protagoniza Pokémon: Diancie and the Cocoon of Destruction (2014)."],
-  720: ["Hoopa protagoniza Pokémon: Hoopa and the Clash of Ages (2015)."],
-  721: ["Volcanion protagoniza Pokémon: Volcanion and the Mechanical Marvel (2016)."],
-  893: ["Zarude protagoniza Pokémon: Secrets of the Jungle (2020)."]
+  ...GEN1_FACTS, ...GEN2_FACTS, ...GEN3_FACTS, ...GEN4_FACTS, ...GEN5_FACTS,
+  ...GEN6_FACTS, ...GEN7_FACTS, ...GEN8_FACTS, ...GEN9_FACTS
 };
