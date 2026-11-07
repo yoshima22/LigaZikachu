@@ -351,6 +351,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
         <RarityMachine
           mascots={mascots}
           dust={dust}
+          onSelfGrant={(n) => setDust((d) => d + n)}
           onFused={({ survivorId, consumedIds, survivor, cost }) => {
             if (cost) setDust((d) => d - cost);
             setMascots((prev) => prev.filter((m) => !consumedIds.includes(m.id)).map((m) => {

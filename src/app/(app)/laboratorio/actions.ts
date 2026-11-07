@@ -236,6 +236,25 @@ async function requireLabAdmin() {
   return requirePlayer();
 }
 
+export async function searchLabPlayersAction(query: string) {
+  await requireLabAdmin();
+  const q = query.trim();
+  if (q.length < 2) return [];
+  return prisma.player.findMany({ where: { displayName: { contains: q, mode: "insensitive" } }, select: { id: true, displayName: true, creationDust: true }, orderBy: { displayName: "asc" }, take: 8 });
+}
+
+// Admin: adiciona Pó de Criação a si mesmo ou a outro jogador (incremento atômico).
+export async function grantCreationDustAction(targetPlayerId: string, amount: number) {
+  const me = await requireLabAdmin();
+  const qty = Math.trunc(Number(amount));
+  if (!Number.isFinite(qty) || qty < 1 || qty > 100000) return { ok: false as const, error: "Informe uma quantidade entre 1 e 100000." };
+  try {
+    const id = targetPlayerId || me.id;
+    const target = await prisma.player.update({ where: { id }, data: { creationDust: { increment: qty } }, select: { displayName: true, creationDust: true } });
+    return { ok: true as const, isSelf: id === me.id, name: target.displayName, balance: target.creationDust, added: qty };
+  } catch { return { ok: false as const, error: "Jogador não encontrado." }; }
+}
+
 export async function buyLabMutationAction(type: GeneticMutationType) {
   const me = await requireLabAdmin();
   const config = MUTATION_ITEMS[type];

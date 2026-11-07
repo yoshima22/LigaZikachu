@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Search, Sparkles, X } from "lucide-react";
-import { fuseMascotsInLabAction } from "../actions";
+import { fuseMascotsInLabAction, grantCreationDustAction, searchLabPlayersAction } from "../actions";
 import { CodeChip, StatStrip, TagChip, statsTotal, type MascotStats } from "./mascot-chips";
 import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { getOriginFusionRecipe, validateLabStarFusion } from "@/lib/lab-rarity-machine";
@@ -65,11 +65,57 @@ function planFusion(sel: MachineMascot[]): Plan {
   return { ok: true, mode: "ORIGIN", summary: `${ORIGIN_LABEL[recipe.sourceOrigin]} → ${ORIGIN_LABEL[recipe.resultOrigin]} · custa ${recipe.mutationCost} Pó de Criação`, cost: recipe.mutationCost };
 }
 
+function DustGrantPanel({ onSelfGrant }: { onSelfGrant: (n: number) => void }) {
+  const [q, setQ] = useState("");
+  const [found, setFound] = useState<{ id: string; displayName: string; creationDust: number }[]>([]);
+  const [target, setTarget] = useState<{ id: string; name: string } | null>(null); // null = minha conta
+  const [amount, setAmount] = useState("100");
+  const [busy, setBusy] = useState(false);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+
+  useEffect(() => {
+    if (q.trim().length < 2) { setFound([]); return; }
+    const t = setTimeout(() => { searchLabPlayersAction(q).then(setFound).catch(() => setFound([])); }, 300);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  async function grant() {
+    setBusy(true); setMsg(null);
+    try {
+      const res = await grantCreationDustAction(target?.id ?? "", Number(amount));
+      if (!res.ok) return setMsg({ ok: false, text: res.error });
+      if (res.isSelf) onSelfGrant(res.added);
+      setMsg({ ok: true, text: `+${res.added} Pó de Criação para ${res.name} (saldo: ${res.balance}).` });
+    } finally { setBusy(false); }
+  }
+
+  return (
+    <details className="rounded-3xl border border-amber-400/25 bg-slate-900/50 p-4">
+      <summary className="cursor-pointer text-xs font-bold uppercase tracking-widest text-amber-300">Admin · Adicionar Pó de Criação</summary>
+      <div className="mt-3 space-y-2">
+        <p className="text-xs text-slate-400">Destino: <b className="text-white">{target ? target.name : "Minha conta"}</b>{target && <button type="button" onClick={() => setTarget(null)} className="ml-2 text-fuchsia-300 underline">usar minha conta</button>}</p>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar outro jogador (mín. 2 letras)…" className="w-full rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-1.5 text-xs text-white outline-none focus:border-amber-300" />
+        {found.length > 0 && (
+          <div className="flex flex-wrap gap-1.5">
+            {found.map((p) => <button key={p.id} type="button" onClick={() => { setTarget({ id: p.id, name: p.displayName }); setQ(""); setFound([]); }} className="rounded-lg border border-slate-700 px-2 py-1 text-[11px] text-slate-200 hover:border-amber-300">{p.displayName} · 🧫 {p.creationDust}</button>)}
+          </div>
+        )}
+        <div className="flex gap-2">
+          <input type="number" min={1} max={100000} value={amount} onChange={(e) => setAmount(e.target.value)} className="w-28 rounded-lg border border-slate-700 bg-slate-950/70 px-3 py-1.5 text-xs text-white" />
+          <button type="button" disabled={busy} onClick={grant} className="rounded-lg bg-amber-300 px-4 py-1.5 text-xs font-bold text-slate-950 disabled:opacity-40">{busy ? "Adicionando…" : "Adicionar"}</button>
+        </div>
+        {msg && <p className={`text-xs ${msg.ok ? "text-emerald-300" : "text-red-300"}`}>{msg.text}</p>}
+      </div>
+    </details>
+  );
+}
+
 export function RarityMachine({
-  mascots, dust, onFused,
+  mascots, dust, onFused, onSelfGrant,
 }: {
   mascots: MachineMascot[];
   dust: number;
+  onSelfGrant: (amount: number) => void;
   onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR"; survivor: FusedSnapshot; cost: number }) => void;
 }) {
   const [ids, setIds] = useState<string[]>([]);
@@ -147,6 +193,8 @@ export function RarityMachine({
           Três da mesma origem sobem de origem. Dois LAB Lv.100 com a mesma estrela ganham ★.
         </p>
       </div>
+
+      <DustGrantPanel onSelfGrant={onSelfGrant} />
 
       {/* Câmara */}
       <div className="rounded-3xl border border-fuchsia-400/25 bg-slate-950/70 p-4">
