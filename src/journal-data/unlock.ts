@@ -10,6 +10,7 @@ export type UnlockContext = {
 function ruleOk(rule: UnlockRule, ctx: UnlockContext) {
   if (rule.type === "mascot") return ctx.mascotIds.has(rule.pokemonId);
   if (rule.type === "sticker") return ctx.stickerIds.has(rule.pokemonId);
+  if (rule.type === "both") return ctx.mascotIds.has(rule.pokemonId) && ctx.stickerIds.has(rule.pokemonId);
   const g = ctx.gens[rule.generation];
   return !!g && g.total > 0 && (g.owned / g.total) * 100 >= rule.percent;
 }
@@ -19,5 +20,6 @@ export const isEntryUnlocked = (rules: UnlockRule[], ctx: UnlockContext) => rule
 export function describeRule(rule: UnlockRule, nameOf: (id: number) => string = (id) => `#${id}`) {
   if (rule.type === "mascot") return `Ter (ou já ter tido) o mascote ${nameOf(rule.pokemonId)}`;
   if (rule.type === "sticker") return `Ter a figurinha de ${nameOf(rule.pokemonId)}`;
+  if (rule.type === "both") return `Ter o mascote e a figurinha de ${nameOf(rule.pokemonId)}`;
   return `Completar ${rule.percent}% do álbum da Geração ${rule.generation}`;
 }

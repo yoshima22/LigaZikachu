@@ -2,6 +2,7 @@
 export type UnlockRule =
   | { type: "mascot"; pokemonId: number } // tem/já teve um mascote da espécie
   | { type: "sticker"; pokemonId: number } // tem a figurinha no álbum
+  | { type: "both"; pokemonId: number } // tem o mascote E a figurinha da espécie
   | { type: "albumGen"; generation: number; percent: number }; // % do álbum da geração
 
 /** Marcador de geração: leva à primeira página dela. */

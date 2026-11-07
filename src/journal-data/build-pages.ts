@@ -68,13 +68,13 @@ async function loadContext(userId: string) {
 type Context = Awaited<ReturnType<typeof loadContext>>;
 
 /**
- * A página abre quando o jogador tem (ou já teve) o mascote da espécie. A figurinha sozinha NÃO abre.
- * Registros escritos à mão podem acrescentar o caminho "álbum da geração completo".
+ * A página abre quando o jogador tem (ou já teve) o mascote da espécie E tem a figurinha dela.
+ * Só um dos dois não abre. Registros escritos à mão podem acrescentar o caminho "álbum da geração completo".
  */
 function rulesFor(card: CardRow): UnlockRule[] {
   const hand = curated.get(card.nationalId);
   return [
-    { type: "mascot", pokemonId: card.nationalId },
+    { type: "both", pokemonId: card.nationalId },
     ...(hand?.entry.unlock ?? []).filter((r) => r.type === "albumGen")
   ];
 }

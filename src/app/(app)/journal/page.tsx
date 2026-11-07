@@ -29,7 +29,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           </p>
           <h1 className="mt-2 font-pixel text-lg leading-snug text-[#FFCB05]">Journal</h1>
           <p className="mt-2 text-sm text-slate-400">
-            {meta.unlockedCount} de {meta.total} registros desbloqueados — um por Pokémon, abertos ao conquistar o mascote do Pokémon.
+            {meta.unlockedCount} de {meta.total} registros desbloqueados — um por Pokémon, abertos ao ter o mascote e a figurinha do Pokémon.
             Use os marcadores<span className="hidden md:inline">, as setas do teclado</span> ou o campo de página.
           </p>
         </div>
