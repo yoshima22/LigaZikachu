@@ -45,6 +45,58 @@ const RARITY_PT: Record<string, string> = {
 
 export type AutoCard = { nationalId: number; displayName: string; generation: number; types: string[]; rarity: string };
 
+export type DexFact = {
+  h: number; w: number; bst: number; top: [string, number];
+  leg: number; gr: number; cr: number; hab: string | null; vars: number;
+  from: number; to: Array<[number, string]>; rk?: Record<string, number>;
+};
+
+const STAT_PT: Record<string, string> = {
+  hp: "PS", attack: "Ataque", defense: "Defesa", "special-attack": "Ataque Esp.", "special-defense": "Defesa Esp.", speed: "Velocidade"
+};
+const HAB_PT: Record<string, string> = {
+  cave: "cavernas", forest: "florestas", grassland: "campos", mountain: "montanhas", rare: "locais raros",
+  "rough-terrain": "terrenos acidentados", sea: "o mar", urban: "cidades", "waters-edge": "beira d'água"
+};
+const HOW_PT = (h: string) =>
+  h.startsWith("L") ? `no nível ${h.slice(1)}` : h === "T" ? "por troca" : h === "I" ? "com um item de evolução" : h === "H" ? "por amizade" : "sob condições especiais";
+const nf = (n: number) => n.toLocaleString("pt-BR", { maximumFractionDigits: 1 });
+
+/** Curiosidades verdadeiras e verificáveis, geradas da PokeAPI (scripts/generate-journal-data.ts). */
+export function generatedFacts(id: number, f: DexFact | undefined, nameOf: (id: number) => string): string[] {
+  if (!f) return [];
+  const out: string[] = [];
+  if (f.leg === 1) out.push("É um Pokémon Lendário.");
+  if (f.leg === 2) out.push("É um Pokémon Mítico.");
+  if (f.leg === 3) out.push("É um Pokémon bebê.");
+
+  if (f.from) out.push(`Evolui de ${nameOf(f.from)}.`);
+  if (f.to.length > 0 && f.to.length <= 3) {
+    for (const [to, how] of f.to) out.push(`Evolui para ${nameOf(to)} ${HOW_PT(how)}.`);
+  } else if (f.to.length > 3) {
+    out.push(`Tem ${f.to.length} evoluções possíveis, como ${nameOf(f.to[0][0])} e ${nameOf(f.to[1][0])}.`);
+  } else if (f.from) out.push("É a forma final da sua linhagem.");
+  else out.push("Não possui evolução.");
+
+  out.push(`Mede ${nf(f.h / 10)} m e pesa ${nf(f.w / 10)} kg.`);
+  const rk = f.rk ?? {};
+  if (rk.heavy) out.push(`É o ${rk.heavy}º Pokémon mais pesado da Pokédex.`);
+  if (rk.light) out.push(`É o ${rk.light}º Pokémon mais leve da Pokédex.`);
+  if (rk.tall) out.push(`É o ${rk.tall}º Pokémon mais alto da Pokédex.`);
+  if (rk.short) out.push(`É o ${rk.short}º Pokémon mais baixo da Pokédex.`);
+  if (rk.bst) out.push(`Tem o ${rk.bst}º maior total de atributos base (${f.bst}).`);
+  out.push(`Seu maior atributo base é ${STAT_PT[f.top[0]] ?? f.top[0]} (${f.top[1]}).`);
+
+  if (f.gr === -1) out.push("Não tem gênero.");
+  else if (f.gr === 0) out.push("É sempre macho.");
+  else if (f.gr === 8) out.push("É sempre fêmea.");
+  if (f.cr <= 3) out.push(`É dificílimo de capturar nos jogos (taxa ${f.cr}/255).`);
+  else if (f.cr === 255) out.push("É um dos mais fáceis de capturar nos jogos (taxa 255/255).");
+  if (f.vars > 0) out.push(`Tem ${f.vars} ${f.vars === 1 ? "forma alternativa registrada" : "formas alternativas registradas"} (megas, regionais ou especiais).`);
+  if (f.hab) out.push(`Na Pokédex, é registrado em: ${HAB_PT[f.hab] ?? f.hab}.`);
+  return out;
+}
+
 const cap = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 export function buildAutoEntry(raw: AutoCard) {
@@ -60,6 +112,6 @@ export function buildAutoEntry(raw: AutoCard) {
       `${c.displayName} é um Pokémon do tipo ${typeNames.join(" / ") || "desconhecido"}, ${where}.`,
       TYPE_FLAVOR[c.types[0]] ?? "Ainda há muito a descobrir sobre seus hábitos e sua origem."
     ],
-    facts: [`Nº ${c.nationalId} da Pokédex Nacional.`, `Raridade no álbum: ${RARITY_PT[c.rarity] ?? c.rarity}.`]
+    facts: [`Raridade no álbum: ${RARITY_PT[c.rarity] ?? c.rarity}.`]
   };
 }

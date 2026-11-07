@@ -43,7 +43,7 @@ export const JOURNAL_CHAPTERS: JournalChapter[] = [
         pokemonId: 150,
         title: "Relatório selado nº 150",
         story: [
-          "O relatório foi lacrado por ordem superior. Só os treinadores que completarem o álbum de Kanto poderão ler o que restou dele."
+          "O relatório foi lacrado por ordem superior. Só quem encontrar o Mewtwo — ou completar o álbum de Kanto — poderá ler o que restou dele."
         ],
         facts: [
           "Nos jogos, Mewtwo foi criado a partir do DNA de Mew.",

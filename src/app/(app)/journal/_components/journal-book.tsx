@@ -2,7 +2,7 @@
 
 import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { ChevronLeft, ChevronRight, Lock, Sparkles } from "lucide-react";
+import { BookMarked, ChevronLeft, ChevronRight, Lock, Sparkles } from "lucide-react";
 
 /** Uma folha aberta (duas páginas) = um Pokémon, 1:1 com as figurinhas do álbum. */
 export type BookPage = {
@@ -24,29 +24,77 @@ export type BookPage = {
 };
 
 const FLIP_MS = 900;
+const OPEN_MS = 1200;
+const EASE = "cubic-bezier(.45,.05,.25,1)";
 const PAPER = "bg-[#e9d7ab] bg-[radial-gradient(ellipse_at_center,#f1e2bb_0%,#e2cd9b_70%,#c9ae76_100%)]";
 const INK = "text-[#3a2a14]";
+const LEATHER = "bg-[linear-gradient(135deg,#4a3120,#2a1a0e_55%,#3a2616)]";
 
 /** Desenho a nanquim em CSS puro: contornos escuros + sépia, multiplicado sobre o pergaminho. */
 function SketchImage({ src, alt }: { src: string; alt: string }) {
   const layer = "object-contain p-5";
+  const img = { fill: true as const, unoptimized: true as const, sizes: "420px", className: layer };
   return (
     <div
       className="absolute inset-0 bg-white"
-      style={{ isolation: "isolate", mixBlendMode: "multiply", filter: "sepia(.85) contrast(1.8) brightness(1.02)" }}
+      style={{ isolation: "isolate", mixBlendMode: "multiply", filter: "sepia(.8) contrast(1.5) brightness(1.03)" }}
     >
-      <Image src={src} alt={alt} fill unoptimized sizes="420px" className={layer} style={{ filter: "grayscale(1) contrast(1.15)" }} />
-      <Image
-        src={src}
-        alt=""
-        aria-hidden
-        fill
-        unoptimized
-        sizes="420px"
-        className={layer}
-        style={{ filter: "grayscale(1) invert(1) blur(3px)", mixBlendMode: "color-dodge" }}
-      />
+      {/* 1) tons em cinza, com contraste para cores claras (amarelo, branco) não sumirem */}
+      <Image src={src} alt={alt} {...img} style={{ filter: "grayscale(1) contrast(1.9) brightness(.92)" }} />
+      {/* 2) cópia invertida e borrada em color-dodge: só os traços internos ficam escuros */}
+      <Image src={src} alt="" aria-hidden {...img} style={{ filter: "grayscale(1) contrast(1.9) brightness(.92) invert(1) blur(1.5px)", mixBlendMode: "color-dodge" }} />
+      {/* 3) contorno firme da silhueta (garante que a borda nunca desapareça) */}
+      <Image src={src} alt="" aria-hidden {...img} style={{ filter: "url(#journal-ink-outline)" }} />
     </div>
+  );
+}
+
+/** Filtro SVG + animações usadas pelo livro. */
+function BookDefs() {
+  return (
+    <>
+      <svg width="0" height="0" className="absolute" aria-hidden focusable="false">
+        <defs>
+          <filter id="journal-ink-outline" x="-5%" y="-5%" width="110%" height="110%" colorInterpolationFilters="sRGB">
+            <feMorphology in="SourceAlpha" operator="dilate" radius="1.4" result="grown" />
+            <feComposite in="grown" in2="SourceAlpha" operator="out" result="edge" />
+            <feFlood floodColor="#1a1008" floodOpacity="0.95" />
+            <feComposite in2="edge" operator="in" />
+          </filter>
+        </defs>
+      </svg>
+      <style>{`
+        @keyframes journalRise { from { opacity: 0; transform: translateY(56px) scale(.9) rotateX(10deg); } to { opacity: 1; transform: none; } }
+        @keyframes journalGlow { 0%,100% { opacity: .55; } 50% { opacity: 1; } }
+        .journal-rise { animation: journalRise 1000ms cubic-bezier(.2,.8,.2,1) both; }
+        .journal-glow { animation: journalGlow 2200ms ease-in-out infinite; }
+        @media (prefers-reduced-motion: reduce) { .journal-rise, .journal-glow { animation: none; } }
+      `}</style>
+    </>
+  );
+}
+
+/** Capa fechada: couro, moldura dourada e emblema. */
+function Cover({ onOpen, className = "" }: { onOpen?: () => void; className?: string }) {
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label="Abrir o livro"
+      className={`group relative flex h-full w-full flex-col items-center justify-center overflow-hidden ${LEATHER} shadow-[inset_0_0_0_2px_#6b4a2b,inset_0_0_0_6px_#1c1208,inset_0_0_0_7px_#a8843f,inset_-14px_0_24px_-10px_rgba(0,0,0,0.6)] ${className}`}
+    >
+      {["left-3 top-3 border-l-4 border-t-4 rounded-tl-lg", "right-3 top-3 border-r-4 border-t-4 rounded-tr-lg", "left-3 bottom-3 border-b-4 border-l-4 rounded-bl-lg", "right-3 bottom-3 border-b-4 border-r-4 rounded-br-lg"].map((c) => (
+        <span key={c} className={`absolute h-8 w-8 border-[#c9a24a] ${c}`} />
+      ))}
+      <div className="flex h-20 w-20 items-center justify-center rounded-full border-2 border-[#c9a24a] bg-[#1c1208]/60 text-[#e5c06a] shadow-[0_0_24px_rgba(201,162,74,0.35)]">
+        <BookMarked size={38} />
+      </div>
+      <p className="mt-5 font-pixel text-lg tracking-widest text-[#e5c06a]">JOURNAL</p>
+      <p className="mt-2 text-[11px] uppercase tracking-[0.3em] text-[#c9a24a]/80">Diário de campo da Liga</p>
+      <p className="journal-glow mt-8 rounded-full border border-[#c9a24a]/50 px-4 py-1.5 text-[11px] uppercase tracking-widest text-[#e5c06a] transition group-hover:bg-[#c9a24a]/15">
+        Clique para abrir
+      </p>
+    </button>
   );
 }
 
@@ -124,8 +172,12 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
   const [index, setIndex] = useState(0); // folha aberta = Pokémon index+1
   const [pageText, setPageText] = useState("");
   const [flip, setFlip] = useState<{ dir: 1 | -1; go: boolean } | null>(null);
+  const [phase, setPhase] = useState<"closed" | "opening" | "open">("closed");
+  const [coverGo, setCoverGo] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const total = pages.length;
+  const isOpen = phase === "open";
 
   // Marcadores: primeira folha de cada geração.
   const bookmarks = useMemo(() => {
@@ -137,9 +189,16 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
   }, [pages]);
   const currentGen = pages[index]?.generation;
 
+  const openBook = () => {
+    if (phase !== "closed") return;
+    setPhase("opening");
+    requestAnimationFrame(() => requestAnimationFrame(() => setCoverGo(true)));
+    openTimer.current = setTimeout(() => setPhase("open"), OPEN_MS + 50);
+  };
+
   const turn = useCallback(
     (dir: 1 | -1) => {
-      if (flip) return;
+      if (flip || phase !== "open") return;
       const next = index + dir;
       if (next < 0 || next >= total) return;
       setFlip({ dir, go: false });
@@ -149,11 +208,11 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
         setFlip(null);
       }, FLIP_MS);
     },
-    [flip, index, total]
+    [flip, index, total, phase]
   );
 
   const jumpTo = (n: number) => {
-    if (flip || !Number.isFinite(n)) return;
+    if (flip || phase !== "open" || !Number.isFinite(n)) return;
     setIndex(Math.min(total - 1, Math.max(0, n - 1)));
   };
 
@@ -165,7 +224,13 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [turn]);
-  useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  useEffect(
+    () => () => {
+      if (timer.current) clearTimeout(timer.current);
+      if (openTimer.current) clearTimeout(openTimer.current);
+    },
+    []
+  );
 
   if (total === 0) return null;
 
@@ -178,15 +243,18 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
   const leafStyle = (origin: "left" | "right", deg: number) => ({
     transformOrigin: `${origin} center`,
     transformStyle: "preserve-3d" as const,
-    transition: `transform ${FLIP_MS}ms cubic-bezier(.45,.05,.25,1)`,
+    transition: `transform ${FLIP_MS}ms ${EASE}`,
     transform: `rotateY(${flip?.go ? deg : 0}deg)`
   });
   const face = { backfaceVisibility: "hidden" as const };
+  const hideUntilOpen = `transition-opacity duration-500 ${isOpen ? "opacity-100" : "pointer-events-none opacity-0"}`;
 
   return (
     <div className="space-y-4">
+      <BookDefs />
+
       {/* Marcadores por geração */}
-      <div className="mx-auto flex max-w-5xl flex-wrap items-end gap-1 px-4">
+      <div className={`mx-auto flex max-w-5xl flex-wrap items-end gap-1 px-4 ${hideUntilOpen}`}>
         {bookmarks.map((b) => {
           const active = b.gen === currentGen;
           return (
@@ -206,58 +274,97 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
         })}
       </div>
 
-      {/* Desktop: livro aberto com capa de couro e folha 3D */}
-      <div
-        className="relative mx-auto -mt-4 hidden aspect-[16/10] w-full max-w-5xl rounded-2xl bg-[linear-gradient(135deg,#4a3120,#2a1a0e_55%,#3a2616)] p-4 shadow-[0_25px_60px_rgba(0,0,0,0.65),inset_0_0_0_2px_#6b4a2b,inset_0_0_0_5px_#1c1208,inset_0_0_0_6px_#a8843f] md:block"
-        style={{ perspective: "2400px" }}
-      >
-        {/* Cantoneiras douradas */}
-        {["left-1.5 top-1.5 border-l-4 border-t-4 rounded-tl-xl", "right-1.5 top-1.5 border-r-4 border-t-4 rounded-tr-xl", "left-1.5 bottom-1.5 border-b-4 border-l-4 rounded-bl-xl", "right-1.5 bottom-1.5 border-b-4 border-r-4 rounded-br-xl"].map((c) => (
-          <span key={c} className={`pointer-events-none absolute z-20 h-9 w-9 border-[#c9a24a] ${c}`} />
-        ))}
+      {/* Desktop: aparece fechado, a capa gira e o livro se abre */}
+      <div className="journal-rise relative mx-auto -mt-4 hidden aspect-[16/10] w-full max-w-5xl md:block">
+        <div
+          className="absolute inset-0"
+          style={{
+            perspective: "2400px",
+            transform: phase === "closed" ? "translateX(-25%)" : "translateX(0)",
+            transition: `transform ${OPEN_MS}ms ${EASE}`
+          }}
+        >
+          <div
+            className={`absolute inset-0 rounded-2xl p-4 shadow-[0_25px_60px_rgba(0,0,0,0.65),inset_0_0_0_2px_#6b4a2b,inset_0_0_0_5px_#1c1208,inset_0_0_0_6px_#a8843f] ${LEATHER} ${phase === "closed" ? "pointer-events-none" : ""}`}
+            style={{ opacity: phase === "closed" ? 0 : 1, transition: "opacity 700ms ease 350ms" }}
+          >
+            {/* Cantoneiras douradas */}
+            {["left-1.5 top-1.5 border-l-4 border-t-4 rounded-tl-xl", "right-1.5 top-1.5 border-r-4 border-t-4 rounded-tr-xl", "left-1.5 bottom-1.5 border-b-4 border-l-4 rounded-bl-xl", "right-1.5 bottom-1.5 border-b-4 border-r-4 rounded-br-xl"].map((c) => (
+              <span key={c} className={`pointer-events-none absolute z-20 h-9 w-9 border-[#c9a24a] ${c}`} />
+            ))}
 
-        <div className="relative grid h-full grid-cols-2 overflow-hidden rounded-md shadow-[-2px_0_0_#d3bd8a,-4px_0_0_#b79b60,-6px_0_0_#d3bd8a,2px_0_0_#d3bd8a,4px_0_0_#b79b60,6px_0_0_#d3bd8a,0_3px_0_#b79b60,0_6px_0_#d3bd8a,0_9px_0_#a88c52]">
-          <div className="h-full shadow-[inset_-18px_0_24px_-14px_rgba(60,35,10,0.55)]">
-            <LeftPage p={baseLeft} />
-          </div>
-          <div className="h-full shadow-[inset_18px_0_24px_-14px_rgba(60,35,10,0.55)]">
-            <RightPage p={baseRight} />
-          </div>
+            <div className="relative grid h-full grid-cols-2 overflow-hidden rounded-md shadow-[-2px_0_0_#d3bd8a,-4px_0_0_#b79b60,-6px_0_0_#d3bd8a,2px_0_0_#d3bd8a,4px_0_0_#b79b60,6px_0_0_#d3bd8a,0_3px_0_#b79b60,0_6px_0_#d3bd8a,0_9px_0_#a88c52]">
+              <div className="h-full shadow-[inset_-18px_0_24px_-14px_rgba(60,35,10,0.55)]">
+                <LeftPage p={baseLeft} />
+              </div>
+              <div className="h-full shadow-[inset_18px_0_24px_-14px_rgba(60,35,10,0.55)]">
+                <RightPage p={baseRight} />
+              </div>
 
-          {flip?.dir === 1 && target && (
-            <div className="absolute inset-y-0 left-1/2 w-1/2" style={leafStyle("left", -180)}>
-              <div className="absolute inset-0" style={face}>
-                <RightPage p={cur} />
-              </div>
-              <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
-                <LeftPage p={target} />
-              </div>
+              {flip?.dir === 1 && target && (
+                <div className="absolute inset-y-0 left-1/2 w-1/2" style={leafStyle("left", -180)}>
+                  <div className="absolute inset-0" style={face}>
+                    <RightPage p={cur} />
+                  </div>
+                  <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
+                    <LeftPage p={target} />
+                  </div>
+                </div>
+              )}
+              {flip?.dir === -1 && target && (
+                <div className="absolute inset-y-0 left-0 w-1/2" style={leafStyle("right", 180)}>
+                  <div className="absolute inset-0" style={face}>
+                    <LeftPage p={cur} />
+                  </div>
+                  <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
+                    <RightPage p={target} />
+                  </div>
+                </div>
+              )}
+              {/* Lombada */}
+              <div className="pointer-events-none absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 bg-gradient-to-r from-transparent via-black/35 to-transparent" />
             </div>
-          )}
-          {flip?.dir === -1 && target && (
-            <div className="absolute inset-y-0 left-0 w-1/2" style={leafStyle("right", 180)}>
+          </div>
+
+          {/* Capa: gira sobre a lombada e termina como o verso (página da esquerda) */}
+          {phase !== "open" && (
+            <div
+              className="absolute inset-y-0 left-1/2 z-30 w-1/2"
+              style={{
+                transformOrigin: "left center",
+                transformStyle: "preserve-3d",
+                transition: `transform ${OPEN_MS}ms ${EASE}`,
+                transform: `rotateY(${coverGo ? -180 : 0}deg)`
+              }}
+            >
               <div className="absolute inset-0" style={face}>
+                <Cover onOpen={openBook} className="rounded-r-2xl" />
+              </div>
+              <div className={`absolute inset-0 rounded-l-2xl py-4 pl-4 ${LEATHER}`} style={{ ...face, transform: "rotateY(180deg)" }}>
                 <LeftPage p={cur} />
               </div>
-              <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
-                <RightPage p={target} />
-              </div>
             </div>
           )}
-          {/* Lombada */}
-          <div className="pointer-events-none absolute inset-y-0 left-1/2 w-3 -translate-x-1/2 bg-gradient-to-r from-transparent via-black/35 to-transparent" />
         </div>
       </div>
 
-      {/* Mobile: páginas empilhadas, sem 3D */}
-      <div className="mx-auto max-w-md space-y-2 overflow-hidden rounded-xl ring-1 ring-[#6b4a2b] md:hidden">
-        <LeftPage p={cur} />
-        <div className="aspect-[4/3]">
-          <RightPage p={cur} />
-        </div>
+      {/* Mobile: capa que aparece e, ao abrir, as páginas empilhadas (sem 3D) */}
+      <div className="md:hidden">
+        {phase === "closed" ? (
+          <div className="journal-rise mx-auto aspect-[3/4] max-w-xs">
+            <Cover onOpen={openBook} className="rounded-2xl" />
+          </div>
+        ) : (
+          <div className="journal-rise mx-auto max-w-md space-y-2 overflow-hidden rounded-xl ring-1 ring-[#6b4a2b]">
+            <LeftPage p={cur} />
+            <div className="aspect-[4/3]">
+              <RightPage p={cur} />
+            </div>
+          </div>
+        )}
       </div>
 
-      <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400">
+      <div className={`flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 ${hideUntilOpen}`}>
         <button
           type="button"
           onClick={() => turn(-1)}

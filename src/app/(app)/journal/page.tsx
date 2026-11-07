@@ -3,7 +3,10 @@ import { BookMarked, Eye } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { requirePlatformAdmin } from "@/lib/auth/permissions";
 import { JOURNAL_CHAPTERS } from "@/journal-data/chapters";
-import { GEN_INFO, buildAutoEntry } from "@/journal-data/auto";
+import { GEN_INFO, buildAutoEntry, generatedFacts, type DexFact } from "@/journal-data/auto";
+import { ANIME_FACTS } from "@/journal-data/anime-facts";
+import dexFacts from "@/journal-data/dex-facts.generated.json";
+import formSpecies from "@/journal-data/form-species.generated.json";
 import { describeRule, isEntryUnlocked, type UnlockContext } from "@/journal-data/unlock";
 import type { UnlockRule } from "@/journal-data/types";
 import { JournalBook, type BookPage } from "./_components/journal-book";
@@ -20,8 +23,10 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
 
   const player = await prisma.player.findUnique({ where: { userId: user.id }, select: { id: true } });
 
-  const [dex, stickers, genTotals, cards] = await Promise.all([
+  const [dex, owned, stickers, genTotals, cards] = await Promise.all([
     player ? prisma.playerPokemonDex.findMany({ where: { playerId: player.id }, select: { pokemonId: true } }) : [],
+    // Mascotes que o jogador tem agora (cobre quem ainda não abriu o álbum para sincronizar a Pokédex).
+    player ? prisma.mascot.findMany({ where: { playerId: player.id }, distinct: ["pokemonId"], select: { pokemonId: true } }) : [],
     player
       ? prisma.playerSticker.findMany({
           where: { playerId: player.id },
@@ -37,7 +42,10 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
   ]);
 
   const ctx: UnlockContext = {
-    mascotIds: new Set(dex.map((d) => d.pokemonId)),
+    // Mascote de forma (mega, regional, Unown...) conta como a espécie base.
+    mascotIds: new Set(
+      [...dex, ...owned].map((d) => (formSpecies as Record<string, number>)[d.pokemonId] ?? d.pokemonId)
+    ),
     stickerIds: new Set(stickers.map((s) => s.card.nationalId)),
     gens: Object.fromEntries(genTotals.map((g) => [g.generation, { owned: 0, total: g._count.id }]))
   };
@@ -48,16 +56,31 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
     JOURNAL_CHAPTERS.flatMap((chapter) => chapter.entries.map((entry) => [entry.pokemonId, { chapter, entry }] as const))
   );
 
+  const nameById = new Map(cards.map((c) => [c.nationalId, cap(c.displayName)]));
+  const nameOf = (id: number) => nameById.get(id) ?? `#${id}`;
+
   // Uma página por Pokémon (1:1 com as figurinhas), na ordem da Pokédex.
   const pages: BookPage[] = cards.map((card) => {
     const gen = GEN_INFO[card.generation];
     const hand = curated.get(card.nationalId);
-    const rules: UnlockRule[] = hand?.entry.unlock ?? [
+    // Toda página abre com o mascote OU a figurinha do próprio Pokémon; registros escritos à mão só acrescentam caminhos.
+    const rules: UnlockRule[] = [
       { type: "mascot", pokemonId: card.nationalId },
-      { type: "sticker", pokemonId: card.nationalId }
+      { type: "sticker", pokemonId: card.nationalId },
+      ...(hand?.entry.unlock ?? []).filter((r) => r.type === "albumGen")
     ];
     const unlocked = revealAll || isEntryUnlocked(rules, ctx);
-    const content = hand ? { title: hand.entry.title, story: hand.entry.story, facts: hand.entry.facts ?? [] } : buildAutoEntry(card);
+    const base = hand ? { title: hand.entry.title, story: hand.entry.story, facts: hand.entry.facts ?? [] } : buildAutoEntry(card);
+    // Ordem: escritos à mão → anime/filmes → dados verdadeiros da Pokédex (no máximo 5, sem repetir).
+    const facts = [
+      ...new Set([
+        ...(hand ? base.facts : []),
+        ...(ANIME_FACTS[card.nationalId] ?? []),
+        ...generatedFacts(card.nationalId, (dexFacts as unknown as Record<string, DexFact>)[card.nationalId], nameOf),
+        ...(hand ? [] : base.facts)
+      ])
+    ].slice(0, 5);
+    const content = { title: base.title, story: base.story, facts };
     return {
       id: hand?.entry.id ?? `auto-${card.nationalId}`,
       generation: card.generation,
@@ -72,7 +95,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
       facts: unlocked ? content.facts : [],
       art: unlocked ? hand?.entry.art ?? null : null,
       imageUrl: card.imageUrl,
-      hints: unlocked ? [] : rules.map(describeRule)
+      hints: unlocked ? [] : rules.map((r) => describeRule(r, nameOf))
     };
   });
   const unlockedCount = pages.filter((p) => !p.locked).length;

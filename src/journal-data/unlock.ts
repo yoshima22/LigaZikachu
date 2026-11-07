@@ -16,8 +16,8 @@ function ruleOk(rule: UnlockRule, ctx: UnlockContext) {
 
 export const isEntryUnlocked = (rules: UnlockRule[], ctx: UnlockContext) => rules.some((r) => ruleOk(r, ctx));
 
-export function describeRule(rule: UnlockRule) {
-  if (rule.type === "mascot") return `Ter o mascote #${rule.pokemonId}`;
-  if (rule.type === "sticker") return `Ter a figurinha #${rule.pokemonId}`;
+export function describeRule(rule: UnlockRule, nameOf: (id: number) => string = (id) => `#${id}`) {
+  if (rule.type === "mascot") return `Ter (ou já ter tido) o mascote ${nameOf(rule.pokemonId)}`;
+  if (rule.type === "sticker") return `Ter a figurinha de ${nameOf(rule.pokemonId)}`;
   return `Completar ${rule.percent}% do álbum da Geração ${rule.generation}`;
 }
