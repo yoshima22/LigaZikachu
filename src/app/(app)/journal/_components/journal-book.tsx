@@ -79,6 +79,33 @@ function LeftPage({ s, index, total }: { s: BookSpread; index: number; total: nu
   );
 }
 
+/**
+ * Efeito de desenho a nanquim/gravura em CSS puro (funciona com qualquer URL remota):
+ * cinza + cópia invertida e borrada em color-dodge = só os contornos ficam escuros;
+ * depois sépia e multiply sobre o pergaminho.
+ */
+function SketchImage({ src, alt }: { src: string; alt: string }) {
+  const layer = "object-contain p-5";
+  return (
+    <div
+      className="absolute inset-0 bg-white"
+      style={{ isolation: "isolate", mixBlendMode: "multiply", filter: "sepia(.85) contrast(1.35) brightness(1.02)" }}
+    >
+      <Image src={src} alt={alt} fill unoptimized sizes="420px" className={layer} style={{ filter: "grayscale(1) contrast(1.15)" }} />
+      <Image
+        src={src}
+        alt=""
+        aria-hidden
+        fill
+        unoptimized
+        sizes="420px"
+        className={layer}
+        style={{ filter: "grayscale(1) invert(1) blur(3px)", mixBlendMode: "color-dodge" }}
+      />
+    </div>
+  );
+}
+
 function RightPage({ s, index }: { s: BookSpread; index: number }) {
   const src = !s.locked && s.art ? s.art : s.imageUrl;
   return (
@@ -87,18 +114,13 @@ function RightPage({ s, index }: { s: BookSpread; index: number }) {
         className="relative flex-1 overflow-hidden rounded-sm border-[3px] border-double bg-[#d9c28d]/60 shadow-inner"
         style={{ borderColor: `${s.accent}aa` }}
       >
-        {src && (
-          <Image
-            src={src}
-            alt={s.locked ? "Página selada" : s.title ?? ""}
-            fill
-            unoptimized
-            sizes="420px"
-            className={`${s.art && !s.locked ? "object-cover" : "object-contain p-6"} ${
-              s.locked ? "brightness-0 opacity-30" : "sepia-[.35] drop-shadow-[0_4px_6px_rgba(60,40,10,0.45)]"
-            }`}
-          />
+        {src && s.locked && (
+          <Image src={src} alt="Página selada" fill unoptimized sizes="420px" className="object-contain p-6 brightness-0 opacity-30" />
         )}
+        {src && !s.locked && s.art && (
+          <Image src={src} alt={s.title ?? ""} fill unoptimized sizes="420px" className="object-cover" />
+        )}
+        {src && !s.locked && !s.art && <SketchImage src={src} alt={s.title ?? ""} />}
       </div>
       <p className="mt-2 text-center font-serif text-[11px] opacity-50">— {index * 2 + 2} —</p>
     </div>
