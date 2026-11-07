@@ -86,6 +86,7 @@ interface MascotData {
   hatchedAt: Date;
   hatchedFromEggType?: string | null;
   hatchedFromEggOrigin?: string | null;
+  labStars?: number;
   megaStoneName?: string | null;
   hiddenAbilityUnlocked?: boolean;
   abilityChoice?: string | null;
@@ -1342,6 +1343,14 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   ? <img src={originIcon.url} alt={originIcon.label} className="h-3.5 w-3.5 shrink-0 object-contain" />
                   : <span>🥚</span>}
                 Nasceu de {hatchedEggLabel}
+              </div>
+            )}
+            {mascot.hatchedFromEggType === "LAB" && (mascot.labStars ?? 0) > 0 && (
+              <div className="flex items-center gap-1.5 rounded-md border border-fuchsia-400/40 bg-fuchsia-500/10 px-1.5 py-0.5" title={`Mascote de Laboratório com ${mascot.labStars} de 5 estrelas`}>
+                <span className="text-[11px] leading-none tracking-tight">
+                  {[1, 2, 3, 4, 5].map((n) => <span key={n} className={n <= (mascot.labStars ?? 0) ? "text-amber-300 drop-shadow-[0_0_4px_rgba(252,211,77,0.8)]" : "text-slate-700"}>★</span>)}
+                </span>
+                <span className="text-[10px] font-bold text-fuchsia-200">{mascot.labStars}/5 estrelas</span>
               </div>
             )}
 

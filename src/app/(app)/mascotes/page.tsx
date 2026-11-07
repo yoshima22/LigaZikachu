@@ -104,7 +104,7 @@ async function fetchMascotPageData(playerId: string) {
         battleWins: true, battleLosses: true,
         arenaState: true, bazarListed: true,
         injuredAt: true, restingUntil: true,
-        hatchedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true,
+        hatchedAt: true, hatchedFromEggType: true, hatchedFromEggOrigin: true, labStars: true,
         lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, lastFedAt: true, diseasedAt: true, diseaseLastSpreadAt: true, socialCooldownUntil: true, hiddenAbilityUnlocked: true, abilityChoice: true,
         expeditions: {
           where: { status: "ACTIVE" },
@@ -412,6 +412,7 @@ export default async function MascotesPage() {
     hatchedAt: m.hatchedAt,
     hatchedFromEggType: m.hatchedFromEggType,
     hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+    labStars: m.labStars,
     megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
     hiddenAbilityUnlocked: m.hiddenAbilityUnlocked,
     abilityChoice: m.abilityChoice,
