@@ -149,12 +149,12 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
               </p>
 
               <div className="aspect-square relative">
-                {visible && card.imageUrl ? (
+                {card.imageUrl ? (
                   <Image
                     src={card.imageUrl}
-                    alt={card.displayName}
+                    alt={visible ? card.displayName : "Pokémon não descoberto"}
                     fill
-                    className="object-contain p-1"
+                    className={`object-contain p-1 ${visible ? "" : "brightness-0"}`}
                     sizes="120px"
                     unoptimized
                   />
