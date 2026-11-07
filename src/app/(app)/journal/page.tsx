@@ -86,7 +86,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           </p>
           <h1 className="mt-2 font-pixel text-lg leading-snug text-[#FFCB05]">Journal</h1>
           <p className="mt-2 text-sm text-slate-400">
-            {unlockedCount} de {pages.length} páginas desbloqueadas — uma por Pokémon, aberta pela figurinha ou pelo mascote.
+            {unlockedCount} de {pages.length} registros desbloqueados — um por Pokémon (nº da página = nº da Pokédex), abertos pela figurinha ou pelo mascote.
             Use os marcadores, as setas do teclado ou o campo de página.
           </p>
         </div>

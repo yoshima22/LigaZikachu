@@ -4,7 +4,7 @@ import Image from "next/image";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight, Lock, Sparkles } from "lucide-react";
 
-/** Uma página do livro = um Pokémon (1:1 com as figurinhas do álbum). */
+/** Uma folha aberta (duas páginas) = um Pokémon, 1:1 com as figurinhas do álbum. */
 export type BookPage = {
   id: string;
   generation: number;
@@ -29,84 +29,68 @@ const INK = "text-[#3a2a14]";
 
 /** Desenho a nanquim em CSS puro: contornos escuros + sépia, multiplicado sobre o pergaminho. */
 function SketchImage({ src, alt }: { src: string; alt: string }) {
-  const layer = "object-contain p-3";
+  const layer = "object-contain p-5";
   return (
     <div
       className="absolute inset-0 bg-white"
       style={{ isolation: "isolate", mixBlendMode: "multiply", filter: "sepia(.85) contrast(1.8) brightness(1.02)" }}
     >
-      <Image src={src} alt={alt} fill unoptimized sizes="320px" className={layer} style={{ filter: "grayscale(1) contrast(1.15)" }} />
+      <Image src={src} alt={alt} fill unoptimized sizes="420px" className={layer} style={{ filter: "grayscale(1) contrast(1.15)" }} />
       <Image
         src={src}
         alt=""
         aria-hidden
         fill
         unoptimized
-        sizes="320px"
+        sizes="420px"
         className={layer}
-        style={{ filter: "grayscale(1) invert(1) blur(2px)", mixBlendMode: "color-dodge" }}
+        style={{ filter: "grayscale(1) invert(1) blur(3px)", mixBlendMode: "color-dodge" }}
       />
     </div>
   );
 }
 
-function PageFace({ p, num }: { p?: BookPage; num: number }) {
-  if (!p) return <div className={`h-full ${PAPER}`} />;
-  const src = !p.locked && p.art ? p.art : p.imageUrl;
+function LeftPage({ p }: { p: BookPage }) {
   return (
-    <div className={`relative flex h-full flex-col overflow-hidden p-4 md:p-5 ${PAPER} ${INK}`}>
-      <div className="flex items-baseline justify-between gap-2 text-[9px] font-semibold uppercase tracking-[0.2em] opacity-60">
-        <span className="truncate">{p.chapterTitle}</span>
-        <span className="shrink-0">N.º {String(p.number).padStart(3, "0")}</span>
-      </div>
-
-      <div
-        className="relative mt-2 h-[32%] shrink-0 overflow-hidden rounded-sm border-[3px] border-double bg-[#d9c28d]/60 shadow-inner"
-        style={{ borderColor: `${p.accent}aa` }}
-      >
-        {src && p.locked && (
-          <Image src={src} alt="Página selada" fill unoptimized sizes="320px" className="object-contain p-3 brightness-0 opacity-30" />
-        )}
-        {src && !p.locked && p.art && <Image src={src} alt={p.title ?? ""} fill unoptimized sizes="320px" className="object-cover" />}
-        {src && !p.locked && !p.art && <SketchImage src={src} alt={p.title ?? ""} />}
-      </div>
-
+    <div className={`relative flex h-full flex-col overflow-hidden p-6 md:p-8 ${PAPER} ${INK}`}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.25em] opacity-60">{p.chapterTitle}</p>
+      <p className="mt-3 text-[11px] font-bold uppercase tracking-widest opacity-60">
+        N.º {String(p.number).padStart(3, "0")}
+        {!p.locked && p.pokemonName ? ` · ${p.pokemonName}` : ""}
+      </p>
       {p.locked ? (
         <div className="flex flex-1 flex-col items-center justify-center text-center">
-          <div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#8c2b24] text-[#f3d9c4] shadow-[0_3px_8px_rgba(0,0,0,0.45)] ring-4 ring-[#8c2b24]/30">
-            <Lock size={20} />
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#8c2b24] text-[#f3d9c4] shadow-[0_3px_8px_rgba(0,0,0,0.45)] ring-4 ring-[#8c2b24]/30">
+            <Lock size={26} />
           </div>
-          <h3 className="mt-3 font-serif text-lg font-bold">Página selada</h3>
-          <p className="mt-1 text-[11px] opacity-70">Para romper o selo (qualquer um):</p>
-          <ul className="mt-1 space-y-0.5 text-xs">
+          <h3 className="mt-5 font-serif text-xl font-bold">Página selada</h3>
+          <p className="mt-2 text-xs opacity-70">Para romper o selo (qualquer um):</p>
+          <ul className="mt-2 space-y-1 text-sm">
             {p.hints.map((h, i) => (
               <li key={i}>• {h}</li>
             ))}
           </ul>
         </div>
       ) : (
-        <div className="mt-3 flex-1 overflow-y-auto pr-1 [scrollbar-color:#a8843f_transparent] [scrollbar-width:thin]">
-          <h3 className="font-serif text-lg font-bold leading-tight">
-            {p.title}
-            {p.pokemonName && <span className="block text-[11px] font-semibold uppercase tracking-widest opacity-55">{p.pokemonName}</span>}
-          </h3>
-          <div className="my-2 h-px bg-gradient-to-r from-transparent via-[#8a6a35] to-transparent" />
+        <div className="mt-2 flex-1 overflow-y-auto pr-1 [scrollbar-color:#a8843f_transparent] [scrollbar-width:thin]">
+          <h3 className="font-serif text-xl font-bold leading-tight md:text-2xl">{p.title}</h3>
+          <div className="my-3 h-px bg-gradient-to-r from-transparent via-[#8a6a35] to-transparent" />
           {p.story.map((t, i) => (
             <p
               key={i}
-              className={`mb-2 font-serif text-[12.5px] leading-relaxed ${
-                i === 0 ? "first-letter:float-left first-letter:mr-1 first-letter:font-bold first-letter:leading-[0.8] first-letter:text-3xl first-letter:text-[#7a3b1c]" : ""
+              className={`mb-3 font-serif text-[13px] leading-relaxed md:text-sm ${
+                i === 0 ? "first-letter:float-left first-letter:mr-1 first-letter:font-bold first-letter:leading-[0.8] first-letter:text-4xl first-letter:text-[#7a3b1c]" : ""
               }`}
             >
               {t}
             </p>
           ))}
           {p.facts.length > 0 && (
-            <div className="mt-3 border-t border-[#8a6a35]/40 pt-2">
+            <div className="mt-4 border-t border-[#8a6a35]/40 pt-3">
               <p className="mb-1 flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-[#7a3b1c]">
                 <Sparkles size={11} /> Você sabia?
               </p>
-              <ul className="space-y-1 font-serif text-[11.5px] italic leading-snug">
+              <ul className="space-y-1 font-serif text-xs italic">
                 {p.facts.map((f, i) => (
                   <li key={i}>• {f}</li>
                 ))}
@@ -115,27 +99,43 @@ function PageFace({ p, num }: { p?: BookPage; num: number }) {
           )}
         </div>
       )}
-      <p className="mt-1 text-center font-serif text-[10px] opacity-50">— {num} —</p>
+      <p className="mt-2 text-center font-serif text-[11px] opacity-50">— {p.number} —</p>
+    </div>
+  );
+}
+
+function RightPage({ p }: { p: BookPage }) {
+  const src = !p.locked && p.art ? p.art : p.imageUrl;
+  return (
+    <div className={`relative flex h-full flex-col overflow-hidden p-6 md:p-8 ${PAPER} ${INK}`}>
+      <div
+        className="relative flex-1 overflow-hidden rounded-sm border-[3px] border-double bg-[#d9c28d]/60 shadow-inner"
+        style={{ borderColor: `${p.accent}aa` }}
+      >
+        {src && p.locked && <Image src={src} alt="Página selada" fill unoptimized sizes="420px" className="object-contain p-6 brightness-0 opacity-30" />}
+        {src && !p.locked && p.art && <Image src={src} alt={p.title ?? ""} fill unoptimized sizes="420px" className="object-cover" />}
+        {src && !p.locked && !p.art && <SketchImage src={src} alt={p.title ?? ""} />}
+      </div>
     </div>
   );
 }
 
 export function JournalBook({ pages }: { pages: BookPage[] }) {
-  const [index, setIndex] = useState(0); // índice do spread (páginas 2i e 2i+1)
+  const [index, setIndex] = useState(0); // folha aberta = Pokémon index+1
   const [pageText, setPageText] = useState("");
   const [flip, setFlip] = useState<{ dir: 1 | -1; go: boolean } | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const total = Math.ceil(pages.length / 2);
+  const total = pages.length;
 
-  // Marcadores: primeira página de cada geração.
+  // Marcadores: primeira folha de cada geração.
   const bookmarks = useMemo(() => {
-    const seen = new Map<number, { gen: number; region: string; accent: string; page: number }>();
+    const seen = new Map<number, { gen: number; region: string; accent: string; number: number }>();
     pages.forEach((p, i) => {
-      if (!seen.has(p.generation)) seen.set(p.generation, { gen: p.generation, region: p.region, accent: p.accent, page: i + 1 });
+      if (!seen.has(p.generation)) seen.set(p.generation, { gen: p.generation, region: p.region, accent: p.accent, number: i + 1 });
     });
     return [...seen.values()];
   }, [pages]);
-  const currentGen = pages[index * 2]?.generation;
+  const currentGen = pages[index]?.generation;
 
   const turn = useCallback(
     (dir: 1 | -1) => {
@@ -152,9 +152,9 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
     [flip, index, total]
   );
 
-  const jumpToPage = (n: number) => {
+  const jumpTo = (n: number) => {
     if (flip || !Number.isFinite(n)) return;
-    setIndex(Math.min(total - 1, Math.max(0, Math.floor((n - 1) / 2))));
+    setIndex(Math.min(total - 1, Math.max(0, n - 1)));
   };
 
   useEffect(() => {
@@ -169,11 +169,11 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
 
   if (total === 0) return null;
 
-  const L = (i: number) => pages[i * 2];
-  const R = (i: number) => pages[i * 2 + 1];
-  const target = flip ? index + flip.dir : index;
-  const baseLeftI = flip?.dir === -1 ? target : index;
-  const baseRightI = flip?.dir === 1 ? target : index;
+  const cur = pages[index];
+  const target = flip ? pages[index + flip.dir] : null;
+  // Páginas estáticas por baixo da folha que gira.
+  const baseLeft = flip?.dir === -1 && target ? target : cur;
+  const baseRight = flip?.dir === 1 && target ? target : cur;
 
   const leafStyle = (origin: "left" | "right", deg: number) => ({
     transformOrigin: `${origin} center`,
@@ -193,8 +193,8 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
             <button
               key={b.gen}
               type="button"
-              onClick={() => jumpToPage(b.page)}
-              title={`${b.region} — página ${b.page}`}
+              onClick={() => jumpTo(b.number)}
+              title={`${b.region} — a partir do nº ${b.number}`}
               className={`rounded-t-md px-2.5 text-[10px] font-bold uppercase tracking-wider text-[#20140a] shadow-md transition-all hover:-translate-y-1 ${
                 active ? "-translate-y-1 py-2" : "py-1 opacity-80"
               }`}
@@ -218,29 +218,29 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
 
         <div className="relative grid h-full grid-cols-2 overflow-hidden rounded-md shadow-[-2px_0_0_#d3bd8a,-4px_0_0_#b79b60,-6px_0_0_#d3bd8a,2px_0_0_#d3bd8a,4px_0_0_#b79b60,6px_0_0_#d3bd8a,0_3px_0_#b79b60,0_6px_0_#d3bd8a,0_9px_0_#a88c52]">
           <div className="h-full shadow-[inset_-18px_0_24px_-14px_rgba(60,35,10,0.55)]">
-            <PageFace p={L(baseLeftI)} num={baseLeftI * 2 + 1} />
+            <LeftPage p={baseLeft} />
           </div>
           <div className="h-full shadow-[inset_18px_0_24px_-14px_rgba(60,35,10,0.55)]">
-            <PageFace p={R(baseRightI)} num={baseRightI * 2 + 2} />
+            <RightPage p={baseRight} />
           </div>
 
-          {flip?.dir === 1 && (
+          {flip?.dir === 1 && target && (
             <div className="absolute inset-y-0 left-1/2 w-1/2" style={leafStyle("left", -180)}>
               <div className="absolute inset-0" style={face}>
-                <PageFace p={R(index)} num={index * 2 + 2} />
+                <RightPage p={cur} />
               </div>
               <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
-                <PageFace p={L(target)} num={target * 2 + 1} />
+                <LeftPage p={target} />
               </div>
             </div>
           )}
-          {flip?.dir === -1 && (
+          {flip?.dir === -1 && target && (
             <div className="absolute inset-y-0 left-0 w-1/2" style={leafStyle("right", 180)}>
               <div className="absolute inset-0" style={face}>
-                <PageFace p={L(index)} num={index * 2 + 1} />
+                <LeftPage p={cur} />
               </div>
               <div className="absolute inset-0" style={{ ...face, transform: "rotateY(180deg)" }}>
-                <PageFace p={R(target)} num={target * 2 + 2} />
+                <RightPage p={target} />
               </div>
             </div>
           )}
@@ -250,12 +250,11 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
       </div>
 
       {/* Mobile: páginas empilhadas, sem 3D */}
-      <div className="mx-auto max-w-md space-y-2 md:hidden">
-        {[L(index), R(index)].map((p, k) => (
-          <div key={k} className="h-[34rem] overflow-hidden rounded-xl ring-1 ring-[#6b4a2b]">
-            <PageFace p={p} num={index * 2 + 1 + k} />
-          </div>
-        ))}
+      <div className="mx-auto max-w-md space-y-2 overflow-hidden rounded-xl ring-1 ring-[#6b4a2b] md:hidden">
+        <LeftPage p={cur} />
+        <div className="aspect-[4/3]">
+          <RightPage p={cur} />
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400">
@@ -271,17 +270,17 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
           className="flex items-center gap-2"
           onSubmit={(e) => {
             e.preventDefault();
-            jumpToPage(Number.parseInt(pageText, 10));
+            jumpTo(Number.parseInt(pageText, 10));
             setPageText("");
           }}
         >
           <span>
-            Páginas {index * 2 + 1}–{Math.min(pages.length, index * 2 + 2)} de {pages.length}
+            Página {index + 1} de {total}
           </span>
           <input
             type="number"
             min={1}
-            max={pages.length}
+            max={total}
             value={pageText}
             onChange={(e) => setPageText(e.target.value)}
             onKeyDown={(e) => e.stopPropagation()}
