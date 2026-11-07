@@ -13,6 +13,7 @@ using Xunit;
 
 namespace ZikaCompanion.Tests;
 
+[Collection(WpfWindowCollection.Name)]
 public sealed class OverlayPolicyTests
 {
     [Fact]

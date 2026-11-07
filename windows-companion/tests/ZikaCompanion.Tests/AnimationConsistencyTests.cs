@@ -9,6 +9,7 @@ using Xunit;
 
 namespace ZikaCompanion.Tests;
 
+[Collection(WpfWindowCollection.Name)]
 public sealed class AnimationConsistencyTests
 {
     [Theory]

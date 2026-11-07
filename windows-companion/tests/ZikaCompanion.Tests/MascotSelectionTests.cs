@@ -11,6 +11,7 @@ using Forms = System.Windows.Forms;
 
 namespace ZikaCompanion.Tests;
 
+[Collection(WpfWindowCollection.Name)]
 public sealed class MascotSelectionTests
 {
     [Fact]

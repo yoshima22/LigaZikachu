@@ -13,6 +13,7 @@ using Forms = System.Windows.Forms;
 
 namespace ZikaCompanion.Tests;
 
+[Collection(WpfWindowCollection.Name)]
 public sealed class MascotPlacementTests
 {
     // These extracted resources are named opposite their actual visual facing.
