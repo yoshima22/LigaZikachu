@@ -154,7 +154,7 @@ export function AlbumCollection({ cards, ownedMap, selectedGen, approvedPlayers 
                     src={card.imageUrl}
                     alt={visible ? card.displayName : "Pokémon não descoberto"}
                     fill
-                    className={`object-contain p-1 ${visible ? "" : "brightness-0"}`}
+                    className={`object-contain p-1 ${visible ? "" : "brightness-0 invert opacity-40"}`}
                     sizes="120px"
                     unoptimized
                   />

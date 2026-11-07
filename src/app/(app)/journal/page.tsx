@@ -97,7 +97,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
                           fill
                           unoptimized
                           sizes="112px"
-                          className={`object-contain p-2 ${unlocked ? "" : "brightness-0 opacity-60"}`}
+                          className={`object-contain p-2 ${unlocked ? "" : "brightness-0 invert opacity-25"}`}
                         />
                       )}
                     </div>
