@@ -56,6 +56,15 @@ public sealed class AlertQueue
         get { lock (_gate) return _pending.Count; }
     }
 
+    public void ClearPending()
+    {
+        lock (_gate)
+        {
+            _pending.Clear();
+            _needsSummary = false;
+        }
+    }
+
     public bool Enqueue(CompanionEvent item)
     {
         ArgumentNullException.ThrowIfNull(item);

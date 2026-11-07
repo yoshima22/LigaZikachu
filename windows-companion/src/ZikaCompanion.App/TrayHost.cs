@@ -26,6 +26,7 @@ public sealed class TrayHost : IDisposable
     private readonly Forms.ToolStripMenuItem _disconnect;
     private CancellationTokenSource _connection = new();
     private EventAdapter _adapter = new();
+    private bool _wasLinked;
 
     public TrayHost(MainOverlayWindow window, OverlayViewModel model, SimulatedEventService simulator)
     {
@@ -79,8 +80,8 @@ public sealed class TrayHost : IDisposable
         _simulator.EventGenerated += Deliver;
         _window.ActionConfirmed += ExecuteAction;
         _window.RouteRequested += OpenRoute;
-        _simulator.Start();
         if (_pilot is not null) { _link.Enabled = false; _ = RestoreAndRunAsync(_connection.Token); }
+        else _simulator.Start();
     }
 
     private Forms.ToolStripMenuItem AddCommand(Forms.ContextMenuStrip menu, string text, Action action)
@@ -106,6 +107,8 @@ public sealed class TrayHost : IDisposable
         _dispatcher.BeginInvoke(() => {
             if (_disposed) return;
             var linked = _pilot?.IsLinked == true;
+            if (linked && !_wasLinked) _model.ClearAlerts();
+            _wasLinked = linked;
             _link.Enabled = !linked;
             _disconnect.Enabled = linked;
             _icon.Text = linked ? "ZikaCompanion • conectado" : "ZikaCompanion • simulação local";
@@ -140,6 +143,7 @@ public sealed class TrayHost : IDisposable
         try { await _pilot!.RestoreAsync(ct); if (!_disposed) _link.Enabled = !_pilot.IsLinked; if (_pilot.IsLinked) await RunEventsAsync(ct); }
         catch (OperationCanceledException) { }
         catch (Exception) { if (!_disposed) _link.Enabled = true; /* Keep the encrypted session for a later retry. */ }
+        finally { if (!_disposed && _pilot?.IsLinked != true) _simulator.Start(); }
     }
 
     private async Task RunEventsAsync(CancellationToken ct)

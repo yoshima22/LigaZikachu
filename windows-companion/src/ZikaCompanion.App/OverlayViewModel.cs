@@ -114,6 +114,15 @@ public sealed class OverlayViewModel : INotifyPropertyChanged
         NotifyState();
     }
 
+    public void ClearAlerts()
+    {
+        _queue.ClearPending();
+        _activeAlert = null;
+        _interruptedAlert = null;
+        _balloonUntil = null;
+        NotifyState();
+    }
+
     public void Advance()
     {
         if (_balloonUntil is { } until && _clock() >= until) DismissBalloon();
