@@ -171,6 +171,9 @@ function CreateSection() {
 
   // Pontos extras aleatórios
   const [extraRandom, setExtraRandom] = useState("0");
+  const [quantity, setQuantity] = useState("1");
+  const [originType, setOriginType] = useState<"" | "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" | "CELESTIAL">("");
+  const [labStars, setLabStars] = useState("1");
 
   const [result, setResult] = useState<string | null>(null);
 
@@ -223,9 +226,10 @@ function CreateSection() {
     const finalV = clampStat(statInt(statV), statInt(bonusV, 0));
     const extraPts = Math.max(0, statInt(extraRandom, 0));
 
+    const qty = Math.max(1, Math.min(50, parseInt(quantity) || 1));
     const name = nickname.trim() || (previewName ?? `#${pokeIdNum}`);
     const summaryLine = [
-      `Criar ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}) para ${playerName || "jogador selecionado"}`,
+      `Criar ${qty}x ${name} (Nv.${lvl}${isShiny ? " ✦ Shiny" : ""}${originType ? ` · ${originType}${originType === "LAB" ? ` ${labStars}★` : ""}` : ""}) para ${playerName || "jogador selecionado"}`,
       `Stats: F${finalF} A${finalA} C${finalC} I${finalI} V${finalV}`,
       extraPts > 0 ? `+${extraPts} pts aleatórios extras` : null,
     ].filter(Boolean).join("\n");
@@ -242,6 +246,9 @@ function CreateSection() {
         statInstinct: finalI,
         statVitality: finalV,
         extraRandomPoints: extraPts || undefined,
+        quantity: qty,
+        originType: originType || undefined,
+        labStars: originType === "LAB" ? parseInt(labStars) || 1 : undefined,
       });
       if (!r.ok) { toast.error(r.error ?? "Erro ao criar."); return; }
       toast.success(r.summary ?? "Mascote criado!");
@@ -251,7 +258,7 @@ function CreateSection() {
       setStatF(String(DEFAULT_STAT)); setStatA(String(DEFAULT_STAT));
       setStatC(String(DEFAULT_STAT)); setStatI(String(DEFAULT_STAT)); setStatV(String(DEFAULT_STAT));
       setBonusF("0"); setBonusA("0"); setBonusC("0"); setBonusI("0"); setBonusV("0");
-      setExtraRandom("0"); setProceduralBase(null);
+      setExtraRandom("0"); setProceduralBase(null); setQuantity("1");
     });
   };
 
@@ -308,6 +315,37 @@ function CreateSection() {
             onChange={e => setNickname(e.target.value)}
             placeholder="deixe vazio para usar o nome padrão"
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05] placeholder:text-slate-600" />
+        </div>
+
+        {/* Quantidade */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Quantidade (1–50)</label>
+          <input type="number" min={1} max={50} value={quantity}
+            onChange={e => setQuantity(e.target.value)}
+            className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]" />
+        </div>
+
+        {/* Raridade / origem */}
+        <div className="space-y-1">
+          <label className="text-xs font-semibold text-slate-400">Raridade (origem)</label>
+          <div className="flex gap-2">
+            <select value={originType} onChange={e => setOriginType(e.target.value as typeof originType)}
+              className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+              <option value="">Padrão do sistema</option>
+              <option value="COMMON">Comum</option>
+              <option value="RARE">Raro</option>
+              <option value="EVENT">Evento</option>
+              <option value="SPECIAL">Especial</option>
+              <option value="LAB">Laboratório</option>
+              <option value="CELESTIAL">Celestial</option>
+            </select>
+            {originType === "LAB" && (
+              <select value={labStars} onChange={e => setLabStars(e.target.value)}
+                className="rounded-xl border border-border bg-slate-900 px-2 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]">
+                {[1, 2, 3, 4, 5].map(n => <option key={n} value={n}>{n}★</option>)}
+              </select>
+            )}
+          </div>
         </div>
 
         {/* Personalidade */}

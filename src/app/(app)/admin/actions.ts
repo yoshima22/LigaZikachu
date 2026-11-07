@@ -1021,6 +1021,12 @@ export async function createMascotForPlayerAction(opts: {
   isFavorite: boolean;
   /** Pontos extras a serem distribuídos aleatoriamente entre os stats */
   extraRandomPoints?: number;
+  /** Quantidade de cópias idênticas (1–50). */
+  quantity?: number;
+  /** Raridade/origem registrada no mascote (omitido = padrão do sistema). */
+  originType?: "COMMON" | "RARE" | "EVENT" | "SPECIAL" | "LAB" | "CELESTIAL";
+  /** Estrelas, só para origem LAB (1–5). */
+  labStars?: number;
 }): Promise<{ ok: boolean; mascotId?: string; summary?: string; error?: string }> {
   try {
     await requireAdmin();
@@ -1037,47 +1043,48 @@ export async function createMascotForPlayerAction(opts: {
     if (opts.level < 1 || opts.level > 100)
       return { ok: false, error: "Nível inválido (1–100)." };
 
-    // Distribui pontos extras aleatoriamente se solicitado
-    let extraF = 0, extraA = 0, extraC = 0, extraI = 0, extraV = 0;
+    const qty = Math.max(1, Math.min(50, Math.trunc(opts.quantity ?? 1)));
+    const origins = ["COMMON", "RARE", "EVENT", "SPECIAL", "LAB", "CELESTIAL"];
+    if (opts.originType && !origins.includes(opts.originType)) return { ok: false, error: "Origem inválida." };
+    const labStars = opts.originType === "LAB" ? Math.max(1, Math.min(5, Math.trunc(opts.labStars ?? 1))) : 0;
     const extraPts = Math.max(0, Math.floor(opts.extraRandomPoints ?? 0));
-    if (extraPts > 0) {
-      const keys = ["F","A","C","I","V"] as const;
-      for (let i = 0; i < extraPts; i++) {
-        const k = keys[Math.floor(Math.random() * 5)];
-        if (k === "F") extraF++;
-        else if (k === "A") extraA++;
-        else if (k === "C") extraC++;
-        else if (k === "I") extraI++;
-        else extraV++;
-      }
-    }
+    const snapshot = await (await import("@/lib/species-registry")).getSpeciesSnapshot(opts.pokemonId);
 
-    const mascot = await prisma.mascot.create({
-      data: {
-        playerId:    opts.playerId,
-        pokemonId:   opts.pokemonId,
-        ...(await (await import("@/lib/species-registry")).getSpeciesSnapshot(opts.pokemonId)),
-        personality: opts.personality,
-        isShiny:     opts.isShiny,
-        isFavorite:  opts.isFavorite,
-        nickname:    opts.nickname?.trim() || null,
-        level:       opts.level,
-        statForce:   opts.statForce    + extraF,
-        statAgility: opts.statAgility  + extraA,
-        statCharisma:opts.statCharisma + extraC,
-        statInstinct:opts.statInstinct + extraI,
-        statVitality:opts.statVitality + extraV,
-      },
-    });
+    const createdIds: string[] = [];
+    for (let n = 0; n < qty; n++) {
+      // Distribui pontos extras aleatoriamente (sorteio independente por cópia)
+      const extra = [0, 0, 0, 0, 0];
+      for (let i = 0; i < extraPts; i++) extra[Math.floor(Math.random() * 5)]++;
+      const created = await prisma.mascot.create({
+        data: {
+          playerId:    opts.playerId,
+          pokemonId:   opts.pokemonId,
+          ...snapshot,
+          personality: opts.personality,
+          isShiny:     opts.isShiny,
+          isFavorite:  opts.isFavorite,
+          nickname:    opts.nickname?.trim() || null,
+          level:       opts.level,
+          statForce:   opts.statForce    + extra[0],
+          statAgility: opts.statAgility  + extra[1],
+          statCharisma:opts.statCharisma + extra[2],
+          statInstinct:opts.statInstinct + extra[3],
+          statVitality:opts.statVitality + extra[4],
+          ...(opts.originType ? { hatchedFromEggType: opts.originType, hatchedFromEggOrigin: "Adicionado pelo admin", labStars } : {}),
+        },
+      });
+      createdIds.push(created.id);
+    }
+    const mascot = { id: createdIds[0] };
     await registerPokemonDiscovery({ playerId: opts.playerId, pokemonId: opts.pokemonId, source: "admin-create" });
 
-    await prisma.mascotEvent.create({
-      data: { mascotId: mascot.id, emoji: "🎁", description: "Mascote adicionado pelo admin." }
+    await prisma.mascotEvent.createMany({
+      data: createdIds.map((mascotId) => ({ mascotId, emoji: "🎁", description: "Mascote adicionado pelo admin." })),
     }).catch(() => null);
 
     const { getPokemonName } = await import("@/lib/mascot-data");
     const name = opts.nickname?.trim() || getPokemonName(opts.pokemonId);
-    return { ok: true, mascotId: mascot.id, summary: `${name} (Nv.${opts.level}) criado para o jogador.` };
+    return { ok: true, mascotId: mascot.id, summary: qty > 1 ? `${qty}x ${name} (Nv.${opts.level}) criados para o jogador.` : `${name} (Nv.${opts.level}) criado para o jogador.` };
   } catch (err) {
     return { ok: false, error: err instanceof Error ? err.message : "Erro" };
   }
