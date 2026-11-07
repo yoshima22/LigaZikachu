@@ -1,6 +1,31 @@
 /** Curiosidades de anime e filmes — só fatos conhecidos e seguros. Expanda por Pokémon (id nacional). */
 export const ANIME_FACTS: Record<number, string[]> = {
-  6: ["No anime, o Charizard de Ash demorou a obedecê-lo, mas virou um dos pilares da equipe."],
+  // — Geração 1 —
+  3: ["Em Pokémon: O Filme 1, um clone de Venusaur enfrenta o original."],
+  6: [
+    "No anime, o Charizard de Ash demorou a obedecê-lo, mas virou um dos pilares da equipe.",
+    "Em Pokémon: O Filme 1, um clone de Charizard enfrenta o original."
+  ],
+  9: [
+    "No anime, Blastoise é o Pokémon de Gary Oak, rival de Ash.",
+    "Em Pokémon: O Filme 1, um clone de Blastoise enfrenta o original."
+  ],
+  10: ["O primeiro Pokémon capturado por Ash no anime foi um Caterpie, que evoluiu até Butterfree."],
+  21: ["No anime, um bando furioso de Spearow persegue Ash e Pikachu logo nos primeiros episódios."],
+  23: ["No anime, Ekans é de Jessie, da Equipe Rocket, e evolui para Arbok."],
+  26: ["No anime, o Raichu do Tenente Surge vence o Pikachu de Ash na primeira batalha em Vermilion."],
+  35: ["No anime, Ash e seus amigos encontram uma comunidade de Clefairy no Monte Moon."],
+  53: ["No anime, Persian é o Pokémon de Giovanni, chefe da Equipe Rocket."],
+  71: ["No anime, o Victreebel de James costuma morder a cabeça dele."],
+  74: ["No anime, Brock tem um Geodude entre os seus primeiros Pokémon."],
+  113: ["No anime, a Chansey ajuda a enfermeira Joy a cuidar dos Pokémon feridos."],
+  122: ["No anime, Mr. Mime é o Pokémon que ajuda nas tarefas de casa de Delia, mãe de Ash."],
+  123: ["No anime, Tracey, ajudante do professor Oak, tem um Scyther."],
+  128: ["No anime, Ash captura 30 Tauros na Zona Safári."],
+  134: ["No anime, Rainer, um dos irmãos Eevee, é um Vaporeon."],
+  135: ["No anime, Sparky, um dos irmãos Eevee, é um Jolteon."],
+  136: ["No anime, Pyro, um dos irmãos Eevee, é um Flareon."],
+  137: ["O episódio \"Dennou Senshi Porygon\" (1997) teve flashes de luz que causaram mal-estar em espectadores no Japão e foi retirado do ar."],
   12: ["No anime, o Butterfree de Ash se despede para seguir com o bando e formar família (\"Bye Bye Butterfree\")."],
   18: ["No anime, o Pidgeot de Ash fica em Kanto para proteger um bando de Pidgey."],
   24: ["No anime, Arbok é o parceiro de Jessie, da Equipe Rocket."],

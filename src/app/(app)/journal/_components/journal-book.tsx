@@ -168,7 +168,7 @@ function RightPage({ p }: { p: BookPage }) {
   );
 }
 
-export function JournalBook({ pages }: { pages: BookPage[] }) {
+export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; autoOpen?: boolean }) {
   const [index, setIndex] = useState(0); // folha aberta = Pokémon index+1
   const [pageText, setPageText] = useState("");
   const [flip, setFlip] = useState<{ dir: 1 | -1; go: boolean } | null>(null);
@@ -176,6 +176,7 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
   const [coverGo, setCoverGo] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mobileRef = useRef<HTMLDivElement>(null);
   const total = pages.length;
   const isOpen = phase === "open";
 
@@ -231,6 +232,33 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
     },
     []
   );
+
+  // No celular as páginas ficam empilhadas: ao mudar de registro, volta ao topo do livro.
+  const firstRun = useRef(true);
+  useEffect(() => {
+    if (firstRun.current) {
+      firstRun.current = false;
+      return;
+    }
+    const el = mobileRef.current;
+    if (!el || window.innerWidth >= 768) return;
+    if (el.closest('[role="dialog"]')) {
+      el.scrollIntoView({ block: "start", behavior: "smooth" }); // sobreposição do álbum: rola dentro dela
+      return;
+    }
+    // Na página: desconta o cabeçalho fixo do site (alto no celular).
+    const header = document.querySelector("header.site-header");
+    const offset = (header?.getBoundingClientRect().height ?? 0) + 8;
+    window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - offset, behavior: "smooth" });
+  }, [index]);
+
+  // Aberto por outro lugar (botão do álbum): o livro aparece e se abre sozinho.
+  useEffect(() => {
+    if (!autoOpen) return;
+    const t = setTimeout(openBook, 1100);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoOpen]);
 
   if (total === 0) return null;
 
@@ -349,7 +377,7 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
       </div>
 
       {/* Mobile: capa que aparece e, ao abrir, as páginas empilhadas (sem 3D) */}
-      <div className="md:hidden">
+      <div ref={mobileRef} className="scroll-mt-20 md:hidden">
         {phase === "closed" ? (
           <div className="journal-rise mx-auto aspect-[3/4] max-w-xs">
             <Cover onOpen={openBook} className="rounded-2xl" />
@@ -364,17 +392,19 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
         )}
       </div>
 
-      <div className={`flex flex-wrap items-center justify-center gap-3 text-xs text-slate-400 ${hideUntilOpen}`}>
+      <div
+        className={`sticky bottom-3 z-40 flex flex-wrap items-center justify-center gap-2 rounded-xl border border-border bg-slate-950/90 p-2 text-xs text-slate-400 backdrop-blur md:static md:gap-3 md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none ${hideUntilOpen}`}
+      >
         <button
           type="button"
           onClick={() => turn(-1)}
           disabled={index === 0 || !!flip}
-          className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-3 py-2.5 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30 md:flex-none md:py-2"
         >
           <ChevronLeft size={14} /> Anterior
         </button>
         <form
-          className="flex items-center gap-2"
+          className="order-3 flex w-full items-center justify-center gap-2 md:order-none md:w-auto"
           onSubmit={(e) => {
             e.preventDefault();
             jumpTo(Number.parseInt(pageText, 10));
@@ -403,7 +433,7 @@ export function JournalBook({ pages }: { pages: BookPage[] }) {
           type="button"
           onClick={() => turn(1)}
           disabled={index === total - 1 || !!flip}
-          className="flex items-center gap-1 rounded-lg border border-border px-3 py-2 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30"
+          className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-3 py-2.5 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30 md:flex-none md:py-2"
         >
           Próximo <ChevronRight size={14} />
         </button>
