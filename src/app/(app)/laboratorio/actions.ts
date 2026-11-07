@@ -270,14 +270,25 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
         const recipe = getOriginFusionRecipe(survivor.hatchedFromEggType);
         if (!recipe || consumed.some((m) => m.hatchedFromEggType !== recipe.sourceOrigin)) throw new Error("Os três mascotes precisam ter a mesma origem compatível.");
         const item = await tx.shopItem.findFirst({ where: { type: recipe.mutationType } });
-        if (!item) throw new Error("Mutação Genética não encontrada.");
+        if (!item) throw new Error("Você não possui a Mutação Genética necessária. Compre na aba Loja de Pó.");
         const used = await tx.playerInventory.updateMany({ where: { playerId: me.id, itemId: item.id, quantity: { gte: 1 } }, data: { quantity: { decrement: 1 } } });
         if (!used.count) throw new Error("Você não possui a Mutação Genética necessária.");
         await applyRainbowFeather(me.id, survivor.id, recipe.resultOrigin, tx, false, recipe.resultOrigin);
         await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: recipe.resultOrigin === "LAB" ? 1 : 0 } });
       }
       await tx.mascot.deleteMany({ where: { id: { in: consumed.map((m) => m.id) } } });
-      return { survivorId: survivor.id };
+      const f = await tx.mascot.findUniqueOrThrow({ where: { id: survivor.id } });
+      return {
+        survivorId: survivor.id,
+        survivor: {
+          pokemonId: f.pokemonId, name: getPokemonName(f.pokemonId),
+          spriteUrl: f.isShiny ? getShinySprite(f.pokemonId) : getStaticSpriteUrl(f.pokemonId),
+          level: f.level, eggType: f.hatchedFromEggType, eggOrigin: getHatchedEggLabel(f.hatchedFromEggType, f.hatchedFromEggOrigin),
+          labStars: f.labStars, personality: f.personality as string, nickname: f.nickname,
+          stats: { force: f.statForce, agility: f.statAgility, charisma: f.statCharisma, instinct: f.statInstinct, vitality: f.statVitality },
+          eventBonusStat: f.eventBonusStat, eventBonusValue: f.eventBonusValue,
+        },
+      };
     }, { isolationLevel: "Serializable" });
     return { ok: true as const, ...result };
   } catch (e) { return { ok: false as const, error: e instanceof Error ? e.message : "Não foi possível concluir a fusão." }; }

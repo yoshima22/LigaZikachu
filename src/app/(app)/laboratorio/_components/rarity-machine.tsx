@@ -3,6 +3,8 @@
 import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import { fuseMascotsInLabAction } from "../actions";
+import { CodeChip, StatStrip, TagChip, statsTotal, type MascotStats } from "./mascot-chips";
+import { PERSONALITY_LABEL } from "@/lib/mascot-data";
 import { getOriginFusionRecipe, validateLabStarFusion } from "@/lib/lab-rarity-machine";
 
 export type MachineMascot = {
@@ -14,6 +16,9 @@ export type MachineMascot = {
   isShiny: boolean;
   spriteUrl: string;
   recyclable: boolean;
+  performanceTag?: string | null;
+  stats?: MascotStats;
+  personality?: string;
   eggOrigin?: string | null;
   eggType?: string | null;
   labStars?: number;
@@ -28,6 +33,12 @@ const ORIGIN_COLOR: Record<string, string> = {
   LAB: "border-fuchsia-400/70 text-fuchsia-300",
 };
 const PAGE_SIZE = 12;
+export type FusedSnapshot = {
+  pokemonId: number; name: string; nickname: string | null; spriteUrl: string; level: number;
+  eggType: string | null; eggOrigin: string | null; labStars: number; personality: string;
+  stats: MascotStats; eventBonusStat: string | null; eventBonusValue: number | null;
+};
+const SORTS = { level: "Maior nível", total: "Maior status total", name: "Nome (A–Z)" } as const;
 const stars = (m: MachineMascot) => Math.max(1, m.labStars || 0);
 const label = (m: MachineMascot) => m.nickname || m.name;
 
@@ -58,23 +69,32 @@ export function RarityMachine({
   mascots, onFused,
 }: {
   mascots: MachineMascot[];
-  onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR" }) => void;
+  onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR"; survivor: FusedSnapshot }) => void;
 }) {
   const [ids, setIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [origin, setOrigin] = useState("");
   const [only100, setOnly100] = useState(false);
+  const [tag, setTag] = useState("");
+  const [personality, setPersonality] = useState("");
+  const [starsF, setStarsF] = useState("");
+  const [sort, setSort] = useState<keyof typeof SORTS>("level");
+  const [rolling, setRolling] = useState<MascotStats | null>(null);
   const [page, setPage] = useState(0);
   const [error, setError] = useState<string | null>(null);
-  const [anim, setAnim] = useState<null | { phase: "charge" | "reveal"; keep: MachineMascot; eaten: MachineMascot[]; summary: string }>(null);
+  const [anim, setAnim] = useState<null | { phase: "charge" | "reveal"; keep: MachineMascot; eaten: MachineMascot[]; summary: string; mode: "ORIGIN" | "STAR"; result?: FusedSnapshot }>(null);
 
   const pool = useMemo(() => mascots.filter((m) => m.recyclable), [mascots]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return pool.filter((m) =>
+    const list = pool.filter((m) =>
       (!q || label(m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) &&
-      (!origin || m.eggType === origin) && (!only100 || m.level === 100));
-  }, [pool, search, origin, only100]);
+      (!origin || m.eggType === origin) && (!only100 || m.level === 100) &&
+      (!tag || (m.performanceTag ?? "NEUTRO") === tag) && (!personality || m.personality === personality) &&
+      (!starsF || (m.eggType === "LAB" && stars(m) === Number(starsF))));
+    const total = (m: MachineMascot) => (m.stats ? statsTotal(m.stats) : 0);
+    return list.sort((a, b) => sort === "name" ? label(a).localeCompare(label(b)) : sort === "total" ? total(b) - total(a) : b.level - a.level);
+  }, [pool, search, origin, only100, tag, personality, starsF, sort]);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const curPage = Math.min(page, pages - 1);
   const visible = filtered.slice(curPage * PAGE_SIZE, (curPage + 1) * PAGE_SIZE);
@@ -89,18 +109,27 @@ export function RarityMachine({
     if (!plan.ok || anim) return;
     const [keep, ...eaten] = selected;
     setError(null);
-    setAnim({ phase: "charge", keep, eaten, summary: plan.summary });
+    setAnim({ phase: "charge", keep, eaten, summary: plan.summary, mode: plan.mode });
     const [res] = await Promise.all([
       fuseMascotsInLabAction({ mode: plan.mode, survivorId: keep.id, consumedIds: eaten.map((m) => m.id) }),
       new Promise((r) => setTimeout(r, 3000)), // dá tempo da animação de carga
     ]);
     if (!res.ok) { setAnim(null); setError(res.error); return; }
-    setAnim({ phase: "reveal", keep, eaten, summary: plan.summary });
-    onFused({ survivorId: keep.id, consumedIds: eaten.map((m) => m.id), mode: plan.mode });
+    setAnim({ phase: "reveal", keep, eaten, summary: plan.summary, mode: plan.mode, result: res.survivor });
+    onFused({ survivorId: keep.id, consumedIds: eaten.map((m) => m.id), mode: plan.mode, survivor: res.survivor });
     setIds([]);
   }
 
-  useEffect(() => { setPage(0); }, [search, origin, only100]);
+  // números sorteando enquanto a máquina refaz os status (só na fusão de origem)
+  const charging = anim?.phase === "charge" && anim.mode === "ORIGIN";
+  useEffect(() => {
+    if (!charging) { setRolling(null); return; }
+    const r = () => 20 + Math.floor(Math.random() * 60);
+    const t = setInterval(() => setRolling({ force: r(), agility: r(), charisma: r(), instinct: r(), vitality: r() }), 80);
+    return () => clearInterval(t);
+  }, [charging]);
+
+  useEffect(() => { setPage(0); }, [search, origin, only100, tag, personality, starsF, sort]);
 
   return (
     <div className="space-y-4">
@@ -130,6 +159,7 @@ export function RarityMachine({
                     <button type="button" onClick={() => toggle(m.id)} aria-label="Remover" className="absolute right-1.5 top-1.5 rounded-full bg-slate-800 p-1 text-slate-400 hover:text-white"><X size={11} /></button>
                     <img src={m.spriteUrl} alt="" className="rm-bob mt-3 h-16 w-16 object-contain [image-rendering:pixelated]" />
                     <p className="mt-1 max-w-full truncate text-xs font-bold text-white">{label(m)}</p>
+                    <TagChip tag={m.performanceTag} />
                     <p className="text-[10px] text-slate-400">{ORIGIN_LABEL[m.eggType ?? ""] ?? "Sem origem"} · Lv.{m.level}{m.eggType === "LAB" ? ` · ${stars(m)}★` : ""}</p>
                     {!keeper && <button type="button" onClick={() => makeKeeper(m.id)} className="mt-1 text-[10px] text-fuchsia-300 underline">tornar mantido</button>}
                   </>
@@ -164,8 +194,23 @@ export function RarityMachine({
           <button type="button" onClick={() => setOnly100((v) => !v)}
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${only100 ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400"}`}>Lv.100</button>
         </div>
+        <div className="mt-2 flex flex-wrap gap-2">
+          {[
+            [tag, setTag, "Desempenho: todos", [["FORTE", "💪 Forte"], ["NEUTRO", "⚖️ Neutro"], ["RUIM", "👎 Ruim"], ["PESSIMO", "🗑️ Péssimo"]]],
+            [personality, setPersonality, "Personalidade: todas", Object.entries(PERSONALITY_LABEL)],
+            [starsF, setStarsF, "Estrelas: todas", [1, 2, 3, 4, 5].map((n) => [String(n), n + "★ (LAB)"])],
+          ].map(([val, set, ph, opts], i) => (
+            <select key={i} value={val as string} onChange={(e) => (set as (v: string) => void)(e.target.value)} className="rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
+              <option value="">{ph as string}</option>
+              {(opts as string[][]).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+            </select>
+          ))}
+          <select value={sort} onChange={(e) => setSort(e.target.value as keyof typeof SORTS)} className="rounded-lg border border-slate-700 bg-slate-950/70 px-2 py-1.5 text-xs text-slate-200">
+            {Object.entries(SORTS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          </select>
+        </div>
 
-        <div className="mt-3 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {visible.map((m) => {
             const idx = ids.indexOf(m.id);
             const first = selected[0];
@@ -176,10 +221,13 @@ export function RarityMachine({
                 {idx >= 0 && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-fuchsia-400 text-[10px] font-black text-slate-950">{idx + 1}</span>}
                 <img src={m.spriteUrl} alt="" loading="lazy" className="h-12 w-12 object-contain [image-rendering:pixelated]" />
                 <p className="mt-1 w-full truncate text-[11px] font-semibold text-white">{m.isShiny ? "✨ " : ""}{label(m)}</p>
+                <TagChip tag={m.performanceTag} />
                 <span className={`mt-0.5 rounded-full border px-1.5 py-px text-[9px] font-bold ${ORIGIN_COLOR[m.eggType ?? ""] ?? "border-slate-700 text-slate-500"}`}>
                   {ORIGIN_LABEL[m.eggType ?? ""] ?? "—"}{m.eggType === "LAB" ? ` ${stars(m)}★` : ""}
                 </span>
-                <span className="text-[10px] text-slate-500">Lv.{m.level}</span>
+                <span className="flex items-center gap-1 text-[10px] text-slate-500">Lv.{m.level} <CodeChip id={m.id} /></span>
+                {m.personality && <span className="text-[9px] text-slate-500">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>}
+                <StatStrip stats={m.stats} />
               </button>
             );
           })}
@@ -209,7 +257,13 @@ export function RarityMachine({
                 <img key={m.id} src={m.spriteUrl} alt="" className="rm-eaten absolute left-1/2 top-1/2 h-16 w-16 object-contain [image-rendering:pixelated]"
                   style={{ ["--a" as string]: `${i * 180 + 90}deg`, animationDelay: `${i * 0.25}s` }} />
               ))}
-              <p className="absolute -bottom-10 left-0 right-0 text-center text-sm font-bold tracking-widest text-fuchsia-200 animate-pulse">FUNDINDO…</p>
+              <div className="absolute -bottom-28 left-1/2 w-72 -translate-x-1/2">
+                <p className="text-center text-sm font-bold tracking-widest text-fuchsia-200 animate-pulse">{anim.mode === "ORIGIN" ? "SUBINDO DE ORIGEM…" : "FUNDINDO ESTRELAS…"}</p>
+                {anim.mode === "ORIGIN" && <>
+                  <p className="mt-1 text-center text-[11px] text-slate-400">Mudando personalidade e sorteando status</p>
+                  <div className="mt-2 opacity-80"><StatStrip stats={rolling ?? anim.keep.stats} size="md" /></div>
+                </>}
+              </div>
             </div>
           ) : (
             <div className="relative flex flex-col items-center">
@@ -222,6 +276,15 @@ export function RarityMachine({
               <p className="rm-rise mt-4 font-pixel text-2xl text-[#FFCB05]">Fusão concluída!</p>
               <p className="rm-rise mt-1 text-sm font-semibold text-white">{label(anim.keep)}</p>
               <p className="rm-rise mt-1 text-xs text-fuchsia-200" style={{ animationDelay: "0.5s" }}>{anim.summary}</p>
+              {anim.mode === "ORIGIN" && anim.result && (
+                <div className="rm-rise mt-3 w-72 rounded-2xl border border-fuchsia-400/30 bg-slate-900/80 p-3 text-center" style={{ animationDelay: "0.7s" }}>
+                  <p className="text-[11px] text-slate-300">
+                    <b className="text-amber-300">{ORIGIN_LABEL[anim.result.eggType ?? ""] ?? "—"}</b> · Lv.{anim.result.level} · Nova personalidade: <b className="text-fuchsia-200">{PERSONALITY_LABEL[anim.result.personality] ?? anim.result.personality}</b>
+                  </p>
+                  <div className="mt-2"><StatStrip stats={anim.result.stats} size="md" /></div>
+                  {anim.result.eventBonusStat && anim.result.eventBonusValue ? <p className="mt-2 text-[10px] text-emerald-300">Bônus de evento preservado (+{anim.result.eventBonusValue})</p> : null}
+                </div>
+              )}
               <button type="button" onClick={() => setAnim(null)} className="rm-rise mt-6 rounded-xl bg-fuchsia-400 px-6 py-2 text-sm font-bold text-slate-950" style={{ animationDelay: "0.9s" }}>Fechar</button>
             </div>
           )}
