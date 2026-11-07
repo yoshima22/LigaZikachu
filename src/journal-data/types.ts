@@ -4,6 +4,17 @@ export type UnlockRule =
   | { type: "sticker"; pokemonId: number } // tem a figurinha no álbum
   | { type: "albumGen"; generation: number; percent: number }; // % do álbum da geração
 
+/** Marcador de geração: leva à primeira página dela. */
+export type JournalBookmark = { gen: number; region: string; accent: string; position: number };
+
+/** O que o servidor entrega na primeira carga (o resto das páginas vem sob demanda). */
+export type JournalMeta = {
+  total: number;
+  unlockedCount: number;
+  bookmarks: JournalBookmark[];
+  initial: import("@/app/(app)/journal/_components/journal-book").BookPage[];
+};
+
 export type JournalEntry = {
   id: string;
   pokemonId: number; // imagem/nome vêm do PokemonCard

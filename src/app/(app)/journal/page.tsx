@@ -2,7 +2,7 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BookMarked, Eye } from "lucide-react";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
-import { buildJournalPages } from "@/journal-data/build-pages";
+import { getJournalMeta } from "@/journal-data/build-pages";
 import { JOURNAL_PUBLIC } from "@/journal-data/config";
 import { JournalBook } from "./_components/journal-book";
 
@@ -17,8 +17,8 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
 
   // "Ver tudo" (todas as páginas abertas) é só para admins revisarem o conteúdo.
   const revealAll = admin && sp.tudo === "1";
-  const pages = await buildJournalPages(user.id, revealAll);
-  const unlockedCount = pages.filter((p) => !p.locked).length;
+  // Só metadados + primeiro bloco: o resto das páginas é carregado sob demanda pelo livro.
+  const meta = await getJournalMeta(user.id, revealAll);
 
   return (
     <div className="space-y-6">
@@ -29,7 +29,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
           </p>
           <h1 className="mt-2 font-pixel text-lg leading-snug text-[#FFCB05]">Journal</h1>
           <p className="mt-2 text-sm text-slate-400">
-            {unlockedCount} de {pages.length} registros desbloqueados — um por Pokémon, abertos pela figurinha ou pelo mascote.
+            {meta.unlockedCount} de {meta.total} registros desbloqueados — um por Pokémon, abertos ao conquistar o mascote do Pokémon.
             Use os marcadores<span className="hidden md:inline">, as setas do teclado</span> ou o campo de página.
           </p>
         </div>
@@ -43,7 +43,7 @@ export default async function JournalPage({ searchParams }: { searchParams: Prom
         )}
       </div>
 
-      <JournalBook pages={pages} />
+      <JournalBook meta={meta} revealAll={revealAll} />
     </div>
   );
 }

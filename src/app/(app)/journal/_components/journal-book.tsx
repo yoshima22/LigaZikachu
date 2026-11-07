@@ -1,12 +1,16 @@
 "use client";
 
 import Image from "next/image";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { BookMarked, ChevronLeft, ChevronRight, Lock, Sparkles } from "lucide-react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { BookMarked, ChevronLeft, ChevronRight, Loader2, Lock, Sparkles } from "lucide-react";
+import { loadJournalChunk } from "../actions";
+import type { JournalMeta } from "@/journal-data/types";
 
 /** Uma folha aberta (duas páginas) = um Pokémon, 1:1 com as figurinhas do álbum. */
 export type BookPage = {
   id: string;
+  /** Posição no livro (1 = primeira folha); coincide com o nº da Pokédex. */
+  position: number;
   generation: number;
   region: string;
   chapterTitle: string;
@@ -168,8 +172,21 @@ function RightPage({ p }: { p: BookPage }) {
   );
 }
 
-export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; autoOpen?: boolean }) {
+export function JournalBook({
+  meta,
+  revealAll = false,
+  autoOpen = false
+}: {
+  meta: JournalMeta;
+  revealAll?: boolean;
+  autoOpen?: boolean;
+}) {
   const [index, setIndex] = useState(0); // folha aberta = Pokémon index+1
+  // Páginas já carregadas (posição → página). O resto vem sob demanda, antes de virar a página.
+  const [loaded, setLoaded] = useState<Map<number, BookPage>>(() => new Map(meta.initial.map((p) => [p.position, p])));
+  const loadedRef = useRef(loaded);
+  const [busy, setBusy] = useState(false);
+  const [loadError, setLoadError] = useState(false);
   const [pageText, setPageText] = useState("");
   const [flip, setFlip] = useState<{ dir: 1 | -1; go: boolean } | null>(null);
   const [phase, setPhase] = useState<"closed" | "opening" | "open">("closed");
@@ -177,18 +194,33 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const openTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mobileRef = useRef<HTMLDivElement>(null);
-  const total = pages.length;
+  const total = meta.total;
   const isOpen = phase === "open";
+  const bookmarks = meta.bookmarks;
+  const currentGen = loaded.get(index + 1)?.generation;
 
-  // Marcadores: primeira folha de cada geração.
-  const bookmarks = useMemo(() => {
-    const seen = new Map<number, { gen: number; region: string; accent: string; number: number }>();
-    pages.forEach((p, i) => {
-      if (!seen.has(p.generation)) seen.set(p.generation, { gen: p.generation, region: p.region, accent: p.accent, number: i + 1 });
-    });
-    return [...seen.values()];
-  }, [pages]);
-  const currentGen = pages[index]?.generation;
+  // Garante as páginas de `center-2` a `center+5` (um bloco de 8). Só busca o que falta, de uma vez.
+  const ensure = useCallback(
+    async (center: number): Promise<boolean> => {
+      const from = Math.max(1, center - 2);
+      const to = Math.min(total, center + 5);
+      const missing: number[] = [];
+      for (let p = from; p <= to; p++) if (!loadedRef.current.has(p)) missing.push(p);
+      if (missing.length === 0) return true;
+      try {
+        const rows = await loadJournalChunk(missing[0], missing[missing.length - 1], revealAll);
+        if (!rows) return false;
+        const next = new Map(loadedRef.current);
+        for (const p of rows) next.set(p.position, p);
+        loadedRef.current = next;
+        setLoaded(next);
+        return true;
+      } catch {
+        return false;
+      }
+    },
+    [total, revealAll]
+  );
 
   const openBook = () => {
     if (phase !== "closed") return;
@@ -198,10 +230,18 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
   };
 
   const turn = useCallback(
-    (dir: 1 | -1) => {
-      if (flip || phase !== "open") return;
+    async (dir: 1 | -1) => {
+      if (flip || busy || phase !== "open") return;
       const next = index + dir;
       if (next < 0 || next >= total) return;
+      // Carrega a página de destino ANTES de rodar a animação de virar.
+      if (!loadedRef.current.has(next + 1)) {
+        setBusy(true);
+        const ok = await ensure(next + 1);
+        setBusy(false);
+        setLoadError(!ok);
+        if (!ok) return;
+      }
       setFlip({ dir, go: false });
       requestAnimationFrame(() => requestAnimationFrame(() => setFlip({ dir, go: true })));
       timer.current = setTimeout(() => {
@@ -209,13 +249,26 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
         setFlip(null);
       }, FLIP_MS);
     },
-    [flip, index, total, phase]
+    [flip, busy, index, total, phase, ensure]
   );
 
-  const jumpTo = (n: number) => {
-    if (flip || phase !== "open" || !Number.isFinite(n)) return;
-    setIndex(Math.min(total - 1, Math.max(0, n - 1)));
+  const jumpTo = async (n: number) => {
+    if (flip || busy || phase !== "open" || !Number.isFinite(n)) return;
+    const target = Math.min(total, Math.max(1, n));
+    if (!loadedRef.current.has(target)) {
+      setBusy(true);
+      const ok = await ensure(target);
+      setBusy(false);
+      setLoadError(!ok);
+      if (!ok) return;
+    }
+    setIndex(target - 1);
   };
+
+  // Pré-carrega as vizinhas em segundo plano para a próxima virada ser instantânea.
+  useEffect(() => {
+    if (phase === "open") void ensure(index + 1);
+  }, [index, phase, ensure]);
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
@@ -262,8 +315,9 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
 
   if (total === 0) return null;
 
-  const cur = pages[index];
-  const target = flip ? pages[index + flip.dir] : null;
+  const cur = loaded.get(index + 1);
+  if (!cur) return null; // nunca acontece: o destino é carregado antes de virar
+  const target = flip ? loaded.get(index + 1 + flip.dir) ?? null : null;
   // Páginas estáticas por baixo da folha que gira.
   const baseLeft = flip?.dir === -1 && target ? target : cur;
   const baseRight = flip?.dir === 1 && target ? target : cur;
@@ -289,8 +343,8 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
             <button
               key={b.gen}
               type="button"
-              onClick={() => jumpTo(b.number)}
-              title={`${b.region} — a partir do nº ${b.number}`}
+              onClick={() => void jumpTo(b.position)}
+              title={`${b.region} — a partir do nº ${b.position}`}
               className={`rounded-t-md px-2.5 text-[10px] font-bold uppercase tracking-wider text-[#20140a] shadow-md transition-all hover:-translate-y-1 ${
                 active ? "-translate-y-1 py-2" : "py-1 opacity-80"
               }`}
@@ -398,7 +452,7 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
         <button
           type="button"
           onClick={() => turn(-1)}
-          disabled={index === 0 || !!flip}
+          disabled={index === 0 || !!flip || busy}
           className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-3 py-2.5 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30 md:flex-none md:py-2"
         >
           <ChevronLeft size={14} /> Anterior
@@ -412,7 +466,15 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
           }}
         >
           <span>
-            Página {index + 1} de {total}
+            {busy ? (
+              <span className="flex items-center gap-1.5">
+                <Loader2 size={12} className="animate-spin" /> Folheando…
+              </span>
+            ) : loadError ? (
+              <span className="text-red-300">Não foi possível carregar. Tente de novo.</span>
+            ) : (
+              <>Página {index + 1} de {total}</>
+            )}
           </span>
           <input
             type="number"
@@ -432,7 +494,7 @@ export function JournalBook({ pages, autoOpen = false }: { pages: BookPage[]; au
         <button
           type="button"
           onClick={() => turn(1)}
-          disabled={index === total - 1 || !!flip}
+          disabled={index === total - 1 || !!flip || busy}
           className="flex flex-1 items-center justify-center gap-1 rounded-lg border border-border px-3 py-2.5 transition hover:border-[#FFCB05]/50 hover:text-[#FFCB05] disabled:opacity-30 md:flex-none md:py-2"
         >
           Próximo <ChevronRight size={14} />

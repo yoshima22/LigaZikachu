@@ -2,24 +2,25 @@
 
 import { useEffect, useState, useTransition } from "react";
 import { BookMarked, Loader2, X } from "lucide-react";
-import { loadJournalPages } from "@/app/(app)/journal/actions";
-import { JournalBook, type BookPage } from "@/app/(app)/journal/_components/journal-book";
+import { loadJournalMeta } from "@/app/(app)/journal/actions";
+import { JournalBook } from "@/app/(app)/journal/_components/journal-book";
+import type { JournalMeta } from "@/journal-data/types";
 
 /** Botão (admin) que puxa o Journal para a tela e o abre com animação. */
 export function JournalLauncher() {
   const [open, setOpen] = useState(false);
-  const [pages, setPages] = useState<BookPage[] | null>(null);
+  const [meta, setMeta] = useState<JournalMeta | null>(null);
   const [error, setError] = useState(false);
   const [pending, start] = useTransition();
 
   function launch() {
     setOpen(true);
-    if (pages) return;
+    if (meta) return;
     setError(false);
     start(async () => {
       try {
-        const result = await loadJournalPages();
-        if (result) setPages(result);
+        const result = await loadJournalMeta();
+        if (result) setMeta(result);
         else setError(true);
       } catch {
         setError(true);
@@ -65,8 +66,8 @@ export function JournalLauncher() {
             <X size={18} />
           </button>
           <div className="mx-auto max-w-5xl pt-10">
-            {pages ? (
-              <JournalBook pages={pages} autoOpen />
+            {meta ? (
+              <JournalBook meta={meta} autoOpen />
             ) : (
               <p className="flex items-center justify-center gap-2 py-24 text-sm text-slate-300">
                 {error ? "Não foi possível carregar o Journal." : (<><Loader2 size={16} className={pending ? "animate-spin" : ""} /> Buscando o livro…</>)}
