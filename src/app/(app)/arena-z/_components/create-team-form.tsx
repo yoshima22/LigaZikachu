@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useTransition, useEffect, useCallback, useMemo } from "react";
+import { LabStarsBadge } from "@/components/mascot/lab-stars-badge";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Search, X, ArrowUpDown, ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
@@ -17,6 +18,8 @@ import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 export interface ValidMascot {
   id: string;
   pokemonId: number;
+  hatchedFromEggType?: string | null;
+  labStars?: number;
   primaryTypeOverride?: string | null;
   secondaryTypeOverride?: string | null;
   nickname: string | null;
@@ -228,7 +231,7 @@ function MascotPick({
           />
         </div>
         <div className="text-center leading-tight">
-          <p className="truncate text-[10px] font-semibold text-slate-100">{displayName(m)}</p>
+          <p className="truncate text-[10px] font-semibold text-slate-100">{displayName(m)} <LabStarsBadge origin={m.hatchedFromEggType} stars={m.labStars} /></p>
           <p className="text-[9px] text-slate-500">
             Nv.{m.level}{!compact && <span className="ml-1 text-slate-600">Σ{totalStats(m)}</span>}
           </p>
@@ -934,7 +937,7 @@ export function AddMascotToTeamForm({ teamId, mascots, slotsUsed }: { teamId: st
                       onError={e => { (e.target as HTMLImageElement).src = getSpriteUrl(m.pokemonId); }}
                     />
                     <div className="min-w-0 flex-1">
-                      <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)}</p>
+                      <p className="truncate text-[10px] font-semibold text-slate-200">{displayName(m)} <LabStarsBadge origin={m.hatchedFromEggType} stars={m.labStars} /></p>
                       <p className="text-[9px] text-slate-500">Nv.{m.level} · Σ{totalStats(m)}</p>
                       <div className="mt-1 grid grid-cols-5 gap-0.5 text-center text-[10px] sm:text-[8px]">
                         {[["FOR", m.statForce], ["AGI", m.statAgility], ["VIT", m.statVitality], ["INS", m.statInstinct], ["CAR", m.statCharisma]].map(([label, value]) => (

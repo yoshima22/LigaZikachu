@@ -359,7 +359,7 @@ export async function getLeaguePageData(playerId: string, displayName: string, a
     const rows = await prisma.mascot.findMany({
       where: { playerId },
       select: {
-        id: true, pokemonId: true, nickname: true, level: true,
+        id: true, pokemonId: true, nickname: true, level: true, hatchedFromEggType: true, labStars: true,
         statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, diseasedAt: true,
         megaEvolvedAt: true, megaEvolvedFromPokemonId: true, preferredCombatRole: true,
         stanceUnlocks: { select: { stanceKey: true } },

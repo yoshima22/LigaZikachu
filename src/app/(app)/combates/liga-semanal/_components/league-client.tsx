@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useTransition, useEffect, useCallback } from "react";
+import { LabStarsBadge } from "@/components/mascot/lab-stars-badge";
 import { toast } from "sonner";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, POINTS, BATTLE_TIMES_BRT } from "../constants";
 import { COMBAT_ROLE_OPTIONS, selectableCombatRoleOptions, getCombatRoleLabel, COMBAT_ROLE_DESCRIPTIONS, recommendCombatRole, defaultCombatRoleFor, type CombatRole } from "@/lib/combat-roles";
@@ -1012,7 +1013,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                     {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-14 w-14 sm:h-10 sm:w-10 object-contain" style={{ imageRendering: "pixelated" }} />
                     <p className="text-xs sm:text-[10px] font-semibold text-slate-200 truncate w-full text-center">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
-                    <p className="text-[10px] sm:text-[9px] text-slate-400">Nv.{m.level}</p>
+                    <p className="text-[10px] sm:text-[9px] text-slate-400">Nv.{m.level} <LabStarsBadge origin={(m as { hatchedFromEggType?: string | null }).hatchedFromEggType} stars={(m as { labStars?: number }).labStars} /></p>
                     <div className="flex w-full items-center gap-1">
                       <select
                         value={currentRole ?? "ATTACKER"}
@@ -1081,7 +1082,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                 {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className="h-12 w-12 shrink-0 object-contain" style={{ imageRendering: "pixelated" }} />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-bold text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)}</p>
+                  <p className="text-xs font-bold text-slate-200 truncate">{m.nickname ?? getPokemonName(m.pokemonId)} <LabStarsBadge origin={(m as { hatchedFromEggType?: string | null }).hatchedFromEggType} stars={(m as { labStars?: number }).labStars} /></p>
                   <p className="text-[11px] text-slate-400">Nv.{m.level}</p>
                   <div className="flex gap-1 mt-1">
                     {types.map(t => (
@@ -1261,7 +1262,7 @@ function TeamsTab({ data, refresh }: { data: PageData; refresh: () => void }) {
                       <span className="absolute top-1 left-1.5 text-[9px] text-slate-600 font-mono">{i + 1}</span>
                       {/* eslint-disable-next-line @next/next/no-img-element */}
                       <img src={getStaticSpriteUrl(m.pokemonId)} alt="" className={`h-12 w-12 sm:h-9 sm:w-9 object-contain ${invalidReason ? "opacity-70 grayscale" : ""}`} style={{ imageRendering: "pixelated" }} />
-                      <p className={`text-[11px] sm:text-[8px] truncate w-full text-center ${invalidReason ? "font-bold text-red-200" : "text-slate-300"}`}>{mascotName}</p>
+                      <p className={`text-[11px] sm:text-[8px] truncate w-full text-center ${invalidReason ? "font-bold text-red-200" : "text-slate-300"}`}>{mascotName} <LabStarsBadge origin={(m as { hatchedFromEggType?: string | null }).hatchedFromEggType} stars={(m as { labStars?: number }).labStars} /></p>
                       <p className="text-[10px] sm:text-[8px] text-slate-500">Nv.{m.level}</p>
                       {invalidReason ? (
                         <p className="text-[9px] sm:text-[7px] font-semibold text-red-300">Mega excedente · será removido</p>

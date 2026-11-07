@@ -367,6 +367,9 @@ function BankRow({
                   // eslint-disable-next-line @next/next/no-img-element
                   <img loading="lazy" decoding="async" src={originIcon.url} alt={originIcon.label} title={`Origem: ${originIcon.label}`} className="h-4 w-4 shrink-0 object-contain" />
                 )}
+                {mascot.hatchedFromEggType === "LAB" && mascot.labStars > 0 && (
+                  <span className="shrink-0 rounded border border-fuchsia-400/40 bg-fuchsia-500/10 px-1 py-px text-[9px] font-black text-amber-300" title={`Laboratório: ${mascot.labStars} de 5 estrelas`}>★{mascot.labStars}</span>
+                )}
                 {hungry && (
                   // eslint-disable-next-line @next/next/no-img-element
                   <img loading="lazy" decoding="async" src={HUNGER_ICON_URL} alt="Com fome" title="Este mascote está com fome" className="h-4 w-4 shrink-0 object-contain" />

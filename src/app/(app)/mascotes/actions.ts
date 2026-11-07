@@ -2099,6 +2099,7 @@ export async function getBankMascotsPageAction(input?: {
       restingUntil: Date | null;
       hatchedFromEggType: string | null;
       hatchedFromEggOrigin: string | null;
+      labStars: number;
       lastFedAt: Date | null;
       lastInteractedAt: Date | null;
       lastPlayedAt: Date | null;
@@ -2265,7 +2266,7 @@ export async function getBankMascotsPageAction(input?: {
       speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true,
       staticSpriteUrlOverride: true, animatedSpriteUrlOverride: true,
       arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
-      hatchedFromEggType: true, hatchedFromEggOrigin: true, lastFedAt: true, diseasedAt: true,
+      hatchedFromEggType: true, hatchedFromEggOrigin: true, labStars: true, lastFedAt: true, diseasedAt: true,
       lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
       ivRating: true, ivScore: true, performanceTag: true, hiddenAbilityUnlocked: true, abilityChoice: true,
       eventBonusStat: true, eventBonusValue: true,
@@ -2350,7 +2351,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     battleWins: number; battleLosses: number;
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
-    hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; megaStoneName: string | null;
+    hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; labStars: number; megaStoneName: string | null;
     hiddenAbilityUnlocked: boolean; abilityChoice: string | null; pokedexLink: { url: string | null; note: string | null };
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
@@ -2411,6 +2412,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         injuredAt: m.injuredAt, restingUntil: m.restingUntil, hatchedAt: m.hatchedAt,
         hatchedFromEggType: m.hatchedFromEggType,
         hatchedFromEggOrigin: m.hatchedFromEggOrigin,
+        labStars: m.labStars,
         megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
         hiddenAbilityUnlocked: m.hiddenAbilityUnlocked, abilityChoice: m.abilityChoice, pokedexLink: getPokedexLink(m.pokemonId),
         lastInteractedAt: m.lastInteractedAt,

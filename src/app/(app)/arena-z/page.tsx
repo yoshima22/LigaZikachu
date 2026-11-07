@@ -191,6 +191,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           where: { playerId: player.id },
           select: {
             id: true, pokemonId: true, nickname: true, level: true, isShiny: true,
+            hatchedFromEggType: true, labStars: true,
             primaryTypeOverride: true, secondaryTypeOverride: true,
             arenaState: true, restingUntil: true, injuredAt: true,
             bazarListed: true, happiness: true, preferredCombatRole: true,
@@ -1120,6 +1121,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     teamId={team.id}
                     mascots={availableMascots.map(m => ({
                       id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+                      hatchedFromEggType: m.hatchedFromEggType, labStars: m.labStars,
                       level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                       statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
                       preferredCombatRole: m.preferredCombatRole,
@@ -1225,6 +1227,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 m.routine?.status !== "ACTIVE"
               ).map(m => ({
                 id: m.id, pokemonId: m.pokemonId, nickname: m.nickname,
+                hatchedFromEggType: m.hatchedFromEggType, labStars: m.labStars,
                 primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
                 level: m.level, statForce: m.statForce, statAgility: m.statAgility,
                 statVitality: m.statVitality, statInstinct: m.statInstinct, statCharisma: m.statCharisma,
