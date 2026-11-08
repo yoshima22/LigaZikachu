@@ -20,7 +20,7 @@ export async function getBuyOrdersView(opts: {
   mine: boolean;
   kind?: "MASCOT" | "ITEM";
   page: number;
-}): Promise<{ orders: BuyOrderView[]; total: number; page: number; totalPages: number }> {
+}): Promise<{ orders: BuyOrderView[]; total: number; totalOrders: number; page: number; totalPages: number }> {
   const now = new Date();
   const where = {
     status: "ACTIVE",
@@ -28,17 +28,28 @@ export async function getBuyOrdersView(opts: {
     ...(opts.mine && opts.playerId ? { buyerId: opts.playerId } : {}),
     ...(opts.kind ? { kind: opts.kind } : {}),
   };
-  const total = await prisma.bazarBuyOrder.count({ where });
+  // A paginação é por jogador (cada um com no máx. 6 pedidos), mais recentes primeiro.
+  const groups = await prisma.bazarBuyOrder.groupBy({
+    by: ["buyerId"],
+    where,
+    _count: { _all: true },
+    _max: { createdAt: true },
+    orderBy: { _max: { createdAt: "desc" } },
+  });
+  const total = groups.length;
+  const totalOrders = groups.reduce((n, g) => n + g._count._all, 0);
   const totalPages = Math.max(1, Math.ceil(total / BUY_ORDERS_PAGE_SIZE));
   const page = Math.min(Math.max(1, opts.page || 1), totalPages);
-  const rows = await prisma.bazarBuyOrder.findMany({
-    where,
-    orderBy: { createdAt: "desc" },
-    skip: (page - 1) * BUY_ORDERS_PAGE_SIZE,
-    take: BUY_ORDERS_PAGE_SIZE,
-    include: { buyer: { select: { id: true, displayName: true } } },
-  });
-  if (rows.length === 0) return { orders: [], total, page, totalPages };
+  const pageIds = groups.slice((page - 1) * BUY_ORDERS_PAGE_SIZE, page * BUY_ORDERS_PAGE_SIZE).map((g) => g.buyerId);
+  const unsorted = pageIds.length
+    ? await prisma.bazarBuyOrder.findMany({
+        where: { ...where, buyerId: { in: pageIds } },
+        orderBy: { createdAt: "desc" },
+        include: { buyer: { select: { id: true, displayName: true, avatarUrl: true } } },
+      })
+    : [];
+  const rows = [...unsorted].sort((x, y) => pageIds.indexOf(x.buyerId) - pageIds.indexOf(y.buyerId));
+  if (rows.length === 0) return { orders: [], total, totalOrders, page, totalPages };
 
   const buyerIds = [...new Set(rows.map((r) => r.buyerId))];
   const wallets = await prisma.zikaCoinWallet.findMany({
@@ -99,7 +110,7 @@ export async function getBuyOrdersView(opts: {
         ? freeMascots.some((m) => m.pokemonId === r.pokemonId && m.level >= r.minLevel && matchesMascotRequirements(r, m))
         : (itemHave.get(r.shopItemId ?? "") ?? 0) >= r.quantity),
   }));
-  return { orders, total, page, totalPages };
+  return { orders, total, totalOrders, page, totalPages };
 }
 
 /** Itens elegíveis para o formulário de novo pedido (só nome — sem imagens pesadas). */

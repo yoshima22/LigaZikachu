@@ -55,7 +55,7 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
             {c.label}
           </Link>
         ))}
-        <span className="ml-auto self-center text-[10px] text-slate-500">{view.total} {view.total === 1 ? "pedido" : "pedidos"}</span>
+        <span className="ml-auto self-center text-[10px] text-slate-500">{view.totalOrders} {view.totalOrders === 1 ? "pedido" : "pedidos"} · {view.total} {view.total === 1 ? "jogador" : "jogadores"}</span>
       </div>
 
       <BuyOrdersPanel orders={view.orders} playerId={playerId} species={SPECIES} items={items} myActiveCount={myActiveCount} />
@@ -63,7 +63,7 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
       {view.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 pt-2 text-xs text-slate-400">
           {view.page > 1 && <Link className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200" href={href(kind ?? "", mine, view.page - 1)}>← Anterior</Link>}
-          <span>Página {view.page} de {view.totalPages} · {BUY_ORDERS_PAGE_SIZE} por página</span>
+          <span>Página {view.page} de {view.totalPages} · {BUY_ORDERS_PAGE_SIZE} jogadores por página</span>
           {view.page < view.totalPages && <Link className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200" href={href(kind ?? "", mine, view.page + 1)}>Próxima →</Link>}
         </div>
       )}

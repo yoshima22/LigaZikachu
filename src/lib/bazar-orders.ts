@@ -1,9 +1,9 @@
 // Loja de Pedidos do Bazar — constantes e tipos (as mutações ficam em bazar/actions.ts).
-export const BUY_ORDER_MAX_ACTIVE = 5;
+export const BUY_ORDER_MAX_ACTIVE = 6; // limite próprio, separado dos 8 anúncios do bazar
 export const BUY_ORDER_MAX_PRICE = 1_000_000;
 export const BUY_ORDER_MAX_QUANTITY = 99;
 export const BUY_ORDER_DURATIONS = [3, 7, 14] as const;
-export const BUY_ORDERS_PAGE_SIZE = 12;
+export const BUY_ORDERS_PAGE_SIZE = 6; // jogadores por página (cada um com até 6 pedidos)
 export const BUY_ORDER_NO_FUNDS_MESSAGE =
   "Este jogador não tem esse valor disponível no momento. Volte mais tarde — o pedido continua aberto.";
 
@@ -29,7 +29,7 @@ export type BuyOrderView = {
   priceCoins: number;
   expiresAt: string;
   createdAt: string;
-  buyer: { id: string; displayName: string };
+  buyer: { id: string; displayName: string; avatarUrl: string | null };
   mine: boolean;
   /** O saldo atual do criador cobre o valor? (não revela o saldo exato) */
   covered: boolean;

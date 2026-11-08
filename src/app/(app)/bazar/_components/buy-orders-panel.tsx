@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useState, useTransition } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Clock, Loader2, PackageSearch, Plus, Search, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
@@ -331,6 +332,15 @@ export function BuyOrdersPanel({ orders, playerId, species, items, myActiveCount
   const [selling, setSelling] = useState<BuyOrderView | null>(null);
   const [creating, setCreating] = useState(false);
   const [cancelling, startCancel] = useTransition();
+  const groups = useMemo(() => {
+    const map = new Map<string, { buyer: BuyOrderView["buyer"]; mine: boolean; orders: BuyOrderView[] }>();
+    for (const o of orders) {
+      const g = map.get(o.buyer.id) ?? { buyer: o.buyer, mine: o.mine, orders: [] };
+      g.orders.push(o);
+      map.set(o.buyer.id, g);
+    }
+    return [...map.values()];
+  }, [orders]);
 
   function cancel(id: string) {
     startCancel(async () => {
@@ -356,47 +366,70 @@ export function BuyOrdersPanel({ orders, playerId, species, items, myActiveCount
           <p className="text-sm text-slate-500">Nenhum pedido aberto por aqui.</p>
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-          {orders.map((o) => (
-            <article key={o.id} className={`flex flex-col gap-3 rounded-2xl border bg-slate-950/60 p-3 transition-colors ${o.canFulfill && o.covered ? "border-emerald-400/40" : "border-border"}`}>
-              <OrderThumb order={o} />
-              <div className="min-w-0 flex-1 space-y-1">
-                <h3 className="truncate text-sm font-bold text-slate-100">
-                  {o.label}{o.kind === "ITEM" && o.quantity > 1 ? ` ×${o.quantity}` : ""}
-                </h3>
-                <p className="text-[11px] text-slate-500">
-                  {o.kind === "MASCOT" ? `Mascote${o.minLevel > 1 ? ` · nível ${o.minLevel}+` : ""}` : "Item"} · por {o.mine ? "você" : o.buyer.displayName}
-                </p>
-                {o.kind === "MASCOT" && (o.personality || o.eggType || o.topStats) && (
-                  <div className="flex flex-wrap gap-1 pt-0.5">
-                    {o.personality && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[o.personality] ?? o.personality}</span>}
-                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {parseEggPrices(o.eggType).map((e) => `${ORDER_EGG_LABEL[e.type] ?? e.type}${e.price ? ` ${e.price.toLocaleString("pt-BR")}` : ""}`).join(" · ")}</span>}
-                    {o.topStats && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">Top: {o.topStats.split(",").map((k) => ORDER_STAT_LABEL[k as OrderStatKey] ?? k).join(" · ")}</span>}
-                  </div>
+        <div className="space-y-5">
+          {groups.map((g) => (
+            <section key={g.buyer.id} className={`overflow-hidden rounded-2xl border ${g.mine ? "border-[#FFCB05]/40" : "border-border"} bg-slate-950/40`}>
+              <header className="flex items-center gap-3 border-b border-border/70 bg-gradient-to-r from-[#1A1A2E] to-[#201d38] px-4 py-3">
+                {g.buyer.avatarUrl ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={g.buyer.avatarUrl} alt="" className="h-10 w-10 rounded-full border border-[#FFCB05]/40 object-cover" />
+                ) : (
+                  <span className="flex h-10 w-10 items-center justify-center rounded-full border border-[#FFCB05]/40 bg-slate-800 text-sm font-black text-[#FFCB05]">
+                    {g.buyer.displayName.slice(0, 1).toUpperCase()}
+                  </span>
                 )}
-                <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[11px] font-black text-[#FFCB05]">💰 {parseEggPrices(o.eggType).some((e) => e.price) ? "a partir de " : ""}{o.priceCoins.toLocaleString("pt-BR")} ZC</span>
-                  {o.covered ? (
-                    <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">✓ Venda imediata</span>
-                  ) : (
-                    <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">⏳ Sem saldo agora</span>
-                  )}
-                  {o.canFulfill && <span className="flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300"><Sparkles size={10} /> Você tem</span>}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-sm font-bold text-slate-100">{g.mine ? "Seus pedidos" : g.buyer.displayName}</p>
+                  <p className="text-[11px] text-slate-500">{g.orders.length} {g.orders.length === 1 ? "pedido aberto" : "pedidos abertos"}{g.mine ? ` · limite ${BUY_ORDER_MAX_ACTIVE}` : " · quer comprar:"}</p>
                 </div>
-                <p className="flex items-center gap-1 pt-1 text-[10px] text-slate-500"><Clock size={10} /> expira em {timeLeft(o.expiresAt)}</p>
+                {!g.mine && (
+                  <Link href={`/jogadores/${g.buyer.id}`} className="rounded-lg border border-border px-2.5 py-1 text-[10px] font-semibold text-slate-400 hover:text-slate-200">Ver perfil</Link>
+                )}
+              </header>
+              <div className="grid gap-4 p-4 sm:grid-cols-2 xl:grid-cols-3">
+                {g.orders.map((o) => (
+                  <article key={o.id} className={`flex flex-col gap-3 rounded-2xl border bg-slate-950/60 p-3 transition-colors ${o.canFulfill && o.covered ? "border-emerald-400/40" : "border-border"}`}>
+                    <OrderThumb order={o} />
+                    <div className="min-w-0 flex-1 space-y-1">
+                      <h3 className="truncate text-sm font-bold text-slate-100">
+                        {o.label}{o.kind === "ITEM" && o.quantity > 1 ? ` ×${o.quantity}` : ""}
+                      </h3>
+                      <p className="text-[11px] text-slate-500">
+                        {o.kind === "MASCOT" ? `Mascote${o.minLevel > 1 ? ` · nível ${o.minLevel}+` : ""}` : "Item"} · por {o.mine ? "você" : o.buyer.displayName}
+                      </p>
+                      {o.kind === "MASCOT" && (o.personality || o.eggType || o.topStats) && (
+                        <div className="flex flex-wrap gap-1 pt-0.5">
+                          {o.personality && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[o.personality] ?? o.personality}</span>}
+                          {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {parseEggPrices(o.eggType).map((e) => `${ORDER_EGG_LABEL[e.type] ?? e.type}${e.price ? ` ${e.price.toLocaleString("pt-BR")}` : ""}`).join(" · ")}</span>}
+                          {o.topStats && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">Top: {o.topStats.split(",").map((k) => ORDER_STAT_LABEL[k as OrderStatKey] ?? k).join(" · ")}</span>}
+                        </div>
+                      )}
+                      <div className="flex flex-wrap items-center gap-1.5 pt-1">
+                        <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[11px] font-black text-[#FFCB05]">💰 {parseEggPrices(o.eggType).some((e) => e.price) ? "a partir de " : ""}{o.priceCoins.toLocaleString("pt-BR")} ZC</span>
+                        {o.covered ? (
+                          <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">✓ Venda imediata</span>
+                        ) : (
+                          <span className="rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold text-amber-300">⏳ Sem saldo agora</span>
+                        )}
+                        {o.canFulfill && <span className="flex items-center gap-1 rounded-full bg-sky-500/15 px-2 py-0.5 text-[10px] font-semibold text-sky-300"><Sparkles size={10} /> Você tem</span>}
+                      </div>
+                      <p className="flex items-center gap-1 pt-1 text-[10px] text-slate-500"><Clock size={10} /> expira em {timeLeft(o.expiresAt)}</p>
+                    </div>
+                    {o.mine ? (
+                      <button onClick={() => cancel(o.id)} disabled={cancelling}
+                        className="flex items-center justify-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50">
+                        <Trash2 size={12} /> Cancelar pedido
+                      </button>
+                    ) : (
+                      <button onClick={() => (playerId ? setSelling(o) : toast.error("Faça login para vender."))}
+                        className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors ${o.covered ? "bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]" : "border border-amber-400/30 text-amber-200 hover:bg-amber-400/10"}`}>
+                        {o.covered ? "Vender agora" : "Ver detalhes"}
+                      </button>
+                    )}
+                  </article>
+                ))}
               </div>
-              {o.mine ? (
-                <button onClick={() => cancel(o.id)} disabled={cancelling}
-                  className="flex items-center justify-center gap-1.5 rounded-xl border border-red-500/30 px-3 py-2 text-xs font-semibold text-red-300 hover:bg-red-500/10 disabled:opacity-50">
-                  <Trash2 size={12} /> Cancelar pedido
-                </button>
-              ) : (
-                <button onClick={() => (playerId ? setSelling(o) : toast.error("Faça login para vender."))}
-                  className={`rounded-xl px-3 py-2 text-xs font-bold transition-colors ${o.covered ? "bg-[#FFCB05] text-[#1A1A2E] hover:bg-[#FFD700]" : "border border-amber-400/30 text-amber-200 hover:bg-amber-400/10"}`}>
-                  {o.covered ? "Vender agora" : "Ver detalhes"}
-                </button>
-              )}
-            </article>
+            </section>
           ))}
         </div>
       )}
