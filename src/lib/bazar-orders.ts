@@ -43,9 +43,9 @@ export type OrderStatKey = (typeof ORDER_STAT_KEYS)[number];
 export const ORDER_STAT_LABEL: Record<OrderStatKey, string> = {
   statForce: "Força", statAgility: "Agilidade", statCharisma: "Carisma", statInstinct: "Instinto", statVitality: "Vitalidade",
 };
-export const ORDER_EGG_TYPES = ["COMMON", "RARE", "SPECIAL", "LAB", "EVENT", "CELESTIAL"] as const;
+export const ORDER_EGG_TYPES = ["COMMON", "RARE", "SPECIAL", "LAB", "EVENT"] as const;
 export const ORDER_EGG_LABEL: Record<string, string> = {
-  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "Ovo de Laboratório", EVENT: "Ovo de Evento", CELESTIAL: "Ovo Celestial",
+  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "Ovo de Laboratório", EVENT: "Ovo de Evento",
 };
 
 export type MascotReq = { personality?: string | null; eggType?: string | null; topStats?: string | null };
