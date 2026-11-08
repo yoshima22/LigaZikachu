@@ -22,6 +22,7 @@ Decisões:
 - **Taxa**: nenhuma ao vendedor (igual compra direta). Cofre do Miauvadão recebe os 15% "faucet" como em `buyListing`.
 - **Abuso**: não vende para si mesmo; respeita `BazarPlayerTradeBan`; preço/dono/saldo validados no servidor.
 - **Notificações** (categoria `BAZAR`, in-game + push): criador ("Pedido atendido") e vendedor ("Venda concluída"); também grava `BazarTransaction` (aparece na atividade/histórico) e `recordPlayerActivity`.
+- **Sem anúncio fantasma**: ao vender a um pedido, anúncios do vendedor com aquele mascote (ou, se faltar estoque livre, aquele item) são cancelados na mesma transação (`_cancelSellerListingsFor` reusa `_cancelListingTx`: devolve escrow e rejeita propostas). Leilão com lances bloqueia a venda; pacotes (bundle) não são desfeitos. Mascote reservado em proposta de outro anúncio continua bloqueado pelo erro padrão.
 - **Cancelar**: só o dono, `ACTIVE → CANCELLED`.
 
 ## Arquivos

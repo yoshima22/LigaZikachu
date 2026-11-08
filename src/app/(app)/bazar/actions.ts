@@ -1106,6 +1106,41 @@ export async function createListing(input: CreateListingInput): Promise<{ error?
 
 // ── Cancelar anúncio ──────────────────────────────────────────────────────────
 
+/** Cancela um anúncio dentro de uma transação: devolve o escrow e rejeita propostas. Retorna os userIds dos proponentes afetados. */
+async function _cancelListingTx(
+  tx: TxClient,
+  listing: { id: string; category: string; payload: unknown },
+  ownerId: string,
+): Promise<string[]> {
+  const listingId = listing.id;
+  const player = { id: ownerId };
+  let rejectedProposerUserIds: string[] = [];
+  await tx.bazarListing.update({ where: { id: listingId }, data: { status: "CANCELLED" } });
+  await _returnEscrow(tx, listing, player.id);
+  // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
+  const pendingProposals = await tx.bazarProposal.findMany({
+    where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
+    select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
+  });
+  rejectedProposerUserIds = pendingProposals.map((proposal) => proposal.proposer.userId);
+  for (const proposal of pendingProposals) {
+    await _releaseProposalEscrow(tx, proposal);
+    const direct = parseDirectState(proposal.message);
+    if (direct) {
+      await _releaseProposalOffers(tx, direct.ownerItems, player.id);
+      if (direct.ownerCoinsEscrowed && direct.ownerCoins > 0) {
+        await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: direct.ownerCoins } }, create: { playerId: player.id, balance: direct.ownerCoins, totalEarned: 0 } });
+      }
+    }
+  }
+  await tx.bazarProposal.updateMany({
+    where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
+    data: { status: "REJECTED" },
+  });
+  return rejectedProposerUserIds;
+}
+
+
 export async function cancelListing(listingId: string): Promise<{ error?: string }> {
   try {
     const user = await getSessionUser();
@@ -1127,28 +1162,7 @@ export async function cancelListing(listingId: string): Promise<{ error?: string
     let rejectedProposerUserIds: string[] = [];
 
     await prisma.$transaction(async (tx) => {
-      await tx.bazarListing.update({ where: { id: listingId }, data: { status: "CANCELLED" } });
-      await _returnEscrow(tx, listing, player.id);
-      // Rejeitar proposals pendentes e liberar mascotes oferecidos nelas.
-      const pendingProposals = await tx.bazarProposal.findMany({
-        where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
-        select: { id: true, proposerId: true, coinsOffer: true, coinsEscrowed: true, ligaCashOffer: true, ligaCashEscrowed: true, itemsOffer: true, message: true, proposer: { select: { userId: true } } },
-      });
-      rejectedProposerUserIds = pendingProposals.map((proposal) => proposal.proposer.userId);
-      for (const proposal of pendingProposals) {
-        await _releaseProposalEscrow(tx, proposal);
-        const direct = parseDirectState(proposal.message);
-        if (direct) {
-          await _releaseProposalOffers(tx, direct.ownerItems, player.id);
-          if (direct.ownerCoinsEscrowed && direct.ownerCoins > 0) {
-            await tx.zikaCoinWallet.upsert({ where: { playerId: player.id }, update: { balance: { increment: direct.ownerCoins } }, create: { playerId: player.id, balance: direct.ownerCoins, totalEarned: 0 } });
-          }
-        }
-      }
-      await tx.bazarProposal.updateMany({
-        where: { listingId, status: { in: ["PENDING", "ACCEPTED"] } },
-        data: { status: "REJECTED" },
-      });
+      rejectedProposerUserIds = await _cancelListingTx(tx, listing, player.id);
     });
 
     revalidateBazar();
@@ -4782,6 +4796,43 @@ async function buyOrderOfferItem(
   return { type: item.type, quantity: order.quantity, displayName: item.name, shopItemId: item.id };
 }
 
+/** Cancela anúncios do vendedor que contêm o que ele vai vender a um pedido (mascote, ou item quando o estoque livre não basta). */
+async function _cancelSellerListingsFor(tx: TxClient, sellerId: string, offer: ProposalOfferItem): Promise<string[]> {
+  const listings = await tx.bazarListing.findMany({
+    where: { playerId: sellerId, status: { in: ["ACTIVE", "RESERVED"] }, category: offer.mascotId ? "MASCOT" : "ITEM" },
+    select: { id: true, category: true, payload: true, listingType: true, currentBidPlayerId: true },
+  });
+  const matches = (payload: Record<string, unknown>) => {
+    if (Array.isArray(payload.bundleItems) && payload.bundleItems.length) return false; // pacotes não são desfeitos aqui
+    if (offer.mascotId) return payload.mascotId === offer.mascotId;
+    if (offer.shopItemId) return payload.shopItemId === offer.shopItemId;
+    return payload.itemType === offer.type;
+  };
+  const freeStock = async () => {
+    if (offer.mascotId) return 0;
+    if (offer.type === "FOOD" || offer.type === "SWEET") {
+      const f = await tx.mascotFoodItem.findUnique({ where: { playerId_type: { playerId: sellerId, type: offer.type } } });
+      return f ? f.quantity - f.boundQuantity : 0;
+    }
+    const inv = await tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: sellerId, itemId: offer.shopItemId ?? "" } } });
+    return inv ? inv.quantity - inv.boundQuantity : 0;
+  };
+  const userIds: string[] = [];
+  for (const l of listings) {
+    if (!matches(l.payload as Record<string, unknown>)) continue;
+    if (!offer.mascotId && (await freeStock()) >= offer.quantity) break; // item: só cancela se faltar estoque livre
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${l.id}))`;
+    const fresh = await tx.bazarListing.findUnique({ where: { id: l.id }, select: { status: true, currentBidPlayerId: true, listingType: true } });
+    if (!fresh || (fresh.status !== "ACTIVE" && fresh.status !== "RESERVED")) continue;
+    if (fresh.listingType === "AUCTION" && fresh.currentBidPlayerId) {
+      throw new Error("Este item está em um leilão com lances e não pode ser vendido agora.");
+    }
+    await tx.bazarListing.update({ where: { id: l.id }, data: { status: "CANCELLED" } });
+    userIds.push(...(await _cancelListingTx(tx, l, sellerId)));
+  }
+  return userIds;
+}
+
 /** Mascotes livres do jogador que atendem a um pedido de espécie (carregado só ao clicar em Vender). */
 export async function getBuyOrderSellOptions(orderId: string): Promise<{
   error?: string;
@@ -4795,10 +4846,20 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
     const order = await prisma.bazarBuyOrder.findUnique({ where: { id: String(orderId) } });
     if (!order || order.kind !== "MASCOT" || order.pokemonId == null) return { error: "Pedido não encontrado." };
     await prepareBazarMascotAvailability(player.id);
+    // Mascotes já anunciados pelo próprio jogador entram: o anúncio é removido na venda.
+    const own = await prisma.bazarListing.findMany({
+      where: { playerId: player.id, status: { in: ["ACTIVE", "RESERVED"] }, category: "MASCOT" },
+      select: { payload: true },
+    });
+    const listedIds = own.flatMap((l) => {
+      const pl = l.payload as Record<string, unknown>;
+      return typeof pl.mascotId === "string" && !Array.isArray(pl.bundleItems) ? [pl.mascotId] : [];
+    });
     const mascots = await prisma.mascot.findMany({
       where: {
         playerId: player.id, pokemonId: order.pokemonId, level: { gte: order.minLevel },
-        bazarListed: false, isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
+        OR: [{ bazarListed: false }, { id: { in: listedIds } }],
+        isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
         ...(order.personality ? { personality: order.personality as never } : {}),
         ...(order.eggType ? { hatchedFromEggType: { in: order.eggType.split(",") as never[] } } : {}),
       },
@@ -4848,6 +4909,7 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
     const qtyLabel = order.kind === "ITEM" && order.quantity > 1 ? ` x${order.quantity}` : "";
     const desc = `${order.label}${qtyLabel} vendido por ${price} ZC (Loja de Pedidos)`;
 
+    let cancelledProposerUserIds: string[] = [];
     await prisma.$transaction(async (tx) => {
       // Dois vendedores no mesmo pedido: o lock serializa e o claim abaixo garante um só vencedor.
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"buyorder:" + order.id}))`;
@@ -4868,6 +4930,9 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
         update: { balance: { increment: price } },
         create: { playerId: player.id, balance: price, totalEarned: price },
       });
+
+      // Sem anúncio fantasma: se o que está sendo vendido já estava anunciado, tira o anúncio do ar.
+      cancelledProposerUserIds = await _cancelSellerListingsFor(tx, player.id, offer);
 
       const reserved = await _reserveProposalOffers(tx, player.id, [offer]);
       await _deliverProposalOffers(tx, reserved, player.id, order.buyerId);
@@ -4907,6 +4972,7 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
     revalidatePath("/mascotes");
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${order.buyer.userId}`);
+    for (const uid of cancelledProposerUserIds) revalidateTag(`nav-${uid}`);
     after(() => Promise.allSettled([
       sendNotificationToPlayers([order.buyerId], { title: `Pedido atendido: ${order.label}${qtyLabel}`, body: `${sellerName} vendeu para o seu pedido por ${price.toLocaleString("pt-BR")} ZC.`, url: "/bazar?tab=pedidos&mine=1", category: "BAZAR" }),
       sendNotificationToPlayers([player.id], { title: `Venda concluída: ${order.label}${qtyLabel}`, body: `Você recebeu ${price.toLocaleString("pt-BR")} ZC de ${buyerName}.`, url: "/bazar?tab=pedidos", category: "BAZAR" }),
