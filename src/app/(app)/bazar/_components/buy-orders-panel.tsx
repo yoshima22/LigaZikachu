@@ -4,8 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Clock, Loader2, PackageSearch, Plus, Search, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
-import { getSpriteUrl } from "@/lib/mascot-data";
-import { BUY_ORDER_DURATIONS, BUY_ORDER_NO_FUNDS_MESSAGE, BUY_ORDER_MAX_ACTIVE, type BuyOrderView } from "@/lib/bazar-orders";
+import { getSpriteUrl, PERSONALITIES, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { BUY_ORDER_DURATIONS, BUY_ORDER_NO_FUNDS_MESSAGE, BUY_ORDER_MAX_ACTIVE, ORDER_EGG_LABEL, ORDER_EGG_TYPES, ORDER_STAT_KEYS, ORDER_STAT_LABEL, type OrderStatKey, type BuyOrderView } from "@/lib/bazar-orders";
 import { cancelBuyOrder, createBuyOrder, getBuyOrderSellOptions, sellToBuyOrder } from "../actions";
 
 type Props = {
@@ -109,7 +109,7 @@ function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => vo
             <p className="flex items-center gap-2 text-xs text-slate-400"><Loader2 size={14} className="animate-spin" /> Procurando seus mascotes…</p>
           ) : mascots.length === 0 ? (
             <p className="rounded-xl border border-dashed border-border p-3 text-xs text-slate-400">
-              Você não tem um {order.label} livre{order.minLevel > 1 ? ` com nível ${order.minLevel}+` : ""}. Mascotes equipados, protegidos ou reservados não aparecem.
+              Você não tem um {order.label} livre que atenda ao pedido. Mascotes equipados, protegidos ou reservados não aparecem.
             </p>
           ) : (
             <div className="space-y-1.5">
@@ -157,6 +157,9 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
   const [shopItemId, setShopItemId] = useState<string>("");
   const [minLevel, setMinLevel] = useState(1);
   const [quantity, setQuantity] = useState(1);
+  const [personality, setPersonality] = useState("");
+  const [eggType, setEggType] = useState("");
+  const [topStats, setTopStats] = useState<OrderStatKey[]>([]);
   const [price, setPrice] = useState("");
   const [days, setDays] = useState<number>(7);
   const [error, setError] = useState<string | null>(null);
@@ -175,7 +178,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
     setError(null);
     start(async () => {
       const r = await createBuyOrder({
-        kind, pokemonId: pokemonId ?? undefined, minLevel, shopItemId: shopItemId || undefined,
+        kind, pokemonId: pokemonId ?? undefined, minLevel, personality: personality || undefined, eggType: eggType || undefined, topStats: topStats.length ? topStats : undefined, shopItemId: shopItemId || undefined,
         quantity, priceCoins: Number(price), durationDays: days,
       });
       if (r.error) { setError(r.error); return; }
@@ -225,10 +228,43 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
         </div>
 
         {kind === "MASCOT" ? (
-          <div className="space-y-1.5">
-            <label className="text-xs font-semibold text-slate-300">Nível mínimo</label>
-            <input type="number" min={1} max={100} value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))}
-              className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+          <div className="space-y-3 rounded-xl border border-border/70 bg-slate-900/40 p-3">
+            <p className="text-[11px] text-slate-500">Requisitos (opcionais): a venda automática só acontece com um mascote que atenda a tudo que você marcar.</p>
+            <div className="grid grid-cols-3 gap-2">
+              <label className="space-y-1 text-[11px] font-semibold text-slate-300">Nível mín.
+                <input type="number" min={1} max={100} value={minLevel} onChange={(e) => setMinLevel(Number(e.target.value))}
+                  className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+              </label>
+              <label className="col-span-2 space-y-1 text-[11px] font-semibold text-slate-300">Personalidade
+                <select value={personality} onChange={(e) => setPersonality(e.target.value)}
+                  className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60">
+                  <option value="">Qualquer</option>
+                  {PERSONALITIES.map((p) => <option key={p} value={p}>{PERSONALITY_LABEL[p] ?? p}</option>)}
+                </select>
+              </label>
+            </div>
+            <label className="block space-y-1 text-[11px] font-semibold text-slate-300">Origem do ovo
+              <select value={eggType} onChange={(e) => setEggType(e.target.value)}
+                className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60">
+                <option value="">Qualquer</option>
+                {ORDER_EGG_TYPES.map((t) => <option key={t} value={t}>{ORDER_EGG_LABEL[t]}</option>)}
+              </select>
+            </label>
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold text-slate-300">3 atributos mais altos <span className="font-normal text-slate-500">({topStats.length}/3 — deixe vazio para qualquer)</span></p>
+              <div className="flex flex-wrap gap-1.5">
+                {ORDER_STAT_KEYS.map((k) => {
+                  const on = topStats.includes(k);
+                  return (
+                    <button key={k} type="button" onClick={() => setTopStats((cur) => on ? cur.filter((x) => x !== k) : cur.length >= 3 ? cur : [...cur, k])}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${on ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"}`}>
+                      {ORDER_STAT_LABEL[k]}
+                    </button>
+                  );
+                })}
+              </div>
+              {topStats.length > 0 && topStats.length < 3 && <p className="text-[10px] text-amber-300">Marque exatamente 3 atributos.</p>}
+            </div>
           </div>
         ) : (
           <div className="space-y-1.5">
@@ -255,11 +291,10 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
         </div>
 
         <p className="rounded-xl bg-slate-900/70 p-3 text-[11px] leading-relaxed text-slate-400">
-          Nada é cobrado agora. O ZC só sai da sua conta quando alguém vender — e se você estiver sem saldo nesse momento, a venda é bloqueada e o pedido continua aberto.
-          Limite de {BUY_ORDER_MAX_ACTIVE} pedidos abertos.
+          Nada é cobrado agora. O ZC só sai da sua conta quando alguém vender. Máximo de {BUY_ORDER_MAX_ACTIVE} pedidos abertos.
         </p>
         {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
-        <button onClick={submit} disabled={pending || !chosen || !(Number(price) > 0)}
+        <button onClick={submit} disabled={pending || !chosen || !(Number(price) > 0) || (topStats.length > 0 && topStats.length < 3)}
           className="w-full rounded-xl bg-[#FFCB05] px-4 py-2.5 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
           {pending ? "Publicando…" : "Publicar pedido"}
         </button>
@@ -309,6 +344,13 @@ export function BuyOrdersPanel({ orders, playerId, species, items, myActiveCount
                 <p className="text-[11px] text-slate-500">
                   {o.kind === "MASCOT" ? `Mascote${o.minLevel > 1 ? ` · nível ${o.minLevel}+` : ""}` : "Item"} · por {o.mine ? "você" : o.buyer.displayName}
                 </p>
+                {o.kind === "MASCOT" && (o.personality || o.eggType || o.topStats) && (
+                  <div className="flex flex-wrap gap-1 pt-0.5">
+                    {o.personality && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[o.personality] ?? o.personality}</span>}
+                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {ORDER_EGG_LABEL[o.eggType] ?? o.eggType}</span>}
+                    {o.topStats && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">Top: {o.topStats.split(",").map((k) => ORDER_STAT_LABEL[k as OrderStatKey] ?? k).join(" · ")}</span>}
+                  </div>
+                )}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
                   <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[11px] font-black text-[#FFCB05]">💰 {o.priceCoins.toLocaleString("pt-BR")} ZC</span>
                   {o.covered ? (

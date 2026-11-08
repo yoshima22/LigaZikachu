@@ -3460,6 +3460,9 @@ model BazarBuyOrder {
   label       String // "Pikachu" / "Ração x3"
   pokemonId   Int? // MASCOT: espécie desejada
   minLevel    Int      @default(1)
+  personality String? // MASCOT: personalidade exigida (opcional)
+  eggType     String? // MASCOT: tipo do ovo de origem exigido (opcional)
+  topStats    String? // MASCOT: 3 atributos mais altos exigidos, ex. "statForce,statAgility,statVitality"
   shopItemId  String? // ITEM: item de inventário desejado
   quantity    Int      @default(1)
   imageUrl    String?

@@ -40,12 +40,12 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
     <div className="space-y-5">
       <section className="rounded-2xl border border-sky-400/25 bg-gradient-to-br from-sky-500/10 via-slate-950/80 to-[#FFCB05]/5 p-5">
         <p className="text-[10px] font-black uppercase tracking-[0.22em] text-sky-300">📋 Loja de Pedidos</p>
-        <h2 className="mt-1 text-base font-bold text-slate-50">Diga o que você quer — quem tem, vende na hora.</h2>
-        <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-400">
-          Publique um pedido com o valor que paga por um mascote ou item. Qualquer jogador que tenha o que você procura pode vender com um clique:
-          o ZC sai da sua conta e o item chega até você no mesmo instante. Nada fica reservado — se faltar saldo no momento da venda, ela é bloqueada
-          e o pedido segue aberto. Pedidos de jogadores sem saldo aparecem como <span className="text-amber-300">“Sem saldo agora”</span>.
-        </p>
+        <h2 className="mt-1 text-base font-bold text-slate-50">Peça o que você quer. Quem tiver, vende na hora.</h2>
+        <ol className="mt-3 grid gap-2 text-xs text-slate-400 sm:grid-cols-3">
+          <li className="rounded-xl bg-black/20 p-3"><strong className="block text-slate-200">1. Faça o pedido</strong>Escolha o mascote ou item e quanto você paga.</li>
+          <li className="rounded-xl bg-black/20 p-3"><strong className="block text-slate-200">2. Alguém vende</strong>Quem tem o que você pediu vende com um clique.</li>
+          <li className="rounded-xl bg-black/20 p-3"><strong className="block text-slate-200">3. Pago na hora</strong>O ZC sai da sua conta só nesse momento. Sem saldo, a venda espera.</li>
+        </ol>
       </section>
 
       <div className="flex flex-wrap gap-2">

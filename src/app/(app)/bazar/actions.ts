@@ -4,7 +4,7 @@ import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
-import { getMascotRarity, getPokemonName, type MascotRarity } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, PERSONALITIES, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES, TRAINING_MILESTONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { canonicalizeReservedInventoryOffer } from "@/lib/bazar-offer-items";
@@ -50,6 +50,9 @@ import {
   BUY_ORDER_MAX_PRICE,
   BUY_ORDER_MAX_QUANTITY,
   BUY_ORDER_NO_FUNDS_MESSAGE,
+  ORDER_EGG_TYPES,
+  ORDER_STAT_KEYS,
+  matchesMascotRequirements,
 } from "@/lib/bazar-orders";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
@@ -4635,6 +4638,9 @@ type BuyOrderInput = {
   kind: "MASCOT" | "ITEM";
   pokemonId?: number;
   minLevel?: number;
+  personality?: string;
+  eggType?: string;
+  topStats?: string[];
   shopItemId?: string;
   quantity?: number;
   priceCoins: number;
@@ -4660,6 +4666,9 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
     let shopItemId: string | null = null;
     let minLevel = 1;
     let quantity = 1;
+    let personality: string | null = null;
+    let eggType: string | null = null;
+    let topStats: string | null = null;
     if (input.kind === "MASCOT") {
       pokemonId = Math.floor(Number(input.pokemonId));
       if (!Number.isInteger(pokemonId) || pokemonId < 1 || pokemonId > 1025) {
@@ -4667,6 +4676,21 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
       }
       minLevel = Math.min(100, Math.max(1, Math.floor(Number(input.minLevel) || 1)));
       label = getPokemonName(pokemonId);
+      if (input.personality) {
+        if (!(PERSONALITIES as readonly string[]).includes(input.personality)) return { error: "Personalidade inválida." };
+        personality = input.personality;
+      }
+      if (input.eggType) {
+        if (!(ORDER_EGG_TYPES as readonly string[]).includes(input.eggType)) return { error: "Origem do ovo inválida." };
+        eggType = input.eggType;
+      }
+      if (input.topStats?.length) {
+        const keys = [...new Set(input.topStats)];
+        if (keys.length !== 3 || keys.some((k) => !(ORDER_STAT_KEYS as readonly string[]).includes(k))) {
+          return { error: "Escolha exatamente 3 atributos." };
+        }
+        topStats = ORDER_STAT_KEYS.filter((k) => keys.includes(k)).join(",");
+      }
     } else if (input.kind === "ITEM") {
       quantity = Math.floor(Number(input.quantity) || 1);
       if (quantity < 1 || quantity > BUY_ORDER_MAX_QUANTITY) return { error: `A quantidade deve ficar entre 1 e ${BUY_ORDER_MAX_QUANTITY}.` };
@@ -4700,7 +4724,7 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
       if (active >= BUY_ORDER_MAX_ACTIVE) throw new Error(`Você já tem ${BUY_ORDER_MAX_ACTIVE} pedidos abertos. Cancele um antes de criar outro.`);
       const order = await tx.bazarBuyOrder.create({
         data: {
-          buyerId: player.id, kind: input.kind, label, pokemonId, minLevel, shopItemId, quantity, imageUrl,
+          buyerId: player.id, kind: input.kind, label, pokemonId, minLevel, personality, eggType, topStats, shopItemId, quantity, imageUrl,
           priceCoins: price, expiresAt: new Date(Date.now() + days * 86_400_000),
         },
         select: { id: true },
@@ -4766,12 +4790,14 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
       where: {
         playerId: player.id, pokemonId: order.pokemonId, level: { gte: order.minLevel },
         bazarListed: false, isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
+        ...(order.personality ? { personality: order.personality as never } : {}),
+        ...(order.eggType ? { hatchedFromEggType: order.eggType as never } : {}),
       },
-      select: { id: true, level: true, nickname: true },
+      select: { id: true, level: true, nickname: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
       orderBy: { level: "asc" },
-      take: 30,
+      take: 60,
     });
-    return { mascots };
+    return { mascots: mascots.filter((m) => matchesMascotRequirements(order, m)).slice(0, 30).map((m) => ({ id: m.id, level: m.level, nickname: m.nickname })) };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao carregar mascotes." };
   }
@@ -4799,10 +4825,11 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
 
     if (order.kind === "MASCOT") {
       await prepareBazarMascotAvailability(player.id);
-      const mascot = mascotId ? await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true, pokemonId: true, level: true } }) : null;
+      const mascot = mascotId ? await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true, pokemonId: true, level: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true } }) : null;
       if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
       if (mascot.pokemonId !== order.pokemonId) return { error: "Este mascote não é da espécie pedida." };
       if (mascot.level < order.minLevel) return { error: `O pedido exige nível ${order.minLevel} ou mais.` };
+      if (!matchesMascotRequirements(order, mascot)) return { error: "Este mascote não atende aos requisitos do pedido (personalidade, ovo ou atributos)." };
     }
     const offer = await buyOrderOfferItem(order, mascotId ?? null);
     const price = order.priceCoins;

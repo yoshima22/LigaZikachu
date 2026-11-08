@@ -16,6 +16,7 @@ Decisões:
 - **Concorrência**: `pg_advisory_xact_lock('buyorder:<id>')` + `'bazarsell:<vendedor>'`, depois claim `updateMany(status ACTIVE → FILLED)`; só um vendedor vence. Saldos só com increment/decrement.
 - **Entrega**: reusa `_reserveProposalOffers` + `_deliverProposalOffers` (mesmas validações de mascote travado/equipado/arena/liga/Rebote vinculado etc. do bazar).
 - **Escopo do pedido**: mascote (espécie + nível mínimo) ou item de inventário (ShopItem, quantidade vendida de uma vez; comida/doce mapeados para `MascotFoodItem`). **Fora**: ovos (variam por bônus), cosméticos, itens ocultos do bazar (`HIDDEN_BAZAR_ITEM_TYPES`, TRACE_*). Lista em `lib/bazar-orders.ts`.
+- **Requisitos opcionais (mascote)**: personalidade, origem do ovo (`hatchedFromEggType`: comum/raro/especial/lab/evento/celestial) e os 3 atributos mais altos (os 3 marcados precisam ser >= os outros 2; empate vale). Validado no servidor em `matchesMascotRequirements` (`lib/bazar-orders.ts`) na lista de mascotes elegíveis, no "Vender" e na dica "Você tem".
 - **Limites**: 5 pedidos abertos por jogador, preço 1..1.000.000 ZC, quantidade 1..99, validade 3/7/14 dias (sem cron: pedidos expirados somem das queries por `expiresAt`).
 - **Taxa**: nenhuma ao vendedor (igual compra direta). Cofre do Miauvadão recebe os 15% "faucet" como em `buyListing`.
 - **Abuso**: não vende para si mesmo; respeita `BazarPlayerTradeBan`; preço/dono/saldo validados no servidor.

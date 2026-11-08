@@ -21,6 +21,9 @@ export type BuyOrderView = {
   label: string;
   pokemonId: number | null;
   minLevel: number;
+  personality: string | null;
+  eggType: string | null;
+  topStats: string | null;
   quantity: number;
   imageUrl: string | null;
   priceCoins: number;
@@ -33,3 +36,34 @@ export type BuyOrderView = {
   /** O jogador logado tem algo que atende ao pedido? */
   canFulfill: boolean;
 };
+
+// ── Requisitos opcionais de mascote ───────────────────────────────────────────
+export const ORDER_STAT_KEYS = ["statForce", "statAgility", "statCharisma", "statInstinct", "statVitality"] as const;
+export type OrderStatKey = (typeof ORDER_STAT_KEYS)[number];
+export const ORDER_STAT_LABEL: Record<OrderStatKey, string> = {
+  statForce: "Força", statAgility: "Agilidade", statCharisma: "Carisma", statInstinct: "Instinto", statVitality: "Vitalidade",
+};
+export const ORDER_EGG_TYPES = ["COMMON", "RARE", "SPECIAL", "LAB", "EVENT", "CELESTIAL"] as const;
+export const ORDER_EGG_LABEL: Record<string, string> = {
+  COMMON: "Ovo Comum", RARE: "Ovo Raro", SPECIAL: "Ovo Especial", LAB: "Ovo de Laboratório", EVENT: "Ovo de Evento", CELESTIAL: "Ovo Celestial",
+};
+
+export type MascotReq = { personality?: string | null; eggType?: string | null; topStats?: string | null };
+export type MascotFacts = {
+  personality: string; hatchedFromEggType: string | null;
+  statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number;
+};
+
+/** Os 3 atributos escolhidos precisam ser os 3 mais altos (empate com os demais vale). */
+export function matchesTopStats(topStats: string | null | undefined, m: MascotFacts) {
+  if (!topStats) return true;
+  const chosen = topStats.split(",") as OrderStatKey[];
+  const rest = ORDER_STAT_KEYS.filter((k) => !chosen.includes(k));
+  return Math.min(...chosen.map((k) => m[k])) >= Math.max(...rest.map((k) => m[k]));
+}
+
+export function matchesMascotRequirements(req: MascotReq, m: MascotFacts) {
+  if (req.personality && m.personality !== req.personality) return false;
+  if (req.eggType && m.hatchedFromEggType !== req.eggType) return false;
+  return matchesTopStats(req.topStats, m);
+}

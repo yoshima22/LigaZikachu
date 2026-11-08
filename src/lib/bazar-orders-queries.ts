@@ -1,10 +1,18 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import {
+  matchesMascotRequirements,
   BUY_ORDERS_PAGE_SIZE,
   BUY_ORDER_EXCLUDED_ITEM_TYPES,
   type BuyOrderView,
 } from "@/lib/bazar-orders";
+
+const MASCOT_FACTS_SELECT = {
+  pokemonId: true, level: true, personality: true, hatchedFromEggType: true,
+  statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+} as const;
+// Só para tipar freeMascots (nunca chamada).
+declare function loadFreeMascots(): Promise<{ pokemonId: number; level: number; personality: string; hatchedFromEggType: string | null; statForce: number; statAgility: number; statCharisma: number; statInstinct: number; statVitality: number }[]>;
 
 /** Lista paginada de pedidos abertos + dicas de cobertura (3-4 queries pequenas e indexadas). */
 export async function getBuyOrdersView(opts: {
@@ -40,7 +48,7 @@ export async function getBuyOrdersView(opts: {
   const balanceByBuyer = new Map(wallets.map((w) => [w.playerId, w.balance]));
 
   // O que o jogador logado já tem que atende a algum pedido da página.
-  const mascotHave = new Map<number, number>(); // pokemonId -> maior nível livre
+  let freeMascots: Awaited<ReturnType<typeof loadFreeMascots>> = [];
   const itemHave = new Map<string, number>(); // shopItemId -> quantidade livre
   if (opts.playerId) {
     const pokemonIds = [...new Set(rows.flatMap((r) => (r.pokemonId != null ? [r.pokemonId] : [])))];
@@ -49,7 +57,7 @@ export async function getBuyOrdersView(opts: {
       pokemonIds.length
         ? prisma.mascot.findMany({
             where: { playerId: opts.playerId, pokemonId: { in: pokemonIds }, bazarListed: false, isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null },
-            select: { pokemonId: true, level: true },
+            select: MASCOT_FACTS_SELECT,
           })
         : [],
       itemIds.length ? prisma.shopItem.findMany({ where: { id: { in: itemIds } }, select: { id: true, type: true } }) : [],
@@ -58,7 +66,7 @@ export async function getBuyOrdersView(opts: {
         : [],
       itemIds.length ? prisma.mascotFoodItem.findMany({ where: { playerId: opts.playerId }, select: { type: true, quantity: true, boundQuantity: true } }) : [],
     ]);
-    for (const m of mascots) mascotHave.set(m.pokemonId, Math.max(mascotHave.get(m.pokemonId) ?? 0, m.level));
+    freeMascots = mascots;
     for (const i of inv) itemHave.set(i.itemId, i.quantity - i.boundQuantity);
     for (const s of shopItems) {
       if (s.type === "MASCOT_FOOD" || s.type === "MASCOT_SWEET") {
@@ -74,6 +82,9 @@ export async function getBuyOrdersView(opts: {
     label: r.label,
     pokemonId: r.pokemonId,
     minLevel: r.minLevel,
+    personality: r.personality,
+    eggType: r.eggType,
+    topStats: r.topStats,
     quantity: r.quantity,
     imageUrl: r.imageUrl,
     priceCoins: r.priceCoins,
@@ -85,7 +96,7 @@ export async function getBuyOrdersView(opts: {
     canFulfill:
       r.buyerId !== opts.playerId &&
       (r.kind === "MASCOT"
-        ? (mascotHave.get(r.pokemonId ?? -1) ?? 0) >= r.minLevel
+        ? freeMascots.some((m) => m.pokemonId === r.pokemonId && m.level >= r.minLevel && matchesMascotRequirements(r, m))
         : (itemHave.get(r.shopItemId ?? "") ?? 0) >= r.quantity),
   }));
   return { orders, total, page, totalPages };
