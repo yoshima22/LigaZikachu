@@ -190,7 +190,8 @@ export async function updateServerCostGoal(input: {
   title: string;
   percentage: number;
   active: boolean;
-}): Promise<{ error?: string; goal?: { title: string; percentage: number; active: boolean } }> {
+  auto?: boolean;
+}): Promise<{ error?: string; goal?: { title: string; percentage: number; active: boolean; auto: boolean } }> {
   try {
     await requireAdmin();
     const title = input.title.trim().replace(/\s+/g, " ").slice(0, 80);
@@ -198,7 +199,7 @@ export async function updateServerCostGoal(input: {
     if (!title) return { error: "Informe o texto da meta." };
     if (!Number.isFinite(percentage)) return { error: "Informe uma porcentagem válida." };
 
-    const goal = { title, percentage, active: Boolean(input.active) };
+    const goal = { title, percentage, active: Boolean(input.active), auto: Boolean(input.auto) };
     await prisma.appSetting.upsert({
       where: { key: SERVER_COST_GOAL_KEY },
       update: { value: { ...goal, updatedAt: new Date().toISOString() } as Prisma.InputJsonValue },

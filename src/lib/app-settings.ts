@@ -42,8 +42,13 @@ export type ServerCostGoalValue = {
   title: string;
   percentage: number;
   active: boolean;
+  /** Quando true, título (mês) e % saem dos passes pagos do mês, ignorando o valor salvo. */
+  auto?: boolean;
   updatedAt?: string;
 };
+
+/** Cada passe pago (R$ 20) cobre ~8% do custo mensal (~R$ 260). */
+export const SERVER_COST_PERCENT_PER_PASS = 8;
 
 const EMPTY_SERVER_COST_GOAL: ServerCostGoalValue = {
   title: "Meta de Custos do Server",
@@ -59,11 +64,29 @@ export const getServerCostGoal = unstable_cache(
         select: { value: true },
       });
       const value = (setting?.value ?? {}) as Partial<ServerCostGoalValue>;
-      const percentage = Number(value.percentage);
+      let percentage = Number(value.percentage);
+      let title = typeof value.title === "string" && value.title.trim()
+        ? value.title.trim().slice(0, 80)
+        : EMPTY_SERVER_COST_GOAL.title;
+      if (value.auto) {
+        // Passe do mês = o passe atual da loja (passLabel = id do calendário).
+        const current = await prisma.passScheduleConfig.findFirst({
+          where: { isCurrentStorePass: true },
+          select: { id: true, storeActivatedAt: true },
+        });
+        if (current) {
+          const paid = await prisma.ligaCashOrder.count({
+            where: { productType: "SUPPORTER_PASS", status: "PAID", amountCents: { gt: 0 }, passScheduleKey: current.id },
+          });
+          percentage = paid * SERVER_COST_PERCENT_PER_PASS;
+          const month = new Intl.DateTimeFormat("pt-BR", { month: "long", timeZone: "America/Sao_Paulo" })
+            .format(current.storeActivatedAt ?? new Date());
+          title = `Meta de Custos do Server - ${month.charAt(0).toUpperCase()}${month.slice(1)}`;
+        }
+      }
       return {
-        title: typeof value.title === "string" && value.title.trim()
-          ? value.title.trim().slice(0, 80)
-          : EMPTY_SERVER_COST_GOAL.title,
+        title,
+        auto: Boolean(value.auto),
         percentage: Number.isFinite(percentage)
           ? Math.min(100, Math.max(0, Math.round(percentage)))
           : 0,

@@ -5,6 +5,7 @@ import {changeLigaCash} from "@/lib/liga-cash-wallet";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
+import { revalidateServerCostGoal } from "@/lib/app-settings";
 
 // ── Professor Enguiça: agradecimento público por apoiar a Liga ─────────────────
 // Variações na voz do Professor Enguiça (elétrico, caloroso, um tanto elétrico
@@ -90,6 +91,8 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
     }
     return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
+
+  if (result.productType === "SUPPORTER_PASS") revalidateServerCostGoal();
 
   if (result.giftRecipientPlayerId) {
     const recipient = await prisma.player.findUnique({ where: { id: result.giftRecipientPlayerId }, select: { userId: true } });

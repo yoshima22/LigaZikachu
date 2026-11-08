@@ -10,7 +10,7 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
   initialNotice: string;
   initialAck?: { title: string; content: string; buttonText: string; active: boolean; version: number };
   initialPatchNotes?: { title: string; content: string }[];
-  initialServerCostGoal?: { title: string; percentage: number; active: boolean };
+  initialServerCostGoal?: { title: string; percentage: number; active: boolean; auto?: boolean };
 }) {
   const [notice, setNotice] = useState(initialNotice);
   const [ackTitle, setAckTitle] = useState(initialAck?.title ?? "");
@@ -60,6 +60,7 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
   const [goalTitle, setGoalTitle] = useState(initialServerCostGoal?.title ?? "Meta de Custos do Server");
   const [goalPercentage, setGoalPercentage] = useState(initialServerCostGoal?.percentage ?? 0);
   const [goalActive, setGoalActive] = useState(initialServerCostGoal?.active ?? false);
+  const [goalAuto, setGoalAuto] = useState(initialServerCostGoal?.auto ?? false);
   const [pendingGoal, startGoal] = useTransition();
 
   return (
@@ -71,27 +72,31 @@ export function AdminCommunicationPanel({ initialNotice, initialAck, initialPatc
               <Gauge size={16} className="text-emerald-300" />
               <h3 className="font-semibold text-slate-200">Meta de custos do servidor</h3>
             </div>
-            <p className="mt-2 text-xs text-slate-500">Controla a barra exibida no topo do site. A porcentagem é atualizada manualmente.</p>
+            <p className="mt-2 text-xs text-slate-500">Controla a barra exibida no topo do site. No modo automático, o mês e a % vêm dos passes pagos do passe atual (8% por passe).</p>
           </div>
           <label className="flex cursor-pointer items-center gap-2 rounded-full border border-emerald-500/25 bg-emerald-500/10 px-3 py-1.5 text-xs font-semibold text-emerald-200">
             <input type="checkbox" checked={goalActive} onChange={(event) => setGoalActive(event.target.checked)} className="accent-emerald-400" />
             Exibir no site
           </label>
+          <label className="flex cursor-pointer items-center gap-2 rounded-full border border-cyan-500/25 bg-cyan-500/10 px-3 py-1.5 text-xs font-semibold text-cyan-200">
+            <input type="checkbox" checked={goalAuto} onChange={(event) => setGoalAuto(event.target.checked)} className="accent-cyan-400" />
+            Automático (passes)
+          </label>
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-[minmax(0,1fr)_9rem_auto] sm:items-end">
           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
             Texto da meta
-            <input value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} maxLength={80} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-white outline-none focus:border-emerald-400/60" placeholder="Meta de Custos do Server - Setembro" />
+            <input disabled={goalAuto} value={goalTitle} onChange={(event) => setGoalTitle(event.target.value)} maxLength={80} className="mt-1.5 w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 text-sm font-normal normal-case tracking-normal text-white outline-none focus:border-emerald-400/60" placeholder="Meta de Custos do Server - Setembro" />
           </label>
           <label className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
             Progresso
             <div className="relative mt-1.5">
-              <input type="number" min={0} max={100} value={goalPercentage} onChange={(event) => setGoalPercentage(Number(event.target.value))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 pr-8 text-sm font-bold text-white outline-none focus:border-emerald-400/60" />
+              <input disabled={goalAuto} type="number" min={0} max={100} value={goalPercentage} onChange={(event) => setGoalPercentage(Number(event.target.value))} className="w-full rounded-xl border border-slate-700 bg-slate-950 px-3 py-2.5 pr-8 text-sm font-bold text-white outline-none focus:border-emerald-400/60" />
               <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs text-slate-500">%</span>
             </div>
           </label>
           <Button type="button" disabled={pendingGoal} onClick={() => startGoal(async () => {
-            const result = await updateServerCostGoal({ title: goalTitle, percentage: goalPercentage, active: goalActive });
+            const result = await updateServerCostGoal({ title: goalTitle, percentage: goalPercentage, active: goalActive, auto: goalAuto });
             if (result.error) toast.error(result.error);
             else if (result.goal) {
               setGoalTitle(result.goal.title);
