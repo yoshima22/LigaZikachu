@@ -1,32 +1,21 @@
-import { Suspense } from "react";
-import { getEconomySettings } from "@/lib/economy-settings";
 import Link from "next/link";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { getOrCreateWallet } from "@/lib/zikacoins";
-import { Plus, Store, ChevronDown, ShieldCheck, RefreshCw, Coins } from "lucide-react";
+import { Plus, Store, ShieldCheck, RefreshCw, Coins } from "lucide-react";
 import { isAdmin, isStaff } from "@/lib/auth/permissions";
-import { MiauvadaoPanel } from "./_components/miauvadao-panel";
 import { MiauvadaoGames } from "./_components/miauvadao-games";
-import { WeeklyTmPanel } from "./_components/weekly-tm-panel";
-import { getWeeklyTmView } from "./weekly-tm-actions";
-import { BazarListingCard } from "./_components/bazar-listing-card";
-import { BazarFeed } from "./_components/bazar-feed";
-import { BazarFiltersClient } from "./_components/bazar-filters-client";
-import { BazarPagination } from "./_components/bazar-pagination";
-import { autoRefreshMiauvadaoIfNeeded, getCurrentMiauvadaoConfig, getMiauvadaoPurchaseStatus, getMiauvadaoRebound, getPersonalMiauvadaoOffer } from "./actions";
-import { getMiauvadaoRotation } from "@/lib/miauvadao-rotation";
-import { getCachedListings, getCachedPremiumAvailability, getCachedPremiumListings, getCachedRecentTransactions } from "./queries";
-import type { BazarItemCategory, BazarListingType } from "@prisma/client";
+import { AnunciosTab } from "./_components/anuncios-tab";
+import { BazarTabs } from "./_components/bazar-tabs";
+import { BuyOrdersTab } from "./_components/buy-orders-tab";
+import { getCurrentMiauvadaoConfig } from "./actions";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
-import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
-import { MysteryStepButton } from "@/app/(app)/combates/ordem-da-trapaca/_components/mystery-step-button";
-import type { MascotRarity } from "@/lib/mascot-data";
 import type { MiauvadaoFusionEggType, MiauvadaoFusionEgg } from "@/lib/miauvadao-egg-fusion";
 import { prisma } from "@/lib/prisma";
-import { PremiumCountdown } from "./_components/premium-countdown";
-import { withMascotHealth } from "@/lib/bazar-mascot-health";
 
 export const dynamic = "force-dynamic";
+
+const TABS = ["anuncios", "jogos", "pedidos"] as const;
+type Tab = (typeof TABS)[number];
 
 export default async function BazarPage({
   searchParams: searchParamsPromise,
@@ -34,6 +23,7 @@ export default async function BazarPage({
   searchParams: Promise<Record<string, string>>;
 }) {
   const searchParams = await searchParamsPromise;
+  const tab: Tab = (TABS as readonly string[]).includes(searchParams.tab) ? (searchParams.tab as Tab) : "anuncios";
 
   const session = await getAppSession();
   const staff = session?.user ? isStaff(session.user.role) : false;
@@ -42,84 +32,7 @@ export default async function BazarPage({
   const platformAdmin = session?.user ? isAdmin(session.user.role) : false;
   const currentPlayer = session?.user ? await getSessionPlayer(session.user.id) : null;
   const playerId = currentPlayer?.id ?? null;
-
-  const [wallet, fusionEggRows] = playerId ? await Promise.all([
-    getOrCreateWallet(playerId),
-    prisma.mascotEgg.findMany({
-      where: {
-        playerId,
-        type: { in: ["COMMON", "EVENT", "RARE", "SPECIAL"] },
-        incubation: null,
-        NOT: { origin: { startsWith: "bazar:" } },
-      },
-      // Bônus maior primeiro dentro de cada raridade, para o jogador ver logo os
-      // ovos "aumentados" e evitar consumi-los sem querer.
-      orderBy: [{ type: "asc" }, { hatchRarityBonusPct: "desc" }, { obtainedAt: "asc" }],
-      select: { id: true, type: true, hatchRarityBonusPct: true, obtainedAt: true, origin: true },
-    }),
-  ]) : [null, []];
-  const [ligaWallet, economy] = playerId ? await Promise.all([
-    prisma.ligaCoinWallet.findUnique({ where: { playerId } }),
-    getEconomySettings(),
-  ]) : [null, null];
-  const fusionEggs: MiauvadaoFusionEgg[] = fusionEggRows.map((egg) => ({
-    id: egg.id,
-    type: egg.type as MiauvadaoFusionEggType,
-    hatchRarityBonusPct: egg.hatchRarityBonusPct,
-    obtainedAt: egg.obtainedAt.toISOString(),
-    origin: egg.origin,
-  }));
-
-  // Manutenção do Bazar — fire-and-forget: não bloqueia o carregamento da página
-  // (rotação de ofertas do Miauvadão e limpeza de anúncios expirados)
-  const listingFilters = {
-    category: searchParams.cat as BazarItemCategory | undefined,
-    type: searchParams.type as BazarListingType | undefined,
-    maxPrice: searchParams.maxPrice ? parseInt(searchParams.maxPrice) : undefined,
-    sortBy: (searchParams.sort as "newest" | "cheapest" | "expensive") ?? "newest",
-    search: searchParams.q || undefined,
-    rarity: searchParams.rarity as MascotRarity | undefined,
-    page: searchParams.page ? parseInt(searchParams.page) : 1,
-  };
-  // Resolve a rotação antes de ler a vitrine. Assim nenhuma requisição perto do
-  // limite reutiliza os itens cinza do ciclo anterior vindos do cache.
-  await autoRefreshMiauvadaoIfNeeded().catch(() => null);
-  const [listingsResult, premiumResult, premiumAvailability, transactions, freshMiauvadao, raidSabotages, bazarStepState] = await Promise.all([
-    getCachedListings(listingFilters),
-    getCachedPremiumListings(listingFilters),
-    getCachedPremiumAvailability(),
-    getCachedRecentTransactions(6),
-    getCurrentMiauvadaoConfig(),
-    getActiveRaidSabotages("BAZAR"),
-    getOrderStepUnlockState("BAZAR_SLOT_SIX_CLICKS"),
-  ]);
-  const blockedSlotSabotage = raidSabotages.find((s) => s.sabotageType === "BLOCK_BAZAR_SLOT");
-  const shouldShowBazarAnomaly = Boolean(blockedSlotSabotage) || (bazarStepState.active && bazarStepState.unlocked && !bazarStepState.resolved);
-
-  const { total, page, totalPages } = listingsResult;
-  // Saúde vem do banco na leitura: o payload do anúncio é um snapshot antigo.
-  const [listings, premiumListings] = await Promise.all([
-    withMascotHealth(listingsResult.listings),
-    withMascotHealth(premiumResult.listings),
-  ]);
-  const visibleTotal = total + premiumResult.total;
-  const nextPremiumVacancyAt = premiumAvailability.activeCount >= 6 ? premiumAvailability.nextVacancyAt : null;
-
-  const dailyOffers = (freshMiauvadao.dailyOffers as unknown[]) ?? [];
-
-  const purchaseStatus = await getMiauvadaoPurchaseStatus(playerId);
-  const personalOffer = playerId ? await getPersonalMiauvadaoOffer().catch(() => null) : null;
-  const [rebound, reboundDebug] = playerId
-    ? await Promise.all([
-        getMiauvadaoRebound(dailyOffers as never).catch(() => null),
-        // Preview visual do Rebote: só contas admin de plataforma (GM não).
-        platformAdmin ? getMiauvadaoRebound(dailyOffers as never, true).catch(() => null) : Promise.resolve(null),
-      ])
-    : [null, null];
-  const weeklyTmView = await getWeeklyTmView().catch(() => null);
-  const rotation = getMiauvadaoRotation();
-  const slotRefreshAvailable = !freshMiauvadao.slotRefreshUsedCycle
-    || freshMiauvadao.slotRefreshUsedCycle < rotation.start;
+  const wallet = playerId ? await getOrCreateWallet(playerId) : null;
 
   return (
     <div className="space-y-6">
@@ -188,234 +101,50 @@ export default async function BazarPage({
         </div>
       )}
 
-      {/* FAQ accordion — acima das ofertas */}
-      <details className="rounded-2xl border overflow-hidden group" style={{ borderColor: "#5a4700", background: "#0e0c06" }}>
-        <summary className="flex cursor-pointer items-center justify-between gap-3 px-5 py-4 text-sm font-semibold select-none"
-          style={{ color: "#c9a800" }}>
-          <span className="flex items-center gap-2">📖 Como funciona o Bazar e o Miauvadão?</span>
-          <ChevronDown size={14} className="transition-transform group-open:rotate-180" style={{ color: "#5a4700" }} />
-        </summary>
-        <div className="border-t px-5 py-4 grid gap-4 sm:grid-cols-2 text-xs leading-relaxed"
-          style={{ borderColor: "#5a4700", color: "#8b6c00" }}>
+      <BazarTabs active={tab} />
 
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🏪 Como anunciar no Bazar</p>
-            <p>Clique em <strong style={{ color: "#c9a800" }}>Anunciar</strong> e escolha mascotes ou itens do seu inventário. O anúncio normal custa <strong style={{ color: "#FFCB05" }}>10 ZC</strong>. A vitrine premium custa <strong style={{ color: "#FFCB05" }}>100 ZC</strong> e destaca a oferta por 6 horas. Limite: <strong style={{ color: "#FFCB05" }}>8 anúncios ativos</strong> por jogador.</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>💰 Cofre do Miauvadão</p>
-            <p>O cofre é alimentado por: <strong style={{ color: "#FFCB05" }}>taxas de anúncio (10 ZC)</strong>, <strong style={{ color: "#FFCB05" }}>30% de cada compra</strong>, apostas perdidas e a troca global de slot. Quanto mais cheio, melhores os descontos e prêmios.</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>📊 Como os descontos são calculados</p>
-            <p>Desconto base = faixa da raridade. O cofre adiciona um bônus suave, com teto raro de <strong style={{ color: "#FFCB05" }}>70%</strong>. As ofertas mudam às 04:00, 10:00, 16:00 e 22:00 (horário de Brasília).</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Troca global de slot (250 ZC)</p>
-            <p>A cada rotação, qualquer jogador pode trocar <strong style={{ color: "#FFCB05" }}>um único slot</strong>, incluindo item e desconto. A troca vale para todos, custa 250 ZC e só pode ser usada uma vez até o próximo ciclo.</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>↩️ Rebote do Miauvadão</p>
-            <p>Se os mais rápidos zerarem um slot e você <strong style={{ color: "#FFCB05" }}>não comprou nenhum slot</strong> naquela rotação, o <strong style={{ color: "#FFCB05" }}>Rebote</strong> libera <strong style={{ color: "#FFCB05" }}>1 cópia</strong> do item esgotado com desconto <strong style={{ color: "#FFCB05" }}>5 pontos menor</strong>. Só nos <strong style={{ color: "#FFCB05" }}>primeiros 25 min</strong> após a rotação (com timer), gasta <strong style={{ color: "#FFCB05" }}>1 das suas compras diárias</strong>, vale até <strong style={{ color: "#FFCB05" }}>2 por rotação</strong> e o item fica <strong style={{ color: "#FFCB05" }}>vinculado à conta</strong>: dá para usar, mas não vender nem trocar.</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🎩 Jogo Shell Game</p>
-            <p>Aposte entre 50–2000 ZC. Adivinhe certo e receba <strong style={{ color: "#FFCB05" }}>aposta + 65%</strong> (ex: 100 ZC → 165 ZC). Perca e a aposta vai ao cofre. Cooldown de 5 min.</p>
-          </div>
-
-          <div className="space-y-1">
-            <p className="font-semibold" style={{ color: "#c9a800" }}>🔄 Ciclo econômico</p>
-            <p>Taxas → cofre → melhores descontos → mais compras → mais no cofre → prêmios maiores no jogo. O cofre é um <strong style={{ color: "#FFCB05" }}>sink econômico saudável</strong> que retira ZC da circulação e distribui em benefícios para todos.</p>
-          </div>
-        </div>
-      </details>
-
-      {/* Miauvadão */}
-      <MiauvadaoPanel
-        offers={dailyOffers as never}
-        vaultBalance={freshMiauvadao.vaultBalance}
-        balance={wallet?.balance ?? 0}
-        ligaCashBalance={ligaWallet?.balance ?? 0}
-        lcMult={economy?.shopLcValueMultiplier ?? 1.1}
-        lcRef={economy?.zcPerLcReference ?? 10}
-        ligaCashEnabled={economy?.allowLcShop ?? false}
-        playerId={playerId}
-        lastNpcMessage={freshMiauvadao.lastNpcMessage ?? freshMiauvadao.lastWinnerMessage ?? null}
-        slotRefreshAvailable={slotRefreshAvailable}
-        purchaseStatus={purchaseStatus}
-        rotationEndsAt={rotation.next.toISOString()}
-        sabotagedOfferIndex={shouldShowBazarAnomaly ? 1 : null}
-        personalOffer={personalOffer as never}
-        rebound={rebound}
-        reboundDebug={reboundDebug}
-        isPlatformAdmin={platformAdmin}
-      />
-
-      {/* TMs da Semana: 5 slots fixos, reset na segunda 00:00 */}
-      {weeklyTmView && (
-        <WeeklyTmPanel
-          view={weeklyTmView}
-          balance={wallet?.balance ?? 0}
-          ligaCashBalance={ligaWallet?.balance ?? 0}
-          playerId={playerId}
-        />
+      {tab === "anuncios" && (
+        <AnunciosTab searchParams={searchParams} playerId={playerId} platformAdmin={platformAdmin} balance={wallet?.balance ?? 0} />
       )}
-
-      {shouldShowBazarAnomaly && (
-        <div className="rounded-2xl border border-purple-500/35 bg-[radial-gradient(circle_at_top_left,rgba(168,85,247,0.18),transparent_35%),rgba(15,23,42,0.85)] p-4">
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <div>
-              <p className="text-[10px] uppercase tracking-widest text-purple-300">Sinal estranho</p>
-              <p className="mt-1 text-sm font-bold text-slate-100">Uma oferta perdeu a sincronizacao.</p>
-              <p className="mt-1 text-xs text-slate-400">O Bazar continua funcionando, mas este slot parece responder de um jeito diferente.</p>
-            </div>
-            {bazarStepState.unlocked ? (
-            <MysteryStepButton
-              stepKey="BAZAR_SLOT_SIX_CLICKS"
-              returnPath="/bazar"
-              className="group relative min-h-20 w-full max-w-48 overflow-hidden rounded-xl border border-purple-400/40 bg-slate-950/80 px-4 py-3 text-left shadow-[0_0_18px_rgba(168,85,247,0.22)] transition hover:border-purple-300/70 disabled:opacity-60 sm:w-48"
-              showOnlySuccess
-              pendingLabel={null}
-              title="Oferta instável"
-            >
-              <span className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(168,85,247,0.12)_0px,rgba(168,85,247,0.12)_1px,transparent_1px,transparent_8px)] opacity-60 group-hover:opacity-90" />
-              <span className="relative block text-[10px] uppercase tracking-widest text-purple-300">Oferta instável</span>
-              <span className="relative mt-1 block text-xs font-black text-slate-100">???</span>
-              <span className="relative mt-1 block text-[10px] text-slate-500">dados corrompidos</span>
-            </MysteryStepButton>
-            ) : (
-              <div
-                className="group relative min-h-20 w-full max-w-48 overflow-hidden rounded-xl border border-purple-400/20 bg-slate-950/60 px-4 py-3 text-left shadow-[0_0_18px_rgba(168,85,247,0.12)] sm:w-48"
-                title={`Ainda faltam pistas: geral ${bazarStepState.generalClues}/${bazarStepState.requiredGeneralClues}, Bazar ${bazarStepState.specificClues}/${bazarStepState.requiredSpecificClues}`}
-              >
-                <span className="absolute inset-0 bg-[repeating-linear-gradient(90deg,rgba(168,85,247,0.08)_0px,rgba(168,85,247,0.08)_1px,transparent_1px,transparent_8px)] opacity-50" />
-                <span className="relative block text-[10px] uppercase tracking-widest text-purple-300/70">Oferta instavel</span>
-                <span className="relative mt-1 block text-xs font-black text-slate-300">???</span>
-                <span className="relative mt-1 block text-[10px] text-slate-600">ainda sem contexto</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Shell Game */}
-      <MiauvadaoGames
-        balance={wallet?.balance ?? 0}
-        playerId={playerId}
-        vaultBalance={freshMiauvadao.vaultBalance}
-        lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
-        isAdmin={platformAdmin}
-        eggs={fusionEggs}
-      />
-
-      {/* Filters */}
-      <Suspense fallback={null}>
-        <BazarFiltersClient />
-      </Suspense>
-
-      {/* Listings + Feed */}
-      <div className="grid gap-6 lg:grid-cols-[1fr_280px]">
-        <div className="space-y-4">
-          {premiumListings.length > 0 && (
-            <section className="rounded-2xl border border-amber-300/35 bg-gradient-to-br from-amber-400/10 via-slate-950/80 to-purple-500/10 p-4 shadow-[0_0_32px_rgba(250,204,21,0.08)]">
-              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-[0.22em] text-amber-300">👑 Vitrine do Miauvadão</p>
-                  <h2 className="mt-0.5 text-sm font-bold text-amber-50">Ofertas premium em destaque</h2>
-                </div>
-                <div className="flex flex-wrap items-center gap-2 text-[10px] text-amber-200/70">
-                  <span>{premiumAvailability.activeCount}/6 vitrines</span>
-                  <span className="text-amber-200/30">•</span>
-                  {nextPremiumVacancyAt ? (
-                    <PremiumCountdown until={nextPremiumVacancyAt} prefix="Próxima vaga em" className="font-semibold text-amber-100" />
-                  ) : (
-                    <span className="font-semibold text-emerald-300">Vaga disponível agora</span>
-                  )}
-                </div>
-              </div>
-              <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {premiumListings.map((listing) => (
-                  <BazarListingCard key={listing.id} listing={{ ...listing, payload: listing.payload as Record<string, unknown>, player: listing.player, _count: listing._count }} />
-                ))}
-              </div>
-            </section>
-          )}
-          {/* Cabeçalho com contador e label de busca ativa */}
-          <div className="flex flex-wrap items-center gap-2">
-            <h2 className="font-semibold text-slate-200">Anúncios ativos</h2>
-            <span className="rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-400">
-              {visibleTotal} {visibleTotal === 1 ? "resultado" : "resultados"}
-            </span>
-            {searchParams.q && (
-              <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[10px] text-[#FFCB05]">
-                🔍 &ldquo;{searchParams.q}&rdquo;
-              </span>
-            )}
-            {totalPages > 1 && (
-              <span className="ml-auto text-[10px] text-slate-500">
-                Página {page} de {totalPages}
-              </span>
-            )}
-          </div>
-
-          {listings.length === 0 && premiumListings.length === 0 ? (
-            <div className="rounded-2xl border border-dashed border-border p-12 text-center space-y-3">
-              <p className="text-3xl">{searchParams.q ? "🔍" : "🏪"}</p>
-              <p className="text-sm text-slate-500">
-                {searchParams.q
-                  ? `Nenhum anúncio encontrado para "${searchParams.q}".`
-                  : "Nenhum anúncio encontrado."}
-              </p>
-              {playerId && !searchParams.q && (
-                <Link href="/bazar/criar"
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-[#FFCB05] px-4 py-2 text-xs font-bold text-[#1A1A2E]">
-                  <Plus size={12}/> Criar primeiro anúncio
-                </Link>
-              )}
-            </div>
-          ) : (
-            <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-              {listings.map(l => (
-                <BazarListingCard
-                  key={l.id}
-                  listing={{
-                    ...l,
-                    payload: l.payload as Record<string, unknown>,
-                    player: l.player,
-                    _count: l._count,
-                  }}
-                />
-              ))}
-            </div>
-          )}
-
-          {/* Paginação */}
-          {totalPages > 1 && (
-            <BazarPagination
-              page={page}
-              totalPages={totalPages}
-              total={total}
-              pageSize={12}
-            />
-          )}
-        </div>
-
-        {/* Feed sidebar */}
-        <div className="space-y-3">
-          <div className="flex items-center justify-between gap-2">
-            <h3 className="font-semibold text-slate-200 text-sm">📡 Atividade recente</h3>
-            <Link href="/bazar/historico" className="text-[10px] font-semibold text-[#FFCB05] hover:underline">
-              Ver histórico completo
-            </Link>
-          </div>
-          <BazarFeed transactions={transactions.map(t => ({ ...t, category: t.category as string }))} />
-        </div>
-      </div>
+      {tab === "jogos" && <JogosTab playerId={playerId} platformAdmin={platformAdmin} balance={wallet?.balance ?? 0} />}
+      {tab === "pedidos" && <BuyOrdersTab searchParams={searchParams} playerId={playerId} />}
     </div>
+  );
+}
+
+async function JogosTab({ playerId, platformAdmin, balance }: { playerId: string | null; platformAdmin: boolean; balance: number }) {
+  const [fusionEggRows, freshMiauvadao] = await Promise.all([
+    playerId
+      ? prisma.mascotEgg.findMany({
+          where: {
+            playerId,
+            type: { in: ["COMMON", "EVENT", "RARE", "SPECIAL"] },
+            incubation: null,
+            NOT: { origin: { startsWith: "bazar:" } },
+          },
+          // Bônus maior primeiro dentro de cada raridade, para o jogador ver logo os
+          // ovos "aumentados" e evitar consumi-los sem querer.
+          orderBy: [{ type: "asc" }, { hatchRarityBonusPct: "desc" }, { obtainedAt: "asc" }],
+          select: { id: true, type: true, hatchRarityBonusPct: true, obtainedAt: true, origin: true },
+        })
+      : [],
+    getCurrentMiauvadaoConfig(),
+  ]);
+  const fusionEggs: MiauvadaoFusionEgg[] = fusionEggRows.map((egg) => ({
+    id: egg.id,
+    type: egg.type as MiauvadaoFusionEggType,
+    hatchRarityBonusPct: egg.hatchRarityBonusPct,
+    obtainedAt: egg.obtainedAt.toISOString(),
+    origin: egg.origin,
+  }));
+  return (
+    <MiauvadaoGames
+      balance={balance}
+      playerId={playerId}
+      vaultBalance={freshMiauvadao.vaultBalance}
+      lastWinnerMessage={freshMiauvadao.lastWinnerMessage ?? null}
+      isAdmin={platformAdmin}
+      eggs={fusionEggs}
+    />
   );
 }

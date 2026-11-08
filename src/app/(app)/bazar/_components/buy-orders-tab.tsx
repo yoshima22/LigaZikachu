@@ -1,0 +1,72 @@
+import Link from "next/link";
+import { POKEMON_PT_NAMES } from "@/lib/mascot-data";
+import { BUY_ORDERS_PAGE_SIZE } from "@/lib/bazar-orders";
+import { getBuyOrdersView, getOrderableItems } from "@/lib/bazar-orders-queries";
+import { prisma } from "@/lib/prisma";
+import { BuyOrdersPanel } from "./buy-orders-panel";
+
+const SPECIES: [number, string][] = Object.entries(POKEMON_PT_NAMES)
+  .map(([id, name]) => [Number(id), name] as [number, string])
+  .filter(([id]) => id >= 1 && id <= 1025);
+
+function href(kind: string, mine: boolean, opage?: number) {
+  const p = new URLSearchParams({ tab: "pedidos" });
+  if (kind) p.set("kind", kind);
+  if (mine) p.set("mine", "1");
+  if (opage && opage > 1) p.set("opage", String(opage));
+  return `/bazar?${p.toString()}`;
+}
+
+/** Aba "Pedidos": lista paginada de pedidos de compra (Loja de Pedidos). */
+export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: Record<string, string>; playerId: string | null }) {
+  const mine = searchParams.mine === "1" && Boolean(playerId);
+  const kind = searchParams.kind === "MASCOT" || searchParams.kind === "ITEM" ? searchParams.kind : undefined;
+  const page = Math.max(1, parseInt(searchParams.opage ?? "1", 10) || 1);
+
+  const [view, items, myActiveCount] = await Promise.all([
+    getBuyOrdersView({ playerId, mine, kind, page }),
+    playerId ? getOrderableItems() : [],
+    playerId ? prisma.bazarBuyOrder.count({ where: { buyerId: playerId, status: "ACTIVE", expiresAt: { gt: new Date() } } }) : 0,
+  ]);
+
+  const chips = [
+    { label: "Todos", href: href("", false), on: !kind && !mine },
+    { label: "🐾 Mascotes", href: href("MASCOT", false), on: kind === "MASCOT" && !mine },
+    { label: "🎒 Itens", href: href("ITEM", false), on: kind === "ITEM" && !mine },
+    ...(playerId ? [{ label: `Meus pedidos${myActiveCount ? ` (${myActiveCount})` : ""}`, href: href("", true), on: mine }] : []),
+  ];
+
+  return (
+    <div className="space-y-5">
+      <section className="rounded-2xl border border-sky-400/25 bg-gradient-to-br from-sky-500/10 via-slate-950/80 to-[#FFCB05]/5 p-5">
+        <p className="text-[10px] font-black uppercase tracking-[0.22em] text-sky-300">📋 Loja de Pedidos</p>
+        <h2 className="mt-1 text-base font-bold text-slate-50">Diga o que você quer — quem tem, vende na hora.</h2>
+        <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-400">
+          Publique um pedido com o valor que paga por um mascote ou item. Qualquer jogador que tenha o que você procura pode vender com um clique:
+          o ZC sai da sua conta e o item chega até você no mesmo instante. Nada fica reservado — se faltar saldo no momento da venda, ela é bloqueada
+          e o pedido segue aberto. Pedidos de jogadores sem saldo aparecem como <span className="text-amber-300">“Sem saldo agora”</span>.
+        </p>
+      </section>
+
+      <div className="flex flex-wrap gap-2">
+        {chips.map((c) => (
+          <Link key={c.label} href={c.href}
+            className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${c.on ? "border-[#FFCB05]/60 bg-[#FFCB05]/10 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"}`}>
+            {c.label}
+          </Link>
+        ))}
+        <span className="ml-auto self-center text-[10px] text-slate-500">{view.total} {view.total === 1 ? "pedido" : "pedidos"}</span>
+      </div>
+
+      <BuyOrdersPanel orders={view.orders} playerId={playerId} species={SPECIES} items={items} myActiveCount={myActiveCount} />
+
+      {view.totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 pt-2 text-xs text-slate-400">
+          {view.page > 1 && <Link className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200" href={href(kind ?? "", mine, view.page - 1)}>← Anterior</Link>}
+          <span>Página {view.page} de {view.totalPages} · {BUY_ORDERS_PAGE_SIZE} por página</span>
+          {view.page < view.totalPages && <Link className="rounded-lg border border-border px-3 py-1.5 hover:text-slate-200" href={href(kind ?? "", mine, view.page + 1)}>Próxima →</Link>}
+        </div>
+      )}
+    </div>
+  );
+}

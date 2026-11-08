@@ -292,6 +292,7 @@ model Player {
   arenaBattlesAsAttacker      ArenaBattle[]                  @relation("ArenaBattleAttacker")
   arenaBattlesAsDefender      ArenaBattle[]                  @relation("ArenaBattleDefender")
   bazarListings               BazarListing[]
+  bazarBuyOrders              BazarBuyOrder[] @relation("BuyOrderBuyer")
   bazarProposals              BazarProposal[]
   bazarFavorites              BazarFavorite[]
   bazarLoansAsLender          BazarLoan[]                    @relation("BazarLoanLender")
@@ -3448,6 +3449,32 @@ model BazarListing {
   @@index([status, premiumUntil])
   @@index([playerId])
   @@map("bazar_listings")
+}
+
+// Loja de Pedidos: o jogador anuncia o que QUER comprar e por quanto. Sem escrow:
+// o ZC só sai da carteira dele no instante em que alguém vende (checado na venda).
+model BazarBuyOrder {
+  id          String   @id @default(cuid())
+  buyerId     String
+  kind        String // MASCOT | ITEM
+  label       String // "Pikachu" / "Ração x3"
+  pokemonId   Int? // MASCOT: espécie desejada
+  minLevel    Int      @default(1)
+  shopItemId  String? // ITEM: item de inventário desejado
+  quantity    Int      @default(1)
+  imageUrl    String?
+  priceCoins  Int // valor TOTAL pago pelo pedido
+  status      String   @default("ACTIVE") // ACTIVE | FILLED | CANCELLED
+  expiresAt   DateTime
+  filledById  String?
+  filledAt    DateTime?
+  createdAt   DateTime @default(now())
+
+  buyer Player @relation("BuyOrderBuyer", fields: [buyerId], references: [id], onDelete: Cascade)
+
+  @@index([status, expiresAt, createdAt])
+  @@index([buyerId, status])
+  @@map("bazar_buy_orders")
 }
 
 model BazarAuctionBid {

@@ -45,6 +45,13 @@ import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
 import { trackGachaObjective } from "@/lib/gacha";
 import { withMascotHealth } from "@/lib/bazar-mascot-health";
 import {
+  BUY_ORDER_EXCLUDED_ITEM_TYPES,
+  BUY_ORDER_MAX_ACTIVE,
+  BUY_ORDER_MAX_PRICE,
+  BUY_ORDER_MAX_QUANTITY,
+  BUY_ORDER_NO_FUNDS_MESSAGE,
+} from "@/lib/bazar-orders";
+import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
   PREMIUM_LISTING_FEE,
   PREMIUM_LISTING_HOURS,
@@ -4615,5 +4622,263 @@ export async function markBazarProposalsViewed(): Promise<void> {
     revalidateTag(`nav-${user.id}`);
   } catch {
     // fire-and-forget — não bloqueia a página
+  }
+}
+
+
+// ── Loja de Pedidos ───────────────────────────────────────────────────────────
+// Sem escrow: o ZC do criador só é debitado no instante da venda automática.
+
+class BuyOrderNoFundsError extends Error {}
+
+type BuyOrderInput = {
+  kind: "MASCOT" | "ITEM";
+  pokemonId?: number;
+  minLevel?: number;
+  shopItemId?: string;
+  quantity?: number;
+  priceCoins: number;
+  durationDays: number;
+};
+
+export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: string; id?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const price = Math.floor(Number(input.priceCoins));
+    if (!Number.isSafeInteger(price) || price < 1 || price > BUY_ORDER_MAX_PRICE) {
+      return { error: `O valor deve ficar entre 1 e ${BUY_ORDER_MAX_PRICE.toLocaleString("pt-BR")} ZC.` };
+    }
+    const days = [3, 7, 14].includes(Number(input.durationDays)) ? Number(input.durationDays) : 7;
+
+    let label = "";
+    let imageUrl: string | null = null;
+    let pokemonId: number | null = null;
+    let shopItemId: string | null = null;
+    let minLevel = 1;
+    let quantity = 1;
+    if (input.kind === "MASCOT") {
+      pokemonId = Math.floor(Number(input.pokemonId));
+      if (!Number.isInteger(pokemonId) || pokemonId < 1 || pokemonId > 1025) {
+        return { error: "Escolha uma espécie válida." };
+      }
+      minLevel = Math.min(100, Math.max(1, Math.floor(Number(input.minLevel) || 1)));
+      label = getPokemonName(pokemonId);
+    } else if (input.kind === "ITEM") {
+      quantity = Math.floor(Number(input.quantity) || 1);
+      if (quantity < 1 || quantity > BUY_ORDER_MAX_QUANTITY) return { error: `A quantidade deve ficar entre 1 e ${BUY_ORDER_MAX_QUANTITY}.` };
+      const item = await prisma.shopItem.findUnique({
+        where: { id: String(input.shopItemId ?? "") },
+        select: { id: true, name: true, type: true, active: true, inventoryEnabled: true, imageUrl: true },
+      });
+      if (!item || !item.active || !item.inventoryEnabled
+        || (BUY_ORDER_EXCLUDED_ITEM_TYPES as readonly string[]).includes(item.type)
+        || HIDDEN_BAZAR_ITEM_TYPES.has(item.type)) {
+        return { error: "Este item não pode ser pedido." };
+      }
+      shopItemId = item.id;
+      label = item.name;
+      imageUrl = sanitizePayloadImageUrl(item.imageUrl);
+    } else {
+      return { error: "Tipo de pedido inválido." };
+    }
+
+    const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
+    if ((wallet?.balance ?? 0) < price) {
+      return { error: "Você precisa ter o valor do pedido em ZC para publicá-lo (ele só sai da conta quando alguém vender)." };
+    }
+
+    let id = "";
+    await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"buyorder-create:" + player.id}))`;
+      const active = await tx.bazarBuyOrder.count({
+        where: { buyerId: player.id, status: "ACTIVE", expiresAt: { gt: new Date() } },
+      });
+      if (active >= BUY_ORDER_MAX_ACTIVE) throw new Error(`Você já tem ${BUY_ORDER_MAX_ACTIVE} pedidos abertos. Cancele um antes de criar outro.`);
+      const order = await tx.bazarBuyOrder.create({
+        data: {
+          buyerId: player.id, kind: input.kind, label, pokemonId, minLevel, shopItemId, quantity, imageUrl,
+          priceCoins: price, expiresAt: new Date(Date.now() + days * 86_400_000),
+        },
+        select: { id: true },
+      });
+      id = order.id;
+    });
+
+    revalidateBazar();
+    return { id };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao criar o pedido." };
+  }
+}
+
+export async function cancelBuyOrder(orderId: string): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const done = await prisma.bazarBuyOrder.updateMany({
+      where: { id: String(orderId), buyerId: player.id, status: "ACTIVE" },
+      data: { status: "CANCELLED" },
+    });
+    if (done.count !== 1) return { error: "Este pedido não está mais aberto." };
+    revalidateBazar();
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao cancelar." };
+  }
+}
+
+/** Oferta que o vendedor entregaria a um pedido (reservada via _reserveProposalOffers). */
+async function buyOrderOfferItem(
+  order: { kind: string; label: string; quantity: number; shopItemId: string | null },
+  mascotId: string | null,
+): Promise<ProposalOfferItem> {
+  if (order.kind === "MASCOT") {
+    if (!mascotId) throw new Error("Escolha o mascote que será vendido.");
+    return { type: "MASCOT", quantity: 1, displayName: order.label, mascotId };
+  }
+  const item = await prisma.shopItem.findUnique({ where: { id: order.shopItemId ?? "" }, select: { id: true, name: true, type: true } });
+  if (!item) throw new Error("Item do pedido não encontrado.");
+  if (item.type === "MASCOT_FOOD") return { type: "FOOD", quantity: order.quantity, displayName: item.name };
+  if (item.type === "MASCOT_SWEET") return { type: "SWEET", quantity: order.quantity, displayName: item.name };
+  return { type: item.type, quantity: order.quantity, displayName: item.name, shopItemId: item.id };
+}
+
+/** Mascotes livres do jogador que atendem a um pedido de espécie (carregado só ao clicar em Vender). */
+export async function getBuyOrderSellOptions(orderId: string): Promise<{
+  error?: string;
+  mascots?: { id: string; level: number; nickname: string | null }[];
+}> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const order = await prisma.bazarBuyOrder.findUnique({ where: { id: String(orderId) } });
+    if (!order || order.kind !== "MASCOT" || order.pokemonId == null) return { error: "Pedido não encontrado." };
+    await prepareBazarMascotAvailability(player.id);
+    const mascots = await prisma.mascot.findMany({
+      where: {
+        playerId: player.id, pokemonId: order.pokemonId, level: { gte: order.minLevel },
+        bazarListed: false, isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
+      },
+      select: { id: true, level: true, nickname: true },
+      orderBy: { level: "asc" },
+      take: 30,
+    });
+    return { mascots };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao carregar mascotes." };
+  }
+}
+
+export async function sellToBuyOrder(orderId: string, mascotId?: string): Promise<{ error?: string; noFunds?: boolean; price?: number }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const order = await prisma.bazarBuyOrder.findUnique({
+      where: { id: String(orderId) },
+      include: { buyer: { select: { id: true, displayName: true, userId: true } } },
+    });
+    if (!order || order.status !== "ACTIVE") return { error: "Este pedido não está mais aberto." };
+    if (order.expiresAt <= new Date()) return { error: "Este pedido expirou." };
+    if (order.buyerId === player.id) return { error: "Você não pode vender para o seu próprio pedido." };
+    await assertBazarPairAllowed(prisma, player.id, order.buyerId);
+
+    // Aviso amigável antes de mexer em qualquer coisa do vendedor.
+    const buyerWallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: order.buyerId }, select: { balance: true } });
+    if ((buyerWallet?.balance ?? 0) < order.priceCoins) return { error: BUY_ORDER_NO_FUNDS_MESSAGE, noFunds: true };
+
+    if (order.kind === "MASCOT") {
+      await prepareBazarMascotAvailability(player.id);
+      const mascot = mascotId ? await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true, pokemonId: true, level: true } }) : null;
+      if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+      if (mascot.pokemonId !== order.pokemonId) return { error: "Este mascote não é da espécie pedida." };
+      if (mascot.level < order.minLevel) return { error: `O pedido exige nível ${order.minLevel} ou mais.` };
+    }
+    const offer = await buyOrderOfferItem(order, mascotId ?? null);
+    const price = order.priceCoins;
+    const sellerName = player.displayName;
+    const buyerName = order.buyer.displayName;
+    const category = order.kind === "MASCOT" ? "MASCOT" : "ITEM";
+    const qtyLabel = order.kind === "ITEM" && order.quantity > 1 ? ` x${order.quantity}` : "";
+    const desc = `${order.label}${qtyLabel} vendido por ${price} ZC (Loja de Pedidos)`;
+
+    await prisma.$transaction(async (tx) => {
+      // Dois vendedores no mesmo pedido: o lock serializa e o claim abaixo garante um só vencedor.
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"buyorder:" + order.id}))`;
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"bazarsell:" + player.id}))`;
+      const claimed = await tx.bazarBuyOrder.updateMany({
+        where: { id: order.id, status: "ACTIVE", expiresAt: { gt: new Date() }, priceCoins: price },
+        data: { status: "FILLED", filledById: player.id, filledAt: new Date() },
+      });
+      if (claimed.count !== 1) throw new Error("Este pedido já foi atendido, cancelado ou expirou.");
+
+      const debited = await tx.zikaCoinWallet.updateMany({
+        where: { playerId: order.buyerId, balance: { gte: price } },
+        data: { balance: { decrement: price } },
+      });
+      if (debited.count !== 1) throw new BuyOrderNoFundsError(BUY_ORDER_NO_FUNDS_MESSAGE);
+      await tx.zikaCoinWallet.upsert({
+        where: { playerId: player.id },
+        update: { balance: { increment: price } },
+        create: { playerId: player.id, balance: price, totalEarned: price },
+      });
+
+      const reserved = await _reserveProposalOffers(tx, player.id, [offer]);
+      await _deliverProposalOffers(tx, reserved, player.id, order.buyerId);
+
+      await tx.bazarTransaction.create({
+        data: { listingId: order.id, sellerId: player.id, buyerId: order.buyerId, sellerName, buyerName, description: desc, coinsAmount: price, category },
+      });
+      await Promise.all([
+        recordPlayerActivity(tx, {
+          playerId: order.buyerId, category: "BAZAR", action: "BAZAR_PURCHASE",
+          summary: `Pedido atendido por ${sellerName}: ${desc}`, source: "BUY_ORDER", entityType: "bazarBuyOrder", entityId: order.id,
+          amount: -price, unit: "ZC",
+        }),
+        recordPlayerActivity(tx, {
+          playerId: player.id, actorUserId: user.id, category: "BAZAR", action: "BAZAR_SALE",
+          summary: `Vendeu para o pedido de ${buyerName}: ${desc}`, source: "BUY_ORDER", entityType: "bazarBuyOrder", entityId: order.id,
+          amount: price, unit: "ZC",
+        }),
+      ]);
+      await createPlayerNotification(tx, {
+        playerId: order.buyerId, category: "BAZAR", type: "BUY_ORDER_FILLED",
+        title: `Pedido atendido: ${order.label}${qtyLabel}`,
+        body: `${sellerName} vendeu para o seu pedido. ${price.toLocaleString("pt-BR")} ZC saíram da sua conta.`,
+        href: "/bazar?tab=pedidos&mine=1", entityId: order.id, eventKey: `bazar:buyorder:filled:buyer:${order.id}`,
+      });
+      await createPlayerNotification(tx, {
+        playerId: player.id, category: "BAZAR", type: "BUY_ORDER_SOLD",
+        title: `Venda concluída: ${order.label}${qtyLabel}`,
+        body: `${buyerName} pagou ${price.toLocaleString("pt-BR")} ZC pelo pedido.`,
+        href: "/bazar?tab=pedidos", entityId: order.id, eventKey: `bazar:buyorder:filled:seller:${order.id}`,
+      });
+      await creditMiauvadaoVaultFromPlayerTransaction(tx, price);
+    });
+
+    revalidateBazar();
+    revalidatePath("/inventario");
+    revalidatePath("/mascotes");
+    revalidateTag(`nav-${user.id}`);
+    revalidateTag(`nav-${order.buyer.userId}`);
+    after(() => Promise.allSettled([
+      sendNotificationToPlayers([order.buyerId], { title: `Pedido atendido: ${order.label}${qtyLabel}`, body: `${sellerName} vendeu para o seu pedido por ${price.toLocaleString("pt-BR")} ZC.`, url: "/bazar?tab=pedidos&mine=1", category: "BAZAR" }),
+      sendNotificationToPlayers([player.id], { title: `Venda concluída: ${order.label}${qtyLabel}`, body: `Você recebeu ${price.toLocaleString("pt-BR")} ZC de ${buyerName}.`, url: "/bazar?tab=pedidos", category: "BAZAR" }),
+      trackGachaObjective(player.id, "BAZAR_VENDA"),
+    ]).then(() => undefined));
+    return { price };
+  } catch (err) {
+    if (err instanceof BuyOrderNoFundsError) return { error: err.message, noFunds: true };
+    return { error: err instanceof Error ? err.message : "Erro ao vender." };
   }
 }
