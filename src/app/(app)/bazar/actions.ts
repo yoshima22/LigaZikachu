@@ -53,6 +53,7 @@ import {
   ORDER_EGG_TYPES,
   ORDER_STAT_KEYS,
   matchesMascotRequirements,
+  orderPriceFor,
 } from "@/lib/bazar-orders";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
@@ -4639,7 +4640,8 @@ type BuyOrderInput = {
   pokemonId?: number;
   minLevel?: number;
   personality?: string;
-  eggTypes?: string[];
+  /** Preço por origem de ovo aceita, ex. { COMMON: 1000, RARE: 1500 }. */
+  eggPrices?: Record<string, number>;
   topStats?: string[];
   shopItemId?: string;
   quantity?: number;
@@ -4654,10 +4656,12 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
     const player = await getSessionPlayer(user.id);
     if (!player) return { error: "Perfil não encontrado." };
 
-    const price = Math.floor(Number(input.priceCoins));
-    if (!Number.isSafeInteger(price) || price < 1 || price > BUY_ORDER_MAX_PRICE) {
-      return { error: `O valor deve ficar entre 1 e ${BUY_ORDER_MAX_PRICE.toLocaleString("pt-BR")} ZC.` };
-    }
+    const okPrice = (n: number) => Number.isSafeInteger(n) && n >= 1 && n <= BUY_ORDER_MAX_PRICE;
+    const priceError = `O valor deve ficar entre 1 e ${BUY_ORDER_MAX_PRICE.toLocaleString("pt-BR")} ZC.`;
+    let price = Math.floor(Number(input.priceCoins));
+    let maxPrice = price;
+    const hasEggPrices = input.kind === "MASCOT" && Object.keys(input.eggPrices ?? {}).length > 0;
+    if (!hasEggPrices && !okPrice(price)) return { error: priceError };
     const days = [3, 7, 14].includes(Number(input.durationDays)) ? Number(input.durationDays) : 7;
 
     let label = "";
@@ -4680,10 +4684,14 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
         if (!(PERSONALITIES as readonly string[]).includes(input.personality)) return { error: "Personalidade inválida." };
         personality = input.personality;
       }
-      if (input.eggTypes?.length) {
-        const types = [...new Set(input.eggTypes)];
-        if (types.some((t) => !(ORDER_EGG_TYPES as readonly string[]).includes(t))) return { error: "Origem do ovo inválida." };
-        eggType = ORDER_EGG_TYPES.filter((t) => types.includes(t)).join(",");
+      if (hasEggPrices) {
+        const entries = Object.entries(input.eggPrices!).map(([t, v]) => [t, Math.floor(Number(v))] as const);
+        if (entries.some(([t]) => !(ORDER_EGG_TYPES as readonly string[]).includes(t))) return { error: "Origem do ovo inválida." };
+        if (entries.some(([, v]) => !okPrice(v))) return { error: priceError };
+        eggType = ORDER_EGG_TYPES.filter((t) => entries.some(([k]) => k === t))
+          .map((t) => `${t}:${entries.find(([k]) => k === t)![1]}`).join(",");
+        price = Math.min(...entries.map(([, v]) => v));
+        maxPrice = Math.max(...entries.map(([, v]) => v));
       }
       if (input.topStats?.length) {
         const keys = [...new Set(input.topStats)];
@@ -4712,7 +4720,7 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
     }
 
     const wallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } });
-    if ((wallet?.balance ?? 0) < price) {
+    if ((wallet?.balance ?? 0) < maxPrice) {
       return { error: "Você precisa ter o valor do pedido em ZC para publicá-lo (ele só sai da conta quando alguém vender)." };
     }
 
@@ -4777,7 +4785,7 @@ async function buyOrderOfferItem(
 /** Mascotes livres do jogador que atendem a um pedido de espécie (carregado só ao clicar em Vender). */
 export async function getBuyOrderSellOptions(orderId: string): Promise<{
   error?: string;
-  mascots?: { id: string; level: number; nickname: string | null }[];
+  mascots?: { id: string; level: number; nickname: string | null; price: number }[];
 }> {
   try {
     const user = await getSessionUser();
@@ -4798,7 +4806,7 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
       orderBy: { level: "asc" },
       take: 60,
     });
-    return { mascots: mascots.filter((m) => matchesMascotRequirements(order, m)).slice(0, 30).map((m) => ({ id: m.id, level: m.level, nickname: m.nickname })) };
+    return { mascots: mascots.filter((m) => matchesMascotRequirements(order, m)).slice(0, 30).map((m) => ({ id: m.id, level: m.level, nickname: m.nickname, price: orderPriceFor(order, m.hatchedFromEggType) })) };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao carregar mascotes." };
   }
@@ -4820,10 +4828,7 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
     if (order.buyerId === player.id) return { error: "Você não pode vender para o seu próprio pedido." };
     await assertBazarPairAllowed(prisma, player.id, order.buyerId);
 
-    // Aviso amigável antes de mexer em qualquer coisa do vendedor.
-    const buyerWallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: order.buyerId }, select: { balance: true } });
-    if ((buyerWallet?.balance ?? 0) < order.priceCoins) return { error: BUY_ORDER_NO_FUNDS_MESSAGE, noFunds: true };
-
+    let price = order.priceCoins;
     if (order.kind === "MASCOT") {
       await prepareBazarMascotAvailability(player.id);
       const mascot = mascotId ? await prisma.mascot.findUnique({ where: { id: mascotId }, select: { playerId: true, pokemonId: true, level: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true } }) : null;
@@ -4831,9 +4836,12 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
       if (mascot.pokemonId !== order.pokemonId) return { error: "Este mascote não é da espécie pedida." };
       if (mascot.level < order.minLevel) return { error: `O pedido exige nível ${order.minLevel} ou mais.` };
       if (!matchesMascotRequirements(order, mascot)) return { error: "Este mascote não atende aos requisitos do pedido (personalidade, ovo ou atributos)." };
+      price = orderPriceFor(order, mascot.hatchedFromEggType);
     }
+    // Aviso amigável antes de mexer em qualquer coisa do vendedor.
+    const buyerWallet = await prisma.zikaCoinWallet.findUnique({ where: { playerId: order.buyerId }, select: { balance: true } });
+    if ((buyerWallet?.balance ?? 0) < price) return { error: BUY_ORDER_NO_FUNDS_MESSAGE, noFunds: true };
     const offer = await buyOrderOfferItem(order, mascotId ?? null);
-    const price = order.priceCoins;
     const sellerName = player.displayName;
     const buyerName = order.buyer.displayName;
     const category = order.kind === "MASCOT" ? "MASCOT" : "ITEM";
@@ -4845,7 +4853,7 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"buyorder:" + order.id}))`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${"bazarsell:" + player.id}))`;
       const claimed = await tx.bazarBuyOrder.updateMany({
-        where: { id: order.id, status: "ACTIVE", expiresAt: { gt: new Date() }, priceCoins: price },
+        where: { id: order.id, status: "ACTIVE", expiresAt: { gt: new Date() }, priceCoins: order.priceCoins, eggType: order.eggType },
         data: { status: "FILLED", filledById: player.id, filledAt: new Date() },
       });
       if (claimed.count !== 1) throw new Error("Este pedido já foi atendido, cancelado ou expirou.");

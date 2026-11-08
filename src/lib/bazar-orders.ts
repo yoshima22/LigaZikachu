@@ -62,8 +62,23 @@ export function matchesTopStats(topStats: string | null | undefined, m: MascotFa
   return Math.min(...chosen.map((k) => m[k])) >= Math.max(...rest.map((k) => m[k]));
 }
 
+/** eggType guarda "COMMON:1000,RARE:1500" (preço por origem). Formato antigo "COMMON,RARE" = preço do pedido. */
+export function parseEggPrices(raw: string | null | undefined): { type: string; price: number | null }[] {
+  if (!raw) return [];
+  return raw.split(",").map((part) => {
+    const [type, price] = part.split(":");
+    return { type, price: price ? Number(price) : null };
+  });
+}
+
+/** Quanto o pedido paga por um mascote nascido de tal ovo. */
+export function orderPriceFor(order: { priceCoins: number; eggType: string | null }, egg: string | null) {
+  const hit = parseEggPrices(order.eggType).find((e) => e.type === egg);
+  return hit?.price ?? order.priceCoins;
+}
+
 export function matchesMascotRequirements(req: MascotReq, m: MascotFacts) {
   if (req.personality && m.personality !== req.personality) return false;
-  if (req.eggType && !req.eggType.split(",").includes(m.hatchedFromEggType ?? "")) return false;
+  if (req.eggType && !parseEggPrices(req.eggType).some((e) => e.type === m.hatchedFromEggType)) return false;
   return matchesTopStats(req.topStats, m);
 }

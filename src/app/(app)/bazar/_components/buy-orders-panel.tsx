@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Clock, Loader2, PackageSearch, Plus, Search, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 import { getSpriteUrl, PERSONALITIES, PERSONALITY_LABEL } from "@/lib/mascot-data";
-import { BUY_ORDER_DURATIONS, BUY_ORDER_NO_FUNDS_MESSAGE, BUY_ORDER_MAX_ACTIVE, ORDER_EGG_LABEL, ORDER_EGG_TYPES, ORDER_STAT_KEYS, ORDER_STAT_LABEL, type OrderStatKey, type BuyOrderView } from "@/lib/bazar-orders";
+import { parseEggPrices, BUY_ORDER_DURATIONS, BUY_ORDER_NO_FUNDS_MESSAGE, BUY_ORDER_MAX_ACTIVE, ORDER_EGG_LABEL, ORDER_EGG_TYPES, ORDER_STAT_KEYS, ORDER_STAT_LABEL, type OrderStatKey, type BuyOrderView } from "@/lib/bazar-orders";
 import { cancelBuyOrder, createBuyOrder, getBuyOrderSellOptions, sellToBuyOrder } from "../actions";
 
 type Props = {
@@ -68,7 +68,7 @@ function OrderThumb({ order }: { order: BuyOrderView }) {
 function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [mascots, setMascots] = useState<{ id: string; level: number; nickname: string | null }[] | null>(null);
+  const [mascots, setMascots] = useState<{ id: string; level: number; nickname: string | null; price: number }[] | null>(null);
   const [pick, setPick] = useState<string>("");
   const [notice, setNotice] = useState<{ msg: string; noFunds: boolean } | null>(
     order.covered ? null : { msg: BUY_ORDER_NO_FUNDS_MESSAGE, noFunds: true },
@@ -87,12 +87,13 @@ function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => vo
     start(async () => {
       const r = await sellToBuyOrder(order.id, order.kind === "MASCOT" ? pick : undefined);
       if (r.error) { setNotice({ msg: r.error, noFunds: Boolean(r.noFunds) }); return; }
-      toast.success(`Venda concluída! +${order.priceCoins.toLocaleString("pt-BR")} ZC na sua conta.`);
+      toast.success(`Venda concluída! +${(r.price ?? order.priceCoins).toLocaleString("pt-BR")} ZC na sua conta.`);
       onClose();
       router.refresh();
     });
   }
 
+  const shownPrice = mascots?.find((m) => m.id === pick)?.price ?? order.priceCoins;
   const qty = order.kind === "ITEM" && order.quantity > 1 ? ` ×${order.quantity}` : "";
   return (
     <Modal title="Vender para o pedido" onClose={onClose}>
@@ -100,7 +101,7 @@ function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => vo
         <div className="rounded-xl border border-border bg-slate-900/60 p-3 text-sm">
           <p className="font-bold text-slate-100">{order.label}{qty}</p>
           <p className="mt-1 text-xs text-slate-400">Pedido de <strong className="text-slate-200">{order.buyer.displayName}</strong></p>
-          <p className="mt-2 text-lg font-black text-[#FFCB05]">💰 {order.priceCoins.toLocaleString("pt-BR")} ZC</p>
+          <p className="mt-2 text-lg font-black text-[#FFCB05]">💰 {shownPrice.toLocaleString("pt-BR")} ZC</p>
           <p className="text-[11px] text-slate-500">Você recebe o valor integral, na hora.</p>
         </div>
 
@@ -119,6 +120,7 @@ function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => vo
                   <input type="radio" name="mascot" checked={pick === m.id} onChange={() => setPick(m.id)} className="accent-[#FFCB05]" />
                   <span className="text-slate-200">{m.nickname || order.label}</span>
                   <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">Nv. {m.level}</span>
+                  <span className="text-xs font-bold text-[#FFCB05]">{m.price.toLocaleString("pt-BR")} ZC</span>
                 </label>
               ))}
               <p className="text-[11px] text-amber-300/80">Atenção: o mascote sai da sua conta para sempre.</p>
@@ -158,7 +160,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
   const [minLevel, setMinLevel] = useState(1);
   const [quantity, setQuantity] = useState(1);
   const [personality, setPersonality] = useState("");
-  const [eggTypes, setEggTypes] = useState<string[]>([]);
+  const [eggPrices, setEggPrices] = useState<Record<string, string>>({});
   const [topStats, setTopStats] = useState<OrderStatKey[]>([]);
   const [price, setPrice] = useState("");
   const [days, setDays] = useState<number>(7);
@@ -178,7 +180,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
     setError(null);
     start(async () => {
       const r = await createBuyOrder({
-        kind, pokemonId: pokemonId ?? undefined, minLevel, personality: personality || undefined, eggTypes: eggTypes.length ? eggTypes : undefined, topStats: topStats.length ? topStats : undefined, shopItemId: shopItemId || undefined,
+        kind, pokemonId: pokemonId ?? undefined, minLevel, personality: personality || undefined, eggPrices: Object.keys(eggPrices).length ? Object.fromEntries(Object.entries(eggPrices).map(([t, v]) => [t, Number(v)])) : undefined, topStats: topStats.length ? topStats : undefined, shopItemId: shopItemId || undefined,
         quantity, priceCoins: Number(price), durationDays: days,
       });
       if (r.error) { setError(r.error); return; }
@@ -244,18 +246,30 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
               </label>
             </div>
             <div className="space-y-1.5">
-              <p className="text-[11px] font-semibold text-slate-300">Origem do ovo <span className="font-normal text-slate-500">(marque quantas aceitar — vazio = qualquer)</span></p>
+              <p className="text-[11px] font-semibold text-slate-300">Origem do ovo <span className="font-normal text-slate-500">(marque as aceitas e dê um preço a cada — vazio = qualquer, preço único)</span></p>
               <div className="flex flex-wrap gap-1.5">
                 {ORDER_EGG_TYPES.map((t) => {
-                  const on = eggTypes.includes(t);
+                  const on = t in eggPrices;
                   return (
-                    <button key={t} type="button" onClick={() => setEggTypes((cur) => on ? cur.filter((x) => x !== t) : [...cur, t])}
+                    <button key={t} type="button" onClick={() => setEggPrices((cur) => { const n = { ...cur }; if (on) delete n[t]; else n[t] = ""; return n; })}
                       className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${on ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"}`}>
                       {ORDER_EGG_LABEL[t]}
                     </button>
                   );
                 })}
               </div>
+              {Object.keys(eggPrices).length > 0 && (
+                <div className="space-y-1.5 pt-1">
+                  {ORDER_EGG_TYPES.filter((t) => t in eggPrices).map((t) => (
+                    <label key={t} className="flex items-center gap-2 text-[11px] text-slate-300">
+                      <span className="w-32 shrink-0">{ORDER_EGG_LABEL[t]}</span>
+                      <input type="number" min={1} inputMode="numeric" placeholder="ZC" value={eggPrices[t]}
+                        onChange={(e) => setEggPrices((cur) => ({ ...cur, [t]: e.target.value }))}
+                        className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60" />
+                    </label>
+                  ))}
+                </div>
+              )}
             </div>
             <div className="space-y-1.5">
               <p className="text-[11px] font-semibold text-slate-300">3 atributos mais altos <span className="font-normal text-slate-500">({topStats.length}/3 — deixe vazio para qualquer)</span></p>
@@ -281,11 +295,13 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
           </div>
         )}
 
+        {Object.keys(eggPrices).length === 0 || kind !== "MASCOT" ? (
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-300">Quanto você paga (ZC total)</label>
           <input type="number" min={1} inputMode="numeric" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ex.: 1500"
             className="w-full rounded-xl border border-border bg-slate-900 px-3 py-2 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60" />
         </div>
+        ) : null}
 
         <div className="space-y-1.5">
           <label className="text-xs font-semibold text-slate-300">Validade</label>
@@ -301,7 +317,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
           Nada é cobrado agora. O ZC só sai da sua conta quando alguém vender. Máximo de {BUY_ORDER_MAX_ACTIVE} pedidos abertos.
         </p>
         {error && <p className="rounded-xl border border-red-500/30 bg-red-500/10 p-3 text-xs text-red-200">{error}</p>}
-        <button onClick={submit} disabled={pending || !chosen || !(Number(price) > 0) || (topStats.length > 0 && topStats.length < 3)}
+        <button onClick={submit} disabled={pending || !chosen || (kind === "MASCOT" && Object.keys(eggPrices).length > 0 ? Object.values(eggPrices).some((v) => !(Number(v) > 0)) : !(Number(price) > 0)) || (topStats.length > 0 && topStats.length < 3)}
           className="w-full rounded-xl bg-[#FFCB05] px-4 py-2.5 text-xs font-bold text-[#1A1A2E] hover:bg-[#FFD700] disabled:opacity-50">
           {pending ? "Publicando…" : "Publicar pedido"}
         </button>
@@ -354,12 +370,12 @@ export function BuyOrdersPanel({ orders, playerId, species, items, myActiveCount
                 {o.kind === "MASCOT" && (o.personality || o.eggType || o.topStats) && (
                   <div className="flex flex-wrap gap-1 pt-0.5">
                     {o.personality && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[o.personality] ?? o.personality}</span>}
-                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {o.eggType.split(",").map((t) => ORDER_EGG_LABEL[t] ?? t).join(" ou ")}</span>}
+                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {parseEggPrices(o.eggType).map((e) => `${ORDER_EGG_LABEL[e.type] ?? e.type}${e.price ? ` ${e.price.toLocaleString("pt-BR")}` : ""}`).join(" · ")}</span>}
                     {o.topStats && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">Top: {o.topStats.split(",").map((k) => ORDER_STAT_LABEL[k as OrderStatKey] ?? k).join(" · ")}</span>}
                   </div>
                 )}
                 <div className="flex flex-wrap items-center gap-1.5 pt-1">
-                  <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[11px] font-black text-[#FFCB05]">💰 {o.priceCoins.toLocaleString("pt-BR")} ZC</span>
+                  <span className="rounded-full border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-0.5 text-[11px] font-black text-[#FFCB05]">💰 {parseEggPrices(o.eggType).some((e) => e.price) ? "a partir de " : ""}{o.priceCoins.toLocaleString("pt-BR")} ZC</span>
                   {o.covered ? (
                     <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold text-emerald-300">✓ Venda imediata</span>
                   ) : (
