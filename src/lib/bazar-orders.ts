@@ -64,6 +64,6 @@ export function matchesTopStats(topStats: string | null | undefined, m: MascotFa
 
 export function matchesMascotRequirements(req: MascotReq, m: MascotFacts) {
   if (req.personality && m.personality !== req.personality) return false;
-  if (req.eggType && m.hatchedFromEggType !== req.eggType) return false;
+  if (req.eggType && !req.eggType.split(",").includes(m.hatchedFromEggType ?? "")) return false;
   return matchesTopStats(req.topStats, m);
 }

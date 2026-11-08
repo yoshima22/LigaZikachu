@@ -158,7 +158,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
   const [minLevel, setMinLevel] = useState(1);
   const [quantity, setQuantity] = useState(1);
   const [personality, setPersonality] = useState("");
-  const [eggType, setEggType] = useState("");
+  const [eggTypes, setEggTypes] = useState<string[]>([]);
   const [topStats, setTopStats] = useState<OrderStatKey[]>([]);
   const [price, setPrice] = useState("");
   const [days, setDays] = useState<number>(7);
@@ -178,7 +178,7 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
     setError(null);
     start(async () => {
       const r = await createBuyOrder({
-        kind, pokemonId: pokemonId ?? undefined, minLevel, personality: personality || undefined, eggType: eggType || undefined, topStats: topStats.length ? topStats : undefined, shopItemId: shopItemId || undefined,
+        kind, pokemonId: pokemonId ?? undefined, minLevel, personality: personality || undefined, eggTypes: eggTypes.length ? eggTypes : undefined, topStats: topStats.length ? topStats : undefined, shopItemId: shopItemId || undefined,
         quantity, priceCoins: Number(price), durationDays: days,
       });
       if (r.error) { setError(r.error); return; }
@@ -243,13 +243,20 @@ function CreateDialog({ species, items, onClose }: { species: [number, string][]
                 </select>
               </label>
             </div>
-            <label className="block space-y-1 text-[11px] font-semibold text-slate-300">Origem do ovo
-              <select value={eggType} onChange={(e) => setEggType(e.target.value)}
-                className="w-full rounded-lg border border-border bg-slate-900 px-2 py-1.5 text-xs text-slate-200 outline-none focus:border-[#FFCB05]/60">
-                <option value="">Qualquer</option>
-                {ORDER_EGG_TYPES.map((t) => <option key={t} value={t}>{ORDER_EGG_LABEL[t]}</option>)}
-              </select>
-            </label>
+            <div className="space-y-1.5">
+              <p className="text-[11px] font-semibold text-slate-300">Origem do ovo <span className="font-normal text-slate-500">(marque quantas aceitar — vazio = qualquer)</span></p>
+              <div className="flex flex-wrap gap-1.5">
+                {ORDER_EGG_TYPES.map((t) => {
+                  const on = eggTypes.includes(t);
+                  return (
+                    <button key={t} type="button" onClick={() => setEggTypes((cur) => on ? cur.filter((x) => x !== t) : [...cur, t])}
+                      className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold ${on ? "border-[#FFCB05]/60 bg-[#FFCB05]/15 text-[#FFCB05]" : "border-border text-slate-400 hover:text-slate-200"}`}>
+                      {ORDER_EGG_LABEL[t]}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <div className="space-y-1.5">
               <p className="text-[11px] font-semibold text-slate-300">3 atributos mais altos <span className="font-normal text-slate-500">({topStats.length}/3 — deixe vazio para qualquer)</span></p>
               <div className="flex flex-wrap gap-1.5">
@@ -347,7 +354,7 @@ export function BuyOrdersPanel({ orders, playerId, species, items, myActiveCount
                 {o.kind === "MASCOT" && (o.personality || o.eggType || o.topStats) && (
                   <div className="flex flex-wrap gap-1 pt-0.5">
                     {o.personality && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[o.personality] ?? o.personality}</span>}
-                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {ORDER_EGG_LABEL[o.eggType] ?? o.eggType}</span>}
+                    {o.eggType && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {o.eggType.split(",").map((t) => ORDER_EGG_LABEL[t] ?? t).join(" ou ")}</span>}
                     {o.topStats && <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">Top: {o.topStats.split(",").map((k) => ORDER_STAT_LABEL[k as OrderStatKey] ?? k).join(" · ")}</span>}
                   </div>
                 )}

@@ -4639,7 +4639,7 @@ type BuyOrderInput = {
   pokemonId?: number;
   minLevel?: number;
   personality?: string;
-  eggType?: string;
+  eggTypes?: string[];
   topStats?: string[];
   shopItemId?: string;
   quantity?: number;
@@ -4680,9 +4680,10 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
         if (!(PERSONALITIES as readonly string[]).includes(input.personality)) return { error: "Personalidade inválida." };
         personality = input.personality;
       }
-      if (input.eggType) {
-        if (!(ORDER_EGG_TYPES as readonly string[]).includes(input.eggType)) return { error: "Origem do ovo inválida." };
-        eggType = input.eggType;
+      if (input.eggTypes?.length) {
+        const types = [...new Set(input.eggTypes)];
+        if (types.some((t) => !(ORDER_EGG_TYPES as readonly string[]).includes(t))) return { error: "Origem do ovo inválida." };
+        eggType = ORDER_EGG_TYPES.filter((t) => types.includes(t)).join(",");
       }
       if (input.topStats?.length) {
         const keys = [...new Set(input.topStats)];
@@ -4791,7 +4792,7 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
         playerId: player.id, pokemonId: order.pokemonId, level: { gte: order.minLevel },
         bazarListed: false, isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
         ...(order.personality ? { personality: order.personality as never } : {}),
-        ...(order.eggType ? { hatchedFromEggType: order.eggType as never } : {}),
+        ...(order.eggType ? { hatchedFromEggType: { in: order.eggType.split(",") as never[] } } : {}),
       },
       select: { id: true, level: true, nickname: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
       orderBy: { level: "asc" },
