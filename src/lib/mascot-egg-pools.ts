@@ -55,7 +55,7 @@ export type EggRollOptions = {
   generationType?: string | null;
   rarityBonusPct?: number;
   randomGenerationBonus?: boolean;
-  /** Garantia de lendários: sorteia só categorias acima de COMMON. */
+  /** Garantia de lendários: sorteia só lendários, míticos, ultra bestas e paradoxais. */
   guaranteeHighRarity?: boolean;
   ownedBaseCounts?: ReadonlyMap<number, number> | Record<number, number>;
   excludedPokemonIds?: Iterable<number>;
@@ -379,9 +379,11 @@ export function rollEggPokemon(eggType: string, options: EggRollOptions = {}): E
   const generation = Number(generationType.replace("EGG_GEN", ""));
   const extraBonus = (options.rarityBonusPct ?? 0) + (options.randomGenerationBonus ? 1 : 0);
   const categoryWeights = getEggCategoryWeightsForGeneration(eggType, generation, extraBonus);
-  // Garantia: remove a categoria comum do sorteio (se a geração não tiver nenhuma rara, cai no comum).
-  if (options.guaranteeHighRarity && Object.entries(categoryWeights).some(([c, w]) => c !== "COMMON" && w > 0)) {
+  // Garantia: remove comum e pseudo-lendário do sorteio (pseudo não conta como raridade garantida).
+  // Se a geração não tiver nenhuma categoria rara, cai no comum.
+  if (options.guaranteeHighRarity && Object.entries(categoryWeights).some(([c, w]) => c !== "COMMON" && c !== "PSEUDO_LEGENDARY" && w > 0)) {
     categoryWeights.COMMON = 0;
+    categoryWeights.PSEUDO_LEGENDARY = 0;
   }
   const requestedCategory = rollCategory(categoryWeights, random);
   const requestedTier: EggPokemonTier = ["LEGENDARY", "MYTHICAL", "ULTRA_BEAST"].includes(requestedCategory)

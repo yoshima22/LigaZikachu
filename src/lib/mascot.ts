@@ -238,9 +238,10 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   }));
   const pokemonId = forcedPokemonId ?? rollResult!.pokemonId;
   const personality = randomPersonality();
+  // Pseudo-lendário não conta: só lendário, mítico, ultra besta e paradoxal zeram o contador.
   const gotHighRarity = rollResult
-    ? rollResult.category !== "COMMON"
-    : registryTier(getMascotRarity(pokemonId)) !== "COMMON";
+    ? rollResult.category !== "COMMON" && rollResult.category !== "PSEUDO_LEGENDARY"
+    : !["COMMON", "PSEUDO_LEGENDARY"].includes(registryTier(getMascotRarity(pokemonId)));
 
   const mascot = await prisma.$transaction(async (tx) => {
     await recordEggPityResult(playerId, pityKey, gotHighRarity, tx);
