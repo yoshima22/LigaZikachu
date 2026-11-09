@@ -5,7 +5,7 @@ import { getSessionUser } from "@/lib/auth/permissions";
 import { redirect } from "next/navigation";
 import { EggType, FoodType, ShopItemType, ZikaCoinTxType } from "@prisma/client";
 import { revalidateTag } from "next/cache";
-import { getStaticSpriteUrl, getShinySprite, getPokemonName } from "@/lib/mascot-data";
+import { getStaticSpriteUrl, getShinySprite, getPokemonName, rollEventBonus } from "@/lib/mascot-data";
 import { creditCoins, getOrCreateWallet } from "@/lib/zikacoins";
 import { computeMascotAnalysis, MASCOT_ANALYSIS_VERSION } from "@/lib/mascot-analysis";
 import type { MascotAnalysis } from "@/lib/mascot-analysis";
@@ -296,6 +296,14 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
         if (!debited.count) throw new Error(`Pó de Criação insuficiente: a fusão custa ${recipe.mutationCost}.`);
         cost = recipe.mutationCost;
         await applyRainbowFeather(me.id, survivor.id, recipe.resultOrigin, tx, false, recipe.resultOrigin);
+        // Ao virar origem de Evento, o mascote rola o mesmo bônus dos ovos de Evento (+3 a +6 em um atributo).
+        if (recipe.resultOrigin === "EVENT") {
+          const cur = await tx.mascot.findUniqueOrThrow({ where: { id: survivor.id }, select: { eventBonusStat: true } });
+          if (!cur.eventBonusStat) {
+            const bonus = rollEventBonus();
+            await tx.mascot.update({ where: { id: survivor.id }, data: { eventBonusRolledAt: new Date(), ...(bonus ? { eventBonusStat: bonus.stat, eventBonusValue: bonus.value, [bonus.stat]: { increment: bonus.value } } : {}) } });
+          }
+        }
         await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: 0 } });
       }
       await tx.mascot.deleteMany({ where: { id: { in: consumed.map((m) => m.id) } } });

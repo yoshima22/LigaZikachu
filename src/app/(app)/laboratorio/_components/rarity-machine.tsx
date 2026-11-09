@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { ChevronLeft, ChevronRight, Loader2, Search, Sparkles, X } from "lucide-react";
 import { fuseMascotsInLabAction, grantCreationDustAction, searchLabPlayersAction } from "../actions";
 import { CodeChip, StatStrip, TagChip, statsTotal, type MascotStats } from "./mascot-chips";
-import { PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { PERSONALITY_LABEL, eventBonusLabel } from "@/lib/mascot-data";
 import { getOriginFusionRecipe, validateLabStarFusion } from "@/lib/lab-rarity-machine";
 
 export type MachineMascot = {
@@ -88,7 +88,7 @@ function HowItWorks() {
         </div>
         <div>
           <p className="font-bold text-fuchsia-200">🌈 O preço da evolução: o Reset</p>
-          <p>Mudar de origem mexe com o DNA. O mantido passa pelo <b>mesmo reset da Pena Arco-Íris</b>: volta à forma-base e ao <b>nível 1</b>, ganha <b>nova personalidade</b> e tem os <b>status sorteados de novo</b> na faixa da nova origem. Se ele for de Evento e tiver o <b>bônus de evento</b>, o bônus <b>continua</b> lá — é o único passageiro que a máquina não consegue arrancar.</p>
+          <p>Mudar de origem mexe com o DNA. O mantido passa pelo <b>mesmo reset da Pena Arco-Íris</b>: volta à forma-base e ao <b>nível 1</b>, ganha <b>nova personalidade</b> e tem os <b>status sorteados de novo</b> na faixa da nova origem. Se ele já tiver o <b>bônus de evento</b>, o bônus <b>continua</b> lá — é o único passageiro que a máquina não consegue arrancar. E quem vira <b>origem de Evento</b> rola, como os ovos de Evento, <b>35% de chance</b> de ganhar <b>+3 a +6 em um atributo aleatório</b>.</p>
         </div>
         <div>
           <p className="font-bold text-fuchsia-200">⭐ Estrelas do Laboratório</p>
@@ -379,7 +379,7 @@ export function RarityMachine({
                     <b className="text-amber-300">{ORIGIN_LABEL[anim.result.eggType ?? ""] ?? "—"}</b> · Lv.{anim.result.level} · Nova personalidade: <b className="text-fuchsia-200">{PERSONALITY_LABEL[anim.result.personality] ?? anim.result.personality}</b>
                   </p>
                   <div className="mt-2"><StatStrip stats={anim.result.stats} size="md" /></div>
-                  {anim.result.eventBonusStat && anim.result.eventBonusValue ? <p className="mt-2 text-[10px] text-emerald-300">Bônus de evento preservado (+{anim.result.eventBonusValue})</p> : null}
+                  {anim.result.eventBonusStat && anim.result.eventBonusValue ? <p className="mt-2 text-[10px] text-emerald-300">🎉 Bônus de Evento: +{anim.result.eventBonusValue} em {eventBonusLabel(anim.result.eventBonusStat)}</p> : null}
                 </div>
               )}
               <button type="button" onClick={() => setAnim(null)} className="rm-rise mt-6 rounded-xl bg-fuchsia-400 px-6 py-2 text-sm font-bold text-slate-950" style={{ animationDelay: "0.9s" }}>Fechar</button>
