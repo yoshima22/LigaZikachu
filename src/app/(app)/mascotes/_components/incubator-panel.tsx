@@ -764,6 +764,16 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
             <span className="text-[10px] text-slate-600">1 slot</span>
           </h2>
           <div className="ml-auto flex flex-wrap items-center gap-3">
+          {hatchResult && recycledDust === null && (
+            <button
+              type="button"
+              onClick={() => { if (window.confirm(`Reciclar ${hatchResult.name} em Pó da Criação? Não dá para desfazer.`)) recycleHatched(); }}
+              disabled={pending}
+              className="flex items-center gap-1.5 rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-3 py-2 text-[11px] font-semibold text-emerald-300 transition hover:border-emerald-400/70 disabled:opacity-40"
+            >
+              ♻️ Reciclar
+            </button>
+          )}
           <EggPityButton />
           <label className="flex cursor-pointer items-center gap-2 rounded-xl border border-violet-400/20 bg-violet-400/[.06] px-3 py-2 text-[11px] text-slate-300 transition hover:border-violet-400/40">
             <input
@@ -877,15 +887,6 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <span className="text-[11px] text-slate-500">Marcar desempenho:</span>
               <PerformanceTagPicker mascotId={hatchResult.mascotId} initial="NEUTRO" size="md" align="left" />
             </div>
-
-            <button
-              type="button"
-              onClick={() => { if (window.confirm(`Reciclar ${hatchResult.name} em Pó da Criação? Não dá para desfazer.`)) recycleHatched(); }}
-              disabled={pending}
-              className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40"
-            >
-              ♻️ Reciclar
-            </button>
 
             <p className="text-xs text-slate-500">Vá até Meus Mascotes para interagir.</p>
             </>)}
