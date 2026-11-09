@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ExternalLink, Lock, Search } from "lucide-react";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
-  ABILITY_CATEGORIES, ABILITY_CATEGORY_LIMIT, ABILITY_REDUCED_FACTOR, ABILITY_STAT_CAP, describeAbility,
+  ABILITY_CATEGORIES, ABILITY_CATEGORY_LIMIT, ABILITY_REDUCED_FACTOR, ABILITY_STAT_CAP, describeAbility, getAbilityInfo,
   type AbilityInfo,
 } from "@/lib/abilities";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
@@ -14,7 +14,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 
 export const metadata = { title: "Habilidades | Liga Zikachu" };
 
-type Props = { searchParams: Promise<{ tab?: string; q?: string; cat?: string; gat?: string; mascote?: string }> };
+type Props = { searchParams: Promise<{ tab?: string; q?: string; cat?: string; gat?: string; mascote?: string; ability?: string }> };
 
 const TABS = [
   ["mascote", "Por mascote"],
@@ -114,7 +114,8 @@ export default async function HabilidadesPage({ searchParams }: Props) {
   const category = ABILITY_CATEGORIES.includes(params.cat as never) ? params.cat : "";
   const triggers = allTriggers();
   const trigger = triggers.includes(params.gat ?? "") ? params.gat : "";
-  const abilityHits = tab === "habilidade" ? searchAbilities({ q, category, trigger, disabled }) : [];
+  const directAbility = params.ability ? getAbilityInfo(params.ability) : null;
+  const abilityHits = tab === "habilidade" ? (directAbility ? [directAbility] : searchAbilities({ q, category, trigger, disabled })) : [];
 
   return (
     <div className="mx-auto max-w-5xl space-y-5">

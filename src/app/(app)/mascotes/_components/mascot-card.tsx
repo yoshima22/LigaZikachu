@@ -1,6 +1,7 @@
 "use client";
 
 import { MascotAbilityPanel } from "./mascot-ability-panel";
+import Link from "next/link";
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -1710,13 +1711,23 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     {chain[evoPreview].ids.length > 1 ? "Pode evoluir para (sorteio):" : "Evolui para:"}
                   </p>
                   <div className="flex flex-wrap justify-center gap-2">
-                    {chain[evoPreview].ids.map((id) => (
-                      <div key={id} className="flex w-16 flex-col items-center rounded-lg bg-slate-800/60 px-1 py-1.5">
-                        <img src={getStaticSpriteUrl(id)} alt={getEvoName(id)} loading="lazy"
-                          className="h-12 w-12 object-contain" style={{ imageRendering: getMascotImageRendering(id) }} />
-                        <span className="mt-0.5 w-full truncate text-center text-[9px] text-slate-300">{getEvoName(id)}</span>
-                      </div>
-                    ))}
+                    {chain[evoPreview].ids.map((id) => {
+                      const card = (
+                        <>
+                          {/* Tamanho nativo do PNG (96px): 1:1 fica nítido; reduzir deixava borrado. */}
+                          <img src={getStaticSpriteUrl(id)} alt={getEvoName(id)} loading="lazy"
+                            className="h-24 w-24 object-contain drop-shadow-[0_0_10px_rgba(125,211,252,0.25)]" style={{ imageRendering: getMascotImageRendering(id) }} />
+                          <span className="mt-1 w-full truncate text-center text-[11px] font-semibold text-slate-200">{getEvoName(id)}</span>
+                          {id <= 1025 && <span className="text-[9px] text-sky-300/80">Ver na Pokédex →</span>}
+                        </>
+                      );
+                      const cls = "flex w-28 flex-col items-center rounded-xl border border-white/5 bg-slate-800/60 px-1 py-2";
+                      return id <= 1025 ? (
+                        <Link key={id} href={`/pokedex?q=${id}`} className={`${cls} transition hover:border-sky-400/40 hover:bg-slate-800`}>{card}</Link>
+                      ) : (
+                        <div key={id} className={cls}>{card}</div>
+                      );
+                    })}
                   </div>
                 </div>
               )}

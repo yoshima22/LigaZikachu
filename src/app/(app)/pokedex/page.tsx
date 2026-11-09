@@ -3,6 +3,9 @@ import Image from "next/image";
 import { ChevronLeft, ChevronRight, ExternalLink, Search, Sparkles } from "lucide-react";
 import { Card, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { getAppSession } from "@/lib/session";
+import { prisma } from "@/lib/prisma";
+import { getAbilityInfo } from "@/lib/abilities";
 import {
   type PokedexPokemon,
   generationOptions,
@@ -67,6 +70,26 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
     totalPages = result.totalPages;
   } catch {
     error = "Nao foi possivel carregar a Pokedex agora. Tente novamente em instantes.";
+  }
+
+  // Coleção do jogador só para os Pokémon desta página (3 queries pequenas, por índice).
+  const ids = pokemon.map((p) => p.id);
+  const ownedNow = new Set<number>();
+  const everHad = new Set<number>();
+  const stickers = new Set<number>();
+  const session = ids.length > 0 ? await getAppSession().catch(() => null) : null;
+  const me = session?.user
+    ? await prisma.player.findUnique({ where: { userId: session.user.id }, select: { id: true } })
+    : null;
+  if (me) {
+    const [mine, dex, owned] = await Promise.all([
+      prisma.mascot.findMany({ where: { playerId: me.id, pokemonId: { in: ids } }, select: { pokemonId: true } }),
+      prisma.playerPokemonDex.findMany({ where: { playerId: me.id, pokemonId: { in: ids } }, select: { pokemonId: true } }),
+      prisma.playerSticker.findMany({ where: { playerId: me.id, card: { nationalId: { in: ids } } }, select: { card: { select: { nationalId: true } } } }),
+    ]);
+    mine.forEach((m) => ownedNow.add(m.pokemonId));
+    dex.forEach((d) => everHad.add(d.pokemonId));
+    owned.forEach((o) => stickers.add(o.card.nationalId));
   }
 
   return (
@@ -203,6 +226,23 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
               </div>
 
               <div className="flex flex-wrap gap-2">
+                {ownedNow.has(entry.id) ? (
+                  <span className="rounded-full border border-emerald-400/40 bg-emerald-500/15 px-2.5 py-1 text-xs font-semibold text-emerald-300">✓ Você tem</span>
+                ) : everHad.has(entry.id) ? (
+                  <span className="rounded-full border border-amber-400/40 bg-amber-500/15 px-2.5 py-1 text-xs font-semibold text-amber-300">Você já teve</span>
+                ) : (
+                  <span className="rounded-full border border-slate-700 px-2.5 py-1 text-xs text-slate-500">Não tem</span>
+                )}
+                <Link
+                  href={`/album?q=${entry.id}`}
+                  className={`rounded-full border px-2.5 py-1 text-xs font-semibold ${
+                    stickers.has(entry.id)
+                      ? "border-sky-400/40 bg-sky-500/15 text-sky-300"
+                      : "border-slate-700 text-slate-500 hover:text-slate-300"
+                  }`}
+                >
+                  {stickers.has(entry.id) ? "🃏 Figurinha no álbum" : "Sem figurinha"}
+                </Link>
                 {entry.types.map((type) => (
                   <span
                     key={type}
@@ -231,15 +271,27 @@ export default async function PokedexPage({ searchParams }: PokedexPageProps) {
                   Habilidades
                 </p>
                 <div className="flex flex-wrap gap-2">
-                  {entry.abilities.map((ability) => (
-                    <span
-                      key={`${entry.id}-${ability.name}`}
-                      className="rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-xs text-slate-300"
-                    >
-                      {ability.name}
-                      {ability.hidden && <span className="text-slate-500"> oculta</span>}
-                    </span>
-                  ))}
+                  {entry.abilities.map((ability) => {
+                    const chipClass = "rounded-full border border-slate-700 bg-slate-900/70 px-2.5 py-1 text-xs text-slate-300";
+                    const inner = (
+                      <>
+                        {ability.name}
+                        {ability.hidden && <span className="text-slate-500"> oculta</span>}
+                      </>
+                    );
+                    return getAbilityInfo(ability.slug) ? (
+                      <Link
+                        key={`${entry.id}-${ability.slug}`}
+                        href={`/habilidades?tab=habilidade&ability=${ability.slug}`}
+                        title="Ver o que esta habilidade faz no jogo"
+                        className={`${chipClass} underline decoration-dotted underline-offset-2 hover:border-[#FFCB05]/50 hover:text-[#FFCB05]`}
+                      >
+                        {inner}
+                      </Link>
+                    ) : (
+                      <span key={`${entry.id}-${ability.slug}`} className={chipClass}>{inner}</span>
+                    );
+                  })}
                 </div>
               </div>
 

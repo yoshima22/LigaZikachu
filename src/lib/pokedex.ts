@@ -41,7 +41,7 @@ export type PokedexPokemon = {
   heightMeters: number;
   weightKg: number;
   types: string[];
-  abilities: Array<{ name: string; hidden: boolean }>;
+  abilities: Array<{ name: string; slug: string; hidden: boolean }>;
   stats: Array<{ name: string; value: number }>;
   officialPokedexUrl: string;
   officialTcgCardsUrl: string;
@@ -143,7 +143,10 @@ export async function searchPokedexPokemon(filters: PokedexSearchFilters | strin
   const requestedPage = Math.max(1, Math.floor(normalizedFilters.page ?? 1));
   const page = Math.min(requestedPage, totalPages);
   const pageEntries = filtered.slice((page - 1) * pageSize, page * pageSize);
-  const pokemon = await Promise.all(pageEntries.map((entry) => getPokedexPokemon(entry.name)));
+  // Busca por ID: o nome da lista pode ser de forma ("deoxys-normal") e o endpoint de espécie dá 404 para ele.
+  // allSettled: uma falha isolada não derruba a página inteira.
+  const settled = await Promise.allSettled(pageEntries.map((entry) => getPokedexPokemon(entry.id)));
+  const pokemon = settled.flatMap((r) => (r.status === "fulfilled" ? [r.value] : []));
 
   return { pokemon, total, page, pageSize, totalPages };
 }
@@ -174,6 +177,7 @@ export async function getPokedexPokemon(nameOrId: string | number): Promise<Poke
     types: pokemon.types.sort((a, b) => a.slot - b.slot).map((entry) => entry.type.name),
     abilities: pokemon.abilities.map((entry) => ({
       name: formatPokemonName(entry.ability.name),
+      slug: entry.ability.name,
       hidden: entry.is_hidden
     })),
     stats: pokemon.stats.map((entry) => ({
