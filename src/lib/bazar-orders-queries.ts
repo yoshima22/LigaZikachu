@@ -1,5 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
+import { getPokemonName, POKEMON_PT_NAMES } from "@/lib/mascot-data";
+import { MEGA_STONES } from "@/lib/mega-evolution";
 import {
   matchesMascotRequirements,
   BUY_ORDERS_PAGE_SIZE,
@@ -122,4 +124,17 @@ export async function getOrderableItems() {
     take: 600,
   });
   return items.filter((i) => !i.type.startsWith("TRACE_"));
+}
+
+/** Todas as espécies pedíveis: dex 1..1025 + formas alternativas (10xxx), megas e extras. */
+let speciesCache: [number, string][] | null = null;
+export function getOrderableSpecies(): [number, string][] {
+  if (!speciesCache) {
+    const ids = new Set<number>([...Object.keys(POKEMON_PT_NAMES).map(Number), ...MEGA_STONES.map((m) => m.megaPokemonId)]);
+    speciesCache = [...ids].filter((id) => id >= 1).sort((a, b) => a - b).map((id) => [id, getPokemonName(id)] as [number, string]);
+  }
+  return speciesCache;
+}
+export function isOrderableSpecies(id: number) {
+  return getOrderableSpecies().some(([i]) => i === id);
 }

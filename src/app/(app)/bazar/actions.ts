@@ -4,6 +4,7 @@ import { getEconomySettings } from "@/lib/economy-settings";
 import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
+import { isOrderableSpecies } from "@/lib/bazar-orders-queries";
 import { getMascotRarity, getPokemonName, PERSONALITIES, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES, TRAINING_MILESTONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
@@ -4689,7 +4690,7 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
     let topStats: string | null = null;
     if (input.kind === "MASCOT") {
       pokemonId = Math.floor(Number(input.pokemonId));
-      if (!Number.isInteger(pokemonId) || pokemonId < 1 || pokemonId > 1025) {
+      if (!Number.isInteger(pokemonId) || !isOrderableSpecies(pokemonId)) {
         return { error: "Escolha uma espécie válida." };
       }
       minLevel = Math.min(100, Math.max(1, Math.floor(Number(input.minLevel) || 1)));

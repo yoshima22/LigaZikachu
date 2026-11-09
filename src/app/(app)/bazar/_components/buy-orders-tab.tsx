@@ -1,13 +1,8 @@
 import Link from "next/link";
-import { POKEMON_PT_NAMES } from "@/lib/mascot-data";
 import { BUY_ORDERS_PAGE_SIZE } from "@/lib/bazar-orders";
-import { getBuyOrdersView, getOrderableItems } from "@/lib/bazar-orders-queries";
+import { getBuyOrdersView, getOrderableItems, getOrderableSpecies } from "@/lib/bazar-orders-queries";
 import { prisma } from "@/lib/prisma";
 import { BuyOrdersPanel } from "./buy-orders-panel";
-
-const SPECIES: [number, string][] = Object.entries(POKEMON_PT_NAMES)
-  .map(([id, name]) => [Number(id), name] as [number, string])
-  .filter(([id]) => id >= 1 && id <= 1025);
 
 function href(kind: string, mine: boolean, opage?: number) {
   const p = new URLSearchParams({ tab: "pedidos" });
@@ -58,7 +53,7 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
         <span className="ml-auto self-center text-[10px] text-slate-500">{view.totalOrders} {view.totalOrders === 1 ? "pedido" : "pedidos"} · {view.total} {view.total === 1 ? "jogador" : "jogadores"}</span>
       </div>
 
-      <BuyOrdersPanel orders={view.orders} playerId={playerId} species={SPECIES} items={items} myActiveCount={myActiveCount} />
+      <BuyOrdersPanel orders={view.orders} playerId={playerId} species={getOrderableSpecies()} items={items} myActiveCount={myActiveCount} />
 
       {view.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 pt-2 text-xs text-slate-400">
