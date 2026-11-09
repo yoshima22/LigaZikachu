@@ -1,6 +1,7 @@
 import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, POKEMON_PT_NAMES } from "@/lib/mascot-data";
+import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import {
   matchesMascotRequirements,
@@ -128,7 +129,11 @@ export async function getOrderableItems() {
 
 /** Todas as espécies pedíveis: dex 1..1025 + formas alternativas (10xxx), megas e extras. */
 let speciesCache: [number, string][] | null = null;
-export function getOrderableSpecies(): [number, string][] {
+export async function getOrderableSpecies(): Promise<[number, string][]> {
+  const off = new Set(await getDisabledEggPokemonIds()); // desligadas no painel ficam ocultas
+  return (await getAllSpecies()).filter(([id]) => !off.has(id));
+}
+async function getAllSpecies(): Promise<[number, string][]> {
   if (!speciesCache) {
     // POKEMON_PT_NAMES não tem as gerações 3-9 (ficam em mapas à parte): varre a dex inteira via getPokemonName.
     const ids = new Set<number>([...Array.from({ length: 1025 }, (_, i) => i + 1), ...Object.keys(POKEMON_PT_NAMES).map(Number), ...MEGA_STONES.map((m) => m.megaPokemonId)]);
@@ -136,6 +141,6 @@ export function getOrderableSpecies(): [number, string][] {
   }
   return speciesCache;
 }
-export function isOrderableSpecies(id: number) {
-  return getOrderableSpecies().some(([i]) => i === id);
+export async function isOrderableSpecies(id: number) {
+  return (await getOrderableSpecies()).some(([i]) => i === id);
 }

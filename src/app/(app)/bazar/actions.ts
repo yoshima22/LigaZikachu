@@ -4690,7 +4690,7 @@ export async function createBuyOrder(input: BuyOrderInput): Promise<{ error?: st
     let topStats: string | null = null;
     if (input.kind === "MASCOT") {
       pokemonId = Math.floor(Number(input.pokemonId));
-      if (!Number.isInteger(pokemonId) || !isOrderableSpecies(pokemonId)) {
+      if (!Number.isInteger(pokemonId) || !(await isOrderableSpecies(pokemonId))) {
         return { error: "Escolha uma espécie válida." };
       }
       minLevel = Math.min(100, Math.max(1, Math.floor(Number(input.minLevel) || 1)));

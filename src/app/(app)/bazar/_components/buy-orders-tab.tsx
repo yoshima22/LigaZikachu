@@ -18,10 +18,11 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
   const kind = searchParams.kind === "MASCOT" || searchParams.kind === "ITEM" ? searchParams.kind : undefined;
   const page = Math.max(1, parseInt(searchParams.opage ?? "1", 10) || 1);
 
-  const [view, items, myActiveCount] = await Promise.all([
+  const [view, items, myActiveCount, species] = await Promise.all([
     getBuyOrdersView({ playerId, mine, kind, page }),
     playerId ? getOrderableItems() : [],
     playerId ? prisma.bazarBuyOrder.count({ where: { buyerId: playerId, status: "ACTIVE", expiresAt: { gt: new Date() } } }) : 0,
+    getOrderableSpecies(),
   ]);
 
   const chips = [
@@ -53,7 +54,7 @@ export async function BuyOrdersTab({ searchParams, playerId }: { searchParams: R
         <span className="ml-auto self-center text-[10px] text-slate-500">{view.totalOrders} {view.totalOrders === 1 ? "pedido" : "pedidos"} · {view.total} {view.total === 1 ? "jogador" : "jogadores"}</span>
       </div>
 
-      <BuyOrdersPanel orders={view.orders} playerId={playerId} species={getOrderableSpecies()} items={items} myActiveCount={myActiveCount} />
+      <BuyOrdersPanel orders={view.orders} playerId={playerId} species={species} items={items} myActiveCount={myActiveCount} />
 
       {view.totalPages > 1 && (
         <div className="flex items-center justify-center gap-3 pt-2 text-xs text-slate-400">
