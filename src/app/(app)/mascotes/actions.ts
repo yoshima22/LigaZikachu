@@ -1661,6 +1661,67 @@ export async function useMegaStoneAction(mascotId: string, inventoryKey: string)
   }
 }
 
+// Reversor de Mega: desfaz a Mega Evolução (a pedra já foi gasta ao evoluir; aqui o vínculo com ela é apagado)
+// e devolve o mascote à forma anterior, removendo o bônus de atributos concedido pela Mega.
+export async function useMegaReverterAction(mascotId: string, inventoryKey: string): Promise<{ error?: string; baseName?: string }> {
+  try {
+    const { itemId, bound } = parseInventoryKey(inventoryKey);
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+
+    const baseName = await prisma.$transaction(async (tx) => {
+      await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${`mega-reverter:${mascotId}`}))`;
+      const [mascot, inv] = await Promise.all([
+        tx.mascot.findUnique({
+          where: { id: mascotId },
+          select: {
+            id: true, playerId: true, pokemonId: true, nickname: true, arenaState: true, bazarListed: true,
+            megaEvolvedAt: true, megaEvolvedFromPokemonId: true, abilityChoice: true, hiddenAbilityUnlocked: true,
+            statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
+            expeditions: { where: { status: "ACTIVE" }, select: { id: true }, take: 1 },
+          },
+        }),
+        tx.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId } }, include: { item: true } }),
+      ]);
+      if (!mascot || mascot.playerId !== player.id) throw new Error("Mascote não encontrado.");
+      if (!inv || inv.quantity <= 0 || inv.item.type !== "MEGA_REVERTER") throw new Error("Você não tem o Reversor de Mega.");
+      if (!mascot.megaEvolvedAt || !mascot.megaEvolvedFromPokemonId) throw new Error("Este mascote não está Mega Evoluído.");
+      if (mascot.arenaState !== "FREE" || mascot.expeditions.length > 0) throw new Error("O mascote precisa estar livre para ser revertido.");
+      if (mascot.bazarListed) throw new Error("Retire o mascote do Bazar antes de reverter a Mega.");
+
+      const bonus = getMegaStoneForMegaPokemon(mascot.pokemonId)?.statBonus ?? MEGA_STAT_BONUS;
+      const back = mascot.megaEvolvedFromPokemonId;
+      const abilityOk = mascot.abilityChoice === null || availableAbilities(back, mascot.hiddenAbilityUnlocked, "REAL").includes(mascot.abilityChoice);
+      await tx.playerInventory.update({ where: { playerId_itemId: { playerId: player.id, itemId } }, data: consumeOne(bound) });
+      await tx.mascot.update({
+        where: { id: mascot.id },
+        data: {
+          pokemonId: back,
+          megaEvolvedFromPokemonId: null,
+          megaStoneItemId: null,
+          megaEvolvedAt: null,
+          ...(abilityOk ? {} : { abilityChoice: null }),
+          statForce: Math.max(1, mascot.statForce - bonus),
+          statAgility: Math.max(1, mascot.statAgility - bonus),
+          statCharisma: Math.max(1, mascot.statCharisma - bonus),
+          statInstinct: Math.max(1, mascot.statInstinct - bonus),
+          statVitality: Math.max(1, mascot.statVitality - bonus),
+        },
+      });
+      await tx.mascotEvent.create({
+        data: { mascotId: mascot.id, emoji: "↩️", description: `Reversor de Mega usado: a Mega Evolução foi desfeita e o mascote voltou a ser ${getPokemonName(back)} (-${bonus} em todos os atributos).` },
+      });
+      return getPokemonName(back);
+    });
+    revalidate(player.id);
+    return { baseName };
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao usar o Reversor de Mega." };
+  }
+}
+
 // Escolhe a habilidade em uso (a oculta só com o TM). null volta ao padrão da espécie.
 export async function setMascotAbilityAction(mascotId: string, abilitySlug: string | null): Promise<{ error?: string; ability?: string | null }> {
   try {

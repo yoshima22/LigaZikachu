@@ -93,6 +93,7 @@ export const SPECIAL_MASCOT_SHOP_ITEM_TYPES = [
   "XP_SHARE",
   "XP_SHARE_TEAM",
   "RAINBOW_FEATHER",
+  "MEGA_REVERTER",
 ] as const;
 
 // Fonte única: novas Megas entram automaticamente em inventário, bazar e
@@ -193,6 +194,7 @@ export const SHOP_ITEM_EMOJI: Record<string, string> = {
   XP_SHARE: "📡",
   XP_SHARE_TEAM: "📡",
   RAINBOW_FEATHER: "🌈",
+  MEGA_REVERTER: "↩️",
   ABILITY_TM: "💿",
   BOND_SHARED_BERRY: "🫐", BOND_CALMING_HERB: "🌿", BOND_REVENGE_TOKEN: "🪙", BOND_TRAINING_RIBBON: "🎗️",
   BOND_SHARED_PILLOW: "🛏️", BOND_NIGHT_TEA: "🍵", BOND_YARD_TOY: "🪀", BOND_ILLUSTRATED_INVITATION: "💌",

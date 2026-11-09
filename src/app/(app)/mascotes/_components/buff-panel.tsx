@@ -4,8 +4,8 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
-import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
-import { getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useMegaReverterAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
+import { MEGA_FORM_IDS, getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, PERSONALITY_DESCRIPTION, getMascotStatusGrowthMultiplier, shortMascotCode } from "@/lib/mascot-data";
 import { FRESH_WATER_IMAGE } from "@/lib/item-image-assets";
 import { getAbilityTmDef, readAbilityTmKey } from "@/lib/abilities/tm";
@@ -69,6 +69,7 @@ const BUFF_EMOJI: Record<string, string> = {
   XP_SHARE:          "📡",
   XP_SHARE_TEAM:     "📡",
   RAINBOW_FEATHER:   "🌈",
+  MEGA_REVERTER:     "↩️",
   ANTIDOTE:          "🧪",
   FIRST_AID_KIT:     "🩹",
   ABILITY_TM:        "💿",
@@ -99,7 +100,7 @@ const EXP_BUFF_AREAS: Record<string, { label: string; applies: boolean }[]> = {
 // Itens que não precisam de seleção de mascote (aplicados globalmente ou com lógica especial)
 const PLAYER_LEVEL_ITEMS = new Set(["PICNIC_BASKET"]);
 // Itens irreversíveis que precisam de confirmação extra
-const DESTRUCTIVE_ITEMS = new Set(["RAINBOW_FEATHER"]);
+const DESTRUCTIVE_ITEMS = new Set(["RAINBOW_FEATHER", "MEGA_REVERTER"]);
 
 const PROTEIN_LIMIT = 3;
 
@@ -231,6 +232,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (isMegaStone && selectedMegaStone) {
       if (!(mascot.pokemonId === selectedMegaStone.compatiblePokemonId && mascot.level >= selectedMegaStone.minLevel)) return false;
     }
+    if (selectedBuffItem?.type === "MEGA_REVERTER") return MEGA_FORM_IDS.has(mascot.pokemonId) && (!mascot.arenaState || mascot.arenaState === "FREE");
     if (!isRainbowFeather) return true;
     if (mascot.arenaState && mascot.arenaState !== "FREE") return false;
     if (isAdminLabFeather) return !mascot.hatchedFromEggType && !mascot.hatchedFromEggOrigin;
@@ -350,7 +352,9 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     if (!isPlayerLevel && selectedMascotObj && !isEligible(selectedMascotObj)) {
       toast.error(isMegaStone && selectedMegaStone
         ? `Selecione um ${selectedMegaStone.compatiblePokemonName} Nv.${selectedMegaStone.minLevel}+ compatível.`
-        : isAbilityTm
+        : selectedBuffItem?.type === "MEGA_REVERTER"
+          ? "Selecione um mascote Mega Evoluído e livre."
+          : isAbilityTm
           ? "Este TM só funciona em mascotes que têm essa habilidade como oculta e ainda não a desbloquearam."
           : "Este mascote não é elegível para este item.");
       return;
@@ -381,6 +385,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         error?: string;
         replacedExistingBuff?: boolean;
         megaName?: string;
+        baseName?: string;
         abilityName?: string;
         statRange?: string;
         comparison?: RainbowFeatherComparison;
@@ -401,6 +406,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot, bound);
         else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
         else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
+        else if (t === "MEGA_REVERTER") r = await useMegaReverterAction(selectedMascot, selectedBuff);
         else if (isMegaStoneType(t)) r = await useMegaStoneAction(selectedMascot, selectedBuff);
         else if (t === "ABILITY_TM") r = await useAbilityTmAction(selectedMascot, selectedBuff);
         else r = await useMascotBuffAction(selectedMascot, selectedBuff);
@@ -429,6 +435,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           else window.setTimeout(() => window.location.reload(), 600);
         } else if (t === "ABILITY_TM") {
           toast.success(`${mascotName} desbloqueou a habilidade oculta ${r.abilityName ?? ""}! 💿`);
+        } else if (t === "MEGA_REVERTER") {
+          toast.success(`${mascotName} voltou a ser ${r.baseName ?? "sua forma anterior"}! ↩️`);
         } else if (isMegaStoneType(t)) {
           toast.success(`${mascotName} despertou ${r.megaName ?? "uma Mega Evolução"}! 🔮`);
         } else if (t === "MASCOT_BUFF_MOOD" && r.personalityChange) {
