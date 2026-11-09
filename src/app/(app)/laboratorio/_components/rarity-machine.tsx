@@ -47,7 +47,7 @@ type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string; cost: number }
 function canJoin(keep: MachineMascot, m: MachineMascot) {
   if (m.pokemonId !== keep.pokemonId || m.eggType !== keep.eggType) return false;
   if (keep.eggType !== "LAB") return !!getOriginFusionRecipe(keep.eggType);
-  return keep.level === 100 && m.level === 100 && (keep.labStars ?? 0) < 5 && (m.labStars ?? 0) >= (keep.labStars ?? 0);
+  return keep.level === 100 && m.level === 100 && (keep.labStars ?? 0) < 5 && (m.labStars ?? 0) === (keep.labStars ?? 0);
 }
 
 function planFusion(sel: MachineMascot[]): Plan {
@@ -55,6 +55,7 @@ function planFusion(sel: MachineMascot[]): Plan {
   const [keep, ...rest] = sel;
   if (rest.some((m) => m.pokemonId !== keep.pokemonId || m.eggType !== keep.eggType)) return { ok: false, reason: "Todos precisam ser o mesmo Pokémon e da mesma origem." };
   if (keep.eggType === "LAB") {
+    if (sel.length !== 3) return { ok: false, reason: "A fusão de estrelas usa 3 mascotes (1 mantido + 2 consumidos)." };
     try {
       let next = 0;
       for (const c of rest) next = validateLabStarFusion({
@@ -91,7 +92,7 @@ function HowItWorks() {
         </div>
         <div>
           <p className="font-bold text-fuchsia-200">⭐ Estrelas do Laboratório</p>
-          <p>Mascote de <b>origem Laboratório no nível 100</b> pode ganhar estrelas (até 5★). Escolha o mantido e coloque <b>1 ou 2 consumidos</b> que também sejam <b>LAB Lv.100 do mesmo Pokémon</b>, com <b>pelo menos as estrelas do mantido</b>. O mantido ganha <b>+1★</b> e <b>+5 em todos os cinco atributos</b>, sem reset e sem custo de Pó. Quanto mais estrelas, mais exigente a máquina fica com o material de sacrifício.</p>
+          <p>Mascote de <b>origem Laboratório no nível 100</b> pode ganhar estrelas. Escolha o mantido e coloque <b>2 consumidos</b> que também sejam <b>LAB Lv.100 do mesmo Pokémon</b> e tenham <b>exatamente a mesma quantidade de estrelas</b> que ele. Para um mantido de 1★ virar 2★, precisa de dois outros de 1★; de 2★ para 3★, dois de 2★; e assim por diante. O mantido ganha <b>+1★</b> e <b>+5 em todos os cinco atributos</b>, sem reset e sem custo de Pó. Quem chegou a <b>5★</b> não evolui mais por aqui: a máquina diz que já é lenda.</p>
         </div>
         <div>
           <p className="font-bold text-fuchsia-200">⚠️ Letrinhas miúdas</p>
@@ -234,7 +235,7 @@ export function RarityMachine({
         <p className="mt-1 text-xs font-bold text-fuchsia-200">🧫 Seu Pó de Criação: {dust}</p>
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-400">
           O 1º escolhido é o <b className="text-fuchsia-200">mantido</b>; os outros são <b className="text-rose-300">consumidos</b> (e não voltam!).
-          Três iguais da mesma origem sobem de origem. LAB Lv.100 ganham ★ com outros LAB Lv.100 iguais.
+          Três iguais da mesma origem sobem de origem. LAB Lv.100 ganham ★ com dois LAB Lv.100 iguais e com as mesmas estrelas.
         </p>
       </div>
 

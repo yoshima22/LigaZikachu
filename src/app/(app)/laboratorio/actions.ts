@@ -284,7 +284,7 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
       if (!survivor || consumed.length !== input.consumedIds.length || [...all].some((m) => m.operationsLocked || m.bazarListed || m.arenaState !== "FREE" || m.primordialBoundPlayerId)) throw new Error("Um dos mascotes não está disponível para a máquina.");
       if (consumed.some((m) => m.pokemonId !== survivor.pokemonId)) throw new Error("Todos os mascotes precisam ser o mesmo Pokémon.");
       if (input.mode === "STAR") {
-        if (consumed.length < 1 || consumed.length > 2) throw new Error("A fusão de estrelas usa um mantido e 1 ou 2 consumidos.");
+        if (consumed.length !== 2) throw new Error("A fusão de estrelas usa um mantido e 2 consumidos.");
         let stars = 0;
         for (const c of consumed) stars = validateLabStarFusion({ survivorOrigin: survivor.hatchedFromEggType, survivorLevel: survivor.level, survivorStars: survivor.labStars, consumedOrigin: c.hatchedFromEggType, consumedLevel: c.level, consumedStars: c.labStars });
         await tx.mascot.update({ where: { id: survivor.id }, data: { labStars: stars, statForce: { increment: 5 }, statAgility: { increment: 5 }, statCharisma: { increment: 5 }, statInstinct: { increment: 5 }, statVitality: { increment: 5 } } });
