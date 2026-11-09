@@ -555,6 +555,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
   const [expeditionStartError, setExpeditionStartError] = useState<string | null>(null);
   const [lootPreviewDuration, setLootPreviewDuration] = useState<ExpeditionDuration>("1h");
   const [showRelations, setShowRelations] = useState(false);
+  const [evoPreview, setEvoPreview] = useState<number | null>(null);
   const [showPermanentItems, setShowPermanentItems] = useState(false);
   const [selectedTrainingMilestoneId, setSelectedTrainingMilestoneId] = useState("");
   const [cardTab, setCardTab] = useState<"ABILITIES" | "STANCES">("ABILITIES");
@@ -1659,13 +1660,13 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
 
         {/* ── Cadeia de evolução ── */}
         {(() => {
-          const chain: { names: string[]; level: number; primary: number }[] = [];
+          const chain: { names: string[]; ids: number[]; level: number; primary: number }[] = [];
           let cur = mascot.pokemonId;
           while (true) {
             const evo = EVOLUTION_MAP.get(cur);
             if (!evo) break;
             const targets = evo.toOptions ?? [evo.to];
-            chain.push({ names: targets.map(id => getEvoName(id)), level: evo.level, primary: evo.to });
+            chain.push({ names: targets.map(id => getEvoName(id)), ids: targets, level: evo.level, primary: evo.to });
             cur = evo.to;
           }
           if (chain.length === 0) return null;
@@ -1679,7 +1680,10 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                 {chain.map((evo, i) => (
                   <span key={i} className="flex items-center gap-1.5">
                     <span className="text-slate-600">→</span>
-                    <span className={`font-semibold ${
+                    <button type="button" onClick={() => setEvoPreview(evoPreview === i ? null : i)}
+                      title="Ver sprite"
+                      className={`font-semibold underline decoration-dotted underline-offset-2 hover:brightness-125 ${
+                      evoPreview === i ? "text-sky-300" :
                       i === 0 && canEvolveNow ? "text-[#FFCB05]" :
                       i === 0 ? "text-slate-300" : "text-slate-500"
                     }`}>
@@ -1689,7 +1693,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                       {evo.names.length > 1 && (
                         <span className="ml-1 text-[9px] font-normal opacity-70">(sorteio)</span>
                       )}
-                    </span>
+                    </button>
                     <span className={`text-[9px] rounded-full px-1.5 py-0.5 ${
                       i === 0 && canEvolveNow
                         ? "bg-[#FFCB05]/20 text-[#FFCB05] font-bold"
@@ -1700,6 +1704,22 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                   </span>
                 ))}
               </div>
+              {evoPreview !== null && chain[evoPreview] && (
+                <div className="rounded-lg border border-sky-400/20 bg-gradient-to-b from-sky-500/10 to-transparent p-2">
+                  <p className="mb-1.5 text-center text-[9px] text-slate-400">
+                    {chain[evoPreview].ids.length > 1 ? "Pode evoluir para (sorteio):" : "Evolui para:"}
+                  </p>
+                  <div className="flex flex-wrap justify-center gap-2">
+                    {chain[evoPreview].ids.map((id) => (
+                      <div key={id} className="flex w-16 flex-col items-center rounded-lg bg-slate-800/60 px-1 py-1.5">
+                        <img src={getStaticSpriteUrl(id)} alt={getEvoName(id)} loading="lazy"
+                          className="h-12 w-12 object-contain" style={{ imageRendering: getMascotImageRendering(id) }} />
+                        <span className="mt-0.5 w-full truncate text-center text-[9px] text-slate-300">{getEvoName(id)}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
               {mascot.evolutionLocked && (
                 <p className="text-[9px] text-red-400">🔒 Evolução travada</p>
               )}
