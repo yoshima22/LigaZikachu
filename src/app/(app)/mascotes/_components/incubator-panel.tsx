@@ -3,6 +3,8 @@
 import { useState, useEffect, useMemo, useRef, useTransition } from "react";
 import { useTimerExpiry } from "@/hooks/use-timer-expiry";
 import { toast } from "sonner";
+import { useRouter } from "next/navigation";
+import { recycleMascotAction } from "../../laboratorio/actions";
 import { Clock, Dna, Egg, Eye, FastForward, FlaskConical, Search, Sparkles, X } from "lucide-react";
 import { getPokemonTypes, getShinySprite, getSpriteUrl, TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import {
@@ -356,6 +358,8 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     stats?: { force: number; agility: number; charisma: number; instinct: number; vitality: number };
     statRange?: [number, number];
   } | null>(null);
+  const router = useRouter();
+  const [recycledDust, setRecycledDust] = useState<number | null>(null);
   const [nickname, setNickname] = useState("");
   const [labChoices, setLabChoices] = useState<LabChoice[] | null>(null);
   const [selectedGen, setSelectedGen] = useState<string>("");
@@ -450,8 +454,20 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
     });
   };
 
+  const recycleHatched = () => {
+    if (!hatchResult) return;
+    startTransition(async () => {
+      const r = await recycleMascotAction(hatchResult.mascotId);
+      if (!r.ok) { toast.error(r.error); return; }
+      setRecycledDust(r.dust);
+      toast.success(`${hatchResult.name} reciclado: +${r.dust} Pó da Criação`);
+      router.refresh();
+    });
+  };
+
   const revealHatchResult = (result: HatchResult) => {
     setNickname("");
+    setRecycledDust(null);
     setHatchResult({
       mascotId: result.mascotId,
       pokemonId: result.pokemonId,
@@ -832,6 +848,12 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               </div>
             )}
 
+            {recycledDust !== null ? (
+              <div className="rounded-xl border border-emerald-500/40 bg-emerald-500/10 px-4 py-3 text-center">
+                <p className="text-sm font-bold text-emerald-300">♻️ {hatchResult.name} reciclado!</p>
+                <p className="text-xs text-emerald-200">+{recycledDust} Pó da Criação gerado{recycledDust === 1 ? "" : "s"}</p>
+              </div>
+            ) : (<>
             {/* Apelido do recém-chocado */}
             <form
               onSubmit={(e) => { e.preventDefault(); saveNickname(); }}
@@ -856,7 +878,17 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
               <PerformanceTagPicker mascotId={hatchResult.mascotId} initial="NEUTRO" size="md" align="left" />
             </div>
 
+            <button
+              type="button"
+              onClick={() => { if (window.confirm(`Reciclar ${hatchResult.name} em Pó da Criação? Não dá para desfazer.`)) recycleHatched(); }}
+              disabled={pending}
+              className="rounded-lg border border-emerald-500/50 bg-emerald-500/10 px-3 py-1.5 text-xs font-bold text-emerald-300 hover:bg-emerald-500/20 disabled:opacity-40"
+            >
+              ♻️ Reciclar
+            </button>
+
             <p className="text-xs text-slate-500">Vá até Meus Mascotes para interagir.</p>
+            </>)}
             <button onClick={() => setHatchResult(null)} className="mt-1 text-xs text-[#FFCB05] underline">Fechar</button>
           </div>
         ) : incubator ? (

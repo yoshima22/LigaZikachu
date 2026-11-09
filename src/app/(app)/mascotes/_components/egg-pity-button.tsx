@@ -30,7 +30,7 @@ export function EggPityButton() {
         <ShieldCheck size={13} /> Garantia de raros
       </button>
       {open && (
-        <div className="absolute right-0 top-full z-30 w-72 pt-2">
+        <div className="fixed inset-x-4 z-30 pt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-72">
           <div className="space-y-2 rounded-xl border border-border bg-slate-950 p-3 shadow-xl">
             <p className="text-[11px] text-slate-400">
               Ovos seguidos sem nascer um mascote de raridade aumentada. Ao completar, o próximo ovo daquele tipo vem garantido. Se sair um antes, o contador zera.
