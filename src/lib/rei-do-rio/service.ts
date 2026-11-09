@@ -242,13 +242,20 @@ export async function processNextRound(editionId: string, now = new Date()): Pro
         })),
         skipDuplicates: true,
       });
-      for (const rt of res.players) {
-        await tx.reiRioParticipant.update({
-          where: { id: rt.pid },
-          data: { scoresJson: J(rt.aggs), totalScore: sumAggs(rt.aggs), wins: rt.wins, losses: rt.losses, draws: rt.draws, byes: rt.byes, damageDealt: rt.damage },
-        });
-        const ds = idByPid.get(rt.pid)!.dayStates[0];
-        await tx.reiRioDayState.update({ where: { id: ds.id }, data: { stateJson: J(rt.state) } });
+      // Duas queries em lote (antes: 2 por participante). Arrays paralelos + unnest.
+      const ps = res.players;
+      if (ps.length) {
+        await tx.$executeRaw`
+          UPDATE "rdr_participants" p SET
+            "scoresJson" = v.s::jsonb, "totalScore" = v.t, "wins" = v.w, "losses" = v.l, "draws" = v.d, "byes" = v.b, "damageDealt" = v.dmg, "updatedAt" = NOW()
+          FROM unnest(${ps.map((r) => r.pid)}::text[], ${ps.map((r) => JSON.stringify(r.aggs))}::text[], ${ps.map((r) => sumAggs(r.aggs))}::int[],
+            ${ps.map((r) => r.wins)}::int[], ${ps.map((r) => r.losses)}::int[], ${ps.map((r) => r.draws)}::int[], ${ps.map((r) => r.byes)}::int[], ${ps.map((r) => Math.round(r.damage))}::int[])
+            AS v(id, s, t, w, l, d, b, dmg)
+          WHERE p."id" = v.id`;
+        await tx.$executeRaw`
+          UPDATE "rdr_day_states" d SET "stateJson" = v.s::jsonb, "updatedAt" = NOW()
+          FROM unnest(${ps.map((r) => idByPid.get(r.pid)!.dayStates[0].id)}::text[], ${ps.map((r) => JSON.stringify(r.state))}::text[]) AS v(id, s)
+          WHERE d."id" = v.id`;
       }
       await tx.reiRioRound.update({ where: { id: next.id }, data: { status: "DONE", finishedAt: new Date(), snapshotJson: J(snapshot), standingsJson: J(res.standings), claimToken: null } });
       if (next.roundIndex >= TOTAL_ROUNDS) {
