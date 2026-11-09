@@ -339,7 +339,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             {t === "recycle" ? <><FlaskConical size={13} /> Reciclar</>
               : t === "shop" ? <><ShoppingBag size={13} /> Loja de Pó</>
               : t === "analyze" ? <><Microscope size={13} /> Análise</>
-              : t === "machine" ? <>🧬 <span className="hidden sm:inline">Máquina </span>{canUseRarityMachine ? "Raridade" : "Parada"}</>
+              : t === "machine" ? <>🧬 <span className="hidden sm:inline">Máquina </span>Raridade</>
               : <>🌀 <span className="hidden sm:inline">Re-roll </span>Caótico</>}
           </button>
         ))}
@@ -347,8 +347,9 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
 
       {tab === "caotico" && <ChaoticRerollPanel />}
 
-      {tab === "machine" && (canUseRarityMachine ? (
+      {tab === "machine" && (
         <RarityMachine
+          isAdmin={canUseRarityMachine}
           mascots={mascots}
           dust={dust}
           onSelfGrant={(n) => setDust((d) => d + n)}
@@ -361,7 +362,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
             }));
           }}
         />
-      ) : <div className="rounded-2xl border border-slate-700 bg-slate-900/60 p-6 text-center"><p className="text-lg font-bold text-slate-200">Máquina Parada</p><p className="mt-2 text-sm text-slate-500">A máquina de raridade está em testes e ainda não está disponível.</p></div>)}
+      )}
 
       {/* ── ANALYZE TAB ── */}
       {tab === "analyze" && (
@@ -582,7 +583,7 @@ export function LabClient({ initialDust, initialMascots, initialWeeklyUsage, ini
       {/* ── SHOP TAB ── */}
       {tab === "shop" && (
         <div className="space-y-3">
-          <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-950/15 p-4"><p className="text-xs font-bold uppercase tracking-widest text-fuchsia-300">Mutações Genéticas</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{([['GENETIC_MUTATION_RARE','Mutação Genética Rara',50],['GENETIC_MUTATION_EVENT','Mutação Genética de Evento',100],['GENETIC_MUTATION_SPECIAL','Mutação Genética Especial',150],['GENETIC_MUTATION_LAB','Mutação Genética de Laboratório',200]] as const).map(([type,name,cost]) => <button key={type} disabled={!canUseRarityMachine || dust < cost || isPending} onClick={() => start(async()=>{const r=await buyLabMutationAction(type);if(!r.ok)return showFeedback(false,r.error);setDust(d=>d-cost);showFeedback(true,`${name} comprada.`)})} className="rounded-xl border border-fuchsia-400/25 bg-slate-950/40 p-3 text-left text-xs disabled:opacity-40"><span className="mr-2">🧬</span><b className="text-white">{name}</b><span className="block mt-1 text-fuchsia-200">🧫 {cost} Pó de Criação</span></button>)}</div>{!canUseRarityMachine && <p className="mt-2 text-[11px] text-slate-500">Disponível para testes administrativos.</p>}</div>
+          {canUseRarityMachine && <div className="rounded-2xl border border-fuchsia-400/30 bg-fuchsia-950/15 p-4"><p className="text-xs font-bold uppercase tracking-widest text-fuchsia-300">Mutações Genéticas</p><div className="mt-3 grid gap-2 sm:grid-cols-2">{([['GENETIC_MUTATION_RARE','Mutação Genética Rara',50],['GENETIC_MUTATION_EVENT','Mutação Genética de Evento',100],['GENETIC_MUTATION_SPECIAL','Mutação Genética Especial',150],['GENETIC_MUTATION_LAB','Mutação Genética de Laboratório',200]] as const).map(([type,name,cost]) => <button key={type} disabled={!canUseRarityMachine || dust < cost || isPending} onClick={() => start(async()=>{const r=await buyLabMutationAction(type);if(!r.ok)return showFeedback(false,r.error);setDust(d=>d-cost);showFeedback(true,`${name} comprada.`)})} className="rounded-xl border border-fuchsia-400/25 bg-slate-950/40 p-3 text-left text-xs disabled:opacity-40"><span className="mr-2">🧬</span><b className="text-white">{name}</b><span className="block mt-1 text-fuchsia-200">🧫 {cost} Pó de Criação</span></button>)}</div>{!canUseRarityMachine && <p className="mt-2 text-[11px] text-slate-500">Disponível para testes administrativos.</p>}</div>}
           <p className="mb-4 text-xs text-slate-500">
             Troque Pó de Criação por recompensas. Os limites semanais reiniciam na segunda-feira; os mensais, no dia 01.
           </p>

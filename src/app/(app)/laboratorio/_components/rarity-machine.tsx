@@ -43,6 +43,13 @@ const label = (m: MachineMascot) => m.nickname || m.name;
 
 type Plan = { ok: true; mode: "ORIGIN" | "STAR"; summary: string; cost: number } | { ok: false; reason: string };
 
+// Compatível com o mantido: mesmo Pokémon e mesma origem; LAB exige Lv.100 e estrelas >= às do mantido.
+function canJoin(keep: MachineMascot, m: MachineMascot) {
+  if (m.pokemonId !== keep.pokemonId || m.eggType !== keep.eggType) return false;
+  if (keep.eggType !== "LAB") return !!getOriginFusionRecipe(keep.eggType);
+  return keep.level === 100 && m.level === 100 && (keep.labStars ?? 0) < 5 && (m.labStars ?? 0) >= (keep.labStars ?? 0);
+}
+
 function planFusion(sel: MachineMascot[]): Plan {
   if (sel.length < 2) return { ok: false, reason: "Escolha o mascote mantido e os que serão consumidos." };
   const [keep, ...rest] = sel;
@@ -64,6 +71,39 @@ function planFusion(sel: MachineMascot[]): Plan {
   if (!recipe) return { ok: false, reason: "A origem do mascote mantido não evolui mais." };
   if (rest.some((m) => m.eggType !== recipe.sourceOrigin)) return { ok: false, reason: `Os três precisam ter origem ${ORIGIN_LABEL[recipe.sourceOrigin]}.` };
   return { ok: true, mode: "ORIGIN", summary: `${ORIGIN_LABEL[recipe.sourceOrigin]} → ${ORIGIN_LABEL[recipe.resultOrigin]} · custa ${recipe.mutationCost} Pó de Criação`, cost: recipe.mutationCost };
+}
+
+function HowItWorks() {
+  return (
+    <details className="rounded-3xl border border-fuchsia-400/25 bg-slate-900/50 p-4 text-xs leading-relaxed text-slate-300">
+      <summary className="cursor-pointer text-xs font-bold uppercase tracking-widest text-fuchsia-300">📜 Como funciona (leia antes de apertar o botão)</summary>
+      <div className="mt-3 space-y-3">
+        <p className="italic text-slate-400">“A máquina voltou a funcionar!”, anunciou a Dra. Cleide Combustão, sem explicar por que o painel de controle ainda pede desculpas toda vez que é ligado. O Prof. Enguiça jura que tudo está dentro das normas de segurança. Nenhuma norma foi consultada.</p>
+        <div>
+          <p className="font-bold text-fuchsia-200">🧬 Fusão de Origem — 3 iguais viram 1 melhor</p>
+          <p>Coloque 3 mascotes do <b>mesmo Pokémon e da mesma origem</b>: o 1º vira o <b className="text-fuchsia-200">mantido</b>, os outros dois são <b className="text-rose-300">consumidos</b> (a máquina não devolve, não tem troco, não tem fila de reclamação). O mantido sobe uma origem:</p>
+          <p className="mt-1 font-mono text-[11px] text-amber-200">Comum → Raro (50) · Raro → Evento (100) · Evento → Especial (150) · Especial → Laboratório (200)</p>
+          <p className="mt-1">O valor entre parênteses é o custo em <b>🧫 Pó de Criação</b>, descontado só se a fusão der certo.</p>
+        </div>
+        <div>
+          <p className="font-bold text-fuchsia-200">🌈 O preço da evolução: o Reset</p>
+          <p>Mudar de origem mexe com o DNA. O mantido passa pelo <b>mesmo reset da Pena Arco-Íris</b>: volta à forma-base e ao <b>nível 1</b>, ganha <b>nova personalidade</b> e tem os <b>status sorteados de novo</b> na faixa da nova origem. Se ele for de Evento e tiver o <b>bônus de evento</b>, o bônus <b>continua</b> lá — é o único passageiro que a máquina não consegue arrancar.</p>
+        </div>
+        <div>
+          <p className="font-bold text-fuchsia-200">⭐ Estrelas do Laboratório</p>
+          <p>Mascote de <b>origem Laboratório no nível 100</b> pode ganhar estrelas (até 5★). Escolha o mantido e coloque <b>1 ou 2 consumidos</b> que também sejam <b>LAB Lv.100 do mesmo Pokémon</b>, com <b>pelo menos as estrelas do mantido</b>. O mantido ganha <b>+1★</b> e <b>+5 em todos os cinco atributos</b>, sem reset e sem custo de Pó. Quanto mais estrelas, mais exigente a máquina fica com o material de sacrifício.</p>
+        </div>
+        <div>
+          <p className="font-bold text-fuchsia-200">⚠️ Letrinhas miúdas</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Só entram mascotes livres: nada de favorito, anunciado no Bazar, em Arena, em Liga Semanal ou travado.</li>
+            <li>Depois que a fusão começa, não tem botão de “ops”. Confira o resumo antes de confirmar.</li>
+            <li>Sem Pó de Criação suficiente, a máquina nem liga: ela é chique, mas não faz fiado.</li>
+          </ul>
+        </div>
+      </div>
+    </details>
+  );
 }
 
 function DustGrantPanel({ onSelfGrant }: { onSelfGrant: (n: number) => void }) {
@@ -112,10 +152,11 @@ function DustGrantPanel({ onSelfGrant }: { onSelfGrant: (n: number) => void }) {
 }
 
 export function RarityMachine({
-  mascots, dust, onFused, onSelfGrant,
+  mascots, dust, onFused, onSelfGrant, isAdmin,
 }: {
   mascots: MachineMascot[];
   dust: number;
+  isAdmin: boolean;
   onSelfGrant: (amount: number) => void;
   onFused: (r: { survivorId: string; consumedIds: string[]; mode: "ORIGIN" | "STAR"; survivor: FusedSnapshot; cost: number }) => void;
 }) {
@@ -133,16 +174,18 @@ export function RarityMachine({
   const [anim, setAnim] = useState<null | { phase: "charge" | "reveal"; keep: MachineMascot; eaten: MachineMascot[]; summary: string; mode: "ORIGIN" | "STAR"; result?: FusedSnapshot }>(null);
 
   const pool = useMemo(() => mascots.filter((m) => m.recyclable), [mascots]);
+  const keeper = pool.find((m) => m.id === ids[0]);
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     const list = pool.filter((m) =>
+      (!keeper || m.id === keeper.id || canJoin(keeper, m)) &&
       (!q || label(m).toLowerCase().includes(q) || m.name.toLowerCase().includes(q)) &&
       (!origin || m.eggType === origin) && (!only100 || m.level === 100) &&
       (!tag || (m.performanceTag ?? "NEUTRO") === tag) && (!personality || m.personality === personality) &&
       (!starsF || (m.eggType === "LAB" && (m.labStars ?? 0) === Number(starsF))));
     const total = (m: MachineMascot) => (m.stats ? statsTotal(m.stats) : 0);
     return list.sort((a, b) => sort === "name" ? label(a).localeCompare(label(b)) : sort === "total" ? total(b) - total(a) : b.level - a.level);
-  }, [pool, search, origin, only100, tag, personality, starsF, sort]);
+  }, [pool, keeper, search, origin, only100, tag, personality, starsF, sort]);
   const pages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const curPage = Math.min(page, pages - 1);
   const visible = filtered.slice(curPage * PAGE_SIZE, (curPage + 1) * PAGE_SIZE);
@@ -186,16 +229,17 @@ export function RarityMachine({
 
       {/* Cabeçalho */}
       <div className="relative overflow-hidden rounded-3xl border border-fuchsia-400/35 bg-[radial-gradient(circle_at_20%_0%,rgba(217,70,239,0.25),transparent_45%),radial-gradient(circle_at_90%_100%,rgba(250,204,21,0.12),transparent_40%),rgba(15,23,42,0.92)] p-5">
-        <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-fuchsia-300">Teste administrativo</p>
+        <p className="text-[10px] font-bold uppercase tracking-[0.25em] text-fuchsia-300">Laboratório da Dra. Cleide Combustão</p>
         <h2 className="mt-1 font-pixel text-xl text-white">Máquina de Raridade</h2>
         <p className="mt-1 text-xs font-bold text-fuchsia-200">🧫 Seu Pó de Criação: {dust}</p>
         <p className="mt-2 max-w-2xl text-xs leading-relaxed text-slate-400">
-          O 1º escolhido é o <b className="text-fuchsia-200">mantido</b>; os outros são <b className="text-rose-300">consumidos</b>.
-          Três da mesma origem sobem de origem. Dois LAB Lv.100 com a mesma estrela ganham ★.
+          O 1º escolhido é o <b className="text-fuchsia-200">mantido</b>; os outros são <b className="text-rose-300">consumidos</b> (e não voltam!).
+          Três iguais da mesma origem sobem de origem. LAB Lv.100 ganham ★ com outros LAB Lv.100 iguais.
         </p>
       </div>
 
-      <DustGrantPanel onSelfGrant={onSelfGrant} />
+      {isAdmin && <DustGrantPanel onSelfGrant={onSelfGrant} />}
+      <HowItWorks />
 
       {/* Câmara */}
       <div className="rounded-3xl border border-fuchsia-400/25 bg-slate-950/70 p-4">
@@ -260,14 +304,13 @@ export function RarityMachine({
             className={`rounded-lg border px-3 py-1.5 text-xs font-semibold ${only100 ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400"}`}>Somente Lv.100</button>
         </div>
 
+        {keeper && <p className="mt-3 rounded-lg border border-fuchsia-400/30 bg-fuchsia-500/10 px-3 py-1.5 text-[11px] text-fuchsia-200">Mostrando só mascotes compatíveis com <b>{label(keeper)}</b>. Remova o mantido do slot para ver todos.</p>}
         <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-4">
           {visible.map((m) => {
             const idx = ids.indexOf(m.id);
-            const first = selected[0];
-            const blocked = idx < 0 && !!first && (m.pokemonId !== first.pokemonId || m.eggType !== first.eggType);
             return (
-              <button key={m.id} type="button" disabled={blocked} onClick={() => toggle(m.id)}
-                className={`relative ${blocked ? "opacity-25" : ""} flex flex-col items-center rounded-xl border p-2 text-center transition hover:-translate-y-0.5 ${idx >= 0 ? "border-fuchsia-300 bg-fuchsia-500/15 shadow-[0_0_14px_rgba(217,70,239,0.3)]" : "border-slate-700/70 bg-slate-950/40 hover:border-slate-500"}`}>
+              <button key={m.id} type="button" onClick={() => toggle(m.id)}
+                className={`relative flex flex-col items-center rounded-xl border p-2 text-center transition hover:-translate-y-0.5 ${idx >= 0 ? "border-fuchsia-300 bg-fuchsia-500/15 shadow-[0_0_14px_rgba(217,70,239,0.3)]" : "border-slate-700/70 bg-slate-950/40 hover:border-slate-500"}`}>
                 {idx >= 0 && <span className="absolute right-1 top-1 flex h-4 w-4 items-center justify-center rounded-full bg-fuchsia-400 text-[10px] font-black text-slate-950">{idx + 1}</span>}
                 <img src={m.spriteUrl} alt="" loading="lazy" className="h-12 w-12 object-contain [image-rendering:pixelated]" />
                 <div className="mt-1 flex w-full items-center justify-center gap-1">
@@ -284,7 +327,7 @@ export function RarityMachine({
               </button>
             );
           })}
-          {visible.length === 0 && <p className="col-span-full py-8 text-center text-xs text-slate-500">Nenhum mascote encontrado.</p>}
+          {visible.length === 0 && <p className="col-span-full py-8 text-center text-xs text-slate-500">{keeper ? "Nenhum outro mascote compatível com o mantido (mesmo Pokémon e origem; LAB precisa de Lv.100)." : "Nenhum mascote encontrado."}</p>}
         </div>
 
         <div className="mt-3 flex items-center justify-between text-xs text-slate-400">

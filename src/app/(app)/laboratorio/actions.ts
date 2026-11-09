@@ -271,7 +271,9 @@ export async function buyLabMutationAction(type: GeneticMutationType) {
 }
 
 export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; survivorId: string; consumedIds: string[] }) {
-  const me = await requireLabAdmin();
+  const me = await requirePlayer();
+  const lockReason = await getLabLockReason();
+  if (lockReason) return { ok: false as const, error: lockReason };
   if (new Set([input.survivorId, ...input.consumedIds]).size !== input.consumedIds.length + 1) return { ok: false as const, error: "Selecione mascotes diferentes." };
   try {
     let cost = 0;
