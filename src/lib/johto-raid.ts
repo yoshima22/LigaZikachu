@@ -2,6 +2,7 @@
 import { revalidateTag, unstable_cache } from "next/cache";
 import { MascotPersonality, Prisma, ZikaCoinTxType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { JOHTO_ADMIN_ONLY } from "@/lib/johto-invitation-copy";
 import { creditCoins } from "@/lib/zikacoins";
 import { toLeagueMascot } from "@/lib/league-combat";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
@@ -24,6 +25,7 @@ const DAY_MS = 86_400_000;
 
 // Cache curto: o layout consulta isto em toda página; o toggle do admin invalida a tag na hora.
 export const isJohtoRaidVisibleToPlayers = unstable_cache(async (): Promise<boolean> => {
+  if (JOHTO_ADMIN_ONLY) return false;
   const setting = await prisma.appSetting.findUnique({ where: { key: JOHTO_VISIBLE_KEY }, select: { value: true } }).catch(() => null);
   return setting?.value === true;
 }, ["johto-raid-visible"], { revalidate: 60, tags: ["johto-raid-visible"] });

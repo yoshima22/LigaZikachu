@@ -2,6 +2,7 @@ import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
 import {
+  JOHTO_ADMIN_ONLY,
   JOHTO_INVITATION_LAUNCH_AT,
   JOHTO_VOTE_QUESTIONS,
   type JohtoVoteQuestionKey,
@@ -131,6 +132,7 @@ const getCachedCampaign = unstable_cache(
  * então basta 1 leitura do destinatário: sem upsert (escrita) e sem a lista de candidatos do torneio.
  * Qualquer outro caso cai no fluxo completo. */
 export async function getJohtoInvitationGateState(playerId: string, now = new Date()): Promise<JohtoInvitationPlayerState> {
+  if (JOHTO_ADMIN_ONLY) return unavailableState();
   const campaign = await getCachedCampaign().catch(() => null);
   if (!campaign || !campaign.publishedAt || new Date(campaign.publishedAt) > now || new Date(campaign.launchAt) > now) {
     return unavailableState();

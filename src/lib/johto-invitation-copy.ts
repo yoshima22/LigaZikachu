@@ -1,3 +1,6 @@
+/** Líderes de Johto fechado: só ADMIN/SUPER_ADMIN (nem GM nem jogadores). Mude para false para voltar a obedecer o toggle do painel. */
+export const JOHTO_ADMIN_ONLY = true;
+
 export const JOHTO_INVITATION_LAUNCH_AT = new Date("2026-10-13T11:00:00.000Z");
 
 export const JOHTO_VOTE_QUESTIONS = [
