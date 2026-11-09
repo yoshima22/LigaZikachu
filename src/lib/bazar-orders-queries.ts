@@ -130,8 +130,9 @@ export async function getOrderableItems() {
 let speciesCache: [number, string][] | null = null;
 export function getOrderableSpecies(): [number, string][] {
   if (!speciesCache) {
-    const ids = new Set<number>([...Object.keys(POKEMON_PT_NAMES).map(Number), ...MEGA_STONES.map((m) => m.megaPokemonId)]);
-    speciesCache = [...ids].filter((id) => id >= 1).sort((a, b) => a - b).map((id) => [id, getPokemonName(id)] as [number, string]);
+    // POKEMON_PT_NAMES não tem as gerações 3-9 (ficam em mapas à parte): varre a dex inteira via getPokemonName.
+    const ids = new Set<number>([...Array.from({ length: 1025 }, (_, i) => i + 1), ...Object.keys(POKEMON_PT_NAMES).map(Number), ...MEGA_STONES.map((m) => m.megaPokemonId)]);
+    speciesCache = [...ids].filter((id) => id >= 1).sort((a, b) => a - b).map((id) => [id, getPokemonName(id)] as [number, string]).filter(([, n]) => !n.startsWith("Pokémon #"));
   }
   return speciesCache;
 }
