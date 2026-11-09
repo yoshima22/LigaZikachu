@@ -5571,3 +5571,121 @@ model CompanionActionAudit {
 
 
 
+
+// ── Rei do Rio (modo semanal PvP assincrono, admin-only na 1a etapa) ─────────
+// Sem FKs para Player/Mascot: bots de teste e snapshots congelados no fechamento
+// nao podem depender de dados vivos.
+model ReiRioEdition {
+  id               String   @id @default(cuid())
+  name             String
+  theme            String   @default("natal")
+  isTest           Boolean  @default(true)
+  autoRun          Boolean  @default(false)
+  mondayDate       String
+  phase            String   @default("PREPARATION")
+  registrationOpen Boolean  @default(true)
+  restDay          Int?
+  lockedAt         DateTime?
+  finishedAt       DateTime?
+  championKey      String?
+  configJson       Json     @default("{}")
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  participants ReiRioParticipant[]
+  rounds       ReiRioRound[]
+  matches      ReiRioMatch[]
+
+  @@index([phase])
+  @@map("rdr_editions")
+}
+
+model ReiRioParticipant {
+  id           String    @id @default(cuid())
+  editionId    String
+  playerKey    String
+  displayName  String
+  isBot        Boolean   @default(false)
+  originalJson Json
+  rosterJson   Json?
+  dayPlansJson Json      @default("{}")
+  scoresJson   Json      @default("{}")
+  totalScore   Int       @default(0)
+  wins         Int       @default(0)
+  losses       Int       @default(0)
+  draws        Int       @default(0)
+  byes         Int       @default(0)
+  damageDealt  Int       @default(0)
+  lockedAt     DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  edition   ReiRioEdition    @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  dayStates ReiRioDayState[]
+
+  @@unique([editionId, playerKey])
+  @@index([editionId])
+  @@map("rdr_participants")
+}
+
+model ReiRioDayState {
+  id            String   @id @default(cuid())
+  participantId String
+  dayIndex      Int
+  formationJson Json
+  stateJson     Json
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  participant ReiRioParticipant @relation(fields: [participantId], references: [id], onDelete: Cascade)
+
+  @@unique([participantId, dayIndex])
+  @@map("rdr_day_states")
+}
+
+model ReiRioRound {
+  id            String    @id @default(cuid())
+  editionId     String
+  roundIndex    Int
+  dayIndex      Int
+  slotInDay     Int
+  scheduledAt   DateTime
+  status        String    @default("PENDING")
+  claimToken    String?
+  startedAt     DateTime?
+  finishedAt    DateTime?
+  snapshotJson  Json?
+  standingsJson Json?
+  error         String?   @db.Text
+
+  edition ReiRioEdition  @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  matches ReiRioMatch[]
+
+  @@unique([editionId, roundIndex])
+  @@index([editionId, status])
+  @@map("rdr_rounds")
+}
+
+model ReiRioMatch {
+  id             String   @id @default(cuid())
+  editionId      String
+  roundId        String
+  roundIndex     Int
+  dayIndex       Int
+  participantAId String
+  participantBId String?
+  winnerId       String?
+  isDraw         Boolean  @default(false)
+  seed           String
+  summaryJson    Json
+  statsJson      Json
+  replayJson     Json?
+  createdAt      DateTime @default(now())
+
+  edition ReiRioEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+  round   ReiRioRound   @relation(fields: [roundId], references: [id], onDelete: Cascade)
+
+  @@unique([roundId, participantAId])
+  @@index([editionId, roundIndex])
+  @@map("rdr_matches")
+}

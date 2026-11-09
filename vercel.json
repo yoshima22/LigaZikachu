@@ -5,6 +5,10 @@
       "schedule": "0 3 * * *"
     },
     {
+      "path": "/api/cron/rei-do-rio",
+      "schedule": "*/5 * * * *"
+    },
+    {
       "path": "/api/cron/tower-resolve",
       "schedule": "*/5 * * * *"
     },

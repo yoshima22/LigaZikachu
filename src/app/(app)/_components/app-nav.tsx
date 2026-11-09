@@ -138,6 +138,14 @@ const combatLinks = [
     platformAdminOnly: true, // em desenvolvimento: só ADMIN, nunca GM
     beta: true,
   },
+  {
+    href: "/combates/rei-do-rio",
+    label: "Rei do Rio",
+    icon: Crown,
+    adminOnly: true,
+    platformAdminOnly: true, // protótipo fechado: só ADMIN, nunca GM
+    beta: true,
+  },
 ];
 
 const rankingLinks = [
