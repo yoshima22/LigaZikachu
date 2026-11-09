@@ -296,7 +296,7 @@ export async function fuseMascotsInLabAction(input: { mode: "ORIGIN" | "STAR"; s
         if (!debited.count) throw new Error(`Pó de Criação insuficiente: a fusão custa ${recipe.mutationCost}.`);
         cost = recipe.mutationCost;
         await applyRainbowFeather(me.id, survivor.id, recipe.resultOrigin, tx, false, recipe.resultOrigin);
-        await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: recipe.resultOrigin === "LAB" ? 1 : 0 } });
+        await tx.mascot.update({ where: { id: survivor.id }, data: { hatchedFromEggType: recipe.resultOrigin, hatchedFromEggOrigin: `Fusão de origem ${recipe.resultOrigin}`, labStars: 0 } });
       }
       await tx.mascot.deleteMany({ where: { id: { in: consumed.map((m) => m.id) } } });
       const f = await tx.mascot.findUniqueOrThrow({ where: { id: survivor.id } });
