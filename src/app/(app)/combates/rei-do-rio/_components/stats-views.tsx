@@ -23,6 +23,9 @@ export function explainRow(r: StandRow, bd: Breakdown[string] | undefined, cfg: 
     `${fmtPts(total)} pontos em ${fights} combate${fights > 1 ? "s" : ""} (média de ${fmtPts(total / fights)} por combate). Só ${Math.round((win / total) * 100)}% vieram de vitórias (${fmtPts(win)} pts); o resto veio de dano, KOs, suporte e resistência.`,
   ];
   if (r.losses > r.wins) lines.push(`Mesmo com mais derrotas (${r.losses}) do que vitórias (${r.wins}), a equipe pontua por tudo o que faz em campo. Vencer vale ${Math.round((cfg.budget.win / budgetTotal) * 100)}% do orçamento de um combate — por isso a posição não segue a ordem de vitórias.`);
+  const m = modifierPct(r, cfg);
+  if (m < 0) lines.push(`Pressão do Trono ativa: ${r.winStreak} vitórias seguidas = ${m}% de Força, Instinto, Vitalidade e Carisma no próximo combate. Se perder, o efeito some.`);
+  if (m > 0) lines.push(`Calor da Lareira ativo: ${r.lossStreak} derrotas seguidas = +${m}% de Força, Instinto, Vitalidade e Carisma no próximo combate. Se vencer ou empatar, o efeito some.`);
   if (r.byes > 0) lines.push(`${r.byes} folga${r.byes > 1 ? "s" : ""} (sem adversário): não dá nem tira pontos.`);
   if ((bd.points.leadership ?? 0) > 0) lines.push(`Permanência no topo rendeu ${fmtPts(bd.points.leadership)} pts (bônus pequeno e limitado, para nunca valer mais do que jogar bem).`);
   return lines;
@@ -50,6 +53,15 @@ export function ScoringExplainer({ cfg }: { cfg: Cfg }) {
       <ul className="mt-2 grid gap-1 sm:grid-cols-2">
         {items.map((i) => <li key={i.k} className="flex items-start gap-2 text-xs text-slate-300"><i className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ background: CAT_COLORS[i.k] }} /><span><b className="text-white">{CATEGORY_LABELS[i.k]} (até {i.v})</b> — {i.d}</span></li>)}
       </ul>
+      <div className="mt-3 rounded-xl border border-sky-300/20 bg-sky-500/5 p-3 text-xs leading-relaxed text-sky-100/90">
+        <p className="font-black text-sky-200">O que os pontos mudam no jogo</p>
+        <ul className="mt-1 list-disc space-y-0.5 pl-4">
+          <li><b>Sua posição</b> e, na sexta às 21h, o título.</li>
+          <li><b>Seus adversários:</b> o pareamento aproxima quem tem pontuação parecida.</li>
+          <li><b>Bônus de topo:</b> estando entre os líderes, mascotes em campo que sobrevivem ganham até {cfg.leadershipCap} pontos extras por combate.</li>
+          <li><b>Não mudam</b> atributos, HP nem a força dos seus mascotes. Os ajustes de combate vêm só de sequências: {cfg.pressure.minStreak} vitórias seguidas ativam a Pressão do Trono (de −{cfg.pressure.steps[1]}% até −{cfg.pressure.steps[cfg.pressure.steps.length - 1]}%) e {cfg.current.minStreak} derrotas seguidas ativam o Calor da Lareira (de +{cfg.current.steps[1]}% até +{cfg.current.steps[cfg.current.steps.length - 1]}%). Quebrou a sequência, o ajuste some.</li>
+        </ul>
+      </div>
       <div className="mt-3 rounded-xl border border-amber-300/30 bg-amber-300/5 p-3 text-xs leading-relaxed text-amber-100/90">
         <p className="font-black text-amber-200">Por que alguém com mais derrotas pode estar na frente?</p>
         <p className="mt-1">Vencer vale só {Math.round((b.win / total) * 100)}% do que um combate pode render. Uma equipe que perde, mas causa muito dano, faz KOs, cura e resiste, soma mais do que outra que vence por pouco e contribui menos. Quem enfrenta adversários fortes também perde mais — e pontua mesmo assim. Toque numa linha da tabela para ver, em números, de onde vêm os pontos de cada jogador.</p>
@@ -68,9 +80,9 @@ export function StandingsTable({ rows, cfg, meId, breakdown }: { rows: StandRow[
     <div>
       {inversions > 0 && breakdown && <p className="mb-2 rounded-lg bg-sky-500/10 px-3 py-1.5 text-[11px] text-sky-200">ℹ️ Em {inversions} comparações, quem está acima tem <b>mais derrotas</b>: a posição segue os pontos, não as vitórias. Toque numa linha para entender.</p>}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[640px] text-sm">
+        <table className="w-full min-w-[720px] text-sm">
           <caption className="sr-only">Classificação geral</caption>
-          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2 pl-2">#</th><th>Jogador</th><th className="w-44">Pontos</th><th className="text-right">Pts/luta</th><th className="text-right">V·D·E</th><th className="text-right">Aprov.</th><th className="pr-2 text-right">Equilíbrio</th></tr></thead>
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2 pl-2">#</th><th>Jogador</th><th className="w-44">Pontos</th><th className="text-right">Pts/luta</th><th className="text-right">V·D·E</th><th className="text-right">Aprov.</th><th className="text-right">Sequência</th><th className="pr-2 text-right">Ajuste</th></tr></thead>
           <tbody>
             {rows.map((r) => {
               const mod = modifierPct(r, cfg);
@@ -86,12 +98,13 @@ export function StandingsTable({ rows, cfg, meId, breakdown }: { rows: StandRow[
                     <td className="text-right font-mono tabular-nums text-slate-300">{fights ? fmtPts(r.score / fights) : "–"}</td>
                     <td className="text-right tabular-nums"><span className="text-emerald-300">{r.wins}</span><span className="text-slate-600">·</span><span className="text-red-300">{r.losses}</span><span className="text-slate-600">·</span><span className="text-slate-400">{r.draws}</span></td>
                     <td className="text-right tabular-nums text-slate-300">{fights ? `${Math.round((r.wins / fights) * 100)}%` : "–"}</td>
+                    <td className="text-right text-xs font-bold tabular-nums">{r.winStreak > 0 ? <span className="text-emerald-300">{r.winStreak}V seguidas</span> : r.lossStreak > 0 ? <span className="text-red-300">{r.lossStreak}D seguidas</span> : <span className="text-slate-600">–</span>}</td>
                     <td className="pr-2 text-right">
-                      {mod < 0 ? <Pill tone="red" title="Pressão do Trono: redução temporária no combate">👑 {mod}%</Pill> : mod > 0 ? <Pill tone="gold" title="Calor da Lareira: bônus temporário no combate">🔥 +{mod}%</Pill> : <span className="text-slate-600">–</span>}
+                      {mod < 0 ? <Pill tone="red" title={`Pressão do Trono: ${r.winStreak} vitórias seguidas reduzem Força, Instinto, Vitalidade e Carisma no próximo combate`}>👑 {mod}%</Pill> : mod > 0 ? <Pill tone="gold" title={`Calor da Lareira: ${r.lossStreak} derrotas seguidas aumentam Força, Instinto, Vitalidade e Carisma no próximo combate`}>🔥 +{mod}%</Pill> : <span className="text-slate-600">–</span>}
                     </td>
                   </tr>
                   {isOpen && bd && (
-                    <tr className="bg-slate-900/60"><td colSpan={7} className="px-3 py-3">
+                    <tr className="bg-slate-900/60"><td colSpan={8} className="px-3 py-3">
                       <StackBar parts={CAT_ORDER.map((k) => ({ key: k, value: bd.points[k] ?? 0 }))} labels />
                       <ul className="mt-2 space-y-1 text-xs text-slate-300">{explainRow(r, bd, cfg).map((l) => <li key={l}>• {l}</li>)}</ul>
                     </td></tr>

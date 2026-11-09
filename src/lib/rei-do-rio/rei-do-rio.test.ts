@@ -7,6 +7,8 @@ import { DEFAULT_CONFIG } from "./config";
 import { makeBotRoster, makeSimPlayer, simulateWeek } from "./simulate";
 import { applyBattleToState, chooseActives, freshDayState, validateFormation, type Formation, type MascotSnap } from "./team";
 import { sumAggs } from "./scoring";
+import { buildStandings, modifierPct, type Result, type StandRow } from "./standings";
+import { mergeConfig } from "./config";
 
 const roster = makeBotRoster("t", "MEDIO", 20);
 const pool = new Map(roster.map((m) => [m.id, m]));
@@ -144,4 +146,35 @@ test("hpMultiplier escala o HP máximo do dia e maxRounds limita a luta", () => 
   assert.deepEqual(short.metrics.errors, []);
   const full = simulateWeek(players, { editionId: "cap" });
   assert.ok(short.metrics.avgKosPerMatch < full.metrics.avgKosPerMatch, "limite de rodadas + HP deve reduzir KOs");
+});
+
+test("Pressão/Calor só vêm de sequência de vitórias/derrotas, nunca da posição", () => {
+  const cfg = mergeConfig({});
+  const mk = (res: Record<string, Result>, prev: StandRow[] | null, score: Record<string, number>) =>
+    buildStandings(["a", "b", "c", "d", "e"].map((pid) => ({ pid, name: pid, score: score[pid] ?? 0, wins: 0, losses: 0, draws: 0, byes: 0, damage: 0, lastResult: res[pid] ?? null })), prev, cfg);
+  // "a" lidera desde a 1ª rodada (1 vitória): líder, mas sem sequência de 2 => nenhum ajuste.
+  let rows = mk({ a: "W", e: "L" }, null, { a: 9000, b: 100 });
+  const get = (pid: string) => rows.find((r) => r.pid === pid)!;
+  assert.equal(get("a").rank, 1);
+  assert.equal(modifierPct(get("a"), cfg), 0);
+  assert.equal(modifierPct(get("e"), cfg), 0);
+  // 2ª vitória seguida: −2%; 3ª: −4%; 5ª: limitado a −6%.
+  rows = mk({ a: "W", e: "L" }, rows, { a: 9500 });
+  assert.equal(modifierPct(get("a"), cfg), -2);
+  assert.equal(modifierPct(get("e"), cfg), 2); // 2 derrotas seguidas: +2%
+  rows = mk({ a: "W", e: "L" }, rows, { a: 9800 });
+  assert.equal(modifierPct(get("a"), cfg), -4);
+  assert.equal(modifierPct(get("e"), cfg), 4);
+  rows = mk({ a: "W", e: "L" }, rows, { a: 9900 });
+  rows = mk({ a: "W", e: "L" }, rows, { a: 9990 });
+  assert.equal(modifierPct(get("a"), cfg), -6);
+  assert.equal(modifierPct(get("e"), cfg), 4);
+  // Folga mantém a sequência; empate zera; derrota/vitória quebra e o ajuste some.
+  rows = mk({ a: "BYE" }, rows, { a: 9990 });
+  assert.equal(modifierPct(get("a"), cfg), -6);
+  rows = mk({ a: "L", e: "W" }, rows, { a: 9990 });
+  assert.equal(modifierPct(get("a"), cfg), 0);
+  assert.equal(modifierPct(get("e"), cfg), 0);
+  // Quem está na base mas venceu a última NÃO ganha Calor só por posição.
+  assert.equal(get("e").current, 0);
 });

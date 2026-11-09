@@ -5,7 +5,7 @@ import { fmtPts } from "@/lib/rei-do-rio/config";
 import type { DailyReport } from "@/lib/rei-do-rio/report";
 import { CATEGORY_LABELS, type PointCategory } from "@/lib/rei-do-rio/scoring";
 import { loadReportAction } from "../actions";
-import { Card, Empty, Pill, Skeleton, Sprite, Title } from "./rei-ui";
+import { CAT_ORDER, Card, Empty, HpBar, Pill, Skeleton, Sprite, StackBar, Title } from "./rei-ui";
 
 const CAT_COLORS: Record<PointCategory, string> = { damage: "#f97316", ko: "#ef4444", support: "#22c55e", resilience: "#38bdf8", win: "#facc15", leadership: "#a78bfa" };
 
@@ -133,9 +133,32 @@ export function ReportView({ editionId, participantId, doneDays, onReplay }: { e
                     <span className="ml-auto font-mono text-sm font-black text-amber-200">+{fmtPts(t.points)}</span>
                     {t.hasReplay && <button onClick={() => onReplay(t.matchId)} className="rounded-lg bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>}
                   </div>
+                  {t.streakNote && <p className="mt-1.5 text-[11px] text-amber-200">⚖️ {t.streakNote}</p>}
                   {t.lineup.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{t.lineup.map((f) => <span key={f.slot} className="flex items-center gap-1 rounded-lg bg-slate-800/70 px-1.5 py-0.5 text-[10px] text-slate-300"><Sprite id={f.pokemonId} size={20} />{f.name}{f.startHpPct < 100 && <b className="text-amber-300">{f.startHpPct}%</b>}</span>)}</div>}
                   {t.defeated.length > 0 && <p className="mt-1.5 text-[11px] text-red-300">Derrotados: {t.defeated.join(", ")}</p>}
                   {t.substitutions.length > 0 && <p className="mt-0.5 text-[11px] text-emerald-300">Para a próxima: {t.substitutions.map((s) => `slot ${s.slot}: ${s.out} → ${s.in} (${s.reason})`).join(" · ")}</p>}
+                  {t.mascots.length > 0 && (
+                    <details className="group mt-2 rounded-xl border border-slate-800 bg-slate-950/50">
+                      <summary className="cursor-pointer list-none px-3 py-2 text-xs font-bold text-sky-200 group-open:border-b group-open:border-slate-800">▸ Como cada mascote contribuiu nesta luta</summary>
+                      <div className="space-y-2 p-3">
+                        <div><p className="mb-1 text-[10px] font-bold uppercase tracking-wider text-slate-500">Origem dos {fmtPts(t.points)} pontos da equipe</p><StackBar parts={CAT_ORDER.map((k) => ({ key: k, value: t.byCategory[k] ?? 0 }))} labels /></div>
+                        {t.mascots.map((m) => (
+                          <div key={m.id} className="rounded-lg bg-slate-900/60 p-2">
+                            <div className="flex items-center gap-2">
+                              <Sprite id={m.pokemonId} size={34} dim={!m.survived} />
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-black text-white">{m.name} <span className="font-normal text-slate-500">· slot {m.slot} · {m.role}</span> {!m.survived && <Pill tone="red">caiu</Pill>}</p>
+                                <div className="flex items-center gap-1.5"><span className="w-16 text-[10px] tabular-nums text-slate-500">{m.startHpPct}% → {m.endHpPct}%</span><div className="flex-1"><HpBar hp={m.endHpPct} max={100} dead={!m.survived} /></div></div>
+                              </div>
+                              <span className="font-mono text-sm font-black text-amber-200">+{fmtPts(m.total)}</span>
+                            </div>
+                            <p className="mt-1 text-[10px] text-slate-400">{m.kos} KO · {m.assists} assist. · {m.damage} dano · {m.healing} cura · {m.mitigated} absorvido</p>
+                            <div className="mt-1"><StackBar parts={CAT_ORDER.map((k) => ({ key: k, value: m.sources[k] ?? 0 }))} labels thin /></div>
+                          </div>
+                        ))}
+                      </div>
+                    </details>
+                  )}
                 </li>
               ))}
             </ol>

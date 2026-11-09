@@ -22,7 +22,8 @@ export type DailyReport = {
     bestStreak: number; roundsInTop: number; slotsExhausted: number;
   };
   mascots: { id: string; name: string; pokemonId: number; roles: string[]; battles: number; dayPoints: number; weekPoints: number; kos: number; assists: number; damageDealt: number; healing: number; mitigated: number; survivedBattles: number; eventRank: number | null; sources: Record<string, number> }[];
-  timeline: { matchId: string; roundIndex: number; at: string; opponent: string | null; result: "W" | "L" | "D" | "BYE"; lineup: { name: string; pokemonId: number; role: string; slot: number; startHpPct: number }[]; defeated: string[]; substitutions: { slot: number; out: string; in: string; reason: string }[]; points: number; hasReplay: boolean; modifierPct: number }[];
+  timeline: { matchId: string; roundIndex: number; at: string; opponent: string | null; result: "W" | "L" | "D" | "BYE"; lineup: { name: string; pokemonId: number; role: string; slot: number; startHpPct: number }[]; defeated: string[]; substitutions: { slot: number; out: string; in: string; reason: string }[]; points: number; hasReplay: boolean; modifierPct: number; streakNote: string | null; byCategory: Record<string, number>;
+    mascots: { id: string; name: string; pokemonId: number; role: string; slot: number; startHpPct: number; endHpPct: number; survived: boolean; kos: number; assists: number; damage: number; healing: number; mitigated: number; total: number; sources: Record<string, number> }[] }[];
   text: string[];
   comparison: { day: number; label: string; points: number; rank: number | null; wins: number; losses: number; kos: number; survived: number }[];
 };
@@ -45,7 +46,7 @@ export function buildDailyReport(pid: string, day: number, matches: ReportMatch[
   let streak = 0, best = 0;
   const timeline: DailyReport["timeline"] = [];
   for (const m of today) {
-    if (!m.b) { acc.byes++; timeline.push({ matchId: m.id, roundIndex: m.roundIndex, at: m.scheduledAt, opponent: null, result: "BYE", lineup: [], defeated: [], substitutions: [], points: 0, hasReplay: false, modifierPct: 0 }); continue; }
+    if (!m.b) { acc.byes++; timeline.push({ matchId: m.id, roundIndex: m.roundIndex, at: m.scheduledAt, opponent: null, result: "BYE", lineup: [], defeated: [], substitutions: [], points: 0, hasReplay: false, modifierPct: 0, streakNote: null, byCategory: {}, mascots: [] }); continue; }
     const s = m.summary as MatchSummary;
     const side = mine(m, pid);
     const me = side === "A" ? s.A : s.B!;
@@ -68,6 +69,9 @@ export function buildDailyReport(pid: string, day: number, matches: ReportMatch[
       defeated: stats.filter((x) => !x.survived).map((x) => x.name),
       substitutions: me.substitutions.map((x) => ({ slot: x.slot, out: nameOf(x.out, stats), in: mascotNames[x.in]?.name ?? x.in, reason: x.reason === "DEFEATED" ? "derrotado" : "ferido" })),
       points: me.team.pointsTotal, hasReplay: m.hasReplay, modifierPct: me.modifierPct,
+      streakNote: me.modifierPct < 0 ? `Pressão do Trono: ${me.winStreak} vitórias seguidas (${me.modifierPct}% de Força, Instinto, Vitalidade e Carisma)` : me.modifierPct > 0 ? `Calor da Lareira: ${me.lossStreak} derrotas seguidas (+${me.modifierPct}% nos mesmos atributos)` : null,
+      byCategory: stats.reduce<Record<string, number>>((acc, x) => { for (const [k, v] of Object.entries(x.points)) acc[k] = (acc[k] ?? 0) + v; return acc; }, {}),
+      mascots: stats.map((x) => ({ id: x.id, name: x.name, pokemonId: x.pokemonId, role: x.role, slot: x.slot, startHpPct: Math.round((x.startHp / Math.max(1, me.lineup.find((f) => f.id === x.id)?.maxHp ?? x.startHp)) * 100), endHpPct: Math.round((x.endHp / Math.max(1, me.lineup.find((f) => f.id === x.id)?.maxHp ?? x.endHp)) * 100), survived: x.survived, kos: x.kos, assists: x.assists, damage: Math.round(x.damageDealt), healing: Math.round(x.healing), mitigated: Math.round(x.mitigated), total: x.total, sources: x.points })).sort((p, q) => q.total - p.total),
     });
   }
   const rankOf = new Map([...leaderboard].sort((a, b) => b.total - a.total).map((x, i) => [x.id, i + 1]));

@@ -28,9 +28,9 @@ export function AdminPanel({ view, onChanged, onCreated }: { view: EditionView |
   const [simWeeks, setSimWeeks] = useState(2);
   const [gap, setGap] = useState(15);
   const [pressure, setPressure] = useState(true);
-  const [hpMult, setHpMult] = useState(1);
-  const [maxRounds, setMaxRounds] = useState(150);
-  const [winPts, setWinPts] = useState(15);
+  const [hpMult, setHpMult] = useState(3);
+  const [maxRounds, setMaxRounds] = useState(6);
+  const [winPts, setWinPts] = useState(30);
 
   const ed = view?.edition;
   const run = (fn: () => Promise<{ ok: boolean; error?: string; message?: string; [k: string]: unknown }>, after?: (r: Awaited<ReturnType<typeof fn>>) => void) =>

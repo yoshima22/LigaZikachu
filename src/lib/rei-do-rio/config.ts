@@ -21,9 +21,13 @@ export type ReiConfig = {
   /** Pontos máximos de permanência no topo por combate (somados à equipe). */
   leadershipPerStreak: number;
   leadershipCap: number;
-  /** Pressão do Trono (líderes) / Calor da Lareira (lanternas). */
-  pressure: { enabled: boolean; steps: number[]; topFraction: number };
-  current: { enabled: boolean; steps: number[]; bottomFraction: number };
+  /**
+   * Pressão do Trono: vitórias SEGUIDAS reduzem Força/Instinto/Vitalidade/Carisma; Calor da Lareira: derrotas SEGUIDAS aumentam.
+   * O gatilho é a sequência (não a posição). `steps[n]` = % no nível n; nível = sequência − minStreak + 1 (limitado ao último passo).
+   * `topFraction` NÃO ativa modificador: só define quem recebe o bônus de pontos de permanência no topo.
+   */
+  pressure: { enabled: boolean; steps: number[]; minStreak: number; topFraction: number };
+  current: { enabled: boolean; steps: number[]; minStreak: number };
   /** Multiplicador do HP máximo dos mascotes NESTE modo (1 = HP normal). Reduz o desgaste diário. */
   hpMultiplier: number;
   /** Limite de rodadas por combate (o motor padrão luta até a extinção, ~150). No limite vence quem tem mais HP total. */
@@ -34,15 +38,15 @@ export type ReiConfig = {
 
 export const DEFAULT_CONFIG: ReiConfig = {
   swapHpGapPct: 15,
-  budget: { damage: 25, ko: 20, support: 25, resilience: 15, win: 15 },
+  budget: { damage: 25, ko: 20, support: 25, resilience: 15, win: 30 },
   supportNormFraction: 0.35,
   leadershipPerStreak: 1,
   leadershipCap: 3,
-  pressure: { enabled: true, steps: [0, 2, 4, 6], topFraction: 0.2 },
-  current: { enabled: true, steps: [0, 2, 4], bottomFraction: 0.25 },
+  pressure: { enabled: true, steps: [0, 2, 4, 6], minStreak: 2, topFraction: 0.2 },
+  current: { enabled: true, steps: [0, 2, 4], minStreak: 2 },
   balanceMinPlayers: 4,
-  hpMultiplier: 1,
-  maxRounds: 150,
+  hpMultiplier: 3,
+  maxRounds: 6,
 };
 
 export function mergeConfig(raw: unknown): ReiConfig {

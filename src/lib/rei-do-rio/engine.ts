@@ -7,7 +7,7 @@ import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { hashStr } from "@/lib/league-pairing";
 import { PT, type ReiConfig } from "./config";
 import { analyzeBattle, emptyAgg, mergeAgg, sumAggs, type Fighter, type MascotAgg, type MascotMatchStats, type TeamMatchStats } from "./scoring";
-import { buildStandings, modifierPct, pairRound, type PastMatch, type StandRow } from "./standings";
+import { buildStandings, modifierPct, pairRound, type PastMatch, type Result, type StandRow } from "./standings";
 import { applyBattleToState, aliveCount, chooseActives, diffActives, exhaustedSlots, type DayState, type Formation, type MascotSnap, type Substitution } from "./team";
 
 export type Runtime = {
@@ -25,7 +25,7 @@ export type SideSummary = {
   before: DayState; after: DayState;
   substitutions: Substitution[];
   exhaustedSlots: number;
-  rank: number; modifierPct: number; topStreak: number;
+  rank: number; modifierPct: number; topStreak: number; winStreak: number; lossStreak: number;
   team: TeamMatchStats;
 };
 export type MatchSummary = {
@@ -66,7 +66,7 @@ function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fight
     const st = rt.state.mascots[id];
     if (!snap || !st || st.dead || st.hp <= 0) return;
     const m = toLeagueMascot({ ...snap, playerId: rt.pid, diseasedAt: null }, i + 1, rt.formation.slots[i].role);
-    // Pressão/Calor: só estas estatísticas, só neste combate. HP máximo e Agilidade (iniciativa) ficam intactos.
+    // Pressão/Calor (por sequência de resultados): só estas estatísticas, só neste combate. HP máximo e Agilidade (iniciativa) ficam intactos.
     if (pct !== 0) {
       const k = 1 + pct / 100;
       for (const s of ["force", "instinct", "vitality", "charisma"] as const) m[s] = Math.max(1, Math.round(m[s] * k));
@@ -111,8 +111,9 @@ export function runMatch(a: Runtime, b: Runtime, ctx: { roundIndex: number; dayI
     const r = fight(la.mascots, lb.mascots, startHp, seed, cfg.maxRounds);
     log = r.log; finalHp = r.finalHp; rounds = r.rounds; winner = r.winner;
     const notes: string[] = [];
-    if (pctA) notes.push(`${a.name}: ${pctA > 0 ? "Calor da Lareira +" : "Pressão do Trono "}${pctA}%`);
-    if (pctB) notes.push(`${b.name}: ${pctB > 0 ? "Calor da Lareira +" : "Pressão do Trono "}${pctB}%`);
+    const why = (p: number, row?: StandRow) => (p > 0 ? `Calor da Lareira +${p}% (${row?.lossStreak ?? 0} derrotas seguidas)` : `Pressão do Trono ${p}% (${row?.winStreak ?? 0} vitórias seguidas)`);
+    if (pctA) notes.push(`${a.name}: ${why(pctA, ctx.rowA)}`);
+    if (pctB) notes.push(`${b.name}: ${why(pctB, ctx.rowB)}`);
     if (notes.length && log.length) {
       const first = log.find((e) => e.turn !== 0) ?? log[0];
       log = [{ ...first, turn: 0, action: "DEFEND", damage: 0, targetId: first.actorId, targetName: first.actorName, targetOwnerId: first.actorOwnerId, effect: `Equilíbrio do evento: ${notes.join(" · ")} em Força, Instinto, Vitalidade e Carisma neste combate.` }, ...log];
@@ -135,7 +136,7 @@ export function runMatch(a: Runtime, b: Runtime, ctx: { roundIndex: number; dayI
   const side = (rt: Runtime, l: ReturnType<typeof buildLineup>, before: DayState, row: StandRow | undefined, pct: number, team: TeamMatchStats, s: "A" | "B"): SideSummary => ({
     pid: rt.pid, name: rt.name, lineup: l.fighters, before, after: rt.state,
     substitutions: diffActives(before.active, rt.state.active, rt.state),
-    exhaustedSlots: exhaustedSlots(rt.formation, rt.state), rank: row?.rank ?? 0, modifierPct: pct, topStreak: topStreak[s], team,
+    exhaustedSlots: exhaustedSlots(rt.formation, rt.state), rank: row?.rank ?? 0, modifierPct: pct, topStreak: topStreak[s], winStreak: (s === "A" ? ctx.rowA : ctx.rowB)?.winStreak ?? 0, lossStreak: (s === "A" ? ctx.rowA : ctx.rowB)?.lossStreak ?? 0, team,
   });
   const summary: MatchSummary = {
     roundIndex: ctx.roundIndex, dayIndex: ctx.dayIndex, rounds, winner, exhausted,
@@ -168,8 +169,14 @@ export function runRound(input: RoundInput): RoundResult {
     const b = byId.get(pair.bId)!;
     matches.push(runMatch(a, b, { roundIndex, dayIndex, seed: `${seedBase}:${a.pid}`, cfg, rowA: rows.get(a.pid), rowB: rows.get(b.pid), fight: input.fight }));
   }
+  const last = new Map<string, Result>();
+  for (const m of matches) {
+    if (!m.bId) { last.set(m.aId, "BYE"); continue; }
+    last.set(m.aId, m.isDraw ? "D" : m.winnerId === m.aId ? "W" : "L");
+    last.set(m.bId, m.isDraw ? "D" : m.winnerId === m.bId ? "W" : "L");
+  }
   const standings = buildStandings(
-    input.players.map((p) => ({ pid: p.pid, name: p.name, isBot: p.isBot, score: sumAggs(p.aggs), wins: p.wins, losses: p.losses, draws: p.draws, byes: p.byes, damage: p.damage })),
+    input.players.map((p) => ({ pid: p.pid, name: p.name, isBot: p.isBot, score: sumAggs(p.aggs), wins: p.wins, losses: p.losses, draws: p.draws, byes: p.byes, damage: p.damage, lastResult: last.get(p.pid) ?? null })),
     snapshot, cfg,
   );
   return { matches, players: input.players, standings };

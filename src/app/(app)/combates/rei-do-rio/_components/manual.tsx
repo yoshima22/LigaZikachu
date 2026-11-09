@@ -11,7 +11,7 @@ type Cfg = EditionView["edition"]["cfg"];
 const SECTIONS = [
   ["visao", "Visão geral"], ["calendario", "Calendário"], ["equipe", "Montando a equipe"], ["dia", "Seus mascotes durante o dia"],
   ["exemplo", "Exemplo passo a passo"], ["noite", "Descanso e recuperação"], ["pareamento", "Quem enfrenta quem"],
-  ["pontos", "Pontuação e classificação"], ["equilibrio", "Pressão do Trono e Calor da Lareira"], ["relatorio", "Relatório e replays"], ["faq", "Perguntas frequentes"],
+  ["pontos", "Pontuação e classificação"], ["contribuicao", "Como cada mascote contribui"], ["equilibrio", "Pressão do Trono e Calor da Lareira"], ["relatorio", "Relatório e replays"], ["faq", "Perguntas frequentes"],
 ] as const;
 
 function Sec({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -29,7 +29,7 @@ const Note = ({ children, tone = "blue" }: { children: ReactNode; tone?: "blue" 
 
 export function Manual({ cfg }: { cfg: Cfg }) {
   const pr = cfg.pressure.steps; const cu = cfg.current.steps;
-  const topPct = Math.round(cfg.pressure.topFraction * 100); const botPct = Math.round(cfg.current.bottomFraction * 100);
+  const topPct = Math.round(cfg.pressure.topFraction * 100);
   const limited = cfg.maxRounds < 150;
   return (
     <div className="grid gap-4 lg:grid-cols-[220px_1fr]">
@@ -74,6 +74,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
           <h3 className="font-black text-white">Dentro de um combate</h3>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Entram <B>seis mascotes de cada lado</B>: o ativo de cada slot, com o HP que tinham ao fim do combate anterior.</li>
+            {cfg.hpMultiplier !== 1 && <li>Neste evento o HP máximo dos mascotes é <B>multiplicado por {cfg.hpMultiplier}</B> (só aqui), para as lutas durarem mais e o time não ser varrido em poucos golpes.</li>}
             <li>A luta é automática, com o mesmo motor da Liga Semanal: ordem por Agilidade, posturas, vantagem de tipo e personalidade.</li>
             <li><B>Não existe substituição no meio da luta.</B> Quando um mascote cai, o lugar dele fica vazio até o fim do combate.</li>
             <li>{limited ? <>O combate dura no máximo <B>{cfg.maxRounds} rodadas</B>. Se ninguém for eliminado até lá, vence quem tem mais HP total somado.</> : <>O combate termina quando um dos lados fica sem mascotes em pé. Se estourar o limite de rodadas do motor, vence quem tem mais HP total somado.</>}</li>
@@ -129,19 +130,31 @@ export function Manual({ cfg }: { cfg: Cfg }) {
             <li>Cura acima do HP que faltava, dano além do necessário para derrotar e efeitos sem efeito real <B>não geram pontos</B>.</li>
             <li>Mascotes que estão na reserva, fora de combate, <B>não pontuam</B>.</li>
             <li><B>Permanência no topo:</B> enquanto o jogador está entre os líderes, mascotes que estão em campo <B>e sobrevivem</B> recebem um pequeno bônus (até {cfg.leadershipCap} pontos por combate para a equipe), para premiar consistência sem valer mais do que jogar bem.</li>
-            <li>Existe também o <B>ranking de mascotes</B>, que ordena cada mascote por pontos, KOs, dano, suporte ou sobrevivência.</li>
+            <li>Os pontos definem a <B>posição</B> e o <B>pareamento</B> (adversários de pontuação parecida); não mudam atributos nem HP. Existe também o <B>ranking de mascotes</B>, que ordena cada mascote por pontos, KOs, dano, suporte ou sobrevivência.</li>
           </ul>
         </Sec>
 
-        <Sec id="equilibrio" title="Pressão do Trono e Calor da Lareira">
-          <p>Para ninguém dominar sem resistência, a classificação aplica ajustes <B>temporários</B>, só dentro dos combates do evento:</p>
+        <Sec id="contribuicao" title="Como cada mascote contribui">
+          <p>Cada mascote que entra em campo recebe sua parte do orçamento do combate conforme o que <B>ele</B> fez. Nada é automático: sem ação efetiva, sem pontos.</p>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li><Pill tone="red">👑 Pressão do Trono</Pill> Quem fica seguidamente no <B>topo ({topPct}% melhores)</B> perde {pr.slice(1).map((v) => `${v}%`).join(", depois ")} (limite de −{pr[pr.length - 1]}%) em Força, Instinto, Vitalidade e Carisma.</li>
-            <li><Pill tone="gold">🔥 Calor da Lareira</Pill> Quem fica seguidamente na <B>base ({botPct}% piores)</B> ganha {cu.slice(1).map((v) => `+${v}%`).join(", depois ")} (limite de +{cu[cu.length - 1]}%) nos mesmos atributos.</li>
-            <li>Ao sair da faixa, o efeito <B>diminui um nível por rodada</B>, em vez de sumir de uma vez.</li>
-            <li>Agilidade e HP <B>não</B> são alterados, nada é permanente, e o ajuste usa a classificação congelada da rodada anterior (sem cálculo circular). Os dois efeitos nunca se somam.</li>
+            <li><B>Dano:</B> a fatia dos pontos de dano é dividida entre os mascotes em proporção ao dano efetivo que cada um causou.</li>
+            <li><B>KOs e assistências:</B> quem derrota um adversário conta um KO; quem tirou pelo menos 20% do HP dele antes conta uma assistência (vale metade).</li>
+            <li><B>Suporte:</B> cura em aliados, dano absorvido por um Guardião, dano extra habilitado por um Encorajador e efeitos do Oportunista. Cura em si mesmo não conta como suporte.</li>
+            <li><B>Resistência:</B> quanto tempo ficou em pé e quanto dano aguentou, dividido pelo tamanho da equipe em campo.</li>
+            <li><B>Vitória:</B> dividida igualmente entre os mascotes que lutaram.</li>
           </ul>
-          <Note tone="gold">Isso não força troca de liderança: boas composições continuam sendo recompensadas. É só um pequeno contrapeso.</Note>
+          <p>No relatório diário, cada luta tem o painel <B>“Como cada mascote contribuiu”</B>, com HP de entrada e saída, KOs, dano, cura e a barra colorida de onde vieram os pontos. O ranking de mascotes usa as mesmas barras.</p>
+        </Sec>
+
+        <Sec id="equilibrio" title="Pressão do Trono e Calor da Lareira">
+          <p>Para ninguém disparar sem resistência (nem ficar para trás sem chance), a partida aplica ajustes <B>temporários</B> por <B>sequência de resultados</B> — não pela posição na tabela:</p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li><Pill tone="red">👑 Pressão do Trono</Pill> Com <B>{cfg.pressure.minStreak} vitórias seguidas</B> a equipe luta com {pr.slice(1).map((v) => `−${v}%`).join(", depois ")} (limite de −{pr[pr.length - 1]}%) em Força, Instinto, Vitalidade e Carisma. Cada vitória a mais sobe um passo.</li>
+            <li><Pill tone="gold">🔥 Calor da Lareira</Pill> Com <B>{cfg.current.minStreak} derrotas seguidas</B> a equipe luta com {cu.slice(1).map((v) => `+${v}%`).join(", depois ")} (limite de +{cu[cu.length - 1]}%) nos mesmos atributos.</li>
+            <li>Quebrou a sequência? O ajuste <B>some</B> no combate seguinte. Empate zera as duas sequências; folga não altera nada.</li>
+            <li>Agilidade e HP <B>não</B> mudam, nada é permanente, e os dois efeitos nunca aparecem juntos. O ajuste usa o resultado da rodada anterior (sem cálculo circular) e aparece no log do replay, na classificação (colunas Sequência e Ajuste) e no relatório.</li>
+          </ul>
+          <Note tone="gold">Estar no topo ({topPct}% melhores) não aplica penalidade: só rende um pequeno bônus de pontos por permanência. O que muda a força em combate é a sequência de vitórias ou derrotas.</Note>
         </Sec>
 
         <Sec id="relatorio" title="Relatório e replays">

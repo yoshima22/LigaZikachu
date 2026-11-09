@@ -7,14 +7,9 @@ const presets = ["BALANCED", "OFFENSIVE", "ENDURANCE", "CONTROL"] as const;
 const tiers = ["FRACO", "MEDIO", "FORTE"] as const;
 
 const scenarios: Record<string, Record<string, unknown>> = {
-  "Base (atual)": {},
-  "Limite 6 rodadas": { maxRounds: 6 },
-  "HP x2 + limite 6": { hpMultiplier: 2, maxRounds: 6 },
-  "HP x3 + limite 6": { hpMultiplier: 3, maxRounds: 6 },
-  "HP x3 + limite 8": { hpMultiplier: 3, maxRounds: 8 },
-  "HP x4 + limite 8": { hpMultiplier: 4, maxRounds: 8 },
-  "HP x3 + limite 8 + Vit. 30": { hpMultiplier: 3, maxRounds: 8, budget: { win: 30 } },
-  "HP x3 + limite 8 + Vit. 30 + 25pp": { hpMultiplier: 3, maxRounds: 8, budget: { win: 30 }, swapHpGapPct: 25 },
+  "Padrão novo (HP x3, 6 rod., vit. 30, sequência)": {},
+  "Antigo (HP x1, 150 rod., vit. 15)": { hpMultiplier: 1, maxRounds: 150, budget: { win: 15 } },
+  "Padrão novo sem Pressão/Calor": { pressure: { enabled: false }, current: { enabled: false } },
 };
 
 const avg = (xs: number[]) => xs.reduce((a, b) => a + b, 0) / xs.length;

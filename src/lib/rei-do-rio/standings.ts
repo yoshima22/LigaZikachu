@@ -2,44 +2,51 @@
 import { swissPairSlot, hashStr, type PairingPlayer } from "@/lib/league-pairing";
 import { PT, type ReiConfig } from "./config";
 
+export type Result = "W" | "L" | "D" | "BYE";
+
 export type StandRow = {
   pid: string; name: string; isBot?: boolean;
   score: number; // centésimos
   wins: number; losses: number; draws: number; byes: number; damage: number;
   rank: number; prevRank: number | null;
-  topStreak: number; bottomStreak: number;
-  /** Níveis aplicados no PRÓXIMO combate (decaem aos poucos ao sair da faixa). */
+  /** Rodadas seguidas no topo (só bônus de pontos de permanência; NÃO gera modificador). */
+  topStreak: number;
+  /** Sequência atual de vitórias / derrotas (empate zera; folga mantém). */
+  winStreak: number; lossStreak: number;
+  /** Níveis aplicados no PRÓXIMO combate: vêm só das sequências e somem quando ela quebra. */
   pressure: number; current: number;
 };
 
-export type RawRow = Pick<StandRow, "pid" | "name" | "score" | "wins" | "losses" | "draws" | "byes" | "damage"> & { isBot?: boolean };
+export type RawRow = Pick<StandRow, "pid" | "name" | "score" | "wins" | "losses" | "draws" | "byes" | "damage"> & { isBot?: boolean; lastResult?: Result | null };
 
-export const emptyBalance = { topStreak: 0, bottomStreak: 0, pressure: 0, current: 0 };
+export const emptyBalance = { topStreak: 0, winStreak: 0, lossStreak: 0, pressure: 0, current: 0 };
 
 const cmp = (a: RawRow, b: RawRow) => b.score - a.score || b.wins - a.wins || b.damage - a.damage || (hashStr(a.pid) & 0xffff) - (hashStr(b.pid) & 0xffff);
 
 export const zoneSize = (n: number, fraction: number) => Math.max(1, Math.round(n * fraction));
 
-/** Classifica e atualiza streaks/níveis a partir da classificação anterior (se houver). */
+/** Classifica e atualiza sequências/níveis a partir da classificação anterior (se houver). */
 export function buildStandings(rows: RawRow[], prev: StandRow[] | null, cfg: ReiConfig): StandRow[] {
   const sorted = [...rows].sort(cmp);
   const n = sorted.length;
   const top = zoneSize(n, cfg.pressure.topFraction);
-  const bottom = zoneSize(n, cfg.current.bottomFraction);
   const prevBy = new Map((prev ?? []).map((r) => [r.pid, r]));
   const balanced = n >= cfg.balanceMinPlayers;
+  const maxP = cfg.pressure.steps.length - 1;
+  const maxC = cfg.current.steps.length - 1;
+  const level = (streak: number, min: number, max: number) => (streak >= min ? Math.min(max, streak - min + 1) : 0);
   return sorted.map((r, i) => {
     const rank = i + 1;
     const p = prevBy.get(r.pid);
-    const inTop = balanced && rank <= top;
-    const inBottom = balanced && !inTop && rank > n - bottom;
-    const topStreak = inTop ? (p?.topStreak ?? 0) + 1 : 0;
-    const bottomStreak = inBottom ? (p?.bottomStreak ?? 0) + 1 : 0;
-    const maxP = cfg.pressure.steps.length - 1;
-    const maxC = cfg.current.steps.length - 1;
-    const pressure = inTop ? Math.min(maxP, topStreak) : Math.max(0, (p?.pressure ?? 0) - 1);
-    const current = inBottom ? Math.min(maxC, bottomStreak) : Math.max(0, (p?.current ?? 0) - 1);
-    return { ...r, rank, prevRank: p?.rank ?? null, topStreak, bottomStreak, pressure: cfg.pressure.enabled ? pressure : 0, current: cfg.current.enabled ? current : 0 };
+    let w = p?.winStreak ?? 0, l = p?.lossStreak ?? 0;
+    if (r.lastResult === "W") { w += 1; l = 0; }
+    else if (r.lastResult === "L") { l += 1; w = 0; }
+    else if (r.lastResult === "D") { w = 0; l = 0; }
+    const topStreak = balanced && rank <= top ? (p?.topStreak ?? 0) + 1 : 0;
+    const pressure = balanced && cfg.pressure.enabled ? level(w, cfg.pressure.minStreak, maxP) : 0;
+    const current = balanced && cfg.current.enabled ? level(l, cfg.current.minStreak, maxC) : 0;
+    const { lastResult: _unused, ...rest } = r; void _unused;
+    return { ...rest, rank, prevRank: p?.rank ?? null, topStreak, winStreak: w, lossStreak: l, pressure, current };
   });
 }
 
