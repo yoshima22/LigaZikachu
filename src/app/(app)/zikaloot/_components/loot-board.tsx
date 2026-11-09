@@ -24,6 +24,11 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
   const [selected, setSelected] = useState<number | null>(null);
   const [showConfirm, setShowConfirm] = useState(false);
   const [useSpecial, setUseSpecial] = useState(false);
+  const PAGE_SIZE = 400;
+  const totalPages = Math.max(1, Math.ceil(maxPicks / PAGE_SIZE));
+  const [page, setPage] = useState(0);
+  const pageStart = page * PAGE_SIZE + 1;
+  const pageEnd = Math.min(maxPicks, (page + 1) * PAGE_SIZE);
 
   const takenMap   = new Map(picks.map((p) => [p.number, { name: p.playerName, playerId: p.playerId }]));
   const blockedSet = new Set(blockedNumbers);
@@ -141,7 +146,7 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
       {isExpired && <p className="text-sm text-red-400">O prazo para escolher números encerrou.</p>}
 
       <div className="grid grid-cols-10 gap-1 sm:grid-cols-20">
-        {Array.from({ length: maxPicks }, (_, i) => i + 1).map((n) => {
+        {Array.from({ length: pageEnd - pageStart + 1 }, (_, i) => pageStart + i).map((n) => {
           const takenInfo = takenMap.get(n);
           const taken    = takenInfo?.name;
           const takenPlayerId = takenInfo?.playerId;
@@ -190,6 +195,16 @@ export function LootBoard({ lootId, picks, blockedNumbers = [], myNumbers, hasTi
           );
         })}
       </div>
+
+      {totalPages > 1 && (
+        <div className="flex items-center justify-center gap-3 text-sm">
+          <button type="button" disabled={page === 0} onClick={() => setPage(page - 1)}
+            className="rounded bg-slate-800 px-3 py-1 text-slate-300 disabled:opacity-40">← Anterior</button>
+          <span className="text-slate-400">{pageStart}–{pageEnd} · Página {page + 1}/{totalPages}</span>
+          <button type="button" disabled={page >= totalPages - 1} onClick={() => setPage(page + 1)}
+            className="rounded bg-slate-800 px-3 py-1 text-slate-300 disabled:opacity-40">Próxima →</button>
+        </div>
+      )}
 
       {previousDraws.length > 0 && (
         <p className="text-xs text-slate-500">
