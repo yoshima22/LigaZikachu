@@ -85,12 +85,25 @@ export async function clearRestPlanAction(editionId: string) {
 
 // ── Administração / testes ────────────────────────────────────────────────────
 
-export async function adminCreateEditionAction(input: { name: string; mondayDate?: string; isTest: boolean; autoRun: boolean; bots: number }) {
+export type BalanceInput = { swapHpGapPct?: number; hpMultiplier?: number; maxRounds?: number; winPoints?: number; pressure?: boolean };
+function balanceToConfig(b: BalanceInput) {
+  const cfg: Record<string, unknown> = {};
+  const num = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
+  const gap = num(b.swapHpGapPct, 1, 60), hp = num(b.hpMultiplier, 0.5, 6), mr = num(b.maxRounds, 3, 150), win = num(b.winPoints, 0, 100);
+  if (gap !== undefined) cfg.swapHpGapPct = gap;
+  if (hp !== undefined) cfg.hpMultiplier = hp;
+  if (mr !== undefined) cfg.maxRounds = Math.round(mr);
+  if (win !== undefined) cfg.budget = { win };
+  if (b.pressure === false) { cfg.pressure = { enabled: false }; cfg.current = { enabled: false }; }
+  return cfg;
+}
+
+export async function adminCreateEditionAction(input: { name: string; mondayDate?: string; isTest: boolean; autoRun: boolean; bots: number; balance?: BalanceInput }) {
   const me = await getReiAdmin();
   if (!me) return DENIED;
   try {
     const monday = input.mondayDate && /^\d{4}-\d{2}-\d{2}$/.test(input.mondayDate) ? input.mondayDate : mondayOf(new Date());
-    const ed = await createEdition({ name: input.name, mondayDate: monday, isTest: input.isTest, autoRun: input.autoRun });
+    const ed = await createEdition({ name: input.name, mondayDate: monday, isTest: input.isTest, autoRun: input.autoRun, config: balanceToConfig(input.balance ?? {}) });
     const bots = Math.max(0, Math.min(40, Math.floor(input.bots || 0)));
     if (bots && ed.isTest) await addBots(ed.id, bots);
     revalidatePath(PATH);
@@ -163,7 +176,7 @@ export async function adminRunRoundNowAction(editionId: string) {
 }
 
 /** Simulação de balanceamento 100% em memória (sem banco). */
-export async function adminSimulateAction(input: { players: number; weeks: number; swapHpGapPct?: number; pressure?: boolean }) {
+export async function adminSimulateAction(input: { players: number; weeks: number } & BalanceInput) {
   const me = await getReiAdmin();
   if (!me) return DENIED;
   try {
@@ -174,9 +187,7 @@ export async function adminSimulateAction(input: { players: number; weeks: numbe
     const out = [];
     for (let w = 0; w < weeks; w++) {
       const players = Array.from({ length: n }, (_, i) => makeSimPlayer(w * 1000 + i + 1, presets[i % 4], tiers[i % 3], i % 2 ? "PRESERVE" : "KEEP"));
-      const cfg: Record<string, unknown> = {};
-      if (input.swapHpGapPct !== undefined) cfg.swapHpGapPct = input.swapHpGapPct;
-      if (input.pressure === false) { cfg.pressure = { enabled: false }; cfg.current = { enabled: false }; }
+      const cfg = balanceToConfig(input);
       const sim = simulateWeek(players, { editionId: `sim-${w}`, cfg });
       out.push({ week: w + 1, metrics: sim.metrics, top: sim.standings.slice(0, 5).map((r) => ({ name: r.name, score: r.score, wins: r.wins })) });
     }

@@ -4,6 +4,8 @@ import { useEffect, useState, type ReactNode } from "react";
 import { COMBAT_ROLE_LABELS, type CombatRole } from "@/lib/combat-roles";
 import { getSpriteUrl } from "@/lib/mascot-data";
 import { DAY_LABELS, PHASE_LABELS, type Phase } from "@/lib/rei-do-rio/schedule";
+import { CATEGORY_LABELS, type PointCategory } from "@/lib/rei-do-rio/scoring";
+import { fmtPts } from "@/lib/rei-do-rio/config";
 
 export const roleLabel = (r: string) => COMBAT_ROLE_LABELS[r as CombatRole] ?? r;
 
@@ -127,9 +129,30 @@ export function PhaseStepper({ phase, restDay }: { phase: string; restDay: numbe
   );
 }
 
-export function Hero({ name, phase, restDay, isTest, right }: { name: string; phase: string; restDay: number | null; isTest: boolean; right?: ReactNode }) {
+export const CAT_ORDER: PointCategory[] = ["damage", "ko", "support", "resilience", "win", "leadership"];
+export const CAT_COLORS: Record<PointCategory, string> = { damage: "#f97316", ko: "#ef4444", support: "#22c55e", resilience: "#38bdf8", win: "#facc15", leadership: "#a78bfa" };
+
+/** Barra empilhada por categoria de pontos (com legenda numérica opcional). */
+export function StackBar({ parts, labels = false, thin = false }: { parts: { key: PointCategory; value: number }[]; labels?: boolean; thin?: boolean }) {
+  const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0);
+  if (total <= 0) return <div className={`${thin ? "h-1.5" : "h-2.5"} rounded-full bg-slate-800`} />;
+  return (
+    <div>
+      <div className={`flex overflow-hidden rounded-full bg-slate-800 ${thin ? "h-1.5" : "h-2.5"}`} role="img" aria-label="Composição dos pontos">
+        {parts.map((p) => p.value > 0 && <span key={p.key} title={CATEGORY_LABELS[p.key]} style={{ width: `${(p.value / total) * 100}%`, background: CAT_COLORS[p.key] }} />)}
+      </div>
+      {labels && <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">{parts.filter((p) => p.value > 0).map((p) => <li key={p.key} className="flex items-center gap-1 text-[10px] text-slate-400"><i className="h-2 w-2 rounded-full" style={{ background: CAT_COLORS[p.key] }} />{CATEGORY_LABELS[p.key]} <b className="text-white">{fmtPts(p.value)}</b> <span className="text-slate-600">({Math.round((p.value / total) * 100)}%)</span></li>)}</ul>}
+    </div>
+  );
+}
+
+export function Hero({ name, phase, restDay, isTest, right, banner }: { name: string; phase: string; restDay: number | null; isTest: boolean; right?: ReactNode; banner?: string | null }) {
   return (
     <header className="relative overflow-hidden rounded-3xl border border-sky-200/15 bg-gradient-to-br from-[#0b1d3a] via-[#10294f] to-[#1a1033] p-5 sm:p-7">
+      {banner && (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img src={banner} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+      )}
       <Snow />
       <div aria-hidden className="absolute -right-6 -top-6 select-none text-[120px] opacity-10">👑</div>
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-sky-300/10 to-transparent" />
@@ -144,7 +167,7 @@ export function Hero({ name, phase, restDay, isTest, right }: { name: string; ph
             <h1 className="mt-2 text-2xl font-black leading-tight text-white sm:text-4xl">
               <span className="mr-2" aria-hidden>🎄</span>{name}
             </h1>
-            <p className="mt-1 max-w-xl text-sm text-sky-100/70">Dezoito mascotes, seis posturas, uma coroa. A correnteza decide quem senta no trono — mesmo sem você entrar no site.</p>
+            <p className="mt-1 max-w-xl text-sm text-sky-100/70">Dezoito mascotes, seis posturas, uma coroa. Monte a equipe na segunda e sobreviva até sexta — os combates acontecem mesmo sem você entrar no site.</p>
             <div className="mt-3"><PhaseStepper phase={phase} restDay={restDay} /></div>
           </div>
           {right}

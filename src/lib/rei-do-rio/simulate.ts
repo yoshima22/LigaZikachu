@@ -49,7 +49,7 @@ export type SimMetrics = {
   rounds: number; matches: number; avgKosPerMatch: number; avgDefeatedPerRound: number;
   exhaustedSlotsPerDay: number; substitutions: number; leadershipChanges: number;
   modifierApplications: number; winsByTag: Record<string, { w: number; n: number }>; pointsByRole: Record<string, number>;
-  spreadStrongWeak: number; ms: number; errors: string[]; champion: string;
+  spreadStrongWeak: number; rankWinCorr: number; inversions: number; strongWinPct: number; weakWinPct: number; ms: number; errors: string[]; champion: string;
 };
 
 export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; cfg?: Partial<ReiConfig>; fight?: FightFn; onRound?: (r: number) => void } = {}) {
@@ -58,12 +58,12 @@ export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; c
   const editionId = opts.editionId ?? "sim";
   const rts: Runtime[] = players.map((p) => ({
     pid: p.pid, name: p.name, isBot: true, roster: new Map(p.roster.map((m) => [m.id, m])), formation: p.formation,
-    state: freshDayState(p.formation, new Map(p.roster.map((m) => [m.id, m]))), aggs: {}, wins: 0, losses: 0, draws: 0, byes: 0, damage: 0,
+    state: freshDayState(p.formation, new Map(p.roster.map((m) => [m.id, m])), cfg.hpMultiplier), aggs: {}, wins: 0, losses: 0, draws: 0, byes: 0, damage: 0,
   }));
   const tagOf = new Map(players.map((p) => [p.pid, p.tag]));
   let snapshot: StandRow[] = initialStandings(rts, cfg);
   const past: { a: string; b: string | null; day: number }[] = [];
-  const metrics: SimMetrics = { rounds: 0, matches: 0, avgKosPerMatch: 0, avgDefeatedPerRound: 0, exhaustedSlotsPerDay: 0, substitutions: 0, leadershipChanges: 0, modifierApplications: 0, winsByTag: {}, pointsByRole: {}, spreadStrongWeak: 0, ms: 0, errors: [], champion: "" };
+  const metrics: SimMetrics = { rounds: 0, matches: 0, avgKosPerMatch: 0, avgDefeatedPerRound: 0, exhaustedSlotsPerDay: 0, substitutions: 0, leadershipChanges: 0, modifierApplications: 0, winsByTag: {}, pointsByRole: {}, spreadStrongWeak: 0, rankWinCorr: 0, inversions: 0, strongWinPct: 0, weakWinPct: 0, ms: 0, errors: [], champion: "" };
   let kos = 0, defeated = 0, exhaustedSum = 0, lastLeader = snapshot[0]?.pid;
   const history: StandRow[][] = [];
 
@@ -99,17 +99,30 @@ export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; c
     }
     if (round % ROUNDS_PER_DAY === 0 && day < COMPETITION_DAYS) {
       // Recuperação noturna + formação original (sem personalização na simulação).
-      for (const rt of rts) { exhaustedSum += rt.formation.slots.filter((s) => s.mascotIds.every((id) => rt.state.mascots[id]?.dead)).length; rt.state = freshDayState(rt.formation, rt.roster); }
+      for (const rt of rts) { exhaustedSum += rt.formation.slots.filter((s) => s.mascotIds.every((id) => rt.state.mascots[id]?.dead)).length; rt.state = freshDayState(rt.formation, rt.roster, cfg.hpMultiplier); }
     } else if (round % ROUNDS_PER_DAY === 0) {
       for (const rt of rts) exhaustedSum += rt.formation.slots.filter((s) => s.mascotIds.every((id) => rt.state.mascots[id]?.dead)).length;
     }
   }
   metrics.avgKosPerMatch = metrics.matches ? kos / metrics.matches : 0;
   metrics.avgDefeatedPerRound = metrics.rounds ? defeated / metrics.rounds : 0;
-  metrics.exhaustedSlotsPerDay = exhaustedSum / Math.max(1, COMPETITION_DAYS);
+  metrics.exhaustedSlotsPerDay = exhaustedSum / Math.max(1, COMPETITION_DAYS * players.length); // por jogador por dia
   const scores = snapshot.map((r) => r.score);
   metrics.spreadStrongWeak = scores.length ? (Math.max(...scores) - Math.min(...scores)) / 100 : 0;
   metrics.champion = snapshot[0]?.name ?? "";
+  // Posição x vitórias: correlação de Spearman simplificada + nº de pares "invertidos" (mais derrotas acima).
+  const byWins = [...snapshot].sort((a, b) => b.wins - a.wins);
+  const n = snapshot.length;
+  const winRank = new Map(byWins.map((r, i) => [r.pid, i + 1]));
+  const d2 = snapshot.reduce((a, r) => a + (r.rank - (winRank.get(r.pid) ?? 0)) ** 2, 0);
+  metrics.rankWinCorr = n > 1 ? 1 - (6 * d2) / (n * (n * n - 1)) : 1;
+  for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (snapshot[i].losses > snapshot[j].losses) metrics.inversions++;
+  const tier = (pid: string) => tagOf.get(pid)!.split("/")[1];
+  for (const grp of [["FORTE", "strongWinPct"], ["FRACO", "weakWinPct"]] as const) {
+    const rows = snapshot.filter((r) => tier(r.pid) === grp[0]);
+    const g = rows.reduce((a, r) => a + r.wins + r.losses + r.draws, 0);
+    metrics[grp[1]] = g ? (100 * rows.reduce((a, r) => a + r.wins, 0)) / g : 0;
+  }
   metrics.ms = Date.now() - t0;
   return { standings: snapshot, runtimes: rts, metrics, history, formationIds: players.map((p) => formationMascotIds(p.formation).length) };
 }

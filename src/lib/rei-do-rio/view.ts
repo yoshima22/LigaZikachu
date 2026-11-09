@@ -23,7 +23,8 @@ export type MascotLite = { id: string; pokemonId: number; name: string; level: n
 const lite = (m: MascotSnap): MascotLite => ({ id: m.id, pokemonId: m.pokemonId, name: m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId), level: m.level });
 export const snapName = (m: MascotSnap) => lite(m).name;
 
-export type TeamView = { pid: string; name: string; isBot: boolean; formation: Formation; mascots: MascotLite[] };
+/** Visão pública de uma equipe: só estrutura (slot/postura/nome/nível). Nunca HP, atributos ou estratégia. */
+export type TeamView = { pid: string; name: string; isBot: boolean; formation: { slots: { role: string; mascotIds: string[] }[] }; day: number | null; mascots: MascotLite[] };
 
 export type EditionView = {
   edition: {
@@ -32,6 +33,8 @@ export type EditionView = {
   };
   rounds: { roundIndex: number; dayIndex: number; slotInDay: number; scheduledAt: string; status: string; error: string | null }[];
   standings: StandRow[];
+  /** Composição dos pontos por jogador (centésimos por categoria) e nº de lutas — explica a classificação. */
+  breakdown: Record<string, { points: Record<string, number>; fights: number }>;
   mascotRanking: { pid: string; owner: string; id: string; name: string; pokemonId: number; total: number; kos: number; assists: number; healing: number; mitigated: number; damageDealt: number; matches: number; wins: number; survivedBattles: number; points: MascotAgg["points"]; byRole: Record<string, number> }[];
   teams: TeamView[];
   me: null | {
@@ -57,15 +60,26 @@ export async function getEditionView(editionId: string, playerId: string): Promi
   const revealed = ed.phase !== "PREPARATION";
 
   const ranking: EditionView["mascotRanking"] = [];
+  const breakdown: EditionView["breakdown"] = {};
   for (const p of parts) {
+    const bd = (breakdown[p.id] = { points: { damage: 0, ko: 0, support: 0, resilience: 0, win: 0, leadership: 0 } as Record<string, number>, fights: p.wins + p.losses + p.draws });
     for (const a of Object.values((p.scoresJson ?? {}) as Record<string, MascotAgg>)) {
+      for (const [k, v] of Object.entries(a.points)) bd.points[k] = (bd.points[k] ?? 0) + v;
       ranking.push({ pid: p.id, owner: p.displayName, id: a.id, name: a.name, pokemonId: a.pokemonId, total: a.total, kos: a.kos, assists: a.assists, healing: Math.round(a.healing), mitigated: Math.round(a.mitigated), damageDealt: a.damageDealt, matches: a.matches, wins: a.wins, survivedBattles: a.survivedBattles, points: a.points, byRole: a.byRole });
     }
   }
   ranking.sort((a, b) => b.total - a.total);
 
+  // Formação efetiva do dia (a congelada às 08h), não a de segunda. Em descanso, os planos do próximo dia seguem ocultos.
+  const dayRows = revealed ? await prisma.reiRioDayState.findMany({ where: { participant: { editionId } }, select: { participantId: true, dayIndex: true, formationJson: true } }) : [];
+  const latest = new Map<string, { day: number; f: Formation }>();
+  for (const d of dayRows) { const cur = latest.get(d.participantId); if (!cur || d.dayIndex > cur.day) latest.set(d.participantId, { day: d.dayIndex, f: d.formationJson as unknown as Formation }); }
   const teams: TeamView[] = revealed
-    ? parts.filter((p) => p.rosterJson).map((p) => ({ pid: p.id, name: p.displayName, isBot: p.isBot, formation: p.originalJson as unknown as Formation, mascots: ((p.rosterJson as MascotSnap[]) ?? []).map(lite) }))
+    ? parts.filter((p) => p.rosterJson).map((p) => {
+        const cur = latest.get(p.id);
+        const f = cur?.f ?? (p.originalJson as unknown as Formation);
+        return { pid: p.id, name: p.displayName, isBot: p.isBot, formation: { slots: f.slots.map((s) => ({ role: s.role, mascotIds: s.mascotIds })) }, day: cur?.day ?? null, mascots: ((p.rosterJson as MascotSnap[]) ?? []).map(lite) };
+      })
     : [];
 
   let meView: EditionView["me"] = null;
@@ -102,7 +116,7 @@ export async function getEditionView(editionId: string, playerId: string): Promi
       doneRounds: done.length, nextRoundAt: nextRound?.scheduledAt.toISOString() ?? null, championName: ed.championKey ? nm.get(ed.championKey) ?? null : null, cfg, lockDropped: cfgJson.lockDropped ?? [],
     },
     rounds: ed.rounds.map((r) => ({ roundIndex: r.roundIndex, dayIndex: r.dayIndex, slotInDay: r.slotInDay, scheduledAt: r.scheduledAt.toISOString(), status: r.status, error: r.error })),
-    standings, mascotRanking: ranking.slice(0, 60), teams, me: meView, pool, recent,
+    standings, breakdown, mascotRanking: ranking.slice(0, 120), teams, me: meView, pool, recent,
     adminParticipants: parts.map((p) => ({ id: p.id, name: p.displayName, isBot: p.isBot, locked: !!p.lockedAt, total: p.totalScore })),
   };
 }

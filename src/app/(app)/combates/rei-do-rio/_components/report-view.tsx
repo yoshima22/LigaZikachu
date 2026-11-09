@@ -13,7 +13,7 @@ function Stat({ label, value, sub, tone }: { label: string; value: string | numb
   return (
     <div className="rounded-xl border border-slate-800 bg-slate-900/60 p-3">
       <p className="text-[10px] font-bold uppercase tracking-wider text-slate-500">{label}</p>
-      <p className={`text-xl font-black tabular-nums ${tone ?? "text-white"}`}>{value}</p>
+      <p className={`text-2xl font-black leading-tight tabular-nums ${tone ?? "text-white"}`}>{value}</p>
       {sub && <p className="text-[10px] text-slate-500">{sub}</p>}
     </div>
   );
@@ -65,16 +65,34 @@ export function ReportView({ editionId, participantId, doneDays, onReplay }: { e
             <Title sub="Gerado a partir das batalhas reais do dia — sem texto inventado.">Resumo de {report.dayLabel}</Title>
             <ul className="space-y-1 text-sm text-sky-50">{report.text.map((t) => <li key={t}>❄️ {t}</li>)}</ul>
           </Card>
-          <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 lg:grid-cols-6">
-            <Stat label="Posição" value={report.summary.rank ? `${report.summary.rank}º` : "–"} sub={report.summary.rankDelta ? `${report.summary.rankDelta > 0 ? "▲" : "▼"} ${Math.abs(report.summary.rankDelta)} no dia` : "sem variação"} tone={report.summary.rankDelta ? (report.summary.rankDelta > 0 ? "text-emerald-300" : "text-red-300") : undefined} />
-            <Stat label="Pontos do dia" value={fmtPts(report.summary.dayPoints)} tone="text-amber-200" />
-            <Stat label="Pontos totais" value={fmtPts(report.summary.totalPoints)} />
-            <Stat label="V · D · E" value={`${report.summary.wins}·${report.summary.losses}·${report.summary.draws}`} sub={report.summary.byes ? `${report.summary.byes} folga(s)` : undefined} />
-            <Stat label="KOs" value={report.summary.kos} sub={`${report.summary.defeatedMascots} derrotados seus`} />
-            <Stat label="Topo" value={`${report.summary.roundsInTop} rod.`} sub={`seq. ${report.summary.bestStreak}V`} />
-            <Stat label="Dano causado" value={Math.round(report.summary.damageDealt)} /><Stat label="Dano recebido" value={Math.round(report.summary.damageTaken)} />
-            <Stat label="Cura efetiva" value={Math.round(report.summary.healing)} /><Stat label="Mitigado" value={Math.round(report.summary.mitigated)} />
-            <Stat label="Batalhas" value={report.summary.battles} /><Stat label="Slots esgotados" value={report.summary.slotsExhausted} />
+          <div className="mt-3 space-y-3">
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-sky-200/70">Resultado</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Stat label="Posição" value={report.summary.rank ? `${report.summary.rank}º` : "–"} sub={report.summary.rankDelta ? `${report.summary.rankDelta > 0 ? "▲" : "▼"} ${Math.abs(report.summary.rankDelta)} no dia` : "sem variação"} tone={report.summary.rankDelta ? (report.summary.rankDelta > 0 ? "text-emerald-300" : "text-red-300") : undefined} />
+                <Stat label="Pontos do dia" value={fmtPts(report.summary.dayPoints)} tone="text-amber-200" sub={report.summary.battles ? `${fmtPts(report.summary.dayPoints / report.summary.battles)} por combate` : undefined} />
+                <Stat label="Pontos totais" value={fmtPts(report.summary.totalPoints)} />
+                <Stat label="Vitórias · Derrotas · Empates" value={`${report.summary.wins} · ${report.summary.losses} · ${report.summary.draws}`} sub={report.summary.byes ? `${report.summary.byes} folga(s) · seq. ${report.summary.bestStreak}V` : `melhor seq. ${report.summary.bestStreak}V`} />
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-sky-200/70">Combate</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Stat label="KOs" value={report.summary.kos} sub={`${report.summary.defeatedMascots} dos seus caíram`} tone="text-red-300" />
+                <Stat label="Dano causado" value={Math.round(report.summary.damageDealt)} tone="text-orange-300" />
+                <Stat label="Dano recebido" value={Math.round(report.summary.damageTaken)} />
+                <Stat label="Batalhas" value={report.summary.battles} sub={`${report.summary.slotsExhausted} slot(s) esgotado(s)`} />
+              </div>
+            </div>
+            <div>
+              <p className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-sky-200/70">Suporte e liderança</p>
+              <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                <Stat label="Cura efetiva" value={Math.round(report.summary.healing)} tone="text-emerald-300" />
+                <Stat label="Dano absorvido" value={Math.round(report.summary.mitigated)} tone="text-sky-300" />
+                <Stat label="Rodadas no topo" value={report.summary.roundsInTop} tone="text-violet-300" />
+                <Stat label="Sobreviventes" value={`${report.comparison.find((c) => c.day === report.day)?.survived ?? 0}`} sub="somados nas lutas do dia" />
+              </div>
+            </div>
           </div>
 
           <Card className="mt-3">

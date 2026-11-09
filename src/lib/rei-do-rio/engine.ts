@@ -39,7 +39,7 @@ export type MatchOutcome = {
   replay: ArenaTurnLog[] | null;
 };
 
-export type FightFn = (a: LeagueMascot[], b: LeagueMascot[], startHp: Map<string, number>, seed: string) => { log: ArenaTurnLog[]; finalHp: Record<string, number>; rounds: number; winner: "A" | "B" | "DRAW" };
+export type FightFn = (a: LeagueMascot[], b: LeagueMascot[], startHp: Map<string, number>, seed: string, maxRounds?: number) => { log: ArenaTurnLog[]; finalHp: Record<string, number>; rounds: number; winner: "A" | "B" | "DRAW" };
 
 /** Mulberry32: torna o motor (que usa Math.random) reproduzível a partir da seed registrada. */
 function mulberry32(seed: number) {
@@ -52,8 +52,8 @@ export function withSeededRandom<T>(seed: string, fn: () => T): T {
   try { return fn(); } finally { Math.random = prev; }
 }
 
-export const officialFight: FightFn = (a, b, startHp, seed) => {
-  const r = withSeededRandom(seed, () => runLeagueCombat(a, b, null, [], [], { startingHp: startHp, includeFinalHp: true }));
+export const officialFight: FightFn = (a, b, startHp, seed, maxRounds) => {
+  const r = withSeededRandom(seed, () => runLeagueCombat(a, b, null, [], [], { startingHp: startHp, includeFinalHp: true, ...(maxRounds && maxRounds < 150 ? { maxRounds } : {}) }));
   return { log: r.log, finalHp: r.finalHpById ?? {}, rounds: r.rounds, winner: r.winner };
 };
 
@@ -66,7 +66,7 @@ function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fight
     const st = rt.state.mascots[id];
     if (!snap || !st || st.dead || st.hp <= 0) return;
     const m = toLeagueMascot({ ...snap, playerId: rt.pid, diseasedAt: null }, i + 1, rt.formation.slots[i].role);
-    // Pressão/Corrente: só estas estatísticas, só neste combate. HP máximo e Agilidade (iniciativa) ficam intactos.
+    // Pressão/Calor: só estas estatísticas, só neste combate. HP máximo e Agilidade (iniciativa) ficam intactos.
     if (pct !== 0) {
       const k = 1 + pct / 100;
       for (const s of ["force", "instinct", "vitality", "charisma"] as const) m[s] = Math.max(1, Math.round(m[s] * k));
@@ -108,14 +108,14 @@ export function runMatch(a: Runtime, b: Runtime, ctx: { roundIndex: number; dayI
     for (const f of [...la.fighters, ...lb.fighters]) finalHp[f.id] = f.startHp;
   } else {
     const startHp = new Map([...la.fighters, ...lb.fighters].map((f) => [f.id, f.startHp]));
-    const r = fight(la.mascots, lb.mascots, startHp, seed);
+    const r = fight(la.mascots, lb.mascots, startHp, seed, cfg.maxRounds);
     log = r.log; finalHp = r.finalHp; rounds = r.rounds; winner = r.winner;
     const notes: string[] = [];
-    if (pctA) notes.push(`${a.name}: ${pctA > 0 ? "Corrente Favorável +" : "Pressão do Trono "}${pctA}%`);
-    if (pctB) notes.push(`${b.name}: ${pctB > 0 ? "Corrente Favorável +" : "Pressão do Trono "}${pctB}%`);
+    if (pctA) notes.push(`${a.name}: ${pctA > 0 ? "Calor da Lareira +" : "Pressão do Trono "}${pctA}%`);
+    if (pctB) notes.push(`${b.name}: ${pctB > 0 ? "Calor da Lareira +" : "Pressão do Trono "}${pctB}%`);
     if (notes.length && log.length) {
       const first = log.find((e) => e.turn !== 0) ?? log[0];
-      log = [{ ...first, turn: 0, action: "DEFEND", damage: 0, targetId: first.actorId, targetName: first.actorName, targetOwnerId: first.actorOwnerId, effect: `Equilíbrio do Rei do Rio: ${notes.join(" · ")} em Força, Instinto, Vitalidade e Carisma neste combate.` }, ...log];
+      log = [{ ...first, turn: 0, action: "DEFEND", damage: 0, targetId: first.actorId, targetName: first.actorName, targetOwnerId: first.actorOwnerId, effect: `Equilíbrio do evento: ${notes.join(" · ")} em Força, Instinto, Vitalidade e Carisma neste combate.` }, ...log];
     }
   }
 

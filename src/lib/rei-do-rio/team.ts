@@ -65,14 +65,14 @@ export function validateFormation(f: Formation, pool: Map<string, MascotSnap>, l
   return [...new Set(errors)];
 }
 
-export const maxHpOf = (m: MascotSnap) => Math.max(10, Math.round(55 + m.level * 6 + m.statVitality * 4));
+export const maxHpOf = (m: MascotSnap, mult = 1) => Math.max(10, Math.round((55 + m.level * 6 + m.statVitality * 4) * mult));
 
 /** Recuperação completa: HP cheio, ninguém derrotado, titulares ativos. */
-export function freshDayState(f: Formation, roster: Map<string, MascotSnap>): DayState {
+export function freshDayState(f: Formation, roster: Map<string, MascotSnap>, hpMult = 1): DayState {
   const mascots: Record<string, MascotState> = {};
   for (const id of formationMascotIds(f)) {
     const m = roster.get(id);
-    const max = m ? maxHpOf(m) : 1;
+    const max = m ? maxHpOf(m, hpMult) : 1;
     mascots[id] = { hp: max, max, dead: false };
   }
   return { mascots, active: f.slots.map((s) => s.mascotIds[0] ?? null) };

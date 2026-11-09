@@ -132,3 +132,16 @@ test("análise: dano excedente e cura acima do HP perdido não geram pontos", ()
   assert.equal(r.A.get("a")!.healing, 0);
   assert.equal(r.A.get("a")!.kos, 1);
 });
+
+test("hpMultiplier escala o HP máximo do dia e maxRounds limita a luta", () => {
+  const base = freshDayState(formation, pool);
+  const tri = freshDayState(formation, pool, 3);
+  const id = formation.slots[0].mascotIds[0];
+  assert.equal(tri.mascots[id].max, Math.round(base.mascots[id].max * 3));
+  assert.equal(tri.mascots[id].hp, tri.mascots[id].max);
+  const players = Array.from({ length: 6 }, (_, i) => makeSimPlayer(i + 1, "BALANCED", "MEDIO", "KEEP"));
+  const short = simulateWeek(players, { editionId: "cap", cfg: { maxRounds: 4, hpMultiplier: 3 } });
+  assert.deepEqual(short.metrics.errors, []);
+  const full = simulateWeek(players, { editionId: "cap" });
+  assert.ok(short.metrics.avgKosPerMatch < full.metrics.avgKosPerMatch, "limite de rodadas + HP deve reduzir KOs");
+});

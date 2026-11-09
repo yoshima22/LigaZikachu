@@ -1,4 +1,4 @@
-// Rei do Rio — constantes fixas do evento e parâmetros de balanceamento ajustáveis.
+// Modo semanal (Trono de Natal) — constantes fixas do evento e parâmetros de balanceamento ajustáveis.
 // Os fixos (18 mascotes, 6 slots, calendário) só mudam com decisão explícita.
 
 export const SLOT_COUNT = 6;
@@ -21,9 +21,13 @@ export type ReiConfig = {
   /** Pontos máximos de permanência no topo por combate (somados à equipe). */
   leadershipPerStreak: number;
   leadershipCap: number;
-  /** Pressão do Trono / Corrente Favorável. */
+  /** Pressão do Trono (líderes) / Calor da Lareira (lanternas). */
   pressure: { enabled: boolean; steps: number[]; topFraction: number };
   current: { enabled: boolean; steps: number[]; bottomFraction: number };
+  /** Multiplicador do HP máximo dos mascotes NESTE modo (1 = HP normal). Reduz o desgaste diário. */
+  hpMultiplier: number;
+  /** Limite de rodadas por combate (o motor padrão luta até a extinção, ~150). No limite vence quem tem mais HP total. */
+  maxRounds: number;
   /** Participantes mínimos para os modificadores valerem. */
   balanceMinPlayers: number;
 };
@@ -37,6 +41,8 @@ export const DEFAULT_CONFIG: ReiConfig = {
   pressure: { enabled: true, steps: [0, 2, 4, 6], topFraction: 0.2 },
   current: { enabled: true, steps: [0, 2, 4], bottomFraction: 0.25 },
   balanceMinPlayers: 4,
+  hpMultiplier: 1,
+  maxRounds: 150,
 };
 
 export function mergeConfig(raw: unknown): ReiConfig {

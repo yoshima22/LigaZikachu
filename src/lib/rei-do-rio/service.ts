@@ -49,7 +49,7 @@ export async function createEdition(input: { name: string; mondayDate: string; i
   const plan = buildRoundPlan(input.mondayDate);
   return prisma.reiRioEdition.create({
     data: {
-      name: input.name.trim() || "Rei do Rio — Trono de Natal", isTest: input.isTest, autoRun: input.autoRun,
+      name: input.name.trim() || "Trono de Natal", isTest: input.isTest, autoRun: input.autoRun,
       mondayDate: input.mondayDate, configJson: J(input.config ?? {}),
       rounds: { create: plan.map((r) => ({ roundIndex: r.roundIndex, dayIndex: r.dayIndex, slotInDay: r.slotInDay, scheduledAt: r.at })) },
     },
@@ -140,11 +140,12 @@ export function effectiveFormation(p: { originalJson: unknown; dayPlansJson: unk
 
 /** Congela a formação do dia e devolve HP cheio (recuperação noturna). Idempotente. */
 export async function ensureDayStates(editionId: string, day: number) {
+  const edCfg = mergeConfig((await prisma.reiRioEdition.findUnique({ where: { id: editionId }, select: { configJson: true } }))?.configJson);
   const parts = await prisma.reiRioParticipant.findMany({ where: { editionId, rosterJson: { not: Prisma.DbNull } } });
   const have = new Set((await prisma.reiRioDayState.findMany({ where: { dayIndex: day, participantId: { in: parts.map((p) => p.id) } }, select: { participantId: true } })).map((d) => d.participantId));
   const rows = parts.filter((p) => !have.has(p.id)).map((p) => {
     const f = effectiveFormation(p, day);
-    return { participantId: p.id, dayIndex: day, formationJson: J(f), stateJson: J(freshDayState(f, rosterOf(p))) };
+    return { participantId: p.id, dayIndex: day, formationJson: J(f), stateJson: J(freshDayState(f, rosterOf(p), edCfg.hpMultiplier)) };
   });
   if (rows.length) await prisma.reiRioDayState.createMany({ data: rows, skipDuplicates: true });
 }

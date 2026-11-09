@@ -1,4 +1,4 @@
-// Classificação, Pressão do Trono / Corrente Favorável e pareamento (reusa o suíço da Liga Semanal).
+// Classificação, Pressão do Trono / Calor da Lareira e pareamento (reusa o suíço da Liga Semanal).
 import { swissPairSlot, hashStr, type PairingPlayer } from "@/lib/league-pairing";
 import { PT, type ReiConfig } from "./config";
 

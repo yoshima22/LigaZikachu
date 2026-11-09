@@ -10,18 +10,20 @@ import { AdminPanel } from "./admin-panel";
 import { ReportView } from "./report-view";
 import { TeamBuilder } from "./team-builder";
 import { Card, Countdown, Empty, Hero, Pill, Skeleton, Sprite, Title } from "./rei-ui";
-import { FormationBoard, MascotRanking, Podium, StandingsTable, TeamsGrid } from "./views";
+import { FormationBoard, Podium } from "./views";
+import { Manual } from "./manual";
+import { MascotRanking, ScoringExplainer, StandingsTable, TeamsGrid } from "./stats-views";
 
-type Tab = "evento" | "equipe" | "ranking" | "mascotes" | "equipes" | "batalhas" | "relatorio" | "admin";
+type Tab = "evento" | "equipe" | "ranking" | "mascotes" | "equipes" | "batalhas" | "relatorio" | "manual" | "admin";
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "evento", label: "Evento", icon: "🏰" }, { key: "equipe", label: "Minha equipe", icon: "🛡️" }, { key: "ranking", label: "Ranking", icon: "🏆" },
   { key: "mascotes", label: "Mascotes", icon: "🐾" }, { key: "equipes", label: "Equipes", icon: "👥" }, { key: "batalhas", label: "Batalhas", icon: "⚔️" },
-  { key: "relatorio", label: "Relatório", icon: "📜" }, { key: "admin", label: "Admin", icon: "🔧" },
+  { key: "relatorio", label: "Relatório", icon: "📜" }, { key: "manual", label: "Manual", icon: "📖" }, { key: "admin", label: "Admin", icon: "🔧" },
 ];
 
 type ReplayData = Extract<Awaited<ReturnType<typeof loadReplayAction>>, { ok: true }>["replay"];
 
-export function ReiClient({ editions: initialEditions }: { editions: EditionSummary[] }) {
+export function ReiClient({ editions: initialEditions, banner = null }: { editions: EditionSummary[]; banner?: string | null }) {
   const [editions, setEditions] = useState(initialEditions);
   const [editionId, setEditionId] = useState<string | null>(initialEditions.find((e) => e.phase !== "FINISHED")?.id ?? initialEditions[0]?.id ?? null);
   const [view, setView] = useState<EditionView | null>(null);
@@ -81,7 +83,7 @@ export function ReiClient({ editions: initialEditions }: { editions: EditionSumm
   return (
     <div className="space-y-4">
       <Hero
-        name={ed?.name ?? "Rei do Rio — Trono de Natal"} phase={ed?.phase ?? "PREPARATION"} restDay={ed?.restDay ?? null} isTest={!!ed?.isTest}
+        name={ed?.name ?? "Trono de Natal"} banner={banner} phase={ed?.phase ?? "PREPARATION"} restDay={ed?.restDay ?? null} isTest={!!ed?.isTest}
         right={nextEvent && <Countdown to={nextEvent.to} label={nextEvent.label} className="min-w-[210px]" />}
       />
 
@@ -114,11 +116,21 @@ export function ReiClient({ editions: initialEditions }: { editions: EditionSumm
           {tab === "evento" && (
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="space-y-4 lg:col-span-2">
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {([
+                    ["Participantes", view.standings.length, "🧑‍🤝‍🧑"],
+                    ["Rodadas", `${ed.doneRounds}/20`, "⏱️"],
+                    ["Combates", Math.round(view.standings.reduce((a, r) => a + r.wins + r.losses + r.draws, 0) / 2), "⚔️"],
+                    ["Líder", view.standings[0] ? (view.standings[0].score / 100).toFixed(1) + " pts" : "–", "👑"],
+                  ] as [string, string | number, string][]).map(([l, v, i]) => (
+                    <div key={l} className="rounded-2xl border border-sky-200/10 bg-slate-950/70 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500"><span aria-hidden>{i}</span> {l}</p><p className="mt-0.5 text-xl font-black tabular-nums text-white">{v}</p></div>
+                  ))}
+                </div>
                 {ed.phase === "FINISHED" && ed.championName && <Card glow><p className="text-center text-2xl font-black text-amber-200">👑 {ed.championName} é o Rei do Rio!</p></Card>}
-                <Card><Title sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} /></div></Card>
+                <Card><Title sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} /></div></Card>
                 <Card>
-                  <Title sub="Últimas batalhas resolvidas." right={<button className="text-xs font-bold text-sky-300" onClick={() => setTab("batalhas")}>ver todas →</button>}>Correnteza recente</Title>
-                  {view.recent.length === 0 ? <Empty icon="🌊" title="O rio ainda está calmo">As primeiras batalhas aparecem depois da rodada de terça às 09h.</Empty> : <MatchList matches={view.recent.slice(0, 5)} onReplay={openReplay} />}
+                  <Title sub="Últimas batalhas resolvidas." right={<button className="text-xs font-bold text-sky-300" onClick={() => setTab("batalhas")}>ver todas →</button>}>Batalhas recentes</Title>
+                  {view.recent.length === 0 ? <Empty icon="⚔️" title="Nenhuma batalha ainda">As primeiras batalhas aparecem depois da rodada de terça às 09h.</Empty> : <MatchList matches={view.recent.slice(0, 5)} onReplay={openReplay} />}
                 </Card>
               </div>
               <div className="space-y-4">
@@ -186,10 +198,11 @@ export function ReiClient({ editions: initialEditions }: { editions: EditionSumm
             </div>
           )}
 
-          {tab === "ranking" && <Card><Title sub="Pontuação do jogador = soma dos seus mascotes. Equilíbrio mostra Pressão do Trono (👑) e Corrente Favorável (❄).">Classificação geral</Title><StandingsTable rows={view.standings} cfg={ed.cfg} meId={me?.participantId} /></Card>}
-          {tab === "mascotes" && <Card><Title sub="Top 30 mascotes da edição, com contribuição real em batalha.">Ranking de mascotes</Title><MascotRanking rows={view.mascotRanking} meId={me?.participantId} /></Card>}
-          {tab === "equipes" && <TeamsGrid teams={view.teams} meId={me?.participantId} />}
-          {tab === "batalhas" && <Card><Title sub="Cada replay é o combate real já resolvido — nada é sorteado de novo.">Histórico de batalhas</Title>{view.recent.length === 0 ? <Empty icon="🌊" title="Sem batalhas ainda" /> : <MatchList matches={view.recent} onReplay={openReplay} />}</Card>}
+          {tab === "ranking" && <div className="space-y-4"><ScoringExplainer cfg={ed.cfg} /><Card><Title sub="Toque numa linha para ver de onde vêm os pontos. 👑 Pressão do Trono · 🔥 Calor da Lareira.">Classificação geral</Title><StandingsTable rows={view.standings} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} /></Card></div>}
+          {tab === "mascotes" && <Card><Title sub="Top 30 por critério, com a origem dos pontos de cada mascote.">Ranking de mascotes</Title><MascotRanking rows={view.mascotRanking} meId={me?.participantId} /></Card>}
+          {tab === "equipes" && <TeamsGrid teams={view.teams} meId={me?.participantId} restDay={ed.phase === "REST" ? ed.restDay : null} />}
+          {tab === "manual" && <Manual cfg={ed.cfg} />}
+          {tab === "batalhas" && <Card><Title sub="Cada replay é o combate real já resolvido — nada é sorteado de novo.">Histórico de batalhas</Title>{view.recent.length === 0 ? <Empty icon="⚔️" title="Sem batalhas ainda" /> : <MatchList matches={view.recent} onReplay={openReplay} />}</Card>}
           {tab === "relatorio" && (me ? <ReportView editionId={ed.id} participantId={me.participantId} doneDays={doneDays} onReplay={openReplay} /> : <Empty icon="📜" title="Sem relatório">Só participantes recebem o relatório diário.</Empty>)}
         </>
       )}
