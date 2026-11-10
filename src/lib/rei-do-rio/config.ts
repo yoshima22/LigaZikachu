@@ -47,7 +47,7 @@ export const DEFAULT_CONFIG: ReiConfig = {
   current: { enabled: true, steps: [0, 2, 4], minStreak: 2 },
   balanceMinPlayers: 4,
   hpMultiplier: 3,
-  maxRounds: 6,
+  maxRounds: 5,
   healthPairing: 0,
   betweenFightHealPct: 0,
 };
