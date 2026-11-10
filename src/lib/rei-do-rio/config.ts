@@ -32,6 +32,8 @@ export type ReiConfig = {
   maxRounds: number;
   /** Pareamento por saúde: peso (em pontos de pareamento) de cada mascote vivo, para equipes esgotadas se enfrentarem. 0 = desligado. */
   healthPairing: number;
+  /** Cura geral (% do HP máximo) aplicada a TODOS os mascotes vivos da equipe após cada combate. Derrotados não voltam. 0 = desligado. */
+  betweenFightHealPct: number;
   /** Participantes mínimos para os modificadores valerem. */
   balanceMinPlayers: number;
 };
@@ -47,6 +49,7 @@ export const DEFAULT_CONFIG: ReiConfig = {
   hpMultiplier: 3,
   maxRounds: 6,
   healthPairing: 0,
+  betweenFightHealPct: 0,
 };
 
 export function mergeConfig(raw: unknown): ReiConfig {

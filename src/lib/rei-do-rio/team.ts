@@ -135,7 +135,7 @@ export function chooseActives(f: Formation, st: DayState, _cfg?: unknown): (stri
 }
 
 /** Aplica o HP final de uma luta ao estado e decide os ativos do próximo combate. */
-export function applyBattleToState(f: Formation, st: DayState, finalHp: Record<string, number>, cfg?: unknown): DayState {
+export function applyBattleToState(f: Formation, st: DayState, finalHp: Record<string, number>, cfg?: { betweenFightHealPct?: number }): DayState {
   const mascots = { ...st.mascots };
   for (const [id, hp] of Object.entries(finalHp)) {
     const cur = mascots[id];
@@ -143,8 +143,11 @@ export function applyBattleToState(f: Formation, st: DayState, finalHp: Record<s
     const next = Math.max(0, Math.min(cur.max, Math.round(hp)));
     mascots[id] = { ...cur, hp: next, dead: next <= 0 };
   }
+  // Cura geral entre lutas (opcional): só quem está vivo; derrotado segue fora até a noite.
+  const heal = cfg?.betweenFightHealPct ?? 0;
+  if (heal > 0) for (const [id, m] of Object.entries(mascots)) if (!m.dead && m.hp > 0) mascots[id] = { ...m, hp: Math.min(m.max, m.hp + Math.round(m.max * (heal / 100))) };
   const next: DayState = { mascots, active: st.active };
-  return { mascots, active: chooseActives(f, next, cfg) };
+  return { mascots, active: chooseActives(f, next) };
 }
 
 export type Substitution = { slot: number; out: string; in: string; reason: "DEFEATED" | "WOUNDED" };
