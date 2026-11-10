@@ -1580,6 +1580,12 @@ model PlayerRecapCounter {
   feathersLab        Int @default(0)
   feathersEvent      Int @default(0)
 
+  // Contados pelo texto do replay (src/lib/player-recap.ts, countLogEffects):
+  // debuff = Oportunista/Travessura; buff = Encorajador/Batedor/Leal(+5%) ativos num golpe.
+  buffsApplied       Int @default(0)
+  debuffsApplied     Int @default(0)
+  effectsBackfilledAt DateTime?
+
   // ZC: a carteira ja guarda totalEarned/totalSpent vitalicios. Guardamos o que
   // foi ganho no ano ate o momento da marca + o valor da carteira na marca; o
   // recap soma (carteira atual - marca) ao valor do ano.

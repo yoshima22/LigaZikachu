@@ -60,7 +60,7 @@ import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
-import { bumpRecap, sumLogDamage } from "@/lib/player-recap";
+import { bumpRecap, countLogEffects, sumLogDamage } from "@/lib/player-recap";
 import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type AbilityRuntime, type DebuffEvent } from "@/lib/abilities/combat";
 import { TRAINING_ABILITY_ROOM, isAbilityTrainingTeam } from "@/lib/arena-z-training";
 import { buildTrainingAbilityPlan } from "@/lib/arena-z-training-abilities";
@@ -3577,7 +3577,8 @@ export async function runBotBattle(
   });
 
   const botDamage = sumLogDamage(combat.log, playerId);
-  await bumpRecap(playerId, { arenaPveBattles: 1, arenaDamageDealt: botDamage.dealt, arenaDamageTaken: botDamage.taken });
+  const botFx = countLogEffects(combat.log, playerId);
+  await bumpRecap(playerId, { arenaPveBattles: 1, arenaDamageDealt: botDamage.dealt, arenaDamageTaken: botDamage.taken, buffsApplied: botFx.buffs, debuffsApplied: botFx.debuffs });
 
   if (!isCasualPlayer && teamDefeated && defeatPreserved)
     await distributeArenaExp(defeatExpMascotIds, defeatPreserved.exp);
@@ -4650,8 +4651,10 @@ export async function runPvpBattle(
   if (pvpBattleId) {
     const atk = sumLogDamage(combat.log, attackTeam.playerId);
     const def = sumLogDamage(combat.log, defenseTeam.playerId);
-    await bumpRecap(attackTeam.playerId, { arenaPvpAttacks: 1, arenaDamageDealt: atk.dealt, arenaDamageTaken: atk.taken });
-    await bumpRecap(defenseTeam.playerId, { arenaPvpDefenses: 1, arenaDamageDealt: def.dealt, arenaDamageTaken: def.taken });
+    const atkFx = countLogEffects(combat.log, attackTeam.playerId);
+    const defFx = countLogEffects(combat.log, defenseTeam.playerId);
+    await bumpRecap(attackTeam.playerId, { arenaPvpAttacks: 1, arenaDamageDealt: atk.dealt, arenaDamageTaken: atk.taken, buffsApplied: atkFx.buffs, debuffsApplied: atkFx.debuffs });
+    await bumpRecap(defenseTeam.playerId, { arenaPvpDefenses: 1, arenaDamageDealt: def.dealt, arenaDamageTaken: def.taken, buffsApplied: defFx.buffs, debuffsApplied: defFx.debuffs });
   }
 
   // Jornadas de postura: a Arena-Z PvP real (não treino) conta para os mascotes dos dois lados.

@@ -3,7 +3,7 @@
 import { revalidatePath, unstable_cache } from "next/cache";
 import { GiftType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
-import { bumpRecap, type RecapDelta } from "@/lib/player-recap";
+import { bumpRecap, leagueEffectCounts, type RecapDelta } from "@/lib/player-recap";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
@@ -768,12 +768,13 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
 
     // Recap: totais da edição somados uma única vez (finalRank nulo = ainda não contado).
     const recapBumps: { playerId: string; delta: RecapDelta }[] = [];
+    const recapFx = await leagueEffectCounts("rush", leagueId).catch(() => new Map<string, { buffs: number; debuffs: number }>());
     await prisma.$transaction(async (tx) => {
       recapBumps.length = 0;
       for (let index = 0; index < ranking.length; index++) {
         const participant = ranking[index]; const rank = index + 1;
         if (participant.finalRank == null && participant.wins + participant.losses + participant.draws > 0) {
-          recapBumps.push({ playerId: participant.playerId, delta: { rushLeagues: 1, rushWins: participant.wins, rushLosses: participant.losses, rushDraws: participant.draws, rushDamageDealt: participant.damageDealt, rushDamageTaken: participant.damageTaken } });
+          recapBumps.push({ playerId: participant.playerId, delta: { rushLeagues: 1, rushWins: participant.wins, rushLosses: participant.losses, rushDraws: participant.draws, rushDamageDealt: participant.damageDealt, rushDamageTaken: participant.damageTaken, buffsApplied: recapFx.get(participant.playerId)?.buffs ?? 0, debuffsApplied: recapFx.get(participant.playerId)?.debuffs ?? 0 } });
         }
         const punished = noShow.has(participant.playerId);
         const reward = punished ? undefined : rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));

@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
-import { bumpRecap, type RecapDelta } from "@/lib/player-recap";
+import { bumpRecap, leagueEffectCounts, type RecapDelta } from "@/lib/player-recap";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, MIN_WEEKLY_LEAGUE_MASCOTS } from "./constants";
@@ -1898,9 +1898,11 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
     let granted = 0;
     // Recap: soma os totais da liga uma única vez por jogador (finalRank nulo = ainda não contado).
     const recapBumps: { playerId: string; delta: RecapDelta }[] = [];
+    const recapFx = await leagueEffectCounts("weekly", leagueId).catch(() => new Map<string, { buffs: number; debuffs: number }>());
     const recapOf = (p: typeof participants[number]): RecapDelta => ({
       weeklyLeagues: 1, weeklyWins: p.wins, weeklyLosses: p.losses + p.woLosses, weeklyDraws: p.draws,
       weeklyDamageDealt: p.damageDealt, weeklyDamageTaken: p.damageTaken,
+      buffsApplied: recapFx.get(p.playerId)?.buffs ?? 0, debuffsApplied: recapFx.get(p.playerId)?.debuffs ?? 0,
     });
     await prisma.$transaction(async (tx) => {
       recapBumps.length = 0;
