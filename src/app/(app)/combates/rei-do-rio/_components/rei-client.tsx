@@ -9,8 +9,11 @@ import { clearRestPlanAction, loadEditionAction, loadReplayAction, registerActio
 import { AdminPanel } from "./admin-panel";
 import { ReportView } from "./report-view";
 import { TeamBuilder } from "./team-builder";
-import { Card, Countdown, Empty, Hero, Pill, Skeleton, Sprite, Title } from "./rei-ui";
-import { FormationBoard, Podium } from "./views";
+import { Avatar, Card, Countdown, Empty, Hero, Ornament, Pill, Skeleton, Title } from "./rei-ui";
+import { FormationBoard } from "./views";
+import { EditionNotice, HighlightsCard, Podium, TodayCard } from "./home-panels";
+import { HistoryView } from "./history-view";
+import { ReiIntro } from "./rei-intro";
 import { Manual } from "./manual";
 import { MascotRanking, ScoringExplainer, StandingsTable, TeamsGrid } from "./stats-views";
 
@@ -34,6 +37,7 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, start] = useTransition();
   const [builderKey, setBuilderKey] = useState(0);
+  const [introKey, setIntroKey] = useState(0);
   const [restInit, setRestInit] = useState<Formation | null>(null);
 
   const refresh = useCallback(async (id = editionId) => {
@@ -101,7 +105,8 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
             <span aria-hidden>{t.icon}</span> {t.label}
           </button>
         ))}
-        <button onClick={() => void refresh()} className="ml-auto shrink-0 rounded-full border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white" aria-label="Atualizar dados">↻</button>
+        <button onClick={() => setIntroKey((k) => k + 1)} className="ml-auto shrink-0 rounded-full border border-amber-300/40 bg-amber-300/10 px-3 py-2 text-xs font-bold text-amber-200 hover:bg-amber-300/20">📘 Como funciona</button>
+        <button onClick={() => void refresh()} className="shrink-0 rounded-full border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white" aria-label="Atualizar dados">↻</button>
       </nav>
 
       {toast && <div role="status" className={`rounded-xl border p-3 text-sm ${toast.ok ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-red-400/30 bg-red-500/10 text-red-200"}`}>{toast.text}</div>}
@@ -126,16 +131,15 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
                     <div key={l} className="rounded-2xl border border-sky-200/10 bg-slate-950/70 p-3"><p className="text-[10px] font-bold uppercase tracking-wider text-slate-500"><span aria-hidden>{i}</span> {l}</p><p className="mt-0.5 text-xl font-black tabular-nums text-white">{v}</p></div>
                   ))}
                 </div>
-                {ed.phase === "FINISHED" && ed.championName && <Card glow><p className="text-center text-2xl font-black text-amber-200">👑 {ed.championName} é o Rei do Rio!</p></Card>}
-                <Card><Title sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} /></div></Card>
-                <Card>
-                  <Title sub="Últimas batalhas resolvidas." right={<button className="text-xs font-bold text-sky-300" onClick={() => setTab("batalhas")}>ver todas →</button>}>Batalhas recentes</Title>
-                  {view.recent.length === 0 ? <Empty icon="⚔️" title="Nenhuma batalha ainda">As primeiras batalhas aparecem depois da rodada de terça às 09h.</Empty> : <MatchList matches={view.recent.slice(0, 5)} onReplay={openReplay} />}
-                </Card>
+                <EditionNotice ed={ed} />
+                {ed.phase === "FINISHED" && ed.championName && <Card glow><div className="flex items-center justify-center gap-3"><Ornament k="crown" size={56} /><p className="text-center text-2xl font-black text-amber-200">{ed.championName} é o campeão!</p></div></Card>}
+                <Card><Title orn="crown" sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} avatars={view.avatars} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} avatars={view.avatars} /></div></Card>
+                {view.today && <TodayCard today={view.today} meId={me?.participantId} avatars={view.avatars} onReplay={openReplay} />}
+                <HighlightsCard highlights={view.highlights} avatars={view.avatars} />
               </div>
               <div className="space-y-4">
                 <Card>
-                  <Title sub="Horários em Brasília.">Calendário</Title>
+                  <Title orn="snowflake" sub="Horários em Brasília.">Calendário</Title>
                   <ol className="space-y-1.5 text-sm">
                     <li className="flex items-center gap-2"><Pill tone={ed.phase === "PREPARATION" ? "gold" : "green"}>Seg</Pill><span className="text-slate-200">Inscrição e montagem até 21h</span></li>
                     {[1, 2, 3, 4].map((d) => {
@@ -144,12 +148,6 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
                     })}
                     <li className="text-[11px] text-slate-500">Descanso entre 21h e 08h: edite ordem e posturas do dia seguinte.</li>
                   </ol>
-                </Card>
-                <Card>
-                  <Title sub="Os três que mais pontuaram.">Destaques</Title>
-                  {view.mascotRanking.length === 0 ? <p className="text-sm text-slate-500">Ainda sem pontuação.</p> : view.mascotRanking.slice(0, 3).map((m, i) => (
-                    <div key={m.id} className="mb-1.5 flex items-center gap-2 rounded-xl bg-slate-900/60 p-2"><span className="w-5 text-center font-black text-amber-300">{i + 1}</span><Sprite id={m.pokemonId} size={34} /><div className="min-w-0 flex-1"><p className="truncate text-sm font-bold text-white">{m.name}</p><p className="truncate text-[10px] text-slate-500">{m.owner} · {m.kos} KO</p></div><span className="font-mono text-sm font-black text-amber-200">{(m.total / 100).toFixed(1)}</span></div>
-                  ))}
                 </Card>
               </div>
             </div>
@@ -200,12 +198,14 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
 
           {tab === "ranking" && <div className="space-y-4"><ScoringExplainer cfg={ed.cfg} /><Card><Title sub="Toque numa linha para ver de onde vêm os pontos. 👑 Pressão do Trono · 🔥 Calor da Lareira.">Classificação geral</Title><StandingsTable rows={view.standings} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} /></Card></div>}
           {tab === "mascotes" && <Card><Title sub="Top 30 por critério, com a origem dos pontos de cada mascote.">Ranking de mascotes</Title><MascotRanking rows={view.mascotRanking} meId={me?.participantId} /></Card>}
-          {tab === "equipes" && <TeamsGrid teams={view.teams} meId={me?.participantId} restDay={ed.phase === "REST" ? ed.restDay : null} />}
+          {tab === "equipes" && <TeamsGrid teams={view.teams} meId={me?.participantId} restDay={ed.phase === "REST" ? ed.restDay : null} avatars={view.avatars} />}
           {tab === "manual" && <Manual cfg={ed.cfg} />}
-          {tab === "batalhas" && <Card><Title sub="Cada replay é o combate real já resolvido — nada é sorteado de novo.">Histórico de batalhas</Title>{view.recent.length === 0 ? <Empty icon="⚔️" title="Sem batalhas ainda" /> : <MatchList matches={view.recent} onReplay={openReplay} />}</Card>}
+          {tab === "batalhas" && <Card><Title orn="lantern" sub="Combates de cada dia, 10 por página. Cada replay é o combate real já resolvido — nada é sorteado de novo.">Histórico de batalhas</Title><HistoryView editionId={ed.id} rounds={view.rounds} hasMe={!!me} meId={me?.participantId} avatars={view.avatars} onReplay={openReplay} /></Card>}
           {tab === "relatorio" && (me ? <ReportView editionId={ed.id} participantId={me.participantId} doneDays={doneDays} onReplay={openReplay} /> : <Empty icon="📜" title="Sem relatório">Só participantes recebem o relatório diário.</Empty>)}
         </>
       )}
+
+      {ed && <ReiIntro cfg={ed.cfg} forceKey={introKey} />}
 
       {replay && (
         <LeagueBattleReplayModal
@@ -216,23 +216,5 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
         />
       )}
     </div>
-  );
-}
-
-function MatchList({ matches, onReplay }: { matches: EditionView["recent"]; onReplay: (id: string) => void }) {
-  return (
-    <ul className="space-y-1.5">
-      {matches.map((m) => (
-        <li key={m.id} className="flex flex-wrap items-center gap-2 rounded-xl border border-slate-800 bg-slate-900/50 px-3 py-2 text-sm">
-          <span className="font-mono text-[11px] text-slate-500">R{m.roundIndex}</span>
-          <span className={m.winner === "A" ? "font-black text-emerald-300" : "text-slate-300"}>{m.aName}</span>
-          <span className="font-mono text-xs text-slate-500">{(m.scoreA / 100).toFixed(1)} × {(m.scoreB / 100).toFixed(1)}</span>
-          <span className={m.winner === "B" ? "font-black text-emerald-300" : "text-slate-300"}>{m.bName}</span>
-          {m.winner === "DRAW" && <Pill>empate</Pill>}
-          {m.exhausted && <Pill tone="red" title="Uma das equipes não tinha mascotes em pé: o resultado saiu sem luta">{m.exhausted === "BOTH" ? "ambas sem mascotes" : `${m.exhausted === "A" ? m.aName : m.bName} sem mascotes`}</Pill>}
-          {!m.exhausted && <button onClick={() => onReplay(m.id)} className="ml-auto rounded-lg bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>}
-        </li>
-      ))}
-    </ul>
   );
 }

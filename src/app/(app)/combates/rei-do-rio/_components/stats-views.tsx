@@ -5,7 +5,7 @@ import { fmtPts } from "@/lib/rei-do-rio/config";
 import { CATEGORY_LABELS, type PointCategory } from "@/lib/rei-do-rio/scoring";
 import { modifierPct, type StandRow } from "@/lib/rei-do-rio/standings";
 import type { EditionView, MascotLite } from "@/lib/rei-do-rio/view";
-import { CAT_COLORS, CAT_ORDER, Card, Empty, Pill, Sprite, StackBar, Title, roleLabel } from "./rei-ui";
+import { Avatar, CAT_COLORS, CAT_ORDER, Card, Empty, Pill, Sprite, StackBar, Title, roleLabel } from "./rei-ui";
 import { Delta } from "./views";
 
 type Cfg = EditionView["edition"]["cfg"];
@@ -70,7 +70,7 @@ export function ScoringExplainer({ cfg }: { cfg: Cfg }) {
   );
 }
 
-export function StandingsTable({ rows, cfg, meId, breakdown }: { rows: StandRow[]; cfg: Cfg; meId?: string; breakdown?: Breakdown }) {
+export function StandingsTable({ rows, cfg, meId, breakdown, avatars }: { rows: StandRow[]; cfg: Cfg; meId?: string; breakdown?: Breakdown; avatars?: EditionView["avatars"] }) {
   const [open, setOpen] = useState<string | null>(null);
   if (!rows.length) return <Empty title="Ninguém inscrito ainda">Quando as equipes forem reveladas a classificação aparece aqui.</Empty>;
   let inversions = 0;
@@ -93,7 +93,7 @@ export function StandingsTable({ rows, cfg, meId, breakdown }: { rows: StandRow[
                 <Fragment key={r.pid}>
                   <tr onClick={() => bd && setOpen(isOpen ? null : r.pid)} className={`cursor-pointer border-t border-slate-800/70 hover:bg-slate-800/30 ${r.pid === meId ? "bg-amber-300/10" : r.rank === 1 ? "bg-amber-300/5" : ""}`} aria-expanded={isOpen}>
                     <td className="py-2 pl-2 font-black tabular-nums text-white">{r.rank}<span className="ml-1 text-[10px]"><Delta row={r} /></span></td>
-                    <td className="font-bold text-white">{r.rank === 1 && <span aria-hidden>👑 </span>}{r.name}{r.isBot && <span className="ml-1 text-[10px] text-slate-500">teste</span>}{r.pid === meId && <span className="ml-1 text-[10px] text-amber-300">você</span>}</td>
+                    <td className="font-bold text-white"><span className="flex items-center gap-2">{avatars && <Avatar src={avatars[r.pid]} name={r.name} size={24} />}{r.rank === 1 && <span aria-hidden>👑</span>}<span className="truncate">{r.name}</span>{r.isBot && <span className="ml-1 text-[10px] text-slate-500">teste</span>}{r.pid === meId && <span className="ml-1 text-[10px] text-amber-300">você</span>}</span></td>
                     <td><div className="flex items-center gap-2"><span className="w-14 text-right font-mono font-black tabular-nums text-amber-200">{fmtPts(r.score)}</span><span className="h-1.5 flex-1 overflow-hidden rounded-full bg-slate-800"><span className="block h-full rounded-full bg-amber-300/80" style={{ width: `${(r.score / topScore) * 100}%` }} /></span></div></td>
                     <td className="text-right font-mono tabular-nums text-slate-300">{fights ? fmtPts(r.score / fights) : "–"}</td>
                     <td className="text-right tabular-nums"><span className="text-emerald-300">{r.wins}</span><span className="text-slate-600">·</span><span className="text-red-300">{r.losses}</span><span className="text-slate-600">·</span><span className="text-slate-400">{r.draws}</span></td>
@@ -169,7 +169,7 @@ export function MascotRanking({ rows, meId }: { rows: EditionView["mascotRanking
 const SLOT_NAMES = ["Titular", "Reserva 1", "Reserva 2"];
 
 /** Equipes dos adversários: slot, postura do dia, nome e nível. Nada de HP, atributos ou estratégia. */
-export function TeamsGrid({ teams, meId, restDay }: { teams: EditionView["teams"]; meId?: string; restDay?: number | null }) {
+function TeamCards({ teams, meId, restDay }: { teams: EditionView["teams"]; meId?: string; restDay?: number | null }) {
   if (!teams.length) return <Empty icon="🔒" title="Equipes ainda secretas">As formações são reveladas aos demais jogadores às 21h de segunda, quando as inscrições fecham.</Empty>;
   const by = (list: MascotLite[]) => new Map(list.map((m) => [m.id, m]));
   const day = teams.find((t) => t.day)?.day;
@@ -207,6 +207,77 @@ export function TeamsGrid({ teams, meId, restDay }: { teams: EditionView["teams"
           );
         })}
       </div>
+    </div>
+  );
+}
+
+const ROLE_GROUP: Record<string, "atk" | "def" | "sup" | "ctl"> = {
+  ATTACKER: "atk", FLANK: "atk", DUELIST: "atk", SPECIALIST: "atk", EXECUTOR: "atk", BLOODTHIRSTY: "atk", ARTILLERY: "atk", ACCUMULATOR: "atk", EXPLOSIVE: "atk", CORROSIVE: "atk",
+  DEFENDER: "def", GUARDIAN: "def", SURVIVOR: "def", UNSHAKABLE: "def", FORTRESS: "def", RETRIBUTOR: "def",
+  HEALER: "sup", ENCOURAGER: "sup", COMMANDER: "sup", PURIFIER: "sup", STRATEGIST: "sup",
+  SABOTEUR: "ctl", OPPORTUNIST: "ctl", PROVOKER: "ctl", SCOUT: "ctl", TRAPPER: "ctl",
+};
+const GROUP_STYLE = {
+  atk: "bg-red-500/15 text-red-200 ring-red-400/30", def: "bg-sky-500/15 text-sky-200 ring-sky-400/30",
+  sup: "bg-emerald-500/15 text-emerald-200 ring-emerald-400/30", ctl: "bg-violet-500/15 text-violet-200 ring-violet-400/30",
+} as const;
+const GROUP_LABEL = { atk: "Ataque", def: "Defesa", sup: "Suporte", ctl: "Controle" } as const;
+
+/** Todas as equipes lado a lado: a postura de cada slot, com destaque por postura. */
+function PostureMatrix({ teams, meId, avatars }: { teams: EditionView["teams"]; meId?: string; avatars: EditionView["avatars"] }) {
+  const [focus, setFocus] = useState<string>("");
+  const used = new Map<string, number>();
+  for (const t of teams) for (const sl of t.formation.slots) used.set(sl.role, (used.get(sl.role) ?? 0) + 1);
+  const ranked = [...used.entries()].sort((a, b) => b[1] - a[1]);
+  const totalSlots = teams.length * 6;
+  return (
+    <div className="space-y-3">
+      <Card>
+        <Title sub="Quantos slots usam cada postura hoje. Toque numa postura para destacá-la na tabela.">Posturas em uso</Title>
+        <div className="flex flex-wrap gap-1.5">
+          <button onClick={() => setFocus("")} className={`rounded-full border px-3 py-1 text-[11px] font-bold ${focus === "" ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400"}`}>Todas</button>
+          {ranked.map(([role, n]) => {
+            const g = ROLE_GROUP[role] ?? "atk";
+            return <button key={role} onClick={() => setFocus(focus === role ? "" : role)} aria-pressed={focus === role} className={`rounded-full px-2.5 py-1 text-[11px] font-bold ring-1 ${GROUP_STYLE[g]} ${focus === role ? "ring-2" : "opacity-80 hover:opacity-100"}`}>{roleLabel(role)} <span className="font-mono">{n}</span> <span className="text-[9px] opacity-70">({Math.round((n / Math.max(1, totalSlots)) * 100)}%)</span></button>;
+          })}
+        </div>
+        <ul className="mt-2 flex flex-wrap gap-3 text-[10px] text-slate-400">{(Object.keys(GROUP_LABEL) as (keyof typeof GROUP_LABEL)[]).map((g) => <li key={g} className="flex items-center gap-1"><i className={`h-2 w-2 rounded-full ring-1 ${GROUP_STYLE[g]}`} />{GROUP_LABEL[g]}</li>)}</ul>
+      </Card>
+      <div className="overflow-x-auto rounded-2xl border border-sky-200/10 bg-slate-950/70">
+        <table className="w-full min-w-[720px] text-xs">
+          <caption className="sr-only">Posturas por slot de cada equipe</caption>
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="sticky left-0 z-10 bg-slate-950 py-2 pl-3">Equipe</th>{[1, 2, 3, 4, 5, 6].map((n) => <th key={n} className="px-1.5 text-center">Slot {n}</th>)}</tr></thead>
+          <tbody>
+            {teams.map((t) => (
+              <tr key={t.pid} className={`border-t border-slate-800/70 ${t.pid === meId ? "bg-amber-300/10" : ""}`}>
+                <td className="sticky left-0 z-10 bg-slate-950 py-1.5 pl-3 pr-2"><span className="flex items-center gap-2 whitespace-nowrap font-bold text-white"><Avatar src={avatars[t.pid]} name={t.name} size={22} />{t.name}{t.pid === meId && <span className="text-[10px] text-amber-300">você</span>}</span></td>
+                {t.formation.slots.map((sl, i) => {
+                  const g = ROLE_GROUP[sl.role] ?? "atk";
+                  const dim = focus && focus !== sl.role;
+                  return <td key={i} className="px-1 py-1 text-center"><span className={`inline-block w-full rounded-lg px-1.5 py-1 text-[11px] font-bold ring-1 transition ${GROUP_STYLE[g]} ${dim ? "opacity-20" : focus ? "ring-2" : ""}`}>{roleLabel(sl.role)}</span></td>;
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+export function TeamsGrid({ teams, meId, restDay, avatars = {} }: { teams: EditionView["teams"]; meId?: string; restDay?: number | null; avatars?: EditionView["avatars"] }) {
+  const [mode, setMode] = useState<"matrix" | "cards">("matrix");
+  if (!teams.length) return <Empty icon="🔒" title="Equipes ainda secretas">As formações são reveladas aos demais jogadores às 21h de segunda, quando as inscrições fecham.</Empty>;
+  const day = teams.find((t) => t.day)?.day;
+  return (
+    <div className="space-y-3">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className="rounded-xl bg-slate-900/60 px-3 py-2 text-xs text-slate-400">Formação {day ? `de ${["", "terça", "quarta", "quinta", "sexta"][day]}` : "do dia"}, já congelada. {restDay ? "As do próximo dia seguem ocultas até as 08h." : "O HP e o estado dos mascotes adversários não são revelados."}</p>
+        <div className="flex gap-1" role="tablist" aria-label="Modo de visualização">
+          {([["matrix", "Matriz de posturas"], ["cards", "Cartões com mascotes"]] as const).map(([k, l]) => <button key={k} role="tab" aria-selected={mode === k} onClick={() => setMode(k)} className={`rounded-full px-3 py-1.5 text-xs font-bold ${mode === k ? "bg-amber-400 text-slate-900" : "bg-slate-800 text-slate-300 hover:text-white"}`}>{l}</button>)}
+        </div>
+      </div>
+      {mode === "matrix" ? <PostureMatrix teams={teams} meId={meId} avatars={avatars} /> : <TeamCards teams={teams} meId={meId} restDay={restDay} />}
     </div>
   );
 }

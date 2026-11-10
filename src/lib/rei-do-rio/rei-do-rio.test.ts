@@ -128,6 +128,10 @@ test("máquina de estados recusa transições inválidas", () => {
   assert.ok(canTransition("PREPARATION", "LOCKED"));
   assert.ok(!canTransition("PREPARATION", "RUNNING"));
   assert.ok(!canTransition("FINISHED", "REST"));
+  assert.ok(canTransition("PREPARATION", "CANCELED"));
+  assert.ok(!canTransition("RUNNING", "CANCELED"));
+  assert.ok(!canTransition("CANCELED", "LOCKED"));
+  assert.equal(mergeConfig({}).minParticipants, 6);
 });
 
 test("pontuação: soma por mascote bate com o total e respeita o orçamento", () => {

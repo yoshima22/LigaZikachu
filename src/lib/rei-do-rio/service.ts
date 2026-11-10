@@ -112,7 +112,7 @@ export async function withdraw(editionId: string, playerId: string) {
 /** Encerra inscrições: congela os 18 mascotes (snapshot) e a formação original. Irreversível. */
 export async function lockEdition(editionId: string) {
   const ed = await prisma.reiRioEdition.findUniqueOrThrow({ where: { id: editionId } });
-  if (ed.phase !== "PREPARATION") return { dropped: [] as string[] };
+  if (ed.phase !== "PREPARATION") return { dropped: [] as string[], canceled: ed.phase === "CANCELED" };
   const parts = await prisma.reiRioParticipant.findMany({ where: { editionId } });
   const dropped: string[] = [];
   for (const p of parts) {
@@ -125,9 +125,16 @@ export async function lockEdition(editionId: string) {
     await prisma.reiRioParticipant.update({ where: { id: p.id }, data: { rosterJson: J(pool.filter((m) => ids.has(m.id))), lockedAt: new Date() } });
   }
   const cfg = (ed.configJson ?? {}) as Record<string, unknown>;
+  const remaining = await prisma.reiRioParticipant.count({ where: { editionId } });
+  const min = mergeConfig(ed.configJson).minParticipants;
+  if (remaining < min) {
+    // Poucos inscritos: o evento da semana é cancelado (nada é processado, ninguém perde nada).
+    await setPhase(editionId, "PREPARATION", "CANCELED", { lockedAt: new Date(), registrationOpen: false, finishedAt: new Date(), configJson: J({ ...cfg, lockDropped: dropped, canceledReason: `Apenas ${remaining} de ${min} inscritos necessários.` }) });
+    return { dropped, canceled: true as const };
+  }
   await setPhase(editionId, "PREPARATION", "LOCKED", { lockedAt: new Date(), registrationOpen: false, configJson: J({ ...cfg, lockDropped: dropped }) });
   await ensureDayStates(editionId, 1);
-  return { dropped };
+  return { dropped, canceled: false as const };
 }
 
 const rosterOf = (p: { rosterJson: unknown }) => new Map(((p.rosterJson as MascotSnap[] | null) ?? []).map((m) => [m.id, m]));
@@ -288,9 +295,9 @@ export async function tick(editionId: string, opts: { now?: Date; force?: boolea
   let processed = 0;
   for (let guard = 0; guard < 30; guard++) {
     const ed = await prisma.reiRioEdition.findUniqueOrThrow({ where: { id: editionId } });
-    if (ed.phase === "FINISHED") break;
+    if (ed.phase === "FINISHED" || ed.phase === "CANCELED") break;
     if (ed.phase === "PREPARATION") {
-      if (force || now >= lockAt(ed.mondayDate)) { const r = await lockEdition(editionId); log.push(`Inscrições encerradas${r.dropped.length ? ` (${r.dropped.length} fora)` : ""}.`); continue; }
+      if (force || now >= lockAt(ed.mondayDate)) { const r = await lockEdition(editionId); log.push(r.canceled ? "Edição CANCELADA: menos inscritos que o mínimo." : `Inscrições encerradas${r.dropped.length ? ` (${r.dropped.length} fora)` : ""}.`); continue; }
       break;
     }
     if (ed.phase === "LOCKED" || ed.phase === "REST") {
@@ -312,7 +319,7 @@ export async function tick(editionId: string, opts: { now?: Date; force?: boolea
 
 /** Cron: só edições com relógio real ligado. */
 export async function tickAutoEditions(now = new Date()) {
-  const eds = await prisma.reiRioEdition.findMany({ where: { autoRun: true, phase: { not: "FINISHED" } }, select: { id: true } });
+  const eds = await prisma.reiRioEdition.findMany({ where: { autoRun: true, phase: { notIn: ["FINISHED", "CANCELED"] } }, select: { id: true } });
   const out: Record<string, string[]> = {};
   for (const e of eds) out[e.id] = (await tick(e.id, { now })).log;
   return out;

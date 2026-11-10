@@ -51,7 +51,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
 
         <Sec id="calendario" title="Calendário (horário de Brasília)">
           <ul className="space-y-1.5">
-            <li><Pill tone="gold">Segunda</Pill> Inscrição e montagem da equipe. Você pode mudar tudo até <B>21h</B>. Às 21h as inscrições fecham, os 18 mascotes ficam <B>travados</B>, a formação original é guardada para sempre e as equipes são reveladas.</li>
+            <li><Pill tone="gold">Segunda</Pill> Inscrição e montagem da equipe. Você pode mudar tudo até <B>21h</B>. Às 21h as inscrições fecham, os 18 mascotes ficam <B>travados</B>, a formação original é guardada para sempre e as equipes são reveladas. Se houver menos de <B>{cfg.minParticipants} inscritos válidos</B> nesse momento, <B>a edição da semana é cancelada</B>: nenhuma rodada é disputada e nada é perdido.</li>
             <li><Pill tone="blue">Terça a sexta</Pill> Cinco rodadas por dia: <B>{ROUND_HOURS.map((h) => `${h}h`).join(" · ")}</B>. São 20 rodadas no total. Cada jogador luta uma vez por rodada.</li>
             <li><Pill tone="purple">Descanso</Pill> Depois da rodada das 21h (terça a quinta) e até as <B>08h</B>. É a janela para ajustar a formação do dia seguinte.</li>
             <li><Pill tone="green">Sexta 21h</Pill> Última rodada. Depois dela a pontuação é consolidada e o campeão é declarado.</li>

@@ -9,7 +9,7 @@ import {
   addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, loadPlayerPool, lockEdition, processNextRound,
   resetTestEdition, saveDayPlan, saveRegistration, tick, verifyEdition, withdraw,
 } from "@/lib/rei-do-rio/service";
-import { getEditionView, listEditions, loadReplay, loadReport } from "@/lib/rei-do-rio/view";
+import { getEditionView, listEditions, loadDayMatches, loadReplay, loadReport } from "@/lib/rei-do-rio/view";
 import { prisma } from "@/lib/prisma";
 
 const DENIED = { ok: false as const, error: "Acesso restrito à equipe ADMIN." };
@@ -27,6 +27,21 @@ export async function loadEditionAction(editionId: string) {
 export async function listEditionsAction() {
   if (!(await getReiAdmin())) return DENIED;
   try { return { ok: true as const, editions: await listEditions() }; } catch (e) { return fail(e); }
+}
+
+export async function loadDayMatchesAction(editionId: string, day: number, opts: { round?: number | null; mine?: boolean; page?: number } = {}) {
+  const me = await getReiAdmin();
+  if (!me) return DENIED;
+  try {
+    let participantId: string | null = null;
+    if (opts.mine) {
+      const part = await prisma.reiRioParticipant.findUnique({ where: { editionId_playerKey: { editionId, playerKey: me.playerId } }, select: { id: true } });
+      participantId = part?.id ?? "__none__";
+    }
+    const d = Math.max(1, Math.min(4, Math.floor(day)));
+    const res = await loadDayMatches(editionId, d, { round: opts.round ?? null, participantId, page: opts.page ?? 1, pageSize: 10 });
+    return { ok: true as const, ...res };
+  } catch (e) { return fail(e); }
 }
 
 export async function loadReportAction(editionId: string, participantId: string, day: number) {

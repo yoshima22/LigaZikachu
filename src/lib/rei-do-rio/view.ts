@@ -9,7 +9,7 @@ import { buildDailyReport, type DailyReport, type ReportMatch } from "./report";
 import { freezeAt, lockAt } from "./schedule";
 import type { MascotAgg, MascotMatchStats } from "./scoring";
 import { effectiveFormation, loadPlayerPool } from "./service";
-import type { StandRow } from "./standings";
+import { pairRound, type StandRow } from "./standings";
 import type { DayState, Formation, MascotSnap } from "./team";
 
 export type EditionSummary = { id: string; name: string; isTest: boolean; phase: string; mondayDate: string; participants: number; autoRun: boolean; createdAt: string };
@@ -26,11 +26,31 @@ export const snapName = (m: MascotSnap) => lite(m).name;
 /** Visão pública de uma equipe: só estrutura (slot/postura/nome/nível). Nunca HP, atributos ou estratégia. */
 export type TeamView = { pid: string; name: string; isBot: boolean; formation: { slots: { role: string; mascotIds: string[] }[] }; day: number | null; mascots: MascotLite[] };
 
+export type MatchRow = {
+  id: string; roundIndex: number; a: string; b: string | null; aName: string; bName: string | null;
+  winner: "A" | "B" | "DRAW" | null; scoreA: number; scoreB: number; rounds: number; exhausted: "A" | "B" | "BOTH" | null; bye: boolean;
+};
+export type Highlight = { key: string; label: string; icon: string; unit: string; top: { id: string; name: string; pokemonId: number; owner: string; pid: string; value: number }[] };
+export type TodayRound = {
+  roundIndex: number; slotInDay: number; at: string; status: string;
+  /** Rodada já resolvida: resultados. */
+  matches: MatchRow[] | null;
+  /** Próxima rodada: confrontos já definidos (mesma conta do processamento real). Rodadas mais distantes: null (a definir). */
+  pairs: { a: string; b: string | null; aName: string; bName: string | null }[] | null;
+};
+
 export type EditionView = {
   edition: {
     id: string; name: string; isTest: boolean; phase: string; restDay: number | null; mondayDate: string; registrationOpen: boolean; autoRun: boolean;
     lockAt: string; freezeAt: string | null; doneRounds: number; nextRoundAt: string | null; championName: string | null; cfg: ReiConfig; lockDropped: string[];
+    participantCount: number; minParticipants: number; canceledReason: string | null;
   };
+  /** Foto de perfil por participante (null = sem foto; bots nunca têm). */
+  avatars: Record<string, string | null>;
+  /** Destaques da edição por categoria (top 3 mascotes). */
+  highlights: Highlight[];
+  /** Combates do dia (resolvidos, próximos confrontos e rodadas a definir). */
+  today: { day: number; rounds: TodayRound[] } | null;
   rounds: { roundIndex: number; dayIndex: number; slotInDay: number; scheduledAt: string; status: string; error: string | null }[];
   standings: StandRow[];
   /** Composição dos pontos por jogador (centésimos por categoria) e nº de lutas — explica a classificação. */
@@ -101,20 +121,55 @@ export async function getEditionView(editionId: string, playerId: string): Promi
 
   const pool = ed.phase === "PREPARATION" ? await loadPlayerPool(playerId) : null;
 
-  const matches = await prisma.reiRioMatch.findMany({ where: { editionId }, orderBy: [{ roundIndex: "desc" }, { createdAt: "desc" }], take: 16, select: { id: true, roundIndex: true, participantAId: true, participantBId: true, winnerId: true, isDraw: true, summaryJson: true } });
   const nm = new Map(parts.map((p) => [p.id, p.displayName]));
-  const recent: EditionView["recent"] = matches.filter((m) => m.participantBId).map((m) => {
-    const s = m.summaryJson as unknown as MatchSummary;
-    return { id: m.id, roundIndex: m.roundIndex, aName: nm.get(m.participantAId) ?? "?", bName: nm.get(m.participantBId!) ?? "?", winner: s.winner ?? null, scoreA: s.A?.team?.pointsTotal ?? 0, scoreB: s.B?.team?.pointsTotal ?? 0, rounds: s.rounds ?? 0, a: m.participantAId, b: m.participantBId, exhausted: s.exhausted ?? null };
-  });
+  const recent = (await queryMatchRows(Prisma.sql`"editionId" = ${editionId} AND "participantBId" IS NOT NULL`, "DESC", 16, 0, nm));
 
-  const cfgJson = (ed.configJson ?? {}) as { lockDropped?: string[] };
+  // Fotos de perfil: só URLs (nunca data-URL base64, que pesaria no egress).
+  const realKeys = parts.filter((p) => !p.isBot).map((p) => p.playerKey);
+  const avatars: Record<string, string | null> = Object.fromEntries(parts.map((p) => [p.id, null]));
+  if (realKeys.length) {
+    const rows = await prisma.$queryRaw<{ id: string; url: string | null }[]>`SELECT "id", CASE WHEN "avatarUrl" LIKE 'http%' THEN "avatarUrl" END AS url FROM "players" WHERE "id" = ANY(${realKeys})`;
+    const byKey = new Map(rows.map((r) => [r.id, r.url]));
+    for (const p of parts) if (!p.isBot) avatars[p.id] = byKey.get(p.playerKey) ?? null;
+  }
+
+  const highlights = buildHighlights(ranking);
+
+  // Combates do dia: o dia da próxima rodada pendente (ou o último dia, se acabou).
+  let today: EditionView["today"] = null;
+  if (ed.phase !== "PREPARATION" && ed.phase !== "CANCELED") {
+    const day = nextRound?.dayIndex ?? ed.rounds[ed.rounds.length - 1]?.dayIndex ?? 1;
+    const dayRounds = ed.rounds.filter((r) => r.dayIndex === day);
+    const dayRows = await queryMatchRows(Prisma.sql`"editionId" = ${editionId} AND "dayIndex" = ${day}`, "ASC", 400, 0, nm);
+    let pairsFor: { roundIndex: number; pairs: NonNullable<TodayRound["pairs"]> } | null = null;
+    if (nextRound && ed.phase !== "FINISHED") {
+      const prev = nextRound.roundIndex > 1 ? ed.rounds[nextRound.roundIndex - 2] : null;
+      const snapshot = prev ? (prev.standingsJson as unknown as StandRow[] | null) : initialStandings(parts.filter((p) => p.rosterJson).map((p) => ({ pid: p.id, name: p.displayName, isBot: p.isBot })), cfg);
+      if (snapshot && (!prev || prev.status === "DONE")) {
+        const past = (await prisma.reiRioMatch.findMany({ where: { editionId }, select: { participantAId: true, participantBId: true, dayIndex: true } })).map((m) => ({ a: m.participantAId, b: m.participantBId, day: m.dayIndex }));
+        const pairs = pairRound(snapshot, past, nextRound.dayIndex, `${editionId}:r${nextRound.roundIndex}`);
+        pairsFor = { roundIndex: nextRound.roundIndex, pairs: pairs.map((x) => ({ a: x.aId, b: x.bId, aName: nm.get(x.aId) ?? "?", bName: x.bId ? nm.get(x.bId) ?? "?" : null })) };
+      }
+    }
+    today = {
+      day,
+      rounds: dayRounds.map((r) => ({
+        roundIndex: r.roundIndex, slotInDay: r.slotInDay, at: r.scheduledAt.toISOString(), status: r.status,
+        matches: r.status === "DONE" ? dayRows.filter((m) => m.roundIndex === r.roundIndex) : null,
+        pairs: pairsFor?.roundIndex === r.roundIndex ? pairsFor.pairs : null,
+      })),
+    };
+  }
+
+  const cfgJson = (ed.configJson ?? {}) as { lockDropped?: string[]; canceledReason?: string };
   return {
     edition: {
       id: ed.id, name: ed.name, isTest: ed.isTest, phase: ed.phase, restDay: ed.restDay, mondayDate: ed.mondayDate, registrationOpen: ed.registrationOpen, autoRun: ed.autoRun,
       lockAt: lockAt(ed.mondayDate).toISOString(), freezeAt: ed.restDay ? freezeAt(ed.mondayDate, ed.restDay).toISOString() : null,
       doneRounds: done.length, nextRoundAt: nextRound?.scheduledAt.toISOString() ?? null, championName: ed.championKey ? nm.get(ed.championKey) ?? null : null, cfg, lockDropped: cfgJson.lockDropped ?? [],
+      participantCount: parts.length, minParticipants: cfg.minParticipants, canceledReason: cfgJson.canceledReason ?? null,
     },
+    avatars, highlights, today,
     rounds: ed.rounds.map((r) => ({ roundIndex: r.roundIndex, dayIndex: r.dayIndex, slotInDay: r.slotInDay, scheduledAt: r.scheduledAt.toISOString(), status: r.status, error: r.error })),
     standings, breakdown, mascotRanking: ranking.slice(0, 120), teams, me: meView, pool, recent,
     adminParticipants: parts.map((p) => ({ id: p.id, name: p.displayName, isBot: p.isBot, locked: !!p.lockedAt, total: p.totalScore })),
@@ -157,3 +212,52 @@ export async function loadReplay(matchId: string) {
 }
 
 
+
+type RawMatch = { id: string; roundIndex: number; a: string; b: string | null; winner: string | null; sa: number | null; sb: number | null; rounds: number | null; exhausted: string | null; bye: string | null };
+
+/** Resumo dos combates sem carregar o JSON inteiro (só os campos necessários, extraídos no banco). */
+async function queryMatchRows(where: Prisma.Sql, dir: "ASC" | "DESC", limit: number, offset: number, names: Map<string, string>): Promise<MatchRow[]> {
+  const order = Prisma.raw(dir);
+  const rows = await prisma.$queryRaw<RawMatch[]>`
+    SELECT "id", "roundIndex", "participantAId" AS a, "participantBId" AS b,
+      "summaryJson"->>'winner' AS winner, ("summaryJson"->'A'->'team'->>'pointsTotal')::int AS sa, ("summaryJson"->'B'->'team'->>'pointsTotal')::int AS sb,
+      ("summaryJson"->>'rounds')::int AS rounds, "summaryJson"->>'exhausted' AS exhausted, "summaryJson"->>'bye' AS bye
+    FROM "rdr_matches" WHERE ${where} ORDER BY "roundIndex" ${order}, "createdAt" ${order} LIMIT ${limit} OFFSET ${offset}`;
+  return rows.map((m) => ({
+    id: m.id, roundIndex: m.roundIndex, a: m.a, b: m.b, aName: names.get(m.a) ?? "?", bName: m.b ? names.get(m.b) ?? "?" : null,
+    winner: m.bye ? null : ((m.winner as MatchRow["winner"]) ?? null), scoreA: m.sa ?? 0, scoreB: m.sb ?? 0, rounds: m.rounds ?? 0,
+    exhausted: (m.exhausted as MatchRow["exhausted"]) ?? null, bye: !!m.bye,
+  }));
+}
+
+/** Histórico paginado: combates de um dia (opcionalmente de uma rodada e/ou de um participante). */
+export async function loadDayMatches(editionId: string, day: number, opts: { round?: number | null; participantId?: string | null; page?: number; pageSize?: number } = {}) {
+  const pageSize = Math.max(1, Math.min(30, opts.pageSize ?? 10));
+  const page = Math.max(1, opts.page ?? 1);
+  const mine = opts.participantId ? Prisma.sql`AND ("participantAId" = ${opts.participantId} OR "participantBId" = ${opts.participantId})` : Prisma.sql`AND "participantBId" IS NOT NULL`;
+  const roundSql = opts.round ? Prisma.sql`AND "roundIndex" = ${opts.round}` : Prisma.empty;
+  const where = Prisma.sql`"editionId" = ${editionId} AND "dayIndex" = ${day} ${roundSql} ${mine}`;
+  const [parts, total] = await Promise.all([
+    prisma.reiRioParticipant.findMany({ where: { editionId }, select: { id: true, displayName: true } }),
+    prisma.$queryRaw<{ n: bigint }[]>`SELECT COUNT(*)::bigint AS n FROM "rdr_matches" WHERE ${where}`,
+  ]);
+  const names = new Map(parts.map((p) => [p.id, p.displayName]));
+  const count = Number(total[0]?.n ?? 0);
+  const items = await queryMatchRows(where, "ASC", pageSize, (page - 1) * pageSize, names);
+  return { total: count, page, pageSize, pageCount: Math.max(1, Math.ceil(count / pageSize)), items };
+}
+
+function buildHighlights(ranking: EditionView["mascotRanking"]): Highlight[] {
+  const defs: { key: string; label: string; icon: string; unit: string; val: (m: EditionView["mascotRanking"][number]) => number }[] = [
+    { key: "points", label: "Mais pontos", icon: "👑", unit: "pts", val: (m) => m.total / 100 },
+    { key: "damage", label: "Maior dano", icon: "⚔️", unit: "dano", val: (m) => m.damageDealt },
+    { key: "kos", label: "Mais KOs", icon: "💥", unit: "KOs", val: (m) => m.kos },
+    { key: "assists", label: "Mais assistências", icon: "🤝", unit: "assist.", val: (m) => m.assists },
+    { key: "support", label: "Melhor suporte", icon: "💚", unit: "cura+absorção", val: (m) => m.healing + m.mitigated },
+    { key: "survival", label: "Mais resistente", icon: "🛡️", unit: "lutas em pé", val: (m) => m.survivedBattles },
+  ];
+  return defs.map((d) => ({
+    key: d.key, label: d.label, icon: d.icon, unit: d.unit,
+    top: [...ranking].map((m) => ({ id: m.id, name: m.name, pokemonId: m.pokemonId, owner: m.owner, pid: m.pid, value: Math.round(d.val(m) * 10) / 10 })).filter((x) => x.value > 0).sort((a, b) => b.value - a.value).slice(0, 3),
+  })).filter((h) => h.top.length > 0);
+}

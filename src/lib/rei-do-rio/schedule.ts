@@ -41,14 +41,15 @@ export const dayOfRound = (roundIndex: number) => Math.floor((roundIndex - 1) / 
 export const DAY_LABELS = ["", "Terça", "Quarta", "Quinta", "Sexta"] as const;
 
 /** Edições só mudam de fase por esta tabela. */
-export const PHASES = ["PREPARATION", "LOCKED", "RUNNING", "REST", "FINISHED"] as const;
+export const PHASES = ["PREPARATION", "LOCKED", "RUNNING", "REST", "FINISHED", "CANCELED"] as const;
 export type Phase = (typeof PHASES)[number];
 const ALLOWED: Record<Phase, Phase[]> = {
-  PREPARATION: ["LOCKED"],
+  PREPARATION: ["LOCKED", "CANCELED"],
   LOCKED: ["RUNNING"],
   RUNNING: ["REST", "FINISHED"],
   REST: ["RUNNING"],
   FINISHED: [],
+  CANCELED: [],
 };
 export const canTransition = (from: string, to: string) => (ALLOWED[from as Phase] ?? []).includes(to as Phase);
 
@@ -58,4 +59,5 @@ export const PHASE_LABELS: Record<Phase, string> = {
   RUNNING: "Em disputa",
   REST: "Descanso",
   FINISHED: "Encerrado",
+  CANCELED: "Cancelado",
 };

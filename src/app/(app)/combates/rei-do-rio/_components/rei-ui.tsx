@@ -6,6 +6,7 @@ import { getSpriteUrl } from "@/lib/mascot-data";
 import { DAY_LABELS, PHASE_LABELS, type Phase } from "@/lib/rei-do-rio/schedule";
 import { CATEGORY_LABELS, type PointCategory } from "@/lib/rei-do-rio/scoring";
 import { fmtPts } from "@/lib/rei-do-rio/config";
+import { REI_ASSETS } from "@/lib/rei-do-rio/assets";
 
 export const roleLabel = (r: string) => COMBAT_ROLE_LABELS[r as CombatRole] ?? r;
 
@@ -63,12 +64,34 @@ export function Card({ children, className = "", glow = false }: { children: Rea
   return <section className={`rdr-rise rounded-2xl border bg-slate-950/70 p-4 backdrop-blur ${glow ? "border-amber-300/40 shadow-[0_0_30px_-10px_rgba(250,204,21,.5)]" : "border-sky-200/10"} ${className}`}>{children}</section>;
 }
 
-export function Title({ children, sub, right }: { children: ReactNode; sub?: string; right?: ReactNode }) {
+export type OrnamentKey = "crown" | "lantern" | "gift" | "baubleBall" | "snowflake";
+
+/** Ornamento natalino (arte publicada no Storage). Decorativo: sempre aria-hidden. */
+export function Ornament({ k, size = 28, className = "" }: { k: OrnamentKey; size?: number; className?: string }) {
+  // eslint-disable-next-line @next/next/no-img-element
+  return <img src={REI_ASSETS.ornaments[k]} alt="" aria-hidden width={size} height={size} loading="lazy" decoding="async" className={`inline-block shrink-0 object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,.45)] ${className}`} style={{ width: size, height: size }} />;
+}
+
+/** Foto de perfil redonda; sem foto (ou bot) cai num círculo com a inicial. */
+export function Avatar({ src, name, size = 40, ring = "", className = "" }: { src?: string | null; name: string; size?: number; ring?: string; className?: string }) {
+  const hue = [...name].reduce((a, c) => (a * 31 + c.charCodeAt(0)) % 360, 7);
+  const base = `shrink-0 rounded-full object-cover ring-2 ${ring || "ring-slate-700"} ${className}`;
+  if (src) {
+    // eslint-disable-next-line @next/next/no-img-element
+    return <img src={src} alt={`Foto de ${name}`} width={size} height={size} loading="lazy" decoding="async" className={base} style={{ width: size, height: size }} />;
+  }
+  return <span aria-hidden className={`${base} grid place-items-center font-black text-white`} style={{ width: size, height: size, fontSize: size * 0.42, background: `linear-gradient(135deg,hsl(${hue} 55% 38%),hsl(${(hue + 40) % 360} 60% 24%))` }}>{(name.replace(/^[^\p{L}\p{N}]+/u, "")[0] ?? "?").toUpperCase()}</span>;
+}
+
+export function Title({ children, sub, right, orn }: { children: ReactNode; sub?: string; right?: ReactNode; orn?: OrnamentKey }) {
   return (
     <div className="mb-3 flex flex-wrap items-end justify-between gap-2">
-      <div>
-        <h2 className="text-base font-black tracking-tight text-white sm:text-lg">{children}</h2>
-        {sub && <p className="text-xs text-slate-400">{sub}</p>}
+      <div className="flex items-center gap-2.5">
+        {orn && <Ornament k={orn} size={34} />}
+        <div>
+          <h2 className="text-base font-black tracking-tight text-white sm:text-lg">{children}</h2>
+          {sub && <p className="text-xs text-slate-400">{sub}</p>}
+        </div>
       </div>
       {right}
     </div>
@@ -95,10 +118,10 @@ export function HpBar({ hp, max, dead }: { hp: number; max: number; dead?: boole
   );
 }
 
-export function Empty({ icon = "❄️", title, children }: { icon?: string; title: string; children?: ReactNode }) {
+export function Empty({ icon = "❄️", orn, title, children }: { icon?: string; orn?: OrnamentKey; title: string; children?: ReactNode }) {
   return (
     <div className="rounded-2xl border border-dashed border-sky-200/15 px-6 py-10 text-center">
-      <p className="text-3xl" aria-hidden>{icon}</p>
+      {orn ? <Ornament k={orn} size={56} className="mx-auto" /> : <p className="text-3xl" aria-hidden>{icon}</p>}
       <p className="mt-2 font-bold text-white">{title}</p>
       {children && <div className="mx-auto mt-1 max-w-md text-sm text-slate-400">{children}</div>}
     </div>
@@ -161,7 +184,12 @@ export function Hero({ name, phase, restDay, isTest, right, banner }: { name: st
         </>
       )}
       <Snow />
-      <div aria-hidden className="absolute -right-6 -top-6 select-none text-[120px] opacity-10">👑</div>
+      {/* eslint-disable @next/next/no-img-element */}
+      <img aria-hidden src="/events/rei-do-rio/ornaments/frost-corner.svg" alt="" className="pointer-events-none absolute left-0 top-0 h-24 w-24 opacity-70 sm:h-32 sm:w-32" />
+      <img aria-hidden src="/events/rei-do-rio/ornaments/frost-corner.svg" alt="" className="pointer-events-none absolute right-0 top-0 h-24 w-24 -scale-x-100 opacity-70 sm:h-32 sm:w-32" />
+      <img aria-hidden src="/events/rei-do-rio/ornaments/holly.svg" alt="" className="pointer-events-none absolute bottom-1 right-3 h-10 w-16 opacity-90 sm:h-14 sm:w-24" />
+      {/* eslint-enable @next/next/no-img-element */}
+      {!banner && <div aria-hidden className="absolute -right-6 -top-6 select-none text-[120px] opacity-10">👑</div>}
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-sky-300/10 to-transparent" />
       <div className="relative flex h-full flex-col">
         <Lights />
