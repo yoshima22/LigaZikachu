@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 96" width="120" height="96">
+  <title>Coroa de Natal</title>
+  <defs>
+    <linearGradient id="gold" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#fff2a6"/>
+      <stop offset="0.5" stop-color="#f3b91f"/>
+      <stop offset="1" stop-color="#b9780a"/>
+    </linearGradient>
+    <linearGradient id="vel" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#e03a4a"/>
+      <stop offset="1" stop-color="#8e1226"/>
+    </linearGradient>
+    <radialGradient id="pearl" cx="35%" cy="30%" r="80%"><stop offset="0" stop-color="#fff"/><stop offset="1" stop-color="#bcd6ea"/></radialGradient>
+  </defs>
+  <path d="M14 78 L8 28 L36 50 L60 16 L84 50 L112 28 L106 78 Z" fill="url(#gold)" stroke="#7a4d05" stroke-width="2.4" stroke-linejoin="round"/>
+  <rect x="14" y="66" width="92" height="18" rx="3" fill="url(#vel)" stroke="#7a4d05" stroke-width="2"/>
+  <path d="M14 66 H106" stroke="#fff2a6" stroke-width="2"/>
+  <circle cx="8" cy="26" r="7" fill="url(#pearl)" stroke="#8aa7bd" stroke-width="1.2"/>
+  <circle cx="60" cy="13" r="8" fill="url(#pearl)" stroke="#8aa7bd" stroke-width="1.2"/>
+  <circle cx="112" cy="26" r="7" fill="url(#pearl)" stroke="#8aa7bd" stroke-width="1.2"/>
+  <g fill="#fff" opacity=".95"><circle cx="30" cy="75" r="2.6"/><circle cx="45" cy="75" r="2.6"/><circle cx="60" cy="75" r="2.6"/><circle cx="75" cy="75" r="2.6"/><circle cx="90" cy="75" r="2.6"/></g>
+  <path d="M60 36 l4 8 -4 8 -4 -8 z" fill="#d62839" stroke="#7a4d05" stroke-width="1.2"/>
+</svg>

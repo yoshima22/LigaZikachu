@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 84" width="64" height="84">
+  <title>Bola de Natal</title>
+  <defs>
+    <radialGradient id="ball" cx="38%" cy="32%" r="75%">
+      <stop offset="0" stop-color="#ff8a8a"/>
+      <stop offset="0.45" stop-color="#d62839"/>
+      <stop offset="1" stop-color="#7d0f1f"/>
+    </radialGradient>
+    <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#fff0a8"/>
+      <stop offset="1" stop-color="#d9a21b"/>
+    </linearGradient>
+    <clipPath id="clip"><circle cx="32" cy="54" r="26"/></clipPath>
+  </defs>
+  <path d="M32 2 V14" stroke="#d9a21b" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <path d="M32 2 q4 0 4 4" stroke="#d9a21b" stroke-width="2" fill="none" stroke-linecap="round"/>
+  <rect x="24" y="14" width="16" height="9" rx="2" fill="url(#gold)"/>
+  <circle cx="32" cy="54" r="26" fill="url(#ball)"/>
+  <g clip-path="url(#clip)" stroke="#f5d56a" stroke-width="3" fill="none" opacity="0.9">
+    <path d="M2 50 Q32 62 62 50"/>
+    <path d="M2 60 Q32 72 62 60"/>
+  </g>
+  <ellipse cx="22" cy="41" rx="7" ry="4" fill="#fff" opacity="0.45" transform="rotate(-30 22 41)"/>
+</svg>

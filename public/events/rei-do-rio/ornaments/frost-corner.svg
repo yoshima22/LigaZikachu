@@ -1,0 +1,18 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 160" width="160" height="160" fill="none" stroke="#e6f4ff" stroke-linecap="round" stroke-linejoin="round">
+  <title>Canto com gelo (canto superior esquerdo; espelhe para os outros)</title>
+  <g opacity=".85">
+    <path d="M0 0 C30 6 52 20 70 44 C84 62 90 82 92 104" stroke-width="2.2"/>
+    <path d="M0 0 C6 30 20 52 44 70 C62 84 82 90 104 92" stroke-width="2.2"/>
+    <path d="M26 16 L40 6 M40 28 L56 20 M52 44 L70 40 M62 64 L78 66" stroke-width="1.6"/>
+    <path d="M16 26 L6 40 M28 40 L20 56 M44 52 L40 70 M64 62 L66 78" stroke-width="1.6"/>
+    <path d="M70 44 L84 34 M92 104 L104 114 M104 92 L114 104" stroke-width="1.4"/>
+  </g>
+  <g fill="#e6f4ff" stroke="none" opacity=".9">
+    <circle cx="56" cy="20" r="2.4"/><circle cx="20" cy="56" r="2.4"/><circle cx="78" cy="66" r="2"/><circle cx="66" cy="78" r="2"/>
+    <circle cx="92" cy="104" r="2.6"/><circle cx="104" cy="92" r="2.6"/><circle cx="12" cy="12" r="3"/>
+  </g>
+  <g opacity=".7" stroke-width="1.6">
+    <path d="M118 22 v14 M111 29 h14 M113 24 l10 10 M123 24 l-10 10"/>
+    <path d="M22 118 v14 M15 125 h14 M17 120 l10 10 M27 120 l-10 10"/>
+  </g>
+</svg>
