@@ -58,6 +58,10 @@ export type AbilityRuntime = {
   weak: string[];
   /** Cópia de buff (Trace): um por vez, até a rodada indicada. */
   traced: Record<string, { kind: "pending" | "agility"; v: number; until: number }>;
+  /** Golpes dados por mascote (Poder puro: 2 golpes fortes, depois dano reduzido). */
+  swings: Record<string, number>;
+  /** Habilidade anulada até a rodada indicada (Múmia). */
+  silenced: Record<string, number>;
 };
 
 export type AbilityStandalone = {
@@ -87,7 +91,7 @@ const statLabel: Record<Stat4, string> = { force: "Força", agility: "Agilidade"
 export function emptyAbilityRuntime(): AbilityRuntime {
   return {
     started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {}, anular: { A: false, D: false },
-    status: {}, curse: {}, field: { sol: false, chuva: false, areia: false, sandUntil: 0 }, tempAgility: {}, tempShield: {}, types: {}, disguised: [], weak: [], traced: {},
+    status: {}, curse: {}, field: { sol: false, chuva: false, areia: false, sandUntil: 0 }, tempAgility: {}, tempShield: {}, types: {}, disguised: [], weak: [], traced: {}, swings: {}, silenced: {},
   };
 }
 
@@ -117,6 +121,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   const held = (m: ArenaMascot): Held | null => {
     const c = config[m.id];
     if (!c || c.factor <= 0) return null;
+    if ((rt.silenced[m.id] ?? 0) >= host.getRound()) return null; // anulada pela Múmia
     const info = getAbilityInfo(c.slug);
     return info?.hasEffect ? { info, factor: c.factor } : null;
   };
@@ -162,13 +167,24 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     return statusesInParam(param).includes(current.kind);
   };
   const randInt = (min: number, max: number) => min + Math.floor(host.rand() * (max - min + 1));
-  /** Bônus à chance de estados aplicados pelos aliados do portador (Brincalhão). */
-  const statusChanceBonus = (source: ArenaMascot) => {
+  /** Estrela da vitória: bônus à chance de TODOS os efeitos de habilidade que dependem de sorte dos aliados. */
+  const luckBonus = (source: ArenaMascot) => {
     for (const ally of alive(teamOf(source))) {
-      const h = heldAs(ally, "BONUS_CHANCE_ESTADO");
+      const h = heldAs(ally, "BONUS_CHANCE");
       if (h) return value(ally, h);
     }
     return 0;
+  };
+  /** Sorteio de chance de uma habilidade de `owner`, já com o bônus de sorte do time. */
+  const roll = (owner: ArenaMascot, p: number) => host.rand() < p + luckBonus(owner);
+  /** Bônus à chance de estados aplicados pelos aliados do portador (Brincalhão) + sorte do time. */
+  const statusChanceBonus = (source: ArenaMascot) => {
+    let bonus = luckBonus(source);
+    for (const ally of alive(teamOf(source))) {
+      const h = heldAs(ally, "BONUS_CHANCE_ESTADO");
+      if (h) { bonus += value(ally, h); break; }
+    }
+    return bonus;
   };
   const highestStat = (m: ArenaMascot): Stat4 => {
     const s = stats(m);
@@ -196,6 +212,14 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     const { target, source, kind } = args;
     const notes: string[] = [];
     if (hpOf(target) <= 0) return notes;
+    // Despertar imediato (Early Bird): o sono não pega.
+    if (kind === "SLEEP") {
+      const early = heldAs(target, "ACORDA_NA_HORA");
+      if (early) {
+        notes.push(say(target, early, `${target.name} acordou na hora: o sono não o impede de agir.`));
+        return notes;
+      }
+    }
     const name = kind === "CURSE" ? CURSE_INFO.label : statusLabel(kind);
     const emoji = kind === "CURSE" ? CURSE_INFO.emoji : STATUS_INFO[kind].emoji;
     // Imunidade por tipo (Corrosão dos aliados pode ignorar a de Veneno/Metal).
@@ -206,7 +230,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       if (kind === "POISON") {
         for (const ally of alive(teamOf(source))) {
           const h = heldAs(ally, "IGNORA_IMUNIDADE");
-          if (h && host.rand() < value(ally, h)) {
+          if (h && roll(ally, value(ally, h))) {
             notes.push(say(ally, h, `ignorou a imunidade de ${target.name} a veneno.`));
             ignored = true;
             break;
@@ -250,7 +274,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     // Sincronia: devolve o estado recebido a quem o causou.
     if (args.allowReturn !== false) {
       const sync = heldAs(target, "ESTADO_DEVOLVE");
-      if (sync && hasLeft(target, sync) && source.id !== target.id && hpOf(source) > 0 && host.rand() < value(target, sync)) {
+      if (sync && hasLeft(target, sync) && source.id !== target.id && hpOf(source) > 0 && roll(target, value(target, sync))) {
         notes.push(say(target, sync, `devolveu ${STATUS_INFO[kind].adjective} a ${source.name}.`), ...applyStatus({ target: source, source: target, kind, label: sync.info.name, allowReturn: false }));
       }
     }
@@ -283,7 +307,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     const notes: string[] = [];
     let amount = args.pct;
     const nullify = heldAs(args.target, "ANULA_DEBUFF");
-    if (nullify && hasLeft(args.target, nullify) && host.rand() < value(args.target, nullify)) {
+    if (nullify && hasLeft(args.target, nullify) && roll(args.target, value(args.target, nullify))) {
       notes.push(say(args.target, nullify, `anulou o debuff de ${statLabel[args.stat]}${args.source ? ` aplicado por ${args.source.name}` : ""}.`));
       return notes;
     }
@@ -340,6 +364,17 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       const notes: string[] = [];
       for (const foe of alive(foesOf(m))) notes.push(...applyDebuff({ target: foe, source: m, stat, pct: v, label: `Habilidade ${h.info.name}` }));
       standalone.push({ actor: m, text: [head, ...notes].join(" "), events: flushEvents() });
+    }
+    // Ventosa (Suction Cups): reduz a Agilidade do rival mais ágil.
+    for (const m of all) {
+      const h = heldAs(m, "VENTOSA");
+      if (!h || hpOf(m) <= 0 || !hasLeft(m, h)) continue;
+      const quickest = [...alive(foesOf(m))].sort((x, y) => y.agility - x.agility)[0];
+      if (!quickest) continue;
+      const v = value(m, h);
+      const head = say(m, h, `reduz a Agilidade de ${quickest.name} (a maior dos rivais) em ${pct(v)}.`);
+      const notes = applyDebuff({ target: quickest, source: m, stat: "agility", pct: v, label: `Habilidade ${h.info.name}` });
+      standalone.push({ actor: m, target: quickest, text: [head, ...notes].join(" "), events: flushEvents() });
     }
     // Sala Maravilhosa: embaralha os atributos do rival mais forte (o maior atributo dele cai).
     for (const m of all) {
@@ -508,10 +543,19 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         case "FURIA": ok = hpPct < 0.33; break;
         case "MAESTRIA_TIPO": ok = matchesTypes(h, types); break;
         case "MAESTRIA_GOLPE": case "PODER_BRUTO": ok = true; break;
+        case "PODER_PURO": {
+          const n = (rt.swings[a.actor.id] = (rt.swings[a.actor.id] ?? 0) + 1);
+          if (n <= 2) { offAmount = 0.35; text = `golpe ${n}/2 com 35% mais dano.`; ok = true; }
+          else {
+            off -= 0.15;
+            if (n === 3) notes.push(say(a.actor, h, `o fôlego acabou: o dano fica 15% menor até o fim da luta.`));
+          }
+          break;
+        }
         case "VANTAGEM": ok = a.multiplier > 1; break;
         case "LENTE": ok = a.multiplier < 1; text = `o golpe resistido perde menos dano (+${pct(v)}).`; break;
         case "ULTIMO": ok = a.isLastOfSide; break;
-        case "GOLPE_FELIZ": ok = host.rand() < REACTION_CHANCE; text = `golpe feliz: ${pct(v)} mais dano.`; break;
+        case "GOLPE_FELIZ": ok = roll(a.actor, REACTION_CHANCE); text = `golpe feliz: ${pct(v)} mais dano.`; break;
         case "AQUECIMENTO": ok = host.getRound() >= 3; text = `já aquecido: golpe com ${pct(v)} mais dano.`; break;
         case "ANALISE": {
           const weakest = [...alive(foesOf(a.actor))].sort((x, y) => x.vitality - y.vitality)[0];
@@ -531,7 +575,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         case "CONVERSAO_TIPO": {
           const converted = abilityTypes(h.info)[0];
           const weakTo = converted ? (TYPE_ADVANTAGE[converted] ?? []) : [];
-          if (types.includes("normal") && a.multiplier <= 1 && host.typesOf(a.target).some((t) => weakTo.includes(t)) && host.rand() < v) {
+          if (types.includes("normal") && a.multiplier <= 1 && host.typesOf(a.target).some((t) => weakTo.includes(t)) && roll(a.actor, v)) {
             ok = true;
             offAmount = 0.3;
             text = `o golpe virou ${h.info.param} e foi super efetivo contra ${a.target.name} (+30% de dano).`;
@@ -646,6 +690,23 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     const h = held(a.target);
     if (!h) return { factor, heal, notes };
     const code = h.info.effectCode;
+    if (code === "GUARDA_ABSOLUTA") {
+      // Wonder Guard: golpes sem vantagem de tipo -30% a -40%; super efetivos +50%.
+      if (a.multiplier > 1) {
+        notes.push(say(a.target, h, `o golpe super efetivo causou 50% a mais.`));
+        return { factor: factor * 1.5, heal, notes };
+      }
+      const v = value(a.target, h);
+      notes.push(say(a.target, h, `o golpe causou ${pct(v)} menos dano.`));
+      return { factor: factor * (1 - v), heal, notes };
+    }
+    if (code === "EVASIVA") {
+      const sure = heldAs(a.actor, "NUNCA_ERRA");
+      if (sure) {
+        notes.push(say(a.actor, sure, `ignorou a esquiva de ${a.target.name}.`));
+        return { factor, heal, notes };
+      }
+    }
     if (code === "AQUECIMENTO") {
       // Nas 2 primeiras rodadas o dono se protege; depois passa a bater mais forte (ver attackBonus).
       if (host.getRound() <= 2) {
@@ -746,6 +807,28 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     }
   }
 
+  /** Liquid Ooze: quem se cura ao atacar sofre o mesmo tanto de dano (de um rival com a habilidade em campo). */
+  function counterLeech(healer: ArenaMascot, amount: number): string[] {
+    const notes: string[] = [];
+    if (amount <= 0 || hpOf(healer) <= 0 || immuneIndirect(healer)) return notes;
+    for (const holder of alive(foesOf(healer))) {
+      const h = heldAs(holder, "CONTRA_VAMPIRISMO");
+      if (!h) continue;
+      notes.push(say(holder, h, `${healer.name} se curou ${amount} HP ao atacar e sofreu o mesmo valor de dano.`));
+      host.hp.set(healer.id, Math.max(0, hpOf(healer) - amount));
+      hpChanges.push({ m: healer, hpAfter: hpOf(healer), by: holder, text: `${holder.name} → ${healer.name}: −${amount} HP` });
+      if (hpOf(healer) <= 0) onFall(healer, holder, notes);
+      break;
+    }
+    return notes;
+  }
+
+  /** Cura por roubo de vida vinda da postura Sanguinário (reação do motor de posturas). */
+  function onLifesteal(healer: ArenaMascot, amount: number) {
+    const notes = counterLeech(healer, amount);
+    if (notes.length) standalone.push({ actor: healer, hpAfter: hpOf(healer), text: notes.join(" ") });
+  }
+
   /** Efeitos depois do golpe: reflexo, reações, regeneração e quedas. */
   function afterHit(a: { actor: ArenaMascot; target: ArenaMascot; damage: number }) {
     const notes: string[] = [];
@@ -760,7 +843,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         notes.push(say(a.target, t, `devolveu ${back} de dano a ${a.actor.name}.`));
         hpChanges.push({ m: a.actor, hpAfter: hpOf(a.actor), by: a.target, text: `${a.target.name} → ${a.actor.name}: −${back} HP` });
         if (hpOf(a.actor) <= 0) onFall(a.actor, a.target, notes);
-      } else if (code === "REACAO" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && host.rand() < REACTION_CHANCE) {
+      } else if (code === "REACAO" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && roll(a.target, REACTION_CHANCE)) {
         const stat = abilityDebuffStat(t.info);
         if (stat) {
           const v = value(a.target, t);
@@ -785,9 +868,13 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         const kind = pickStatus(t.info.param);
         const victim = foes[Math.floor(host.rand() * foes.length)];
         if (kind && victim) notes.push(say(a.target, t, `espalhou espinhos tóxicos.`), ...applyStatus({ target: victim, source: a.target, kind, label: `Habilidade ${t.info.name}` }));
-      } else if (code === "CLIMA_AREIA_REACAO" && hasLeft(a.target, t) && host.rand() < value(a.target, t)) {
+      } else if (code === "CLIMA_AREIA_REACAO" && hasLeft(a.target, t) && roll(a.target, value(a.target, t))) {
         rt.field.sandUntil = host.getRound() + 1;
         notes.push(say(a.target, t, `levantou uma tempestade de areia para a próxima rodada.`));
+      } else if (code === "ANULA_HABILIDADE" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && held(a.actor) && roll(a.target, value(a.target, t))) {
+        const theirs = getAbilityInfo(config[a.actor.id]?.slug)?.name ?? "habilidade";
+        rt.silenced[a.actor.id] = host.getRound() + 2; // esta rodada e as 2 seguintes
+        notes.push(say(a.target, t, `anulou ${theirs} de ${a.actor.name} por 3 rodadas.`));
       } else if (code === "ARMADURA_FRACA" && targetAlive && hasLeft(a.target, t) && !rt.weak.includes(a.target.id)) {
         const v = value(a.target, t);
         rt.weak.push(a.target.id);
@@ -804,9 +891,10 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       const gained = hpOf(a.actor) - before;
       notes.push(say(a.actor, vamp, `recuperou ${gained} HP do dano causado.`));
       hpChanges.push({ m: a.actor, hpAfter: hpOf(a.actor), by: a.actor, heal: gained, text: `${a.actor.name} recupera ${gained} HP` });
+      notes.push(...counterLeech(a.actor, gained));
     }
     const h = held(a.actor);
-    if (h && h.info.effectCode === "TOQUE" && targetAlive && hasLeft(a.actor, h) && hpOf(a.actor) > 0 && host.rand() < REACTION_CHANCE) {
+    if (h && h.info.effectCode === "TOQUE" && targetAlive && hasLeft(a.actor, h) && hpOf(a.actor) > 0 && roll(a.actor, REACTION_CHANCE)) {
       const stat = abilityDebuffStat(h.info);
       if (stat) {
         const v = value(a.actor, h);
@@ -838,7 +926,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       if (!h || !hasLeft(foe, h)) continue;
       const current = rt.traced[foe.id];
       if (current && current.until >= host.getRound()) continue;
-      if (host.rand() >= value(foe, h)) continue;
+      if (!roll(foe, value(foe, h))) continue;
       rt.traced[foe.id] = { kind, v, until: host.getRound() + 2 };
       standalone.push({ actor: foe, target: owner, text: say(foe, h, kind === "pending" ? `copiou o buff de ${owner.name}: o próximo golpe causa ${pct(v)} mais dano.` : `copiou o buff de ${owner.name}: Agilidade +${pct(v)} por 2 rodadas.`) });
       break;
@@ -940,7 +1028,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     // Estados que fazem perder a ação. Mente aberta (No Guard) pode ignorá-los.
     const ignoreRoll = () => {
       const g = heldAs(actor, "ATACA_APESAR_ESTADO");
-      return g && hasLeft(actor, g) && host.rand() < value(actor, g) ? g : null;
+      return g && hasLeft(actor, g) && roll(actor, value(actor, g)) ? g : null;
     };
     let skip = false;
     if (st.kind === "SLEEP") {
@@ -965,7 +1053,8 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         }
       }
     } else if (st.kind === "CONFUSION") {
-      if (host.rand() < STATUS_RULES.confusionSelfHit) {
+      // Mira infalível (Mind's Eye): a confusão não faz o ataque falhar.
+      if (!heldAs(actor, "NUNCA_ERRA") && host.rand() < STATUS_RULES.confusionSelfHit) {
         const g = ignoreRoll();
         if (g) standalone.push({ actor, text: say(actor, g, `${actor.name} ignorou a confusão e agiu mesmo assim.`) });
         else {
@@ -987,12 +1076,12 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   /** Propeller Tail/Stalwart: chance de ignorar o Provocador que desviaria o golpe. */
   function ignoresProvoker(actor: ArenaMascot): string | null {
     const h = heldAs(actor, "IGNORA_PROVOCADOR");
-    if (!h || !hasLeft(actor, h) || host.rand() >= value(actor, h)) return null;
+    if (!h || !hasLeft(actor, h) || !roll(actor, value(actor, h))) return null;
     return say(actor, h, `ignorou o Provocador e manteve o alvo.`);
   }
 
   return {
-    onBattleStart, onRoundStart, onActionStart, ignoresProvoker, attackBonus, buffMods, maybeRedirect, onDefend, defense, guardianExtra, survive, afterHit,
+    onBattleStart, onRoundStart, onActionStart, onLifesteal, ignoresProvoker, attackBonus, buffMods, maybeRedirect, onDefend, defense, guardianExtra, survive, afterHit,
     applyDebuff, flushEvents, flushStandalone, flushHpChanges, healTarget,
     agilityMult: (id: string) => {
       const m = byId.get(id);

@@ -1453,6 +1453,11 @@ function runArenaCombatInternal(
             actorRole: getCombatRoleLabel(by.combatRole), targetRole: getCombatRoleLabel(to.combatRole), effect: r.text, reaction: true,
           });
           turn++;
+          // Liquid Ooze: roubo de vida da postura Sanguinário também é punido.
+          if (abilityEngine && r.kind === "HEAL" && r.actorId === r.targetId) {
+            abilityEngine.onLifesteal(by, r.amount);
+            flushAbilityLog();
+          }
         }
       }
     }
