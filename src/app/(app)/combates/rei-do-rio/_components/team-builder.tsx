@@ -5,7 +5,7 @@ import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
 import { getPokemonName } from "@/lib/mascot-data";
 import { autoBuild, PRESETS, type Preset } from "@/lib/rei-do-rio/auto-build";
 import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "@/lib/rei-do-rio/config";
-import { STRATEGY_LABELS, emptyFormation, roleAllowedFor, validateFormation, type Formation, type MascotSnap, type Strategy } from "@/lib/rei-do-rio/team";
+import { SWAP_PRESETS, describeSwap, emptyFormation, roleAllowedFor, slotSwapPct, validateFormation, type Formation, type MascotSnap } from "@/lib/rei-do-rio/team";
 import { Card, Empty, Pill, Sprite, Title, roleLabel } from "./rei-ui";
 
 const nameOf = (m: MascotSnap) => m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId);
@@ -75,7 +75,7 @@ export function TeamBuilder({
   const promote = (slot: number, idx: number) => update((d) => { const a = d.slots[slot].mascotIds; if (idx > 0) [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]]; });
 
   function runAuto() {
-    const r = autoBuild(pool, preset, f.strategy);
+    const r = autoBuild(pool, preset, "PRESERVE");
     if (!r.ok) { setAutoError([r.error, ...r.missing]); setNotes([]); return; }
     setAutoError(null); setF(r.formation); setNotes(r.explanation); setSel(null);
   }
@@ -102,14 +102,15 @@ export function TeamBuilder({
         </Card>
       )}
 
-      <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Estratégia de trocas">
-        {(Object.keys(STRATEGY_LABELS) as Strategy[]).map((s) => (
-          <button key={s} role="radio" aria-checked={f.strategy === s} onClick={() => update((d) => { d.strategy = s; })} title={STRATEGY_LABELS[s].desc} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${f.strategy === s ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400 hover:text-white"}`}>
-            {STRATEGY_LABELS[s].name}{s === "KEEP" ? " (padrão)" : ""}
-          </button>
-        ))}
-        <span className="text-[11px] text-slate-500">{STRATEGY_LABELS[f.strategy].desc}</span>
-      </div>
+      <Card>
+        <Title sub="Defina, por slot, quando o mascote em campo dá lugar ao próximo da fila. A troca só acontece entre combates.">Troca por vida</Title>
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Aplicar a todos os slots">
+          <span className="text-[11px] text-slate-500">Aplicar a todos os slots:</span>
+          {SWAP_PRESETS.map((p) => (
+            <button key={p.pct} type="button" onClick={() => update((d) => { d.slots.forEach((sl) => { sl.swapBelowPct = p.pct; }); })} className={`rounded-full border px-3 py-1.5 text-xs font-bold ${f.slots.every((sl) => slotSwapPct(f, sl) === p.pct) ? "border-amber-300 bg-amber-300/15 text-amber-200" : "border-slate-700 text-slate-400 hover:text-white"}`}>{p.label}</button>
+          ))}
+        </div>
+      </Card>
 
       <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {f.slots.map((slot, si) => (
@@ -158,6 +159,11 @@ export function TeamBuilder({
                 );
               })}
             </ol>
+            <div className="mt-2 rounded-lg bg-slate-950/60 p-2">
+              <div className="flex items-center justify-between"><label htmlFor={`swap-${si}`} className="text-[10px] font-bold uppercase tracking-wider text-slate-500">Troca por vida</label><span className="text-[11px] font-black text-amber-200">{slotSwapPct(f, slot) === 0 ? "Até cair" : `HP ≤ ${slotSwapPct(f, slot)}%`}</span></div>
+              <input id={`swap-${si}`} type="range" min={0} max={90} step={10} value={slotSwapPct(f, slot)} onChange={(e) => update((d) => { d.slots[si].swapBelowPct = Number(e.target.value) === 10 ? 10 : Number(e.target.value); })} className="mt-1 w-full accent-amber-300" aria-describedby={`swap-d-${si}`} />
+              <p id={`swap-d-${si}`} className="mt-0.5 text-[10px] leading-snug text-slate-400">{describeSwap(slotSwapPct(f, slot))}</p>
+            </div>
           </Card>
         ))}
       </div>

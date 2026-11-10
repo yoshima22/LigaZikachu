@@ -12,8 +12,6 @@ export const LOCK_HOUR = 21; // segunda
 export const FREEZE_HOUR = 8; // manhã de cada dia de competição
 
 export type ReiConfig = {
-  /** Diferença mínima de HP% (pontos percentuais) para "Preservar os feridos" trocar. */
-  swapHpGapPct: number;
   /** Orçamento de pontos por equipe/combate (não são pontos automáticos). */
   budget: { damage: number; ko: number; support: number; resilience: number; win: number };
   /** Normalizadores: fração do HP total inimigo que "enche" a categoria. */
@@ -32,12 +30,13 @@ export type ReiConfig = {
   hpMultiplier: number;
   /** Limite de rodadas por combate (o motor padrão luta até a extinção, ~150). No limite vence quem tem mais HP total. */
   maxRounds: number;
+  /** Pareamento por saúde: peso (em pontos de pareamento) de cada mascote vivo, para equipes esgotadas se enfrentarem. 0 = desligado. */
+  healthPairing: number;
   /** Participantes mínimos para os modificadores valerem. */
   balanceMinPlayers: number;
 };
 
 export const DEFAULT_CONFIG: ReiConfig = {
-  swapHpGapPct: 15,
   budget: { damage: 25, ko: 20, support: 25, resilience: 15, win: 30 },
   supportNormFraction: 0.35,
   leadershipPerStreak: 1,
@@ -47,6 +46,7 @@ export const DEFAULT_CONFIG: ReiConfig = {
   balanceMinPlayers: 4,
   hpMultiplier: 3,
   maxRounds: 6,
+  healthPairing: 0,
 };
 
 export function mergeConfig(raw: unknown): ReiConfig {

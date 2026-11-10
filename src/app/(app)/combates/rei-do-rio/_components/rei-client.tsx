@@ -229,7 +229,8 @@ function MatchList({ matches, onReplay }: { matches: EditionView["recent"]; onRe
           <span className="font-mono text-xs text-slate-500">{(m.scoreA / 100).toFixed(1)} × {(m.scoreB / 100).toFixed(1)}</span>
           <span className={m.winner === "B" ? "font-black text-emerald-300" : "text-slate-300"}>{m.bName}</span>
           {m.winner === "DRAW" && <Pill>empate</Pill>}
-          <button onClick={() => onReplay(m.id)} className="ml-auto rounded-lg bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>
+          {m.exhausted && <Pill tone="red" title="Uma das equipes não tinha mascotes em pé: o resultado saiu sem luta">{m.exhausted === "BOTH" ? "ambas sem mascotes" : `${m.exhausted === "A" ? m.aName : m.bName} sem mascotes`}</Pill>}
+          {!m.exhausted && <button onClick={() => onReplay(m.id)} className="ml-auto rounded-lg bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>}
         </li>
       ))}
     </ul>

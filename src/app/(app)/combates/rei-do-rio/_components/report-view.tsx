@@ -127,12 +127,13 @@ export function ReportView({ editionId, participantId, doneDays, onReplay }: { e
                 <li key={t.matchId} className="rounded-xl border border-slate-800 bg-slate-900/50 p-3">
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-mono text-xs text-slate-400">{new Date(t.at).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}</span>
-                    <Pill tone={t.result === "W" ? "green" : t.result === "L" ? "red" : "slate"}>{t.result === "W" ? "Vitória" : t.result === "L" ? "Derrota" : t.result === "D" ? "Empate" : "Folga"}</Pill>
+                    <Pill tone={t.result === "W" ? "green" : t.result === "L" ? "red" : "slate"}>{t.exhausted === "self" ? "Derrota por falta de mascotes" : t.exhausted === "opponent" ? "Vitória sem luta" : t.exhausted === "both" ? "Empate sem luta" : t.result === "W" ? "Vitória" : t.result === "L" ? "Derrota" : t.result === "D" ? "Empate" : "Folga"}</Pill>
                     <span className="text-sm font-bold text-white">{t.opponent ? `vs ${t.opponent}` : "Sem adversário"}</span>
                     {t.modifierPct !== 0 && <Pill tone={t.modifierPct < 0 ? "red" : "blue"}>{t.modifierPct < 0 ? "👑" : "❄"} {t.modifierPct > 0 ? "+" : ""}{t.modifierPct}%</Pill>}
                     <span className="ml-auto font-mono text-sm font-black text-amber-200">+{fmtPts(t.points)}</span>
                     {t.hasReplay && <button onClick={() => onReplay(t.matchId)} className="rounded-lg bg-sky-500/20 px-2.5 py-1 text-xs font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>}
                   </div>
+                  {t.exhausted && <p className={`mt-1.5 rounded-lg px-2 py-1 text-[11px] font-bold ${t.exhausted === "self" ? "bg-red-500/10 text-red-200" : "bg-slate-800 text-slate-300"}`}>{t.exhausted === "self" ? "Sua equipe não tinha nenhum mascote em pé para escalar, então a rodada foi perdida sem luta (você não pontua)." : t.exhausted === "opponent" ? "O adversário ficou sem mascotes em pé: você vence sem luta e recebe só os pontos de vitória." : "As duas equipes estavam sem mascotes: empate sem luta e sem pontos."}</p>}
                   {t.streakNote && <p className="mt-1.5 text-[11px] text-amber-200">⚖️ {t.streakNote}</p>}
                   {t.lineup.length > 0 && <div className="mt-2 flex flex-wrap gap-1">{t.lineup.map((f) => <span key={f.slot} className="flex items-center gap-1 rounded-lg bg-slate-800/70 px-1.5 py-0.5 text-[10px] text-slate-300"><Sprite id={f.pokemonId} size={20} />{f.name}{f.startHpPct < 100 && <b className="text-amber-300">{f.startHpPct}%</b>}</span>)}</div>}
                   {t.defeated.length > 0 && <p className="mt-1.5 text-[11px] text-red-300">Derrotados: {t.defeated.join(", ")}</p>}

@@ -161,7 +161,9 @@ export function runRound(input: RoundInput): RoundResult {
   const byId = new Map(input.players.map((p) => [p.pid, p]));
   const rows = new Map(snapshot.map((r) => [r.pid, r]));
   const seedBase = `${input.editionId}:r${roundIndex}`;
-  const pairs = pairRound(snapshot, past, dayIndex, seedBase);
+  // Pareamento por saúde (opcional): conta mascotes vivos para aproximar equipes esgotadas entre si.
+  const health = cfg.healthPairing > 0 ? new Map(input.players.map((p) => [p.pid, aliveCount(p.state) * cfg.healthPairing])) : undefined;
+  const pairs = pairRound(snapshot, past, dayIndex, seedBase, health);
   const matches: MatchOutcome[] = [];
   for (const pair of pairs) {
     const a = byId.get(pair.aId)!;

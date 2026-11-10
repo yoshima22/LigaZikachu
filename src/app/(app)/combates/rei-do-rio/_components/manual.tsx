@@ -66,7 +66,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
             <li>Posturas avançadas só podem ser usadas por mascotes que <B>já as desbloquearam</B> (a missão é por mascote, não vale para todos). O servidor confere isso sempre.</li>
             <li>A <B>ordem importa</B>: titular entra primeiro; se ele cair, entra a Reserva 1, depois a Reserva 2.</li>
             <li>O botão <B>Montar minha equipe automaticamente</B> escolhe 18 mascotes equilibrados (não só os mais fortes) e distribui nos slots. Se você tiver menos de 18, ele explica o que falta — nunca inventa nem duplica mascotes.</li>
-            <li>Estratégia de trocas: <B>Manter os sobreviventes</B> (padrão) ou <B>Preservar os feridos</B> (veja a próxima seção).</li>
+            <li><B>Troca por vida</B> (por slot): você escolhe se o mascote em campo fica <B>até cair</B> ou se dá lugar ao próximo da fila quando termina um combate com <B>HP igual ou abaixo de X%</B> (de 10% a 90%). O padrão sugerido é <B>50%</B> (veja a próxima seção).</li>
           </ul>
         </Sec>
 
@@ -85,10 +85,10 @@ export function Manual({ cfg }: { cfg: Cfg }) {
             <li><B>Sobrevivente</B> leva o HP em que terminou. <B>Não há cura automática</B> entre combates; só a cura feita dentro da luta (por exemplo, por um Cuidador) conta.</li>
             <li><B>Derrotado</B> fica indisponível <B>até a noite</B>. O slot dele escala o próximo da fila que ainda esteja vivo — <B>somente no próximo combate</B>, nunca no mesmo.</li>
             <li>Cada slot anda <B>sozinho</B>: um titular caindo não mexe nos outros cinco slots, e nunca há troca de mascote entre slots durante o dia.</li>
-            <li><B>Manter os sobreviventes:</B> quem sobreviveu fica no slot, mesmo ferido. Só os derrotados saem.</li>
-            <li><B>Preservar os feridos:</B> se uma reserva viva do mesmo slot tiver pelo menos <B>{cfg.swapHpGapPct} pontos percentuais</B> de HP a mais que o ativo, ela assume. O ferido continua vivo na fila, com o HP que tem (não se cura). Essa folga mínima evita trocas de vai-e-vem entre dois mascotes com HP parecido.</li>
+            <li><B>Até cair:</B> o mascote só sai do slot quando for derrotado.</li>
+            <li><B>Trocar com HP ≤ X%:</B> se o ativo sobreviver a um combate com HP igual ou abaixo de X%, ele sai e entra o <B>próximo da fila que esteja vivo e acima de X%</B>. Se o próximo também estiver abaixo do limite, passa para o seguinte; se ninguém estiver acima, ninguém entra (nunca se troca por alguém pior). O mascote que saiu continua vivo na fila, <B>sem se curar</B>, e só volta se os outros caírem. Cada slot tem o seu próprio limite — por exemplo, um Defensor pode ir “até cair” enquanto o Cuidador sai aos 60%.</li>
             <li>Se os três mascotes de um slot caírem, o slot fica <B>vazio</B> até a noite. Sua equipe segue lutando com os slots restantes (cinco, quatro, três…).</li>
-            <li>Se <B>todos</B> os slots esgotarem, sua equipe não tem quem escalar: o adversário vence a rodada sem luta (só recebe os pontos de vitória), e você não soma nada.</li>
+            <li>Se <B>todos</B> os slots esgotarem, sua equipe não tem nenhum mascote em pé para escalar. A rodada é registrada como <B>“Derrota por falta de mascotes”</B>: não há luta nem replay, o adversário vence recebendo só os pontos de vitória, e você não soma pontos. Se as duas equipes estiverem sem mascotes, é um empate sem luta. Na noite todos voltam com HP cheio — o desgaste não passa para o dia seguinte.</li>
           </ul>
         </Sec>
 
@@ -101,12 +101,12 @@ export function Manual({ cfg }: { cfg: Cfg }) {
             <tr className="border-t border-slate-800"><td className="py-1.5 font-bold">15h</td><td>B continua, com 80%</td><td>H entra (G fora até a noite)</td></tr>
             <tr className="border-t border-slate-800"><td className="py-1.5 font-bold">Noite</td><td colSpan={2}>Todos voltam com HP cheio; A e G estão disponíveis de novo</td></tr>
           </tbody></table></div>
-          <Note>Com <B>Preservar os feridos</B>, às 12h o slot 3 poderia colocar H (100%) no lugar de G (35%), já que a diferença passa de {cfg.swapHpGapPct} pontos. G seguiria vivo e disponível na fila, ainda com 35%.</Note>
+          <Note>Com <B>troca aos 50%</B> no slot 3, às 12h G (35%) já teria saído e H (100%) entraria no lugar, porque G terminou a luta com HP igual ou abaixo de 50%. G seguiria vivo e disponível na fila, ainda com 35%. Em “até cair”, G continuaria em campo até ser derrotado.</Note>
         </Sec>
 
         <Sec id="noite" title="Descanso e recuperação">
           <p>Depois da última rodada do dia, na janela de descanso, <B>todos os 18 mascotes recuperam o HP completo</B> e deixam de estar derrotados.</p>
-          <p><B>Até as 08h você pode:</B> reordenar titular e reservas, mover mascotes entre slots, trocar a postura de qualquer slot (repetindo à vontade), mudar a estratégia de trocas, reaplicar o montador automático e ver uma prévia.</p>
+          <p><B>Até as 08h você pode:</B> reordenar titular e reservas, mover mascotes entre slots, trocar a postura de qualquer slot (repetindo à vontade), mudar o limite de troca por vida de cada slot, reaplicar o montador automático e ver uma prévia.</p>
           <p><B>Você não pode:</B> trocar, adicionar ou remover mascotes dos 18 originais, usar postura que o mascote não desbloqueou, ou mexer na equipe depois das 08h e durante as rodadas.</p>
           <ul className="list-disc space-y-1 pl-5">
             <li>A formação de <B>segunda é guardada</B> e nunca é sobrescrita. Se você não personalizar a noite, a equipe volta a usar a original.</li>

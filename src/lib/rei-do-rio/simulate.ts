@@ -37,18 +37,20 @@ export function makeBotRoster(key: string, tier: BotTier = "MEDIO", count = 20):
 
 export type SimPlayer = { pid: string; name: string; tag: string; roster: MascotSnap[]; formation: Formation };
 
-export function makeSimPlayer(i: number, preset: Preset, tier: BotTier, strategy: Strategy, label?: string): SimPlayer {
+/** `strategy`: KEEP (até cair), PRESERVE (limiar sugerido por postura) ou um número = mesmo limiar de troca em todos os slots. */
+export function makeSimPlayer(i: number, preset: Preset, tier: BotTier, strategy: Strategy | number, label?: string): SimPlayer {
   const pid = `bot:${i}`;
   const roster = makeBotRoster(pid, tier);
-  const built = autoBuild(roster, preset, strategy);
+  const built = autoBuild(roster, preset, typeof strategy === "number" ? "KEEP" : strategy);
   if (!built.ok) throw new Error(built.error);
+  if (typeof strategy === "number") for (const s of built.formation.slots) s.swapBelowPct = strategy;
   return { pid, name: label ?? `Bot ${i} · ${preset}/${tier}`, tag: `${preset}/${tier}/${strategy}`, roster, formation: built.formation };
 }
 
 export type SimMetrics = {
   rounds: number; matches: number; avgKosPerMatch: number; avgDefeatedPerRound: number;
   exhaustedSlotsPerDay: number; substitutions: number; leadershipChanges: number;
-  modifierApplications: number; winsByTag: Record<string, { w: number; n: number }>; pointsByRole: Record<string, number>;
+  modifierApplications: number; activeBySlot: number[]; emptyPctBySlot: number[]; byTier: Record<string, { active: number[]; emptyPct: number[] }>; winsByTag: Record<string, { w: number; n: number }>; pointsByRole: Record<string, number>;
   spreadStrongWeak: number; rankWinCorr: number; inversions: number; strongWinPct: number; weakWinPct: number; ms: number; errors: string[]; champion: string;
 };
 
@@ -63,9 +65,11 @@ export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; c
   const tagOf = new Map(players.map((p) => [p.pid, p.tag]));
   let snapshot: StandRow[] = initialStandings(rts, cfg);
   const past: { a: string; b: string | null; day: number }[] = [];
-  const metrics: SimMetrics = { rounds: 0, matches: 0, avgKosPerMatch: 0, avgDefeatedPerRound: 0, exhaustedSlotsPerDay: 0, substitutions: 0, leadershipChanges: 0, modifierApplications: 0, winsByTag: {}, pointsByRole: {}, spreadStrongWeak: 0, rankWinCorr: 0, inversions: 0, strongWinPct: 0, weakWinPct: 0, ms: 0, errors: [], champion: "" };
+  const metrics: SimMetrics = { rounds: 0, matches: 0, avgKosPerMatch: 0, avgDefeatedPerRound: 0, exhaustedSlotsPerDay: 0, substitutions: 0, leadershipChanges: 0, modifierApplications: 0, activeBySlot: [0, 0, 0, 0, 0], emptyPctBySlot: [0, 0, 0, 0, 0], byTier: {}, winsByTag: {}, pointsByRole: {}, spreadStrongWeak: 0, rankWinCorr: 0, inversions: 0, strongWinPct: 0, weakWinPct: 0, ms: 0, errors: [], champion: "" };
   let kos = 0, defeated = 0, exhaustedSum = 0, lastLeader = snapshot[0]?.pid;
   const history: StandRow[][] = [];
+  const tierAcc: Record<string, { n: number[]; act: number[]; emp: number[] }> = {};
+  const slotN = [0, 0, 0, 0, 0], slotActive = [0, 0, 0, 0, 0], slotEmpty = [0, 0, 0, 0, 0];
 
   for (let round = 1; round <= TOTAL_ROUNDS; round++) {
     const day = Math.floor((round - 1) / ROUNDS_PER_DAY) + 1;
@@ -76,6 +80,13 @@ export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; c
         if (!m.bId) continue;
         const s = m.summary as MatchSummary;
         metrics.matches++;
+        const si = (round - 1) % ROUNDS_PER_DAY;
+        for (const [pid, side] of [[m.aId, s.A], [m.bId, s.B!]] as const) {
+          const t = tagOf.get(pid)!.split("/")[1];
+          const e = (tierAcc[t] ??= { n: [0, 0, 0, 0, 0], act: [0, 0, 0, 0, 0], emp: [0, 0, 0, 0, 0] });
+          e.n[si]++; e.act[si] += side.lineup.length; e.emp[si] += side.lineup.length === 0 ? 1 : 0;
+        }
+        slotN[si] += 2; slotActive[si] += s.A.lineup.length + s.B!.lineup.length; slotEmpty[si] += (s.A.lineup.length === 0 ? 1 : 0) + (s.B!.lineup.length === 0 ? 1 : 0);
         kos += s.A.team.kos + s.B!.team.kos;
         defeated += s.A.team.kos + s.B!.team.kos;
         metrics.substitutions += s.A.substitutions.length + s.B!.substitutions.length;
@@ -104,6 +115,9 @@ export function simulateWeek(players: SimPlayer[], opts: { editionId?: string; c
       for (const rt of rts) exhaustedSum += rt.formation.slots.filter((s) => s.mascotIds.every((id) => rt.state.mascots[id]?.dead)).length;
     }
   }
+  metrics.activeBySlot = slotN.map((n, i) => (n ? slotActive[i] / n : 0));
+  metrics.emptyPctBySlot = slotN.map((n, i) => (n ? (100 * slotEmpty[i]) / n : 0));
+  for (const [t, e] of Object.entries(tierAcc)) metrics.byTier[t] = { active: e.n.map((n, i) => (n ? e.act[i] / n : 0)), emptyPct: e.n.map((n, i) => (n ? (100 * e.emp[i]) / n : 0)) };
   metrics.avgKosPerMatch = metrics.matches ? kos / metrics.matches : 0;
   metrics.avgDefeatedPerRound = metrics.rounds ? defeated / metrics.rounds : 0;
   metrics.exhaustedSlotsPerDay = exhaustedSum / Math.max(1, COMPETITION_DAYS * players.length); // por jogador por dia

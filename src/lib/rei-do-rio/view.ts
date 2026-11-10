@@ -43,7 +43,7 @@ export type EditionView = {
   };
   /** Coleção do jogador (só antes do fechamento): base do montador manual. */
   pool: MascotSnap[] | null;
-  recent: { id: string; roundIndex: number; aName: string; bName: string | null; winner: "A" | "B" | "DRAW" | null; scoreA: number; scoreB: number; rounds: number; a: string; b: string | null }[];
+  recent: { id: string; roundIndex: number; aName: string; bName: string | null; winner: "A" | "B" | "DRAW" | null; scoreA: number; scoreB: number; rounds: number; a: string; b: string | null; exhausted: "A" | "B" | "BOTH" | null }[];
   adminParticipants: { id: string; name: string; isBot: boolean; locked: boolean; total: number }[];
 };
 
@@ -105,7 +105,7 @@ export async function getEditionView(editionId: string, playerId: string): Promi
   const nm = new Map(parts.map((p) => [p.id, p.displayName]));
   const recent: EditionView["recent"] = matches.filter((m) => m.participantBId).map((m) => {
     const s = m.summaryJson as unknown as MatchSummary;
-    return { id: m.id, roundIndex: m.roundIndex, aName: nm.get(m.participantAId) ?? "?", bName: nm.get(m.participantBId!) ?? "?", winner: s.winner ?? null, scoreA: s.A?.team?.pointsTotal ?? 0, scoreB: s.B?.team?.pointsTotal ?? 0, rounds: s.rounds ?? 0, a: m.participantAId, b: m.participantBId };
+    return { id: m.id, roundIndex: m.roundIndex, aName: nm.get(m.participantAId) ?? "?", bName: nm.get(m.participantBId!) ?? "?", winner: s.winner ?? null, scoreA: s.A?.team?.pointsTotal ?? 0, scoreB: s.B?.team?.pointsTotal ?? 0, rounds: s.rounds ?? 0, a: m.participantAId, b: m.participantBId, exhausted: s.exhausted ?? null };
   });
 
   const cfgJson = (ed.configJson ?? {}) as { lockDropped?: string[] };

@@ -66,15 +66,52 @@ test("derrotado nunca volta no mesmo dia; slot esgotado fica vazio", () => {
   assert.ok(chooseActives(formation, st, DEFAULT_CONFIG)[0] === null);
 });
 
-test("PRESERVE troca por reserva mais saudável só acima do limiar", () => {
-  const f: Formation = { ...structuredClone(formation), strategy: "PRESERVE" };
+test("troca por vida: sai ao terminar com HP <= X% e entra o próximo da fila acima de X%", () => {
+  const f: Formation = structuredClone(formation);
+  f.slots[0].swapBelowPct = 50;
+  f.slots[1].swapBelowPct = 0; // "até cair"
   const st = freshDayState(f, pool);
-  const [t, r1] = f.slots[0].mascotIds;
-  let next = applyBattleToState(f, st, { [t]: Math.round(st.mascots[t].max * 0.9) }, DEFAULT_CONFIG);
-  assert.equal(next.active[0], t); // 90% vs 100%: diferença < 15
-  next = applyBattleToState(f, st, { [t]: Math.round(st.mascots[t].max * 0.5) }, DEFAULT_CONFIG);
+  const [t, r1, r2] = f.slots[0].mascotIds;
+  const hp = (id: string, p: number) => Math.floor(st.mascots[id].max * p);
+  // 60%: acima do limiar, fica.
+  let next = applyBattleToState(f, st, { [t]: hp(t, 0.6) });
+  assert.equal(next.active[0], t);
+  // 50% (<=): sai; a reserva 1 (100%) assume; o ferido segue vivo, sem cura.
+  next = applyBattleToState(f, st, { [t]: hp(t, 0.5) });
   assert.equal(next.active[0], r1);
-  assert.ok(!next.mascots[t].dead && next.mascots[t].hp > 0); // ferido segue vivo e disponível, sem cura
+  assert.ok(!next.mascots[t].dead && next.mascots[t].hp === hp(t, 0.5));
+  // Se a próxima da fila também está <= limiar, passa para a seguinte acima do limiar.
+  let two = applyBattleToState(f, st, { [t]: hp(t, 0.4), [r1]: hp(r1, 0.3) });
+  assert.equal(two.active[0], r2);
+  // Se ninguém está acima do limiar, ninguém entra (nunca troca por alguém pior).
+  two = applyBattleToState(f, st, { [t]: hp(t, 0.4), [r1]: hp(r1, 0.3), [r2]: hp(r2, 0.2) });
+  assert.equal(two.active[0], t);
+  // Slot "até cair" nunca troca por vida.
+  const s1 = f.slots[1].mascotIds[0];
+  next = applyBattleToState(f, st, { [s1]: hp(s1, 0.1) });
+  assert.equal(next.active[1], s1);
+  // Sem oscilação: o ferido que saiu não volta enquanto a reserva está acima do limiar.
+  let loop = applyBattleToState(f, st, { [t]: hp(t, 0.5) });
+  loop = applyBattleToState(f, loop, { [r1]: hp(r1, 0.8) });
+  assert.equal(loop.active[0], r1);
+});
+
+test("validação do limite de troca por vida", () => {
+  const f: Formation = structuredClone(formation);
+  f.slots[0].swapBelowPct = 5;
+  assert.ok(validateFormation(f, pool).some((e) => e.includes("limite de troca")));
+  f.slots[0].swapBelowPct = 55.5;
+  assert.ok(validateFormation(f, pool).some((e) => e.includes("limite de troca")));
+  f.slots[0].swapBelowPct = 70;
+  assert.deepEqual(validateFormation(f, pool), []);
+});
+
+test("equipe sem mascotes perde sem luta e isso é registrado", () => {
+  const players = Array.from({ length: 4 }, (_, i) => makeSimPlayer(i + 1, "BALANCED", "MEDIO", 0));
+  // HP mínimo e limite longo: força esgotamento ao longo do dia.
+  const sim = simulateWeek(players, { editionId: "exh", cfg: { hpMultiplier: 0.5, maxRounds: 150 } });
+  assert.deepEqual(sim.metrics.errors, []);
+  assert.ok(sim.metrics.emptyPctBySlot.some((v) => v > 0), "alguma rodada deve ter equipe zerada");
 });
 
 test("calendário: 20 rodadas, 5 por dia, 09h-21h BRT", () => {

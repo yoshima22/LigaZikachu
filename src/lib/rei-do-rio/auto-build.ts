@@ -4,7 +4,7 @@ import { COMBAT_ROLE_LABELS, type CombatRole } from "@/lib/combat-roles";
 import { getPokemonName } from "@/lib/mascot-data";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "./config";
-import { emptyFormation, type Formation, type MascotSnap, type Strategy } from "./team";
+import { emptyFormation, suggestedSwapPct, type Formation, type MascotSnap, type Strategy } from "./team";
 
 export type Preset = "BALANCED" | "OFFENSIVE" | "ENDURANCE" | "CONTROL";
 export const PRESETS: Record<Preset, { name: string; desc: string; roles: CombatRole[] }> = {
@@ -34,6 +34,7 @@ export type AutoBuildResult =
   | { ok: true; formation: Formation; explanation: string[] }
   | { ok: false; error: string; missing: string[] };
 
+/** `strategy`: KEEP = todos os slots "até cair"; PRESERVE = limiar sugerido por postura (suportes saem aos 50%). */
 export function autoBuild(pool: MascotSnap[], preset: Preset = "BALANCED", strategy: Strategy = "KEEP"): AutoBuildResult {
   const unique = [...new Map(pool.map((m) => [m.id, m])).values()];
   if (unique.length < TEAM_SIZE) {
@@ -41,7 +42,6 @@ export function autoBuild(pool: MascotSnap[], preset: Preset = "BALANCED", strat
   }
   const template = PRESETS[preset].roles;
   const f = emptyFormation();
-  f.strategy = strategy;
   const left = new Set(unique.map((m) => m.id));
   const byId = new Map(unique.map((m) => [m.id, m]));
   const explanation: string[] = [];
@@ -68,11 +68,11 @@ export function autoBuild(pool: MascotSnap[], preset: Preset = "BALANCED", strat
       ids.push(...extra.map((m) => m.id));
       explanation.push(`Slot ${i + 1}: faltaram mascotes com a postura ${COMBAT_ROLE_LABELS[template[i]]}; usei Atacante.`);
     }
-    f.slots[i] = { role, mascotIds: ids };
+    f.slots[i] = { role, mascotIds: ids, swapBelowPct: strategy === "PRESERVE" ? suggestedSwapPct(role) : 0 };
   }
   f.slots.forEach((s, i) => {
     const t = byId.get(s.mascotIds[0])!;
-    explanation.push(`Slot ${i + 1} · ${COMBAT_ROLE_LABELS[s.role as CombatRole]}: ${t.nickname || t.speciesNameOverride || getPokemonName(t.pokemonId)} abre, com 2 reservas na fila.`);
+    explanation.push(`Slot ${i + 1} · ${COMBAT_ROLE_LABELS[s.role as CombatRole]}: ${t.nickname || t.speciesNameOverride || getPokemonName(t.pokemonId)} abre, com 2 reservas na fila${s.swapBelowPct ? `; troca ao ficar com ${s.swapBelowPct}% de HP ou menos` : "; fica até cair"}.`);
   });
   explanation.unshift(`Estratégia ${PRESETS[preset].name}: ${PRESETS[preset].desc} Escolhi pelo encaixe na postura, não só pelo poder bruto.`);
   return { ok: true, formation: f, explanation };

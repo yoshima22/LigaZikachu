@@ -61,7 +61,7 @@ export function modifierPct(row: Pick<StandRow, "pressure" | "current"> | undefi
 export type PastMatch = { a: string; b: string | null; day: number };
 
 /** Pareamento da rodada a partir do snapshot congelado (mesmo resultado em qualquer ordem). */
-export function pairRound(snapshot: StandRow[], past: PastMatch[], day: number, seed: string) {
+export function pairRound(snapshot: StandRow[], past: PastMatch[], day: number, seed: string, healthBonus?: Map<string, number>) {
   const faced = new Map<string, Map<string, number>>();
   const today = new Map<string, Set<string>>();
   const byeCount = new Map<string, number>();
@@ -74,6 +74,6 @@ export function pairRound(snapshot: StandRow[], past: PastMatch[], day: number, 
       today.get(m.a)!.add(m.b); today.get(m.b)!.add(m.a);
     }
   }
-  const players: PairingPlayer[] = snapshot.map((r) => ({ playerId: r.pid, points: Math.round(r.score / PT / 5), wins: r.wins, damageDealt: r.damage, byes: 0 }));
+  const players: PairingPlayer[] = snapshot.map((r) => ({ playerId: r.pid, points: Math.round(r.score / PT / 5) + (healthBonus?.get(r.pid) ?? 0), wins: r.wins, damageDealt: r.damage, byes: 0 }));
   return swissPairSlot(players, faced, today, byeCount, seed);
 }

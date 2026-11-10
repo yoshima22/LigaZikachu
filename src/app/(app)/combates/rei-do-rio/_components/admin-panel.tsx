@@ -26,7 +26,7 @@ export function AdminPanel({ view, onChanged, onCreated }: { view: EditionView |
   const [sim, setSim] = useState<Run[] | null>(null);
   const [simPlayers, setSimPlayers] = useState(12);
   const [simWeeks, setSimWeeks] = useState(2);
-  const [gap, setGap] = useState(15);
+  const [gap, setGap] = useState(50);
   const [pressure, setPressure] = useState(true);
   const [hpMult, setHpMult] = useState(3);
   const [maxRounds, setMaxRounds] = useState(6);
@@ -51,7 +51,7 @@ export function AdminPanel({ view, onChanged, onCreated }: { view: EditionView |
             <label className="flex items-center gap-2"><input type="checkbox" checked={auto} onChange={(e) => setAuto(e.target.checked)} />Relógio real (cron)</label>
           </div>
         </div>
-        <button disabled={pending} onClick={() => run(() => adminCreateEditionAction({ name, isTest, autoRun: auto, bots, balance: { hpMultiplier: hpMult, maxRounds, winPoints: winPts, swapHpGapPct: gap, pressure } }), (r) => r.editionId && onCreated(r.editionId as string))} className="mt-3 rounded-xl bg-amber-400 px-4 py-2 text-sm font-black text-slate-900 disabled:opacity-50">Criar edição</button>
+        <button disabled={pending} onClick={() => run(() => adminCreateEditionAction({ name, isTest, autoRun: auto, bots, balance: { hpMultiplier: hpMult, maxRounds, winPoints: winPts, pressure } }), (r) => r.editionId && onCreated(r.editionId as string))} className="mt-3 rounded-xl bg-amber-400 px-4 py-2 text-sm font-black text-slate-900 disabled:opacity-50">Criar edição</button>
         {!isTest && <p className="mt-2 text-[11px] text-amber-300">Os parâmetros de HP, limite de rodadas e vitória (campos do simulador abaixo) são gravados na edição. Edição real: usa as datas do calendário. Comandos que mexem nela pedem o nome exato para confirmar.</p>}
       </Card>
 
@@ -106,12 +106,12 @@ export function AdminPanel({ view, onChanged, onCreated }: { view: EditionView |
         <div className="flex flex-wrap items-end gap-3 text-xs text-slate-400">
           <label>Jogadores<input type="number" min={4} max={40} value={simPlayers} onChange={(e) => setSimPlayers(Number(e.target.value))} className="ml-1 w-16 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
           <label>Semanas<input type="number" min={1} max={5} value={simWeeks} onChange={(e) => setSimWeeks(Number(e.target.value))} className="ml-1 w-14 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
-          <label>Limiar de troca (pp)<input type="number" min={1} max={60} value={gap} onChange={(e) => setGap(Number(e.target.value))} className="ml-1 w-14 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
+          <label>Troca por vida dos bots (%)<input type="number" min={0} max={90} step={10} value={gap} onChange={(e) => setGap(Number(e.target.value))} className="ml-1 w-14 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
           <label>HP x<input type="number" step="0.5" min={0.5} max={6} value={hpMult} onChange={(e) => setHpMult(Number(e.target.value))} className="ml-1 w-14 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
           <label>Limite de rodadas<input type="number" min={3} max={150} value={maxRounds} onChange={(e) => setMaxRounds(Number(e.target.value))} className="ml-1 w-16 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
           <label>Pts da vitória<input type="number" min={0} max={100} value={winPts} onChange={(e) => setWinPts(Number(e.target.value))} className="ml-1 w-14 rounded border border-slate-700 bg-slate-900 px-1 py-1 text-white" /></label>
           <label className="flex items-center gap-1"><input type="checkbox" checked={pressure} onChange={(e) => setPressure(e.target.checked)} />Pressão/Corrente</label>
-          <button disabled={pending} onClick={() => start(async () => { const r = await adminSimulateAction({ players: simPlayers, weeks: simWeeks, swapHpGapPct: gap, pressure, hpMultiplier: hpMult, maxRounds, winPoints: winPts }); if (r.ok) setSim(r.runs as Run[]); else setMsg({ ok: false, text: r.error ?? "Falhou." }); })} className="rounded-lg bg-violet-500 px-3 py-1.5 font-black text-white disabled:opacity-50">Simular</button>
+          <button disabled={pending} onClick={() => start(async () => { const r = await adminSimulateAction({ players: simPlayers, weeks: simWeeks, swapPct: gap, pressure, hpMultiplier: hpMult, maxRounds, winPoints: winPts }); if (r.ok) setSim(r.runs as Run[]); else setMsg({ ok: false, text: r.error ?? "Falhou." }); })} className="rounded-lg bg-violet-500 px-3 py-1.5 font-black text-white disabled:opacity-50">Simular</button>
           {sim && <button onClick={() => download("rei-do-rio-simulacao.json", sim)} className="rounded-lg border border-slate-600 px-3 py-1.5 font-bold text-white">Exportar</button>}
         </div>
         {sim?.map((r) => (

@@ -85,12 +85,11 @@ export async function clearRestPlanAction(editionId: string) {
 
 // ── Administração / testes ────────────────────────────────────────────────────
 
-export type BalanceInput = { swapHpGapPct?: number; hpMultiplier?: number; maxRounds?: number; winPoints?: number; pressure?: boolean };
+export type BalanceInput = { swapPct?: number; hpMultiplier?: number; maxRounds?: number; winPoints?: number; pressure?: boolean };
 function balanceToConfig(b: BalanceInput) {
   const cfg: Record<string, unknown> = {};
   const num = (v: unknown, lo: number, hi: number) => (typeof v === "number" && Number.isFinite(v) ? Math.min(hi, Math.max(lo, v)) : undefined);
-  const gap = num(b.swapHpGapPct, 1, 60), hp = num(b.hpMultiplier, 0.5, 6), mr = num(b.maxRounds, 3, 150), win = num(b.winPoints, 0, 100);
-  if (gap !== undefined) cfg.swapHpGapPct = gap;
+  const hp = num(b.hpMultiplier, 0.5, 6), mr = num(b.maxRounds, 3, 150), win = num(b.winPoints, 0, 100);
   if (hp !== undefined) cfg.hpMultiplier = hp;
   if (mr !== undefined) cfg.maxRounds = Math.round(mr);
   if (win !== undefined) cfg.budget = { win };
@@ -186,7 +185,7 @@ export async function adminSimulateAction(input: { players: number; weeks: numbe
     const tiers = ["FRACO", "MEDIO", "FORTE"] as const;
     const out = [];
     for (let w = 0; w < weeks; w++) {
-      const players = Array.from({ length: n }, (_, i) => makeSimPlayer(w * 1000 + i + 1, presets[i % 4], tiers[i % 3], i % 2 ? "PRESERVE" : "KEEP"));
+      const players = Array.from({ length: n }, (_, i) => makeSimPlayer(w * 1000 + i + 1, presets[i % 4], tiers[i % 3], typeof input.swapPct === "number" ? Math.max(0, Math.min(90, Math.round(input.swapPct))) : i % 2 ? "PRESERVE" : "KEEP"));
       const cfg = balanceToConfig(input);
       const sim = simulateWeek(players, { editionId: `sim-${w}`, cfg });
       out.push({ week: w + 1, metrics: sim.metrics, top: sim.standings.slice(0, 5).map((r) => ({ name: r.name, score: r.score, wins: r.wins })) });

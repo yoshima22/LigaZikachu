@@ -1,16 +1,44 @@
 // Formação, validação (servidor e cliente) e estado diário do Rei do Rio. Tudo puro.
 import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
-import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE, type ReiConfig } from "./config";
+import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "./config";
 
+/** Legado (antes da troca por slot). KEEP = "até cair"; PRESERVE = sugestão automática por postura. */
 export type Strategy = "KEEP" | "PRESERVE";
-export const STRATEGY_LABELS: Record<Strategy, { name: string; desc: string }> = {
-  KEEP: { name: "Manter os sobreviventes", desc: "Quem sobrevive continua no slot, mesmo ferido. Só os derrotados são substituídos." },
-  PRESERVE: { name: "Preservar os feridos", desc: "Entre combates, um reserva bem mais saudável do mesmo slot pode assumir o lugar de um ferido." },
-};
 
-export type SlotPlan = { role: string; mascotIds: string[] };
-export type Formation = { slots: SlotPlan[]; strategy: Strategy };
+/**
+ * `swapBelowPct`: o mascote ativo sai ao fim de um combate se sobreviveu com HP <= X% e o próximo da fila
+ * (vivo, com HP > X%) assume. 0/null/ausente = "até cair" (só sai quando derrotado).
+ */
+export type SlotPlan = { role: string; mascotIds: string[]; swapBelowPct?: number | null };
+export type Formation = { slots: SlotPlan[]; /** @deprecated use swapBelowPct por slot */ strategy?: Strategy };
+
+export const SWAP_MIN = 10;
+export const SWAP_MAX = 90;
+export const SWAP_PRESETS = [{ pct: 0, label: "Até cair" }, { pct: 30, label: "Trocar aos 30%" }, { pct: 50, label: "Trocar aos 50% (sugerido)" }, { pct: 70, label: "Trocar aos 70%" }] as const;
+
+/** Limiar efetivo do slot (inclui compatibilidade com formações antigas que usavam `strategy`). */
+export function slotSwapPct(f: Pick<Formation, "strategy">, slot: Pick<SlotPlan, "swapBelowPct">): number {
+  if (slot.swapBelowPct !== undefined && slot.swapBelowPct !== null) return slot.swapBelowPct;
+  return f.strategy === "PRESERVE" ? 50 : 0;
+}
+
+/**
+ * Sugestão padrão do montador. Nas simulações (todas as faixas de força), trocar com 30–50% de HP venceu "até cair"
+ * por 4 a 18 pontos percentuais de vitórias; 50% foi o melhor/mais estável. Segue como sugestão, o jogador muda por slot.
+ */
+export const DEFAULT_SWAP_PCT = 50;
+export function suggestedSwapPct(_role?: string): number {
+  void _role;
+  return DEFAULT_SWAP_PCT;
+}
+
+/** Frase de prévia mostrada no editor. */
+export function describeSwap(pctValue: number): string {
+  return pctValue <= 0
+    ? "Fica em campo até ser derrotado; só então entra o próximo da fila."
+    : `Se terminar um combate com ${pctValue}% de HP ou menos, sai e entra o próximo da fila que esteja acima de ${pctValue}%. Ele continua vivo na fila, sem se curar.`;
+}
 
 /** Foto do mascote congelada na inscrição. `unlocked` = posturas de jornada liberadas para ELE. */
 export type MascotSnap = {
@@ -33,7 +61,7 @@ export const isValidRole = (role: string) => (COMBAT_ROLE_VALUES as readonly str
 export const roleAllowedFor = (role: string, m: Pick<MascotSnap, "unlocked">) => isValidRole(role) && canSelectTrainingStance(role, m.unlocked);
 
 export function emptyFormation(): Formation {
-  return { slots: Array.from({ length: SLOT_COUNT }, () => ({ role: "ATTACKER", mascotIds: [] })), strategy: "KEEP" };
+  return { slots: Array.from({ length: SLOT_COUNT }, () => ({ role: "ATTACKER", mascotIds: [], swapBelowPct: DEFAULT_SWAP_PCT })) };
 }
 
 export const formationMascotIds = (f: Formation) => f.slots.flatMap((s) => s.mascotIds);
@@ -45,11 +73,12 @@ export const formationMascotIds = (f: Formation) => f.slots.flatMap((s) => s.mas
 export function validateFormation(f: Formation, pool: Map<string, MascotSnap>, lockedIds: Set<string> | null = null): string[] {
   const errors: string[] = [];
   if (!f || !Array.isArray(f.slots) || f.slots.length !== SLOT_COUNT) return [`A formação precisa de exatamente ${SLOT_COUNT} slots.`];
-  if (f.strategy !== "KEEP" && f.strategy !== "PRESERVE") errors.push("Estratégia de troca inválida.");
   const seen = new Set<string>();
   f.slots.forEach((slot, i) => {
     const label = `Slot ${i + 1}`;
     if (!isValidRole(slot.role)) errors.push(`${label}: postura inválida.`);
+    const sw = slot.swapBelowPct;
+    if (sw !== undefined && sw !== null && !(Number.isInteger(sw) && (sw === 0 || (sw >= SWAP_MIN && sw <= SWAP_MAX)))) errors.push(`${label}: o limite de troca por vida deve ser "até cair" ou entre ${SWAP_MIN}% e ${SWAP_MAX}%.`);
     if (!Array.isArray(slot.mascotIds) || slot.mascotIds.length !== SQUAD_SIZE) { errors.push(`${label}: precisa de ${SQUAD_SIZE} mascotes (titular + 2 reservas).`); return; }
     for (const id of slot.mascotIds) {
       const m = pool.get(id);
@@ -83,30 +112,30 @@ const usable = (st: DayState, id: string) => !!st.mascots[id] && !st.mascots[id]
 
 /**
  * Escolhe quem entra no PRÓXIMO combate em cada slot. Nunca é chamada durante uma luta.
- * KEEP: sobrevivente fica; derrotado cede ao próximo reserva vivo na ordem.
- * PRESERVE: igual, mas um reserva com HP% >= ativo + limiar pode assumir (sem oscilar).
+ * - Ativo derrotado: entra o próximo da fila que esteja vivo (preferindo quem está acima do limiar do slot).
+ * - Ativo vivo com HP% <= swapBelowPct: troca pelo próximo da fila vivo e ACIMA do limiar; se não houver, fica.
  */
-export function chooseActives(f: Formation, st: DayState, cfg: Pick<ReiConfig, "swapHpGapPct">): (string | null)[] {
+export function chooseActives(f: Formation, st: DayState, _cfg?: unknown): (string | null)[] {
+  void _cfg;
   return f.slots.map((slot, i) => {
     const queue = slot.mascotIds;
+    const thr = slotSwapPct(f, slot);
     const current = st.active[i];
-    let pick: string | null = current && usable(st, current) ? current : null;
-    if (!pick) pick = queue.find((id) => usable(st, id)) ?? null; // ordem do jogador
-    if (pick && f.strategy === "PRESERVE") {
-      const base = pct(st.mascots[pick]);
-      const better = queue
-        .filter((id) => id !== pick && usable(st, id))
-        .map((id) => ({ id, p: pct(st.mascots[id]) }))
-        .filter((c) => c.p - base >= cfg.swapHpGapPct)
-        .sort((a, b) => b.p - a.p || queue.indexOf(a.id) - queue.indexOf(b.id))[0];
-      if (better) pick = better.id;
+    const alive = (id: string) => usable(st, id);
+    if (current && alive(current)) {
+      if (thr > 0 && pct(st.mascots[current]) <= thr) {
+        const next = queue.find((id) => id !== current && alive(id) && pct(st.mascots[id]) > thr);
+        if (next) return next;
+      }
+      return current;
     }
-    return pick;
+    // Ativo caiu (ou slot novo): primeiro da fila vivo e acima do limiar; senão, o primeiro vivo.
+    return queue.find((id) => alive(id) && (thr <= 0 || pct(st.mascots[id]) > thr)) ?? queue.find((id) => alive(id)) ?? null;
   });
 }
 
 /** Aplica o HP final de uma luta ao estado e decide os ativos do próximo combate. */
-export function applyBattleToState(f: Formation, st: DayState, finalHp: Record<string, number>, cfg: Pick<ReiConfig, "swapHpGapPct">): DayState {
+export function applyBattleToState(f: Formation, st: DayState, finalHp: Record<string, number>, cfg?: unknown): DayState {
   const mascots = { ...st.mascots };
   for (const [id, hp] of Object.entries(finalHp)) {
     const cur = mascots[id];
