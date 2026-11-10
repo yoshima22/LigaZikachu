@@ -33,6 +33,7 @@ import { TRAINING_MILESTONE_ITEMS } from "@/lib/training-catalog";
 import { recordTrainingJourneyProgress, recordAffinityEvent } from "@/lib/training-journeys";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { bumpRecap } from "@/lib/player-recap";
 import { getSpeciesSnapshot } from "@/lib/species-registry";
 import { trackGachaObjective } from "@/lib/gacha";
 import { PERSONALITY_AFFINITY, type StatKey } from "@/lib/personality-design";
@@ -352,6 +353,7 @@ export async function hatchEgg(playerId: string, forcedPokemonId?: number, force
   const [rangeMin, rangeMax] = EGG_STAT_RANGES[eggTypeKey] ?? [8, 14];
   // Missões semanais das Invocações: "choque N ovos" (com filtro opcional de raridade).
   void trackGachaObjective(playerId, "OVOS_ABERTOS", 1, { rarity: eggTypeKey });
+  void bumpRecap(playerId, { eggsHatched: 1 });
   const rouletteGeneration = rollResult?.generation ?? generationForEggPokemon(pokemonId);
   const disabledForRoulette = new Set(disabledEggPokemonIds);
   const roulettePool = rouletteGeneration

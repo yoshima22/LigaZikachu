@@ -15,6 +15,7 @@ import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { getActiveRaidSabotages, getOrderStepUnlockState } from "@/lib/raid-event";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { bumpRecap } from "@/lib/player-recap";
 import { getWeeklyLeagueLockedMascotIds } from "@/lib/weekly-league-locks";
 import { isAdmin } from "@/lib/auth/permissions";
 import { applyRainbowFeather } from "@/lib/mascot";
@@ -454,6 +455,7 @@ export async function recycleMascotAction(mascotId: string) {
     }),
   ]);
 
+  void bumpRecap(me.id, { mascotsRecycled: 1 });
   return { ok: true as const, dust };
 }
 
@@ -521,6 +523,7 @@ export async function recycleMascotsAction(mascotIds: string[]) {
     }),
   ]);
 
+  void bumpRecap(me.id, { mascotsRecycled: mascots.length });
   return { ok: true as const, dust, recycledIds: uniqueIds, breakdown };
 }
 

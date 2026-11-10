@@ -2,6 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
+import { bumpRecap, type RecapDelta } from "@/lib/player-recap";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { WEEKLY_MODIFIERS, LEAGUE_ITEMS, MIN_WEEKLY_LEAGUE_MASCOTS } from "./constants";
@@ -1895,7 +1896,14 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
     const noShow = new Set<string>([...tally].filter(([, t]) => t.total > 0 && t.wo === t.total).map(([id]) => id));
 
     let granted = 0;
+    // Recap: soma os totais da liga uma única vez por jogador (finalRank nulo = ainda não contado).
+    const recapBumps: { playerId: string; delta: RecapDelta }[] = [];
+    const recapOf = (p: typeof participants[number]): RecapDelta => ({
+      weeklyLeagues: 1, weeklyWins: p.wins, weeklyLosses: p.losses + p.woLosses, weeklyDraws: p.draws,
+      weeklyDamageDealt: p.damageDealt, weeklyDamageTaken: p.damageTaken,
+    });
     await prisma.$transaction(async (tx) => {
+      recapBumps.length = 0;
       for (let index = 0; index < participants.length; index++) {
         const participant = participants[index];
         if (participant.rewardGranted) continue;
@@ -1905,7 +1913,8 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
         const rank = index + 1;
         if (noShow.has(participant.playerId)) {
           // Sem recompensa; ativa o modo casual (o jogador pode reativar/desligar depois).
-          await tx.weeklyMascotLeagueParticipant.updateMany({ where: { id: participant.id, rewardGranted: false }, data: { finalRank: rank } });
+          const ranked = await tx.weeklyMascotLeagueParticipant.updateMany({ where: { id: participant.id, rewardGranted: false, finalRank: null }, data: { finalRank: rank } });
+          if (ranked.count > 0) recapBumps.push({ playerId: participant.playerId, delta: recapOf(participant) });
           await tx.player.update({ where: { id: participant.playerId }, data: { casualMode: true } });
           continue;
         }
@@ -1914,6 +1923,7 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
           data: { finalRank: rank, rewardGranted: true },
         });
         if (claimed.count === 0) continue;
+        if (participant.finalRank == null) recapBumps.push({ playerId: participant.playerId, delta: recapOf(participant) });
         const boxItems = rank === 1 ? 3 : rank === 2 ? 2 : rank === 3 ? 1 : 0;
         await tx.playerGift.create({
           data: {
@@ -1953,6 +1963,8 @@ export async function finalizeLeagueAction(leagueId: string, automationSecret?: 
       }
       await tx.weeklyMascotLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: participants[0].playerId } });
     }, { timeout: 20000, maxWait: 10000 });
+
+    for (const bump of recapBumps) await bumpRecap(bump.playerId, bump.delta);
 
     const champion = await prisma.player.findUnique({
       where: { id: participants[0].playerId },

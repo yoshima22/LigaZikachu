@@ -37,6 +37,7 @@ import { isTrainingStance } from "@/lib/training-journey-state";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { ADMIN_LAB_RAINBOW_FEATHER_ID } from "@/lib/admin-lab-feather";
 import { recordPlayerActivity } from "@/lib/player-activity";
+import { bumpRecap } from "@/lib/player-recap";
 import { trackGachaObjective } from "@/lib/gacha";
 import { Prisma } from "@prisma/client";
 import { after } from "next/server";
@@ -1567,6 +1568,8 @@ export async function useMascotBuffAction(mascotId: string, inventoryKey: string
       await tx.mascotEvent.create({ data: { mascotId, emoji: "✨", description: `Usou ${config.label}!` } });
     });
 
+    if (inventoryItem.item.type === "MASCOT_BUFF_STAT") void bumpRecap(player.id, { proteinsUsed: 1 });
+
     const honeyOutcome = inventoryItem.item.type === "MASCOT_BUFF_HAPPY"
       ? await maybeTriggerHoneyFriendship(mascotId, player.id).catch(() => null)
       : null;
@@ -2072,6 +2075,8 @@ export async function useRainbowFeatherAction(mascotId: string, inventoryKey: st
       });
       return reset;
     });
+    const featherTier = { COMMON: "feathersCommon", RARE: "feathersRare", SPECIAL: "feathersSpecial", LAB: "feathersLab", EVENT: "feathersEvent" } as const;
+    void bumpRecap(player.id, { feathersUsed: 1, [featherTier[eggTier as keyof typeof featherTier] ?? "feathersCommon"]: 1 });
     revalidate(player.id);
     return {
       statRange: `${result.statMin}–${result.statMax}`,

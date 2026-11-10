@@ -1546,6 +1546,55 @@ model PlayerActivityLog {
   @@map("player_activity_logs")
 }
 
+// Contadores acumulados por jogador/ano para o recap de fim de ano. Sem FK de
+// proposito: nao pesa em DELETE de usuario e as escritas sao so increments
+// atomicos (ver src/lib/player-recap.ts).
+model PlayerRecapCounter {
+  playerId String
+  year     Int
+
+  weeklyLeagues      Int @default(0)
+  weeklyWins         Int @default(0)
+  weeklyLosses       Int @default(0)
+  weeklyDraws        Int @default(0)
+  weeklyDamageDealt  Int @default(0)
+  weeklyDamageTaken  Int @default(0)
+  rushLeagues        Int @default(0)
+  rushWins           Int @default(0)
+  rushLosses         Int @default(0)
+  rushDraws          Int @default(0)
+  rushDamageDealt    Int @default(0)
+  rushDamageTaken    Int @default(0)
+  arenaPveBattles    Int @default(0)
+  arenaPvpAttacks    Int @default(0)
+  arenaPvpDefenses   Int @default(0)
+  arenaDamageDealt   Int @default(0)
+  arenaDamageTaken   Int @default(0)
+  eggsHatched        Int @default(0)
+  mascotsRecycled    Int @default(0)
+  proteinsUsed       Int @default(0)
+  feathersUsed       Int @default(0)
+  feathersCommon     Int @default(0)
+  feathersRare       Int @default(0)
+  feathersSpecial    Int @default(0)
+  feathersLab        Int @default(0)
+  feathersEvent      Int @default(0)
+
+  // ZC: a carteira ja guarda totalEarned/totalSpent vitalicios. Guardamos o que
+  // foi ganho no ano ate o momento da marca + o valor da carteira na marca; o
+  // recap soma (carteira atual - marca) ao valor do ano.
+  zcEarnedAtMark     Int @default(0)
+  zcSpentAtMark      Int @default(0)
+  zcWalletEarnedMark Int @default(0)
+  zcWalletSpentMark  Int @default(0)
+
+  backfilledAt DateTime?
+  updatedAt    DateTime  @default(now()) @updatedAt
+
+  @@id([playerId, year])
+  @@map("player_recap_counters")
+}
+
 model PlayerGift {
   id          String     @id @default(cuid())
   playerId    String

@@ -3,6 +3,7 @@
 import { revalidatePath, unstable_cache } from "next/cache";
 import { GiftType, Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
+import { bumpRecap, type RecapDelta } from "@/lib/player-recap";
 import { getAppSession, getSessionPlayer } from "@/lib/session";
 import { isStaff } from "@/lib/auth/permissions";
 import { getPokemonName, getPokemonTypes } from "@/lib/mascot-data";
@@ -765,9 +766,15 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
       if (t && t.total > 0 && t.wo === t.total) noShow.add(p.playerId);
     }
 
+    // Recap: totais da edição somados uma única vez (finalRank nulo = ainda não contado).
+    const recapBumps: { playerId: string; delta: RecapDelta }[] = [];
     await prisma.$transaction(async (tx) => {
+      recapBumps.length = 0;
       for (let index = 0; index < ranking.length; index++) {
         const participant = ranking[index]; const rank = index + 1;
+        if (participant.finalRank == null && participant.wins + participant.losses + participant.draws > 0) {
+          recapBumps.push({ playerId: participant.playerId, delta: { rushLeagues: 1, rushWins: participant.wins, rushLosses: participant.losses, rushDraws: participant.draws, rushDamageDealt: participant.damageDealt, rushDamageTaken: participant.damageTaken } });
+        }
         const punished = noShow.has(participant.playerId);
         const reward = punished ? undefined : rewards.find((r) => rank >= r.rankFrom && rank <= (r.rankTo ?? r.rankFrom));
         await tx.rushLeagueParticipant.update({ where: { id: participant.id }, data: { finalRank: rank, rewardGranted: Boolean(reward) } });
@@ -797,6 +804,7 @@ export async function adminFinishRushLeagueAction(leagueId: string, automationSe
       }
       await tx.rushLeague.update({ where: { id: leagueId }, data: { status: "FINISHED", championPlayerId: ranking[0]?.playerId, rewardsGrantedAt: new Date(), ruleJson: { ...ruleData(league.ruleJson), noShowPlayerIds: [...noShow] } as Prisma.InputJsonValue } });
     });
+    for (const bump of recapBumps) await bumpRecap(bump.playerId, bump.delta);
     revalidatePath(PATH);
     return { success: true };
   } catch (error) { return { error: error instanceof Error ? error.message : "Falha ao encerrar a Rush." }; }
