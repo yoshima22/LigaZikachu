@@ -5,6 +5,8 @@ import type { StandRow } from "@/lib/rei-do-rio/standings";
 import type { DayState, Formation, MascotSnap } from "@/lib/rei-do-rio/team";
 import type { EditionView } from "@/lib/rei-do-rio/view";
 import { getPokemonName } from "@/lib/mascot-data";
+import { getAbilityInfo } from "@/lib/abilities";
+import { abilityOf } from "@/lib/rei-do-rio/team";
 import { Card, Empty, HpBar, Pill, Sprite, Title, roleLabel } from "./rei-ui";
 
 const nm = (m: MascotSnap) => m.nickname || m.speciesNameOverride || getPokemonName(m.pokemonId);
@@ -46,6 +48,7 @@ export function FormationBoard({ formation, state, roster }: { formation: Format
                           {wounded && <Pill tone="red">Ferido</Pill>}
                           {!isActive && !st?.dead && id !== nextId && <Pill>{idx === 0 ? "Titular" : "Reserva"}</Pill>}
                         </div>
+                        {getAbilityInfo(abilityOf(formation, m)) && <p className="truncate text-[10px] text-violet-200/80">✨ {getAbilityInfo(abilityOf(formation, m))!.name}</p>}
                         {st && <><HpBar hp={st.hp} max={st.max} dead={st.dead} /><p className="mt-0.5 text-[10px] tabular-nums text-slate-500">{st.dead ? "0" : st.hp}/{st.max} HP</p></>}
                       </div>
                     </div>

@@ -10,6 +10,7 @@ import { COMPETITION_DAYS, TOTAL_ROUNDS, mergeConfig, type ReiConfig } from "./c
 import { buildRoundPlan, canTransition, freezeAt, isLastRoundOfDay, lockAt, type Phase } from "./schedule";
 import { autoBuild, type Preset } from "./auto-build";
 import { initialStandings, runRound, type MatchSummary, type Runtime } from "./engine";
+import { arenaFight } from "./fight-arena";
 import { makeBotRoster, type BotTier } from "./simulate";
 import type { StandRow } from "./standings";
 import { sumAggs, type MascotAgg } from "./scoring";
@@ -27,17 +28,17 @@ export async function getReiAdmin() {
 
 // ── Coleção do jogador -> snapshots ───────────────────────────────────────────
 
-const toSnap = (m: { id: string; pokemonId: number; nickname: string | null; level: number; statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number; personality: string | null; speciesNameOverride: string | null; primaryTypeOverride: string | null; secondaryTypeOverride: string | null; preferredCombatRole: string | null; stanceUnlocks: { stanceKey: string }[] }): MascotSnap => ({
+const toSnap = (m: { id: string; pokemonId: number; nickname: string | null; level: number; statForce: number; statAgility: number; statInstinct: number; statVitality: number; statCharisma: number; personality: string | null; speciesNameOverride: string | null; primaryTypeOverride: string | null; secondaryTypeOverride: string | null; preferredCombatRole: string | null; hiddenAbilityUnlocked: boolean; abilityChoice: string | null; stanceUnlocks: { stanceKey: string }[] }): MascotSnap => ({
   id: m.id, pokemonId: m.pokemonId, nickname: m.nickname, level: m.level,
   statForce: m.statForce, statAgility: m.statAgility, statInstinct: m.statInstinct, statVitality: m.statVitality, statCharisma: m.statCharisma,
   personality: m.personality, speciesNameOverride: m.speciesNameOverride, primaryTypeOverride: m.primaryTypeOverride, secondaryTypeOverride: m.secondaryTypeOverride,
-  preferredCombatRole: m.preferredCombatRole, unlocked: m.stanceUnlocks.map((s) => s.stanceKey),
+  preferredCombatRole: m.preferredCombatRole, hiddenUnlocked: m.hiddenAbilityUnlocked, abilityChoice: m.abilityChoice, unlocked: m.stanceUnlocks.map((s) => s.stanceKey),
 });
 
 export async function loadPlayerPool(playerId: string): Promise<MascotSnap[]> {
   const rows = await prisma.mascot.findMany({
     where: { playerId },
-    select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, personality: true, speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true, preferredCombatRole: true, stanceUnlocks: { select: { stanceKey: true } } },
+    select: { id: true, pokemonId: true, nickname: true, level: true, statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, personality: true, speciesNameOverride: true, primaryTypeOverride: true, secondaryTypeOverride: true, preferredCombatRole: true, hiddenAbilityUnlocked: true, abilityChoice: true, stanceUnlocks: { select: { stanceKey: true } } },
     orderBy: { level: "desc" },
   });
   return rows.map(toSnap);
@@ -236,7 +237,8 @@ export async function processNextRound(editionId: string, now = new Date()): Pro
     const known = new Set(snapshot.map((r) => r.pid));
     const active = players.filter((p) => known.has(p.pid));
     const past = pastRows.map((m) => ({ a: m.participantAId, b: m.participantBId, day: m.dayIndex }));
-    const res = runRound({ editionId, roundIndex: next.roundIndex, dayIndex: next.dayIndex, cfg, snapshot, players: active, past });
+    // Motor Arena: o único que executa as habilidades passivas (mesmas regras de combate da liga).
+    const res = runRound({ editionId, roundIndex: next.roundIndex, dayIndex: next.dayIndex, cfg, snapshot, players: active, past, fight: arenaFight });
 
     const lastOfDay = isLastRoundOfDay(next.roundIndex);
     await prisma.$transaction(async (tx) => {

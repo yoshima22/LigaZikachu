@@ -9,7 +9,7 @@ import { ScoringExplainer } from "./stats-views";
 type Cfg = EditionView["edition"]["cfg"];
 
 const SECTIONS = [
-  ["visao", "Visão geral"], ["calendario", "Calendário"], ["equipe", "Montando a equipe"], ["dia", "Seus mascotes durante o dia"],
+  ["visao", "Visão geral"], ["calendario", "Calendário"], ["equipe", "Montando a equipe"], ["habilidades", "Habilidades"], ["dia", "Seus mascotes durante o dia"],
   ["exemplo", "Exemplo passo a passo"], ["noite", "Descanso e recuperação"], ["pareamento", "Quem enfrenta quem"],
   ["pontos", "Pontuação e classificação"], ["contribuicao", "Como cada mascote contribui"], ["equilibrio", "Pressão do Trono e Calor da Lareira"], ["relatorio", "Relatório e replays"], ["faq", "Perguntas frequentes"],
 ] as const;
@@ -70,12 +70,23 @@ export function Manual({ cfg }: { cfg: Cfg }) {
           </ul>
         </Sec>
 
+        <Sec id="habilidades" title="Habilidades">
+          <p>Cada mascote luta com <B>uma habilidade passiva</B> (as mesmas das arenas). Por padrão é a que ele já usa; você pode <B>trocar por qualquer outra que ele possa ter</B> na ficha do mascote, na tela de montagem — inclusive durante o descanso, para o dia seguinte. A habilidade oculta só aparece para quem tem o TM dela.</p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>Cada habilidade tem uma categoria (Dano, Defesa, Reflexo, Controle, Suporte, Sobrevivência) e um número de ativações por luta.</li>
+            <li><B>Limite por categoria em campo:</B> o 1º mascote da categoria usa 100% do efeito, o 2º usa 70% e do 3º em diante a habilidade fica <B>desligada</B> naquele combate (Sobrevivência: só 1). Vale a <B>ordem dos slots</B> dos mascotes que estão em campo.</li>
+            <li>Quando uma reserva entra no lugar de um titular, a regra é <B>recalculada</B> para o combate seguinte. O painel “Habilidades em campo” da montagem mostra quem está ligado, reduzido ou desligado para o 1º combate.</li>
+            <li>Os efeitos duram só a luta, têm teto de 20% e as ativações aparecem no replay.</li>
+            <li>Você não vê as habilidades dos adversários, só as posturas, nomes e níveis.</li>
+          </ul>
+        </Sec>
+
         <Sec id="dia" title="Como seus mascotes respondem durante o dia">
           <h3 className="font-black text-white">Dentro de um combate</h3>
           <ul className="list-disc space-y-1.5 pl-5">
             <li>Entram <B>seis mascotes de cada lado</B>: o ativo de cada slot, com o HP que tinham ao fim do combate anterior.</li>
             {cfg.hpMultiplier !== 1 && <li>Neste evento o HP máximo dos mascotes é <B>multiplicado por {cfg.hpMultiplier}</B> (só aqui), para as lutas durarem mais e o time não ser varrido em poucos golpes.</li>}
-            <li>A luta é automática, com o mesmo motor da Liga Semanal: ordem por Agilidade, posturas, vantagem de tipo e personalidade.</li>
+            <li>A luta é automática, com o motor de combate das arenas: ordem por Agilidade, posturas, vantagem de tipo, personalidade e <B>habilidades passivas</B>.</li>
             <li><B>Não existe substituição no meio da luta.</B> Quando um mascote cai, o lugar dele fica vazio até o fim do combate.</li>
             <li>{limited ? <>O combate dura no máximo <B>{cfg.maxRounds} rodadas</B>. Se ninguém for eliminado até lá, vence quem tem mais HP total somado.</> : <>O combate termina quando um dos lados fica sem mascotes em pé. Se estourar o limite de rodadas do motor, vence quem tem mais HP total somado.</>}</li>
             <li>Buffs e debuffs do combate (Encorajador, Oportunista, etc.) valem <B>só naquela luta</B>; não ficam para a próxima.</li>
@@ -173,7 +184,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
               ["Perdi um mascote no bazar depois de me inscrever. E agora?", "Até as 21h de segunda a equipe é revalidada; mascote que sumiu invalida a inscrição. Depois do fechamento, os atributos ficam congelados e a equipe segue como foi inscrita."],
               ["Os atributos dos meus mascotes mudam durante a semana?", "Não neste modo: eles são fotografados no fechamento de segunda."],
               ["Meu mascote pode ser usado em outros modos ao mesmo tempo?", "Sim. O HP e a derrota daqui existem só neste evento."],
-              ["Habilidades passivas funcionam?", "Ainda não: o motor de combate usado aqui (o da Liga Semanal) não as executa."],
+              ["Habilidades passivas funcionam?", "Sim. Cada mascote usa a habilidade padrão dele ou a que você escolher na montagem (a oculta exige o TM). Veja a seção Habilidades."],
               ["Há recompensas?", "Ainda não. Serão definidas depois, e todas as colocações receberão algo."],
             ] as [string, string][]).map(([q, a]) => <div key={q}><dt className="font-black text-white">{q}</dt><dd className="text-slate-400">{a}</dd></div>)}
           </dl>

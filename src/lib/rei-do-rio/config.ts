@@ -36,6 +36,8 @@ export type ReiConfig = {
   betweenFightHealPct: number;
   /** Mínimo de inscritos válidos no fechamento (seg 21h); abaixo disso a edição é cancelada. */
   minParticipants: number;
+  /** Habilidades passivas ligadas (motor Arena). Desligadas = combate puro das posturas. */
+  abilities: boolean;
   /** Participantes mínimos para os modificadores valerem. */
   balanceMinPlayers: number;
 };
@@ -53,6 +55,7 @@ export const DEFAULT_CONFIG: ReiConfig = {
   healthPairing: 0,
   betweenFightHealPct: 0,
   minParticipants: 6,
+  abilities: true,
 };
 
 export function mergeConfig(raw: unknown): ReiConfig {

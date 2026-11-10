@@ -85,46 +85,48 @@ function MatchLine({ m, meId, onReplay, avatars }: { m: MatchRow; meId?: string;
   );
 }
 
-/** Combates do dia: resultados das rodadas feitas, confrontos já definidos da próxima e "a definir" das demais. */
-export function TodayCard({ today, meId, avatars, onReplay }: { today: NonNullable<EditionView["today"]>; meId?: string; avatars: EditionView["avatars"]; onReplay: (id: string) => void }) {
+/** Seus combates do dia: resultados já saídos, o confronto definido da próxima rodada e as demais "a definir". */
+export function TodayCard({ today, meId, avatars, onReplay, onSeeAll }: { today: NonNullable<EditionView["today"]>; meId?: string; avatars: EditionView["avatars"]; onReplay: (id: string) => void; onSeeAll: () => void }) {
+  const dayName = DAY_LABELS[today.day]?.toLowerCase() ?? "hoje";
+  const seeAll = <button onClick={onSeeAll} className="text-xs font-bold text-sky-300 hover:underline">ver todos os combates →</button>;
+  if (!today.participating) {
+    return (
+      <Card>
+        <Title orn="lantern" sub="Só participantes têm jogos próprios no dia." right={seeAll}>Combates de {dayName}</Title>
+        <p className="text-sm text-slate-400">Você não está inscrito nesta edição, mas pode acompanhar todas as partidas de todos os jogadores na aba <b className="text-white">Batalhas</b>.</p>
+      </Card>
+    );
+  }
   const nextIdx = today.rounds.findIndex((r) => r.status !== "DONE");
-  const lastDone = [...today.rounds].reverse().find((r) => r.status === "DONE")?.roundIndex;
   return (
     <Card>
-      <Title orn="lantern" sub="Rodadas às 09h, 12h, 15h, 18h e 21h. Os confrontos de cada rodada saem da classificação logo após a anterior.">Combates de {DAY_LABELS[today.day]?.toLowerCase() ?? "hoje"}</Title>
-      <div className="space-y-2">
+      <Title orn="lantern" sub="Rodadas às 09h, 12h, 15h, 18h e 21h. O adversário de cada rodada é definido assim que a anterior termina." right={seeAll}>Seus combates de {dayName}</Title>
+      <ol className="space-y-1.5">
         {today.rounds.map((r, i) => {
           const done = r.status === "DONE";
           const isNext = i === nextIdx;
+          const mine = r.matches?.[0] ?? null;
+          const pair = r.pairs?.[0] ?? null;
           return (
-            <details key={r.roundIndex} open={isNext || r.roundIndex === lastDone} className="group rounded-xl border border-slate-800 bg-slate-950/50">
-              <summary className="flex cursor-pointer list-none flex-wrap items-center gap-2 px-3 py-2">
+            <li key={r.roundIndex} className={`rounded-xl border p-2.5 ${isNext ? "border-amber-300/40 bg-amber-300/5" : "border-slate-800 bg-slate-950/50"}`}>
+              <div className="flex flex-wrap items-center gap-2">
                 <span className="font-mono text-sm font-black text-white">{hhmm(r.at)}</span>
-                <span className="text-[11px] text-slate-500">rodada {r.roundIndex}</span>
-                {done ? <Pill tone="green">concluída · {r.matches?.filter((m) => !m.bye).length ?? 0} combates</Pill>
-                  : isNext ? <Pill tone="gold">{r.pairs ? "próxima · confrontos definidos" : "próxima"}</Pill>
-                  : <Pill>a definir após a rodada anterior</Pill>}
-                <span className="ml-auto text-xs text-slate-500 transition group-open:rotate-90" aria-hidden>▸</span>
-              </summary>
-              <div className="px-3 pb-3">
-                {done && r.matches && <ul className="space-y-1">{r.matches.map((m) => <MatchLine key={m.id} m={m} meId={meId} onReplay={onReplay} avatars={avatars} />)}</ul>}
-                {!done && r.pairs && (
-                  <ul className="space-y-1">
-                    {r.pairs.map((p) => (
-                      <li key={p.a} className={`flex items-center gap-2 rounded-lg px-2 py-1.5 text-xs ${p.a === meId || p.b === meId ? "bg-amber-300/10 ring-1 ring-amber-300/30" : "bg-slate-900/40"}`}>
-                        <Avatar src={avatars[p.a]} name={p.aName} size={22} /><span className="text-slate-200">{p.aName}</span>
-                        <span className="text-slate-600">×</span>
-                        {p.b ? <><span className="text-slate-200">{p.bName}</span><Avatar src={avatars[p.b]} name={p.bName ?? "?"} size={22} /></> : <Pill>folga</Pill>}
-                      </li>
-                    ))}
-                  </ul>
+                {done ? (!mine || mine.bye ? <Pill>folga</Pill> : <Pill tone={mine.exhausted ? "red" : mine.winner === "DRAW" ? "slate" : (mine.winner === "A") === (mine.a === meId) ? "green" : "red"}>{mine.exhausted ? (mine.exhausted === "BOTH" ? "empate sem luta" : (mine.exhausted === "A") === (mine.a === meId) ? "derrota por falta de mascotes" : "vitória sem luta") : mine.winner === "DRAW" ? "empate" : (mine.winner === "A") === (mine.a === meId) ? "vitória" : "derrota"}</Pill>)
+                  : isNext ? <Pill tone="gold">{pair ? "próximo combate" : "próxima rodada"}</Pill> : <Pill>a definir</Pill>}
+                {done && mine && !mine.bye && (
+                  <>
+                    <span className="flex items-center gap-1.5 text-sm text-slate-200"><Avatar src={avatars[mine.a === meId ? mine.a : (mine.b ?? mine.a)]} name={mine.a === meId ? mine.aName : mine.bName ?? "?"} size={20} />vs <Avatar src={avatars[mine.a === meId ? (mine.b ?? mine.a) : mine.a]} name={mine.a === meId ? mine.bName ?? "?" : mine.aName} size={20} /><b className="text-white">{mine.a === meId ? mine.bName : mine.aName}</b></span>
+                    <span className="font-mono text-xs text-slate-500">{fmtPts(mine.a === meId ? mine.scoreA : mine.scoreB)} × {fmtPts(mine.a === meId ? mine.scoreB : mine.scoreA)}</span>
+                    {!mine.exhausted && <button onClick={() => onReplay(mine.id)} className="ml-auto rounded-md bg-sky-500/20 px-2 py-0.5 text-[11px] font-bold text-sky-200 hover:bg-sky-500/30">▶ Replay</button>}
+                  </>
                 )}
-                {!done && !r.pairs && <p className="text-xs text-slate-500">Os confrontos são definidos quando a rodada anterior termina, pela classificação daquele momento.</p>}
+                {!done && pair && (pair.b ? <span className="flex items-center gap-1.5 text-sm text-slate-200">contra <Avatar src={avatars[pair.a === meId ? (pair.b ?? pair.a) : pair.a]} name={pair.a === meId ? pair.bName ?? "?" : pair.aName} size={20} /><b className="text-white">{pair.a === meId ? pair.bName : pair.aName}</b></span> : <span className="text-sm text-slate-400">folga nesta rodada (sem adversário)</span>)}
+                {!done && !pair && <span className="text-xs text-slate-500">{isNext ? "Confronto ainda não definido." : "Definido quando a rodada anterior terminar."}</span>}
               </div>
-            </details>
+            </li>
           );
         })}
-      </div>
+      </ol>
     </Card>
   );
 }

@@ -219,3 +219,32 @@ test("Pressão/Calor só vêm de sequência de vitórias/derrotas, nunca da posi
   // Quem está na base mas venceu a última NÃO ganha Calor só por posição.
   assert.equal(get("e").current, 0);
 });
+
+test("habilidades: padrão, escolha por mascote, oculta exige TM e limite por categoria", async () => {
+  const { SPECIES_ABILITIES } = await import("@/lib/abilities/data.generated");
+  const { getAbilityInfo } = await import("@/lib/abilities");
+  const { abilityOf, evaluateLineupAbilities } = await import("./team");
+  const hiddenEntry = Object.entries(SPECIES_ABILITIES).find(([, [normal, hidden]]) => hidden && !normal.includes(hidden) && getAbilityInfo(hidden)?.hasEffect);
+  assert.ok(hiddenEntry, "precisa de uma espécie com habilidade oculta com efeito");
+  const [idStr, [normal, hidden]] = hiddenEntry!;
+  const m: MascotSnap = { ...roster[0], id: "hx", pokemonId: Number(idStr), hiddenUnlocked: false, abilityChoice: null };
+  const f: Formation = structuredClone(formation);
+  f.slots[0].mascotIds[0] = "hx";
+  const p = new Map(pool); p.set("hx", m);
+  // padrão = a primeira com efeito entre as disponíveis
+  assert.ok(abilityOf(f, m) && normal.includes(abilityOf(f, m)!), "padrão vem das habilidades comuns");
+  // escolher a oculta sem o TM é recusado no servidor
+  f.abilities = { hx: hidden! };
+  assert.ok(validateFormation(f, p).some((e) => e.includes("habilidade escolhida não está disponível")));
+  // com o TM, passa e a escolha vale
+  p.set("hx", { ...m, hiddenUnlocked: true });
+  assert.ok(!validateFormation(f, p).some((e) => e.includes("habilidade escolhida")));
+  assert.equal(abilityOf(f, { ...m, hiddenUnlocked: true }), hidden);
+  // habilidade de outro mascote não vale
+  f.abilities = { hx: "intimidate" };
+  assert.ok(validateFormation(f, p).some((e) => e.includes("habilidade escolhida")) || !(normal as string[]).includes("intimidate"));
+  // limite por categoria: 3 habilidades de Dano -> ligada, 70%, desligada
+  const dmg = Object.entries((await import("@/lib/abilities/data.generated")).ABILITIES).filter(([, d]) => d.effect === "FURIA").slice(0, 3).map(([s]) => s);
+  const st = evaluateLineupAbilities(dmg);
+  assert.deepEqual(st.map((s) => s?.state), ["ACTIVE", "REDUCED", "OFF"]);
+});

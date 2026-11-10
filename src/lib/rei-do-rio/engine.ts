@@ -3,12 +3,13 @@
 // administrativas e nos testes. O combate usa o motor oficial `runLeagueCombat`.
 import type { ArenaTurnLog } from "@/lib/arena-z";
 import { runLeagueCombat, toLeagueMascot, type LeagueMascot } from "@/lib/league-combat";
+import type { AbilityLineup } from "@/lib/abilities/combat";
 import { getCombatRoleLabel } from "@/lib/combat-roles";
 import { hashStr } from "@/lib/league-pairing";
 import { PT, type ReiConfig } from "./config";
 import { analyzeBattle, emptyAgg, mergeAgg, sumAggs, type Fighter, type MascotAgg, type MascotMatchStats, type TeamMatchStats } from "./scoring";
 import { buildStandings, modifierPct, pairRound, type PastMatch, type Result, type StandRow } from "./standings";
-import { applyBattleToState, aliveCount, chooseActives, diffActives, exhaustedSlots, type DayState, type Formation, type MascotSnap, type Substitution } from "./team";
+import { abilityOf, applyBattleToState, aliveCount, chooseActives, diffActives, evaluateLineupAbilities, exhaustedSlots, type DayState, type Formation, type MascotSnap, type Substitution } from "./team";
 
 export type Runtime = {
   pid: string; name: string; isBot?: boolean;
@@ -39,7 +40,9 @@ export type MatchOutcome = {
   replay: ArenaTurnLog[] | null;
 };
 
-export type FightFn = (a: LeagueMascot[], b: LeagueMascot[], startHp: Map<string, number>, seed: string, maxRounds?: number) => { log: ArenaTurnLog[]; finalHp: Record<string, number>; rounds: number; winner: "A" | "B" | "DRAW" };
+/** Extras da luta: limite de rodadas e habilidades por lado (só o motor Arena as executa). */
+export type FightExtras = { maxRounds?: number; abilities?: { A: AbilityLineup; B: AbilityLineup } };
+export type FightFn = (a: LeagueMascot[], b: LeagueMascot[], startHp: Map<string, number>, seed: string, extras?: FightExtras) => { log: ArenaTurnLog[]; finalHp: Record<string, number>; rounds: number; winner: "A" | "B" | "DRAW" };
 
 /** Mulberry32: torna o motor (que usa Math.random) reproduzível a partir da seed registrada. */
 function mulberry32(seed: number) {
@@ -52,14 +55,16 @@ export function withSeededRandom<T>(seed: string, fn: () => T): T {
   try { return fn(); } finally { Math.random = prev; }
 }
 
-export const officialFight: FightFn = (a, b, startHp, seed, maxRounds) => {
+export const officialFight: FightFn = (a, b, startHp, seed, extras) => {
+  const maxRounds = extras?.maxRounds;
   const r = withSeededRandom(seed, () => runLeagueCombat(a, b, null, [], [], { startingHp: startHp, includeFinalHp: true, ...(maxRounds && maxRounds < 150 ? { maxRounds } : {}) }));
   return { log: r.log, finalHp: r.finalHpById ?? {}, rounds: r.rounds, winner: r.winner };
 };
 
-function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fighters: Fighter[] } {
+function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fighters: Fighter[]; abilities: AbilityLineup } {
   const mascots: LeagueMascot[] = [];
   const fighters: Fighter[] = [];
+  const slugs: (string | null)[] = [];
   rt.state.active.forEach((id, i) => {
     if (!id) return;
     const snap = rt.roster.get(id);
@@ -74,8 +79,17 @@ function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fight
     m.hp = st.max; // HP máximo persistente do evento
     mascots.push(m);
     fighters.push({ id, name: m.name, pokemonId: m.pokemonId, role: getCombatRoleLabel(m.combatRole), slot: i + 1, maxHp: st.max, startHp: st.hp });
+    slugs.push(abilityOf(rt.formation, snap));
   });
-  return { mascots, fighters };
+  // Habilidades: limite por categoria pela ORDEM DOS SLOTS em campo (1º 100%, 2º 70%, 3º+ desligado), recalculado a cada luta.
+  const states = evaluateLineupAbilities(slugs);
+  const abilities: AbilityLineup = {};
+  fighters.forEach((f, i) => {
+    const s = states[i];
+    f.ability = s ? { slug: s.slug, name: s.name, state: s.state, factor: s.factor, reason: s.reason } : null;
+    if (s && s.factor > 0) abilities[f.id] = { slug: s.slug, factor: s.factor };
+  });
+  return { mascots, fighters, abilities };
 }
 
 const dmgOf = (s: TeamMatchStats) => s.damageDealt;
@@ -108,7 +122,7 @@ export function runMatch(a: Runtime, b: Runtime, ctx: { roundIndex: number; dayI
     for (const f of [...la.fighters, ...lb.fighters]) finalHp[f.id] = f.startHp;
   } else {
     const startHp = new Map([...la.fighters, ...lb.fighters].map((f) => [f.id, f.startHp]));
-    const r = fight(la.mascots, lb.mascots, startHp, seed, cfg.maxRounds);
+    const r = fight(la.mascots, lb.mascots, startHp, seed, { maxRounds: cfg.maxRounds, ...(cfg.abilities ? { abilities: { A: la.abilities, B: lb.abilities } } : {}) });
     log = r.log; finalHp = r.finalHp; rounds = r.rounds; winner = r.winner;
     const notes: string[] = [];
     const why = (p: number, row?: StandRow) => (p > 0 ? `Calor da Lareira +${p}% (${row?.lossStreak ?? 0} derrotas seguidas)` : `Pressão do Trono ${p}% (${row?.winStreak ?? 0} vitórias seguidas)`);

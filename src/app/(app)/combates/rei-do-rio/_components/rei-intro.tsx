@@ -29,7 +29,7 @@ function buildPages(cfg: EditionView["edition"]["cfg"]): Page[] {
     {
       eyebrow: "No combate", title: "Como seus mascotes lutam", orn: "baubleBall",
       text: `Seis mascotes por lado, um de cada slot. Não há troca no meio da luta: quem cai fica fora até o fim do combate. A luta dura no máximo ${cfg.maxRounds} rodadas; se ninguém for eliminado, vence quem tiver mais HP somado.`,
-      points: ["O HP continua de uma luta para a outra e não há cura entre combates.", "Mascote derrotado só volta na noite, com HP cheio.", `O HP máximo neste evento é ${cfg.hpMultiplier}× o normal (só aqui).`],
+      points: ["O HP continua de uma luta para a outra e não há cura entre combates.", "Mascote derrotado só volta na noite, com HP cheio.", `O HP máximo neste evento é ${cfg.hpMultiplier}× o normal (só aqui).`, "Cada mascote usa uma habilidade passiva: a padrão dele ou a que você escolher na montagem."],
     },
     {
       eyebrow: "Estratégia", title: "Troca por vida", orn: "snowflake",

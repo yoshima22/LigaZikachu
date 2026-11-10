@@ -4,6 +4,7 @@ import { revalidatePath } from "next/cache";
 import { mondayOf } from "@/lib/rei-do-rio/schedule";
 import { autoBuild, type Preset } from "@/lib/rei-do-rio/auto-build";
 import type { Formation, Strategy } from "@/lib/rei-do-rio/team";
+import { arenaFight } from "@/lib/rei-do-rio/fight-arena";
 import { makeSimPlayer, simulateWeek, type BotTier } from "@/lib/rei-do-rio/simulate";
 import {
   addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, loadPlayerPool, lockEdition, processNextRound,
@@ -202,7 +203,7 @@ export async function adminSimulateAction(input: { players: number; weeks: numbe
     for (let w = 0; w < weeks; w++) {
       const players = Array.from({ length: n }, (_, i) => makeSimPlayer(w * 1000 + i + 1, presets[i % 4], tiers[i % 3], typeof input.swapPct === "number" ? Math.max(0, Math.min(90, Math.round(input.swapPct))) : i % 2 ? "PRESERVE" : "KEEP"));
       const cfg = balanceToConfig(input);
-      const sim = simulateWeek(players, { editionId: `sim-${w}`, cfg });
+      const sim = simulateWeek(players, { editionId: `sim-${w}`, cfg, fight: arenaFight });
       out.push({ week: w + 1, metrics: sim.metrics, top: sim.standings.slice(0, 5).map((r) => ({ name: r.name, score: r.score, wins: r.wins })) });
     }
     return { ok: true as const, runs: out };

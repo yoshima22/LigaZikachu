@@ -50,7 +50,7 @@ export type EditionView = {
   /** Destaques da edição por categoria (top 3 mascotes). */
   highlights: Highlight[];
   /** Combates do dia (resolvidos, próximos confrontos e rodadas a definir). */
-  today: { day: number; rounds: TodayRound[] } | null;
+  today: { day: number; /** O jogador está inscrito? (só então há jogos "dele" a mostrar) */ participating: boolean; rounds: TodayRound[] } | null;
   rounds: { roundIndex: number; dayIndex: number; slotInDay: number; scheduledAt: string; status: string; error: string | null }[];
   standings: StandRow[];
   /** Composição dos pontos por jogador (centésimos por categoria) e nº de lutas — explica a classificação. */
@@ -140,7 +140,9 @@ export async function getEditionView(editionId: string, playerId: string): Promi
   if (ed.phase !== "PREPARATION" && ed.phase !== "CANCELED") {
     const day = nextRound?.dayIndex ?? ed.rounds[ed.rounds.length - 1]?.dayIndex ?? 1;
     const dayRounds = ed.rounds.filter((r) => r.dayIndex === day);
-    const dayRows = await queryMatchRows(Prisma.sql`"editionId" = ${editionId} AND "dayIndex" = ${day}`, "ASC", 400, 0, nm);
+    // Só os jogos DO jogador no dia (todos os combates de todos ficam na aba Batalhas).
+    const mineId = mine?.id ?? null;
+    const dayRows = mineId ? await queryMatchRows(Prisma.sql`"editionId" = ${editionId} AND "dayIndex" = ${day} AND ("participantAId" = ${mineId} OR "participantBId" = ${mineId})`, "ASC", 20, 0, nm) : [];
     let pairsFor: { roundIndex: number; pairs: NonNullable<TodayRound["pairs"]> } | null = null;
     if (nextRound && ed.phase !== "FINISHED") {
       const prev = nextRound.roundIndex > 1 ? ed.rounds[nextRound.roundIndex - 2] : null;
@@ -148,11 +150,12 @@ export async function getEditionView(editionId: string, playerId: string): Promi
       if (snapshot && (!prev || prev.status === "DONE")) {
         const past = (await prisma.reiRioMatch.findMany({ where: { editionId }, select: { participantAId: true, participantBId: true, dayIndex: true } })).map((m) => ({ a: m.participantAId, b: m.participantBId, day: m.dayIndex }));
         const pairs = pairRound(snapshot, past, nextRound.dayIndex, `${editionId}:r${nextRound.roundIndex}`);
-        pairsFor = { roundIndex: nextRound.roundIndex, pairs: pairs.map((x) => ({ a: x.aId, b: x.bId, aName: nm.get(x.aId) ?? "?", bName: x.bId ? nm.get(x.bId) ?? "?" : null })) };
+        pairsFor = { roundIndex: nextRound.roundIndex, pairs: pairs.filter((x) => mineId && (x.aId === mineId || x.bId === mineId)).map((x) => ({ a: x.aId, b: x.bId, aName: nm.get(x.aId) ?? "?", bName: x.bId ? nm.get(x.bId) ?? "?" : null })) };
       }
     }
     today = {
       day,
+      participating: !!mineId,
       rounds: dayRounds.map((r) => ({
         roundIndex: r.roundIndex, slotInDay: r.slotInDay, at: r.scheduledAt.toISOString(), status: r.status,
         matches: r.status === "DONE" ? dayRows.filter((m) => m.roundIndex === r.roundIndex) : null,
@@ -203,7 +206,7 @@ export async function loadReplay(matchId: string) {
   const parts = await prisma.reiRioParticipant.findMany({ where: { id: { in: [m.participantAId, m.participantBId] } }, select: { id: true, displayName: true } });
   const nm = new Map(parts.map((p) => [p.id, p.displayName]));
   const s = m.summaryJson as unknown as MatchSummary;
-  const lineup = (side: "A" | "B") => (s[side]?.lineup ?? []).map((f) => ({ id: f.id, name: f.name, pokemonId: f.pokemonId, role: f.role, maxHp: f.maxHp, startHp: f.startHp < f.maxHp ? f.startHp : undefined, ownerId: side === "A" ? m.participantAId : m.participantBId! }));
+  const lineup = (side: "A" | "B") => (s[side]?.lineup ?? []).map((f, i) => ({ id: f.id, name: f.name, pokemonId: f.pokemonId, role: f.role, maxHp: f.maxHp, startHp: f.startHp < f.maxHp ? f.startHp : undefined, ownerId: side === "A" ? m.participantAId : m.participantBId!, ...(f.ability && f.ability.state !== "NONE" ? { ability: { slug: f.ability.slug, state: f.ability.state, factor: f.ability.factor, reason: f.ability.reason, slot: i + 1 } } : {}) }));
   return {
     playerAId: m.participantAId, playerBId: m.participantBId, playerAName: nm.get(m.participantAId) ?? "A", playerBName: nm.get(m.participantBId) ?? "B",
     winnerId: m.winnerId, isDraw: m.isDraw, replay: (m.replayJson ?? []) as never[], lineupA: lineup("A"), lineupB: lineup("B"),

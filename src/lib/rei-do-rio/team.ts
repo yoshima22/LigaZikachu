@@ -1,6 +1,7 @@
 // Formação, validação (servidor e cliente) e estado diário do Rei do Rio. Tudo puro.
 import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
+import { availableAbilities, evaluateTeamAbilities, getAbilityInfo, resolveAbilitySlug, type AbilitySlot } from "@/lib/abilities";
 import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "./config";
 
 /** Legado (antes da troca por slot). KEEP = "até cair"; PRESERVE = sugestão automática por postura. */
@@ -11,7 +12,13 @@ export type Strategy = "KEEP" | "PRESERVE";
  * (vivo, com HP > X%) assume. 0/null/ausente = "até cair" (só sai quando derrotado).
  */
 export type SlotPlan = { role: string; mascotIds: string[]; swapBelowPct?: number | null };
-export type Formation = { slots: SlotPlan[]; /** @deprecated use swapBelowPct por slot */ strategy?: Strategy };
+export type Formation = {
+  slots: SlotPlan[];
+  /** Habilidade escolhida por mascote (slug). Ausente = a do próprio mascote (escolha salva) ou a padrão da espécie. */
+  abilities?: Record<string, string>;
+  /** @deprecated use swapBelowPct por slot */
+  strategy?: Strategy;
+};
 
 export const SWAP_MIN = 10;
 export const SWAP_MAX = 90;
@@ -47,6 +54,9 @@ export type MascotSnap = {
   personality: string | null;
   speciesNameOverride?: string | null; primaryTypeOverride?: string | null; secondaryTypeOverride?: string | null;
   preferredCombatRole?: string | null;
+  /** Habilidade oculta liberada (TM) e a escolha salva no mascote. */
+  hiddenUnlocked?: boolean;
+  abilityChoice?: string | null;
   unlocked: string[];
 };
 
@@ -59,6 +69,22 @@ export type DayState = {
 
 export const isValidRole = (role: string) => (COMBAT_ROLE_VALUES as readonly string[]).includes(role);
 export const roleAllowedFor = (role: string, m: Pick<MascotSnap, "unlocked">) => isValidRole(role) && canSelectTrainingStance(role, m.unlocked);
+
+/** Habilidades que o mascote pode usar (a oculta só com o TM). */
+export const abilityOptionsOf = (m: Pick<MascotSnap, "pokemonId" | "hiddenUnlocked">) => availableAbilities(m.pokemonId, Boolean(m.hiddenUnlocked), "REAL");
+
+/** Habilidade em uso: a escolhida na formação, senão a salva no mascote, senão a padrão da espécie. */
+export function abilityOf(f: Pick<Formation, "abilities">, m: MascotSnap): string | null {
+  return resolveAbilitySlug({ pokemonId: m.pokemonId, choice: f.abilities?.[m.id] ?? m.abilityChoice ?? null, hiddenUnlocked: Boolean(m.hiddenUnlocked), mode: "REAL" });
+}
+
+export type AbilityState = { slug: string; name: string; state: AbilitySlot["state"]; factor: number; reason: string | null };
+
+/** Estado de cada habilidade de uma escalação em campo (ordem dos slots): ligada, reduzida (70%) ou desligada. */
+export function evaluateLineupAbilities(slugs: Array<string | null>): Array<AbilityState | null> {
+  const slots = evaluateTeamAbilities(slugs);
+  return slugs.map((slug, i) => (slug && getAbilityInfo(slug)?.hasEffect ? { slug, name: getAbilityInfo(slug)!.name, state: slots[i].state, factor: slots[i].factor, reason: slots[i].reason } : null));
+}
 
 export function emptyFormation(): Formation {
   return { slots: Array.from({ length: SLOT_COUNT }, () => ({ role: "ATTACKER", mascotIds: [], swapBelowPct: DEFAULT_SWAP_PCT })) };
@@ -73,6 +99,11 @@ export const formationMascotIds = (f: Formation) => f.slots.flatMap((s) => s.mas
 export function validateFormation(f: Formation, pool: Map<string, MascotSnap>, lockedIds: Set<string> | null = null): string[] {
   const errors: string[] = [];
   if (!f || !Array.isArray(f.slots) || f.slots.length !== SLOT_COUNT) return [`A formação precisa de exatamente ${SLOT_COUNT} slots.`];
+  for (const [id, slug] of Object.entries(f.abilities ?? {})) {
+    const m = pool.get(id);
+    if (!m) { errors.push("Habilidade escolhida para um mascote que não está na equipe."); continue; }
+    if (!abilityOptionsOf(m).includes(slug)) errors.push(`${m.nickname ?? `#${m.pokemonId}`}: a habilidade escolhida não está disponível (a oculta exige o TM).`);
+  }
   const seen = new Set<string>();
   f.slots.forEach((slot, i) => {
     const label = `Slot ${i + 1}`;

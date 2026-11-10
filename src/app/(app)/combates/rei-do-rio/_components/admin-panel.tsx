@@ -6,7 +6,39 @@ import type { SimMetrics } from "@/lib/rei-do-rio/simulate";
 import { DAY_LABELS } from "@/lib/rei-do-rio/schedule";
 import type { EditionView } from "@/lib/rei-do-rio/view";
 import { adminAddBotsAction, adminCommandAction, adminCreateEditionAction, adminSimulateAction, adminToggleRegistrationAction, type AdminCommand } from "../actions";
+import { REI_ASSETS } from "@/lib/rei-do-rio/assets";
 import { Card, Pill, Title } from "./rei-ui";
+
+const GALLERY: { label: string; url: string; wide?: boolean }[] = [
+  { label: "Banner do topo (2000×667)", url: REI_ASSETS.banner, wide: true },
+  { label: "Capa do tutorial (1122×1402)", url: REI_ASSETS.cover },
+  { label: "Fundo (1536×1024)", url: REI_ASSETS.background },
+  { label: "Coroa", url: REI_ASSETS.ornaments.crown }, { label: "Lanterna", url: REI_ASSETS.ornaments.lantern }, { label: "Presente", url: REI_ASSETS.ornaments.gift },
+  { label: "Bola de Natal", url: REI_ASSETS.ornaments.baubleBall }, { label: "Floco de neve", url: REI_ASSETS.ornaments.snowflake },
+  { label: "Cantos de gelo (SVG)", url: "/events/rei-do-rio/ornaments/frost-corner.svg" }, { label: "Azevinho (SVG)", url: "/events/rei-do-rio/ornaments/holly.svg" },
+  { label: "Guirlanda (SVG)", url: "/events/rei-do-rio/ornaments/garland.svg" },
+];
+
+/** Todas as imagens do evento, com verificação de carregamento (útil para diagnosticar imagem que não aparece). */
+function AssetGallery() {
+  const [status, setStatus] = useState<Record<string, "ok" | "erro">>({});
+  const failed = Object.values(status).filter((s) => s === "erro").length;
+  return (
+    <Card>
+      <Title orn="gift" sub="Onde cada imagem aparece: banner e cantos de gelo/azevinho no topo da página; coroa no pódio e nos títulos; lanterna, presente, bola e floco nos títulos dos cartões e do tutorial; capa no tutorial.">Imagens do evento</Title>
+      {failed > 0 && <p role="alert" className="mb-2 rounded-lg bg-red-500/10 p-2 text-xs text-red-200">{failed} imagem(ns) não carregaram neste navegador. Verifique se o deploy mais recente está no ar e se o Storage está acessível.</p>}
+      <ul className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+        {GALLERY.map((g) => (
+          <li key={g.url} className={`rounded-xl border p-2 ${status[g.url] === "erro" ? "border-red-400/50 bg-red-500/5" : "border-slate-800 bg-slate-900/60"} ${g.wide ? "col-span-2 sm:col-span-4" : ""}`}>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={g.url} alt="" onLoad={() => setStatus((s) => ({ ...s, [g.url]: "ok" }))} onError={() => setStatus((s) => ({ ...s, [g.url]: "erro" }))} className={`mx-auto object-contain ${g.wide ? "max-h-40" : "h-24"}`} />
+            <p className="mt-1 text-center text-[10px] font-bold text-slate-300">{g.label} {status[g.url] === "ok" ? <span className="text-emerald-300">✓</span> : status[g.url] === "erro" ? <span className="text-red-300">✕</span> : null}</p>
+          </li>
+        ))}
+      </ul>
+    </Card>
+  );
+}
 
 type Run = { week: number; metrics: SimMetrics; top: { name: string; score: number; wins: number }[] };
 
@@ -39,6 +71,7 @@ export function AdminPanel({ view, onChanged, onCreated }: { view: EditionView |
 
   return (
     <div className="space-y-4">
+      <AssetGallery />
       {msg && <div role="status" className={`rounded-xl border p-3 text-sm ${msg.ok ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-red-400/30 bg-red-500/10 text-red-200"}`}>{msg.text}</div>}
 
       <Card>

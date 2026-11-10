@@ -10,7 +10,7 @@ export const CATEGORY_LABELS: Record<PointCategory, string> = {
   damage: "Dano", ko: "KOs e assistências", support: "Suporte", resilience: "Resistência", win: "Vitória", leadership: "Permanência no topo",
 };
 
-export type Fighter = { id: string; name: string; pokemonId: number; role: string; slot: number; maxHp: number; startHp: number };
+export type Fighter = { id: string; name: string; pokemonId: number; role: string; slot: number; maxHp: number; startHp: number; ability?: { slug: string; name: string; state: "ACTIVE" | "REDUCED" | "OFF" | "NONE"; factor: number; reason: string | null } | null };
 
 export type MascotMatchStats = {
   id: string; name: string; pokemonId: number; role: string; slot: number; side: "A" | "B";
@@ -74,6 +74,25 @@ export function analyzeBattle(input: AnalyzeInput): { A: Map<string, MascotMatch
     if (!actor || !target) continue;
     const round = e.round ?? rounds;
 
+    if (e.action === "ABILITY") {
+      // Habilidades: cura efetiva (damage = cura) e debuffs reais com origem registrada.
+      const heal = Math.max(0, e.damage);
+      if (heal > 0 && e.targetHpAfter !== undefined) {
+        const before = hp.get(target.id) ?? 0;
+        const eff = Math.min(heal, Math.max(0, (max.get(target.id) ?? before) - before));
+        if (actor.id !== target.id && actor.side === target.side) actor.healing += eff;
+      }
+      for (const ev of e.debuffEvents ?? []) {
+        if (ev.kind !== "APPLY" || !ev.sourceId) continue;
+        const src = all.get(ev.sourceId); const tgt = all.get(ev.targetId);
+        if (src && tgt && src.side !== tgt.side) src.debuffs += 1;
+      }
+      if (e.targetHpAfter !== undefined) {
+        hp.set(target.id, Math.max(0, e.targetHpAfter));
+        if (e.targetHpAfter <= 0 && target.survived) { target.survived = false; target.roundsAlive = Math.min(target.roundsAlive, round); }
+      }
+      continue;
+    }
     if (e.action === "HEAL") {
       const before = hp.get(target.id) ?? 0;
       const room = Math.max(0, (max.get(target.id) ?? before) - before);

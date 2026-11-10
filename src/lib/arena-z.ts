@@ -406,8 +406,10 @@ export type ArenaCombatOptions = {
   maxTurns?: number;
   /** Seed canônica da partida. Quando omitida, mantém o comportamento aleatório tradicional. */
   seed?: number;
-  /** Habilidades passivas (só o Arena Draft usa). Sem isto o combate é idêntico ao de sempre. */
+  /** Habilidades passivas (Arena Draft, Arena Z treino e Rei do Rio). Sem isto o combate é idêntico ao de sempre. */
   abilities?: AbilityLineup;
+  /** Limite de rodadas (Rei do Rio). Ao atingir, vence quem tem mais HP total. Ausente = sem limite de rodadas. */
+  maxRounds?: number;
 };
 
 const combatRng = new AsyncLocalStorage<() => number>();
@@ -968,7 +970,8 @@ function runArenaCombatInternal(
   while (
     alive(attackers, hp).length > 0 &&
     alive(defenders, hp).length > 0 &&
-    turn <= segmentEnd
+    turn <= segmentEnd &&
+    (options.maxRounds === undefined || round <= options.maxRounds)
   ) {
     if (abilityEngine) {
       abilityEngine.onRoundStart(round);

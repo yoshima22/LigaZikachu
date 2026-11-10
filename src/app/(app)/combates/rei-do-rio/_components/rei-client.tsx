@@ -134,7 +134,7 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
                 <EditionNotice ed={ed} />
                 {ed.phase === "FINISHED" && ed.championName && <Card glow><div className="flex items-center justify-center gap-3"><Ornament k="crown" size={56} /><p className="text-center text-2xl font-black text-amber-200">{ed.championName} é o campeão!</p></div></Card>}
                 <Card><Title orn="crown" sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} avatars={view.avatars} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} avatars={view.avatars} /></div></Card>
-                {view.today && <TodayCard today={view.today} meId={me?.participantId} avatars={view.avatars} onReplay={openReplay} />}
+                {view.today && <TodayCard today={view.today} meId={me?.participantId} avatars={view.avatars} onReplay={openReplay} onSeeAll={() => setTab("batalhas")} />}
                 <HighlightsCard highlights={view.highlights} avatars={view.avatars} />
               </div>
               <div className="space-y-4">
@@ -161,7 +161,7 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
                     {me && <div className="flex flex-wrap items-center gap-2"><Pill tone="green">Inscrição registrada</Pill><button onClick={() => start(async () => { const r = await withdrawAction(ed.id); flash(r.ok, r.ok ? "Inscrição cancelada." : r.error ?? ""); void refresh(); })} className="text-xs text-red-300 underline">Cancelar inscrição</button></div>}
                     {!ed.registrationOpen && <p className="mt-2 text-sm text-amber-300">As inscrições estão fechadas pelo admin.</p>}
                   </Card>
-                  {ed.registrationOpen && <TeamBuilder key={`reg-${builderKey}-${me?.participantId ?? "new"}`} pool={view.pool} lockedIds={null} initial={me?.original ?? null} mode="register" onSave={saveRegistration} saving={saving} />}
+                  {ed.registrationOpen && <TeamBuilder key={`reg-${builderKey}-${me?.participantId ?? "new"}`} pool={view.pool} lockedIds={null} initial={me?.original ?? null} mode="register" hpMult={ed.cfg.hpMultiplier} onSave={saveRegistration} saving={saving} />}
                 </>
               )}
               {ed.phase !== "PREPARATION" && !me && <Empty icon="🚪" title="Você não está nesta edição">A inscrição é voluntária e encerrou às 21h de segunda. Ainda dá para acompanhar tudo pelas outras abas.</Empty>}
@@ -181,7 +181,7 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
                   )}
                   {ed.phase === "REST" ? (
                     <TeamBuilder
-                      key={`rest-${builderKey}`} pool={me.roster} lockedIds={new Set(me.roster.map((m) => m.id))} initial={restInit ?? me.restPlan ?? me.original} mode="rest" onSave={saveRest} saving={saving}
+                      key={`rest-${builderKey}`} pool={me.roster} lockedIds={new Set(me.roster.map((m) => m.id))} initial={restInit ?? me.restPlan ?? me.original} mode="rest" hpMult={ed.cfg.hpMultiplier} onSave={saveRest} saving={saving}
                       extraActions={<>
                         <button onClick={() => { setRestInit(me.original); setBuilderKey((k) => k + 1); }} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">↺ Restaurar original de segunda</button>
                         {me.yesterday && <button onClick={() => { setRestInit(me.yesterday); setBuilderKey((k) => k + 1); }} className="rounded-xl border border-slate-700 px-3 py-2 text-xs font-bold text-slate-300 hover:text-white">⟲ Reaproveitar a de ontem</button>}
