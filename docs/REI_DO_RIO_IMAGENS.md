@@ -5,6 +5,8 @@ Paleta da UI (para a arte conversar com a tela): azul-noite `#0b1d3a`, azul-gelo
 
 Regras para TODAS as imagens: sem texto, letras, logotipos, molduras, ícones de interface ou marca d'água; **sem personagens reconhecíveis de franquias** (use silhuetas genéricas de criaturas, se precisar); sem pessoas com rosto.
 
+**Publicadas (2026-11-10)** no bucket público `assets` do Supabase, em `events/rei-do-rio/` (constantes em `src/lib/rei-do-rio/assets.ts`; republicar com `npx tsx scripts/rei-do-rio-upload-assets.ts <pasta>`): `banner.webp` (2000×667), `cover.webp` (1122×1402), `background.webp` (1536×1024) e `ornaments/` → `crown`, `lantern`, `gift`, `bauble-ball`, `snowflake` (1254×1254, transparentes). O banner já está ligado ao Hero (fundo no desktop, faixa acima do texto no celular). Capa, fundo e ornamentos ainda não estão na UI.
+
 Já prontos (vetoriais, feitos à mão): `public/events/rei-do-rio/ornaments/` → `snowflake.svg`, `bauble.svg`, `holly.svg`, `garland.svg` (repete na horizontal), `crown.svg`, `frost-corner.svg` (canto superior esquerdo; espelhar para os outros).
 
 ---

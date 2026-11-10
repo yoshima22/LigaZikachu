@@ -148,18 +148,25 @@ export function StackBar({ parts, labels = false, thin = false }: { parts: { key
 
 export function Hero({ name, phase, restDay, isTest, right, banner }: { name: string; phase: string; restDay: number | null; isTest: boolean; right?: ReactNode; banner?: string | null }) {
   return (
-    <header className="relative overflow-hidden rounded-3xl border border-sky-200/15 bg-gradient-to-br from-[#0b1d3a] via-[#10294f] to-[#1a1033] p-5 sm:p-7">
+    <header className={`relative overflow-hidden rounded-3xl border border-sky-200/15 bg-gradient-to-br from-[#0b1d3a] via-[#10294f] to-[#1a1033] p-5 sm:p-7 ${banner ? "sm:min-h-[340px] lg:min-h-[400px]" : ""}`}>
       {banner && (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img src={banner} alt="" className="absolute inset-0 h-full w-full object-cover opacity-40" />
+        <>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src={banner} alt="" className="absolute inset-0 hidden h-full w-full object-cover object-right sm:block" />
+          {/* Celular: a arte inteira numa faixa acima do texto (nada de texto sobre a imagem). */}
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <div className="relative -mx-5 -mt-5 mb-3 overflow-hidden sm:hidden"><img src={banner} alt="" className="block h-auto w-full max-w-none" /></div>
+          {/* Escurece a esquerda para o título ficar legível; a arte aparece inteira à direita. */}
+          <div aria-hidden className="absolute inset-0 hidden bg-gradient-to-r from-[#0b1d3a]/70 via-[#0b1d3a]/35 to-transparent sm:block" />
+        </>
       )}
       <Snow />
       <div aria-hidden className="absolute -right-6 -top-6 select-none text-[120px] opacity-10">👑</div>
       <div aria-hidden className="absolute inset-x-0 bottom-0 h-16 bg-gradient-to-t from-sky-300/10 to-transparent" />
-      <div className="relative">
+      <div className="relative flex h-full flex-col">
         <Lights />
-        <div className="mt-3 flex flex-wrap items-start justify-between gap-4">
-          <div>
+        <div className="mt-3 flex flex-1 flex-wrap items-start justify-between gap-4">
+          <div className="flex h-full min-w-0 flex-col sm:max-w-[55%]">
             <div className="flex flex-wrap items-center gap-2">
               <Pill tone="red">🔒 Só ADMIN</Pill>
               {isTest && <Pill tone="purple">Edição de teste</Pill>}
@@ -169,8 +176,9 @@ export function Hero({ name, phase, restDay, isTest, right, banner }: { name: st
             </h1>
             <p className="mt-1 max-w-xl text-sm text-sky-100/70">Dezoito mascotes, seis posturas, uma coroa. Monte a equipe na segunda e sobreviva até sexta — os combates acontecem mesmo sem você entrar no site.</p>
             <div className="mt-3"><PhaseStepper phase={phase} restDay={restDay} /></div>
+            {banner && right && <div className="mt-auto pt-4">{right}</div>}
           </div>
-          {right}
+          {!banner && right}
         </div>
       </div>
     </header>
