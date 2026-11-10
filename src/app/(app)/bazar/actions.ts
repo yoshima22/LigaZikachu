@@ -55,6 +55,7 @@ import {
   ORDER_STAT_KEYS,
   matchesMascotRequirements,
   orderPriceFor,
+  parseEggPrices,
 } from "@/lib/bazar-orders";
 import {
   MAX_ACTIVE_PREMIUM_LISTINGS,
@@ -4862,7 +4863,7 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
         OR: [{ bazarListed: false }, { id: { in: listedIds } }],
         isEquipped: false, operationsLocked: false, primordialBoundPlayerId: null, arenaState: "FREE",
         ...(order.personality ? { personality: order.personality as never } : {}),
-        ...(order.eggType ? { hatchedFromEggType: { in: order.eggType.split(",") as never[] } } : {}),
+        ...(order.eggType ? { hatchedFromEggType: { in: parseEggPrices(order.eggType).map((e) => e.type) as never[] } } : {}),
       },
       select: { id: true, level: true, nickname: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
       orderBy: { level: "asc" },
