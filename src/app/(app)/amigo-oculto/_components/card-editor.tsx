@@ -9,8 +9,8 @@ const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
 // Cartinha aleatória (para o botão "Surpreenda-me").
 export function randomCard(funnyOnly = true): CardData {
   const pool = LINES.filter((l) => !funnyOnly || l.funny);
-  const lines = [...pool].sort(() => Math.random() - 0.5).slice(0, 2).map((l) => l.key);
-  return { greeting: pick(GREETINGS).key, lines, closing: pick(CLOSINGS).key, background: pick(BACKGROUNDS).key, sticker: pick(STICKERS), image: pick(IMAGES).key };
+  const lines = [...pool].sort(() => Math.random() - 0.5).slice(0, 2 + Math.floor(Math.random() * 2)).map((l) => l.key);
+  return { greeting: pick(GREETINGS.slice(2)).key, lines, closing: pick(CLOSINGS).key, background: pick(BACKGROUNDS).key, sticker: pick(STICKERS), image: pick(IMAGES).key };
 }
 
 export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: CardData) => void }) {
@@ -27,19 +27,19 @@ export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: Car
         </div>
       </div>
       <div>
-        <h3 className={h}>3. Saudação</h3>
-        <div className="flex flex-wrap gap-1.5">{GREETINGS.map((g) => <button key={g.key} className={chip(card.greeting === g.key)} onClick={() => setCard({ ...card, greeting: g.key })}>{g.text}</button>)}</div>
+        <h3 className={h}>3. Início da mensagem</h3>
+        <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pr-1">{GREETINGS.map((g) => <button key={g.key} className={chip(card.greeting === g.key)} onClick={() => setCard({ ...card, greeting: g.key })}>{g.text}</button>)}</div>
       </div>
       <div>
         <div className="mb-1 flex items-center justify-between">
-          <h3 className="text-sm font-semibold">4. Frases (até 3) — {card.lines.length}/3</h3>
+          <h3 className="text-sm font-semibold">4. Meio da mensagem (até 3) — {card.lines.length}/3</h3>
           <label className="flex items-center gap-1 text-xs text-slate-300"><input type="checkbox" checked={funnyOnly} onChange={(ev) => setFunnyOnly(ev.target.checked)} /> só as engraçadas 😂</label>
         </div>
-        <div className="flex flex-wrap gap-1.5">{LINES.filter((l) => !funnyOnly || l.funny).map((l) => <button key={l.key} className={chip(card.lines.includes(l.key))} onClick={() => toggleLine(l.key)}>{l.funny ? "😂 " : ""}{l.text}</button>)}</div>
+        <div className="flex max-h-64 flex-wrap gap-1.5 overflow-y-auto pr-1">{LINES.filter((l) => !funnyOnly || l.funny).map((l) => <button key={l.key} className={chip(card.lines.includes(l.key))} onClick={() => toggleLine(l.key)}>{l.funny ? "😂 " : ""}{l.text}</button>)}</div>
       </div>
       <div>
-        <h3 className={h}>5. Fecho</h3>
-        <div className="flex flex-wrap gap-1.5">{CLOSINGS.map((c) => <button key={c.key} className={chip(card.closing === c.key)} onClick={() => setCard({ ...card, closing: c.key })}>{c.text}</button>)}</div>
+        <h3 className={h}>5. Fim da mensagem</h3>
+        <div className="flex max-h-48 flex-wrap gap-1.5 overflow-y-auto pr-1">{CLOSINGS.map((c) => <button key={c.key} className={chip(card.closing === c.key)} onClick={() => setCard({ ...card, closing: c.key })}>{c.text}</button>)}</div>
       </div>
       <div>
         <h3 className={h}>6. Fundo e adorno</h3>

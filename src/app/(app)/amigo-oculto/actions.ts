@@ -17,14 +17,36 @@ async function guarded<T>(fn: (a: NonNullable<Awaited<ReturnType<typeof svc.getS
   }
 }
 
-export const createEditionAction = (i: { name: string; startsOn: string; deliverAt: string }) => guarded(() => svc.createEdition(i));
-export const registerMeAction = (editionId: string) => guarded((a) => svc.register(editionId, a.playerId, a.displayName));
-export const addBotsAction = (editionId: string, n: number) => guarded(() => svc.addBots(editionId, n));
-export const drawAction = (editionId: string) => guarded(() => svc.runDraw(editionId));
-export const checkinAction = (participantId: string, day?: string) => guarded(() => svc.checkin(participantId, day));
-export const updateConfigAction = (editionId: string, i: { goalPct: number; levels: number[]; mimoMinPct: number }) => guarded(() => svc.updateConfig(editionId, i));
-export const saveBuildAction = (participantId: string, giftKey: string, card: unknown) => guarded(() => svc.saveBuild(participantId, giftKey, card));
-export const deliverAction = (editionId: string) => guarded(() => svc.deliver(editionId));
-export const resetEditionAction = (editionId: string) => guarded(() => svc.resetEdition(editionId));
-export const openCardAction = (participantId: string) => guarded(() => svc.openCard(participantId));
-export const debugCheckinsAction = (editionId: string, mode: "random" | "clear" | "fill", pct?: number) => guarded(() => svc.debugCheckins(editionId, mode, pct));
+export async function createEditionAction(i: { name: string; startsOn: string; deliverAt: string }) {
+  return guarded(() => svc.createEdition(i));
+}
+export async function registerMeAction(editionId: string) {
+  return guarded((a) => svc.register(editionId, a.playerId, a.displayName));
+}
+export async function addBotsAction(editionId: string, n: number) {
+  return guarded(() => svc.addBots(editionId, n));
+}
+export async function drawAction(editionId: string) {
+  return guarded(() => svc.runDraw(editionId));
+}
+export async function checkinAction(participantId: string, day?: string) {
+  return guarded(() => svc.checkin(participantId, day));
+}
+export async function updateConfigAction(editionId: string, i: { goalPct: number; levels: number[]; mimoMinPct: number }) {
+  return guarded(() => svc.updateConfig(editionId, i));
+}
+export async function saveBuildAction(participantId: string, giftKey: string, card: unknown) {
+  return guarded(() => svc.saveBuild(participantId, giftKey, card));
+}
+export async function deliverAction(editionId: string) {
+  return guarded(() => svc.deliver(editionId));
+}
+export async function resetEditionAction(editionId: string) {
+  return guarded(() => svc.resetEdition(editionId));
+}
+export async function openCardAction(participantId: string) {
+  return guarded(() => svc.openCard(participantId));
+}
+export async function debugCheckinsAction(editionId: string, mode: "random" | "clear" | "fill", pct?: number) {
+  return guarded(() => svc.debugCheckins(editionId, mode, pct));
+}
