@@ -11,6 +11,9 @@ import path from "node:path";
 
 const SP = process.env.SP || ".";
 const OUT = path.resolve("src/lib/extra-forms-data.ts");
+// Formas que já existiam como megas custom antes do painel. As contrapartes
+// posteriores da Pokédex não entram no painel para não duplicar a mesma Mega.
+const LEGACY_MEGA_DUPLICATE_FORM_IDS = new Set([10283, 10300]);
 
 // nomes-base do jogo (para montar "Base-Sufixo")
 const md = fs.readFileSync("src/lib/mascot-data.ts", "utf8");
@@ -34,7 +37,8 @@ async function fetchJson(url: string, tries = 3): Promise<any> {
 }
 
 async function main() {
-  const A: { id: number; slug: string }[] = JSON.parse(fs.readFileSync(SP + "/final.json", "utf8")).A;
+  const A: { id: number; slug: string }[] = JSON.parse(fs.readFileSync(SP + "/final.json", "utf8")).A
+    .filter((form: { id: number }) => !LEGACY_MEGA_DUPLICATE_FORM_IDS.has(form.id));
   const names: Record<number, string> = {};
   const elements: Record<number, string> = {};
   const generation: Record<number, number> = {};

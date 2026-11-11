@@ -11,7 +11,6 @@ export const EXTRA_MEGA_STONES: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_CUSTOM_10280", stoneName: "Starmieita", compatiblePokemonId: 121, compatiblePokemonName: "Starmie", megaPokemonId: 10280, megaPokemonName: "Starmie-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10281", stoneName: "Dragoniteita", compatiblePokemonId: 149, compatiblePokemonName: "Dragonite", megaPokemonId: 10281, megaPokemonName: "Dragonite-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10282", stoneName: "Meganiumita", compatiblePokemonId: 154, compatiblePokemonName: "Meganium", megaPokemonId: 10282, megaPokemonName: "Meganium-Mega", minLevel: 50, price: 15000 },
-  { type: "MEGA_STONE_CUSTOM_10283", stoneName: "Feraligatrita", compatiblePokemonId: 160, compatiblePokemonName: "Feraligatr", megaPokemonId: 10283, megaPokemonName: "Feraligatr-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10284", stoneName: "Skarmoryita", compatiblePokemonId: 227, compatiblePokemonName: "Skarmory", megaPokemonId: 10284, megaPokemonName: "Skarmory-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10285", stoneName: "Froslassita", compatiblePokemonId: 478, compatiblePokemonName: "Froslass", megaPokemonId: 10285, megaPokemonName: "Froslass-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10286", stoneName: "Emboarita", compatiblePokemonId: 500, compatiblePokemonName: "Emboar", megaPokemonId: 10286, megaPokemonName: "Emboar-Mega", minLevel: 50, price: 15000 },
@@ -28,7 +27,6 @@ export const EXTRA_MEGA_STONES: readonly MegaStoneConfig[] = [
   { type: "MEGA_STONE_CUSTOM_10297", stoneName: "Malamarita", compatiblePokemonId: 687, compatiblePokemonName: "Malamar", megaPokemonId: 10297, megaPokemonName: "Malamar-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10298", stoneName: "Barbaracleita", compatiblePokemonId: 689, compatiblePokemonName: "Barbaracle", megaPokemonId: 10298, megaPokemonName: "Barbaracle-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10299", stoneName: "Dragalgeita", compatiblePokemonId: 691, compatiblePokemonName: "Dragalge", megaPokemonId: 10299, megaPokemonName: "Dragalge-Mega", minLevel: 50, price: 15000 },
-  { type: "MEGA_STONE_CUSTOM_10300", stoneName: "Hawluchaita", compatiblePokemonId: 701, compatiblePokemonName: "Hawlucha", megaPokemonId: 10300, megaPokemonName: "Hawlucha-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10303", stoneName: "Falinksita", compatiblePokemonId: 870, compatiblePokemonName: "Falinks", megaPokemonId: 10303, megaPokemonName: "Falinks-Mega", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10304", stoneName: "Raichuita X", compatiblePokemonId: 26, compatiblePokemonName: "Raichu", megaPokemonId: 10304, megaPokemonName: "Raichu-Mega X", minLevel: 50, price: 15000 },
   { type: "MEGA_STONE_CUSTOM_10305", stoneName: "Raichuita Y", compatiblePokemonId: 26, compatiblePokemonName: "Raichu", megaPokemonId: 10305, megaPokemonName: "Raichu-Mega Y", minLevel: 50, price: 15000 },
@@ -56,4 +54,4 @@ export const EXTRA_MEGA_STONES: readonly MegaStoneConfig[] = [
 ];
 
 // IDs das formas mega custom que possuem pedra (para o gate por toggle).
-export const CUSTOM_MEGA_POKEMON_IDS: number[] = [10278, 10279, 10280, 10281, 10282, 10283, 10284, 10285, 10286, 10287, 10288, 10289, 10290, 10291, 10292, 10293, 10294, 10295, 10296, 10297, 10298, 10299, 10300, 10303, 10304, 10305, 10306, 10307, 10308, 10309, 10310, 10311, 10312, 10313, 10314, 10315, 10316, 10317, 10318, 10319, 10320, 10321, 10322, 10323, 10324, 10325, 10326];
+export const CUSTOM_MEGA_POKEMON_IDS: number[] = [10278, 10279, 10280, 10281, 10282, 10284, 10285, 10286, 10287, 10288, 10289, 10290, 10291, 10292, 10293, 10294, 10295, 10296, 10297, 10298, 10299, 10303, 10304, 10305, 10306, 10307, 10308, 10309, 10310, 10311, 10312, 10313, 10314, 10315, 10316, 10317, 10318, 10319, 10320, 10321, 10322, 10323, 10324, 10325, 10326];

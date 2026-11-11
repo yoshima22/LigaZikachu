@@ -8,6 +8,7 @@ import { getPokemonName } from "../src/lib/mascot-data";
 
 const SP = process.env.SP || ".";
 const need: { id: number; slug: string }[] = JSON.parse(fs.readFileSync(SP + "/mega-need-stone.json", "utf8"));
+const LEGACY_MEGA_DUPLICATE_FORM_IDS = new Set([10283, 10300]);
 // Mapa nome-normalizado -> id nacional (só espécies-base 1..1025), lido direto do
 // arquivo (o import runtime de POKEMON_PT_NAMES vem truncado no tsx).
 const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, "");
@@ -33,7 +34,7 @@ function resolveBase(slug: string): { id: number; suffix: string } {
   throw new Error("base não resolvida: " + slug);
 }
 
-const stones = need.map(({ id, slug }) => {
+const stones = need.filter(({ id }) => !LEGACY_MEGA_DUPLICATE_FORM_IDS.has(id)).map(({ id, slug }) => {
   const { id: baseId, suffix } = resolveBase(slug);
   const baseName = getPokemonName(baseId);
   return {

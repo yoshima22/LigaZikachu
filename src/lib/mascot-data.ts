@@ -2385,7 +2385,7 @@ export const POKEMON_ELEMENT: Record<number, string> = {
   10241:"steel/dragon",10242:"steel/dragon",   // Sliggoo/Goodra-Hisui
   10243:"ice/rock",                            // Avalugg-Hisui
   10244:"grass/fighting",                      // Decidueye-Hisui
-  10301:"water",                               // Mega Feraligatr custom
+  10301:"water/dragon",                        // Mega Feraligatr custom
   10302:"fighting/flying",                     // Mega Hawlucha custom
 };
 
