@@ -5745,3 +5745,45 @@ model ReiRioMatch {
   @@index([editionId, roundIndex])
   @@map("rdr_matches")
 }
+
+// ── Amigo Oculto (admin-only): inscrição, sorteio, laços da comunidade, cartão e presente ──
+model SecretSantaEdition {
+  id           String    @id @default(cuid())
+  name         String
+  isTest       Boolean   @default(true)
+  phase        String    @default("REGISTRATION") // REGISTRATION | COLLECTING | DELIVERED | CANCELED
+  startsOn     String // YYYY-MM-DD (BRT): primeiro dia que conta laços
+  deliverAt    DateTime
+  drawnAt      DateTime?
+  deliveredAt  DateTime?
+  seedHash     String? // compromisso do sorteio (sha256 da seed), publicado antes
+  seed         String? // revelada depois da entrega
+  configJson   Json      @default("{}")
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  participants SecretSantaParticipant[]
+
+  @@map("ss_editions")
+}
+
+model SecretSantaParticipant {
+  id           String    @id @default(cuid())
+  editionId    String
+  playerId     String?
+  displayName  String
+  recipientId  String? // participante que esta pessoa tirou (definido no sorteio)
+  checkinsJson Json      @default("[]") // ["YYYY-MM-DD", ...]
+  giftKey      String? // item escolhido no catálogo
+  cardJson     Json? // { greeting, lines[], closing, background, sticker }
+  builtAt      DateTime?
+  deliveredGiftId String? // PlayerGift criado quando o RECEBEDOR abre o cartão
+  openedAt     DateTime? // quando o recebedor abriu o cartão que recebeu
+  createdAt    DateTime  @default(now())
+
+  edition SecretSantaEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
+
+  @@unique([editionId, playerId])
+  @@index([editionId])
+  @@map("ss_participants")
+}
