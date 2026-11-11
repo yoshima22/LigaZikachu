@@ -1,5 +1,5 @@
 // Cartão de Natal montado só com frases prontas (sem texto livre: nada a moderar).
-export type CardData = { greeting: string; lines: string[]; closing: string; background: string; sticker: string };
+export type CardData = { greeting: string; lines: string[]; closing: string; background: string; sticker: string; image?: string };
 
 export const GREETINGS = [
   { key: "g1", text: "Feliz Natal!" },
@@ -8,7 +8,7 @@ export const GREETINGS = [
   { key: "g4", text: "Tirei você no amigo oculto!" },
   { key: "g5", text: "Que a noite seja iluminada!" },
 ];
-export const LINES = [
+export const LINES: { key: string; text: string; funny?: boolean }[] = [
   { key: "l1", text: "Seus mascotes merecem o melhor do inverno." },
   { key: "l2", text: "Você faz a Liga ser mais divertida." },
   { key: "l3", text: "Que suas rodadas sejam sempre de vitória." },
@@ -19,6 +19,16 @@ export const LINES = [
   { key: "l8", text: "Prepare o time: o ano que vem promete." },
   { key: "l9", text: "Você é daqueles rivais que a gente respeita." },
   { key: "l10", text: "Que a sorte esteja sempre a seu favor." },
+  { key: "f1", funny: true, text: "Tirei você e quase troquei de nome para não ser descoberto." },
+  { key: "f2", funny: true, text: "Seu presente veio embrulhado com a última fita adesiva da Liga." },
+  { key: "f3", funny: true, text: "Prometo que não é um ovo de Magikarp... talvez seja." },
+  { key: "f4", funny: true, text: "Se o presente for ruim, a culpa é do sorteio." },
+  { key: "f5", funny: true, text: "Esse cartão se autodestrói se você perder a próxima rodada." },
+  { key: "f6", funny: true, text: "Pensei muito em você. Uns 4 minutos, mas com carinho." },
+  { key: "f7", funny: true, text: "Seu mascote me pediu para avisar: ele quer mais doces." },
+  { key: "f8", funny: true, text: "Comi o panetone, mas guardei o presente." },
+  { key: "f9", funny: true, text: "Este presente foi inspecionado por um Snorlax. Aprovado depois da soneca." },
+  { key: "f10", funny: true, text: "Se você descobriu quem sou, finja que não." },
 ];
 export const CLOSINGS = [
   { key: "c1", text: "Com carinho, seu amigo oculto." },
@@ -26,6 +36,19 @@ export const CLOSINGS = [
   { key: "c3", text: "Até a próxima rodada!" },
   { key: "c4", text: "Feliz Natal e um ótimo ano novo!" },
 ];
+// Ilustrações do cartão (composições de emoji por enquanto; `url` troca por arte pintada depois).
+export const IMAGES: { key: string; label: string; scene: string; url?: string }[] = [
+  { key: "noel-chamine", label: "Noel preso na chaminé", scene: "🧱🎅" },
+  { key: "rena-perdida", label: "Rena perdida", scene: "🦌❓" },
+  { key: "boneco-derretendo", label: "Boneco de neve derretendo", scene: "☃️💦" },
+  { key: "pisca", label: "Pinheiro enrolado no pisca-pisca", scene: "🎄💡" },
+  { key: "ovo-natal", label: "Ovo de Natal chocando", scene: "🥚🎁" },
+  { key: "mascote-gorro", label: "Mascote de gorro", scene: "🐣🎅" },
+  { key: "panetone-vs-pave", label: "Panetone vs. pavê", scene: "🍞⚔️🍰" },
+  { key: "meia-furada", label: "Meia furada com presente", scene: "🧦🎁" },
+  { key: "soneca", label: "Snorlax de soneca", scene: "😴🎁" },
+];
+
 export const STICKERS = ["🎄", "⭐", "🎁", "❄️", "🔔", "🕯️", "🦌", "☃️"];
 // Fundos desenhados em CSS (sem dependência de imagem). As artes pintadas podem entrar depois pelo mesmo `key`.
 export const BACKGROUNDS = [
@@ -49,5 +72,6 @@ export function validateCard(input: unknown): { ok: true; card: CardData } | { o
   if (!c.closing || !has(CLOSINGS, c.closing)) return { ok: false, error: "Escolha um fecho." };
   if (!c.background || !BACKGROUNDS.some((b) => b.key === c.background)) return { ok: false, error: "Escolha um fundo." };
   if (!c.sticker || !STICKERS.includes(c.sticker)) return { ok: false, error: "Escolha um adorno." };
-  return { ok: true, card: { greeting: c.greeting, lines: c.lines, closing: c.closing, background: c.background, sticker: c.sticker } };
+  if (c.image && !IMAGES.some((i) => i.key === c.image)) return { ok: false, error: "Ilustração inválida." };
+  return { ok: true, card: { greeting: c.greeting, lines: c.lines, closing: c.closing, background: c.background, sticker: c.sticker, ...(c.image ? { image: c.image } : {}) } };
 }

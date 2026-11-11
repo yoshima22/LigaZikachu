@@ -9,6 +9,13 @@ Rota `/amigo-oculto` (sem link no menu; guard admin no servidor + em todas as ac
 4. **Montagem**: presente do catálogo curado (`catalog.ts`, grátis; só tiers ≤ nível atual) + cartão só com frases prontas (`cards.ts`; sem texto livre, nada a moderar). Dá para salvar só o cartão enquanto o nível é 0.
 5. **Entrega** (`deliver`, hoje botão manual): completa quem não montou com o presente padrão do nível + cartão simples. O recebedor abre o cartão (envelope animado) e só então o `PlayerGift` (TOURNAMENT_BOX) é criado na Caixa — sem bypass pelo "Receber todos". Mimo de constância (+5 comida, +3 doce) se ≥70% dos dias com check-in.
 
+## Menu de debug (botão "🛠 Menu de debug" no painel)
+- **Check-in diário:** grade jogador × dia; clique marca o dia (só edição de teste); atalhos "sortear 70%", "todos todos os dias", "zerar".
+- **Loja de presentes:** catálogo com controle de nível simulado e conteúdo de cada item.
+- **Cartinha:** montador com ilustração (emoji por enquanto; `IMAGES[].url` aceita arte pintada) e 10 frases engraçadas (`funny`), botão "Surpreenda-me".
+- **Animação:** reproduz o envelope + cartão com a cartinha montada.
+- **Regras:** meta %, faixas dos 4 níveis e % de constância editáveis até a entrega (`updateConfig`).
+
 ## Pendente / decisões abertas
 - Datas reais, meta (75%) e catálogo final (itens/quantidades são palpite — conferir economia).
 - Identidade: hoje o cartão não revela o remetente (assinatura "amigo oculto"); revelação opcional não implementada.

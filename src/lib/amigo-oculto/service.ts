@@ -42,10 +42,13 @@ export async function addBots(editionId: string, n: number) {
 }
 
 // Check-in diário (dia BRT). A condição `NOT ? dia` no UPDATE torna o duplo clique idempotente.
-export async function checkin(participantId: string, now = new Date()) {
+export async function checkin(participantId: string, dayOverride?: string) {
   const p = await prisma.secretSantaParticipant.findUnique({ where: { id: participantId }, include: { edition: true } });
   if (!p) return fail("Participante não encontrado.");
-  const day = brtDay(now);
+  // Dia livre só para depurar edições de teste.
+  if (dayOverride && !p.edition.isTest) return fail("Dia livre só vale em edições de teste.");
+  const day = dayOverride ?? brtDay(new Date());
+  if (dayOverride && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > brtDay(p.edition.deliverAt))) return fail("Dia fora da janela.");
   if (p.edition.phase !== "COLLECTING") return fail("Os laços só contam depois do sorteio e antes da entrega.");
   if (day < p.edition.startsOn) return fail("Os laços ainda não começaram.");
   const rows = await prisma.$executeRaw`UPDATE ss_participants SET "checkinsJson" = "checkinsJson" || to_jsonb(${day}::text) WHERE id = ${participantId} AND NOT ("checkinsJson" ? ${day})`;
@@ -152,12 +155,38 @@ export async function getView(editionId?: string) {
     editions,
     edition: {
       id: e.id, name: e.name, phase: e.phase, isTest: e.isTest, startsOn: e.startsOn, deliverAt: e.deliverAt.toISOString(), seedHash: e.seedHash, seed: e.phase === "DELIVERED" ? e.seed : null,
-      ...col, cfg: undefined, today: brtDay(new Date()),
+      ...col, today: brtDay(new Date()),
       participants: e.participants.map((p) => ({
         id: p.id, name: p.displayName, isBot: !p.playerId, recipient: p.recipientId ? nameOf.get(p.recipientId) ?? null : null,
-        checkins: countCheckins(p.checkinsJson as string[], e.startsOn, last), checkedToday: (p.checkinsJson as string[]).includes(brtDay(new Date())),
+        checkins: countCheckins(p.checkinsJson as string[], e.startsOn, last), days: p.checkinsJson as string[], checkedToday: (p.checkinsJson as string[]).includes(brtDay(new Date())),
         giftKey: p.giftKey, built: Boolean(p.builtAt), opened: Boolean(p.openedAt),
       })),
     },
   };
+}
+
+// Regras ajustáveis (antes da entrega): meta, faixas dos níveis e % de constância para o mimo.
+export async function updateConfig(editionId: string, input: { goalPct: number; levels: number[]; mimoMinPct: number }) {
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, configJson: true } });
+  if (!e || e.phase === "DELIVERED") return fail("Edição já entregue.");
+  const l = input.levels;
+  const sorted = l.length === 4 && l.every((x, i) => x > 0 && x <= 1.5 && (i === 0 || x > l[i - 1]));
+  if (!(input.goalPct > 0 && input.goalPct <= 1) || !sorted || !(input.mimoMinPct >= 0 && input.mimoMinPct <= 1)) return fail("Valores inválidos (meta 1–100%, níveis crescentes, mimo 0–100%).");
+  await prisma.secretSantaEdition.update({ where: { id: editionId }, data: { configJson: { ...readConfig(e.configJson), goalPct: input.goalPct, levels: l as [number, number, number, number], mimoMinPct: input.mimoMinPct } } });
+  return { ok: true };
+}
+
+// Depuração (só edições de teste em contagem de laços): marca check-ins sem esperar os dias passarem.
+export async function debugCheckins(editionId: string, mode: "random" | "clear" | "fill", pct = 0.7) {
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, include: { participants: { select: { id: true } } } });
+  if (!e?.isTest) return fail("Só em edições de teste.");
+  if (e.phase !== "COLLECTING") return fail("Disponível só durante a contagem de laços.");
+  const last = brtDay(e.deliverAt);
+  const days: string[] = [];
+  for (let n = 0; n < daysBetween(e.startsOn, last) && n < 60; n++) days.push(new Date(Date.parse(`${e.startsOn}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10));
+  await prisma.$transaction(e.participants.map((p) => prisma.secretSantaParticipant.update({
+    where: { id: p.id },
+    data: { checkinsJson: mode === "clear" ? [] : mode === "fill" ? days : days.filter(() => Math.random() < pct) },
+  })));
+  return { ok: true };
 }

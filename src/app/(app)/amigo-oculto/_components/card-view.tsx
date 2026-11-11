@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BACKGROUNDS, CLOSINGS, GREETINGS, LINES, textOf, type CardData } from "@/lib/amigo-oculto/cards";
+import { BACKGROUNDS, CLOSINGS, GREETINGS, IMAGES, LINES, textOf, type CardData } from "@/lib/amigo-oculto/cards";
 
 const FLAKES = Array.from({ length: 22 }, (_, i) => ({ left: (i * 37) % 100, delay: (i * 0.45) % 6, dur: 6 + ((i * 7) % 5), size: 6 + ((i * 5) % 9) }));
 
@@ -34,7 +34,16 @@ export function CardView({ card, animate = false }: { card: CardData; animate?: 
     <div className="ss-anim relative mx-auto flex aspect-[4/5] w-full max-w-sm flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl p-7 text-center shadow-2xl" style={{ background: bg.css, color: bg.ink, border: `2px solid ${bg.accent}` }}>
       <Snow color={bg.ink} />
       <div aria-hidden className="absolute inset-2 rounded-xl" style={{ border: `1px dashed ${bg.accent}`, opacity: 0.6 }} />
-      <div className="text-5xl drop-shadow" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>{card.sticker}</div>
+      {(() => {
+        const img = IMAGES.find((i) => i.key === card.image);
+        return img ? (
+          <div className="relative z-10 text-center drop-shadow" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>
+            {img.url ? <img src={img.url} alt={img.label} className="mx-auto h-28 w-28 object-contain" /> : <div className="text-6xl leading-none">{img.scene}</div>}
+            <div className="mt-1 text-[11px] uppercase tracking-wider opacity-80">{img.label}</div>
+          </div>
+        ) : null;
+      })()}
+      <div className={card.image ? "absolute right-3 top-3 text-2xl" : "text-5xl drop-shadow"} style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>{card.sticker}</div>
       <h3 className="font-serif text-2xl font-bold leading-tight" style={{ color: bg.accent, ...step(0) }}>{textOf(GREETINGS, card.greeting)}</h3>
       <div className="space-y-2 text-[15px] leading-snug">
         {card.lines.map((k, i) => <p key={k} style={step(i + 1)}>{textOf(LINES, k)}</p>)}

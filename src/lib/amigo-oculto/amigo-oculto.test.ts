@@ -40,4 +40,6 @@ test("catálogo e cartão", () => {
   assert.ok(!validateCard({ ...ok, lines: [] }).ok);
   assert.ok(!validateCard({ ...ok, lines: ["l1", "l1"] }).ok);
   assert.ok(!validateCard({ ...ok, background: "x" }).ok);
+  assert.ok(validateCard({ ...ok, image: "noel-chamine", lines: ["f1", "f2"] }).ok);
+  assert.ok(!validateCard({ ...ok, image: "nada" }).ok);
 });

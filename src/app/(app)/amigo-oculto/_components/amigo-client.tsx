@@ -6,9 +6,11 @@ import { BACKGROUNDS, CLOSINGS, GREETINGS, LINES, STICKERS, type CardData } from
 import { GIFT_CATALOG } from "@/lib/amigo-oculto/catalog";
 import { addBotsAction, checkinAction, createEditionAction, deliverAction, drawAction, openCardAction, registerMeAction, resetEditionAction, saveBuildAction } from "../actions";
 import { CARD_CSS, CardView, EnvelopeReveal } from "./card-view";
+import { CardEditor } from "./card-editor";
+import { DebugPanel } from "./debug-panel";
 
-type P = { id: string; name: string; isBot: boolean; recipient: string | null; checkins: number; checkedToday: boolean; giftKey: string | null; built: boolean; opened: boolean };
-type Ed = { id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
+type P = { days: string[]; id: string; name: string; isBot: boolean; recipient: string | null; checkins: number; checkedToday: boolean; giftKey: string | null; built: boolean; opened: boolean };
+type Ed = { today: string; cfg: { goalPct: number; levels: number[]; mimoMinPct: number }; id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
 type View = { editions: { id: string; name: string; phase: string }[]; edition: Ed | null };
 
 const PHASE: Record<string, string> = { REGISTRATION: "Inscrições", COLLECTING: "Juntando laços", DELIVERED: "Entregue", CANCELED: "Cancelada" };
@@ -73,6 +75,7 @@ function NewEdition({ run, pending, editions }: { run: (f: () => Promise<unknown
 function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Promise<unknown>) => void; pending: boolean; myPlayerName: string }) {
   const pct = Math.min(100, Math.round((e.bonds / e.goal) * 100));
   const [as, setAs] = useState<string>(e.participants[0]?.id ?? "");
+  const [debug, setDebug] = useState(false);
   const me = e.participants.find((p) => p.id === as);
   return (
     <>
@@ -100,6 +103,9 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
         </div>
         {e.seedHash && <p className="break-all text-[11px] text-slate-400">Compromisso do sorteio (sha256): {e.seedHash}{e.seed ? ` · seed: ${e.seed}` : ""}</p>}
       </section>
+
+      <div><button className={btn} onClick={() => setDebug(!debug)}>{debug ? "Fechar menu de debug" : "🛠 Menu de debug"}</button></div>
+      {debug && <DebugPanel e={e} run={run} pending={pending} />}
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <h2 className="mb-2 font-semibold">Participantes</h2>
@@ -138,8 +144,6 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
 function Builder({ e, p, run, pending }: { e: Ed; p: P; run: (f: () => Promise<unknown>) => void; pending: boolean }) {
   const [gift, setGift] = useState(p.giftKey ?? "");
   const [card, setCard] = useState<CardData>(EMPTY);
-  const toggleLine = (k: string) => setCard((c) => ({ ...c, lines: c.lines.includes(k) ? c.lines.filter((x) => x !== k) : c.lines.length < 3 ? [...c.lines, k] : c.lines }));
-  const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs ${on ? "border-amber-300 bg-amber-300/20 text-amber-100" : "border-white/15 bg-white/5 hover:bg-white/10"}`;
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <div className="space-y-4">
@@ -157,23 +161,7 @@ function Builder({ e, p, run, pending }: { e: Ed; p: P; run: (f: () => Promise<u
             })}
           </div>
         </div>
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">2. Saudação</h3>
-          <div className="flex flex-wrap gap-1.5">{GREETINGS.map((g) => <button key={g.key} className={chip(card.greeting === g.key)} onClick={() => setCard({ ...card, greeting: g.key })}>{g.text}</button>)}</div>
-        </div>
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">3. Frases (até 3) — {card.lines.length}/3</h3>
-          <div className="flex flex-wrap gap-1.5">{LINES.map((l) => <button key={l.key} className={chip(card.lines.includes(l.key))} onClick={() => toggleLine(l.key)}>{l.text}</button>)}</div>
-        </div>
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">4. Fecho</h3>
-          <div className="flex flex-wrap gap-1.5">{CLOSINGS.map((c) => <button key={c.key} className={chip(card.closing === c.key)} onClick={() => setCard({ ...card, closing: c.key })}>{c.text}</button>)}</div>
-        </div>
-        <div>
-          <h3 className="mb-1 text-sm font-semibold">5. Fundo e adorno</h3>
-          <div className="flex flex-wrap gap-2">{BACKGROUNDS.map((b) => <button key={b.key} title={b.label} onClick={() => setCard({ ...card, background: b.key })} className={`h-9 w-9 rounded-full border-2 ${card.background === b.key ? "border-amber-300" : "border-white/20"}`} style={{ background: b.css }} />)}</div>
-          <div className="mt-2 flex flex-wrap gap-1.5">{STICKERS.map((s) => <button key={s} className={`${chip(card.sticker === s)} text-base`} onClick={() => setCard({ ...card, sticker: s })}>{s}</button>)}</div>
-        </div>
+        <CardEditor card={card} setCard={setCard} />
         <button className={btnPrimary} disabled={pending || card.lines.length === 0} onClick={() => run(() => saveBuildAction(p.id, gift, card))}>Salvar presente e cartão</button>
         <p className="text-xs text-slate-400">Quem não montar até a entrega envia o presente padrão do nível com um cartão simples.</p>
       </div>
