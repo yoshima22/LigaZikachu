@@ -31,16 +31,14 @@ export function CardView({ card, animate = false }: { card: CardData; animate?: 
   const bg = BACKGROUNDS.find((b) => b.key === card.background) ?? BACKGROUNDS[0];
   const step = (n: number) => (animate ? { opacity: 0, animation: `ss-in .8s ease ${0.5 + n * 0.9}s forwards` } : undefined);
   return (
-    <div className="ss-anim relative mx-auto flex aspect-[4/5] w-full max-w-sm flex-col items-center justify-center gap-4 overflow-hidden rounded-2xl p-7 text-center shadow-2xl" style={{ background: bg.css, color: bg.ink, border: `2px solid ${bg.accent}` }}>
+    <div className="ss-anim relative mx-auto flex min-h-[34rem] w-full max-w-sm flex-col items-center justify-center gap-3 overflow-hidden rounded-2xl p-7 text-center shadow-2xl" style={{ background: bg.css, color: bg.ink, border: `2px solid ${bg.accent}` }}>
       <Snow color={bg.ink} />
       <div aria-hidden className="absolute inset-2 rounded-xl" style={{ border: `1px dashed ${bg.accent}`, opacity: 0.6 }} />
       {(() => {
         const img = IMAGES.find((i) => i.key === card.image);
         return img ? (
-          <div className="relative z-10 text-center drop-shadow" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>
-            {img.url ? <img src={img.url} alt={img.label} className="mx-auto h-28 w-28 object-contain" /> : <div className="text-6xl leading-none">{img.scene}</div>}
-            <div className="mt-1 text-[11px] uppercase tracking-wider opacity-80">{img.label}</div>
-          </div>
+          // eslint-disable-next-line @next/next/no-img-element
+          <img src={img.url} alt={img.label} className="relative z-10 -mt-2 h-48 w-auto max-w-full object-contain drop-shadow-xl" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined} />
         ) : null;
       })()}
       <div className={card.image ? "absolute right-3 top-3 text-2xl" : "text-5xl drop-shadow"} style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>{card.sticker}</div>

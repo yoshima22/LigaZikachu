@@ -107,17 +107,20 @@ export const CLOSINGS = [
   { key: "c19", text: "Tchau, tchau, e obrigado por existir na Liga!" },
   { key: "c20", text: "Até a próxima, treinador(a) lendário(a)!" },
 ];
-// Ilustrações do cartão (composições de emoji por enquanto; `url` troca por arte pintada depois).
-export const IMAGES: { key: string; label: string; scene: string; url?: string }[] = [
-  { key: "noel-chamine", label: "Noel preso na chaminé", scene: "🧱🎅" },
-  { key: "rena-perdida", label: "Rena perdida", scene: "🦌❓" },
-  { key: "boneco-derretendo", label: "Boneco de neve derretendo", scene: "☃️💦" },
-  { key: "pisca", label: "Pinheiro enrolado no pisca-pisca", scene: "🎄💡" },
-  { key: "ovo-natal", label: "Ovo de Natal chocando", scene: "🥚🎁" },
-  { key: "mascote-gorro", label: "Mascote de gorro", scene: "🐣🎅" },
-  { key: "panetone-vs-pave", label: "Panetone vs. pavê", scene: "🍞⚔️🍰" },
-  { key: "meia-furada", label: "Meia furada com presente", scene: "🧦🎁" },
-  { key: "soneca", label: "Snorlax de soneca", scene: "😴🎁" },
+// Ilustrações do cartão: artes dos personagens da Liga publicadas em assets/events/amigo-oculto/.
+const IMG_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/assets/events/amigo-oculto`;
+const img = (key: string, label: string) => ({ key, label, url: `${IMG_BASE}/${key}.webp` });
+export const IMAGES: { key: string; label: string; url: string }[] = [
+  img("noel-chamine", "Jotape preso na chaminé"),
+  img("enguica-lista", "Enguiça e a lista do Noel"),
+  img("cleide-arvore", "Cleide e a árvore explosiva"),
+  img("miauvadao-arvore", "Miauvadão derruba a árvore"),
+  img("miauvadao-noel", "Papai Noel Miauvadão"),
+  img("amigos-suspeitos", "Amigos ocultos suspeitos"),
+  img("laboratorio", "Laboratório natalino"),
+  img("troca-presentes", "Troca de presentes"),
+  img("ceia", "Ceia da Liga"),
+  img("brinde", "Brinde de fim de ano"),
 ];
 
 export const STICKERS = ["🎄", "⭐", "🎁", "❄️", "🔔", "🕯️", "🦌", "☃️"];

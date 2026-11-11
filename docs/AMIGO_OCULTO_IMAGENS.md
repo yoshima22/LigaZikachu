@@ -27,3 +27,6 @@ Ilustração do topo da cartinha: 1024×1024, **fundo transparente**, personagem
 
 ## Como usar
 Cole o **bloco de estilo** + a cena + anexe as referências citadas. Gere uma imagem por cena, envie os arquivos e eu converto para webp, publico no Storage e ligo cada uma na lista de ilustrações da cartinha.
+
+## Publicadas (2026-11-11)
+10 ilustrações em WebP (768px, fundo transparente) em `assets/events/amigo-oculto/<chave>.webp` — chaves: `noel-chamine`, `enguica-lista`, `cleide-arvore`, `miauvadao-arvore`, `miauvadao-noel`, `amigos-suspeitos`, `laboratorio`, `troca-presentes`, `ceia`, `brinde`. Republicar: `npx tsx scripts/amigo-oculto-upload-assets.ts <pasta com 9.webp..18.webp>`. Ligadas em `IMAGES` (`src/lib/amigo-oculto/cards.ts`).
