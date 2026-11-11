@@ -6,6 +6,7 @@ export type SsConfig = {
   levels: [number, number, number, number]; // frações da meta que liberam os níveis 1..4
   mimoMinPct: number; // % dos dias com check-in para ganhar o mimo de constância
   minParticipants: number;
+  published?: boolean; // visível para os jogadores (padrão: só admin)
 };
 export const DEFAULT_SS_CONFIG: SsConfig = { goalPct: 0.75, levels: [0.25, 0.5, 0.75, 1], mimoMinPct: 0.7, minParticipants: 6 };
 
@@ -58,3 +59,19 @@ export function countCheckins(days: string[], from: string, to: string): number 
 export const earnedMimo = (checkins: number, totalDays: number, cfg: SsConfig) => totalDays > 0 && checkins / totalDays >= cfg.mimoMinPct;
 
 export const brtDay = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+
+// Sorteio entre as opções (determinístico por seed + participante, auditável depois).
+export const pickIndex = (seed: string, n: number) => Math.floor(rngFromSeed(seed)() * n);
+
+// Sorteio que evita repetir pares de edições anteriores (best effort: tenta várias seeds).
+export function drawAvoiding(ids: string[], avoid: Set<string>, tries = 300): { seed: string; pairs: Map<string, string> } {
+  let best: { seed: string; pairs: Map<string, string>; bad: number } | null = null;
+  for (let i = 0; i < tries; i++) {
+    const seed = createHash("sha256").update(`${Math.random()}:${Date.now()}:${i}`).digest("hex").slice(0, 32);
+    const pairs = draw(ids, seed);
+    const bad = [...pairs].filter(([a, b]) => avoid.has(`${a}>${b}`)).length;
+    if (!best || bad < best.bad) best = { seed, pairs, bad };
+    if (bad === 0) break;
+  }
+  return best!;
+}

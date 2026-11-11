@@ -3,14 +3,15 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BACKGROUNDS, CLOSINGS, GREETINGS, LINES, STICKERS, type CardData } from "@/lib/amigo-oculto/cards";
-import { GIFT_CATALOG } from "@/lib/amigo-oculto/catalog";
-import { addBotsAction, checkinAction, createEditionAction, deliverAction, drawAction, openCardAction, registerMeAction, resetEditionAction, saveBuildAction } from "../actions";
+import type { ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
+import { PackagePicker, ReceivedGift } from "./package-ui";
+import { setPublishedAction, addBotsAction, checkinAction, createEditionAction, deliverAction, drawAction, openCardAction, registerMeAction, resetEditionAction, saveBuildAction } from "../actions";
 import { CARD_CSS, CardView, EnvelopeReveal } from "./card-view";
 import { CardEditor } from "./card-editor";
 import { DebugPanel } from "./debug-panel";
 
-type P = { days: string[]; id: string; name: string; isBot: boolean; recipient: string | null; checkins: number; checkedToday: boolean; giftKey: string | null; built: boolean; opened: boolean };
-type Ed = { today: string; cfg: { goalPct: number; levels: number[]; mimoMinPct: number }; id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
+type P = { days: string[]; id: string; name: string; isBot: boolean; recipient: string | null; checkins: number; checkedToday: boolean; options: string[]; giftKey: string | null; built: boolean; opened: boolean };
+type Ed = { published: boolean; today: string; cfg: { goalPct: number; levels: number[]; mimoMinPct: number }; id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
 type View = { editions: { id: string; name: string; phase: string }[]; edition: Ed | null };
 
 const PHASE: Record<string, string> = { REGISTRATION: "Inscrições", COLLECTING: "Juntando laços", DELIVERED: "Entregue", CANCELED: "Cancelada" };
@@ -20,7 +21,7 @@ const btnPrimary = "rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-semibold te
 
 const EMPTY: CardData = { greeting: "g1", lines: ["l1"], closing: "c1", background: "noite", sticker: "🎄" };
 
-export function AmigoClient({ view, myPlayerName }: { view: View; myPlayerName: string }) {
+export function AmigoClient({ view, myPlayerName, packages }: { view: View; myPlayerName: string; packages: ResolvedPackage[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -44,7 +45,7 @@ export function AmigoClient({ view, myPlayerName }: { view: View; myPlayerName: 
       {msg && <p className="rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">{msg}</p>}
 
       <NewEdition run={run} pending={pending} editions={view.editions} />
-      {e && <Edition e={e} run={run} pending={pending} myPlayerName={myPlayerName} />}
+      {e && <Edition e={e} run={run} pending={pending} myPlayerName={myPlayerName} packages={packages} />}
     </div>
   );
 }
@@ -59,7 +60,7 @@ function NewEdition({ run, pending, editions }: { run: (f: () => Promise<unknown
       <h2 className="font-semibold">Edições</h2>
       {editions.length > 0 && (
         <div className="flex flex-wrap gap-2">
-          {editions.map((x) => <button key={x.id} className={btn} onClick={() => router.push(`/amigo-oculto?e=${x.id}`)}>{x.name} · {PHASE[x.phase]}</button>)}
+          {editions.map((x) => <button key={x.id} className={btn} onClick={() => router.push(`/amigo-oculto/admin?e=${x.id}`)}>{x.name} · {PHASE[x.phase]}</button>)}
         </div>
       )}
       <div className="grid gap-2 sm:grid-cols-4">
@@ -72,7 +73,7 @@ function NewEdition({ run, pending, editions }: { run: (f: () => Promise<unknown
   );
 }
 
-function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Promise<unknown>) => void; pending: boolean; myPlayerName: string }) {
+function Edition({ e, run, pending, myPlayerName, packages }: { e: Ed; run: (f: () => Promise<unknown>) => void; pending: boolean; myPlayerName: string; packages: ResolvedPackage[] }) {
   const pct = Math.min(100, Math.round((e.bonds / e.goal) * 100));
   const [as, setAs] = useState<string>(e.participants[0]?.id ?? "");
   const [debug, setDebug] = useState(false);
@@ -89,6 +90,7 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
               <button className={btnPrimary} disabled={pending} onClick={() => run(() => drawAction(e.id))}>Sortear</button>
             </>}
             {e.phase === "COLLECTING" && <button className={btnPrimary} disabled={pending} onClick={() => confirm("Entregar agora? Fecha a montagem.") && run(() => deliverAction(e.id))}>Entregar agora</button>}
+            <button className={btn} disabled={pending} onClick={() => run(() => setPublishedAction(e.id, !e.published))}>{e.published ? "👁 Publicada — ocultar" : "🔒 Só admin — publicar"}</button>
             {e.isTest && <button className={btn} disabled={pending} onClick={() => confirm("Apagar esta edição de teste?") && run(() => resetEditionAction(e.id))}>Apagar teste</button>}
           </div>
         </div>
@@ -105,7 +107,7 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
       </section>
 
       <div><button className={btn} onClick={() => setDebug(!debug)}>{debug ? "Fechar menu de debug" : "🛠 Menu de debug"}</button></div>
-      {debug && <DebugPanel e={e} run={run} pending={pending} />}
+      {debug && <DebugPanel e={e} run={run} pending={pending} packages={packages} />}
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4">
         <h2 className="mb-2 font-semibold">Participantes</h2>
@@ -133,7 +135,7 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
               {e.participants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
             </select>
           </div>
-          {me && e.phase === "COLLECTING" && <Builder key={me.id} e={e} p={me} run={run} pending={pending} />}
+          {me && e.phase === "COLLECTING" && <Builder key={me.id} e={e} p={me} run={run} pending={pending} packages={packages} />}
           {me && e.phase === "DELIVERED" && <Delivery key={me.id} participantId={me.id} />}
         </section>
       )}
@@ -141,28 +143,19 @@ function Edition({ e, run, pending, myPlayerName }: { e: Ed; run: (f: () => Prom
   );
 }
 
-function Builder({ e, p, run, pending }: { e: Ed; p: P; run: (f: () => Promise<unknown>) => void; pending: boolean }) {
-  const [gift, setGift] = useState(p.giftKey ?? "");
+function Builder({ e, p, run, pending, packages }: { e: Ed; p: P; run: (f: () => Promise<unknown>) => void; pending: boolean; packages: ResolvedPackage[] }) {
+  const [opts, setOpts] = useState<string[]>(p.options);
   const [card, setCard] = useState<CardData>(EMPTY);
   return (
     <div className="grid gap-5 lg:grid-cols-2">
       <div className="space-y-4">
         <p className="text-sm text-slate-300">Presente para <b>{p.recipient}</b> {p.built && <span className="text-emerald-300">(já montado — salvar de novo substitui)</span>}</p>
         <div>
-          <h3 className="mb-1 text-sm font-semibold">1. Presente (sem custo — o nível vem dos laços{e.level === 0 ? "; ainda bloqueado, monte só o cartão por enquanto" : ""})</h3>
-          <div className="grid gap-2 sm:grid-cols-2">
-            {GIFT_CATALOG.map((g) => {
-              const locked = g.tier > e.level;
-              return (
-                <button key={g.key} disabled={locked} onClick={() => setGift(g.key)} className={`rounded-xl border p-2 text-left text-sm ${gift === g.key ? "border-amber-300 bg-amber-300/10" : "border-white/10 bg-white/5"} ${locked ? "opacity-40" : "hover:bg-white/10"}`}>
-                  <span className="mr-1">{locked ? "🔒" : g.emoji}</span>{g.name} <span className="text-xs text-slate-400">· nível {g.tier}</span>
-                </button>
-              );
-            })}
-          </div>
+          <h3 className="mb-1 text-sm font-semibold">1. Pacotes de presente (sem custo — o nível vem dos laços{e.level === 0 ? "; ainda bloqueado, monte só o cartão por enquanto" : ""})</h3>
+          <PackagePicker packages={packages} level={e.level} selected={opts} onChange={setOpts} />
         </div>
         <CardEditor card={card} setCard={setCard} />
-        <button className={btnPrimary} disabled={pending || card.lines.length === 0} onClick={() => run(() => saveBuildAction(p.id, gift, card))}>Salvar presente e cartão</button>
+        <button className={btnPrimary} disabled={pending || card.lines.length === 0 || (opts.length !== 0 && opts.length !== 3)} onClick={() => run(() => saveBuildAction(p.id, opts, card))}>Salvar presente e cartão</button>
         <p className="text-xs text-slate-400">Quem não montar até a entrega envia o presente padrão do nível com um cartão simples.</p>
       </div>
       <div><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} /></div>
@@ -172,9 +165,9 @@ function Builder({ e, p, run, pending }: { e: Ed; p: P; run: (f: () => Promise<u
 
 // Abre o cartão recebido: envelope animado → cartão → presente (vai para a Caixa de Presentes).
 function Delivery({ participantId }: { participantId: string }) {
-  const [res, setRes] = useState<{ card?: CardData; gift?: { name: string; emoji: string }; mimo?: boolean; delivered?: boolean; error?: string } | null>(null);
+  const [res, setRes] = useState<{ card?: CardData; pkg?: ResolvedPackage; mimo?: boolean; delivered?: boolean; error?: string } | null>(null);
   const [loading, setLoading] = useState(false);
-  if (!res?.card) {
+  if (!res?.card || !res.pkg) {
     return (
       <div className="space-y-2">
         <button className={btnPrimary} disabled={loading} onClick={async () => { setLoading(true); setRes((await openCardAction(participantId)) as typeof res); setLoading(false); }}>Receber o cartão deste participante</button>
@@ -184,11 +177,7 @@ function Delivery({ participantId }: { participantId: string }) {
   }
   return (
     <EnvelopeReveal card={res.card}>
-      <div className="rounded-xl border border-amber-300/50 bg-black/30 p-4 text-center">
-        <div className="text-4xl">{res.gift?.emoji}</div>
-        <p className="font-semibold">{res.gift?.name}{res.mimo ? " + mimo de constância" : ""}</p>
-        <p className="text-sm text-slate-300">{res.delivered ? "O presente já está na sua Caixa de Presentes." : "(Testador: sem Caixa de Presentes.)"}</p>
-      </div>
+      <ReceivedGift pkg={res.pkg} mimo={Boolean(res.mimo)} delivered={Boolean(res.delivered)} />
     </EnvelopeReveal>
   );
 }

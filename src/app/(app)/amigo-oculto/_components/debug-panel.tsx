@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { GIFT_CATALOG, MIMO_PAYLOAD } from "@/lib/amigo-oculto/catalog";
+import { MIMO } from "@/lib/amigo-oculto/catalog";
+import type { ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
+import { PackageCard } from "./package-ui";
 import { type CardData } from "@/lib/amigo-oculto/cards";
 import { checkinAction, debugCheckinsAction, updateConfigAction } from "../actions";
 import { CardEditor, randomCard } from "./card-editor";
@@ -15,17 +17,14 @@ const btn = "rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm h
 const tab = (on: boolean) => `rounded-lg px-3 py-1.5 text-sm ${on ? "bg-amber-400 font-semibold text-slate-900" : "bg-white/10 hover:bg-white/20"}`;
 const TABS = [["checkin", "📅 Check-in diário"], ["loja", "🛍️ Loja de presentes"], ["carta", "✉️ Cartinha"], ["anim", "🎬 Animação"], ["regras", "⚙️ Regras"]] as const;
 
-const fmtPayload = (p: (typeof GIFT_CATALOG)[number]["payload"]) =>
-  [p.coins && `${p.coins} moedas`, p.food && `${p.food} comida`, p.sweet && `${p.sweet} doces`, ...(p.eggs ?? []).map((x) => `${x.quantity ?? 1}× ovo ${x.type}`), ...(p.shopItems ?? []).map((x) => `${x.quantity ?? 1}× ${x.type}`)].filter(Boolean).join(" · ");
-
-export function DebugPanel({ e, run, pending }: { e: DebugEd; run: Run; pending: boolean }) {
+export function DebugPanel({ e, run, pending, packages }: { e: DebugEd; run: Run; pending: boolean; packages: ResolvedPackage[] }) {
   const [t, setT] = useState<(typeof TABS)[number][0]>("checkin");
   const [card, setCard] = useState<CardData>({ greeting: "g3", lines: ["f1", "f4"], closing: "c1", background: "noite", sticker: "🎄", image: "noel-chamine" });
   return (
     <section className="space-y-4 rounded-2xl border border-amber-300/30 bg-amber-300/5 p-4">
       <div className="flex flex-wrap gap-2">{TABS.map(([k, l]) => <button key={k} className={tab(t === k)} onClick={() => setT(k)}>{l}</button>)}</div>
       {t === "checkin" && <CheckinDebug e={e} run={run} pending={pending} />}
-      {t === "loja" && <ShopDebug realLevel={e.level} />}
+      {t === "loja" && <ShopDebug realLevel={e.level} packages={packages} />}
       {t === "carta" && (
         <div className="grid gap-5 lg:grid-cols-2">
           <div className="space-y-3">
@@ -77,7 +76,7 @@ function CheckinDebug({ e, run, pending }: { e: DebugEd; run: Run; pending: bool
   );
 }
 
-function ShopDebug({ realLevel }: { realLevel: number }) {
+function ShopDebug({ realLevel, packages }: { realLevel: number; packages: ResolvedPackage[] }) {
   const [lv, setLv] = useState(realLevel);
   return (
     <div className="space-y-3">
@@ -86,19 +85,9 @@ function ShopDebug({ realLevel }: { realLevel: number }) {
         <span className="text-xs text-slate-400">(nível real da comunidade agora: {realLevel})</span>
       </label>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-        {GIFT_CATALOG.map((g) => {
-          const locked = g.tier > lv;
-          return (
-            <div key={g.key} className={`rounded-xl border p-3 text-sm ${locked ? "border-white/10 bg-white/5 opacity-50" : "border-amber-300/40 bg-amber-300/10"}`}>
-              <div className="text-2xl">{locked ? "🔒" : g.emoji}</div>
-              <div className="font-semibold">{g.name}</div>
-              <div className="text-xs text-slate-300">Nível {g.tier}</div>
-              <div className="mt-1 text-xs text-slate-400">{fmtPayload(g.payload)}</div>
-            </div>
-          );
-        })}
+        {packages.map((p) => <PackageCard key={p.key} pkg={p} locked={p.tier > lv} />)}
       </div>
-      <p className="text-xs text-slate-400">Mimo de constância: {fmtPayload(MIMO_PAYLOAD)}.</p>
+      <p className="text-xs text-slate-400">Mimo de constância: {MIMO.food} comidas + {MIMO.sweet} doces. Itens e imagens vêm da loja.</p>
     </div>
   );
 }

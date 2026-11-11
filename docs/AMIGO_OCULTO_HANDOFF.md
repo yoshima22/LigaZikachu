@@ -1,6 +1,6 @@
 # Amigo Oculto — handoff (admin-only, em construção)
 
-Rota `/amigo-oculto` (sem link no menu; guard admin no servidor + em todas as actions). Código: `src/lib/amigo-oculto/` (núcleo puro `core.ts`, `catalog.ts`, `cards.ts`, `service.ts`) e `src/app/(app)/amigo-oculto/`. Tabelas `ss_editions`/`ss_participants` (`prisma/migrations-manual/20261110_amigo_oculto.sql`, já aplicada).
+Rotas: `/amigo-oculto` = tela do JOGADOR (só aparece quando o admin clica "publicar" na edição; antes disso só admin enxerga; sem link no menu) e `/amigo-oculto/admin` = painel de teste/debug (admin). Guard no servidor + em todas as actions (`actions.ts` admin, `player-actions.ts` jogador: o participante vem da sessão, nunca do cliente). Código: `src/lib/amigo-oculto/` (núcleo puro `core.ts`, `catalog.ts`, `cards.ts`, `service.ts`) e `src/app/(app)/amigo-oculto/`. Tabelas `ss_editions`/`ss_participants` (`prisma/migrations-manual/20261110_amigo_oculto.sql`, já aplicada).
 
 ## Fluxo
 1. **Inscrição** (admin cria edição de teste; inscreve a si e testadores). Mínimo 6 para sortear.
@@ -8,6 +8,13 @@ Rota `/amigo-oculto` (sem link no menu; guard admin no servidor + em todas as ac
 3. **Laços**: 1 check-in por dia por pessoa (dia BRT, idempotente via SQL). Meta = inscritos × dias × 75%. Níveis 1–4 em 25/50/75/100% da meta.
 4. **Montagem**: presente do catálogo curado (`catalog.ts`, grátis; só tiers ≤ nível atual) + cartão só com frases prontas (`cards.ts`; sem texto livre, nada a moderar). Dá para salvar só o cartão enquanto o nível é 0.
 5. **Entrega** (`deliver`, hoje botão manual): completa quem não montou com o presente padrão do nível + cartão simples. O recebedor abre o cartão (envelope animado) e só então o `PlayerGift` (TOURNAMENT_BOX) é criado na Caixa — sem bypass pelo "Receber todos". Mimo de constância (+5 comida, +3 doce) se ≥70% dos dias com check-in.
+
+## Versão 2 (2026-11-11)
+- **Pacotes reais da loja** (`catalog.ts`, 19 pacotes em 4 níveis, itens por nome resolvidos no banco com a imagem original — `catalog-db.ts`). O presenteador escolhe **3 pacotes**; na entrega o servidor sorteia **1** (determinístico: `pickIndex(seed:participante)`), sem escolha vale 3 pacotes padrão do nível. Ovos viram `MascotEgg` reais; comida/doce vão por payload; itens vão ao inventário pelo nome (TOURNAMENT_BOX).
+- **Tela do jogador**: inscrição (e cancelar), "Você tirou" (persistente, dá para voltar e consultar), laços + check-in, montagem (3 pacotes + cartão), abertura animada do cartão e galeria "Cartões da Liga" depois da entrega (remetente oculto).
+- **Ninguém é tirado 2×**: ciclo único + `@@unique([editionId, recipientId])` no banco; o sorteio ainda evita repetir pares de edições anteriores (best effort, `drawAvoiding`).
+- **Entrega automática ao acessar**: passou de `deliverAt` e ninguém entregou → `playerView` chama `deliver` (idempotente, claim da fase). Data pretendida: 25/12/2026 00:00 BRT = `2026-12-25T03:00:00Z`. Não depende de cron.
+- Migration: `prisma/migrations-manual/20261111_amigo_oculto_opcoes.sql` (já aplicada).
 
 ## Menu de debug (botão "🛠 Menu de debug" no painel)
 - **Check-in diário:** grade jogador × dia; clique marca o dia (só edição de teste); atalhos "sortear 70%", "todos todos os dias", "zerar".

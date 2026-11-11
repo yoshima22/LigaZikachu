@@ -1,18 +1,25 @@
 import { redirect } from "next/navigation";
-import { getSsAdmin, getView } from "@/lib/amigo-oculto/service";
-import { AmigoClient } from "./_components/amigo-client";
+import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
+import { currentEdition, playerView } from "@/lib/amigo-oculto/service";
+import { getSessionPlayer } from "@/lib/session";
+import { PlayerClient } from "./_components/player-client";
 
 export const dynamic = "force-dynamic";
 
-// Fechado ao público: só admin entra; as actions repetem a checagem.
-export default async function AmigoOcultoPage({ searchParams }: { searchParams: Promise<{ e?: string }> }) {
-  const admin = await getSsAdmin();
-  if (!admin) redirect("/dashboard");
-  const { e } = await searchParams;
-  const view = await getView(e);
+// Tela do jogador. Só aparece quando o admin publica a edição; até lá, só admin enxerga.
+export default async function AmigoOcultoPage() {
+  const user = await getSessionUser();
+  if (!user) redirect("/dashboard");
+  const player = await getSessionPlayer(user.id);
+  if (!player) redirect("/dashboard");
+  const admin = isAdmin(user.role);
+  const edition = await currentEdition(admin);
+  if (!edition) redirect("/dashboard");
+  const view = await playerView(edition.id, player.id);
+  if (!view) redirect("/dashboard");
   return (
-    <main className="mx-auto max-w-5xl space-y-4 px-3 py-6 sm:px-4 sm:py-8">
-      <AmigoClient view={JSON.parse(JSON.stringify(view))} myPlayerName={admin.displayName} />
+    <main className="mx-auto max-w-4xl space-y-4 px-3 py-6 sm:px-4 sm:py-8">
+      <PlayerClient view={JSON.parse(JSON.stringify(view))} isAdmin={admin} />
     </main>
   );
 }

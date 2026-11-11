@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_SS_CONFIG as C, countCheckins, daysBetween, draw, earnedMimo, goalFor, hashSeed, levelFor } from "./core";
-import { GIFT_CATALOG, defaultGift, giftsForLevel } from "./catalog";
+import { DEFAULT_SS_CONFIG as C, countCheckins, daysBetween, draw, drawAvoiding, earnedMimo, goalFor, hashSeed, levelFor, pickIndex } from "./core";
+import { PACKAGES, defaultOptions, packagesForLevel, validateOptions } from "./catalog";
 import { validateCard } from "./cards";
 
 test("sorteio: ninguém tira a si mesmo, sem trocas diretas, todos recebem 1, determinístico", () => {
@@ -32,9 +32,15 @@ test("laços: meta sobre inscritos, níveis e check-in 1 por dia", () => {
 });
 
 test("catálogo e cartão", () => {
-  assert.ok(giftsForLevel(1).every((g) => g.tier === 1) && giftsForLevel(4).length === GIFT_CATALOG.length);
-  assert.equal(defaultGift(0).tier, 1);
-  assert.equal(defaultGift(3).tier, 3);
+  assert.ok(packagesForLevel(1).every((g) => g.tier === 1) && packagesForLevel(4).length === PACKAGES.length);
+  for (const t of [1, 2, 3, 4]) assert.ok(PACKAGES.filter((p) => p.tier === t).length >= 3, `nível ${t} precisa de 3+ pacotes`);
+  assert.equal(new Set(PACKAGES.map((p) => p.key)).size, PACKAGES.length);
+  assert.equal(defaultOptions(0).length, 3);
+  assert.ok(defaultOptions(3).every((k) => PACKAGES.find((p) => p.key === k)!.tier === 3));
+  assert.ok(validateOptions(["guloseimas", "torcedor", "visual"], 1).ok);
+  assert.ok(!validateOptions(["guloseimas", "torcedor"], 1).ok);              // precisa de 3
+  assert.ok(!validateOptions(["guloseimas", "guloseimas", "visual"], 1).ok);  // distintos
+  assert.ok(!validateOptions(["guloseimas", "torcedor", "raro"], 1).ok);      // nível 3 bloqueado
   const ok = { greeting: "g1", lines: ["l1"], closing: "c1", background: "noite", sticker: "🎄" };
   assert.ok(validateCard(ok).ok);
   assert.ok(!validateCard({ ...ok, lines: [] }).ok);
@@ -42,4 +48,16 @@ test("catálogo e cartão", () => {
   assert.ok(!validateCard({ ...ok, background: "x" }).ok);
   assert.ok(validateCard({ ...ok, image: "noel-chamine", lines: ["f1", "f2"] }).ok);
   assert.ok(!validateCard({ ...ok, image: "nada" }).ok);
+});
+
+test("sorteio entre as 3 opções e pares anteriores evitados", () => {
+  const hits = [0, 0, 0];
+  for (let i = 0; i < 3000; i++) hits[pickIndex(`s:${i}`, 3)]++;
+  assert.ok(hits.every((h) => h > 800), `distribuição desbalanceada ${hits}`);
+  assert.equal(pickIndex("a:b", 3), pickIndex("a:b", 3));
+  const ids = Array.from({ length: 8 }, (_, i) => `p${i}`);
+  const first = draw(ids, "base");
+  const avoid = new Set([...first].map(([a, b]) => `${a}>${b}`));
+  const { pairs } = drawAvoiding(ids, avoid);
+  assert.ok([...pairs].every(([a, b]) => !avoid.has(`${a}>${b}`)));
 });

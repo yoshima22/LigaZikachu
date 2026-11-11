@@ -5774,7 +5774,8 @@ model SecretSantaParticipant {
   displayName  String
   recipientId  String? // participante que esta pessoa tirou (definido no sorteio)
   checkinsJson Json      @default("[]") // ["YYYY-MM-DD", ...]
-  giftKey      String? // item escolhido no catálogo
+  giftKey      String? // pacote sorteado entre as 3 opções (definido na entrega)
+  giftOptionsJson Json @default("[]") // 3 pacotes escolhidos pelo presenteador
   cardJson     Json? // { greeting, lines[], closing, background, sticker }
   builtAt      DateTime?
   deliveredGiftId String? // PlayerGift criado quando o RECEBEDOR abre o cartão
@@ -5784,6 +5785,7 @@ model SecretSantaParticipant {
   edition SecretSantaEdition @relation(fields: [editionId], references: [id], onDelete: Cascade)
 
   @@unique([editionId, playerId])
+  @@unique([editionId, recipientId]) // ninguém é tirado duas vezes na mesma edição
   @@index([editionId])
   @@map("ss_participants")
 }

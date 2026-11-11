@@ -10,6 +10,7 @@ async function guarded<T>(fn: (a: NonNullable<Awaited<ReturnType<typeof svc.getS
   try {
     const r = await fn(a);
     revalidatePath("/amigo-oculto");
+    revalidatePath("/amigo-oculto/admin");
     return r;
   } catch (e) {
     console.error("[amigo-oculto]", e);
@@ -35,8 +36,8 @@ export async function checkinAction(participantId: string, day?: string) {
 export async function updateConfigAction(editionId: string, i: { goalPct: number; levels: number[]; mimoMinPct: number }) {
   return guarded(() => svc.updateConfig(editionId, i));
 }
-export async function saveBuildAction(participantId: string, giftKey: string, card: unknown) {
-  return guarded(() => svc.saveBuild(participantId, giftKey, card));
+export async function saveBuildAction(participantId: string, optionKeys: string[], card: unknown) {
+  return guarded(() => svc.saveBuild(participantId, optionKeys, card));
 }
 export async function deliverAction(editionId: string) {
   return guarded(() => svc.deliver(editionId));
@@ -49,4 +50,7 @@ export async function openCardAction(participantId: string) {
 }
 export async function debugCheckinsAction(editionId: string, mode: "random" | "clear" | "fill", pct?: number) {
   return guarded(() => svc.debugCheckins(editionId, mode, pct));
+}
+export async function setPublishedAction(editionId: string, published: boolean) {
+  return guarded(() => svc.setPublished(editionId, published));
 }
