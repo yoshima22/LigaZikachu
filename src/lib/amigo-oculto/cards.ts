@@ -123,6 +123,8 @@ export const IMAGES: { key: string; label: string; url: string; lightUrl?: strin
   img("ceia", "Ceia da Liga"),
   img("brinde", "Brinde de fim de ano"),
   { ...img("linha-natal", "Troca de presentes (traço que muda de cor)"), lightUrl: `${IMG_BASE}/linha-natal-branco.webp` },
+  { ...img("linha-bruto", "Noel erguido pelo brutamontes (traço que muda de cor)"), lightUrl: `${IMG_BASE}/linha-bruto-branco.webp` },
+  { ...img("linha-explosao", "Explosão de presentes (traço que muda de cor)"), lightUrl: `${IMG_BASE}/linha-explosao-branco.webp` },
 ];
 
 // Fundo escuro = texto claro: a arte em traço troca para a versão branca.
