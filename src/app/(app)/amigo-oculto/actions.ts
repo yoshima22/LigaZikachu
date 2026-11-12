@@ -33,7 +33,7 @@ export async function drawAction(editionId: string) {
 export async function checkinAction(participantId: string, day?: string) {
   return guarded(() => svc.checkin(participantId, day));
 }
-export async function updateConfigAction(editionId: string, i: { goalPct: number; levels: number[]; mimoMinPct: number }) {
+export async function updateConfigAction(editionId: string, i: { levels: number[]; mimoMinPct: number }) {
   return guarded(() => svc.updateConfig(editionId, i));
 }
 export async function saveBuildAction(participantId: string, optionKeys: string[], card: unknown) {

@@ -9,17 +9,18 @@ import { checkinSelfAction, leaveSelfAction, openMyCardAction, registerSelfActio
 import { CARD_CSS, CardView, EnvelopeReveal, Snow } from "./card-view";
 import { CardEditor } from "./card-editor";
 import { PackageCard, PackagePicker, ReceivedGift } from "./package-ui";
+import { CategoryCatalog, HowItWorks } from "./info-panels";
 
 type Person = { id: string; name: string; avatarUrl: string | null; checkins: number };
 type View = {
-  edition: { id: string; name: string; phase: string; startsOn: string; deliverAt: string; today: string; level: number; goal: number; bonds: number; totalDays: number; elapsedDays: number; minParticipants: number };
+  edition: { id: string; name: string; phase: string; startsOn: string; deliverAt: string; today: string; level: number; levels: number[]; goal: number; bonds: number; totalDays: number; elapsedDays: number; minParticipants: number };
   participants: Person[];
   packages: ResolvedPackage[];
   me: { id: string; checkins: number; checkedToday: boolean; built: boolean; options: string[]; card: CardData | null; opened: boolean; recipient: { name: string; avatarUrl: string | null } | null } | null;
   gallery: { to: string; card: CardData; packageKey: string | null; packageName: string }[];
 };
 
-const LEVELS = ["Nenhum nível ainda", "Nível 1", "Nível 2", "Nível 3", "Nível 4"];
+const LEVELS = ["Nenhuma categoria liberada", "Nem ligo pro Natal", "Natal é Legal", "Eu Amo o Natal", "Papa Coração"];
 const btn = "rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40";
 const btnPrimary = "rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-300 disabled:opacity-40";
 const panel = "space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4";
@@ -91,7 +92,7 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
             ? <button className={btn} disabled={pending} onClick={() => run(() => leaveSelfAction(e.id))}>Cancelar minha inscrição</button>
             : <button className={btnPrimary} disabled={pending} onClick={() => run(() => registerSelfAction(e.id))}>Quero participar!</button>)}
         </div>
-        {e.phase === "REGISTRATION" && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} Depois do sorteio você descobre quem tirou. São necessários pelo menos {e.minParticipants} inscritos.</p>}
+        {e.phase === "REGISTRATION" && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} As inscrições vão até <b>{e.startsOn.split("-").reverse().slice(0, 2).join("/")}</b>; no mesmo dia o sorteio é feito e você descobre quem tirou. São necessários pelo menos {e.minParticipants} inscritos.</p>}
         {e.phase !== "REGISTRATION" && !me && <p className="text-sm text-slate-300">As inscrições já foram encerradas. Você poderá ver os cartões da Liga depois da entrega.</p>}
         <div className="flex flex-wrap gap-2">
           {view.participants.map((p) => (
@@ -99,6 +100,9 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
           ))}
         </div>
       </section>
+
+      {e.phase !== "DELIVERED" && <HowItWorks startsOn={e.startsOn} deliverAt={e.deliverAt} minParticipants={e.minParticipants} />}
+      {e.phase !== "DELIVERED" && <CategoryCatalog packages={view.packages} levels={e.levels} bonds={e.bonds} />}
 
       {/* Quem eu tirei */}
       {me?.recipient && (
@@ -116,17 +120,17 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
       {me && e.phase === "COLLECTING" && (
         <section className={panel}>
           <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold">🤝 Laços da comunidade</h2>
-            <button className={btnPrimary} disabled={pending || me.checkedToday || e.today < e.startsOn} onClick={() => run(() => checkinSelfAction(e.id))}>{me.checkedToday ? "✔ Check-in de hoje feito" : e.today < e.startsOn ? "Começa em breve" : "Fazer check-in de hoje"}</button>
+            <h2 className="font-semibold">🍭 Bengalas de açúcar da comunidade</h2>
+            <button className={btnPrimary} disabled={pending || me.checkedToday || e.today < e.startsOn} onClick={() => run(() => checkinSelfAction(e.id))}>{me.checkedToday ? "✔ Check-in de hoje feito" : e.today < e.startsOn ? `Começa em ${e.startsOn.split("-").reverse().slice(0, 2).join("/")}` : "Fazer check-in (+1 🍭)"}</button>
           </div>
           <div>
-            <div className="mb-1 flex justify-between text-sm"><span>{e.bonds} de {e.goal} laços</span><span className="text-amber-300">{LEVELS[e.level]}</span></div>
+            <div className="mb-1 flex justify-between text-sm"><span>{e.bonds} 🍭 de {e.goal}</span><span className="text-amber-300">{LEVELS[e.level]}</span></div>
             <div className="relative h-4 overflow-hidden rounded-full bg-black/40">
               <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-300 transition-all" style={{ width: `${pct}%` }} />
-              {[25, 50, 75].map((m) => <span key={m} className="absolute top-0 h-full w-px bg-white/40" style={{ left: `${m}%` }} />)}
+              {e.levels.slice(0, 3).map((m) => <span key={m} className="absolute top-0 h-full w-px bg-white/40" style={{ left: `${Math.min(100, (m / e.goal) * 100)}%` }} />)}
             </div>
           </div>
-          <p className="text-xs text-slate-300">Cada check-in diário de cada inscrito vira 1 laço. Quanto mais laços, melhores os pacotes que dá para presentear. Seus check-ins: <b>{me.checkins}</b>.</p>
+          <p className="text-xs text-slate-300">Cada check-in diário de cada inscrito vira 1 bengala de açúcar. Quanto mais bengalas, mais categorias de presente são liberadas. Suas bengalas: <b>{me.checkins}</b>.</p>
         </section>
       )}
 
@@ -146,21 +150,21 @@ function Builder({ view, run, pending }: { view: View; run: (f: () => Promise<un
   const { edition: e, me } = view;
   const [opts, setOpts] = useState<string[]>(me!.options);
   const [card, setCard] = useState<CardData>(me!.card ?? EMPTY);
-  const canSave = card.lines.length > 0 && (opts.length === 0 || opts.length === 3);
+  const canSave = card.lines.length > 0 && (opts.length <= 3);
   return (
     <section className={panel}>
       <h2 className="font-semibold">🎀 Monte seu presente e seu cartão{me!.built ? " ✔ (salvo — pode alterar)" : ""}</h2>
       {me!.recipient && <p className="text-sm text-slate-300">Para: <b>{me!.recipient.name}</b></p>}
-      <h3 className="text-sm font-semibold">1. Pacotes de presente</h3>
+      <h3 className="text-sm font-semibold">1. Kits de presente</h3>
       {e.level === 0
-        ? <p className="rounded-lg border border-dashed border-white/20 p-3 text-sm text-slate-300">Os pacotes são liberados conforme a comunidade junta laços (check-in diário de todos). Enquanto isso, já dá para montar o cartão!</p>
-        : <PackagePicker packages={view.packages} level={e.level} selected={opts} onChange={setOpts} />}
+        ? <p className="rounded-lg border border-dashed border-white/20 p-3 text-sm text-slate-300">Os kits são liberados conforme a comunidade junta bengalas de açúcar (check-in diário de todos, a partir de 01/12). Enquanto isso, já dá para montar o cartão!</p>
+        : <PackagePicker packages={view.packages} level={e.level} levels={e.levels} selected={opts} onChange={setOpts} />}
       <div className="grid gap-5 lg:grid-cols-2">
         <div><h3 className="mb-2 text-sm font-semibold">2. Cartão</h3><CardEditor card={card} setCard={setCard} /></div>
         <div className="lg:sticky lg:top-4 lg:self-start"><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} /></div>
       </div>
       <button className={btnPrimary} disabled={pending || !canSave} onClick={() => run(() => saveBuildSelfAction(e.id, opts, card))}>Salvar presente e cartão</button>
-      <p className="text-xs text-slate-400">Você pode editar até a entrega. Quem não montar envia 3 pacotes padrão do nível e um cartão simples.</p>
+      <p className="text-xs text-slate-400">Você pode editar até a entrega. Quem não escolher kits envia 3 kits padrão da categoria mais alta liberada e um cartão simples.</p>
     </section>
   );
 }
@@ -213,7 +217,7 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
           <div className="w-full max-w-sm space-y-3 py-6" onClick={(ev) => ev.stopPropagation()}>
             <p className="text-center text-sm text-white">Cartão para <b>{open.to}</b></p>
             <CardView card={open.card} />
-            {pkg && <div className="space-y-1"><p className="text-center text-xs uppercase tracking-wider text-amber-200">🎲 Pacote sorteado</p><PackageCard pkg={pkg} /></div>}
+            {pkg && <div className="space-y-1"><p className="text-center text-xs uppercase tracking-wider text-amber-200">🎲 Kit sorteado</p><PackageCard pkg={pkg} /></div>}
             <button className={`${btn} w-full`} onClick={() => setOpen(null)}>Fechar</button>
           </div>
         </div>

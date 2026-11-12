@@ -16,7 +16,7 @@ const err = (r: unknown) => assert.ok(r && typeof r === "object" && "error" in (
   try {
     // pacotes reais da loja, com imagens
     const packs = await loadPackages();
-    for (const t of [1, 2, 3, 4]) assert.ok(packs.filter((p) => p.tier === t).length >= 3, `nível ${t} sem 3 pacotes resolvidos`);
+    assert.deepEqual([1, 2, 3, 4].map((t) => packs.filter((p) => p.tier === t).length), [5, 10, 10, 15]);
     console.log("pacotes:", packs.length, "| itens com imagem:", packs.flatMap((p) => p.items).filter((i) => i.imageUrl).length, "/", packs.flatMap((p) => p.items).length);
 
     err(await s.runDraw(c.id));                       // poucos inscritos
@@ -35,11 +35,13 @@ const err = (r: unknown) => assert.ok(r && typeof r === "object" && "error" in (
     assert.equal(((await s.checkin(p0.id)) as { counted: boolean }).counted, true);
     assert.equal(((await s.checkin(p0.id)) as { counted: boolean }).counted, false);  // 1 por dia
     const card = { greeting: "g1", lines: ["l1", "f1"], closing: "c1", background: "noite", sticker: "🎄", image: "ceia" };
-    err(await s.saveBuild(p0.id, ["guloseimas", "torcedor", "visual"], card));         // nível 0: bloqueado
+    err(await s.saveBuild(p0.id, ["n1-lanchinho", "n2-evento", "n3-gala"], card));      // com 1 bengala só a categoria 1 está liberada
     ok(await s.saveBuild(p0.id, [], card));                                            // só o cartão
-    ok(await s.debugCheckins(c.id, "fill"));                                           // laços cheios -> nível 4
-    err(await s.saveBuild(p0.id, ["guloseimas", "torcedor"], card));                   // exige 3
-    for (const p of ed.participants) ok(await s.saveBuild(p.id, ["tm-poder", "especial", "laboratorio"], card));
+    ok(await s.updateConfig(c.id, { levels: [1, 2, 3, 4], mimoMinPct: 0.7 }));         // limiares baixos só para o teste
+    ok(await s.debugCheckins(c.id, "fill"));                                           // bengalas cheias -> categoria 4
+    err(await s.saveBuild(p0.id, ["n4-ciencia", "n4-papai", "n4-ninhada", "n4-lendario"], card)); // máximo 3
+    ok(await s.saveBuild(p0.id, ["n4-ciencia"], card));                                // 1 kit basta
+    for (const p of ed.participants) ok(await s.saveBuild(p.id, ["n4-ciencia", "n4-papai", "n4-ninhada"], card));
 
     // entrega automática ao acessar depois do horário
     await prisma.secretSantaEdition.update({ where: { id: c.id }, data: { deliverAt: new Date(Date.now() - 60_000) } });
@@ -48,7 +50,7 @@ const err = (r: unknown) => assert.ok(r && typeof r === "object" && "error" in (
     assert.equal(v!.gallery.length, 8);
     assert.ok(v!.me && v!.me.recipient);
     const done = await prisma.secretSantaParticipant.findMany({ where: { editionId: c.id } });
-    for (const p of done) assert.ok(["tm-poder", "especial", "laboratorio"].includes(p.giftKey!), "sorteio fora das 3 opções");
+    for (const p of done) assert.ok(["n4-ciencia", "n4-papai", "n4-ninhada"].includes(p.giftKey!), "sorteio fora das 3 opções");
     err(await s.deliver(c.id));                                                       // idempotente: segunda entrega não faz nada
 
     // recebedor real abre o cartão -> presente na Caixa com itens reais

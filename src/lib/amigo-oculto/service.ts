@@ -3,7 +3,7 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
-import { DEFAULT_SS_CONFIG, brtDay, countCheckins, daysBetween, drawAvoiding, earnedMimo, goalFor, hashSeed, levelFor, pickIndex, readConfig } from "./core";
+import { DEFAULT_SS_CONFIG, brtDay, countCheckins, daysBetween, drawAvoiding, earnedMimo, hashSeed, lastCheckinDay, levelFor, pickIndex, readConfig } from "./core";
 import { defaultOptions, packageByKey, validateOptions } from "./catalog";
 import { giftPayload, loadPackages } from "./catalog-db";
 import { validateCard, type CardData } from "./cards";
@@ -21,14 +21,17 @@ const fail = (error: string): Fail => ({ error });
 export async function createEdition(input: { name: string; startsOn: string; deliverAt: string }) {
   const deliverAt = new Date(input.deliverAt);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(input.startsOn) || Number.isNaN(deliverAt.getTime())) return fail("Datas inválidas.");
-  if (brtDay(deliverAt) < input.startsOn) return fail("A entrega precisa ser depois do início dos laços.");
+  if (lastCheckinDay(deliverAt) < input.startsOn) return fail("A entrega precisa ser depois do início das bengalas de açúcar.");
   const e = await prisma.secretSantaEdition.create({ data: { name: input.name.trim().slice(0, 60) || "Amigo Oculto", startsOn: input.startsOn, deliverAt, configJson: DEFAULT_SS_CONFIG } });
   return { id: e.id };
 }
 
+// Inscrições: abertas até o dia de início das bengalas (00:00 de Brasília), quando o sorteio acontece. Edições de teste ignoram a data.
+const registrationOpen = (e: { phase: string; startsOn: string; isTest: boolean }) => e.phase === "REGISTRATION" && (e.isTest || brtDay(new Date()) < e.startsOn);
+
 export async function register(editionId: string, playerId: string, displayName: string) {
-  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true } });
-  if (!e || e.phase !== "REGISTRATION") return fail("As inscrições estão fechadas.");
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, startsOn: true, isTest: true } });
+  if (!e || !registrationOpen(e)) return fail("As inscrições estão fechadas.");
   await prisma.secretSantaParticipant.upsert({ where: { editionId_playerId: { editionId, playerId } }, update: {}, create: { editionId, playerId, displayName } });
   return { ok: true };
 }
@@ -48,9 +51,9 @@ export async function checkin(participantId: string, dayOverride?: string) {
   // Dia livre só para depurar edições de teste.
   if (dayOverride && !p.edition.isTest) return fail("Dia livre só vale em edições de teste.");
   const day = dayOverride ?? brtDay(new Date());
-  if (dayOverride && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > brtDay(p.edition.deliverAt))) return fail("Dia fora da janela.");
-  if (p.edition.phase !== "COLLECTING") return fail("Os laços só contam depois do sorteio e antes da entrega.");
-  if (day < p.edition.startsOn) return fail("Os laços ainda não começaram.");
+  if (dayOverride && (!/^\d{4}-\d{2}-\d{2}$/.test(day) || day > lastCheckinDay(p.edition.deliverAt))) return fail("Dia fora da janela.");
+  if (p.edition.phase !== "COLLECTING") return fail("As bengalas só contam depois do sorteio e antes da entrega.");
+  if (day < p.edition.startsOn) return fail("As bengalas de açúcar começam em " + p.edition.startsOn.split("-").reverse().join("/") + ".");
   const rows = await prisma.$executeRaw`UPDATE ss_participants SET "checkinsJson" = "checkinsJson" || to_jsonb(${day}::text) WHERE id = ${participantId} AND NOT ("checkinsJson" ? ${day})`;
   return { ok: true, counted: rows === 1 };
 }
@@ -71,24 +74,33 @@ export async function runDraw(editionId: string) {
     if (g && r) avoid.add(`${g}>${r}`);
   }
   const { seed, pairs } = drawAvoiding(e.participants.map((p) => p.id), avoid);
-  await prisma.$transaction([
-    ...[...pairs].map(([id, recipientId]) => prisma.secretSantaParticipant.update({ where: { id }, data: { recipientId } })),
-    prisma.secretSantaEdition.update({ where: { id: editionId }, data: { phase: "COLLECTING", drawnAt: new Date(), seed, seedHash: hashSeed(seed) } }),
-  ]);
-  return { ok: true };
+  // Claim da fase primeiro: duas requisições simultâneas não sorteiam duas vezes.
+  const done = await prisma.$transaction(async (tx) => {
+    const claim = await tx.secretSantaEdition.updateMany({ where: { id: editionId, phase: "REGISTRATION" }, data: { phase: "COLLECTING", drawnAt: new Date(), seed, seedHash: hashSeed(seed) } });
+    if (claim.count !== 1) return false;
+    for (const [id, recipientId] of pairs) await tx.secretSantaParticipant.update({ where: { id }, data: { recipientId } });
+    return true;
+  });
+  return done ? { ok: true } : fail("O sorteio já foi feito.");
 }
 
-// Estado coletivo: laços, meta e nível. `now` limita a janela de contagem ao dia atual/entrega.
+// Sorteio automático ao acessar, quando as inscrições fecham (edições reais; sem cron). Com poucos inscritos, fica parado para o admin decidir.
+export async function ensureDrawn(editionId: string) {
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, startsOn: true, isTest: true } });
+  if (e?.phase === "REGISTRATION" && !e.isTest && brtDay(new Date()) >= e.startsOn) await runDraw(editionId);
+}
+
+// Estado coletivo: bengalas de açúcar, meta (última categoria) e categoria liberada. `now` limita a janela de contagem ao dia atual/entrega.
 export function collective(e: { startsOn: string; deliverAt: Date; configJson: unknown }, rows: { checkinsJson: unknown }[], now = new Date()) {
   const cfg = readConfig(e.configJson);
-  const last = brtDay(e.deliverAt);
+  const last = lastCheckinDay(e.deliverAt);
   const totalDays = daysBetween(e.startsOn, last);
-  const goal = goalFor(rows.length, totalDays, cfg);
   const bonds = rows.reduce((s, r) => s + countCheckins(r.checkinsJson as string[], e.startsOn, last), 0);
-  return { cfg, totalDays, elapsedDays: Math.min(totalDays, daysBetween(e.startsOn, brtDay(now))), goal, bonds, level: levelFor(bonds, goal, cfg) };
+  // `goal` = bengalas da última categoria (barra de progresso).
+  return { cfg, totalDays, elapsedDays: Math.min(totalDays, daysBetween(e.startsOn, brtDay(now))), goal: cfg.levels[3], bonds, level: levelFor(bonds, cfg) };
 }
 
-// optionKeys vazio = só o cartão (os pacotes ficam para quando os laços liberarem algum nível).
+// optionKeys vazio = só o cartão (os kits ficam para quando as bengalas liberarem alguma categoria).
 export async function saveBuild(participantId: string, optionKeys: string[], rawCard: unknown) {
   const p = await prisma.secretSantaParticipant.findUnique({ where: { id: participantId }, include: { edition: { include: { participants: { select: { checkinsJson: true } } } } } });
   if (!p) return fail("Participante não encontrado.");
@@ -109,7 +121,7 @@ export async function saveBuild(participantId: string, optionKeys: string[], raw
 // (determinístico por seed+participante) e revela a seed. O PlayerGift só nasce quando o recebedor abre o cartão.
 export async function deliver(editionId: string) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, include: { participants: true } });
-  if (!e || e.phase !== "COLLECTING") return fail("A edição precisa estar em contagem de laços.");
+  if (!e || e.phase !== "COLLECTING") return fail("A edição precisa estar em contagem de bengalas.");
   const level = collective(e, e.participants).level;
   const fallbackCard: CardData = { greeting: "g1", lines: ["l2"], closing: "c2", background: "noite", sticker: "🎄" };
   await prisma.$transaction(async (tx) => {
@@ -117,7 +129,7 @@ export async function deliver(editionId: string) {
     if (claim.count !== 1) return;
     for (const p of e.participants) {
       const saved = ((p.giftOptionsJson as string[]) ?? []).filter((k) => packageByKey(k));
-      const opts = saved.length === 3 ? saved : defaultOptions(level);
+      const opts = saved.length > 0 ? saved : defaultOptions(level);
       const giftKey = opts[pickIndex(`${e.seed}:${p.id}`, opts.length)];
       await tx.secretSantaParticipant.update({ where: { id: p.id }, data: { giftKey, giftOptionsJson: opts, cardJson: (p.cardJson ?? fallbackCard) as Prisma.InputJsonValue } });
     }
@@ -149,7 +161,7 @@ export async function openCard(viewerParticipantId: string) {
   const pkg = (await loadPackages()).find((x) => x.key === def.key) ?? { ...def, items: [] };
   const rows = await prisma.secretSantaParticipant.findMany({ where: { editionId: me.editionId }, select: { checkinsJson: true } });
   const { cfg, totalDays } = collective(me.edition, rows);
-  const mimo = earnedMimo(countCheckins(giver.checkinsJson as string[], me.edition.startsOn, brtDay(me.edition.deliverAt)), totalDays, cfg);
+  const mimo = earnedMimo(countCheckins(giver.checkinsJson as string[], me.edition.startsOn, lastCheckinDay(me.edition.deliverAt)), totalDays, cfg);
   let giftId = giver.deliveredGiftId;
   if (me.playerId && !giver.openedAt) {
     giftId = await prisma.$transaction(async (tx) => {
@@ -171,7 +183,7 @@ export async function getView(editionId?: string) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id }, include: { participants: { orderBy: { createdAt: "asc" } } } });
   if (!e) return { editions, edition: null };
   const col = collective(e, e.participants);
-  const last = brtDay(e.deliverAt);
+  const last = lastCheckinDay(e.deliverAt);
   const nameOf = new Map(e.participants.map((p) => [p.id, p.displayName]));
   return {
     editions,
@@ -187,14 +199,14 @@ export async function getView(editionId?: string) {
   };
 }
 
-// Regras ajustáveis (antes da entrega): meta, faixas dos níveis e % de constância para o mimo.
-export async function updateConfig(editionId: string, input: { goalPct: number; levels: number[]; mimoMinPct: number }) {
+// Regras ajustáveis (antes da entrega): bengalas de cada categoria e % de constância para o mimo.
+export async function updateConfig(editionId: string, input: { levels: number[]; mimoMinPct: number }) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, configJson: true } });
   if (!e || e.phase === "DELIVERED") return fail("Edição já entregue.");
   const l = input.levels;
-  const sorted = l.length === 4 && l.every((x, i) => x > 0 && x <= 1.5 && (i === 0 || x > l[i - 1]));
-  if (!(input.goalPct > 0 && input.goalPct <= 1) || !sorted || !(input.mimoMinPct >= 0 && input.mimoMinPct <= 1)) return fail("Valores inválidos (meta 1–100%, níveis crescentes, mimo 0–100%).");
-  await prisma.secretSantaEdition.update({ where: { id: editionId }, data: { configJson: { ...readConfig(e.configJson), goalPct: input.goalPct, levels: l as [number, number, number, number], mimoMinPct: input.mimoMinPct } } });
+  const sorted = l.length === 4 && l.every((x, i) => Number.isInteger(x) && x >= 1 && (i === 0 || x > l[i - 1]));
+  if (!sorted || !(input.mimoMinPct >= 0 && input.mimoMinPct <= 1)) return fail("Valores inválidos (bengalas inteiras e crescentes, mimo 0–100%).");
+  await prisma.secretSantaEdition.update({ where: { id: editionId }, data: { configJson: { ...readConfig(e.configJson), levels: l as [number, number, number, number], mimoMinPct: input.mimoMinPct } } });
   return { ok: true };
 }
 
@@ -202,8 +214,8 @@ export async function updateConfig(editionId: string, input: { goalPct: number; 
 export async function debugCheckins(editionId: string, mode: "random" | "clear" | "fill", pct = 0.7) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, include: { participants: { select: { id: true } } } });
   if (!e?.isTest) return fail("Só em edições de teste.");
-  if (e.phase !== "COLLECTING") return fail("Disponível só durante a contagem de laços.");
-  const last = brtDay(e.deliverAt);
+  if (e.phase !== "COLLECTING") return fail("Disponível só durante a contagem de bengalas.");
+  const last = lastCheckinDay(e.deliverAt);
   const days: string[] = [];
   for (let n = 0; n < daysBetween(e.startsOn, last) && n < 60; n++) days.push(new Date(Date.parse(`${e.startsOn}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10));
   await prisma.$transaction(e.participants.map((p) => prisma.secretSantaParticipant.update({
@@ -230,6 +242,7 @@ export async function currentEdition(admin: boolean) {
 }
 
 export async function playerView(editionId: string, playerId: string) {
+  await ensureDrawn(editionId);
   await ensureDelivered(editionId);
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, include: { participants: { orderBy: { createdAt: "asc" } } } });
   if (!e) return null;
@@ -246,11 +259,11 @@ export async function playerView(editionId: string, playerId: string) {
   const byKey = new Map(packages.map((x) => [x.key, x]));
   const myRecipient = me?.recipientId ? e.participants.find((p) => p.id === me.recipientId) : null;
   return {
-    edition: { id: e.id, name: e.name, phase: e.phase, startsOn: e.startsOn, deliverAt: e.deliverAt.toISOString(), today, level: col.level, goal: col.goal, bonds: col.bonds, totalDays: col.totalDays, elapsedDays: col.elapsedDays, minParticipants: col.cfg.minParticipants },
-    participants: e.participants.map((p) => ({ id: p.id, name: p.displayName, avatarUrl: p.playerId ? avatar.get(p.playerId) ?? null : null, checkins: countCheckins(p.checkinsJson as string[], e.startsOn, brtDay(e.deliverAt)) })),
+    edition: { id: e.id, name: e.name, phase: e.phase, startsOn: e.startsOn, deliverAt: e.deliverAt.toISOString(), today, level: col.level, levels: col.cfg.levels, goal: col.goal, bonds: col.bonds, totalDays: col.totalDays, elapsedDays: col.elapsedDays, minParticipants: col.cfg.minParticipants },
+    participants: e.participants.map((p) => ({ id: p.id, name: p.displayName, avatarUrl: p.playerId ? avatar.get(p.playerId) ?? null : null, checkins: countCheckins(p.checkinsJson as string[], e.startsOn, lastCheckinDay(e.deliverAt)) })),
     packages,
     me: me && {
-      id: me.id, checkins: countCheckins(checkinDays, e.startsOn, brtDay(e.deliverAt)), checkedToday: checkinDays.includes(today), built: Boolean(me.builtAt),
+      id: me.id, checkins: countCheckins(checkinDays, e.startsOn, lastCheckinDay(e.deliverAt)), checkedToday: checkinDays.includes(today), built: Boolean(me.builtAt),
       options: ((me.giftOptionsJson as string[]) ?? []), card: (me.cardJson as CardData | null) ?? null, opened: delivered ? Boolean(e.participants.find((p) => p.recipientId === me.id)?.openedAt) : false,
       recipient: myRecipient ? { name: myRecipient.displayName, avatarUrl: myRecipient.playerId ? avatar.get(myRecipient.playerId) ?? null : null } : null,
     },
@@ -260,8 +273,8 @@ export async function playerView(editionId: string, playerId: string) {
 }
 
 export async function leaveEdition(editionId: string, playerId: string) {
-  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true } });
-  if (!e || e.phase !== "REGISTRATION") return fail("As inscrições estão fechadas.");
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, startsOn: true, isTest: true } });
+  if (!e || !registrationOpen(e)) return fail("As inscrições estão fechadas.");
   await prisma.secretSantaParticipant.deleteMany({ where: { editionId, playerId } });
   return { ok: true };
 }

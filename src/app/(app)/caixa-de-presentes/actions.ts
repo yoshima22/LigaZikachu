@@ -2,7 +2,7 @@
 
 import { revalidatePath, revalidateTag } from "next/cache";
 import { z } from "zod";
-import { EggType, FoodType, GiftStatus, Prisma, ZikaCoinTxType } from "@prisma/client";
+import { EggType, FoodType, GiftStatus, Prisma, ShopItemType, ZikaCoinTxType } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { creditCoins } from "@/lib/zikacoins";
@@ -207,7 +207,8 @@ async function applyGiftReward(
         description: `Recompensa de torneio: ${gift.title}`,
       });
     }
-    for (const [type, quantity] of [[FoodType.FOOD, food], [FoodType.SWEET, sweet]] as const) {
+    const rareSweet = typeof payload.rareSweet === "number" ? Math.max(0, Math.floor(payload.rareSweet)) : 0;
+    for (const [type, quantity] of [[FoodType.FOOD, food], [FoodType.SWEET, sweet], [FoodType.RARE_SWEET, rareSweet]] as const) {
       if (quantity <= 0) continue;
       await tx.mascotFoodItem.upsert({
         where: { playerId_type: { playerId, type } },
@@ -230,6 +231,20 @@ async function applyGiftReward(
             type: egg.type,
             origin: typeof payload.origin === "string" ? payload.origin : gift.title,
           },
+        });
+      }
+    }
+    // Pedra de mega evolução aleatória (Amigo Oculto): sorteada na hora de receber, entre as pedras ativas (sem o meteorito de Rayquaza).
+    const randomMegaStones = typeof payload.randomMegaStones === "number" ? Math.min(5, Math.max(0, Math.floor(payload.randomMegaStones))) : 0;
+    if (randomMegaStones > 0) {
+      const stoneTypes = Object.values(ShopItemType).filter((t) => t.startsWith("MEGA_STONE_") && t !== "MEGA_STONE_RAYQUAZITE");
+      const stones = await tx.shopItem.findMany({ where: { type: { in: stoneTypes }, active: true }, select: { id: true } });
+      for (let n = 0; n < randomMegaStones && stones.length > 0; n++) {
+        const stone = stones[Math.floor(Math.random() * stones.length)];
+        await tx.playerInventory.upsert({
+          where: { playerId_itemId: { playerId, itemId: stone.id } },
+          update: { quantity: { increment: 1 } },
+          create: { playerId, itemId: stone.id, quantity: 1, equipped: false, source: "EVENT_REWARD" },
         });
       }
     }

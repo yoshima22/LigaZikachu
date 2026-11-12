@@ -1,14 +1,13 @@
-// Núcleo puro do Amigo Oculto: sorteio, laços da comunidade e níveis de presente. Sem banco, sem relógio.
+// Núcleo puro do Amigo Oculto: sorteio, bengalas de açúcar da comunidade e categorias de presente. Sem banco, sem relógio.
 import { createHash } from "node:crypto";
 
 export type SsConfig = {
-  goalPct: number; // meta = inscritos × dias × goalPct
-  levels: [number, number, number, number]; // frações da meta que liberam os níveis 1..4
+  levels: [number, number, number, number]; // bengalas de açúcar (total da comunidade) que liberam as categorias 1..4
   mimoMinPct: number; // % dos dias com check-in para ganhar o mimo de constância
   minParticipants: number;
   published?: boolean; // visível para os jogadores (padrão: só admin)
 };
-export const DEFAULT_SS_CONFIG: SsConfig = { goalPct: 0.75, levels: [0.25, 0.5, 0.75, 1], mimoMinPct: 0.7, minParticipants: 6 };
+export const DEFAULT_SS_CONFIG: SsConfig = { levels: [1, 31, 151, 300], mimoMinPct: 0.7, minParticipants: 6 };
 
 export const readConfig = (raw: unknown): SsConfig => ({ ...DEFAULT_SS_CONFIG, ...(raw && typeof raw === "object" ? (raw as Partial<SsConfig>) : {}) });
 
@@ -44,14 +43,12 @@ export function daysBetween(from: string, to: string): number {
   return Math.max(0, Math.floor((d(to) - d(from)) / 86_400_000) + 1);
 }
 
-export const goalFor = (participants: number, days: number, cfg: SsConfig) => Math.max(1, Math.round(participants * days * cfg.goalPct));
-
-// Nível coletivo 0..4 pelo total de laços.
-export function levelFor(bonds: number, goal: number, cfg: SsConfig): number {
-  return cfg.levels.reduce((lv, f, i) => (bonds >= goal * f ? i + 1 : lv), 0);
+// Categoria coletiva 0..4 pelo total de bengalas de açúcar (pontos absolutos, não proporcionais).
+export function levelFor(bonds: number, cfg: SsConfig): number {
+  return cfg.levels.reduce((lv, min, i) => (bonds >= min ? i + 1 : lv), 0);
 }
 
-// Laços limitados a 1 por dia e por pessoa; datas repetidas ou fora da janela não contam.
+// Bengalas limitadas a 1 por dia e por pessoa; datas repetidas ou fora da janela não contam.
 export function countCheckins(days: string[], from: string, to: string): number {
   return new Set(days.filter((d) => d >= from && d <= to)).size;
 }
@@ -59,6 +56,8 @@ export function countCheckins(days: string[], from: string, to: string): number 
 export const earnedMimo = (checkins: number, totalDays: number, cfg: SsConfig) => totalDays > 0 && checkins / totalDays >= cfg.mimoMinPct;
 
 export const brtDay = (d: Date) => new Date(d.getTime() - 3 * 3_600_000).toISOString().slice(0, 10);
+// Último dia com check-in possível: a entrega é à 00:00, então o dia da entrega já não conta.
+export const lastCheckinDay = (deliverAt: Date) => brtDay(new Date(deliverAt.getTime() - 1));
 
 // Sorteio entre as opções (determinístico por seed + participante, auditável depois).
 export const pickIndex = (seed: string, n: number) => Math.floor(rngFromSeed(seed)() * n);

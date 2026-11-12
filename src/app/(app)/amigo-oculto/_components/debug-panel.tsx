@@ -9,7 +9,7 @@ import { checkinAction, debugCheckinsAction, updateConfigAction } from "../actio
 import { CardEditor, randomCard } from "./card-editor";
 import { CardView, EnvelopeReveal } from "./card-view";
 
-type Cfg = { goalPct: number; levels: number[]; mimoMinPct: number };
+type Cfg = { levels: number[]; mimoMinPct: number };
 export type DebugEd = { id: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; today: string; level: number; goal: number; bonds: number; cfg: Cfg; participants: { id: string; name: string; days: string[]; checkins: number }[] };
 type Run = (f: () => Promise<unknown>) => void;
 
@@ -47,7 +47,7 @@ function CheckinDebug({ e, run, pending }: { e: DebugEd; run: Run; pending: bool
   const live = e.phase === "COLLECTING" && e.isTest;
   return (
     <div className="space-y-3">
-      <p className="text-sm text-slate-300">🤝 {e.bonds} de {e.goal} laços · {e.phase === "COLLECTING" ? "clique numa célula para marcar o check-in daquele dia (só em edição de teste)" : "o check-in abre depois do sorteio"}.</p>
+      <p className="text-sm text-slate-300">🍭 {e.bonds} de {e.goal} bengalas · {e.phase === "COLLECTING" ? "clique numa célula para marcar o check-in daquele dia (só em edição de teste)" : "o check-in abre depois do sorteio"}.</p>
       {live && (
         <div className="flex flex-wrap gap-2">
           <button className={btn} disabled={pending} onClick={() => run(() => debugCheckinsAction(e.id, "random", 0.7))}>Sortear 70% dos dias</button>
@@ -80,9 +80,9 @@ function ShopDebug({ realLevel, packages }: { realLevel: number; packages: Resol
   const [lv, setLv] = useState(realLevel);
   return (
     <div className="space-y-3">
-      <label className="flex flex-wrap items-center gap-3 text-sm">Nível simulado: <b>{lv}</b>
+      <label className="flex flex-wrap items-center gap-3 text-sm">Categoria simulada: <b>{lv}</b>
         <input type="range" min={0} max={4} value={lv} onChange={(ev) => setLv(Number(ev.target.value))} />
-        <span className="text-xs text-slate-400">(nível real da comunidade agora: {realLevel})</span>
+        <span className="text-xs text-slate-400">(categoria real da comunidade agora: {realLevel})</span>
       </label>
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {packages.map((p) => <PackageCard key={p.key} pkg={p} locked={p.tier > lv} />)}
@@ -112,17 +112,15 @@ function AnimDebug({ card }: { card: CardData }) {
 }
 
 function RulesDebug({ e, run, pending }: { e: DebugEd; run: Run; pending: boolean }) {
-  const [goal, setGoal] = useState(Math.round(e.cfg.goalPct * 100));
-  const [lv, setLv] = useState(e.cfg.levels.map((x) => Math.round(x * 100)));
+  const [lv, setLv] = useState(e.cfg.levels);
   const [mimo, setMimo] = useState(Math.round(e.cfg.mimoMinPct * 100));
   const num = "w-20 rounded-lg bg-black/30 p-2 text-sm";
   return (
     <div className="space-y-3 text-sm">
-      <label className="flex items-center gap-2">Meta = inscritos × dias ×<input className={num} type="number" value={goal} onChange={(ev) => setGoal(Number(ev.target.value))} />%</label>
-      <div className="flex flex-wrap items-center gap-2">Níveis 1–4 abrem em (% da meta):{lv.map((x, i) => <input key={i} className={num} type="number" value={x} onChange={(ev) => setLv(lv.map((y, j) => (j === i ? Number(ev.target.value) : y)))} />)}</div>
+      <div className="flex flex-wrap items-center gap-2">Categorias 1–4 abrem com (bengalas da comunidade):{lv.map((x, i) => <input key={i} className={num} type="number" value={x} onChange={(ev) => setLv(lv.map((y, j) => (j === i ? Number(ev.target.value) : y)))} />)}</div>
       <label className="flex items-center gap-2">Mimo de constância a partir de<input className={num} type="number" value={mimo} onChange={(ev) => setMimo(Number(ev.target.value))} />% dos dias</label>
-      <button className={btn} disabled={pending || e.phase === "DELIVERED"} onClick={() => run(() => updateConfigAction(e.id, { goalPct: goal / 100, levels: lv.map((x) => x / 100), mimoMinPct: mimo / 100 }))}>Salvar regras</button>
-      <p className="text-xs text-slate-400">Meta atual: {e.goal} laços. Mudar as regras recalcula níveis e meta na hora (valem até a entrega).</p>
+      <button className={btn} disabled={pending || e.phase === "DELIVERED"} onClick={() => run(() => updateConfigAction(e.id, { levels: lv, mimoMinPct: mimo / 100 }))}>Salvar regras</button>
+      <p className="text-xs text-slate-400">Bengalas atuais: {e.bonds}. Mudar as regras recalcula as categorias na hora (valem até a entrega).</p>
     </div>
   );
 }

@@ -29,3 +29,12 @@ Rotas: `/amigo-oculto` = tela do JOGADOR (só aparece quando o admin clica "publ
 - Cron de entrega automática (depende de "acertar os crons"), inscrição pelo próprio jogador, artes pintadas de fundo (hoje gradientes CSS), lembrete de check-in por notificação, laços extras por atividade.
 - Animação só validada por SSR/typecheck: o painel do navegador estava oculto, falta olhar no browser.
 - Teste: `npx tsx --test src/lib/amigo-oculto/amigo-oculto.test.ts`; E2E de banco: `scripts/amigo-oculto-e2e.ts` (precisa de stub `server-only` em NODE_PATH).
+
+## v3 (2026-11-12) - bengalas de acucar e 40 kits
+
+- **Datas:** inscricoes abertas ate 01/12/2026 (00:00 BRT); o sorteio roda sozinho no primeiro acesso depois disso (`ensureDrawn`, so edicoes reais; com menos de `minParticipants` fica parado para o admin). Check-in so a partir de 01/12. Entrega 25/12/2026 00:00 BRT (`deliverAt` = 2026-12-25T03:00:00Z). O dia 25 nao tem check-in (`lastCheckinDay`): 24 dias.
+- **Bengalas de acucar** (antes "lacos"): 1 por check-in/dia/pessoa. Categorias por pontos ABSOLUTOS da comunidade (`cfg.levels` = [1, 31, 151, 300]), editaveis no debug. Categorias: Nem ligo pro Natal (1-30), Natal e Legal (31-150), Eu Amo o Natal (151-299), Papa Coracao (300+). Categorias liberadas sao cumulativas.
+- **Kits** (`catalog.ts`): 5x3 itens, 10x3, 10x4, 15x4 = 40 kits, so com itens permitidos em cada categoria. Linhas "fx" (comida, doce, doce raro, pedra de mega aleatoria) contam como item. Presenteador escolhe de 1 a 3 kits; sorteio entre os escolhidos na entrega (`pickIndex`).
+- **Caixa de Presentes** (`caixa-de-presentes/actions.ts`, ramo TOURNAMENT_BOX): novos campos `rareSweet` e `randomMegaStones` (sorteia entre as MEGA_STONE_* ativas, sem Rayquazite).
+- **UI:** `info-panels.tsx` (Como funciona + catalogo de categorias/kits), menu em Mercado > Amigo Oculto (so admin por enquanto, `app-nav.tsx`).
+- **Pendente:** liberar menu para jogadores (tirar `adminOnly`), convite por notificacao, publicar a edicao no painel, imagens das pedras/itens sem imagem (17 itens da loja), nome final da categoria 4 (lista usa "Papa Coracao", contagem de kits usa "Pokemon Na Mao, Natal no Coracao").
