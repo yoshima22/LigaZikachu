@@ -41,7 +41,7 @@ export function LeagueTicker({ initialEvents }: { initialEvents: TickerEvent[] }
         return [...queued, ...payload.events!.filter((event) => !known.has(event.id))];
       });
     };
-    const timer = window.setInterval(refresh, 60_000);
+    const timer = window.setInterval(refresh, 180_000);
     return () => window.clearInterval(timer);
   }, []);
 

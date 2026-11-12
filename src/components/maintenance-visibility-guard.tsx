@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 
-const MIN_CHECK_INTERVAL_MS = 10_000;
+const MIN_CHECK_INTERVAL_MS = 60_000;
 
 export function MaintenanceVisibilityGuard() {
   useEffect(() => {
