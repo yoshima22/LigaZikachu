@@ -3778,13 +3778,14 @@ async function _getArenaRanking(limit: number) {
     WITH eligible AS (
       SELECT b.*
       FROM "arena_battles" b
+      LEFT JOIN "arena_teams" at ON at."id" = b."attackTeamId"
       -- Comparar o enum DIRETO (sem ::text): o cast desabilitava os índices
       -- (status_type / type_createdAt) e forçava seq scan de toda a tabela.
       WHERE b."status" = 'RESOLVED'::"ArenaBattleStatus"
-        -- O ranking público é PvP. O filtro Prisma anterior citava BOT, mas a
-        -- condição do defensor nulo já os excluía; tornamos a regra explícita
-        -- para não transformar farm PvE antigo em milhares de vitórias.
-        AND b."type" = 'PVP'::"ArenaBattleType"
+        -- Contador total da Arena Z: PvP + PvE (BOT).
+        AND b."type" IN ('PVP'::"ArenaBattleType", 'BOT'::"ArenaBattleType")
+        -- Treino não conta (sem vencedor/perdedor, só gerava empates falsos).
+        AND COALESCE(at."isTraining", false) = false
         AND NOT EXISTS (
           SELECT 1
           FROM "players" ap
@@ -3796,7 +3797,7 @@ async function _getArenaRanking(limit: number) {
       SELECT
         b."attackerPlayerId" AS "playerId",
         CASE WHEN b."winnerPlayerId" = b."attackerPlayerId" THEN 1 ELSE 0 END AS wins,
-        CASE WHEN b."loserPlayerId" = b."attackerPlayerId" THEN 1 ELSE 0 END AS losses,
+        CASE WHEN b."loserPlayerId" = b."attackerPlayerId" AND b."result"::text <> 'DRAW' THEN 1 ELSE 0 END AS losses,
         CASE WHEN b."result"::text = 'DRAW' THEN 1 ELSE 0 END AS draws,
         CASE WHEN b."winnerPlayerId" = b."attackerPlayerId"
           THEN COALESCE((b."lootResult"->>'coins')::numeric, 0) ELSE 0 END AS coins,
@@ -3810,7 +3811,7 @@ async function _getArenaRanking(limit: number) {
       SELECT
         b."defenderPlayerId" AS "playerId",
         CASE WHEN b."winnerPlayerId" = b."defenderPlayerId" THEN 1 ELSE 0 END AS wins,
-        CASE WHEN b."loserPlayerId" = b."defenderPlayerId" THEN 1 ELSE 0 END AS losses,
+        CASE WHEN b."loserPlayerId" = b."defenderPlayerId" AND b."result"::text <> 'DRAW' THEN 1 ELSE 0 END AS losses,
         CASE WHEN b."result"::text = 'DRAW' THEN 1 ELSE 0 END AS draws,
         CASE WHEN b."winnerPlayerId" = b."defenderPlayerId"
           THEN COALESCE((b."lootResult"->>'coins')::numeric, 0) ELSE 0 END AS coins,
