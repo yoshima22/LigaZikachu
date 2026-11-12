@@ -128,11 +128,12 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
           <section className={panel}>
             <div className="flex flex-wrap items-center justify-between gap-2">
               <h2 className="text-lg font-bold">📝 Inscrição</h2>
-              {e.phase === "REGISTRATION" && (me
+              {e.phase === "REGISTRATION" && !isAdmin && (me
                 ? <button className={btn} disabled={pending} onClick={() => run(() => leaveSelfAction(e.id))}>Cancelar minha inscrição</button>
                 : <button className={btnPrimary} disabled={pending} onClick={() => run(() => registerSelfAction(e.id))}>Quero participar!</button>)}
             </div>
-            {e.phase === "REGISTRATION" && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} Inscrições até <b>{dm(e.startsOn)}</b>; nesse dia o sorteio é feito e você descobre quem tirou. Mínimo de {e.minParticipants} inscritos.</p>}
+            {e.phase === "REGISTRATION" && isAdmin && <p className="text-sm text-amber-200">Contas de administrador não participam do Amigo Oculto; você vê a página só para acompanhar.</p>}
+            {e.phase === "REGISTRATION" && !isAdmin && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} Inscrições até <b>{dm(e.startsOn)}</b>; nesse dia o sorteio é feito e você descobre quem tirou. Mínimo de {e.minParticipants} inscritos.</p>}
             {e.phase !== "REGISTRATION" && !me && <p className="text-sm text-slate-300">As inscrições já foram encerradas. Você poderá ver os cartões da Liga depois da entrega.</p>}
             <div className="flex flex-wrap gap-2">
               {view.participants.length === 0 && <p className="text-sm text-slate-400">Ninguém se inscreveu ainda. Seja o primeiro!</p>}

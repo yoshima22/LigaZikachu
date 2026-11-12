@@ -32,6 +32,9 @@ const registrationOpen = (e: { phase: string; startsOn: string; isTest: boolean 
 export async function register(editionId: string, playerId: string, displayName: string) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, startsOn: true, isTest: true } });
   if (!e || !registrationOpen(e)) return fail("As inscrições estão fechadas.");
+  // Contas admin não participam das edições reais (só testam em edições de teste).
+  const acct = await prisma.player.findUnique({ where: { id: playerId }, select: { user: { select: { role: true } } } });
+  if (!e.isTest && acct && isAdmin(acct.user.role)) return fail("Contas de administrador não participam do Amigo Oculto.");
   await prisma.secretSantaParticipant.upsert({ where: { editionId_playerId: { editionId, playerId } }, update: {}, create: { editionId, playerId, displayName } });
   return { ok: true };
 }

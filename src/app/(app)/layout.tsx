@@ -310,7 +310,7 @@ export default async function AppLayout({
       : Promise.resolve([]),
   ]);
 
-  const amigoInvite = player?.id ? await getAmigoInviteState(player.id).catch(() => null) : null;
+  const amigoInvite = !isPlatformAdmin && player?.id ? await getAmigoInviteState(player.id).catch(() => null) : null;
 
   return (
     <>
