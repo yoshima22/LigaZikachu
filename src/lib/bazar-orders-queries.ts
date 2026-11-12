@@ -3,6 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { getPokemonName, POKEMON_PT_NAMES } from "@/lib/mascot-data";
 import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
 import { EXTRA_FORM_IDS } from "@/lib/extra-forms-data";
+import { getTowerExclusiveMascot } from "@/lib/tower/exclusive-catalog";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import {
   matchesMascotRequirements,
@@ -144,13 +145,13 @@ async function getAllSpecies(): Promise<[number, string][]> {
     // formas regionais/megas com nome em mapas à parte: varre as faixas de ids de forma
     ...Array.from({ length: 400 }, (_, i) => 10001 + i),
     ...Array.from({ length: 100 }, (_, i) => 201001 + i),
-    ...Array.from({ length: 8 }, (_, i) => 210001 + i),
     ...Object.keys(POKEMON_PT_NAMES).map(Number),
     ...EXTRA_FORM_IDS,
     ...MEGA_STONES.map((m) => m.megaPokemonId),
     ...defs.map((d) => d.pokemonId),
   ]);
-  const list = [...ids].filter((id) => id >= 1).sort((a, b) => a - b)
+  // Mascotes exclusivos da Torre dos Rebeldes não entram em pedidos.
+  const list = [...ids].filter((id) => id >= 1 && !getTowerExclusiveMascot(id)).sort((a, b) => a - b)
     .map((id) => [id, defName.get(id) ?? getPokemonName(id)] as [number, string])
     .filter(([, n]) => !n.startsWith("Pokémon #"));
   speciesCache = { list, at: Date.now() };
