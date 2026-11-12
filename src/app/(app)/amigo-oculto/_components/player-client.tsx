@@ -3,7 +3,7 @@
 import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BACKGROUNDS, IMAGES, type CardData } from "@/lib/amigo-oculto/cards";
+import { BACKGROUNDS, IMAGES, isDarkBg, type CardData } from "@/lib/amigo-oculto/cards";
 import type { ResolvedItem, ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
 import { checkinSelfAction, leaveSelfAction, openMyCardAction, registerSelfAction, saveBuildSelfAction } from "../player-actions";
 import { CARD_CSS, CardView, EnvelopeReveal, Snow } from "./card-view";
@@ -246,7 +246,7 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
               <div className="flex h-28 items-center justify-center p-2">
                 {img ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img src={img.url} alt={img.label} loading="lazy" className="h-full w-auto object-contain" />
+                  <img src={img.lightUrl && isDarkBg(bg.ink) ? img.lightUrl : img.url} alt={img.label} loading="lazy" className="h-full w-auto object-contain" />
                 ) : <span className="text-5xl">{g.card.sticker}</span>}
               </div>
               <div className="bg-black/35 px-2.5 py-1.5 text-xs"><div className="font-semibold">De {g.from} → {g.to}</div><div className="opacity-80">{g.packageName}</div></div>

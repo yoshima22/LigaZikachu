@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { BACKGROUNDS, CLOSINGS, GREETINGS, IMAGES, LINES, textOf, type CardData } from "@/lib/amigo-oculto/cards";
+import { BACKGROUNDS, CLOSINGS, GREETINGS, IMAGES, LINES, isDarkBg, textOf, type CardData } from "@/lib/amigo-oculto/cards";
 
 const FLAKES = Array.from({ length: 22 }, (_, i) => ({ left: (i * 37) % 100, delay: (i * 0.45) % 6, dur: 6 + ((i * 7) % 5), size: 6 + ((i * 5) % 9) }));
 
@@ -37,8 +37,18 @@ export function CardView({ card, animate = false, from }: { card: CardData; anim
       {(() => {
         const img = IMAGES.find((i) => i.key === card.image);
         return img ? (
+          img.lightUrl ? (
+            // Arte em traço: as duas versões ficam empilhadas e trocam de cor (fade) conforme o fundo.
+            <span className="relative z-10 -mt-2 inline-block h-48 max-w-full" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.url} alt={img.label} className="h-full w-auto max-w-full object-contain transition-opacity duration-700" style={{ opacity: isDarkBg(bg.ink) ? 0 : 1 }} />
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={img.lightUrl} alt="" aria-hidden className="absolute inset-0 h-full w-full object-contain transition-opacity duration-700" style={{ opacity: isDarkBg(bg.ink) ? 1 : 0 }} />
+            </span>
+          ) : (
           // eslint-disable-next-line @next/next/no-img-element
           <img src={img.url} alt={img.label} className="relative z-10 -mt-2 h-48 w-auto max-w-full object-contain drop-shadow-xl" style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined} />
+          )
         ) : null;
       })()}
       <div className={card.image ? "absolute right-3 top-3 text-2xl" : "text-5xl drop-shadow"} style={animate ? { animation: "ss-pop .8s ease .2s both" } : undefined}>{card.sticker}</div>

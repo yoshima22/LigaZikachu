@@ -110,7 +110,8 @@ export const CLOSINGS = [
 // Ilustrações do cartão: artes dos personagens da Liga publicadas em assets/events/amigo-oculto/.
 const IMG_BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/public/assets/events/amigo-oculto`;
 const img = (key: string, label: string) => ({ key, label, url: `${IMG_BASE}/${key}.webp` });
-export const IMAGES: { key: string; label: string; url: string }[] = [
+// `lightUrl`: mesma arte em traço branco, usada automaticamente em fundos escuros (troca de cor).
+export const IMAGES: { key: string; label: string; url: string; lightUrl?: string }[] = [
   img("noel-chamine", "Jotape preso na chaminé"),
   img("enguica-lista", "Enguiça e a lista do Noel"),
   img("cleide-arvore", "Cleide e a árvore explosiva"),
@@ -121,7 +122,11 @@ export const IMAGES: { key: string; label: string; url: string }[] = [
   img("troca-presentes", "Troca de presentes"),
   img("ceia", "Ceia da Liga"),
   img("brinde", "Brinde de fim de ano"),
+  { ...img("linha-natal", "Troca de presentes (traço que muda de cor)"), lightUrl: `${IMG_BASE}/linha-natal-branco.webp` },
 ];
+
+// Fundo escuro = texto claro: a arte em traço troca para a versão branca.
+export const isDarkBg = (ink: string) => { const n = parseInt(ink.slice(1), 16); return 0.299 * (n >> 16) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255) > 150; };
 
 export const STICKERS = ["🎄", "⭐", "🎁", "❄️", "🔔", "🕯️", "🦌", "☃️"];
 // Fundos desenhados em CSS (sem dependência de imagem). As artes pintadas podem entrar depois pelo mesmo `key`.
