@@ -1436,6 +1436,7 @@ export async function buyListing(listingId: string, currency: "ZC" | "LC" = "ZC"
     revalidateBazar();
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${listing.player.userId}`);
+    bustMascotCache(player.id, listing.playerId);
     // Missões semanais das Invocações: venda concluída e gasto no Bazar.
     after(() => Promise.allSettled([
       trackGachaObjective(listing.playerId, "BAZAR_VENDA"),
@@ -1694,7 +1695,7 @@ export async function confirmDirectNegotiation(proposalId: string): Promise<{ er
       }
     });
     revalidateBazar();
-    if (done) { revalidateTag(`nav-${proposal.proposer.userId}`); revalidateTag(`nav-${proposal.listing.player.userId}`); }
+    if (done) { revalidateTag(`nav-${proposal.proposer.userId}`); revalidateTag(`nav-${proposal.listing.player.userId}`); bustMascotCache(proposal.proposerId, proposal.listing.playerId); }
     return { done };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro ao confirmar." }; }
 }
@@ -2201,6 +2202,7 @@ export async function acceptProposal(proposalId: string): Promise<{ error?: stri
     revalidateTag(`nav-${user.id}`);
     // Notifica o proponente que sua proposta foi aceita
     revalidateTag(`nav-${proposal.proposer.userId}`);
+    bustMascotCache(proposal.proposerId, listing.playerId);
     after(() => Promise.allSettled([
       sendNotificationToPlayers([proposal.proposerId], { title: `Proposta aceita: ${listingDisplayName(listing)}`, body: `${listing.player.displayName} aceitou sua proposta.`, url: `/bazar/${listing.id}`, category: "BAZAR" }),
       sendNotificationToPlayers([listing.playerId], { title: `Troca concluída: ${listingDisplayName(listing)}`, body: `A proposta foi aceita e os conteúdos foram entregues.`, url: `/bazar/${listing.id}`, category: "BAZAR" }),
@@ -3538,6 +3540,11 @@ async function _creditEscrowedCoins(tx: TxClient, playerId: string, amount: numb
 }
 
 /** Entrega uma oferta que já foi reservada, sem descontá-la novamente. */
+/** A página /mascotes cacheia a lista por jogador (tag player-mascots-<id>): sem isso, o mascote recebido só aparece após ~15 s. */
+function bustMascotCache(...playerIds: (string | null | undefined)[]) {
+  for (const id of new Set(playerIds)) if (id) revalidateTag(`player-mascots-${id}`);
+}
+
 async function _deliverProposalOffers(tx: TxClient, items: ProposalOfferItem[], fromPlayerId: string, toPlayerId: string) {
   for (const item of items) {
     const quantity = item.mascotId ? 1 : Math.max(1, Math.floor(Number(item.quantity) || 1));
@@ -4486,6 +4493,7 @@ export async function finalizeAuction(listingId: string): Promise<{ error?: stri
     revalidateBazar();
     if (listing.player.userId) revalidateTag(`nav-${listing.player.userId}`);
     if (winner.userId) revalidateTag(`nav-${winner.userId}`);
+    bustMascotCache(winnerId, listing.playerId);
 
     // Notifica o vencedor
     const wonPayload = listing.payload as Record<string, unknown>;
@@ -4974,6 +4982,7 @@ export async function sellToBuyOrder(orderId: string, mascotId?: string): Promis
     revalidatePath("/mascotes");
     revalidateTag(`nav-${user.id}`);
     revalidateTag(`nav-${order.buyer.userId}`);
+    bustMascotCache(player.id, order.buyerId);
     for (const uid of cancelledProposerUserIds) revalidateTag(`nav-${uid}`);
     after(() => Promise.allSettled([
       sendNotificationToPlayers([order.buyerId], { title: `Pedido atendido: ${order.label}${qtyLabel}`, body: `${sellerName} vendeu para o seu pedido por ${price.toLocaleString("pt-BR")} ZC.`, url: "/bazar?tab=pedidos&mine=1", category: "BAZAR" }),
