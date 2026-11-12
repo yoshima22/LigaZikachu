@@ -1,6 +1,7 @@
 "use server";
 
-import { revalidatePath } from "next/cache";
+import { revalidatePath, revalidateTag } from "next/cache";
+import { AMIGO_OCULTO_TAG } from "@/lib/amigo-oculto/invite";
 import * as svc from "@/lib/amigo-oculto/service";
 
 // Toda action repete o guard: o modo é fechado a admins nesta etapa.
@@ -11,6 +12,7 @@ async function guarded<T>(fn: (a: NonNullable<Awaited<ReturnType<typeof svc.getS
     const r = await fn(a);
     revalidatePath("/amigo-oculto");
     revalidatePath("/amigo-oculto/admin");
+    revalidateTag(AMIGO_OCULTO_TAG);
     return r;
   } catch (e) {
     console.error("[amigo-oculto]", e);

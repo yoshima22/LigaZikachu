@@ -57,6 +57,8 @@ import { AccountAccessObserver } from "@/components/account-access-observer";
 import { getJohtoInvitationGateState } from "@/lib/johto-invitation";
 import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
+import { AmigoOcultoInviteGate } from "./_components/amigo-oculto-invite-gate";
+import { getAmigoInviteState } from "@/lib/amigo-oculto/invite";
 import { getOccurrenceNoticesForPlayer } from "@/lib/mascot-occurrences";
 
 const ACCESS_OBSERVATION_USER_IDS = new Set([
@@ -308,8 +310,11 @@ export default async function AppLayout({
       : Promise.resolve([]),
   ]);
 
+  const amigoInvite = player?.id ? await getAmigoInviteState(player.id).catch(() => null) : null;
+
   return (
     <>
+      {amigoInvite && <AmigoOcultoInviteGate editionId={amigoInvite.editionId} />}
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
       <Toaster
