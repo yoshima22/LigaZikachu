@@ -38,10 +38,11 @@ export function LeagueTicker({ initialEvents }: { initialEvents: TickerEvent[] }
       if (!payload?.events) return;
       setEvents((queued) => {
         const known = new Set(queued.map((event) => event.id));
-        return [...queued, ...payload.events!.filter((event) => !known.has(event.id))];
+        // Fila de no máximo 5: o que está na tela + os mais novos, sem acumular.
+        return [...queued, ...payload.events!.filter((event) => !known.has(event.id))].slice(0, 5);
       });
     };
-    const timer = window.setInterval(refresh, 180_000);
+    const timer = window.setInterval(refresh, 60_000);
     return () => window.clearInterval(timer);
   }, []);
 

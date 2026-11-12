@@ -92,9 +92,9 @@ export async function publishLeagueTicker(input: PublishLeagueTickerInput): Prom
   }
 }
 
-export async function getPendingLeagueTickerEvents(playerId: string, limit = 12): Promise<LeagueTickerItem[]> {
+export async function getPendingLeagueTickerEvents(playerId: string, limit = 5): Promise<LeagueTickerItem[]> {
   const now = new Date();
-  const take = Number.isFinite(limit) ? Math.max(1, Math.min(20, Math.floor(limit))) : 12;
+  const take = Number.isFinite(limit) ? Math.max(1, Math.min(20, Math.floor(limit))) : 5;
   // Preserve the latest-500 seen window without transferring those IDs to the server.
   // Tagged parameters keep player IDs and limits out of the SQL text.
   return prisma.$queryRaw<LeagueTickerItem[]>`
