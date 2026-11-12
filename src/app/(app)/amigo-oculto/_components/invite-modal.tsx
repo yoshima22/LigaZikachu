@@ -17,7 +17,8 @@ const CSS = `
 @keyframes ao-snow{from{transform:translateY(-10vh)}to{transform:translateY(110vh)}}
 .ao-back{animation:ao-fade .35s ease-out both}
 .ao-card{animation:ao-pop .8s cubic-bezier(.2,.9,.3,1.2) both,ao-glow 2.4s ease-in-out .8s infinite}
-.ao-wrap:hover .ao-card{animation:ao-glow 1.2s ease-in-out infinite;transform:scale(1.015)}
+.ao-card img{transition:transform .35s ease}
+.ao-card:hover img{transform:scale(1.025)}
 .ao-shine{animation:ao-shine 3.2s ease-in-out 1.2s infinite}
 @media (prefers-reduced-motion:reduce){.ao-card,.ao-shine,.ao-back{animation:none!important}}
 `;

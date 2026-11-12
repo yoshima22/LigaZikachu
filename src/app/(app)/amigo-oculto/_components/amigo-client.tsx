@@ -9,9 +9,10 @@ import { setPublishedAction, addBotsAction, checkinAction, createEditionAction, 
 import { CARD_CSS, CardView, EnvelopeReveal } from "./card-view";
 import { CardEditor } from "./card-editor";
 import { DebugPanel } from "./debug-panel";
+import { KitEditor } from "./kit-editor";
 
 type P = { days: string[]; id: string; name: string; isBot: boolean; recipient: string | null; checkins: number; checkedToday: boolean; options: string[]; giftKey: string | null; built: boolean; opened: boolean };
-type Ed = { published: boolean; today: string; cfg: { levels: number[]; mimoMinPct: number }; id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
+type Ed = { published: boolean; today: string; cfg: { levels: number[]; mimoMinPct: number; kits?: Record<string, unknown> }; id: string; name: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; seedHash: string | null; seed: string | null; totalDays: number; elapsedDays: number; goal: number; bonds: number; level: number; participants: P[] };
 type View = { editions: { id: string; name: string; phase: string }[]; edition: Ed | null };
 
 const PHASE: Record<string, string> = { REGISTRATION: "Inscrições", COLLECTING: "Juntando bengalas", DELIVERED: "Entregue", CANCELED: "Cancelada" };
@@ -21,7 +22,7 @@ const btnPrimary = "rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-semibold te
 
 const EMPTY: CardData = { greeting: "g1", lines: ["l1"], closing: "c1", background: "noite", sticker: "🎄" };
 
-export function AmigoClient({ view, myPlayerName, packages }: { view: View; myPlayerName: string; packages: ResolvedPackage[] }) {
+export function AmigoClient({ view, myPlayerName, packages, choices }: { view: View; myPlayerName: string; packages: ResolvedPackage[]; choices: string[] }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
@@ -45,7 +46,7 @@ export function AmigoClient({ view, myPlayerName, packages }: { view: View; myPl
       {msg && <p className="rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">{msg}</p>}
 
       <NewEdition run={run} pending={pending} editions={view.editions} />
-      {e && <Edition e={e} run={run} pending={pending} myPlayerName={myPlayerName} packages={packages} />}
+      {e && <Edition e={e} run={run} pending={pending} myPlayerName={myPlayerName} packages={packages} choices={choices} />}
     </div>
   );
 }
@@ -73,10 +74,11 @@ function NewEdition({ run, pending, editions }: { run: (f: () => Promise<unknown
   );
 }
 
-function Edition({ e, run, pending, myPlayerName, packages }: { e: Ed; run: (f: () => Promise<unknown>) => void; pending: boolean; myPlayerName: string; packages: ResolvedPackage[] }) {
+function Edition({ e, run, pending, myPlayerName, packages, choices }: { e: Ed; run: (f: () => Promise<unknown>) => void; pending: boolean; myPlayerName: string; packages: ResolvedPackage[]; choices: string[] }) {
   const pct = Math.min(100, Math.round((e.bonds / e.goal) * 100));
   const [as, setAs] = useState<string>(e.participants[0]?.id ?? "");
   const [debug, setDebug] = useState(false);
+  const [kits, setKits] = useState(false);
   const me = e.participants.find((p) => p.id === as);
   return (
     <>
@@ -106,7 +108,8 @@ function Edition({ e, run, pending, myPlayerName, packages }: { e: Ed; run: (f: 
         {e.seedHash && <p className="break-all text-[11px] text-slate-400">Compromisso do sorteio (sha256): {e.seedHash}{e.seed ? ` · seed: ${e.seed}` : ""}</p>}
       </section>
 
-      <div><button className={btn} onClick={() => setDebug(!debug)}>{debug ? "Fechar menu de debug" : "🛠 Menu de debug"}</button></div>
+      <div className="flex flex-wrap gap-2"><button className={btn} onClick={() => setKits(!kits)}>{kits ? "Fechar editor de kits" : "🧰 Editar kits"}</button><button className={btn} onClick={() => setDebug(!debug)}>{debug ? "Fechar menu de debug" : "🛠 Menu de debug"}</button></div>
+      {kits && <KitEditor editionId={e.id} packages={packages} edited={Object.keys(e.cfg.kits ?? {})} choices={choices} run={run} pending={pending} locked={e.phase === "DELIVERED"} />}
       {debug && <DebugPanel e={e} run={run} pending={pending} packages={packages} />}
 
       <section className="rounded-2xl border border-white/10 bg-white/5 p-4">

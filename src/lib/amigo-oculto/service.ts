@@ -4,7 +4,7 @@ import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
 import { DEFAULT_SS_CONFIG, brtDay, countCheckins, daysBetween, drawAvoiding, earnedMimo, hashSeed, lastCheckinDay, levelFor, pickIndex, readConfig } from "./core";
-import { MIMO_OPTIONS, defaultOptions, packageByKey, validateOptions } from "./catalog";
+import { EGG_LABEL, FX_LABEL, MIMO_OPTIONS, PACKAGES, defaultOptions, packageByKey, validateOptions, type PackageItem } from "./catalog";
 import { giftPayload, loadPackages, resolveMimo } from "./catalog-db";
 import { validateCard, type CardData } from "./cards";
 
@@ -159,7 +159,7 @@ export async function openCard(viewerParticipantId: string) {
   if (!giver?.cardJson || !giver.giftKey) return fail("Nenhum cartão para você.");
   const def = packageByKey(giver.giftKey);
   if (!def) return fail("Presente inválido.");
-  const pkg = (await loadPackages()).find((x) => x.key === def.key) ?? { ...def, items: [] };
+  const pkg = (await loadPackages(readConfig(me.edition.configJson).kits)).find((x) => x.key === def.key) ?? { ...def, items: [] };
   const rows = await prisma.secretSantaParticipant.findMany({ where: { editionId: me.editionId }, select: { checkinsJson: true } });
   const { cfg, totalDays } = collective(me.edition, rows);
   const earned = earnedMimo(countCheckins(giver.checkinsJson as string[], me.edition.startsOn, lastCheckinDay(me.edition.deliverAt)), totalDays, cfg);
@@ -228,6 +228,52 @@ export async function debugCheckins(editionId: string, mode: "random" | "clear" 
   return { ok: true };
 }
 
+// ── Edição de kits (admin) ────────────────────────────────────────────────────
+
+// Itens que o admin pode usar nos kits: comida/doce/doce raro/pedra aleatória, ovos reais e itens da loja
+// (sem os ovos e comida/doce da loja, que já existem como os tipos acima).
+export async function kitItemChoices() {
+  const rows = await prisma.shopItem.findMany({ where: { active: true }, select: { name: true, type: true }, orderBy: { name: "asc" } });
+  const skip = (t: string) => t.startsWith("EGG_") || t === "MASCOT_FOOD" || t === "MASCOT_SWEET";
+  return [...Object.values(FX_LABEL), ...Object.values(EGG_LABEL), ...rows.filter((r) => !skip(r.type)).map((r) => r.name)];
+}
+
+export async function saveKit(editionId: string, key: string, entries: { name: string; qty: number }[]) {
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, configJson: true } });
+  if (!e || e.phase === "DELIVERED") return fail("Edição já entregue.");
+  if (!PACKAGES.some((p) => p.key === key)) return fail("Kit inválido.");
+  if (!Array.isArray(entries) || entries.length < 1 || entries.length > 8) return fail("Um kit precisa de 1 a 8 itens.");
+  const fxBy = new Map(Object.entries(FX_LABEL).map(([k, v]) => [v, k]));
+  const eggBy = new Map(Object.entries(EGG_LABEL).map(([k, v]) => [v, k]));
+  const items: PackageItem[] = [];
+  for (const en of entries) {
+    const qty = Math.floor(Number(en.qty));
+    if (!(qty >= 1 && qty <= 999)) return fail(`Quantidade inválida em "${en.name}" (1 a 999).`);
+    if (items.some((i) => i.name.toLowerCase() === en.name.toLowerCase())) return fail(`"${en.name}" aparece duas vezes.`);
+    if (fxBy.has(en.name)) items.push({ name: en.name, qty, fx: fxBy.get(en.name) as PackageItem["fx"] });
+    else if (eggBy.has(en.name)) items.push({ name: en.name, qty, egg: eggBy.get(en.name) as PackageItem["egg"] });
+    else {
+      const r = await prisma.shopItem.findFirst({ where: { name: { equals: en.name, mode: "insensitive" }, active: true }, select: { name: true } });
+      if (!r) return fail(`Item "${en.name}" não existe na loja.`);
+      items.push({ name: r.name, qty });
+    }
+  }
+  const cfg = readConfig(e.configJson);
+  await prisma.secretSantaEdition.update({ where: { id: editionId }, data: { configJson: { ...cfg, kits: { ...(cfg.kits ?? {}), [key]: items } } as unknown as Prisma.InputJsonValue } });
+  return { ok: true };
+}
+
+// Volta o kit ao conteúdo padrão do catálogo.
+export async function resetKit(editionId: string, key: string) {
+  const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { phase: true, configJson: true } });
+  if (!e || e.phase === "DELIVERED") return fail("Edição já entregue.");
+  const cfg = readConfig(e.configJson);
+  const { [key]: _drop, ...rest } = cfg.kits ?? {};
+  void _drop;
+  await prisma.secretSantaEdition.update({ where: { id: editionId }, data: { configJson: { ...cfg, kits: rest } as unknown as Prisma.InputJsonValue } });
+  return { ok: true };
+}
+
 // Publicar para os jogadores (padrão: só admin vê).
 export async function setPublished(editionId: string, published: boolean) {
   const e = await prisma.secretSantaEdition.findUnique({ where: { id: editionId }, select: { configJson: true } });
@@ -258,7 +304,7 @@ export async function playerView(editionId: string, playerId: string) {
   const avatar = new Map(av.map((r) => [r.id, r.url]));
   const today = brtDay(new Date());
   const checkinDays = me ? (me.checkinsJson as string[]) : [];
-  const packages = await loadPackages();
+  const packages = await loadPackages(col.cfg.kits);
   const byKey = new Map(packages.map((x) => [x.key, x]));
   const myRecipient = me?.recipientId ? e.participants.find((p) => p.id === me.recipientId) : null;
   return {

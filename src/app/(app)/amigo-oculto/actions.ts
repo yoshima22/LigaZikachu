@@ -39,6 +39,12 @@ export async function updateConfigAction(editionId: string, i: { levels: number[
 export async function saveBuildAction(participantId: string, optionKeys: string[], card: unknown) {
   return guarded(() => svc.saveBuild(participantId, optionKeys, card));
 }
+export async function saveKitAction(editionId: string, key: string, items: { name: string; qty: number }[]) {
+  return guarded(() => svc.saveKit(editionId, key, items));
+}
+export async function resetKitAction(editionId: string, key: string) {
+  return guarded(() => svc.resetKit(editionId, key));
+}
 export async function deliverAction(editionId: string) {
   return guarded(() => svc.deliver(editionId));
 }

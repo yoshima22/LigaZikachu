@@ -1,12 +1,13 @@
 // Resolve os kits com os itens reais da loja (tipo + imagem original). Itens da loja que não existem mais são omitidos.
 import { prisma } from "@/lib/prisma";
 import { eggImageUrl } from "@/lib/egg-origin";
-import { PACKAGES, MIMO_OPTIONS, type EggKind, type Fx, type GiftPackage } from "./catalog";
+import { effectivePackages, MIMO_OPTIONS, type EggKind, type Fx, type GiftPackage, type PackageItem } from "./catalog";
 
 export type ResolvedItem = { name: string; qty: number; type: string | null; imageUrl: string | null; egg?: EggKind; fx?: Fx };
 export type ResolvedPackage = Omit<GiftPackage, "items"> & { items: ResolvedItem[] };
 
-export async function loadPackages(): Promise<ResolvedPackage[]> {
+export async function loadPackages(kits?: Record<string, PackageItem[]>): Promise<ResolvedPackage[]> {
+  const PACKAGES = effectivePackages(kits);
   const names = [...new Set(PACKAGES.flatMap((p) => p.items.filter((i) => !i.egg && !i.fx).map((i) => i.name)))];
   const rows = await prisma.shopItem.findMany({ where: { name: { in: names }, active: true }, select: { name: true, type: true, imageUrl: true } });
   const byName = new Map<string, (typeof rows)[number]>();

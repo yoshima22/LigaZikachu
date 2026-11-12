@@ -19,6 +19,18 @@ const err = (r: unknown) => assert.ok(r && typeof r === "object" && "error" in (
     assert.deepEqual([1, 2, 3, 4].map((t) => packs.filter((p) => p.tier === t).length), [5, 10, 10, 15]);
     console.log("pacotes:", packs.length, "| itens com imagem:", packs.flatMap((p) => p.items).filter((i) => i.imageUrl).length, "/", packs.flatMap((p) => p.items).length);
 
+    // edição de kits pelo admin: valida itens, aplica por edição e restaura o padrão
+    err(await s.saveKit(c.id, "n1-lanchinho", [{ name: "Item que não existe", qty: 1 }]));
+    err(await s.saveKit(c.id, "n1-lanchinho", [{ name: "Comida", qty: 0 }]));
+    ok(await s.saveKit(c.id, "n1-lanchinho", [{ name: "Comida", qty: 99 }, { name: "Pena Arco-Íris de Laboratório Potente", qty: 2 }, { name: "Ovo de Evento", qty: 1 }]));
+    const edCfg = await prisma.secretSantaEdition.findUniqueOrThrow({ where: { id: c.id }, select: { configJson: true } });
+    const kitsCfg = (edCfg.configJson as { kits?: Record<string, { name: string; qty: number }[]> }).kits;
+    const edited = (await loadPackages(kitsCfg)).find((p) => p.key === "n1-lanchinho")!;
+    assert.deepEqual(edited.items.map((i) => [i.name, i.qty]), [["Comida", 99], ["Pena Arco-Íris de Laboratório Potente", 2], ["Ovo de Evento", 1]]);
+    assert.equal((await loadPackages()).find((p) => p.key === "n1-lanchinho")!.items[0].qty, 20); // padrão intacto
+    ok(await s.resetKit(c.id, "n1-lanchinho"));
+    assert.equal(((await prisma.secretSantaEdition.findUniqueOrThrow({ where: { id: c.id }, select: { configJson: true } })).configJson as { kits?: object }).kits && Object.keys(((await prisma.secretSantaEdition.findUniqueOrThrow({ where: { id: c.id }, select: { configJson: true } })).configJson as { kits: object }).kits).length, 0);
+
     err(await s.runDraw(c.id));                       // poucos inscritos
     await s.addBots(c.id, 7);
     const real = await prisma.player.findFirstOrThrow({ select: { id: true, displayName: true } });

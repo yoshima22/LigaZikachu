@@ -90,6 +90,9 @@ export const PACKAGES: GiftPackage[] = [
 // Presente do Papai Noel (constância): quem fez check-in em 70% dos dias ganha 1 destes, sorteado, junto do presente de Natal.
 export const MIMO_OPTIONS: PackageItem[] = [ovoLab(), proteina(), penaLabP()];
 
+// Catálogo efetivo: o padrão com os itens editados pelo admin (por chave) no lugar.
+export const effectivePackages = (kits?: Record<string, PackageItem[]>): GiftPackage[] => PACKAGES.map((p) => (kits?.[p.key]?.length ? { ...p, items: kits[p.key] } : p));
+
 export const OPTIONS_PER_GIFT = 3;
 export const packageByKey = (key: string | null | undefined) => PACKAGES.find((g) => g.key === key);
 export const packagesForLevel = (level: number) => PACKAGES.filter((g) => g.tier <= level);

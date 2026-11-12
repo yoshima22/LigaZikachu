@@ -1,11 +1,13 @@
 // Núcleo puro do Amigo Oculto: sorteio, bengalas de açúcar da comunidade e categorias de presente. Sem banco, sem relógio.
 import { createHash } from "node:crypto";
+import type { PackageItem } from "./catalog";
 
 export type SsConfig = {
   levels: [number, number, number, number]; // bengalas de açúcar (total da comunidade) que liberam as categorias 1..4
   mimoMinPct: number; // % dos dias com check-in para ganhar o mimo de constância
   minParticipants: number;
   published?: boolean; // visível para os jogadores (padrão: só admin)
+  kits?: Record<string, PackageItem[]>; // itens/quantidades editados pelo admin (sobrepõem o catálogo padrão)
 };
 export const DEFAULT_SS_CONFIG: SsConfig = { levels: [1, 31, 151, 300], mimoMinPct: 0.7, minParticipants: 6 };
 
