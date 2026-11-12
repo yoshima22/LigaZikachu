@@ -8,6 +8,8 @@ import { type CardData } from "@/lib/amigo-oculto/cards";
 import { checkinAction, debugCheckinsAction, updateConfigAction } from "../actions";
 import { CardEditor, randomCard } from "./card-editor";
 import { CardView, EnvelopeReveal } from "./card-view";
+import { InviteModal } from "./invite-modal";
+import { KitDrawReveal } from "./kit-reveal";
 
 type Cfg = { levels: number[]; mimoMinPct: number };
 export type DebugEd = { id: string; phase: string; isTest: boolean; startsOn: string; deliverAt: string; today: string; level: number; goal: number; bonds: number; cfg: Cfg; participants: { id: string; name: string; days: string[]; checkins: number }[] };
@@ -15,7 +17,7 @@ type Run = (f: () => Promise<unknown>) => void;
 
 const btn = "rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40";
 const tab = (on: boolean) => `rounded-lg px-3 py-1.5 text-sm ${on ? "bg-amber-400 font-semibold text-slate-900" : "bg-white/10 hover:bg-white/20"}`;
-const TABS = [["checkin", "📅 Check-in diário"], ["loja", "🛍️ Loja de presentes"], ["carta", "✉️ Cartinha"], ["anim", "🎬 Animação"], ["regras", "⚙️ Regras"]] as const;
+const TABS = [["checkin", "📅 Check-in diário"], ["loja", "🛍️ Loja de presentes"], ["carta", "✉️ Cartinha"], ["anim", "🎬 Animação"], ["convite", "📣 Convite"], ["sorteio", "🎲 Sorteio do kit"], ["regras", "⚙️ Regras"]] as const;
 
 export function DebugPanel({ e, run, pending, packages }: { e: DebugEd; run: Run; pending: boolean; packages: ResolvedPackage[] }) {
   const [t, setT] = useState<(typeof TABS)[number][0]>("checkin");
@@ -24,6 +26,8 @@ export function DebugPanel({ e, run, pending, packages }: { e: DebugEd; run: Run
     <section className="space-y-4 rounded-2xl border border-amber-300/30 bg-amber-300/5 p-4">
       <div className="flex flex-wrap gap-2">{TABS.map(([k, l]) => <button key={k} className={tab(t === k)} onClick={() => setT(k)}>{l}</button>)}</div>
       {t === "checkin" && <CheckinDebug e={e} run={run} pending={pending} />}
+      {t === "sorteio" && <DrawDebug packages={packages} />}
+      {t === "convite" && <InviteDebug />}
       {t === "loja" && <ShopDebug realLevel={e.level} packages={packages} />}
       {t === "carta" && (
         <div className="grid gap-5 lg:grid-cols-2">
@@ -88,6 +92,34 @@ function ShopDebug({ realLevel, packages }: { realLevel: number; packages: Resol
         {packages.map((p) => <PackageCard key={p.key} pkg={p} locked={p.tier > lv} />)}
       </div>
       <p className="text-xs text-slate-400">Mimo de constância: {MIMO.food} comidas + {MIMO.sweet} doces. Itens e imagens vêm da loja.</p>
+    </div>
+  );
+}
+
+// Simula a abertura do presente: sorteia 1 entre 3 kits aleatórios e toca a animação.
+function DrawDebug({ packages }: { packages: ResolvedPackage[] }) {
+  const [run, setRun] = useState<{ id: number; cands: ResolvedPackage[]; win: string } | null>(null);
+  const start = () => {
+    const cands = [...packages].sort(() => Math.random() - 0.5).slice(0, 3);
+    setRun({ id: Date.now(), cands, win: cands[Math.floor(Math.random() * cands.length)].key });
+  };
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-300">Sorteia 1 entre 3 kits aleatórios e mostra a abertura do presente, como será na entrega.</p>
+      <button className={btn} onClick={start}>{run ? "▶ Sortear de novo" : "▶ Sortear e abrir presente"}</button>
+      {run && <KitDrawReveal key={run.id} candidates={run.cands} winnerKey={run.win} />}
+    </div>
+  );
+}
+
+// Pré-visualiza o convite (popup com efeito) que depois aparecerá para os jogadores. Hoje só aqui, para admin.
+function InviteDebug() {
+  const [show, setShow] = useState(false);
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-slate-300">Convite do Amigo Oculto com efeito de entrada. Clicar na imagem leva para <code>/amigo-oculto</code>. Ainda não aparece para os jogadores.</p>
+      <button className={btn} onClick={() => setShow(true)}>▶ Mostrar convite</button>
+      {show && <InviteModal onClose={() => setShow(false)} />}
     </div>
   );
 }
