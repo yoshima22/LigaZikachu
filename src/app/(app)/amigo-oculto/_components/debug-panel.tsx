@@ -1,7 +1,6 @@
 "use client";
 
 import { useState } from "react";
-import { MIMO } from "@/lib/amigo-oculto/catalog";
 import type { ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
 import { PackageCard } from "./package-ui";
 import { type CardData } from "@/lib/amigo-oculto/cards";
@@ -91,7 +90,7 @@ function ShopDebug({ realLevel, packages }: { realLevel: number; packages: Resol
       <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
         {packages.map((p) => <PackageCard key={p.key} pkg={p} locked={p.tier > lv} />)}
       </div>
-      <p className="text-xs text-slate-400">Mimo de constância: {MIMO.food} comidas + {MIMO.sweet} doces. Itens e imagens vêm da loja.</p>
+      <p className="text-xs text-slate-400">Presente do Papai Noel (constância): ovo de laboratório, proteína Zika ou pena de laboratório potente, sorteado. Itens e imagens vêm da loja.</p>
     </div>
   );
 }
@@ -134,7 +133,7 @@ function AnimDebug({ card }: { card: CardData }) {
         <EnvelopeReveal key={n} card={card}>
           <div className="rounded-xl border border-amber-300/50 bg-black/30 p-4 text-center">
             <div className="text-4xl">🧺</div>
-            <p className="font-semibold">Cesta de guloseimas + mimo de constância</p>
+            <p className="font-semibold">Kit sorteado + presente do Papai Noel</p>
             <p className="text-sm text-slate-300">O presente já está na sua Caixa de Presentes.</p>
           </div>
         </EnvelopeReveal>
@@ -150,7 +149,7 @@ function RulesDebug({ e, run, pending }: { e: DebugEd; run: Run; pending: boolea
   return (
     <div className="space-y-3 text-sm">
       <div className="flex flex-wrap items-center gap-2">Categorias 1–4 abrem com (bengalas da comunidade):{lv.map((x, i) => <input key={i} className={num} type="number" value={x} onChange={(ev) => setLv(lv.map((y, j) => (j === i ? Number(ev.target.value) : y)))} />)}</div>
-      <label className="flex items-center gap-2">Mimo de constância a partir de<input className={num} type="number" value={mimo} onChange={(ev) => setMimo(Number(ev.target.value))} />% dos dias</label>
+      <label className="flex items-center gap-2">Presente do Papai Noel a partir de<input className={num} type="number" value={mimo} onChange={(ev) => setMimo(Number(ev.target.value))} />% dos dias</label>
       <button className={btn} disabled={pending || e.phase === "DELIVERED"} onClick={() => run(() => updateConfigAction(e.id, { levels: lv, mimoMinPct: mimo / 100 }))}>Salvar regras</button>
       <p className="text-xs text-slate-400">Bengalas atuais: {e.bonds}. Mudar as regras recalcula as categorias na hora (valem até a entrega).</p>
     </div>

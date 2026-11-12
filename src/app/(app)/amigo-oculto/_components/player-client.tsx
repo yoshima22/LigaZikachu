@@ -4,21 +4,22 @@ import { useEffect, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { BACKGROUNDS, IMAGES, type CardData } from "@/lib/amigo-oculto/cards";
-import type { ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
+import type { ResolvedItem, ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
 import { checkinSelfAction, leaveSelfAction, openMyCardAction, registerSelfAction, saveBuildSelfAction } from "../player-actions";
 import { CARD_CSS, CardView, EnvelopeReveal, Snow } from "./card-view";
 import { CardEditor } from "./card-editor";
 import { PackageCard, PackagePicker, ReceivedGift } from "./package-ui";
-import { CaneProgress, HowItWorks, panel } from "./info-panels";
+import { CaneProgress, HowItWorks, MyDays, panel } from "./info-panels";
+import { GuideModal } from "./guide-modal";
 import { Cane } from "./candy-cane";
 
 type Person = { id: string; name: string; avatarUrl: string | null; checkins: number };
 type View = {
-  edition: { id: string; name: string; phase: string; startsOn: string; deliverAt: string; today: string; level: number; levels: number[]; goal: number; bonds: number; totalDays: number; elapsedDays: number; minParticipants: number };
+  edition: { id: string; name: string; phase: string; startsOn: string; deliverAt: string; today: string; level: number; levels: number[]; mimoMinPct: number; goal: number; bonds: number; totalDays: number; elapsedDays: number; minParticipants: number };
   participants: Person[];
   packages: ResolvedPackage[];
-  me: { id: string; checkins: number; checkedToday: boolean; built: boolean; options: string[]; card: CardData | null; opened: boolean; recipient: { name: string; avatarUrl: string | null } | null } | null;
-  gallery: { to: string; card: CardData; packageKey: string | null; packageName: string }[];
+  me: { id: string; checkins: number; days: string[]; checkedToday: boolean; built: boolean; options: string[]; card: CardData | null; opened: boolean; recipient: { name: string; avatarUrl: string | null } | null } | null;
+  gallery: { from: string; to: string; card: CardData; packageKey: string | null; packageName: string }[];
 };
 
 const PHASE_LABEL: Record<string, string> = { REGISTRATION: "Inscrições abertas", COLLECTING: "Juntando bengalas", DELIVERED: "Entregue" };
@@ -63,7 +64,10 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
   const [tab, setTab] = useState<"inicio" | "kits" | "cartao" | "galeria">("inicio");
   const [opts, setOpts] = useState<string[]>(me?.options ?? []);
   const [card, setCard] = useState<CardData>(me?.card ?? EMPTY);
+  const [guide, setGuide] = useState(false);
   const left = useCountdown(e.deliverAt);
+  const myName = view.participants.find((p) => p.id === me?.id)?.name;
+  const checkinOpen = Boolean(me) && e.phase === "COLLECTING" && e.today >= e.startsOn;
   const run = (fn: () => Promise<unknown>, okText?: string) => start(async () => {
     const r = (await fn()) as { error?: string } | undefined;
     setMsg(r?.error ? { ok: false, text: r.error } : okText ? { ok: true, text: okText } : null);
@@ -86,7 +90,10 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
               <p className="text-xs uppercase tracking-widest text-amber-300">Natal da Liga · Mercado</p>
               <h1 className="text-2xl font-extrabold sm:text-3xl">🎁 {e.name}</h1>
             </div>
-            {isAdmin && <Link href="/amigo-oculto/admin" className={btn}>🛠 Painel admin</Link>}
+            <div className="flex flex-wrap gap-2">
+              <button className={btn} onClick={() => setGuide(true)}>❓ Como funciona</button>
+              {isAdmin && <Link href="/amigo-oculto/admin" className={btn}>🛠 Painel admin</Link>}
+            </div>
           </div>
           <p className="text-sm text-slate-200">🎄 Entrega dos cartões e presentes: <b>{when} (Brasília)</b></p>
           <div className="flex flex-wrap gap-2">
@@ -103,6 +110,15 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
           <button key={k} onClick={() => setTab(k)} className={`flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${tab === k ? "bg-amber-400 text-slate-900" : "text-slate-200 hover:bg-white/10"}`}>{label}</button>
         ))}
       </nav>
+
+      {guide && <GuideModal onClose={() => setGuide(false)} info={{ startsOn: e.startsOn, deliverAt: e.deliverAt, levels: e.levels, totalDays: e.totalDays, mimoMinPct: e.mimoMinPct }} />}
+
+      {checkinOpen && me && !me.checkedToday && (
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/60 bg-amber-300/15 p-3">
+          <p className="text-sm text-amber-100">⏰ Você ainda não fez o <b>check-in de hoje</b>. Vale 1 bengala de açúcar para a Liga!</p>
+          <button className={btnPrimary} disabled={pending} onClick={() => run(() => checkinSelfAction(e.id), "Check-in feito! +1 bengala para a comunidade.")}>Fazer check-in agora</button>
+        </div>
+      )}
 
       {msg && <p className={`rounded-lg border p-3 text-sm ${msg.ok ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200" : "border-red-400/40 bg-red-500/10 text-red-200"}`}>{msg.text}</p>}
 
@@ -135,14 +151,25 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
 
           {/* Bengalas + check-in */}
           {!delivered && (
-            <section className={panel}>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <h2 className="text-lg font-bold"><Cane size={20} /> Bengalas de açúcar</h2>
-                {me && <button className={btnPrimary} disabled={pending || me.checkedToday || e.phase !== "COLLECTING" || e.today < e.startsOn} onClick={() => run(() => checkinSelfAction(e.id))}>{me.checkedToday ? "✔ Check-in de hoje feito" : e.phase !== "COLLECTING" || e.today < e.startsOn ? `Check-in começa em ${dm(e.startsOn)}` : "Fazer check-in (+1 bengala)"}</button>}
-              </div>
-              <CaneProgress bonds={e.bonds} levels={e.levels} goal={e.goal} />
-              <p className="text-xs text-slate-300">Cada check-in diário de cada inscrito vira 1 bengala para a comunidade. Quanto mais bengalas, mais categorias de kits ficam disponíveis.{me ? <> Suas bengalas: <b>{me.checkins}</b>.</> : null}</p>
-            </section>
+            <>
+              {me && (
+                <section className="space-y-3 rounded-2xl border-2 border-amber-300/50 bg-amber-300/5 p-4 sm:p-5">
+                  <div className="flex flex-wrap items-center justify-between gap-3">
+                    <div>
+                      <h2 className="text-lg font-bold">✅ Seu check-in diário</h2>
+                      <p className="text-xs text-slate-300">É aqui que você faz o check-in: <b>1 clique por dia</b>, de {dm(e.startsOn)} em diante. Cada clique = 1 bengala para a Liga.</p>
+                    </div>
+                    <button className={`${btnPrimary} px-6 py-3 text-base`} disabled={pending || me.checkedToday || !checkinOpen} onClick={() => run(() => checkinSelfAction(e.id), "Check-in feito! +1 bengala para a comunidade.")}>{me.checkedToday ? "✔ Check-in de hoje feito" : !checkinOpen ? `Abre em ${dm(e.startsOn)}` : "Fazer check-in (+1 bengala)"}</button>
+                  </div>
+                  <MyDays startsOn={e.startsOn} deliverAt={e.deliverAt} today={e.today} days={me.days} />
+                </section>
+              )}
+              <section className={panel}>
+                <h2 className="text-lg font-bold"><Cane size={20} /> Bengalas juntas da comunidade</h2>
+                <p className="text-sm text-slate-300">A Liga já juntou <b className="text-white">{e.bonds}</b> bengalas, somando o check-in de todos os {view.participants.length} inscritos.{me ? <> Você contribuiu com <b className="text-white">{me.checkins}</b>.</> : null}</p>
+                <CaneProgress bonds={e.bonds} levels={e.levels} goal={e.goal} />
+              </section>
+            </>
           )}
 
           {delivered && me && <MyCard editionId={e.id} />}
@@ -164,8 +191,8 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
           <h2 className="text-lg font-bold">💌 Monte seu cartão de Natal</h2>
           <p className="text-sm text-slate-300">{me ? "Pode montar e salvar já; dá para mudar até a entrega." : "Teste à vontade para ver como fica. Inscreva-se na aba Início para poder salvar."}{me?.recipient ? <> Para: <b>{me.recipient.name}</b>.</> : null}</p>
           <div className="grid gap-5 lg:grid-cols-2">
-            <CardEditor card={card} setCard={setCard} />
-            <div className="lg:sticky lg:top-4 lg:self-start"><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} /></div>
+            <CardEditor card={card} setCard={setCard} saved={Boolean(me?.built)} />
+            <div className="lg:sticky lg:top-4 lg:self-start"><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} from={myName} /></div>
           </div>
         </section>
       )}
@@ -185,7 +212,7 @@ export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }
 
 // Abre (ou revê) o cartão recebido; o presente cai na Caixa de Presentes na primeira abertura.
 function MyCard({ editionId }: { editionId: string }) {
-  const [res, setRes] = useState<{ card?: CardData; pkg?: ResolvedPackage; mimo?: boolean; delivered?: boolean; error?: string } | null>(null);
+  const [res, setRes] = useState<{ card?: CardData; from?: string; pkg?: ResolvedPackage; mimo?: ResolvedItem | null; delivered?: boolean; error?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   return (
     <section className={panel}>
@@ -196,7 +223,7 @@ function MyCard({ editionId }: { editionId: string }) {
           {res?.error && <p className="text-sm text-red-300">{res.error}</p>}
         </div>
       ) : (
-        <EnvelopeReveal card={res.card}><ReceivedGift pkg={res.pkg} mimo={Boolean(res.mimo)} delivered={Boolean(res.delivered)} /></EnvelopeReveal>
+        <EnvelopeReveal card={res.card} from={res.from}><ReceivedGift pkg={res.pkg} mimo={res.mimo ?? null} delivered={Boolean(res.delivered)} /></EnvelopeReveal>
       )}
     </section>
   );
@@ -208,7 +235,7 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
   return (
     <section className={panel}>
       <h2 className="text-lg font-bold">🖼️ Cartões da Liga</h2>
-      <p className="text-xs text-slate-300">Todos os cartões e presentes sorteados. Quem enviou continua em segredo. 🤫</p>
+      <p className="text-xs text-slate-300">Todos os cartões e presentes sorteados, com a assinatura de quem enviou. Clique para ler. 💌</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {items.map((g, i) => {
           const bg = BACKGROUNDS.find((b) => b.key === g.card.background) ?? BACKGROUNDS[0];
@@ -221,7 +248,7 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
                   <img src={img.url} alt={img.label} loading="lazy" className="h-full w-auto object-contain" />
                 ) : <span className="text-5xl">{g.card.sticker}</span>}
               </div>
-              <div className="bg-black/35 px-2.5 py-1.5 text-xs"><div className="font-semibold">Para: {g.to}</div><div className="opacity-80">{g.packageName}</div></div>
+              <div className="bg-black/35 px-2.5 py-1.5 text-xs"><div className="font-semibold">De {g.from} → {g.to}</div><div className="opacity-80">{g.packageName}</div></div>
             </button>
           );
         })}
@@ -229,8 +256,8 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
       {open && (
         <div className="fixed inset-0 z-50 flex items-start justify-center overflow-y-auto bg-black/80 p-4" onClick={() => setOpen(null)}>
           <div className="w-full max-w-sm space-y-3 py-6" onClick={(ev) => ev.stopPropagation()}>
-            <p className="text-center text-sm text-white">Cartão para <b>{open.to}</b></p>
-            <CardView card={open.card} />
+            <p className="text-center text-sm text-white">Cartão de <b>{open.from}</b> para <b>{open.to}</b></p>
+            <CardView card={open.card} from={open.from} />
             {pkg && <div className="space-y-1"><p className="text-center text-xs uppercase tracking-wider text-amber-200">🎲 Kit sorteado</p><PackageCard pkg={pkg} /></div>}
             <button className={`${btn} w-full`} onClick={() => setOpen(null)}>Fechar</button>
           </div>

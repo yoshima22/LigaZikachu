@@ -4,8 +4,8 @@ import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getSessionPlayer } from "@/lib/session";
 import { DEFAULT_SS_CONFIG, brtDay, countCheckins, daysBetween, drawAvoiding, earnedMimo, hashSeed, lastCheckinDay, levelFor, pickIndex, readConfig } from "./core";
-import { defaultOptions, packageByKey, validateOptions } from "./catalog";
-import { giftPayload, loadPackages } from "./catalog-db";
+import { MIMO_OPTIONS, defaultOptions, packageByKey, validateOptions } from "./catalog";
+import { giftPayload, loadPackages, resolveMimo } from "./catalog-db";
 import { validateCard, type CardData } from "./cards";
 
 export async function getSsAdmin() {
@@ -162,7 +162,9 @@ export async function openCard(viewerParticipantId: string) {
   const pkg = (await loadPackages()).find((x) => x.key === def.key) ?? { ...def, items: [] };
   const rows = await prisma.secretSantaParticipant.findMany({ where: { editionId: me.editionId }, select: { checkinsJson: true } });
   const { cfg, totalDays } = collective(me.edition, rows);
-  const mimo = earnedMimo(countCheckins(giver.checkinsJson as string[], me.edition.startsOn, lastCheckinDay(me.edition.deliverAt)), totalDays, cfg);
+  const earned = earnedMimo(countCheckins(giver.checkinsJson as string[], me.edition.startsOn, lastCheckinDay(me.edition.deliverAt)), totalDays, cfg);
+  // Presente do Papai Noel: ovo de lab, proteína ou pena de lab potente (sorteio determinístico pela seed).
+  const mimo = earned ? await resolveMimo(pickIndex(`${me.edition.seed}:mimo:${giver.id}`, MIMO_OPTIONS.length)) : null;
   let giftId = giver.deliveredGiftId;
   if (me.playerId && !giver.openedAt) {
     giftId = await prisma.$transaction(async (tx) => {
@@ -173,7 +175,7 @@ export async function openCard(viewerParticipantId: string) {
       return g.id;
     });
   }
-  return { card: giver.cardJson as CardData, pkg, mimo, giftId, delivered: Boolean(me.playerId), alreadyOpened: Boolean(giver.openedAt) };
+  return { card: giver.cardJson as CardData, from: giver.displayName, pkg, mimo, giftId, delivered: Boolean(me.playerId), alreadyOpened: Boolean(giver.openedAt) };
 }
 
 // Visão do painel admin: edição, coletivo e participantes (com quem tirou quem, só para admin).
@@ -260,16 +262,16 @@ export async function playerView(editionId: string, playerId: string) {
   const byKey = new Map(packages.map((x) => [x.key, x]));
   const myRecipient = me?.recipientId ? e.participants.find((p) => p.id === me.recipientId) : null;
   return {
-    edition: { id: e.id, name: e.name, phase: e.phase, startsOn: e.startsOn, deliverAt: e.deliverAt.toISOString(), today, level: col.level, levels: col.cfg.levels, goal: col.goal, bonds: col.bonds, totalDays: col.totalDays, elapsedDays: col.elapsedDays, minParticipants: col.cfg.minParticipants },
+    edition: { id: e.id, name: e.name, phase: e.phase, startsOn: e.startsOn, deliverAt: e.deliverAt.toISOString(), today, level: col.level, levels: col.cfg.levels, mimoMinPct: col.cfg.mimoMinPct, goal: col.goal, bonds: col.bonds, totalDays: col.totalDays, elapsedDays: col.elapsedDays, minParticipants: col.cfg.minParticipants },
     participants: e.participants.map((p) => ({ id: p.id, name: p.displayName, avatarUrl: p.playerId ? avatar.get(p.playerId) ?? null : null, checkins: countCheckins(p.checkinsJson as string[], e.startsOn, lastCheckinDay(e.deliverAt)) })),
     packages,
     me: me && {
-      id: me.id, checkins: countCheckins(checkinDays, e.startsOn, lastCheckinDay(e.deliverAt)), checkedToday: checkinDays.includes(today), built: Boolean(me.builtAt),
+      id: me.id, checkins: countCheckins(checkinDays, e.startsOn, lastCheckinDay(e.deliverAt)), days: checkinDays, checkedToday: checkinDays.includes(today), built: Boolean(me.builtAt),
       options: ((me.giftOptionsJson as string[]) ?? []), card: (me.cardJson as CardData | null) ?? null, opened: delivered ? Boolean(e.participants.find((p) => p.recipientId === me.id)?.openedAt) : false,
       recipient: myRecipient ? { name: myRecipient.displayName, avatarUrl: myRecipient.playerId ? avatar.get(myRecipient.playerId) ?? null : null } : null,
     },
     // Depois da entrega: todos os cartões (remetente oculto), com o pacote sorteado de cada um.
-    gallery: delivered ? e.participants.filter((p) => p.cardJson && p.recipientId).map((p) => ({ to: nameOf.get(p.recipientId!) ?? "?", card: p.cardJson as CardData, packageKey: p.giftKey, packageName: byKey.get(p.giftKey ?? "")?.name ?? packageByKey(p.giftKey)?.name ?? "" })) : [],
+    gallery: delivered ? e.participants.filter((p) => p.cardJson && p.recipientId).map((p) => ({ from: p.displayName, to: nameOf.get(p.recipientId!) ?? "?", card: p.cardJson as CardData, packageKey: p.giftKey, packageName: byKey.get(p.giftKey ?? "")?.name ?? packageByKey(p.giftKey)?.name ?? "" })) : [],
   };
 }
 

@@ -1,7 +1,7 @@
 // Resolve os kits com os itens reais da loja (tipo + imagem original). Itens da loja que não existem mais são omitidos.
 import { prisma } from "@/lib/prisma";
 import { eggImageUrl } from "@/lib/egg-origin";
-import { PACKAGES, MIMO, type EggKind, type Fx, type GiftPackage } from "./catalog";
+import { PACKAGES, MIMO_OPTIONS, type EggKind, type Fx, type GiftPackage } from "./catalog";
 
 export type ResolvedItem = { name: string; qty: number; type: string | null; imageUrl: string | null; egg?: EggKind; fx?: Fx };
 export type ResolvedPackage = Omit<GiftPackage, "items"> & { items: ResolvedItem[] };
@@ -22,14 +22,24 @@ export async function loadPackages(): Promise<ResolvedPackage[]> {
   }));
 }
 
+// Presente do Papai Noel (constância) sorteado pelo índice, já com imagem/tipo da loja.
+export async function resolveMimo(index: number): Promise<ResolvedItem> {
+  const i = MIMO_OPTIONS[index % MIMO_OPTIONS.length];
+  if (i.egg) return { ...i, type: null, imageUrl: eggImageUrl(i.egg) };
+  const r = await prisma.shopItem.findFirst({ where: { name: i.name, active: true }, select: { type: true, imageUrl: true } });
+  return { ...i, type: (r?.type as string) ?? null, imageUrl: r?.imageUrl ?? null };
+}
+
 // Payload TOURNAMENT_BOX da Caixa de Presentes: itens por nome (inventário), ovos reais, comida/doce e pedras de mega sorteadas.
-export function giftPayload(p: ResolvedPackage, mimo: boolean) {
+// `mimo` (presente do Papai Noel) entra junto do kit.
+export function giftPayload(pkg: ResolvedPackage, mimo: ResolvedItem | null) {
+  const p = { ...pkg, items: mimo ? [...pkg.items, mimo] : pkg.items };
   const fxQty = (k: Fx) => p.items.filter((i) => i.fx === k).reduce((s, i) => s + i.qty, 0);
   return {
     rewardKind: "TOURNAMENT_BOX",
     origin: "Amigo Oculto",
-    food: fxQty("FOOD") + (mimo ? MIMO.food : 0),
-    sweet: fxQty("SWEET") + (mimo ? MIMO.sweet : 0),
+    food: fxQty("FOOD"),
+    sweet: fxQty("SWEET"),
     rareSweet: fxQty("RARE_SWEET"),
     randomMegaStones: fxQty("MEGA"),
     eggs: p.items.filter((i) => i.egg).map((i) => ({ type: i.egg, quantity: i.qty })),

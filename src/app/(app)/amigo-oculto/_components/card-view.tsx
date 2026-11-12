@@ -27,7 +27,7 @@ export function Snow({ color = "#fff" }: { color?: string }) {
 }
 
 // `animate`: linhas aparecem em sequência (entrega). Sem animate, o cartão é estático (prévia do montador).
-export function CardView({ card, animate = false }: { card: CardData; animate?: boolean }) {
+export function CardView({ card, animate = false, from }: { card: CardData; animate?: boolean; from?: string }) {
   const bg = BACKGROUNDS.find((b) => b.key === card.background) ?? BACKGROUNDS[0];
   const step = (n: number) => (animate ? { opacity: 0, animation: `ss-in .8s ease ${0.5 + n * 0.9}s forwards` } : undefined);
   return (
@@ -47,12 +47,13 @@ export function CardView({ card, animate = false }: { card: CardData; animate?: 
         {card.lines.map((k, i) => <p key={k} style={step(i + 1)}>{textOf(LINES, k)}</p>)}
       </div>
       <p className="mt-2 text-sm italic opacity-90" style={step(card.lines.length + 1)}>{textOf(CLOSINGS, card.closing)}</p>
+      {from ? <p className="font-serif text-lg font-bold" style={{ color: bg.accent, ...step(card.lines.length + 2) }}>— {from}</p> : null}
     </div>
   );
 }
 
 // Envelope → abre → cartão sobe → onDone (mostra o presente). Clique em qualquer lugar do envelope.
-export function EnvelopeReveal({ card, onOpen, children }: { card: CardData; onOpen?: () => void; children?: React.ReactNode }) {
+export function EnvelopeReveal({ card, from, onOpen, children }: { card: CardData; from?: string; onOpen?: () => void; children?: React.ReactNode }) {
   const [stage, setStage] = useState<0 | 1 | 2>(0);
   useEffect(() => {
     if (stage !== 1) return;
@@ -72,7 +73,7 @@ export function EnvelopeReveal({ card, onOpen, children }: { card: CardData; onO
         </button>
       ) : (
         <div className="ss-anim relative py-2" style={{ animation: "ss-rise .9s ease both" }}>
-          <CardView card={card} animate />
+          <CardView card={card} animate from={from} />
           <div className="mt-5" style={{ opacity: 0, animation: `ss-in .8s ease ${1.2 + (card.lines.length + 2) * 0.9}s forwards` }}>{children}</div>
         </div>
       )}

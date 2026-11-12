@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { BACKGROUNDS, CLOSINGS, GREETINGS, LINES, STICKERS, type CardData } from "@/lib/amigo-oculto/cards";
-import type { ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
+import type { ResolvedItem, ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
 import { PackagePicker, ReceivedGift } from "./package-ui";
 import { setPublishedAction, addBotsAction, checkinAction, createEditionAction, deliverAction, drawAction, openCardAction, registerMeAction, resetEditionAction, saveBuildAction } from "../actions";
 import { CARD_CSS, CardView, EnvelopeReveal } from "./card-view";
@@ -15,7 +15,7 @@ type Ed = { published: boolean; today: string; cfg: { levels: number[]; mimoMinP
 type View = { editions: { id: string; name: string; phase: string }[]; edition: Ed | null };
 
 const PHASE: Record<string, string> = { REGISTRATION: "Inscrições", COLLECTING: "Juntando bengalas", DELIVERED: "Entregue", CANCELED: "Cancelada" };
-const LEVELS = ["Nenhuma categoria", "Nem ligo pro Natal", "Natal é Legal", "Eu Amo o Natal", "Papa Coração"];
+const LEVELS = ["Nenhuma categoria", "Nem ligo pro Natal", "Natal é Legal", "Eu Amo o Natal", "Papai Noel No Coração"];
 const btn = "rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40";
 const btnPrimary = "rounded-lg bg-amber-400 px-3 py-1.5 text-sm font-semibold text-slate-900 hover:bg-amber-300 disabled:opacity-40";
 
@@ -165,7 +165,7 @@ function Builder({ e, p, run, pending, packages }: { e: Ed; p: P; run: (f: () =>
 
 // Abre o cartão recebido: envelope animado → cartão → presente (vai para a Caixa de Presentes).
 function Delivery({ participantId }: { participantId: string }) {
-  const [res, setRes] = useState<{ card?: CardData; pkg?: ResolvedPackage; mimo?: boolean; delivered?: boolean; error?: string } | null>(null);
+  const [res, setRes] = useState<{ card?: CardData; pkg?: ResolvedPackage; mimo?: ResolvedItem | null; from?: string; delivered?: boolean; error?: string } | null>(null);
   const [loading, setLoading] = useState(false);
   if (!res?.card || !res.pkg) {
     return (
@@ -176,8 +176,8 @@ function Delivery({ participantId }: { participantId: string }) {
     );
   }
   return (
-    <EnvelopeReveal card={res.card}>
-      <ReceivedGift pkg={res.pkg} mimo={Boolean(res.mimo)} delivered={Boolean(res.delivered)} />
+    <EnvelopeReveal card={res.card} from={res.from}>
+      <ReceivedGift pkg={res.pkg} mimo={res.mimo ?? null} delivered={Boolean(res.delivered)} />
     </EnvelopeReveal>
   );
 }

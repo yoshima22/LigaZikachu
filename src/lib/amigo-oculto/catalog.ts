@@ -16,7 +16,7 @@ export const TIERS = [
   { tier: 1, name: "Nem ligo pro Natal", emoji: "🙄", from: 1, to: 30, blurb: "Agrados simples: comida, doces, antídoto e um ovo ou pena." },
   { tier: 2, name: "Natal é Legal", emoji: "🎄", from: 31, to: 150, blurb: "Ovos raros e de evento, penas de evento, amuletos e tickets." },
   { tier: 3, name: "Eu Amo o Natal", emoji: "🎅", from: 151, to: 299, blurb: "Ovos de evento e especiais, penas especiais e de laboratório." },
-  { tier: 4, name: "Papa Coração", emoji: "💝", from: 300, to: null, blurb: "O melhor da Liga: ovos de laboratório, penas potentes e pedra de mega." },
+  { tier: 4, name: "Papai Noel No Coração", emoji: "💝", from: 300, to: null, blurb: "O melhor da Liga: ovos de laboratório, penas potentes e pedra de mega." },
 ] as const;
 // Pontos de corte (bengalas) que liberam os níveis 1..4.
 export const DEFAULT_LEVELS: [number, number, number, number] = [1, 31, 151, 300];
@@ -26,7 +26,9 @@ const it = (name: string): Q => (qty = 1) => ({ name, qty });
 const egg = (kind: EggKind): Q => (qty = 1) => ({ name: EGG_LABEL[kind], qty, egg: kind });
 const fx = (kind: Fx): Q => (qty = 1) => ({ name: FX_LABEL[kind], qty, fx: kind });
 
-const comida = fx("FOOD"), doce = fx("SWEET"), doceRaro = fx("RARE_SWEET"), pedraMega = fx("MEGA");
+const comida = fx("FOOD"), doce = fx("SWEET"), pedraMega = fx("MEGA");
+// Doce Raro sempre vem em múltiplos de 10 (pedido do admin): doceRaro(2) = 20.
+const doceRaro: Q = (qty = 1) => fx("RARE_SWEET")(qty * 10);
 const bala = it("Bala de Mel"), antidoto = it("Antídoto"), vitamina = it("Vitamina Chocante"), amuleto = it("Amuleto da Sorte"), agua = it("Água Fresca");
 const ovoSorte = it("Ovo da Sorte"), politica = it("Política de Fraqueza"), ferias = it("Ticket de Férias do Prof. Carvalho"), cesta = it("Cesta de Piquenique Chocante");
 const socorros = it("Kit de Primeiros Socorros"), reversor = it("Reversor De Mega"), proteina = it("Proteína Zika");
@@ -67,7 +69,7 @@ export const PACKAGES: GiftPackage[] = [
   P("n3-spa", 3, "🛁", "Kit Spa Natalino", [ferias(2), socorros(2), agua(2), amuleto()]),
   P("n3-sorte-especial", 3, "🎲", "Kit Sorte Especial", [ovoEspecial(), ovoSorte(), vitamina(), penaEspecial()]),
   P("n3-cientista", 3, "🔬", "Kit Caixa do Cientista", [ovoSorte(), penaLab(), cesta(), socorros()]),
-  // Papa Coração — 15 kits × 4 itens
+  // Papai Noel No Coração — 15 kits × 4 itens
   P("n4-mega-presente", 4, "💎", "Kit Mega Presente", [pedraMega(), bala(2), doceRaro(), vitamina()]),
   P("n4-mega-reverso", 4, "🔄", "Kit Mega e Reverso", [pedraMega(), reversor(), amuleto(), ferias()]),
   P("n4-mega-surpresa", 4, "🎆", "Kit Mega Surpresa", [pedraMega(), cesta(), politica(), proteina()]),
@@ -85,8 +87,8 @@ export const PACKAGES: GiftPackage[] = [
   P("n4-papai", 4, "🎅", "Kit Caixa do Papai", [ovoLab(), penaEspecial(), reversor(), proteina()]),
 ];
 
-// Mimo de constância: um agrado pequeno junto ao presente principal.
-export const MIMO = { food: 5, sweet: 3 };
+// Presente do Papai Noel (constância): quem fez check-in em 70% dos dias ganha 1 destes, sorteado, junto do presente de Natal.
+export const MIMO_OPTIONS: PackageItem[] = [ovoLab(), proteina(), penaLabP()];
 
 export const OPTIONS_PER_GIFT = 3;
 export const packageByKey = (key: string | null | undefined) => PACKAGES.find((g) => g.key === key);

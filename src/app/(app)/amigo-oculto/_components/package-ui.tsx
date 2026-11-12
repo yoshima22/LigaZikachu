@@ -1,7 +1,7 @@
 "use client";
 
 import type { ResolvedItem, ResolvedPackage } from "@/lib/amigo-oculto/catalog-db";
-import { FX_EMOJI, MIMO, OPTIONS_PER_GIFT, TIERS } from "@/lib/amigo-oculto/catalog";
+import { FX_EMOJI, OPTIONS_PER_GIFT, TIERS } from "@/lib/amigo-oculto/catalog";
 import { getShopItemEmoji } from "@/lib/shop-config";
 import { Cane } from "./candy-cane";
 
@@ -97,12 +97,18 @@ export function PackagePicker({ packages, level, levels, selected, onChange, rea
 }
 
 // Painel "seu presente" mostrado depois que o cartão abre.
-export function ReceivedGift({ pkg, mimo, delivered }: { pkg: ResolvedPackage; mimo: boolean; delivered: boolean }) {
+export function ReceivedGift({ pkg, mimo, delivered }: { pkg: ResolvedPackage; mimo: ResolvedItem | null; delivered: boolean }) {
   return (
     <div className="space-y-2 rounded-xl border border-amber-300/50 bg-black/30 p-3 text-center">
       <p className="text-xs uppercase tracking-wider text-amber-200">🎲 O sorteio escolheu para você</p>
       <PackageCard pkg={pkg} />
-      {mimo && <p className="text-xs text-emerald-300">+ mimo de constância: {MIMO.food} comidas e {MIMO.sweet} doces</p>}
+      {mimo && (
+        <div className="flex items-center justify-center gap-3 rounded-xl border border-emerald-400/50 bg-emerald-400/10 p-2.5 text-left">
+          <span className="text-2xl">🎅</span>
+          <ItemIcon item={mimo} />
+          <p className="text-xs text-emerald-200"><b className="block text-sm">Presente do Papai Noel</b>Por fazer check-in em quase todos os dias: {mimo.name} ×{mimo.qty}</p>
+        </div>
+      )}
       <p className="text-sm text-slate-300">{delivered ? "O presente já está na sua Caixa de Presentes." : "(Testador: sem Caixa de Presentes.)"}</p>
     </div>
   );

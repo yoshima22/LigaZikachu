@@ -19,10 +19,13 @@ const TAB_LABEL: Record<Tab, string> = { start: "Início", mid: "Meio", end: "Fi
 const box = "rounded-xl border border-white/10 bg-black/20 p-3";
 const mini = "rounded-md border border-white/15 bg-white/10 px-2 py-0.5 text-xs hover:bg-white/20 disabled:opacity-30";
 
-export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: CardData) => void }) {
+// Os botões de subir/descer/remover só aparecem depois que a pessoa personaliza (ou se o cartão já foi salvo).
+export function CardEditor({ card, setCard: setCardRaw, saved = false }: { card: CardData; setCard: (c: CardData) => void; saved?: boolean }) {
+  const [touched, setTouched] = useState(false);
+  const setCard = (c: CardData) => { setTouched(true); setCardRaw(c); };
+  const custom = touched || saved;
   const [tab, setTab] = useState<Tab>("mid");
   const [q, setQ] = useState("");
-  const [funnyOnly, setFunnyOnly] = useState(false);
   const total = 2 + card.lines.length;
 
   const move = (i: number, d: -1 | 1) => {
@@ -34,7 +37,7 @@ export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: Car
   };
   const rm = (k: string) => setCard({ ...card, lines: card.lines.filter((x) => x !== k) });
 
-  const list = (tab === "start" ? GREETINGS : tab === "end" ? CLOSINGS : LINES.filter((l) => !funnyOnly || l.funny)).filter((x) => x.text.toLowerCase().includes(q.toLowerCase()));
+  const list = (tab === "start" ? GREETINGS : tab === "end" ? CLOSINGS : LINES).filter((x) => x.text.toLowerCase().includes(q.toLowerCase()));
   const chosen = (k: string) => (tab === "start" ? card.greeting === k : tab === "end" ? card.closing === k : card.lines.includes(k));
   const full = tab === "mid" && card.lines.length >= MAX_MID;
   const choose = (k: string) => {
@@ -67,11 +70,11 @@ export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: Car
             {card.lines.length === 0 && <p className="rounded-lg border border-dashed border-white/20 px-2.5 py-1.5 text-xs text-slate-400">Escolha de 1 a 3 frases na biblioteca abaixo.</p>}
             {card.lines.map((k, i) => (
               <Line key={k} text={textOf(LINES, k)}>
-                <span className="flex shrink-0 gap-1">
+                {custom && <span className="flex shrink-0 gap-1">
                   <button className={mini} disabled={i === 0} onClick={() => move(i, -1)} aria-label="Subir">↑</button>
                   <button className={mini} disabled={i === card.lines.length - 1} onClick={() => move(i, 1)} aria-label="Descer">↓</button>
                   <button className={mini} onClick={() => rm(k)} aria-label="Remover">✕</button>
-                </span>
+                </span>}
               </Line>
             ))}
           </Slot>
@@ -88,7 +91,6 @@ export function CardEditor({ card, setCard }: { card: CardData; setCard: (c: Car
         </div>
         <div className="mb-2 flex flex-wrap items-center gap-2">
           <input value={q} onChange={(ev) => setQ(ev.target.value)} placeholder="Buscar frase…" className="min-w-0 flex-1 rounded-lg bg-black/30 px-2.5 py-1.5 text-sm" />
-          {tab === "mid" && <label className="flex items-center gap-1 text-xs text-slate-300"><input type="checkbox" checked={funnyOnly} onChange={(ev) => setFunnyOnly(ev.target.checked)} /> só as engraçadas 😂</label>}
         </div>
         <div className="max-h-72 space-y-1 overflow-y-auto pr-1">
           {list.length === 0 && <p className="py-3 text-center text-xs text-slate-400">Nenhuma frase encontrada.</p>}

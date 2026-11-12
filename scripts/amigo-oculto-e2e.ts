@@ -55,16 +55,17 @@ const err = (r: unknown) => assert.ok(r && typeof r === "object" && "error" in (
 
     // recebedor real abre o cartão -> presente na Caixa com itens reais
     const realP = done.find((p) => p.playerId === real.id)!;
-    const o = (await s.openCard(realP.id)) as unknown as { card: unknown; pkg: { name: string; items: unknown[] }; giftId: string | null };
+    const o = (await s.openCard(realP.id)) as unknown as { card: unknown; from: string; mimo: { name: string } | null; pkg: { name: string; items: unknown[] }; giftId: string | null };
     giftId = o.giftId;
-    assert.ok(o.card && o.pkg.name && giftId);
+    assert.ok(o.card && o.pkg.name && giftId && o.from);
+    assert.ok(o.mimo && ["Ovo de Laboratório", "Proteína Zika", "Pena Arco-Íris de Laboratório Potente"].includes(o.mimo.name), "presente do Papai Noel esperado (constância cheia)");
     const g = await prisma.playerGift.findUniqueOrThrow({ where: { id: giftId! } });
     const pl = g.payload as { shopItems?: unknown[]; eggs?: unknown[] };
     assert.ok((pl.shopItems?.length ?? 0) + (pl.eggs?.length ?? 0) > 0);
     const again = (await s.openCard(realP.id)) as unknown as { giftId: string | null };
     assert.equal(again.giftId, giftId);                                               // reabrir não duplica o presente
     assert.equal(await prisma.playerGift.count({ where: { playerId: real.id, title: g.title, createdAt: { gte: g.createdAt } } }), 1);
-    console.log("openCard:", o.pkg.name, "| payload:", JSON.stringify(giftPayload(packs.find((p) => p.name === o.pkg.name)!, false)).slice(0, 160));
+    console.log("openCard:", o.pkg.name, "| payload:", JSON.stringify(giftPayload(packs.find((p) => p.name === o.pkg.name)!, null)).slice(0, 160));
     console.log("E2E OK");
   } finally {
     if (giftId) await prisma.playerGift.delete({ where: { id: giftId } }).catch(() => {});

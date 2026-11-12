@@ -36,6 +36,28 @@ export function CaneProgress({ bonds, levels, goal }: { bonds: number; levels: n
   );
 }
 
+// Calendário dos dias de check-in do próprio jogador (feito / perdido / hoje / ainda vai chegar).
+export function MyDays({ startsOn, deliverAt, today, days }: { startsOn: string; deliverAt: string; today: string; days: string[] }) {
+  const last = new Date(Date.parse(deliverAt) - 1 - 3 * 3_600_000).toISOString().slice(0, 10);
+  const all: string[] = [];
+  for (let t = Date.parse(`${startsOn}T00:00:00Z`); new Date(t).toISOString().slice(0, 10) <= last && all.length < 62; t += 86_400_000) all.push(new Date(t).toISOString().slice(0, 10));
+  const done = new Set(days);
+  const made = all.filter((d) => done.has(d)).length;
+  return (
+    <div className="space-y-2">
+      <p className="text-sm"><b className="text-emerald-300">{made}</b> de {all.length} dias feitos por você{today < startsOn ? " (começa em " + dm(startsOn) + ")" : ""}</p>
+      <div className="grid grid-cols-6 gap-1.5 sm:grid-cols-8">
+        {all.map((d) => {
+          const state = done.has(d) ? "done" : d === today ? "today" : d < today ? "missed" : "future";
+          const cls = { done: "border-emerald-400/60 bg-emerald-400/20 text-emerald-100", today: "border-amber-300 bg-amber-300/15 text-amber-100 ring-2 ring-amber-300", missed: "border-red-400/30 bg-red-500/10 text-red-200/70", future: "border-white/10 bg-black/20 text-slate-500" }[state];
+          return <div key={d} title={state === "done" ? "Feito" : state === "today" ? "Hoje — falta fazer" : state === "missed" ? "Não feito" : "Ainda não chegou"} className={`rounded-lg border px-1 py-1.5 text-center text-[11px] leading-tight ${cls}`}><div className="font-bold">{dm(d)}</div><div>{state === "done" ? "✔" : state === "today" ? "hoje" : state === "missed" ? "✕" : "·"}</div></div>;
+        })}
+      </div>
+      <p className="text-[11px] text-slate-400">✔ feito · ✕ não feito · hoje = falta clicar no botão de check-in</p>
+    </div>
+  );
+}
+
 // Explica o que é o amigo oculto, as datas e como o presente é definido.
 export function HowItWorks({ startsOn, deliverAt, minParticipants }: { startsOn: string; deliverAt: string; minParticipants: number }) {
   const deliver = new Date(deliverAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", day: "2-digit", month: "2-digit", hour: "2-digit", minute: "2-digit" }).replace(",", " às");
@@ -58,7 +80,7 @@ export function HowItWorks({ startsOn, deliverAt, minParticipants }: { startsOn:
           </li>
         ))}
       </ol>
-      <p className="rounded-lg bg-black/25 p-2.5 text-xs text-slate-300">🏅 <b>Constância:</b> quem faz check-in em 70% dos dias manda um mimo extra junto do presente. Os presentes não custam moedas: vêm das bengalas que a Liga junta unida.</p>
+      <p className="rounded-lg bg-black/25 p-2.5 text-xs text-slate-300">🎅 <b>Presente do Papai Noel:</b> quem faz check-in em 70% dos dias ganha, junto do presente de Natal, 1 sorteado entre Ovo de Laboratório, Proteína Zika ou Pena Arco-Íris de Laboratório Potente. Os kits não custam moedas: vêm das bengalas que a Liga junta unida.</p>
     </section>
   );
 }
