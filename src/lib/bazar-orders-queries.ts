@@ -2,6 +2,7 @@ import "server-only";
 import { prisma } from "@/lib/prisma";
 import { getPokemonName, POKEMON_PT_NAMES } from "@/lib/mascot-data";
 import { getDisabledEggPokemonIds } from "@/lib/disabled-species";
+import { EXTRA_FORM_IDS } from "@/lib/extra-forms-data";
 import { MEGA_STONES } from "@/lib/mega-evolution";
 import {
   matchesMascotRequirements,
@@ -128,18 +129,32 @@ export async function getOrderableItems() {
 }
 
 /** Todas as espécies pedíveis: dex 1..1025 + formas alternativas (10xxx), megas e extras. */
-let speciesCache: [number, string][] | null = null;
+let speciesCache: { list: [number, string][]; at: number } | null = null;
 export async function getOrderableSpecies(): Promise<[number, string][]> {
   const off = new Set(await getDisabledEggPokemonIds()); // desligadas no painel ficam ocultas
   return (await getAllSpecies()).filter(([id]) => !off.has(id));
 }
+/** Mesmo universo do painel de formas: dex 1..1025 + formas/megas (EXTRA_FORM_IDS) + espécies custom do banco. */
 async function getAllSpecies(): Promise<[number, string][]> {
-  if (!speciesCache) {
-    // POKEMON_PT_NAMES não tem as gerações 3-9 (ficam em mapas à parte): varre a dex inteira via getPokemonName.
-    const ids = new Set<number>([...Array.from({ length: 1025 }, (_, i) => i + 1), ...Object.keys(POKEMON_PT_NAMES).map(Number), ...MEGA_STONES.map((m) => m.megaPokemonId)]);
-    speciesCache = [...ids].filter((id) => id >= 1).sort((a, b) => a - b).map((id) => [id, getPokemonName(id)] as [number, string]).filter(([, n]) => !n.startsWith("Pokémon #"));
-  }
-  return speciesCache;
+  if (speciesCache && Date.now() - speciesCache.at < 60_000) return speciesCache.list;
+  const defs = await prisma.pokemonSpeciesDefinition.findMany({ select: { pokemonId: true, name: true } });
+  const defName = new Map(defs.map((d) => [d.pokemonId, d.name]));
+  const ids = new Set<number>([
+    ...Array.from({ length: 1025 }, (_, i) => i + 1),
+    // formas regionais/megas com nome em mapas à parte: varre as faixas de ids de forma
+    ...Array.from({ length: 400 }, (_, i) => 10001 + i),
+    ...Array.from({ length: 100 }, (_, i) => 201001 + i),
+    ...Array.from({ length: 8 }, (_, i) => 210001 + i),
+    ...Object.keys(POKEMON_PT_NAMES).map(Number),
+    ...EXTRA_FORM_IDS,
+    ...MEGA_STONES.map((m) => m.megaPokemonId),
+    ...defs.map((d) => d.pokemonId),
+  ]);
+  const list = [...ids].filter((id) => id >= 1).sort((a, b) => a - b)
+    .map((id) => [id, defName.get(id) ?? getPokemonName(id)] as [number, string])
+    .filter(([, n]) => !n.startsWith("Pokémon #"));
+  speciesCache = { list, at: Date.now() };
+  return list;
 }
 export async function isOrderableSpecies(id: number) {
   return (await getOrderableSpecies()).some(([i]) => i === id);
