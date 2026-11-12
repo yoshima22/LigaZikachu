@@ -9,7 +9,8 @@ import { checkinSelfAction, leaveSelfAction, openMyCardAction, registerSelfActio
 import { CARD_CSS, CardView, EnvelopeReveal, Snow } from "./card-view";
 import { CardEditor } from "./card-editor";
 import { PackageCard, PackagePicker, ReceivedGift } from "./package-ui";
-import { CategoryCatalog, HowItWorks } from "./info-panels";
+import { CaneProgress, HowItWorks, panel } from "./info-panels";
+import { Cane } from "./candy-cane";
 
 type Person = { id: string; name: string; avatarUrl: string | null; checkins: number };
 type View = {
@@ -20,11 +21,11 @@ type View = {
   gallery: { to: string; card: CardData; packageKey: string | null; packageName: string }[];
 };
 
-const LEVELS = ["Nenhuma categoria liberada", "Nem ligo pro Natal", "Natal é Legal", "Eu Amo o Natal", "Papa Coração"];
+const PHASE_LABEL: Record<string, string> = { REGISTRATION: "Inscrições abertas", COLLECTING: "Juntando bengalas", DELIVERED: "Entregue" };
 const btn = "rounded-lg border border-white/15 bg-white/10 px-3 py-1.5 text-sm hover:bg-white/20 disabled:opacity-40";
 const btnPrimary = "rounded-lg bg-amber-400 px-4 py-2 text-sm font-semibold text-slate-900 hover:bg-amber-300 disabled:opacity-40";
-const panel = "space-y-3 rounded-2xl border border-white/10 bg-white/5 p-4";
 const EMPTY: CardData = { greeting: "g1", lines: ["l1"], closing: "c1", background: "noite", sticker: "🎄" };
+const dm = (iso: string) => iso.split("-").reverse().slice(0, 2).join("/");
 
 export function Avatar({ p, size = 40 }: { p: { name: string; avatarUrl: string | null }; size?: number }) {
   return p.avatarUrl ? (
@@ -51,121 +52,134 @@ function useCountdown(iso: string) {
   return left;
 }
 
+const Chip = ({ children }: { children: React.ReactNode }) => <span className="rounded-full border border-white/15 bg-black/30 px-3 py-1 text-xs">{children}</span>;
+
 export function PlayerClient({ view, isAdmin }: { view: View; isAdmin: boolean }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [msg, setMsg] = useState<string | null>(null);
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const { edition: e, me } = view;
+  const delivered = e.phase === "DELIVERED";
+  const [tab, setTab] = useState<"inicio" | "kits" | "cartao" | "galeria">("inicio");
+  const [opts, setOpts] = useState<string[]>(me?.options ?? []);
+  const [card, setCard] = useState<CardData>(me?.card ?? EMPTY);
   const left = useCountdown(e.deliverAt);
-  const run = (fn: () => Promise<unknown>) => start(async () => {
+  const run = (fn: () => Promise<unknown>, okText?: string) => start(async () => {
     const r = (await fn()) as { error?: string } | undefined;
-    setMsg(r?.error ?? null);
+    setMsg(r?.error ? { ok: false, text: r.error } : okText ? { ok: true, text: okText } : null);
     router.refresh();
   });
   const when = new Date(e.deliverAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", dateStyle: "long", timeStyle: "short" });
-  const pct = Math.min(100, Math.round((e.bonds / e.goal) * 100));
+  const canSave = Boolean(me) && !delivered && card.lines.length > 0 && opts.length <= 3;
+  const tabs = [
+    ["inicio", "🏠 Início"], ["kits", "🎁 Kits"], ...(delivered ? [["galeria", "🖼️ Cartões da Liga"]] : [["cartao", "💌 Meu cartão"]]),
+  ] as [typeof tab, string][];
 
   return (
     <div className="space-y-4 text-slate-100">
       <style>{CARD_CSS}</style>
-      <header className="relative overflow-hidden rounded-2xl border border-white/10 bg-gradient-to-br from-[#0b1d3a] via-[#2a1747] to-[#5a1a2a] p-5">
+      <header className="relative overflow-hidden rounded-3xl border border-white/10 bg-gradient-to-br from-[#0b1d3a] via-[#2a1747] to-[#5a1a2a] p-5 sm:p-7">
         <Snow />
-        <div className="relative">
+        <div className="relative space-y-3">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <p className="text-xs uppercase tracking-widest text-amber-300">Natal da Liga</p>
-              <h1 className="text-2xl font-bold">🎁 {e.name}</h1>
+              <p className="text-xs uppercase tracking-widest text-amber-300">Natal da Liga · Mercado</p>
+              <h1 className="text-2xl font-extrabold sm:text-3xl">🎁 {e.name}</h1>
             </div>
             {isAdmin && <Link href="/amigo-oculto/admin" className={btn}>🛠 Painel admin</Link>}
           </div>
-          <p className="mt-2 text-sm text-slate-200">🎄 Entrega dos cartões e presentes: <b>{when} (Brasília)</b></p>
-          {e.phase !== "DELIVERED" && left ? <p className="text-xs text-amber-200">Faltam {left}</p> : null}
+          <p className="text-sm text-slate-200">🎄 Entrega dos cartões e presentes: <b>{when} (Brasília)</b></p>
+          <div className="flex flex-wrap gap-2">
+            <Chip>📌 {PHASE_LABEL[e.phase] ?? e.phase}</Chip>
+            <Chip>👥 {view.participants.length} inscritos</Chip>
+            <Chip><Cane size={12} /> {e.bonds} bengalas</Chip>
+            {!delivered && left ? <Chip>⏳ faltam {left}</Chip> : null}
+          </div>
         </div>
       </header>
-      {msg && <p className="rounded-lg border border-red-400/40 bg-red-500/10 p-3 text-sm text-red-200">{msg}</p>}
 
-      {/* Inscrição */}
-      <section className={panel}>
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h2 className="font-semibold">📝 Inscrições ({view.participants.length})</h2>
-          {e.phase === "REGISTRATION" && (me
-            ? <button className={btn} disabled={pending} onClick={() => run(() => leaveSelfAction(e.id))}>Cancelar minha inscrição</button>
-            : <button className={btnPrimary} disabled={pending} onClick={() => run(() => registerSelfAction(e.id))}>Quero participar!</button>)}
-        </div>
-        {e.phase === "REGISTRATION" && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} As inscrições vão até <b>{e.startsOn.split("-").reverse().slice(0, 2).join("/")}</b>; no mesmo dia o sorteio é feito e você descobre quem tirou. São necessários pelo menos {e.minParticipants} inscritos.</p>}
-        {e.phase !== "REGISTRATION" && !me && <p className="text-sm text-slate-300">As inscrições já foram encerradas. Você poderá ver os cartões da Liga depois da entrega.</p>}
-        <div className="flex flex-wrap gap-2">
-          {view.participants.map((p) => (
-            <span key={p.id} className="flex items-center gap-2 rounded-full bg-black/25 py-1 pl-1 pr-3 text-sm"><Avatar p={p} size={28} />{p.name}</span>
-          ))}
-        </div>
-      </section>
+      <nav className="flex gap-1.5 overflow-x-auto rounded-2xl border border-white/10 bg-black/20 p-1.5">
+        {tabs.map(([k, label]) => (
+          <button key={k} onClick={() => setTab(k)} className={`flex-1 whitespace-nowrap rounded-xl px-3 py-2 text-sm font-semibold transition ${tab === k ? "bg-amber-400 text-slate-900" : "text-slate-200 hover:bg-white/10"}`}>{label}</button>
+        ))}
+      </nav>
 
-      {e.phase !== "DELIVERED" && <HowItWorks startsOn={e.startsOn} deliverAt={e.deliverAt} minParticipants={e.minParticipants} />}
-      {e.phase !== "DELIVERED" && <CategoryCatalog packages={view.packages} levels={e.levels} bonds={e.bonds} />}
+      {msg && <p className={`rounded-lg border p-3 text-sm ${msg.ok ? "border-emerald-400/40 bg-emerald-500/10 text-emerald-200" : "border-red-400/40 bg-red-500/10 text-red-200"}`}>{msg.text}</p>}
 
-      {/* Quem eu tirei */}
-      {me?.recipient && (
-        <section className="relative overflow-hidden rounded-2xl border border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-rose-400/10 p-5 text-center">
-          <p className="text-xs uppercase tracking-widest text-amber-200">🤫 Você tirou</p>
-          <div className="my-3 flex flex-col items-center gap-2">
-            <Avatar p={me.recipient} size={84} />
-            <p className="text-2xl font-bold">{me.recipient.name}</p>
-          </div>
-          <p className="text-xs text-slate-300">Guarde segredo! Você pode voltar aqui quando quiser para consultar.</p>
-        </section>
-      )}
-
-      {/* Laços + check-in */}
-      {me && e.phase === "COLLECTING" && (
-        <section className={panel}>
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="font-semibold">🍭 Bengalas de açúcar da comunidade</h2>
-            <button className={btnPrimary} disabled={pending || me.checkedToday || e.today < e.startsOn} onClick={() => run(() => checkinSelfAction(e.id))}>{me.checkedToday ? "✔ Check-in de hoje feito" : e.today < e.startsOn ? `Começa em ${e.startsOn.split("-").reverse().slice(0, 2).join("/")}` : "Fazer check-in (+1 🍭)"}</button>
-          </div>
-          <div>
-            <div className="mb-1 flex justify-between text-sm"><span>{e.bonds} 🍭 de {e.goal}</span><span className="text-amber-300">{LEVELS[e.level]}</span></div>
-            <div className="relative h-4 overflow-hidden rounded-full bg-black/40">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-amber-300 transition-all" style={{ width: `${pct}%` }} />
-              {e.levels.slice(0, 3).map((m) => <span key={m} className="absolute top-0 h-full w-px bg-white/40" style={{ left: `${Math.min(100, (m / e.goal) * 100)}%` }} />)}
+      {tab === "inicio" && (
+        <>
+          {/* Inscrição */}
+          <section className={panel}>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h2 className="text-lg font-bold">📝 Inscrição</h2>
+              {e.phase === "REGISTRATION" && (me
+                ? <button className={btn} disabled={pending} onClick={() => run(() => leaveSelfAction(e.id))}>Cancelar minha inscrição</button>
+                : <button className={btnPrimary} disabled={pending} onClick={() => run(() => registerSelfAction(e.id))}>Quero participar!</button>)}
             </div>
-          </div>
-          <p className="text-xs text-slate-300">Cada check-in diário de cada inscrito vira 1 bengala de açúcar. Quanto mais bengalas, mais categorias de presente são liberadas. Suas bengalas: <b>{me.checkins}</b>.</p>
+            {e.phase === "REGISTRATION" && <p className="text-sm text-slate-300">{me ? "✔ Você está inscrito." : "Inscreva-se para entrar no sorteio."} Inscrições até <b>{dm(e.startsOn)}</b>; nesse dia o sorteio é feito e você descobre quem tirou. Mínimo de {e.minParticipants} inscritos.</p>}
+            {e.phase !== "REGISTRATION" && !me && <p className="text-sm text-slate-300">As inscrições já foram encerradas. Você poderá ver os cartões da Liga depois da entrega.</p>}
+            <div className="flex flex-wrap gap-2">
+              {view.participants.length === 0 && <p className="text-sm text-slate-400">Ninguém se inscreveu ainda. Seja o primeiro!</p>}
+              {view.participants.map((p) => <span key={p.id} className="flex items-center gap-2 rounded-full bg-black/25 py-1 pl-1 pr-3 text-sm"><Avatar p={p} size={28} />{p.name}</span>)}
+            </div>
+          </section>
+
+          {/* Quem eu tirei */}
+          {me?.recipient && (
+            <section className="relative overflow-hidden rounded-3xl border border-amber-300/40 bg-gradient-to-br from-amber-300/10 to-rose-400/10 p-6 text-center">
+              <p className="text-xs uppercase tracking-widest text-amber-200">🤫 Você tirou</p>
+              <div className="my-3 flex flex-col items-center gap-2"><Avatar p={me.recipient} size={88} /><p className="text-2xl font-bold">{me.recipient.name}</p></div>
+              <p className="text-xs text-slate-300">Guarde segredo! Você pode voltar aqui quando quiser para consultar.</p>
+            </section>
+          )}
+
+          {/* Bengalas + check-in */}
+          {!delivered && (
+            <section className={panel}>
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <h2 className="text-lg font-bold"><Cane size={20} /> Bengalas de açúcar</h2>
+                {me && <button className={btnPrimary} disabled={pending || me.checkedToday || e.phase !== "COLLECTING" || e.today < e.startsOn} onClick={() => run(() => checkinSelfAction(e.id))}>{me.checkedToday ? "✔ Check-in de hoje feito" : e.phase !== "COLLECTING" || e.today < e.startsOn ? `Check-in começa em ${dm(e.startsOn)}` : "Fazer check-in (+1 bengala)"}</button>}
+              </div>
+              <CaneProgress bonds={e.bonds} levels={e.levels} goal={e.goal} />
+              <p className="text-xs text-slate-300">Cada check-in diário de cada inscrito vira 1 bengala para a comunidade. Quanto mais bengalas, mais categorias de kits ficam disponíveis.{me ? <> Suas bengalas: <b>{me.checkins}</b>.</> : null}</p>
+            </section>
+          )}
+
+          {delivered && me && <MyCard editionId={e.id} />}
+          {!delivered && <HowItWorks startsOn={e.startsOn} deliverAt={e.deliverAt} minParticipants={e.minParticipants} />}
+        </>
+      )}
+
+      {tab === "kits" && (
+        <section className={panel}>
+          <h2 className="text-lg font-bold">🎁 Kits de presente</h2>
+          {!me && !delivered && <p className="text-sm text-slate-300">Veja o que cada categoria tem. Inscreva-se na aba Início para escolher os seus kits.</p>}
+          {e.level === 0 && !delivered && <p className="rounded-lg border border-dashed border-white/20 p-3 text-sm text-slate-300">Ainda não dá para escolher: os kits são liberados conforme a comunidade junta bengalas de açúcar (check-in diário, a partir de {dm(e.startsOn)}).</p>}
+          <PackagePicker packages={view.packages} level={e.level} levels={e.levels} selected={opts} onChange={setOpts} readOnly={!me || delivered} deliverLabel={`${dm(e.deliverAt.slice(0, 10))} à 00:00`} />
         </section>
       )}
 
-      {/* Montagem */}
-      {me && e.phase === "COLLECTING" && <Builder key={me.id} view={view} run={run} pending={pending} />}
+      {tab === "cartao" && (
+        <section className={panel}>
+          <h2 className="text-lg font-bold">💌 Monte seu cartão de Natal</h2>
+          <p className="text-sm text-slate-300">{me ? "Pode montar e salvar já; dá para mudar até a entrega." : "Teste à vontade para ver como fica. Inscreva-se na aba Início para poder salvar."}{me?.recipient ? <> Para: <b>{me.recipient.name}</b>.</> : null}</p>
+          <div className="grid gap-5 lg:grid-cols-2">
+            <CardEditor card={card} setCard={setCard} />
+            <div className="lg:sticky lg:top-4 lg:self-start"><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} /></div>
+          </div>
+        </section>
+      )}
 
-      {/* Meu cartão */}
-      {me && e.phase === "DELIVERED" && <MyCard editionId={e.id} />}
+      {tab === "galeria" && delivered && view.gallery.length > 0 && <Gallery items={view.gallery} packages={view.packages} />}
+      {tab === "galeria" && delivered && view.gallery.length === 0 && <section className={panel}><p className="text-sm text-slate-300">Nenhum cartão para mostrar.</p></section>}
 
-      {/* Cartões da Liga */}
-      {e.phase === "DELIVERED" && view.gallery.length > 0 && <Gallery items={view.gallery} packages={view.packages} />}
+      {me && !delivered && (tab === "kits" || tab === "cartao") && (
+        <div className="sticky bottom-3 z-20 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-amber-300/40 bg-[#1b1233]/95 p-3 shadow-xl backdrop-blur">
+          <p className="text-xs text-slate-200">🎁 {opts.length ? `${opts.length} kit(s) escolhido(s) — 1 será sorteado` : "Nenhum kit escolhido"} · 💌 cartão com {card.lines.length} frase(s){me.built ? " · ✔ já salvo" : ""}</p>
+          <button className={btnPrimary} disabled={pending || !canSave} onClick={() => run(() => saveBuildSelfAction(e.id, opts, card), "Salvo! Você pode alterar até a entrega.")}>Salvar kits e cartão</button>
+        </div>
+      )}
     </div>
-  );
-}
-
-function Builder({ view, run, pending }: { view: View; run: (f: () => Promise<unknown>) => void; pending: boolean }) {
-  const { edition: e, me } = view;
-  const [opts, setOpts] = useState<string[]>(me!.options);
-  const [card, setCard] = useState<CardData>(me!.card ?? EMPTY);
-  const canSave = card.lines.length > 0 && (opts.length <= 3);
-  return (
-    <section className={panel}>
-      <h2 className="font-semibold">🎀 Monte seu presente e seu cartão{me!.built ? " ✔ (salvo — pode alterar)" : ""}</h2>
-      {me!.recipient && <p className="text-sm text-slate-300">Para: <b>{me!.recipient.name}</b></p>}
-      <h3 className="text-sm font-semibold">1. Kits de presente</h3>
-      {e.level === 0
-        ? <p className="rounded-lg border border-dashed border-white/20 p-3 text-sm text-slate-300">Os kits são liberados conforme a comunidade junta bengalas de açúcar (check-in diário de todos, a partir de 01/12). Enquanto isso, já dá para montar o cartão!</p>
-        : <PackagePicker packages={view.packages} level={e.level} levels={e.levels} selected={opts} onChange={setOpts} />}
-      <div className="grid gap-5 lg:grid-cols-2">
-        <div><h3 className="mb-2 text-sm font-semibold">2. Cartão</h3><CardEditor card={card} setCard={setCard} /></div>
-        <div className="lg:sticky lg:top-4 lg:self-start"><h3 className="mb-2 text-sm font-semibold">Prévia</h3><CardView card={card} /></div>
-      </div>
-      <button className={btnPrimary} disabled={pending || !canSave} onClick={() => run(() => saveBuildSelfAction(e.id, opts, card))}>Salvar presente e cartão</button>
-      <p className="text-xs text-slate-400">Você pode editar até a entrega. Quem não escolher kits envia 3 kits padrão da categoria mais alta liberada e um cartão simples.</p>
-    </section>
   );
 }
 
@@ -175,7 +189,7 @@ function MyCard({ editionId }: { editionId: string }) {
   const [loading, setLoading] = useState(false);
   return (
     <section className={panel}>
-      <h2 className="font-semibold">💌 Seu cartão chegou!</h2>
+      <h2 className="text-lg font-bold">💌 Seu cartão chegou!</h2>
       {!res?.card || !res.pkg ? (
         <div className="space-y-2">
           <button className={btnPrimary} disabled={loading} onClick={async () => { setLoading(true); setRes((await openMyCardAction(editionId)) as typeof res); setLoading(false); }}>Abrir meu cartão</button>
@@ -193,7 +207,7 @@ function Gallery({ items, packages }: { items: View["gallery"]; packages: Resolv
   const pkg = open ? packages.find((p) => p.key === open.packageKey) : null;
   return (
     <section className={panel}>
-      <h2 className="font-semibold">🖼️ Cartões da Liga</h2>
+      <h2 className="text-lg font-bold">🖼️ Cartões da Liga</h2>
       <p className="text-xs text-slate-300">Todos os cartões e presentes sorteados. Quem enviou continua em segredo. 🤫</p>
       <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
         {items.map((g, i) => {

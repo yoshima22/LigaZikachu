@@ -104,7 +104,8 @@ export function collective(e: { startsOn: string; deliverAt: Date; configJson: u
 export async function saveBuild(participantId: string, optionKeys: string[], rawCard: unknown) {
   const p = await prisma.secretSantaParticipant.findUnique({ where: { id: participantId }, include: { edition: { include: { participants: { select: { checkinsJson: true } } } } } });
   if (!p) return fail("Participante não encontrado.");
-  if (p.edition.phase !== "COLLECTING" || Date.now() >= p.edition.deliverAt.getTime()) return fail("A montagem abre após o sorteio e fecha na entrega.");
+  // O cartão já pode ser montado/salvo durante as inscrições; os kits dependem das bengalas (validateOptions).
+  if ((p.edition.phase !== "COLLECTING" && p.edition.phase !== "REGISTRATION") || Date.now() >= p.edition.deliverAt.getTime()) return fail("A montagem fecha na entrega.");
   const v = validateCard(rawCard);
   if (!v.ok) return fail(v.error);
   let keys: string[] | null = null;
