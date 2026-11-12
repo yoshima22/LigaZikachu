@@ -3782,10 +3782,13 @@ async function _getArenaRanking(limit: number) {
       -- Comparar o enum DIRETO (sem ::text): o cast desabilitava os índices
       -- (status_type / type_createdAt) e forçava seq scan de toda a tabela.
       WHERE b."status" = 'RESOLVED'::"ArenaBattleStatus"
-        -- Contador total da Arena Z: PvP + PvE (BOT).
-        AND b."type" IN ('PVP'::"ArenaBattleType", 'BOT'::"ArenaBattleType")
+        -- Ranking é só PvP: PvE (BOT), treino e auto-ataque não contam.
+        AND b."type" = 'PVP'::"ArenaBattleType"
+        AND b."attackerPlayerId" IS DISTINCT FROM b."defenderPlayerId"
         -- Treino não conta (sem vencedor/perdedor, só gerava empates falsos).
         AND COALESCE(at."isTraining", false) = false
+        -- Treino antigo cujo time foi apagado não tem vencedor: fora também.
+        AND (b."winnerPlayerId" IS NOT NULL OR b."result"::text = 'DRAW')
         AND NOT EXISTS (
           SELECT 1
           FROM "players" ap
