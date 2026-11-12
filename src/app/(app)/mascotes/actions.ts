@@ -2228,6 +2228,8 @@ export async function getBankMascotsPageAction(input?: {
       and.push(rarityIds.length > 0 ? { pokemonId: { in: rarityIds } } : { id: "__no_match__" });
     }
 
+    if (rarity === "SHINY") and.push({ isShiny: true });
+
     // Filtro por personalidade do mascote (usa a lista canônica — inclui as novas).
     if (Object.prototype.hasOwnProperty.call(PERSONALITY_LABEL, personality)) {
       and.push({ personality: personality as never });

@@ -197,7 +197,7 @@ function HatchRoulette({ result, onComplete }: { result: HatchResult; onComplete
               const distance = Math.abs(candidateIndex - index);
               const center = distance === 0;
               const isWinner = revealed && candidateIndex === winnerIndex;
-              const sprite = isWinner ? finalSprite : getSpriteUrl(pokemonId);
+              const sprite = candidateIndex === winnerIndex ? finalSprite : getSpriteUrl(pokemonId);
               return (
                 <div key={`${candidateIndex}-${pokemonId}`} className={`flex w-36 shrink-0 snap-center flex-col items-center rounded-2xl border px-2 py-4 transition-[opacity,transform,filter,border-color,box-shadow] duration-300 sm:w-44 sm:px-3 ${center ? "scale-105 border-yellow-300/60 bg-yellow-300/10 opacity-100" : distance === 1 ? "scale-90 border-white/10 bg-black/20 opacity-40 blur-[.3px]" : "scale-75 border-transparent opacity-10 blur-[1px]"} ${isWinner ? "animate-pulse shadow-[0_0_45px_rgba(250,204,21,.35)]" : ""}`}>
                   {/* eslint-disable-next-line @next/next/no-img-element */}

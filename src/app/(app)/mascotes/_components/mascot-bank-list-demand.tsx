@@ -755,6 +755,8 @@ export function MascotBankList({
           {(["MEGA", "LEGENDARY", "MYTHICAL", "ULTRA_BEAST", "PSEUDO_LEGENDARY", "PARADOX"] as const).map((r) => (
             <option key={r} value={r}>{RARITY_LABEL[r]}</option>
           ))}
+          <option disabled>──────────</option>
+          <option value="SHINY">✦ Shiny</option>
         </select>
         <select
           value={personalityFilter}
