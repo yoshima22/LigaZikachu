@@ -41,7 +41,7 @@ export function searchAbilities(args: { q?: string; category?: string; trigger?:
     if (!info.hasEffect && !(args.includeNoEffect || q)) continue;
     if (args.category && info.category !== args.category) continue;
     if (args.trigger && info.trigger !== args.trigger) continue;
-    if (q && !norm(`${info.name} ${info.effectName ?? ""} ${info.category ?? ""}`).includes(q)) continue;
+    if (q && !norm(`${info.name} ${info.effectName ?? ""} ${info.category ?? ""} ${info.dex ?? ""} ${info.template ?? ""} ${info.param ?? ""}`).includes(q)) continue;
     if (args.disabled?.size) {
       const h = getAbilityHolders(slug, args.disabled);
       if (h.normal.length + h.hidden.length === 0) continue; // só mascotes desligados a têm
