@@ -6,6 +6,7 @@ import { Prisma } from "@prisma/client";
 import { getSessionUser } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
 import { prisma } from "@/lib/prisma";
+import { signalRealtime } from "@/lib/realtime-signal";
 import {
   publicDraftPet,
   validateArenaDraftPets,
@@ -597,7 +598,7 @@ export async function getDraftQueueStatusAction(matchId: string) {
 /** Chamado enquanto o jogador está na fila (sala CREATED). Resolve a corrida em
  * que dois jogadores criam salas ao mesmo tempo: quem consultar primeiro pareia
  * as duas salas do mesmo modo. Retorna o matchId para onde navegar. */
-export async function tryPairDraftAction(matchId: string) {
+async function tryPairDraftActionImpl(matchId: string) {
   try {
     const player = await currentPlayer();
     return await prisma.$transaction(async (tx) => {
@@ -708,7 +709,7 @@ export async function getDraftSyncStateAction(matchId: string) {
   }
 }
 
-export async function cancelDraftQueueAction(matchId: string) {
+async function cancelDraftQueueActionImpl(matchId: string) {
   const player = await currentPlayer();
   await prisma.arenaDraftMatch.updateMany({
     where: {
@@ -803,7 +804,7 @@ export async function createDraftChallengeAction(
   }
 }
 
-export async function answerDraftChallengeAction(
+async function answerDraftChallengeActionImpl(
   matchId: string,
   presetId: string | null,
   accept: boolean,
@@ -896,7 +897,7 @@ const pickOrder: Array<"A" | "B"> = [
   "B",
   "A",
 ];
-export async function submitArenaDraftAction(
+async function submitArenaDraftActionImpl(
   matchId: string,
   targetId: string,
   idempotencyKey: string,
@@ -1270,7 +1271,7 @@ async function persistCombatSegment(
   return true;
 }
 
-export async function resolveArenaDraftBattleAction(matchId: string) {
+async function resolveArenaDraftBattleActionImpl(matchId: string) {
   try {
     const player = await currentPlayer();
     let finishedPlayers: string[] = [];
@@ -1344,7 +1345,7 @@ export async function resolveArenaDraftBattleAction(matchId: string) {
   }
 }
 
-export async function submitArenaDraftStrategyAction(input: {
+async function submitArenaDraftStrategyActionImpl(input: {
   matchId: string;
   activeIds: string[];
   postures: Record<string, ArenaMascot["combatRole"]>;
@@ -1472,7 +1473,7 @@ export async function submitArenaDraftStrategyAction(input: {
 /** Resolve apenas quando o prazo já venceu. As escolhas ausentes mantêm a
  * formação e as posturas atuais, portanto uma queda de conexão não inventa
  * trocas nem revela informação privada. */
-export async function advanceArenaDraftTimeoutAction(matchId: string) {
+async function advanceArenaDraftTimeoutActionImpl(matchId: string) {
   try {
     const player = await currentPlayer();
     let finishedPlayers: string[] = [];
@@ -1602,7 +1603,7 @@ export async function advanceArenaDraftTimeoutAction(matchId: string) {
   }
 }
 
-export async function heartbeatArenaDraftAction(matchId: string) {
+async function heartbeatArenaDraftActionImpl(matchId: string) {
   try {
     const player = await currentPlayer();
     return await prisma.$transaction(async (tx) => {
@@ -1691,4 +1692,50 @@ export async function heartbeatArenaDraftAction(matchId: string) {
   } catch {
     return { active: false, opponentOnline: false };
   }
+}
+
+// Sinal realtime: avisa as salas abertas que a versão do draft mudou, para elas
+// sincronizarem na hora sem polling de 1s (o polling vira só reserva lenta).
+// signalRealtime usa after(): só dispara depois da resposta (transação já commitada).
+const signalDraft = (...ids: Array<string | null | undefined>) =>
+  signalRealtime(ids.filter((id): id is string => Boolean(id)).map((id) => `draft:${id}`), "sync");
+
+export async function tryPairDraftAction(matchId: string) {
+  const r = await tryPairDraftActionImpl(matchId);
+  if (r.matched || r.cancelled) signalDraft(matchId, r.matchId);
+  return r;
+}
+export async function cancelDraftQueueAction(matchId: string) {
+  await cancelDraftQueueActionImpl(matchId);
+  signalDraft(matchId);
+}
+export async function answerDraftChallengeAction(matchId: string, presetId: string | null, accept: boolean) {
+  const r = await answerDraftChallengeActionImpl(matchId, presetId, accept);
+  signalDraft(matchId);
+  return r;
+}
+export async function submitArenaDraftAction(matchId: string, targetId: string, idempotencyKey: string) {
+  const r = await submitArenaDraftActionImpl(matchId, targetId, idempotencyKey);
+  signalDraft(matchId);
+  return r;
+}
+export async function resolveArenaDraftBattleAction(matchId: string) {
+  const r = await resolveArenaDraftBattleActionImpl(matchId);
+  signalDraft(matchId);
+  return r;
+}
+export async function submitArenaDraftStrategyAction(input: Parameters<typeof submitArenaDraftStrategyActionImpl>[0]) {
+  const r = await submitArenaDraftStrategyActionImpl(input);
+  signalDraft(input.matchId);
+  return r;
+}
+export async function advanceArenaDraftTimeoutAction(matchId: string) {
+  const r = await advanceArenaDraftTimeoutActionImpl(matchId);
+  signalDraft(matchId);
+  return r;
+}
+export async function heartbeatArenaDraftAction(matchId: string) {
+  const r = await heartbeatArenaDraftActionImpl(matchId);
+  if ("resolved" in r && r.resolved) signalDraft(matchId);
+  return r;
 }
