@@ -79,6 +79,8 @@ export const arenaDraftPetSchema = z.object({
   isMega: z.boolean(),
   // Habilidade passiva escolhida (slug do PokeAPI). Sem ela vale a padrão da espécie.
   ability: z.string().max(60).optional(),
+  // Prioridade da habilidade no time (0 = primeira), independente do slot do mascote.
+  abilityRank: z.number().int().min(0).max(99).optional(),
   nickname: z.string().trim().max(18).optional(),
   personality: z.string().min(1),
   posture: z.string().min(1),

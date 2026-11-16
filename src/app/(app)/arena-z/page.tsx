@@ -24,6 +24,8 @@ import { PvpVaultLive } from "./_components/pvp-vault-live";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { CombatRoleSelect } from "./_components/combat-role-select";
+import { TeamAbilityEditor } from "./_components/team-ability-editor";
+import { arenaZAbilitiesLive } from "@/lib/abilities/schedule";
 import { getStanceUnlockMap } from "@/lib/stance-unlocks";
 import { ManualRefreshButton } from "@/app/(app)/_components/manual-refresh-button";
 import { AdminArenaHistorySelector } from "./_components/admin-arena-history-selector";
@@ -125,6 +127,7 @@ export default async function ArenaZPage({
   const session = await getAppSession();
   if (!session?.user) redirect("/login");
   const admin = isAdmin(session.user.role);
+  const abilitiesLive = arenaZAbilitiesLive();
   const params = await searchParams;
   const activeTab: Tab = (TABS.includes(params.tab as Tab) ? params.tab : "salas") as Tab;
   const historyView = params.history === "pvp" ? "pvp" : "mine";
@@ -214,6 +217,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                 id: true, pokemonId: true, nickname: true, level: true,
                 arenaState: true, restingUntil: true, isShiny: true,
                 statForce: true, statAgility: true, statInstinct: true, statVitality: true, statCharisma: true, happiness: true,
+                abilityChoice: true, hiddenAbilityUnlocked: true,
               },
             },
           },
@@ -560,7 +564,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
         }
         const { rooms: levelRooms, trainingRoom, abilityTrainingRoom } = roomsData;
         const renderTrainingRoom = (room: typeof trainingRoom, ability: boolean) => {
-          const trainingAttackers = readyActiveTeams.filter(t => t.isTraining && (t.roomLevel === -1) === ability);
+          const trainingAttackers = readyActiveTeams.filter(t => t.isTraining && (abilitiesLive ? !ability : (t.roomLevel === -1) === ability));
           return (
             <details key={room.roomLevel} className={`group rounded-2xl border overflow-hidden ${ability ? "border-fuchsia-500/20 bg-fuchsia-500/5" : "border-sky-500/20 bg-sky-500/5"}`} open={room.teamCount > 0}>
               <summary className="flex cursor-pointer select-none items-center justify-between gap-3 px-5 py-4 font-semibold text-sky-100 hover:text-white">
@@ -917,7 +921,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             )}
 
             {renderTrainingRoom(trainingRoom, false)}
-            {renderTrainingRoom(abilityTrainingRoom, true)}
+            {!abilitiesLive && renderTrainingRoom(abilityTrainingRoom, true)}
 
             {/* Ranking */}
             <details className="group rounded-2xl border border-border bg-slate-950/60 overflow-hidden">
@@ -999,7 +1003,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                         </span>
                       )}
                       <span className="rounded-full border border-blue-500/40 bg-blue-500/10 text-blue-200 px-2 py-0.5 text-[10px] font-bold">
-                        {team.isTraining ? (team.roomLevel === -1 ? "✨ Treino c/ Habilidades" : "🥊 Treino") : `Sala Nv.${team.roomLevel}`}
+                        {team.isTraining ? (team.roomLevel === -1 && !abilitiesLive ? "✨ Treino c/ Habilidades" : "🥊 Treino") : `Sala Nv.${team.roomLevel}`}
                       </span>
                       {debuffDisplay > 0 && (
                         <span className={`rounded-full border px-2 py-0.5 text-[10px] font-bold ${debuffDisplay >= 60 ? "border-red-500/60 text-red-300" : "border-orange-500/60 text-orange-300"}`}>
@@ -1091,6 +1095,23 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     </div>
                   ))}
                 </div>
+
+                {team.status === "ACTIVE" && (abilitiesLive || admin || team.roomLevel === -1) && (
+                  <TeamAbilityEditor
+                    teamId={team.id}
+                    debug={admin}
+                    initialOrder={Array.isArray(team.abilityOrder) ? (team.abilityOrder as string[]) : null}
+                    members={team.members.map(member => ({
+                      id: member.mascotId,
+                      name: member.mascot.nickname ?? getPokemonName(member.mascot.pokemonId),
+                      pokemonId: member.mascot.pokemonId,
+                      slot: member.slot,
+                      abilityChoice: member.mascot.abilityChoice,
+                      hiddenAbilityUnlocked: member.mascot.hiddenAbilityUnlocked,
+                      stats: { force: member.mascot.statForce, agility: member.mascot.statAgility, charisma: member.mascot.statCharisma, instinct: member.mascot.statInstinct, vitality: member.mascot.statVitality },
+                    }))}
+                  />
+                )}
 
                 <details className="group mt-3 rounded-xl border border-sky-500/20 bg-sky-500/5">
                   <summary className="flex cursor-pointer list-none items-center justify-between gap-2 px-3 py-2 text-[11px] font-semibold text-sky-200">
@@ -1219,7 +1240,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                   <RetirePenaltyBadge retiredAt={lastRetiredTeam.retiredAt} />
                 </div>
               )}
-              <CreateTeamForm mascots={mascots.filter(m =>
+              <CreateTeamForm abilitiesLive={abilitiesLive} admin={admin} mascots={mascots.filter(m =>
                 !mascotIdsInActiveTeams.has(m.id) &&
                 !m.bazarListed &&
                 m.expeditions.length === 0 &&

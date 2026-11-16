@@ -1,13 +1,13 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ABILITY_CATEGORY_LIMIT, ABILITY_REDUCED_FACTOR, getAbilityInfo } from "@/lib/abilities";
-import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
+import { getAbilityInfo, sortByAbilityOrder } from "@/lib/abilities";
+import { AbilityAllocator } from "@/components/ability-lineup";
 import { COMBAT_ROLE_OPTIONS } from "@/lib/combat-roles";
 import { autoBuild, PRESETS, type Preset } from "@/lib/rei-do-rio/auto-build";
 import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "@/lib/rei-do-rio/config";
-import { SWAP_PRESETS, abilityOf, describeSwap, emptyFormation, evaluateLineupAbilities, roleAllowedFor, slotSwapPct, validateFormation, type Formation, type MascotSnap } from "@/lib/rei-do-rio/team";
-import { AbilityField, MascotHeading, StatBars, mascotName } from "./mascot-card";
+import { SWAP_PRESETS, abilityOf, abilityOptionsOf, describeSwap, emptyFormation, roleAllowedFor, slotSwapPct, validateFormation, type Formation, type MascotSnap } from "@/lib/rei-do-rio/team";
+import { MascotHeading, StatBars, mascotName } from "./mascot-card";
 import { Card, Empty, Pill, Sprite, Title, roleLabel } from "./rei-ui";
 
 const SLOT_LABELS = ["Titular", "Reserva 1", "Reserva 2"];
@@ -53,9 +53,17 @@ export function TeamBuilder({
   }, [pool, used, q, sort]);
   const selMascot = sel ? poolMap.get(sel.id) : null;
 
-  // Habilidades dos titulares (ordem dos slots): ligada, 70% ou desligada pelo limite da categoria.
-  const titulars = f.slots.map((s) => (s.mascotIds[0] ? poolMap.get(s.mascotIds[0]) ?? null : null));
-  const abilityStates = evaluateLineupAbilities(titulars.map((m) => (m ? abilityOf(f, m) : null)));
+  // Montagem de habilidades: todos da equipe, em ordem de prioridade (independe do slot); só os titulares contam no 1º combate.
+  const allocMascots = sortByAbilityOrder(
+    f.slots.flatMap((slot, si) => slot.mascotIds.flatMap((id, idx) => {
+      const m = poolMap.get(id);
+      return m ? [{
+        id: m.id, name: mascotName(m), pokemonId: m.pokemonId, slot: si, inField: idx === 0, ability: abilityOf(f, m), options: abilityOptionsOf(m),
+        stats: { force: m.statForce, agility: m.statAgility, charisma: m.statCharisma, instinct: m.statInstinct, vitality: m.statVitality },
+      }] : [];
+    })),
+    f.abilityOrder,
+  );
 
   const update = (fn: (draft: Formation) => void) => setF((prev) => { const d = structuredClone(prev); fn(d); return d; });
 
@@ -81,6 +89,7 @@ export function TeamBuilder({
   const clearCell = (slot: number, idx: number) => update((d) => { d.slots[slot].mascotIds.splice(idx, 1); });
   const promote = (slot: number, idx: number) => update((d) => { const a = d.slots[slot].mascotIds; if (idx > 0) [a[idx - 1], a[idx]] = [a[idx], a[idx - 1]]; });
   const setAbility = (id: string, slug: string) => update((d) => { d.abilities = { ...(d.abilities ?? {}), [id]: slug }; });
+  const setAbilityOrder = (ids: string[]) => update((d) => { d.abilityOrder = ids; });
 
   function runAuto() {
     const r = autoBuild(pool, preset, "PRESERVE");
@@ -91,7 +100,7 @@ export function TeamBuilder({
     // Só guarda a escolha de habilidade dos mascotes que estão na equipe.
     const ids = new Set(f.slots.flatMap((s) => s.mascotIds));
     const abilities = Object.fromEntries(Object.entries(f.abilities ?? {}).filter(([id]) => ids.has(id)));
-    onSave({ ...f, abilities });
+    onSave({ ...f, abilities, abilityOrder: (f.abilityOrder ?? []).filter((id) => ids.has(id)) });
   }
 
   return (
@@ -140,7 +149,6 @@ export function TeamBuilder({
 
           <div className="grid gap-4 lg:grid-cols-2">
             {f.slots.map((slot, si) => {
-              const state = abilityStates[si];
               return (
                 <Card key={si} className="!p-3">
                   <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -183,7 +191,7 @@ export function TeamBuilder({
                               {detail ? (
                                 <div className="mt-2 space-y-2">
                                   <StatBars m={m} />
-                                  <AbilityField m={m} f={f} onChange={(slug) => setAbility(m.id, slug)} state={idx === 0 ? state : null} />
+                                  <p className="text-[11px] text-violet-200/80">✨ {abilityName(f, m)}</p>
                                 </div>
                               ) : <p className="mt-1.5 text-[11px] text-violet-200/80">✨ {abilityName(f, m)}</p>}
                             </div>
@@ -262,24 +270,8 @@ export function TeamBuilder({
           </Card>
 
           <Card>
-            <Title orn="snowflake" sub="Quem entra em campo no 1º combate (os titulares).">Habilidades em campo</Title>
-            <ul className="space-y-1.5">
-              {f.slots.map((slot, i) => {
-                const m = titulars[i]; const st = abilityStates[i];
-                return (
-                  <li key={i} className="flex items-center gap-2 rounded-lg bg-slate-900/60 px-2 py-1.5 text-xs">
-                    <span className="grid h-5 w-5 shrink-0 place-items-center rounded-full bg-sky-400/15 text-[10px] font-black text-sky-200">{i + 1}</span>
-                    {m ? <Sprite id={m.pokemonId} size={26} /> : <span className="h-[26px] w-[26px]" />}
-                    <span className="min-w-0 flex-1 truncate"><b className="text-white">{st ? st.name : "—"}</b></span>
-                    {st && (st.state === "ACTIVE" ? <Pill tone="green">ligada</Pill> : st.state === "REDUCED" ? <Pill tone="gold" title={st.reason ?? ""}>70%</Pill> : st.state === "OFF" ? <Pill tone="red" title={st.reason ?? ""}>desligada</Pill> : null)}
-                  </li>
-                );
-              })}
-            </ul>
-            <p className="mt-2 text-[11px] leading-relaxed text-slate-400">
-              Em campo, cada categoria liga poucas habilidades: o 1º mascote da categoria usa 100%, o 2º usa {Math.round(ABILITY_REDUCED_FACTOR * 100)}% e os seguintes ficam desligados (Sobrevivência: só 1). A ordem dos slots decide quem fica ligado, e a regra é recalculada a cada combate quando uma reserva entra.
-            </p>
-            <div className="mt-2 flex flex-wrap gap-1.5">{(Object.keys(ABILITY_CATEGORY_LIMIT) as (keyof typeof ABILITY_CATEGORY_LIMIT)[]).map((c) => <span key={c} className={`rounded border px-1.5 py-0.5 text-[10px] font-bold ${ABILITY_CATEGORY_STYLE[c]}`}>{c} · até {ABILITY_CATEGORY_LIMIT[c]}</span>)}</div>
+            <Title orn="snowflake" sub="Prioridade independe do slot. Titulares contam no 1º combate; reservas entram na conta quando jogam.">Habilidades</Title>
+            <AbilityAllocator debug mascots={allocMascots} onReorder={setAbilityOrder} onChangeAbility={setAbility} />
           </Card>
         </aside>
       </div>

@@ -1,6 +1,6 @@
 // Habilidades no Arena Draft: escolha por mascote, validação e plano ligado/reduzido/desligado.
 import type { ArenaDraftPet, DraftMode } from "@/lib/arena-draft";
-import { availableAbilities, evaluateTeamAbilities, getAbilityInfo, getSpeciesAbilities, type AbilitySlot } from "./index";
+import { abilityPriorityIndices, availableAbilities, evaluateTeamAbilities, getAbilityInfo, getSpeciesAbilities, type AbilitySlot } from "./index";
 import type { AbilityLineup } from "./combat";
 
 /** Habilidades que o time salvo pode escolher: no modo Customizado a oculta é livre. */
@@ -31,16 +31,21 @@ export function validateDraftAbilities(pets: Array<Pick<ArenaDraftPet, "speciesI
 
 export type DraftAbilityState = { slug: string; state: AbilitySlot["state"]; factor: number; reason: string | null };
 
+/** Ids por prioridade de habilidade (menor `abilityRank` primeiro); sem rank vale a ordem dos slots. */
+export function draftAbilityOrder(pets: Array<Pick<ArenaDraftPet, "id" | "abilityRank">>): string[] {
+  return pets.filter((p) => p.abilityRank != null).sort((a, b) => a.abilityRank! - b.abilityRank!).map((p) => p.id);
+}
+
 /** Plano do time em campo: a ordem de `activeIds` define os slots. */
 export function buildDraftAbilityPlan(
-  pets: Array<Pick<ArenaDraftPet, "id" | "speciesId" | "ability">>,
+  pets: Array<Pick<ArenaDraftPet, "id" | "speciesId" | "ability" | "abilityRank">>,
   activeIds: string[],
   mode: DraftMode,
 ): { lineup: AbilityLineup; states: Record<string, DraftAbilityState> } {
   const byId = new Map(pets.map((pet) => [pet.id, pet]));
   const ordered = activeIds.map((id) => byId.get(id)).filter((pet): pet is NonNullable<typeof pet> => Boolean(pet));
   const slugs = ordered.map((pet) => draftAbilitySlug(pet, mode));
-  const slots = evaluateTeamAbilities(slugs);
+  const slots = evaluateTeamAbilities(slugs, abilityPriorityIndices(ordered.map((p) => p.id), draftAbilityOrder(pets)));
   const lineup: AbilityLineup = {};
   const states: Record<string, DraftAbilityState> = {};
   ordered.forEach((pet, index) => {

@@ -81,8 +81,8 @@ function buildLineup(rt: Runtime, pct: number): { mascots: LeagueMascot[]; fight
     fighters.push({ id, name: m.name, pokemonId: m.pokemonId, role: getCombatRoleLabel(m.combatRole), slot: i + 1, maxHp: st.max, startHp: st.hp });
     slugs.push(abilityOf(rt.formation, snap));
   });
-  // Habilidades: limite por categoria pela ORDEM DOS SLOTS em campo (1º 100%, 2º 70%, 3º+ desligado), recalculado a cada luta.
-  const states = evaluateLineupAbilities(slugs);
+  // Habilidades: limite por categoria pela prioridade escolhida (padrão: ordem dos slots em campo) (1º 100%, 2º 70%, 3º+ desligado), recalculado a cada luta.
+  const states = evaluateLineupAbilities(slugs, fighters.map((f) => f.id), rt.formation.abilityOrder);
   const abilities: AbilityLineup = {};
   fighters.forEach((f, i) => {
     const s = states[i];

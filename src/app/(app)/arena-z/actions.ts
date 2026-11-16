@@ -93,7 +93,23 @@ async function checkTeamStaleFromIncomingAttack(
   };
 }
 
-export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>, isTraining = false, abilityPicks?: Record<string, string>): Promise<{ error?: string }> {
+/** Grava a habilidade preferida (só as válidas para o mascote) e a prioridade da equipe. */
+async function saveTeamAbilities(playerId: string, teamId: string, mascotIds: string[], picks?: Record<string, string>, order?: string[]) {
+  const { availableAbilities } = await import("@/lib/abilities");
+  const owned = await prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, pokemonId: true, hiddenAbilityUnlocked: true } });
+  for (const m of owned) {
+    const slug = picks?.[m.id];
+    if (slug && availableAbilities(m.pokemonId, m.hiddenAbilityUnlocked, "REAL").includes(slug)) {
+      await prisma.mascot.update({ where: { id: m.id }, data: { abilityChoice: slug } });
+    }
+  }
+  if (order) {
+    const ids = new Set(mascotIds);
+    await prisma.arenaTeam.update({ where: { id: teamId }, data: { abilityOrder: [...new Set(order)].filter((id) => ids.has(id)) } });
+  }
+}
+
+export async function createArenaTeamAction(mascotIds: string[], name: string, roomLevel: number, combatRoles?: Record<string, string>, isTraining = false, abilityPicks?: Record<string, string>, abilityOrder?: string[]): Promise<{ error?: string }> {
   try {
     const playerId = await getCurrentPlayerId();
     const { ARENA_ROOMS } = await import("@/lib/arena-z");
@@ -101,21 +117,28 @@ export async function createArenaTeamAction(mascotIds: string[], name: string, r
     const [{ getBattleModeDivision }, { validateBattleDivision }] = await Promise.all([import("@/lib/battle-division-settings"), import("@/lib/battle-divisions")]);
     const [division, mascots] = await Promise.all([getBattleModeDivision("ARENA_Z"), prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, megaEvolvedAt: true, megaEvolvedFromPokemonId: true } })]);
     const divisionCheck = validateBattleDivision(mascots, division); if (!divisionCheck.valid) return { error: divisionCheck.message };
-    await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number] | -1, combatRoles, isTraining);
-    if (isTraining && abilityPicks) {
-      const { availableAbilities } = await import("@/lib/abilities");
-      const owned = await prisma.mascot.findMany({ where: { id: { in: mascotIds }, playerId }, select: { id: true, pokemonId: true, hiddenAbilityUnlocked: true } });
-      for (const m of owned) {
-        const slug = abilityPicks[m.id];
-        if (slug && availableAbilities(m.pokemonId, m.hiddenAbilityUnlocked, "REAL").includes(slug)) {
-          await prisma.mascot.update({ where: { id: m.id }, data: { abilityChoice: slug } });
-        }
-      }
-    }
+    const team = await createArenaTeam(playerId, name, mascotIds, roomLevel as typeof ARENA_ROOMS[number] | -1, combatRoles, isTraining);
+    if (abilityPicks || abilityOrder) await saveTeamAbilities(playerId, team.id, mascotIds, abilityPicks, abilityOrder);
     revalidateTag("arena-active-teams");
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao criar equipe." };
+  }
+}
+
+/** Remonta as habilidades de uma equipe ativa: escolha por mascote e ordem de prioridade (independe do slot). */
+export async function setArenaTeamAbilitiesAction(teamId: string, abilityPicks: Record<string, string>, abilityOrder: string[]): Promise<{ error?: string }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    const team = await prisma.arenaTeam.findUnique({ where: { id: teamId }, select: { playerId: true, status: true, members: { select: { mascotId: true } } } });
+    if (!team || team.playerId !== playerId) return { error: "Equipe não encontrada." };
+    if (team.status !== "ACTIVE") return { error: "A equipe não está ativa." };
+    await saveTeamAbilities(playerId, teamId, team.members.map((m) => m.mascotId), abilityPicks, abilityOrder);
+    revalidateTag("arena-active-teams");
+    revalidatePath("/arena-z");
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao salvar as habilidades." };
   }
 }
 

@@ -138,6 +138,8 @@ export async function saveRealRosterAction(input: {
   postures?: Record<string, string>;
   /** Habilidade escolhida por mascote (slug); sem isto vale a que o mascote já usa. */
   abilities?: Record<string, string>;
+  /** Ids por prioridade de habilidade (independe do slot). */
+  abilityOrder?: string[];
 }) {
   try {
     const player = await currentPlayer();
@@ -175,6 +177,7 @@ export async function saveRealRosterAction(input: {
       throw new Error("Um ou mais mascotes não pertencem à sua conta.");
     // Mantém a ordem escolhida pelo jogador.
     const byId = new Map(mascots.map((m) => [m.id, m]));
+    const abilityRank = new Map([...new Set(input.abilityOrder ?? [])].filter((id) => uniqueIds.includes(id)).map((id, i) => [id, i]));
     const pets = uniqueIds.map((mascotId, slot) => {
       const mascot = byId.get(mascotId)!;
       const wantedAbility = input.abilities?.[mascot.id];
@@ -205,6 +208,7 @@ export async function saveRealRosterAction(input: {
         throw new Error(`${mascot.nickname ?? getPokemonName(mascot.pokemonId)} ainda não desbloqueou esta postura.`);
       return {
         ...(ability ? { ability } : {}),
+        ...(abilityRank.has(mascot.id) ? { abilityRank: abilityRank.get(mascot.id)! } : {}),
         id: mascot.id,
         slot,
         speciesId: mascot.pokemonId,

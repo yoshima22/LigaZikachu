@@ -1,7 +1,7 @@
 // Formação, validação (servidor e cliente) e estado diário do Rei do Rio. Tudo puro.
 import { COMBAT_ROLE_VALUES } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
-import { availableAbilities, evaluateTeamAbilities, getAbilityInfo, resolveAbilitySlug, type AbilitySlot } from "@/lib/abilities";
+import { abilityPriorityIndices, availableAbilities, evaluateTeamAbilities, getAbilityInfo, resolveAbilitySlug, type AbilitySlot } from "@/lib/abilities";
 import { SLOT_COUNT, SQUAD_SIZE, TEAM_SIZE } from "./config";
 
 /** Legado (antes da troca por slot). KEEP = "até cair"; PRESERVE = sugestão automática por postura. */
@@ -16,6 +16,8 @@ export type Formation = {
   slots: SlotPlan[];
   /** Habilidade escolhida por mascote (slug). Ausente = a do próprio mascote (escolha salva) ou a padrão da espécie. */
   abilities?: Record<string, string>;
+  /** Mascotes por prioridade de habilidade (independe do slot); sem isto vale a ordem dos slots. */
+  abilityOrder?: string[];
   /** @deprecated use swapBelowPct por slot */
   strategy?: Strategy;
 };
@@ -81,8 +83,8 @@ export function abilityOf(f: Pick<Formation, "abilities">, m: MascotSnap): strin
 export type AbilityState = { slug: string; name: string; state: AbilitySlot["state"]; factor: number; reason: string | null };
 
 /** Estado de cada habilidade de uma escalação em campo (ordem dos slots): ligada, reduzida (70%) ou desligada. */
-export function evaluateLineupAbilities(slugs: Array<string | null>): Array<AbilityState | null> {
-  const slots = evaluateTeamAbilities(slugs);
+export function evaluateLineupAbilities(slugs: Array<string | null>, ids?: string[], order?: string[] | null): Array<AbilityState | null> {
+  const slots = evaluateTeamAbilities(slugs, ids ? abilityPriorityIndices(ids, order) : undefined);
   return slugs.map((slug, i) => (slug && getAbilityInfo(slug)?.hasEffect ? { slug, name: getAbilityInfo(slug)!.name, state: slots[i].state, factor: slots[i].factor, reason: slots[i].reason } : null));
 }
 

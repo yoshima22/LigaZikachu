@@ -3312,6 +3312,7 @@ model ArenaTeam {
   isTraining           Boolean         @default(false) // sala de treinamento: sem lesões, sem loot, sem ranking
   pendingBotJson       Json?
   pendingBotDifficulty String?
+  abilityOrder         Json? // ids de mascotes por prioridade de habilidade (independe do slot)
   lastPassiveIncomeAt  DateTime        @default(now())
   enteredAt            DateTime        @default(now())
   lastBattleAt         DateTime? // última batalha PvP

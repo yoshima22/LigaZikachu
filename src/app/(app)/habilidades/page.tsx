@@ -199,8 +199,8 @@ export default async function HabilidadesPage({ searchParams }: Props) {
           <div className="rounded-2xl border border-border bg-slate-900/60 p-4">
             <h2 className="font-bold text-white">Limite por categoria no time</h2>
             <p className="mt-1 text-xs text-slate-400">
-              Para evitar times só de dano, a ordem dos slots em campo decide: o 1º mascote da categoria usa 100% do efeito, o 2º usa {Math.round(ABILITY_REDUCED_FACTOR * 100)}% (se o limite for 2) e do 3º em diante a habilidade fica desligada.
-              Você pode mudar a posição dos mascotes para escolher quem fica ligado. O estado é recalculado a cada janela estratégica e não muda se alguém cair no meio do trecho.
+              Para evitar times só de dano, a ordem de prioridade que você monta decide (não a posição do mascote no time): o 1º da lista na categoria usa 100% do efeito, o 2º usa {Math.round(ABILITY_REDUCED_FACTOR * 100)}% (se o limite for 2) e do 3º em diante a habilidade fica desligada.
+              Arraste as habilidades na tela de montagem do time para escolher quem fica ligado. O estado é recalculado a cada janela estratégica e não muda se alguém cair no meio do trecho.
             </p>
             <div className="mt-3 overflow-x-auto">
               <table className="w-full text-xs">

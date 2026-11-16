@@ -11,8 +11,8 @@ import { addMascotToArenaTeamAction, createArenaTeamAction } from "../actions";
 import { listWeeklyPresetsAction, saveWeeklyPresetAction, deleteWeeklyPresetAction } from "@/app/(app)/combates/liga-semanal/actions";
 import { CombatRoleHelpButton } from "@/components/combat-role-help";
 import { TRAINING_ABILITY_ROOM } from "@/lib/arena-z-training";
-import { availableAbilities, resolveAbilitySlug } from "@/lib/abilities";
-import { AbilityLineupPanel } from "@/components/ability-lineup";
+import { availableAbilities, resolveAbilitySlug, sortByAbilityOrder } from "@/lib/abilities";
+import { AbilityAllocator } from "@/components/ability-lineup";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 
 export interface ValidMascot {
@@ -348,7 +348,7 @@ function SelectedBar({
 
 // ── CreateTeamForm ─────────────────────────────────────────────────────────
 
-export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
+export function CreateTeamForm({ mascots, abilitiesLive = false, admin = false }: { mascots: ValidMascot[]; abilitiesLive?: boolean; admin?: boolean }) {
   const router = useRouter();
   const [pending, startTransition] = useTransition();
   const [selected, setSelected] = useState<Set<string>>(new Set());
@@ -358,15 +358,8 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
   const [isTraining, setIsTraining] = useState(false);
   const [abilityTraining, setAbilityTraining] = useState(false);
   const [abilityPicks, setAbilityPicks] = useState<Record<string, string>>({});
-  const moveSelected = useCallback((index: number, delta: number) => {
-    setSelected(prev => {
-      const ids = [...prev];
-      const target = index + delta;
-      if (target < 0 || target >= ids.length) return prev;
-      [ids[index], ids[target]] = [ids[target], ids[index]];
-      return new Set(ids);
-    });
-  }, []);
+  const showAbilities = abilitiesLive || admin || (isTraining && abilityTraining);
+  const [abilityOrder, setAbilityOrder] = useState<string[] | null>(null);
   const [search, setSearch] = useState("");
   const [sort, setSort] = useState<SortKey>("level_desc");
   const [filter, setFilter] = useState<FilterKey>("available");
@@ -515,7 +508,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
         const mascot = mascots.find(m => m.id === id);
         return [id, roles[id] ?? (mascot ? defaultRoleForMascot(mascot) : "ATTACKER")];
       }));
-      const r = await createArenaTeamAction([...selected], name.trim(), isTraining && abilityTraining ? TRAINING_ABILITY_ROOM : roomLevel, rolePayload, isTraining, isTraining && abilityTraining ? Object.fromEntries([...selected].flatMap(id => abilityPicks[id] ? [[id, abilityPicks[id]]] : [])) : undefined);
+      const r = await createArenaTeamAction([...selected], name.trim(), isTraining && abilityTraining && !abilitiesLive ? TRAINING_ABILITY_ROOM : roomLevel, rolePayload, isTraining, showAbilities ? Object.fromEntries([...selected].flatMap(id => abilityPicks[id] ? [[id, abilityPicks[id]]] : [])) : undefined, showAbilities ? sortByAbilityOrder([...selected].map(id => ({ id })), abilityOrder).map(m => m.id) : undefined);
       if (r.error) toast.error(r.error);
       else { toast.success("Equipe criada!"); router.refresh(); setSelected(new Set()); setRoles({}); setName(""); }
     });
@@ -577,14 +570,16 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
       {selected.size > 0 && (
         <>
         <SelectedBar mascots={mascots} selected={selected} roles={roles} onRoleChange={changeRole} onRemove={toggle} roomLevel={isTraining ? 100 : roomLevel} />
-        {isTraining && abilityTraining && (
-          <AbilityLineupPanel
-            onMove={moveSelected}
+        {showAbilities && (
+          <AbilityAllocator
+            debug={admin}
+            onReorder={setAbilityOrder}
             onChangeAbility={(id, slug) => setAbilityPicks(prev => ({ ...prev, [id]: slug }))}
-            mascots={[...selected].flatMap(id => {
+            mascots={sortByAbilityOrder([...selected].flatMap((id, slot) => {
               const m = mascots.find(x => x.id === id);
               if (!m) return [];
               return [{
+                slot,
                 id: m.id,
                 name: displayName(m),
                 pokemonId: m.pokemonId,
@@ -593,7 +588,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
                 preferred: resolveAbilitySlug({ pokemonId: m.pokemonId, choice: m.abilityChoice, hiddenUnlocked: Boolean(m.hiddenAbilityUnlocked), mode: "REAL" }),
                 stats: { force: m.statForce, agility: m.statAgility, charisma: m.statCharisma, instinct: m.statInstinct, vitality: m.statVitality },
               }];
-            })}
+            }), abilityOrder)}
           />
         )}
         </>
@@ -618,14 +613,14 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
               }`}>
               🥊 Treino
             </button>
-            <button type="button" onClick={() => { setIsTraining(true); setAbilityTraining(true); }}
+            {!abilitiesLive && <button type="button" onClick={() => { setIsTraining(true); setAbilityTraining(true); }}
               className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
                 isTraining && abilityTraining
                   ? "border-fuchsia-400/50 bg-fuchsia-400/10 text-fuchsia-300"
                   : "border-border text-slate-500 hover:border-slate-600 hover:text-slate-300"
               }`}>
               ✨ Treino c/ Habilidades
-            </button>
+            </button>}
             {ARENA_ROOM_OPTIONS.map(lvl => (
               <button key={lvl} type="button" onClick={() => { setIsTraining(false); setAbilityTraining(false); setRoomLevel(lvl); }}
                 className={`rounded-lg border px-2.5 py-1.5 text-[10px] font-bold transition-colors ${
@@ -637,7 +632,7 @@ export function CreateTeamForm({ mascots }: { mascots: ValidMascot[] }) {
               </button>
             ))}
           </div>
-          {isTraining && abilityTraining
+          {isTraining && abilityTraining && !abilitiesLive
             ? <p className="mt-1.5 text-[9px] text-fuchsia-400">Treino c/ Habilidades: igual ao treino, mas as habilidades passivas dos mascotes valem aqui (só nesta sala). Mostra a habilidade preferida do mascote, que pode ser trocada por slot (a oculta só vale se o mascote usou o TM). Só enfrenta equipes da mesma sala ou o bot.</p>
             : isTraining
             ? <p className="mt-1.5 text-[9px] text-sky-500">Treino: sem limite de nível, sem loot, sem lesões, sem impacto no ranking.</p>

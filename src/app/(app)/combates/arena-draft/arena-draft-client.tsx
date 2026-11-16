@@ -29,8 +29,9 @@ import {
 } from "@/lib/arena-draft";
 import { PERSONALITY_LABEL, TYPE_LABELS_PT } from "@/lib/mascot-data";
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
-import { AbilityPicker, AbilityTeamSummary } from "./ability-picker";
-import { draftAbilityOptions, draftAbilitySlug } from "@/lib/abilities/draft";
+import { AbilityAllocator } from "@/components/ability-lineup";
+import { sortByAbilityOrder } from "@/lib/abilities";
+import { draftAbilityOptions, draftAbilityOrder, draftAbilitySlug } from "@/lib/abilities/draft";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import { COMBAT_ROLE_DESCRIPTIONS, type CombatRole } from "@/lib/combat-roles";
 import { PERSONALITY_DESIGN_BY_KEY } from "@/lib/personality-design";
@@ -622,6 +623,7 @@ export function ArenaDraftClient({
             <RealRosterBuilder
               realPresets={presets.filter((p) => p.source === "REAL")}
               onSaved={() => router.refresh()}
+              isAdmin={isAdmin}
             />
           ) : (
             <div className="grid gap-5 xl:grid-cols-[1fr_1.35fr]">
@@ -938,7 +940,6 @@ export function ArenaDraftClient({
                     <p className={`text-[10px] font-bold ${megas >= ARENA_DRAFT_RULES.maxMegas ? "text-amber-300" : "text-slate-500"}`}>
                       Limite de {ARENA_DRAFT_RULES.maxMegas} Megas por time — não é possível ultrapassar.
                     </p>
-                    <AbilityTeamSummary slugs={pets.map((pet) => draftAbilitySlug(pet, "CUSTOM"))} />
                     <div className="mt-1">
                       <TeamCombatAnalysisButton
                         mascots={pets.map((pet) => ({
@@ -955,6 +956,22 @@ export function ArenaDraftClient({
                         }))}
                         roles={Object.fromEntries(pets.map((pet) => [pet.id, pet.posture]))}
                         mode="ARENA"
+                      />
+                    </div>
+                    <div className="mt-2">
+                      <AbilityAllocator
+                        debug={isAdmin}
+                        note="Em campo vão 6 mascotes por janela; a prévia considera os 6 primeiros slots, e a prioridade vale entre os que você escalar."
+                        onReorder={(ids) => setPets(pets.map((pet) => ({ ...pet, abilityRank: ids.indexOf(pet.id) })))}
+                        onChangeAbility={(id, slug) => updatePet(id, { ability: slug })}
+                        mascots={sortByAbilityOrder(
+                          pets.map((pet) => ({
+                            id: pet.id, slot: pet.slot, inField: pet.slot < 6, pokemonId: pet.speciesId, stats: pet.stats,
+                            name: pet.nickname?.trim() || species.find((sp) => sp.id === pet.speciesId)?.name || `#${pet.speciesId}`,
+                            ability: draftAbilitySlug(pet, "CUSTOM"), options: draftAbilityOptions(pet.speciesId, "CUSTOM"),
+                          })),
+                          draftAbilityOrder(pets),
+                        )}
                       />
                     </div>
                     <div className="mt-1 h-2 w-full max-w-md overflow-hidden rounded-full bg-white/10">
@@ -1214,15 +1231,6 @@ export function ArenaDraftClient({
                                         ? "Forma Mega · +10"
                                         : "Forma comum"}
                                     </div>
-                                  </div>
-                                  <div className="mt-2">
-                                    <AbilityPicker
-                                      speciesId={pet.speciesId}
-                                      value={pet.ability}
-                                      options={draftAbilityOptions(pet.speciesId, "CUSTOM")}
-                                      stats={pet.stats}
-                                      onChange={(slug) => updatePet(pet.id, { ability: slug })}
-                                    />
                                   </div>
                                   <div className="mt-2 grid gap-2 sm:grid-cols-2">
                                     <div className="rounded-lg border border-fuchsia-300/20 bg-fuchsia-300/[.04] p-2.5">
@@ -1745,9 +1753,11 @@ export function ArenaDraftClient({
 function RealRosterBuilder({
   realPresets,
   onSaved,
+  isAdmin,
 }: {
   realPresets: Preset[];
   onSaved: () => void;
+  isAdmin: boolean;
 }) {
   const [pending, start] = useTransition();
   const [mascots, setMascots] = useState<RealMascot[]>([]);
@@ -1757,6 +1767,7 @@ function RealRosterBuilder({
   const [selected, setSelected] = useState<string[]>([]);
   const [postures, setPostures] = useState<Record<string, string>>({});
   const [abilities, setAbilities] = useState<Record<string, string>>({});
+  const [abilityOrder, setAbilityOrder] = useState<string[] | null>(null);
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const perPage = 18;
@@ -1822,6 +1833,7 @@ function RealRosterBuilder({
           .map((p) => [p.id, p.ability as string]),
       ),
     );
+    setAbilityOrder(draftAbilityOrder(preset.pets));
   };
   const reset = () => {
     setEditingId(null);
@@ -1829,6 +1841,7 @@ function RealRosterBuilder({
     setSelected([]);
     setPostures({});
     setAbilities({});
+    setAbilityOrder(null);
   };
   const save = () =>
     start(async () => {
@@ -1847,6 +1860,7 @@ function RealRosterBuilder({
         mascotIds: selected,
         postures,
         abilities,
+        abilityOrder: sortByAbilityOrder(selected.map((id) => ({ id })), abilityOrder).map((m) => m.id),
       });
       if (result.error) toast.error(result.error);
       else {
@@ -1963,7 +1977,24 @@ function RealRosterBuilder({
           </b>{" "}
           · o limite é {ARENA_DRAFT_RULES.maxMegas} Megas por time e não pode ser ultrapassado.
         </p>
-        <AbilityTeamSummary slugs={selected.map((id) => abilities[id] ?? byId.get(id)?.ability)} />
+        <div className="mt-2">
+          <AbilityAllocator
+            debug={isAdmin}
+            note="Em campo vão 6 mascotes por janela; a prévia abaixo considera os 6 primeiros slots, e a prioridade vale entre os que você escalar."
+            onReorder={setAbilityOrder}
+            onChangeAbility={(id, slug) => setAbilities((cur) => ({ ...cur, [id]: slug }))}
+            mascots={sortByAbilityOrder(
+              selected.flatMap((id, slot) => {
+                const m = byId.get(id);
+                return m && m.abilityOptions ? [{
+                  id, slot, inField: slot < 6, name: m.nickname ?? m.name, pokemonId: m.speciesId, stats: m.stats,
+                  ability: abilities[id] ?? m.ability ?? null, options: m.abilityOptions,
+                }] : [];
+              }),
+              abilityOrder,
+            )}
+          />
+        </div>
         <input
           value={search}
           onChange={(e) => {
@@ -2069,18 +2100,6 @@ function RealRosterBuilder({
                         >
                           <Trash2 size={12} />
                         </button>
-                      </div>
-                    )}
-                    {picked && m.abilityOptions && (
-                      <div className="mt-2">
-                        <AbilityPicker
-                          speciesId={m.speciesId}
-                          value={abilities[m.id] ?? m.ability}
-                          options={m.abilityOptions}
-                          stats={m.stats}
-                          lockedHidden
-                          onChange={(slug) => setAbilities((cur) => ({ ...cur, [m.id]: slug }))}
-                        />
                       </div>
                     )}
                   </article>
@@ -2239,7 +2258,7 @@ function ArenaDraftTutorial({
             <TutorialStep
               number="05"
               title="Habilidades passivas"
-              text="Cada mascote usa uma habilidade da Pokédex adaptada ao combate (efeito de no máximo 20%, com número fixo de ativações). Por categoria, o 1º mascote em campo usa 100%, o 2º usa 70% e os seguintes ficam desligados. Mude a ordem dos slots a cada janela. No modo Padrão, a habilidade oculta exige o TM dela. Consulte tudo na aba Habilidades."
+              text="Cada mascote usa uma habilidade da Pokédex adaptada ao combate (efeito de no máximo 20%, com número fixo de ativações). Por categoria, a 1ª habilidade da sua lista de prioridade usa 100%, a 2ª usa 70% e as seguintes ficam desligadas. Monte a prioridade na tela do time, independente do slot. No modo Padrão, a habilidade oculta exige o TM dela. Consulte tudo na aba Habilidades."
             />
             <TutorialStep
               number="06"

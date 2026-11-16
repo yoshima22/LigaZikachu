@@ -63,7 +63,21 @@ import { recordPlayerActivity } from "@/lib/player-activity";
 import { bumpRecap, countLogEffects, sumLogDamage } from "@/lib/player-recap";
 import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type AbilityRuntime, type DebuffEvent } from "@/lib/abilities/combat";
 import { TRAINING_ABILITY_ROOM, isAbilityTrainingTeam } from "@/lib/arena-z-training";
-import { buildTrainingAbilityPlan } from "@/lib/arena-z-training-abilities";
+import { buildTrainingAbilityPlan, type TrainingAbilityMember } from "@/lib/arena-z-training-abilities";
+import { arenaZAbilitiesLive } from "@/lib/abilities/schedule";
+
+/**
+ * Habilidades na Arena Z: a partir de 23/11/2026 valem em toda a Arena Z; antes disso, só na
+ * sala de treino com habilidades (ou quando `force`, para o debug da conta admin).
+ */
+function arenaAbilityPlan(
+  team: { isTraining: boolean; roomLevel: number | null; abilityOrder?: unknown; members: Array<{ mascot: TrainingAbilityMember }> },
+  force = false,
+) {
+  if (!force && !arenaZAbilitiesLive() && !isAbilityTrainingTeam(team)) return null;
+  const order = Array.isArray(team.abilityOrder) ? (team.abilityOrder as string[]) : null;
+  return buildTrainingAbilityPlan(team.members.map((m) => m.mascot), order);
+}
 
 export const ARENA_Z_CONFIG = {
   susCost: 10,
@@ -1861,14 +1875,15 @@ export async function getRoomsData(viewerPlayerId?: string) {
   });
 
   // Salas de Treinamento — separadas das salas por nível; a de habilidades é à parte
-  const trainingTeams = teams.filter((t) => t.isTraining && !isAbilityTrainingTeam(t));
+  const abilityRoomOpen = !arenaZAbilitiesLive();
+  const trainingTeams = teams.filter((t) => t.isTraining && (!abilityRoomOpen || !isAbilityTrainingTeam(t)));
   const trainingRoom = {
     roomLevel: 0,
     isTraining: true,
     teamCount: trainingTeams.length,
     teams: trainingTeams.map((t) => mapTeam(t, viewerPlayerId)),
   };
-  const abilityTrainingTeams = teams.filter((t) => isAbilityTrainingTeam(t));
+  const abilityTrainingTeams = abilityRoomOpen ? teams.filter((t) => isAbilityTrainingTeam(t)) : [];
   const abilityTrainingRoom = {
     roomLevel: TRAINING_ABILITY_ROOM,
     isTraining: true,
@@ -3126,7 +3141,8 @@ export async function runBotBattle(
       toArenaMascot({ ...m.mascot, combatRole: m.combatRole }),
     );
     const bot = buildBotOpponent(attackers, difficulty);
-    const combat = runArenaCombat(attackers, bot.defenders);
+    const adminPlan = arenaAbilityPlan(team, true);
+    const combat = runArenaCombat(attackers, bot.defenders, adminPlan ? { abilities: adminPlan.lineup } : undefined);
     const won = combat.result === "ATTACKER_WIN";
     const diff = DIFFICULTY_CONFIG[difficulty];
     const fakeReward: ArenaLootFull = won
@@ -3213,9 +3229,7 @@ export async function runBotBattle(
       toArenaMascot({ ...m.mascot, combatRole: m.combatRole }),
     );
     const bot = buildBotOpponent(attackers, difficulty);
-    const abilityPlan = isAbilityTrainingTeam(team)
-      ? buildTrainingAbilityPlan(team.members.map((m) => m.mascot))
-      : null;
+    const abilityPlan = arenaAbilityPlan(team);
     const combat = runArenaCombat(
       attackers,
       bot.defenders,
@@ -3383,7 +3397,8 @@ export async function runBotBattle(
     defenders = bot.defenders;
   }
 
-  const combat = runArenaCombat(attackers, defenders);
+  const pvePlan = arenaAbilityPlan(team);
+  const combat = runArenaCombat(attackers, defenders, pvePlan ? { abilities: pvePlan.lineup } : undefined);
   const won = combat.result === "ATTACKER_WIN";
   // Recompensa escalada pela dificuldade
   const baseReward = won
@@ -4206,8 +4221,8 @@ export async function runPvpBattle(
 
   // Treino: ambos os times devem ser de treinamento; pode atacar o próprio time
   const isTrainingBattle = attackTeam.isTraining && defenseTeam.isTraining;
-  const isAbilityTraining = isTrainingBattle && isAbilityTrainingTeam(attackTeam);
-  if (isTrainingBattle && isAbilityTrainingTeam(attackTeam) !== isAbilityTrainingTeam(defenseTeam)) {
+  const isAbilityTraining = !arenaZAbilitiesLive() && isTrainingBattle && isAbilityTrainingTeam(attackTeam);
+  if (!arenaZAbilitiesLive() && isTrainingBattle && isAbilityTrainingTeam(attackTeam) !== isAbilityTrainingTeam(defenseTeam)) {
     throw new Error(
       "A sala de treino com habilidades só enfrenta equipes da mesma sala (ambas com habilidades).",
     );
@@ -4318,8 +4333,8 @@ export async function runPvpBattle(
     defenders,
     await getBondCombatModifier(defenders.map((m) => m.id)),
   );
-  const attackPlan = isAbilityTraining ? buildTrainingAbilityPlan(attackTeam.members.map((m) => m.mascot)) : null;
-  const defensePlan = isAbilityTraining ? buildTrainingAbilityPlan(defenseTeam.members.map((m) => m.mascot)) : null;
+  const attackPlan = isAbilityTraining || arenaZAbilitiesLive() ? arenaAbilityPlan(attackTeam, true) : null;
+  const defensePlan = isAbilityTraining || arenaZAbilitiesLive() ? arenaAbilityPlan(defenseTeam, true) : null;
   const combat = runArenaCombat(
     attackers,
     defenders,

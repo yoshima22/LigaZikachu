@@ -135,6 +135,7 @@ export default async function DraftRoomPage({
           personality: revealBuild ? p.personality : null,
           // A habilidade escolhida é segredo do dono até o combate revelar tudo.
           ability: revealBuild ? draftAbilitySlug(p, match.mode === "REAL" ? "REAL" : "CUSTOM") : null,
+          abilityRank: revealBuild ? p.abilityRank ?? null : null,
           types: types.map((type) => TYPE_LABELS_PT[type] ?? type),
           advantages: advantages.map((type) => TYPE_LABELS_PT[type] ?? type),
           weaknesses: weaknesses.map((type) => TYPE_LABELS_PT[type] ?? type),

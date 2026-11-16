@@ -1500,9 +1500,9 @@ export default async function ManualPage() {
             ]}
           />
         </Sub>
-        <Sub title="Limite por categoria e ordem dos slots">
+        <Sub title="Limite por categoria e prioridade das habilidades">
           <p className="text-xs leading-6 text-slate-400">
-            Para ninguém montar um time só de dano, cada categoria tem um limite de habilidades ligadas entre os mascotes em campo. Vale a ordem dos slots:
+            Para ninguém montar um time só de dano, cada categoria tem um limite de habilidades ligadas entre os mascotes em campo. Vale a ordem de prioridade que você monta na tela do time (independe da posição do mascote); sem prioridade definida vale a ordem dos slots:
           </p>
           <Table
             headers={["Posição na categoria", "Efeito"]}
@@ -1589,7 +1589,7 @@ export default async function ManualPage() {
         <Sub title="Perguntas frequentes">
           <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
             <li><strong className="text-slate-200">Valem na Liga Semanal, Rush ou Arena Z?</strong> Não, por enquanto só no Arena Draft.</li>
-            <li><strong className="text-slate-200">Minha habilidade está desligada ou em 70%. Por quê?</strong> Já há mascotes em campo com habilidades da mesma categoria antes dele. Mude a ordem dos slots.</li>
+            <li><strong className="text-slate-200">Minha habilidade está desligada ou em 70%. Por quê?</strong> Já há mascotes em campo com habilidades da mesma categoria antes dele. Suba a prioridade dela na montagem de habilidades.</li>
             <li><strong className="text-slate-200">Perco o TM se o mascote evoluir?</strong> Não, o desbloqueio é permanente.</li>
             <li><strong className="text-slate-200">Posso usar um TM em qualquer mascote?</strong> Não, só em quem tem aquela habilidade como oculta; o botão “Quem pode usar” mostra antes de comprar.</li>
             <li><strong className="text-slate-200">O que é a linha “Na Pokédex”?</strong> O que a habilidade faz no jogo oficial. O texto “No combate” explica como ela foi adaptada aqui.</li>
@@ -1611,7 +1611,7 @@ export default async function ManualPage() {
           <ul className="list-disc space-y-1 pl-5 text-xs leading-6 text-slate-400">
             <li>A luta é automática e vai até o fim, sem limite de rodadas. Nos turnos 20, 35 e 45 cada lado reorganiza o time em segredo; o último trecho é exibido por completo antes do replay e dos destaques.</li>
             <li>Mascotes derrotados saem do campo sozinhos. Dá para travar a estratégia com menos de 6 mascotes (de 1 até o número de vivos).</li>
-            <li>A ordem dos slots em campo decide quais habilidades ficam ligadas; use as setas na janela estratégica.</li>
+            <li>A prioridade das habilidades (montada na tela do time) decide quais ficam ligadas, independente da posição do mascote.</li>
             <li>O log mostra, para cada golpe, o dano, o multiplicador de tipo, a vida restante, o K.O. e as habilidades ativadas (com o n.º de ativações).</li>
             <li>Clique em qualquer mascote para ver forças e fraquezas de tipo, e use o botão “?” para a análise da equipe.</li>
           </ul>

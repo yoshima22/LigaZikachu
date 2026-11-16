@@ -176,22 +176,39 @@ export type AbilitySlotState = "ACTIVE" | "REDUCED" | "OFF" | "NONE";
 export type AbilitySlot = { state: AbilitySlotState; factor: number; reason: string | null };
 
 /**
- * Estado de cada habilidade no time em campo, na ordem dos slots: dentro do limite
- * da categoria vale 100%; o 2º usa o efeito reduzido; o excedente fica desligado.
+ * Índices na ordem de prioridade das habilidades. `order` = ids do mais ao menos prioritário
+ * (independe da posição do mascote no time); quem não está nela vem depois, na ordem dos slots.
  */
-export function evaluateTeamAbilities(slugs: Array<string | null>): AbilitySlot[] {
+export function abilityPriorityIndices(ids: string[], order?: ReadonlyArray<string> | null): number[] {
+  const rank = new Map((order ?? []).map((id, i) => [id, i]));
+  return ids.map((_, i) => i).sort((a, b) => (rank.get(ids[a]) ?? Infinity) - (rank.get(ids[b]) ?? Infinity) || a - b);
+}
+
+/**
+ * Estado de cada habilidade no time em campo. A contagem por categoria segue `priority`
+ * (índices, do mais prioritário ao menos; padrão = ordem dos slots): dentro do limite vale 100%;
+ * o 2º usa o efeito reduzido; o excedente fica desligado. O resultado vem na ordem original.
+ */
+export function evaluateTeamAbilities(slugs: Array<string | null>, priority?: number[]): AbilitySlot[] {
   const seen: Record<string, number> = {};
-  return slugs.map((slug) => {
-    const info = getAbilityInfo(slug);
-    if (!info || !info.hasEffect || !info.category) return { state: "NONE", factor: 0, reason: null };
+  const out: AbilitySlot[] = new Array(slugs.length);
+  for (const i of priority ?? slugs.map((_, k) => k)) {
+    const info = getAbilityInfo(slugs[i]);
+    if (!info || !info.hasEffect || !info.category) { out[i] = { state: "NONE", factor: 0, reason: null }; continue; }
     const index = (seen[info.category] = (seen[info.category] ?? 0) + 1);
     const limit = ABILITY_CATEGORY_LIMIT[info.category];
     if (index > limit) {
-      return { state: "OFF", factor: 0, reason: `Limite de ${limit} habilidade${limit > 1 ? "s" : ""} de ${info.category} no time` };
+      out[i] = { state: "OFF", factor: 0, reason: `Limite de ${limit} habilidade${limit > 1 ? "s" : ""} de ${info.category} no time` };
+    } else if (index === 2) {
+      out[i] = { state: "REDUCED", factor: ABILITY_REDUCED_FACTOR, reason: `2º de ${info.category} no time: efeito em ${Math.round(ABILITY_REDUCED_FACTOR * 100)}%` };
+    } else {
+      out[i] = { state: "ACTIVE", factor: 1, reason: null };
     }
-    if (index === 2) {
-      return { state: "REDUCED", factor: ABILITY_REDUCED_FACTOR, reason: `2º de ${info.category} no time: efeito em ${Math.round(ABILITY_REDUCED_FACTOR * 100)}%` };
-    }
-    return { state: "ACTIVE", factor: 1, reason: null };
-  });
+  }
+  return out;
+}
+
+/** Itens na ordem de prioridade de habilidade (`order` = ids); quem não está nela segue na ordem original. */
+export function sortByAbilityOrder<T extends { id: string }>(items: T[], order?: ReadonlyArray<string> | null): T[] {
+  return abilityPriorityIndices(items.map((i) => i.id), order).map((i) => items[i]);
 }

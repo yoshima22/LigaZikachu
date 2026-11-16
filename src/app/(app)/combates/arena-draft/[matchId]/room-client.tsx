@@ -2,7 +2,7 @@
 import { MascotInfoTrigger } from "@/components/mascot/mascot-info";
 import { TeamCombatAnalysisButton } from "@/components/team-combat-analysis";
 import { EventLine, type DebuffEvt } from "../event-line";
-import { evaluateTeamAbilities, getAbilityInfo, describeAbility, type AbilitySlotState } from "@/lib/abilities";
+import { abilityPriorityIndices, evaluateTeamAbilities, getAbilityInfo, describeAbility, type AbilitySlotState } from "@/lib/abilities";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
@@ -147,6 +147,8 @@ type Pet = {
   sprite: string;
   personality?: string | null;
   ability?: string | null;
+  /** Prioridade da habilidade no time (0 = primeira), independe do slot. */
+  abilityRank?: number | null;
   types: string[];
   advantages: string[];
   weaknesses: string[];
@@ -608,7 +610,8 @@ function LineupPanel({
   locked: boolean;
 }) {
   const ordered = active.map((id) => pets.find((p) => p.id === id)).filter((p): p is Pet => Boolean(p));
-  const slots = evaluateTeamAbilities(ordered.map((p) => p.ability ?? null));
+  const byRank = pets.filter((p) => p.abilityRank != null).sort((a, b) => a.abilityRank! - b.abilityRank!).map((p) => p.id);
+  const slots = evaluateTeamAbilities(ordered.map((p) => p.ability ?? null), abilityPriorityIndices(ordered.map((p) => p.id), byRank));
   const move = (index: number, delta: number) =>
     setActive((cur) => {
       const next = [...cur];
@@ -622,8 +625,8 @@ function LineupPanel({
     <div className="mt-4 rounded-2xl border border-fuchsia-300/20 bg-fuchsia-300/[.03] p-3">
       <p className="text-[9px] font-black uppercase tracking-widest text-fuchsia-300">Ordem em campo e habilidades</p>
       <p className="mt-1 text-[10px] leading-relaxed text-slate-400">
-        Dentro de cada categoria, o 1º mascote usa a habilidade com 100%, o 2º com 70% e do 3º em diante ela fica desligada (Sobrevivência: só o 1º).
-        Mude a posição para escolher quem fica ligado. O estado vale até a próxima janela.
+        Dentro de cada categoria, quem tem a maior prioridade (definida na montagem do time, não pela posição) usa a habilidade com 100%, o 2º com 70% e do 3º em diante ela fica desligada (Sobrevivência: só o 1º).
+        Sem prioridade definida vale a ordem dos slots. O estado vale até a próxima janela.
       </p>
       <ol className="mt-2 grid gap-1.5 sm:grid-cols-2">
         {ordered.map((pet, index) => (
