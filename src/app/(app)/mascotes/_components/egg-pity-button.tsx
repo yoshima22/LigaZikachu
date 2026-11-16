@@ -19,8 +19,9 @@ export function EggPityButton() {
   return (
     <div
       className="relative"
-      onMouseEnter={() => { setOpen(true); load(); }}
-      onMouseLeave={() => setOpen(false)}
+      // Hover só para mouse: no toque o mouseenter emulado abria e o click seguinte fechava.
+      onPointerEnter={(e) => { if (e.pointerType === "mouse") { setOpen(true); load(); } }}
+      onPointerLeave={(e) => { if (e.pointerType === "mouse") setOpen(false); }}
     >
       <button
         type="button"
@@ -30,7 +31,7 @@ export function EggPityButton() {
         <ShieldCheck size={13} /> Garantia de raros
       </button>
       {open && (
-        <div className="fixed inset-x-4 z-30 pt-2 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:w-72">
+        <div className="fixed inset-x-4 top-24 z-50 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:z-30 sm:w-72 sm:pt-2">
           <div className="space-y-2 rounded-xl border border-border bg-slate-950 p-3 shadow-xl">
             <p className="text-[11px] text-slate-400">
               Ovos seguidos sem nascer um mascote de raridade aumentada. Ao completar, o próximo ovo daquele tipo vem garantido. Se sair um antes, o contador zera.
