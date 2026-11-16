@@ -479,6 +479,7 @@ export function IncubatorPanel({ incubator, eggs, canSkipIncubation = false, onH
       statRange: result.statRange,
     });
     onHatched?.(result.pokemonId, result.name);
+    window.dispatchEvent(new Event("mascot-hatched")); // banco recarrega a página atual
   };
 
   const applyHatchResult = (result: HatchResult) => {

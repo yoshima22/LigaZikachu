@@ -16,6 +16,7 @@ import {
 } from "@/lib/mascot-data";
 import { getMascotImageRendering, getPreferredSpriteUrl, type PlayerSpritePreferences } from "@/lib/sprite-preferences";
 import { mascotOriginIcon } from "@/lib/mascot-origin-icons";
+import { getHatchedEggLabel } from "@/lib/egg-origin";
 import { shouldShowExpeditionCancellation, shouldShowExpeditionStatus } from "@/lib/mascot-expedition-visibility";
 import {
   interactAction, equipMascotAction, unequipMascotAction,
@@ -421,39 +422,6 @@ const BUFF_DISPLAY: Record<string, { emoji: string; label: string; color: string
   XP_SHARE:        { emoji: "📡",   label: "Comp. XP",        color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
   XP_SHARE_TEAM:   { emoji: "📡",   label: "Comp. Geral",     color: "border-cyan-500/40 bg-cyan-500/10 text-cyan-300", permanent: true },
 };
-
-const EGG_TYPE_LABEL: Record<string, string> = {
-  COMMON: "Ovo Comum",
-  RARE: "Ovo Raro",
-  SPECIAL: "Ovo Especial",
-  EVENT: "Ovo de Evento",
-  LAB: "Ovo de Laboratorio",
-  CELESTIAL: "Ovo Celestial",
-};
-
-function getHatchedEggLabel(type?: string | null, origin?: string | null) {
-  if (!type) return null;
-  if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
-    const [, originalType, generationType] = origin.split(":");
-    const generation = generationType?.replace("EGG_GEN", "").replace("PLUS", "+");
-    if (generation) {
-      const randomLabel = origin.startsWith("GEN_RANDOM:") ? " · geração sorteada" : "";
-      return `${EGG_TYPE_LABEL[originalType] ?? "Ovo"} de Geração ${generation}${randomLabel}`;
-    }
-  }
-  if (type.startsWith("EGG_GEN")) {
-    const generation = type.replace("EGG_GEN", "").replace("PLUS", "+");
-    return `Ovo de Geração ${generation}`;
-  }
-  if (origin?.startsWith("LAB_REGION:")) {
-    const generation = origin
-      .replace("LAB_REGION:EGG_GEN", "")
-      .split("|", 1)[0];
-    const randomLabel = origin.split("|").includes("GEN_RANDOM") ? " · geração sorteada" : "";
-    return `Ovo de Laboratório (Geração ${generation}${randomLabel})`;
-  }
-  return EGG_TYPE_LABEL[type] ?? type.replaceAll("_", " ");
-}
 
 function getRelationTier(relation: MascotRelation) {
   const legacyScore = relation.type === "FRIEND"

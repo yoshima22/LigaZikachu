@@ -654,6 +654,13 @@ export function MascotBankList({
     return () => window.clearTimeout(timer);
   }, [search, loadPage]);
 
+  // Mascote recém-nascido aparece no banco sem recarregar a página.
+  useEffect(() => {
+    const onHatched = () => loadPage(page);
+    window.addEventListener("mascot-hatched", onHatched);
+    return () => window.removeEventListener("mascot-hatched", onHatched);
+  }, [loadPage, page]);
+
   const totalPages = Math.max(1, Math.ceil(knownTotal / PAGE_SIZE));
   const safePage = Math.min(page, totalPages);
   const busyCount = rows.filter((mascot) => isBusy(mascot)).length;

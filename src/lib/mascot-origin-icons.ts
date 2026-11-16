@@ -38,8 +38,10 @@ export function resolveMascotOriginRarity(type?: string | null, origin?: string 
   if (origin?.startsWith("GEN_CHOICE:") || origin?.startsWith("GEN_RANDOM:")) {
     const original = origin.split(":")[1];
     if (original === "RARE" || original === "SPECIAL" || original === "EVENT" || original === "LAB" || original === "COMMON") return original;
+    if (original?.startsWith("EGG_GEN")) return "COMMON";
   }
-  if (type === "LAB" || type.startsWith("EGG_GEN")) return "LAB";
+  if (type === "LAB") return "LAB";
+  if (type.startsWith("EGG_GEN")) return "COMMON";
   if (type === "RARE" || type === "SPECIAL" || type === "EVENT" || type === "COMMON") return type;
   // Sem raridade reconhecida (ovo antigo/legado sem tipo registrado) → sem ícone.
   return null;
