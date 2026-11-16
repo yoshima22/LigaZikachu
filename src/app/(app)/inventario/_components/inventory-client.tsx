@@ -1,8 +1,8 @@
 "use client";
 
-import { useTransition } from "react";
+import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { CheckCircle, Circle } from "lucide-react";
+import { CheckCircle, Circle, Search } from "lucide-react";
 import { equipItem } from "../../shop/actions";
 import { TitleDisplay } from "@/components/ui/title-display";
 import type { TitleRarity, TitleTheme } from "@/components/ui/title-display";
@@ -118,12 +118,30 @@ function ItemSection({ title, items }: { title: string; items: InventoryItem[] }
   );
 }
 
+const norm = (v: string) => v.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+
 export function InventoryClient({ titles, banners, frames }: Props) {
+  const [q, setQ] = useState("");
+  const nq = norm(q.trim());
+  const filter = (items: InventoryItem[]) =>
+    nq ? items.filter((i) => norm(`${i.name} ${i.description ?? ""} ${rarityLabel[i.rarity] ?? ""}`).includes(nq)) : items;
+  const [t, b, f] = [filter(titles), filter(banners), filter(frames)];
   return (
     <div className="space-y-8">
-      <ItemSection title="Títulos" items={titles} />
-      <ItemSection title="Banners" items={banners} />
-      <ItemSection title="Molduras" items={frames} />
+      <label className="flex items-center gap-2 rounded-xl border border-border bg-slate-950/60 px-3 py-2">
+        <Search size={14} className="text-slate-500" />
+        <input
+          type="search"
+          value={q}
+          onChange={(e) => setQ(e.target.value)}
+          placeholder="Buscar nos seus itens (nome, descrição ou raridade)…"
+          className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-600"
+        />
+      </label>
+      {nq && t.length + b.length + f.length === 0 && <p className="text-sm text-slate-500">Nenhum item encontrado.</p>}
+      <ItemSection title="Títulos" items={t} />
+      <ItemSection title="Banners" items={b} />
+      <ItemSection title="Molduras" items={f} />
     </div>
   );
 }
