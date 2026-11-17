@@ -71,6 +71,8 @@ export type AbilityRuntime = {
   /** Condenado (portador -> quem foi marcado) e o marcado (-> rodada em que cai, depois que o portador cair). */
   doom: Record<string, { markedId: string; markedName: string }>;
   doomed: Record<string, { holderName: string; dieRound: number | null }>;
+  /** Bônus de atributo acumulado durante a luta (fração), por mascote. */
+  statBuff: Record<string, Partial<Record<Stat4, number>>>;
 };
 
 export type AbilityStandalone = {
@@ -101,7 +103,7 @@ export function emptyAbilityRuntime(): AbilityRuntime {
   return {
     started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {}, anular: { A: false, D: false },
     status: {}, curse: {}, field: { sol: false, chuva: false, areia: false, sandUntil: 0 }, tempAgility: {}, tempShield: {}, types: {}, disguised: [], weak: [], traced: {}, swings: {}, silenced: {},
-    freeze: {}, flinch: {}, acted: {}, doom: {}, doomed: {},
+    freeze: {}, flinch: {}, acted: {}, doom: {}, doomed: {}, statBuff: {},
   };
 }
 
@@ -128,11 +130,27 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     if (m) m.types = [...types];
   }
 
+  const STAT_BUFF_CAP = 0.4;
+  const FRUIT_SLUGS = new Set(["cheek-pouch", "harvest", "cud-chew", "ripen", "gluttony"]);
+  const statOfInfo = (info: AbilityInfo): Stat4 | null => (info.scale && info.scale !== "charisma" ? (info.scale as Stat4) : null);
+  const addStatBuff = (m: ArenaMascot, stat: Stat4, v: number) => {
+    const cur = (rt.statBuff[m.id] ??= {});
+    cur[stat] = Math.min(STAT_BUFF_CAP, (cur[stat] ?? 0) + v);
+    return cur[stat]!;
+  };
+  /** Algum rival vivo com Unnerve / As One desliga as habilidades de fruta. */
+  const unnerved = (m: ArenaMascot) =>
+    foesOf(m).some((f) => {
+      const c = config[f.id];
+      const info = c && c.factor > 0 ? getAbilityInfo(c.slug) : null;
+      return hpOf(f) > 0 && Boolean(info) && (info!.effectCode === "SEM_FRUTA" || info!.slug.startsWith("as-one"));
+    });
   const held = (m: ArenaMascot): Held | null => {
     const c = config[m.id];
     if (!c || c.factor <= 0) return null;
     if ((rt.silenced[m.id] ?? 0) >= host.getRound()) return null; // anulada pela Múmia
     const info = getAbilityInfo(c.slug);
+    if (info && FRUIT_SLUGS.has(info.slug) && unnerved(m)) return null; // Unnerve / As One dos rivais
     return info?.hasEffect ? { info, factor: c.factor } : null;
   };
   const heldAs = (m: ArenaMascot, code: string): Held | null => {
@@ -371,6 +389,10 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   /** Ponto único de aplicação de debuff: aplica Corpo limpo, Véu e Espelho e registra a origem. */
   function applyDebuff(args: { target: ArenaMascot; source: ArenaMascot | null; stat: Stat4; pct: number; label: string }): string[] {
     const notes: string[] = [];
+    if (args.stat === "agility" && heldAs(args.target, "FIRME")) {
+      notes.push(`${args.target.name} está firme no lugar: imune a reduções de Agilidade.`);
+      return notes;
+    }
     let amount = args.pct;
     const nullify = heldAs(args.target, "ANULA_DEBUFF");
     if (nullify && hasLeft(args.target, nullify) && roll(args.target, value(args.target, nullify))) {
@@ -406,6 +428,12 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         rt.pending[args.target.id] = { v: value(args.target, adv), label: adv.info.name };
         notes.push(say(args.target, adv, `o próximo golpe causa ${pct(value(args.target, adv))} mais dano.`));
       }
+      const up = heldAs(args.target, "AUMENTA_AO_DEBUFF");
+      const upStat = up ? statOfInfo(up.info) : null;
+      if (up && upStat && hasLeft(args.target, up)) {
+        const total = addStatBuff(args.target, upStat, value(args.target, up));
+        notes.push(say(args.target, up, `${statLabel[upStat]} sobe ${pct(value(args.target, up))} (total ${pct(total)}).`));
+      }
     } else {
       notes.push(`${statLabel[args.stat]} de ${args.target.name} já tinha um debuff maior (debuffs não somam).`);
     }
@@ -433,6 +461,54 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         notes.push(...applyDebuff({ target: foe, source: m, stat, pct: v, label: `Habilidade ${h.info.name}` }));
       }
       standalone.push({ actor: m, text: [head, ...notes].join(" "), events: flushEvents() });
+    }
+    // Reforço passivo de atributo (Huge Power, Hustle, Dauntless Shield...): vale a luta inteira.
+    for (const m of all) {
+      for (const code of ["BUFF_PASSIVO", "BUFF_PASSIVO_DEF"]) {
+        const h = heldAs(m, code);
+        const stat = h ? statOfInfo(h.info) : null;
+        if (!h || !stat || hpOf(m) <= 0) continue;
+        const v = value(m, h);
+        const total = addStatBuff(m, stat, v);
+        standalone.push({ actor: m, text: say(m, h, `${statLabel[stat]} de ${m.name} sobe ${pct(v)} durante a luta (total ${pct(total)}).`) });
+      }
+    }
+    // Ímã (Magnet Pull): reduz a Agilidade dos rivais do tipo Metal.
+    for (const m of all) {
+      const h = heldAs(m, "PRENDER_METAL");
+      if (!h || hpOf(m) <= 0 || !hasLeft(m, h)) continue;
+      const metals = alive(foesOf(m)).filter((f) => host.typesOf(f).includes("steel"));
+      if (metals.length === 0) continue;
+      const v = value(m, h);
+      const notes: string[] = [];
+      for (const f of metals) notes.push(...applyDebuff({ target: f, source: m, stat: "agility", pct: v, label: `Habilidade ${h.info.name}` }));
+      standalone.push({ actor: m, text: [say(m, h, `reduz a Agilidade dos rivais Metal em ${pct(v)}.`), ...notes].join(" "), events: flushEvents() });
+    }
+    // Pressão (Pressure): cada habilidade rival com 2+ ativações perde 1.
+    for (const m of all) {
+      const h = heldAs(m, "PRESSAO");
+      if (!h || hpOf(m) <= 0 || !hasLeft(m, h)) continue;
+      const hit: string[] = [];
+      for (const f of alive(foesOf(m))) {
+        const theirs = held(f);
+        if (theirs && theirs.info.activations > 1) {
+          rt.uses[f.id] = (rt.uses[f.id] ?? 0) + 1;
+          hit.push(f.name);
+        }
+      }
+      standalone.push({ actor: m, text: say(m, h, hit.length ? `as habilidades de ${hit.join(", ")} perdem 1 ativação.` : `nenhum rival perdeu ativações.`) });
+    }
+    // Análise de defesa (Download): compara Vitalidade x Carisma dos rivais.
+    for (const m of all) {
+      const h = heldAs(m, "DOWNLOAD_ATRIBUTO");
+      if (!h || hpOf(m) <= 0 || !hasLeft(m, h)) continue;
+      const foes = alive(foesOf(m));
+      if (foes.length === 0) continue;
+      const avg = (k: "vitality" | "charisma") => foes.reduce((s, f) => s + f[k], 0) / foes.length;
+      const stat: Stat4 = avg("vitality") <= avg("charisma") ? "force" : "instinct";
+      const v = value(m, h);
+      const total = addStatBuff(m, stat, v);
+      standalone.push({ actor: m, text: say(m, h, `a ${stat === "force" ? "Vitalidade" : "Carisma"} dos rivais é a menor: ${statLabel[stat]} sobe ${pct(v)} (total ${pct(total)}).`) });
     }
     // Ventosa (Suction Cups): reduz a Agilidade do rival mais ágil.
     for (const m of all) {
@@ -916,6 +992,15 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         maybeTrace(killer, "pending", v);
         notes.push(say(killer, k, `o próximo golpe causa ${pct(v)} mais dano.`));
       }
+      const kb = heldAs(killer, "AUMENTA_AO_ABATER");
+      if (kb && hasLeft(killer, kb) && hpOf(killer) > 0) {
+        const stat = kb.info.slug === "beast-boost" ? highestStat(killer) : statOfInfo(kb.info);
+        if (stat) {
+          const v = value(killer, kb);
+          const total = addStatBuff(killer, stat, v);
+          notes.push(say(killer, kb, `${statLabel[stat]} sobe ${pct(v)} (total ${pct(total)}).`));
+        }
+      }
     }
   }
 
@@ -983,10 +1068,17 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       } else if (code === "CLIMA_AREIA_REACAO" && hasLeft(a.target, t) && roll(a.target, value(a.target, t))) {
         rt.field.sandUntil = host.getRound() + 1;
         notes.push(say(a.target, t, `levantou uma tempestade de areia para a próxima rodada.`));
-      } else if (code === "ANULA_HABILIDADE" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && held(a.actor) && roll(a.target, value(a.target, t))) {
+      } else if (code === "ANULA_HABILIDADE" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && held(a.actor) && !heldAs(a.actor, "FIRME") && roll(a.target, value(a.target, t))) {
         const theirs = getAbilityInfo(config[a.actor.id]?.slug)?.name ?? "habilidade";
         rt.silenced[a.actor.id] = host.getRound() + 2; // esta rodada e as 2 seguintes
         notes.push(say(a.target, t, `anulou ${theirs} de ${a.actor.name} por 3 rodadas.`));
+      } else if ((code === "AUMENTA_AO_SER_ATINGIDO" || code === "AUMENTA_AO_SER_ATINGIDO_TIPO") && targetAlive && hasLeft(a.target, t) && (code === "AUMENTA_AO_SER_ATINGIDO" || matchesTypes(t, host.typesOf(a.actor)))) {
+        const stat = statOfInfo(t.info);
+        if (stat) {
+          const v = value(a.target, t);
+          const total = addStatBuff(a.target, stat, v);
+          notes.push(say(a.target, t, `${statLabel[stat]} sobe ${pct(v)} (total ${pct(total)}).`));
+        }
       } else if (code === "CONDENACAO" && hasLeft(a.target, t) && hpOf(a.actor) > 0 && !rt.doom[a.target.id]) {
         notes.push(say(a.target, t, `condenou ${a.actor.name}.`), ...applyStatus({ target: a.actor, source: a.target, kind: "DOOM", label: `Habilidade ${t.info.name}` }));
       } else if (code === "ARMADURA_FRACA" && targetAlive && hasLeft(a.target, t) && !rt.weak.includes(a.target.id)) {
@@ -1221,11 +1313,11 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     onBattleStart, onRoundStart, onActionStart, onLifesteal, ignoresProvoker, attackBonus, buffMods, maybeRedirect, onDefend, defense, guardianExtra, survive, afterHit,
     applyDebuff, flushEvents, flushStandalone, flushHpChanges, healTarget,
     onTargetChosen,
-    forceMult: (id: string) => 1 - STATUS_RULES.freezeForcePerStack * freezeStacks(id),
+    statMult: (id: string, stat: Stat4) => (stat === "force" ? 1 - STATUS_RULES.freezeForcePerStack * freezeStacks(id) : 1) * (1 + (rt.statBuff[id]?.[stat] ?? 0)),
     agilityMult: (id: string) => {
       const m = byId.get(id);
       const round = host.getRound();
-      let v = (rt.agility[id] ?? 0) - STATUS_RULES.freezeAgilityPerStack * freezeStacks(id);
+      let v = (rt.agility[id] ?? 0) + (rt.statBuff[id]?.agility ?? 0) - STATUS_RULES.freezeAgilityPerStack * freezeStacks(id);
       const temp = rt.tempAgility[id];
       if (temp && temp.until >= round) v += temp.v;
       const trace = rt.traced[id];

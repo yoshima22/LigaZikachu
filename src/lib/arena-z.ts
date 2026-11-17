@@ -593,7 +593,7 @@ function getEffectiveStat(
   stat: "force" | "agility" | "instinct" | "vitality",
 ) {
   const pct = debuffs.get(m.id)?.[stat] ?? 0;
-  const boost = (stat === "agility" && activeAbilityEngine ? activeAbilityEngine.agilityMult(m.id) : 1) * (stat === "force" && activeAbilityEngine ? activeAbilityEngine.forceMult(m.id) : 1) * (activeStanceEngine?.statMult(m.id, stat) ?? 1);
+  const boost = (stat === "agility" && activeAbilityEngine ? activeAbilityEngine.agilityMult(m.id) : 1) * (stat !== "agility" && activeAbilityEngine ? activeAbilityEngine.statMult(m.id, stat) : 1) * (activeStanceEngine?.statMult(m.id, stat) ?? 1);
   return Math.max(1, Math.round(m[stat] * (1 - pct) * boost));
 }
 

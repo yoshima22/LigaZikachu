@@ -114,7 +114,9 @@ function fill(template: string, rng: { em: string; ate: string; de: string } | n
     // Concordância: "em 4% a 12%", "até 12%" e "de 4% a 12%" conforme a frase.
     text = text.replace(/em \{rng\}/g, `em ${rng.em}`).replace(/até \{rng\}/g, `até ${rng.ate}`).replace(/\{rng\}/g, rng.de);
   }
-  return text.replace(/\{T\}/g, info.param ?? "").replace(/\{S\}/g, info.param ?? "");
+  // Parâmetro "Atributo|Tipo": {S} = atributo e {T} = tipo.
+  const [first, second] = (info.param ?? "").split("|");
+  return text.replace(/\{T\}/g, second ?? first ?? "").replace(/\{S\}/g, first ?? "");
 }
 
 /** Descrição em português com o intervalo do efeito. */

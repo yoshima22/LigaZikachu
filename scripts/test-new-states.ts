@@ -9,7 +9,7 @@ function setup(cfg: Record<string, { slug: string; factor: number }>) {
   let round = 1;
   const host: any = { attackers: [a], defenders: [b], hp, debuffs: new Map(), rand: () => 0, typesOf: (m: any) => m.types, getRound: () => round };
   const eng = createAbilityEngine(cfg, host);
-  return { a, b, hp, eng, setRound: (r: number) => { round = r; } };
+  return { a, b, hp, eng, debuffs: host.debuffs as Map<string, any>, setRound: (r: number) => { round = r; } };
 }
 
 // Congelado: 3 acúmulos (rodadas 1-3 do granizo) -> trava na rodada 4 -> some na 5.
@@ -18,7 +18,7 @@ function setup(cfg: Record<string, { slug: string; factor: number }>) {
   t.eng.onBattleStart();
   t.setRound(1); t.eng.onRoundStart(1);
   t.setRound(2); assert.equal(Math.round((1 - t.eng.agilityMult("b")) * 100), 10, "1 acúmulo ativo na rodada 2 = -10% de Agilidade");
-  assert.equal(Math.round((1 - t.eng.forceMult("b")) * 100), 5, "e -5% de Força");
+  assert.equal(Math.round((1 - t.eng.statMult("b", "force")) * 100), 5, "e -5% de Força");
   t.eng.onRoundStart(2);
   t.setRound(3); t.eng.onRoundStart(3);
   t.setRound(4); t.eng.onRoundStart(4);
@@ -50,5 +50,32 @@ function setup(cfg: Record<string, { slug: string; factor: number }>) {
   t.eng.afterHit({ actor: t.a, target: t.b, damage: 10 }); // b cai
   t.setRound(2); t.eng.onRoundStart(2);
   assert.equal(t.hp.get("a"), 0, "o condenado cai 1 rodada depois");
+}
+// Buffs de atributo (Pokédex): passivo, ao abater, Download, Firme, Pressão.
+{
+  const t = setup({ a: { slug: "huge-power", factor: 1 } });
+  t.eng.onBattleStart();
+  assert.ok(t.eng.statMult("a", "force") > 1, "Huge Power sobe a Força");
+  assert.equal(t.eng.statMult("a", "instinct"), 1);
+}
+{
+  const t = setup({ a: { slug: "moxie", factor: 1 } });
+  t.eng.onBattleStart(); t.setRound(1); t.eng.onRoundStart(1);
+  t.hp.set("b", 0);
+  t.eng.afterHit({ actor: t.a, target: t.b, damage: 10 });
+  assert.ok(t.eng.statMult("a", "force") > 1, "Moxie: Força sobe ao derrotar");
+}
+{
+  const t = setup({ a: { slug: "download", factor: 1 } });
+  t.eng.onBattleStart();
+  assert.ok(t.eng.statMult("a", "force") > 1, "Download: Vitalidade <= Carisma do rival sobe a Força");
+}
+{
+  const t = setup({ a: { slug: "arena-trap", factor: 1 }, b: { slug: "suction-cups", factor: 1 } });
+  t.eng.onBattleStart();
+  assert.equal(t.debuffs.get("b")?.agility ?? 0, 0, "Suction Cups: imune a redução de Agilidade");
+  const u = setup({ a: { slug: "arena-trap", factor: 1 } });
+  u.eng.onBattleStart();
+  assert.ok((u.debuffs.get("b")?.agility ?? 0) > 0, "Arena Trap reduz a Agilidade do rival mais rápido");
 }
 console.log("ok");

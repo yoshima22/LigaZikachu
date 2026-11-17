@@ -67,20 +67,28 @@ A Sala de Treino com Habilidades some nesse dia (vira treino comum). Suas equipe
 • Condenado: o 1º que ataca o mascote fica condenado e cai 1 rodada depois dele. Imunes: Fantasma e Sombrio. Dá para curar
 • Congelado em acúmulos: até 3 (cada um: -10% Agilidade e -5% Força por 2 rodadas). No 3º, paralisado por 1 rodada e o gelo sai com tudo
 
-🛠️ Ajustes de habilidades (em andamento)
-• Arena Trap, Shadow Tag, Magnet Pull: reduzem a Agilidade do rival mais rápido (Magnet Pull só em Metal)
-• Armor Tail, Dazzling, Queenly Majesty: seguem reduzindo a iniciativa dos rivais
+🛠️ Ajustes de habilidades (JÁ NO AR)
+• Arena Trap e Shadow Tag: reduzem a Agilidade do rival mais rápido. Magnet Pull: só rivais Metal
 • Suction Cups: imune a reduções de Agilidade e à anulação de habilidade
-• Pressure: rivais perdem 1 ativação; Unnerve/As One: desligam curas de fruta dos rivais
-• Ruin (Sword/Tablets/Vessel/Beads): Vitalidade / Força / Instinto / Carisma
+• Pressure: as habilidades dos rivais perdem 1 ativação (as de 1 ativação não são afetadas)
+• Unnerve e As One: desligam as habilidades de fruta dos rivais (Cheek Pouch, Harvest, Cud Chew, Ripen, Gluttony)
 • Cute Charm (Apaixonado), Stench (Amendrontado), Perish Body (Condenado), Snow Warning (Congelado) já aplicam os novos estados
 • Oblivious imune a Apaixonado; Aroma Veil: aliados imunes a Apaixonado/Confuso/Maldito; Inner Focus imune a Amendrontado e à Intimidação
 • Serene Grace: dobra a chance dos estados aplicados pelas habilidades dos seus aliados (teto 50%)
 • Thermal Exchange e Water Bubble: imunes a queimadura. Pastel Veil entra no jogo
-• Huge Power, Defiant, Moxie, Competitive, Berserk, Steadfast, Unburden e outras passam a aumentar o atributo da Pokédex (Força, Instinto, Vitalidade, Agilidade) em vez de só dano
-• Genesect (Download) compara Vitalidade x Carisma do rival e sobe Força ou Instinto
-• Ditto/Mew: copiam o sprite e os tipos do rival mais forte (atributos próprios). Arceus e Silvally: escolhem o tipo no card
-• Habilidades de item (Pickup, Honey Gather, Harvest, etc.) serão passivas de expedição (mascotes nos favoritos); em combate não fazem nada
+• Habilidades que agora aumentam o atributo da Pokédex em vez de só dano:
+  - Força: Huge Power, Pure Power, Hustle, Gorilla Tactics, Intrepid Sword (passivo na luta); Moxie, Chilling Neigh, As One Glastrier (ao derrotar); Defiant, Guard Dog (ao ser debuffado); Justified e Thermal Exchange (ao ser atingido pelo tipo)
+  - Instinto: Grim Neigh, As One Spectrier (ao derrotar); Competitive (ao ser debuffado)
+  - Vitalidade: Dauntless Shield (passivo); Stamina (ao ser atingido); Water Compaction (golpes de Água)
+  - Agilidade: Steam Engine (golpes de Fogo e Água)
+  - Beast Boost: sobe o maior atributo ao derrotar
+  - Download (Genesect e outros): compara Vitalidade x Carisma dos rivais e sobe Força ou Instinto
+  - Os bônus se acumulam até +40% por atributo na luta
+
+🔜 Ainda em andamento
+• Ruin (Beads → Carisma), Berserk, Steadfast, Unburden, Frisk/Forewarn
+• Ditto/Mew copiando sprite e tipos do rival; Arceus e Silvally escolhendo o tipo no card
+• Habilidades de item (Pickup, Honey Gather, etc.) viram passivas de expedição (mascotes nos favoritos); em combate não fazem nada
 
 📖 Palavras-chave nas descrições (JÁ NO AR): passe o mouse/toque em Queimado, Instinto, Ativação, Crítico... para ver a explicação completa. Glossário novo no Manual.
 Tudo no Manual > Habilidades Passivas.
