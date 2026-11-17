@@ -4,7 +4,7 @@ import { revalidatePath, revalidateTag } from "next/cache";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
 import { getMegaStoneByType, getMegaStoneForMegaPokemon, isMegaStoneType, MEGA_STAT_BONUS } from "@/lib/mega-evolution";
-import { availableAbilities, getAbilityInfo } from "@/lib/abilities";
+import { availableAbilities, getAbilityInfo, resolveAbilitySlug } from "@/lib/abilities";
 import { getPokedexLink } from "@/lib/pokedex-link";
 import { canLearnAbilityTm, readAbilityTmKey } from "@/lib/abilities/tm";
 import { getSessionPlayer } from "@/lib/session";
@@ -1725,6 +1725,29 @@ export async function useMegaReverterAction(mascotId: string, inventoryKey: stri
   }
 }
 
+// Escolhe o tipo do mascote com uma habilidade de tipo à escolha (Multitype/RKS System). null volta ao tipo original.
+export async function setMascotAbilityTypeAction(mascotId: string, type: string | null): Promise<{ error?: string }> {
+  try {
+    const user = await getSessionUser();
+    if (!user) return { error: "Não autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil não encontrado." };
+    const mascot = await prisma.mascot.findUnique({ where: { id: mascotId }, select: { id: true, playerId: true, pokemonId: true, hiddenAbilityUnlocked: true, abilityChoice: true } });
+    if (!mascot || mascot.playerId !== player.id) return { error: "Mascote não encontrado." };
+    const { TYPE_LABELS_PT } = await import("@/lib/mascot-data");
+    if (type !== null) {
+      if (!Object.keys(TYPE_LABELS_PT).includes(type)) return { error: "Tipo inválido." };
+      const slug = resolveAbilitySlug({ pokemonId: mascot.pokemonId, choice: mascot.abilityChoice, hiddenUnlocked: mascot.hiddenAbilityUnlocked, mode: "REAL" });
+      if (getAbilityInfo(slug)?.effectCode !== "TIPO_ESCOLHIDO") return { error: "A habilidade equipada não permite escolher o tipo." };
+    }
+    await prisma.mascot.update({ where: { id: mascot.id }, data: { abilityTypeChoice: type } });
+    revalidate(player.id);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro ao escolher o tipo." };
+  }
+}
+
 // Escolhe a habilidade em uso (a oculta só com o TM). null volta ao padrão da espécie.
 export async function setMascotAbilityAction(mascotId: string, abilitySlug: string | null): Promise<{ error?: string; ability?: string | null }> {
   try {
@@ -1740,7 +1763,8 @@ export async function setMascotAbilityAction(mascotId: string, abilitySlug: stri
     if (abilitySlug !== null && !availableAbilities(mascot.pokemonId, mascot.hiddenAbilityUnlocked, "REAL").includes(abilitySlug)) {
       return { error: "Esta habilidade não está disponível para o mascote (a oculta exige o TM)." };
     }
-    await prisma.mascot.update({ where: { id: mascot.id }, data: { abilityChoice: abilitySlug } });
+    // Trocar de habilidade remove o tipo escolhido (Multitype/RKS System).
+    await prisma.mascot.update({ where: { id: mascot.id }, data: { abilityChoice: abilitySlug, abilityTypeChoice: null } });
     revalidate(player.id);
     return { ability: abilitySlug };
   } catch (err) {
@@ -2336,7 +2360,7 @@ export async function getBankMascotsPageAction(input?: {
       arenaState: true, bazarListed: true, injuredAt: true, restingUntil: true,
       hatchedFromEggType: true, hatchedFromEggOrigin: true, labStars: true, lastFedAt: true, diseasedAt: true,
       lastInteractedAt: true, lastPlayedAt: true, lastPettedAt: true, socialCooldownUntil: true,
-      ivRating: true, ivScore: true, performanceTag: true, hiddenAbilityUnlocked: true, abilityChoice: true,
+      ivRating: true, ivScore: true, performanceTag: true, hiddenAbilityUnlocked: true, abilityChoice: true, abilityTypeChoice: true,
       eventBonusStat: true, eventBonusValue: true,
       statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true,
       expeditions: { where: { status: "ACTIVE" }, take: 1, select: { id: true, finishAt: true, status: true } },
@@ -2420,7 +2444,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
     arenaState: string; bazarListed: boolean;
     injuredAt: Date | null; restingUntil: Date | null; hatchedAt: Date;
     hatchedFromEggType: string | null; hatchedFromEggOrigin: string | null; labStars: number; megaStoneName: string | null;
-    hiddenAbilityUnlocked: boolean; abilityChoice: string | null; pokedexLink: { url: string | null; note: string | null };
+    hiddenAbilityUnlocked: boolean; abilityChoice: string | null; abilityTypeChoice?: string | null; pokedexLink: { url: string | null; note: string | null };
     lastInteractedAt: Date | null; lastPlayedAt: Date | null; lastPettedAt: Date | null; lastFedAt: Date | null; socialCooldownUntil: Date | null;
     evolutionLocked: boolean; expLocked: boolean; operationsLocked: boolean; primordialBoundPlayerId: string | null; isShiny: boolean;
     ivRating: string | null; ivScore: number | null; performanceTag: string; preferredCombatRole: string | null;
@@ -2482,7 +2506,7 @@ export async function getMascotDetailAction(mascotId: string): Promise<{
         hatchedFromEggOrigin: m.hatchedFromEggOrigin,
         labStars: m.labStars,
         megaStoneName: getMegaStoneForMegaPokemon(m.pokemonId)?.stoneName ?? null,
-        hiddenAbilityUnlocked: m.hiddenAbilityUnlocked, abilityChoice: m.abilityChoice, pokedexLink: getPokedexLink(m.pokemonId),
+        hiddenAbilityUnlocked: m.hiddenAbilityUnlocked, abilityChoice: m.abilityChoice, abilityTypeChoice: m.abilityTypeChoice, pokedexLink: getPokedexLink(m.pokemonId),
         lastInteractedAt: m.lastInteractedAt,
         lastPlayedAt: m.lastPlayedAt,
         lastPettedAt: m.lastPettedAt,

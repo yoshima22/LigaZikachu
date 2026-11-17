@@ -12,21 +12,24 @@ import {
 } from "@/lib/abilities";
 import { abilityTmItemName } from "@/lib/abilities/tm";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
-import { setMascotAbilityAction } from "../actions";
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { setMascotAbilityAction, setMascotAbilityTypeAction } from "../actions";
 
 export function MascotAbilityPanel({
-  mascotId, pokemonId, hiddenAbilityUnlocked, abilityChoice, stats, pokedex,
+  mascotId, pokemonId, hiddenAbilityUnlocked, abilityChoice, abilityTypeChoice, stats, pokedex,
 }: {
   mascotId: string;
   pokemonId: number;
   hiddenAbilityUnlocked: boolean;
   abilityChoice: string | null;
+  abilityTypeChoice?: string | null;
   stats: Stats;
   pokedex: { url: string | null; note: string | null } | null;
 }) {
   const router = useRouter();
   const [pending, start] = useTransition();
   const [choice, setChoice] = useState<string | null>(abilityChoice);
+  const [typeChoice, setTypeChoice] = useState<string | null>(abilityTypeChoice ?? null);
   const options = availableAbilities(pokemonId, hiddenAbilityUnlocked, "REAL");
   const current = resolveAbilitySlug({ pokemonId, choice, hiddenUnlocked: hiddenAbilityUnlocked, mode: "REAL" });
   const info = getAbilityInfo(current);
@@ -37,7 +40,14 @@ export function MascotAbilityPanel({
     start(async () => {
       const res = await setMascotAbilityAction(mascotId, slug);
       if (res.error) toast.error(res.error);
-      else { setChoice(slug); toast.success("Habilidade trocada."); router.refresh(); }
+      else { setChoice(slug); setTypeChoice(null); toast.success("Habilidade trocada."); router.refresh(); }
+    });
+
+  const changeType = (type: string) =>
+    start(async () => {
+      const res = await setMascotAbilityTypeAction(mascotId, type || null);
+      if (res.error) toast.error(res.error);
+      else { setTypeChoice(type || null); toast.success(type ? "Tipo escolhido." : "Tipo original restaurado."); router.refresh(); }
     });
 
   if (!info && !lockedHidden) return null;
@@ -66,7 +76,18 @@ export function MascotAbilityPanel({
       {info?.dex && <p className="mt-1 text-[9px] text-slate-500">Na Pokédex: {info.dex}</p>}
       {info && <p className="mt-0.5 leading-snug text-slate-300"><KeywordText text={info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)} /></p>}
       {info?.hasEffect && info.scale && (
-        <p className="mt-0.5 text-[9px] text-slate-600">O efeito cresce com o atributo {info.scale} (máximo em 250). Só vale no Arena Draft por enquanto.</p>
+        <p className="mt-0.5 text-[9px] text-slate-600">O efeito cresce com o atributo {info.scale} (máximo em 250). Vale nos modos com habilidades.</p>
+      )}
+      {info?.effectCode === "TIPO_ESCOLHIDO" && (
+        <label className="mt-1.5 block text-[9px] font-bold uppercase tracking-wider text-fuchsia-300">
+          Tipo do mascote
+          <select value={typeChoice ?? ""} disabled={pending} onChange={(e) => changeType(e.target.value)}
+            className="mt-0.5 w-full rounded border border-fuchsia-400/30 bg-slate-900 px-1.5 py-1 text-[10px] font-semibold normal-case tracking-normal text-fuchsia-100">
+            <option value="">Tipo original</option>
+            {Object.entries(TYPE_LABELS_PT).map(([key, label]) => <option key={key} value={key}>{label}</option>)}
+          </select>
+          <span className="mt-0.5 block text-[9px] font-normal normal-case tracking-normal text-slate-500">Vale no combate enquanto esta habilidade estiver equipada. Trocar de habilidade remove a escolha.</span>
+        </label>
       )}
       {options.length > 1 && (
         <label className="mt-1.5 block text-[9px] font-bold uppercase tracking-wider text-slate-500">

@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { createAbilityEngine } from "../src/lib/abilities/combat";
 
 const mk = (id: string, name: string, types: string[]) => ({ id, name, types, hp: 100, force: 100, agility: 100, charisma: 100, instinct: 100, vitality: 100, level: 50, ownerId: id, combatRole: "ATTACKER" }) as any;
-function setup(cfg: Record<string, { slug: string; factor: number }>) {
+function setup(cfg: Record<string, { slug: string; factor: number; typeChoice?: string }>) {
   const a = mk("a", "Aqua", ["ice"]), b = mk("b", "Bolt", ["electric"]);
   const hp = new Map([["a", 100], ["b", 100]]);
   let round = 1;
@@ -77,5 +77,31 @@ function setup(cfg: Record<string, { slug: string; factor: number }>) {
   const u = setup({ a: { slug: "arena-trap", factor: 1 } });
   u.eng.onBattleStart();
   assert.ok((u.debuffs.get("b")?.agility ?? 0) > 0, "Arena Trap reduz a Agilidade do rival mais rápido");
+}
+// Ditto (Transform): assume sprite e tipos do rival mais forte. Mew (Mimic): copia a habilidade de quem ataca.
+{
+  const t = setup({ a: { slug: "transform", factor: 1 } });
+  (t.b as any).pokemonId = 25; (t.b as any).force = 999;
+  t.eng.onBattleStart(); t.setRound(1); t.eng.onRoundStart(1);
+  t.eng.onActionStart(t.a, 0);
+  const ev = t.eng.flushStandalone().find((e) => e.transform);
+  assert.equal(ev?.transform?.pokemonId, 25, "Ditto assume o sprite do rival mais forte");
+  assert.deepEqual(t.a.types, t.b.types, "e os tipos dele");
+  assert.equal(t.a.force, 100, "mantendo os próprios atributos");
+}
+{
+  const t = setup({ a: { slug: "mimic", factor: 1 }, b: { slug: "huge-power", factor: 1 } });
+  t.eng.onBattleStart(); t.setRound(1); t.eng.onRoundStart(1);
+  t.eng.afterHit({ actor: t.a, target: t.b, damage: 10 });
+  assert.equal(t.eng.snapshot().copied.a, "huge-power", "Mew copiou a habilidade do atacado");
+}
+// Tipo à escolha (Arceus/Silvally): o tipo do card vale em combate.
+{
+  const t = setup({ a: { slug: "multitype", factor: 1, typeChoice: "fire" } });
+  t.eng.onBattleStart();
+  assert.deepEqual(t.a.types, ["fire"]);
+  const u = setup({ a: { slug: "intimidate", factor: 1, typeChoice: "fire" } });
+  u.eng.onBattleStart();
+  assert.deepEqual(u.a.types, ["ice"], "sem a habilidade de tipo à escolha, o tipo não muda");
 }
 console.log("ok");

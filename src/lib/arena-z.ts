@@ -385,6 +385,8 @@ export type ArenaTurnLog = {
   typeDelta?: number;
   /** Acerto crítico (+15% de dano). Ausente em combates antigos. */
   critical?: boolean;
+  /** O ator assumiu o sprite deste mascote (Transformação do Ditto). */
+  transform?: { pokemonId: number };
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -952,7 +954,7 @@ function runArenaCombatInternal(
       )
     : null;
   activeAbilityEngine = abilityEngine;
-  const pushAbilityLog = (e: { actor: ArenaMascot; target?: ArenaMascot; text: string; heal?: number; hpAfter?: number; events?: DebuffEvent[] }) => {
+  const pushAbilityLog = (e: { actor: ArenaMascot; target?: ArenaMascot; text: string; heal?: number; hpAfter?: number; events?: DebuffEvent[]; transform?: { pokemonId: number } }) => {
     const target = e.target ?? e.actor;
     log.push({
       turn,
@@ -973,6 +975,7 @@ function runArenaCombatInternal(
       targetRole: getCombatRoleLabel(target.combatRole),
       effect: e.text,
       ...(e.events?.length ? { debuffEvents: e.events } : {}),
+      ...(e.transform ? { transform: e.transform } : {}),
     });
   };
   const flushAbilityLog = () => {
@@ -3132,6 +3135,7 @@ export async function runBotBattle(
               arenaState: true,
               restingUntil: true,
               abilityChoice: true,
+              abilityTypeChoice: true,
               hiddenAbilityUnlocked: true,
             },
           },
@@ -4210,6 +4214,7 @@ export async function runPvpBattle(
     arenaState: true,
     restingUntil: true,
     abilityChoice: true,
+              abilityTypeChoice: true,
     hiddenAbilityUnlocked: true,
   } as const;
   const [attackTeam, defenseTeam] = await Promise.all([

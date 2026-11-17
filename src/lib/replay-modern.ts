@@ -16,6 +16,7 @@ export type ReplayLogEntry = {
   typeStep?: number;
   typeDelta?: number;
   critical?: boolean;
+  transform?: { pokemonId: number } | null;
   multiplier?: number;
   actorRole?: string;
   targetRole?: string;
@@ -102,6 +103,7 @@ export function buildModernReplay(
       typeStep: e.typeStep,
       typeDelta: e.typeDelta,
       critical: e.critical,
+      transform: e.transform ?? undefined,
       multiplier: e.multiplier,
       targetHpAfter,
       actorRole: e.actorRole,

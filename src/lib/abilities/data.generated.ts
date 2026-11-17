@@ -103,6 +103,9 @@ export const ABILITY_EFFECTS: Record<string, AbilityEffectDef> = {
   PRESSAO: {"name":"Pressão","category":"Controle","trigger":"Início da luta","text":"As habilidades dos rivais perdem 1 ativação por luta (as que só têm 1 ativação não são afetadas).","activations":1,"scale":null,"min":null,"max":null},
   SEM_FRUTA: {"name":"Sem frutas","category":"Controle","trigger":"Passivo","text":"Enquanto este mascote estiver em campo, os rivais não conseguem usar habilidades de fruta (Cheek Pouch, Harvest, Cud Chew, Ripen e Gluttony).","activations":0,"scale":null,"min":null,"max":null},
   DOWNLOAD_ATRIBUTO: {"name":"Análise de defesa","category":"Dano","trigger":"Início da luta","text":"Compara a Vitalidade e o Carisma (defesa física e especial) dos rivais: se a Vitalidade for menor, a Força do mascote sobe {rng}; se o Carisma for menor, o Instinto sobe {rng}.","activations":1,"scale":"Instinto","min":6,"max":20},
+  TRANSFORMA: {"name":"Transformação","category":"Defesa","trigger":"Primeira ação","text":"Na primeira ação, o mascote se transforma no rival mais forte (maior soma de atributos): assume o sprite e os tipos dele até o fim da luta, mantendo os próprios atributos.","activations":1,"scale":null,"min":null,"max":null},
+  COPIA_HABILIDADE: {"name":"Cópia de habilidade","category":"Defesa","trigger":"Ao atacar","text":"Ao atacar um rival pela primeira vez, copia a habilidade dele pelo resto da luta (no lugar da própria).","activations":1,"scale":null,"min":null,"max":null},
+  TIPO_ESCOLHIDO: {"name":"Tipo à escolha","category":"Defesa","trigger":"Passivo","text":"O jogador escolhe o tipo do mascote no card dele. Enquanto esta habilidade estiver equipada, o tipo escolhido substitui o original em combate. Equipar outra habilidade remove a escolha.","activations":0,"scale":null,"min":null,"max":null},
 };
 
 export const ABILITIES: Record<string, AbilityDef> = {
@@ -216,7 +219,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "illuminate": {"name":"Illuminate","dex":"Dobra a chance de encontros selvagens e evita perda de precisão.","effect":"QUEBRA_GUARDA"},
   "illusion": {"name":"Illusion","dex":"Disfarça-se como outro Pokémon até ser atingido.","effect":"COPIA_TIPO_ALIADO"},
   "immunity": {"name":"Immunity","dex":"Impede envenenamento.","effect":"IMUNE_ESTADO","param":"Envenenado"},
-  "imposter": {"name":"Imposter","dex":"Transforma-se no Pokémon rival ao entrar.","effect":"COPIA_TIPO_RIVAL"},
+  "imposter": {"name":"Imposter","dex":"Transforma-se no Pokémon rival ao entrar.","effect":"TRANSFORMA"},
   "infiltrator": {"name":"Infiltrator","dex":"Atravessa barreiras como Reflect e Light Screen.","effect":"QUEBRA_GUARDA"},
   "innards-out": {"name":"Innards Out","dex":"Ao cair, causa dano igual ao HP que tinha.","effect":"ULTIMO_SUSPIRO"},
   "inner-focus": {"name":"Inner Focus","dex":"Impede recuar (flinch) e, nas gerações novas, também a Intimidação.","effect":"IMUNE_ESTADO","param":"Amendrontado e Intimidação"},
@@ -257,7 +260,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "motor-drive": {"name":"Motor Drive","dex":"Absorve golpes Elétricos e ganha Velocidade.","effect":"ABSORCAO","param":"Elétrico"},
   "moxie": {"name":"Moxie","dex":"Ataque sobe ao derrotar um Pokémon.","effect":"AUMENTA_AO_ABATER","param":"Força"},
   "multiscale": {"name":"Multiscale","dex":"Com HP cheio, reduz pela metade o dano recebido.","effect":"ESCAMAS","o":{"min":12,"max":25}},
-  "multitype": {"name":"Multitype","dex":"Muda de tipo conforme a placa que segura.","effect":"VANTAGEM"},
+  "multitype": {"name":"Multitype","dex":"Muda de tipo conforme a placa que segura.","effect":"TIPO_ESCOLHIDO"},
   "mummy": {"name":"Mummy","dex":"Troca a habilidade de quem faz contato por Mummy.","effect":"ANULA_HABILIDADE"},
   "mycelium-might": {"name":"Mycelium Might","dex":"Golpes de status agem por último, mas ignoram habilidades do alvo.","effect":"QUEBRA_GUARDA"},
   "natural-cure": {"name":"Natural Cure","dex":"Cura problemas de status ao sair de campo.","effect":"PURIFICACAO"},
@@ -306,7 +309,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "regenerator": {"name":"Regenerator","dex":"Recupera 1/3 do HP ao sair de campo.","effect":"REGENERACAO"},
   "ripen": {"name":"Ripen","dex":"Dobra o efeito das frutas.","effect":"CURA_GRADUAL"},
   "rivalry": {"name":"Rivalry","dex":"Mais dano contra o mesmo gênero e menos contra o oposto.","effect":"PODER_BRUTO"},
-  "rks-system": {"name":"RKS System","dex":"Muda de tipo conforme a memória que segura.","effect":"VANTAGEM"},
+  "rks-system": {"name":"RKS System","dex":"Muda de tipo conforme a memória que segura.","effect":"TIPO_ESCOLHIDO"},
   "rock-head": {"name":"Rock Head","dex":"Impede o dano de recuo dos próprios golpes.","effect":"CASCO"},
   "rocky-payload": {"name":"Rocky Payload","dex":"Golpes de Pedra ficam mais fortes.","effect":"MAESTRIA_TIPO","param":"Pedra"},
   "rough-skin": {"name":"Rough Skin","dex":"Machuca quem o atinge com contato.","effect":"ESPINHOS"},
@@ -412,13 +415,14 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "wonder-skin": {"name":"Wonder Skin","dex":"Golpes de status contra ele erram mais.","effect":"ANULA_DEBUFF"},
   "zen-mode": {"name":"Zen Mode","dex":"Muda de forma com HP abaixo da metade.","effect":"FURIA"},
   "zero-to-hero": {"name":"Zero to Hero","dex":"Assume a forma Heroica ao sair de campo.","effect":"VINGANCA"},
-  "transform": {"name":"Transform","dex":"Transforma-se no rival ao entrar (aqui: copia o tipo dele). Exclusiva de Mew e Ditto.","effect":"COPIA_TIPO_RIVAL"},
+  "transform": {"name":"Transform","dex":"Transforma-se no rival ao entrar (aqui: assume o sprite e os tipos do rival mais forte). Exclusiva do Ditto.","effect":"TRANSFORMA"},
   "wonder-room": {"name":"Wonder Room","dex":"Embaralha os atributos em campo.","effect":"MUDANCA_STATUS","param":"Psíquico"},
   "endeavor": {"name":"Endeavor","dex":"Revida quando o time está em desvantagem.","effect":"VINGANCA","param":"Normal","o":{"activations":2,"min":3,"max":9,"scale":"Vitalidade"}},
   "air-balloon": {"name":"Air Balloon","dex":"Flutua com um balão: esquiva parcial.","effect":"EVASIVA","o":{"activations":1,"min":12,"max":20,"scale":"Carisma"}},
   "lum-protection": {"name":"Lum Protection","dex":"Protege aliados com a força das aves.","effect":"GUARDA_TIPO","param":"Voador"},
   "quick-claw": {"name":"Quick Claw","dex":"Às vezes age primeiro.","effect":"ATAQUE_RAPIDO"},
   "pastel-veil": {"name":"Pastel Veil","dex":"Protege o mascote e os aliados de envenenamento.","effect":"IMUNE_ESTADO","param":"Envenenado (também aliados)"},
+  "mimic": {"name":"Mimic","dex":"Copia a habilidade do mascote que ele ataca. Exclusiva do Mew.","effect":"COPIA_HABILIDADE"},
 };
 
 // pokemonId -> [habilidades comuns, habilidade oculta]
@@ -573,7 +577,7 @@ export const SPECIES_ABILITIES: Record<number, [string[], string | null]> = {
   148: [["shed-skin"],"marvel-scale"],
   149: [["inner-focus"],"multiscale"],
   150: [["pressure"],"unnerve"],
-  151: [["synchronize","transform"],null],
+  151: [["synchronize","mimic"],null],
   152: [["overgrow"],"leaf-guard"],
   153: [["overgrow"],"leaf-guard"],
   154: [["overgrow"],"leaf-guard"],

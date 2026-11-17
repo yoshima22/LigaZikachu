@@ -81,6 +81,8 @@ export const arenaDraftPetSchema = z.object({
   ability: z.string().max(60).optional(),
   // Prioridade da habilidade no time (0 = primeira), independente do slot do mascote.
   abilityRank: z.number().int().min(0).max(99).optional(),
+  // Tipo escolhido no card do mascote (Multitype/RKS System).
+  typeChoice: z.string().max(20).optional(),
   nickname: z.string().trim().max(18).optional(),
   personality: z.string().min(1),
   posture: z.string().min(1),

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { EffectChips } from "@/components/replay-effect-chips";
 import { conditionsOf, statusesAt, type CondKind } from "@/lib/replay-status";
 import { AbilitiesCard, StatusStrip } from "./replay-overlays";
+import { getStaticSpriteUrl } from "@/lib/mascot-data";
 
 // ── Tipos de dados (preview isolado; mesma forma que um turnLog normalizado) ──
 export type Combatant = {
@@ -30,6 +31,7 @@ export type ReplayTurn = {
   typeStep?: number; // −2..+2 (vantagem/resistência de tipo)
   typeDelta?: number; // pontos de dano somados(+)/removidos(−) pelo tipo
   critical?: boolean; // acerto crítico (+15% de dano)
+  transform?: { pokemonId: number }; // o ator assume o sprite deste mascote (Transformação)
   targetHpAfter: number; // HP absoluto do alvo após o golpe
   actorRole?: string;
   targetRole?: string;
@@ -216,6 +218,27 @@ export function ReplayCanvas({ data, compact = false, hideLabels = false, loop: 
   // Efeitos ativos no turno mostrado (faixa abaixo do campo).
   const statuses = useMemo(() => statusesAt(data, currentLog), [data, currentLog]);
   condsRef.current = conditionsOf(statuses);
+  // Transformação (Ditto): troca o sprite do ator a partir do turno em que ela acontece.
+  const tfCache = useRef<Record<string, HTMLImageElement>>({});
+  const overrides = useMemo(() => {
+    const o: Record<string, number> = {};
+    for (let i = 0; i <= Math.min(currentLog, data.turns.length - 1); i++) {
+      const t = data.turns[i];
+      if (t.transform) o[t.actorId] = t.transform.pokemonId;
+    }
+    return o;
+  }, [data, currentLog]);
+  useEffect(() => {
+    for (const c of data.teams) {
+      const pid = overrides[c.id];
+      if (pid == null && !tfCache.current[`orig:${c.id}`]) continue;
+      const url = pid == null ? c.sprite : getStaticSpriteUrl(pid);
+      let img = tfCache.current[url];
+      if (!img) { img = new Image(); img.src = url; tfCache.current[url] = img; }
+      spritesRef.current[c.id] = img;
+      if (pid != null) tfCache.current[`orig:${c.id}`] = img; else delete tfCache.current[`orig:${c.id}`];
+    }
+  }, [overrides, data]);
   // Card de habilidades: pausa o combate enquanto está aberto e retoma ao fechar
   // só se estava rodando antes.
   const [showAbilities, setShowAbilities] = useState(false);
@@ -588,6 +611,12 @@ function lastStand(st: St, a: Actor, color: string, label: string) {
 }
 
 function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
+  if (sc.turn.transform) {
+    pushFx(st, "ring", actor.x, actor.y - 4, 520, "#e879f9", { max: 80 });
+    for (let i = 0; i < 24; i++) { const ang = Math.random() * Math.PI * 2, sp = 2 + Math.random() * 4; st.particles.push({ x: actor.x, y: actor.y - 6, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 1, life: 620, max: 620, color: ["#e879f9", "#ffffff", "#a78bfa"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2.5, g: -0.05 }); }
+    actor.flash = 1;
+    st.pops.push({ x: actor.x, y: actor.y - 62, text: "TRANSFORMOU!", color: "#e879f9", life: 1200, vy: -0.6 });
+  }
   const color = hex(sc.turn.attackerType);
   const step = sc.turn.typeStep ?? (sc.turn.advantageApplied ? 1 : 0);
   const supa = step > 0;

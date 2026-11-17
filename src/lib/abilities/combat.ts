@@ -1,5 +1,6 @@
 // Motor das habilidades passivas no combate. Só roda quando o Arena Draft passa a opção
 // `abilities` ao runArenaCombat: os outros modos não enxergam nada disto.
+import { TYPE_LABELS_PT } from "@/lib/mascot-data";
 import type { ArenaMascot } from "@/lib/arena-z";
 import { TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { abilityDebuffStat, abilityTypes, abilityValue, getAbilityInfo, type AbilityInfo } from "./index";
@@ -12,7 +13,7 @@ export type Stat4 = "force" | "agility" | "instinct" | "vitality";
 export type DebuffMap = Map<string, Partial<Record<Stat4, number>>>;
 
 /** Habilidade em uso por mascote e o fator do time (1 = ligada, 0.7 = reduzida, 0 = desligada). */
-export type AbilityLineup = Record<string, { slug: string; factor: number }>;
+export type AbilityLineup = Record<string, { slug: string; factor: number; /** Tipo escolhido (Multitype/RKS System). */ typeChoice?: string }>;
 
 export type DebuffOrigin = { pct: number; sourceId: string | null; sourceName: string; label: string; round: number };
 export type DebuffEvent = {
@@ -62,6 +63,10 @@ export type AbilityRuntime = {
   swings: Record<string, number>;
   /** Habilidade anulada até a rodada indicada (Múmia). */
   silenced: Record<string, number>;
+  /** Habilidade copiada por quem tem Cópia de habilidade (Mimic): mascote -> slug. */
+  copied: Record<string, string>;
+  /** Transformação (Ditto): mascote -> pokemonId do rival cujo sprite ele assumiu. */
+  transformed: Record<string, number>;
   /** Congelado em acúmulos: cada acúmulo vale (since, until]; no 3º, `lockRound` é a rodada em que o alvo não age. */
   freeze: Record<string, { stacks: Array<{ since: number; until: number }>; lockRound: number | null; sourceName: string }>;
   /** Amendrontado: rodada em que o alvo perde a ação. */
@@ -82,6 +87,8 @@ export type AbilityStandalone = {
   heal?: number;
   hpAfter?: number;
   events?: DebuffEvent[];
+  /** O ator assumiu o sprite deste mascote (Transformação). */
+  transform?: { pokemonId: number };
 };
 
 export type AbilityHost = {
@@ -103,14 +110,17 @@ export function emptyAbilityRuntime(): AbilityRuntime {
   return {
     started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {}, anular: { A: false, D: false },
     status: {}, curse: {}, field: { sol: false, chuva: false, areia: false, sandUntil: 0 }, tempAgility: {}, tempShield: {}, types: {}, disguised: [], weak: [], traced: {}, swings: {}, silenced: {},
-    freeze: {}, flinch: {}, acted: {}, doom: {}, doomed: {}, statBuff: {},
+    freeze: {}, flinch: {}, acted: {}, doom: {}, doomed: {}, statBuff: {}, copied: {}, transformed: {},
   };
 }
 
-export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, previous?: AbilityRuntime) {
+export function createAbilityEngine(lineup: AbilityLineup, host: AbilityHost, previous?: AbilityRuntime) {
+  // Cópia local: o Mew (Mimic) troca a habilidade no meio da luta sem mexer no plano original.
+  const config: AbilityLineup = { ...lineup };
   const rt: AbilityRuntime = previous
     ? { ...emptyAbilityRuntime(), ...structuredClone(previous) }
     : emptyAbilityRuntime();
+  for (const [id, slug] of Object.entries(rt.copied)) if (config[id]) config[id] = { ...config[id], slug };
   const all = [...host.attackers, ...host.defenders];
   const byId = new Map(all.map((m) => [m.id, m]));
   const sideOf = new Map<string, "A" | "D">();
@@ -448,6 +458,15 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   function onBattleStart() {
     if (rt.started) return;
     rt.started = true;
+    // Tipo à escolha (Arceus, Silvally): o tipo escolhido no card substitui o original.
+    for (const m of all) {
+      const choice = config[m.id]?.typeChoice;
+      const h = heldAs(m, "TIPO_ESCOLHIDO");
+      if (!h || !choice || hpOf(m) <= 0) continue;
+      m.types = [choice];
+      rt.types[m.id] = [choice];
+      standalone.push({ actor: m, text: say(m, h, `${m.name} assume o tipo ${TYPE_LABELS_PT[choice] ?? choice}.`) });
+    }
     for (const m of all) {
       const h = heldAs(m, "INTIMIDACAO");
       if (!h || hpOf(m) <= 0 || !hasLeft(m, h)) continue;
@@ -1089,6 +1108,17 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         maybeTrace(a.target, "agility", v);
       }
     }
+    const mimic = heldAs(a.actor, "COPIA_HABILIDADE");
+    if (mimic && hasLeft(a.actor, mimic) && hpOf(a.actor) > 0) {
+      const theirs = config[a.target.id];
+      const info = theirs && theirs.factor > 0 ? getAbilityInfo(theirs.slug) : null;
+      if (info?.hasEffect && info.effectCode !== "COPIA_HABILIDADE") {
+        notes.push(say(a.actor, mimic, `copiou ${info.name} de ${a.target.name}: usa essa habilidade pelo resto da luta.`));
+        config[a.actor.id] = { ...config[a.actor.id], slug: info.slug };
+        rt.copied[a.actor.id] = info.slug;
+        rt.uses[a.actor.id] = 0; // a habilidade copiada começa com todas as ativações
+      }
+    }
     const vamp = heldAs(a.actor, "VAMPIRISMO");
     if (vamp && hasLeft(a.actor, vamp) && a.damage > 0 && hpOf(a.actor) > 0 && hpOf(a.actor) < a.actor.hp) {
       const v = value(a.actor, vamp);
@@ -1204,6 +1234,20 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     }
     const round = host.getRound();
     const h = held(actor);
+
+    // Transformação (Ditto): vira o rival mais forte (sprite e tipos), com os próprios atributos.
+    if (h && h.info.effectCode === "TRANSFORMA" && !rt.disguised.includes(actor.id) && hasLeft(actor, h)) {
+      rt.disguised.push(actor.id);
+      const total = (m: ArenaMascot) => m.force + m.agility + m.charisma + m.instinct + m.vitality;
+      const model = [...alive(foesOf(actor))].sort((a, b) => total(b) - total(a))[0];
+      if (model) {
+        const copied = [...host.typesOf(model)];
+        actor.types = copied;
+        rt.types[actor.id] = copied;
+        rt.transformed[actor.id] = model.pokemonId;
+        standalone.push({ actor, target: model, transform: { pokemonId: model.pokemonId }, text: say(actor, h, `${actor.name} se transformou em ${model.name} (o rival mais forte): assume o sprite e os tipos dele (${copied.join("/")}), mantendo os próprios atributos.`) });
+      }
+    }
 
     // Disfarces: Illusion/Imposter/Transform na primeira ação.
     if (h && !rt.disguised.includes(actor.id) && (h.info.effectCode === "COPIA_TIPO_ALIADO" || h.info.effectCode === "COPIA_TIPO_RIVAL") && hasLeft(actor, h)) {

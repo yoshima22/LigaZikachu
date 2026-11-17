@@ -38,7 +38,7 @@ export function draftAbilityOrder(pets: Array<Pick<ArenaDraftPet, "id" | "abilit
 
 /** Plano do time em campo: a ordem de `activeIds` define os slots. */
 export function buildDraftAbilityPlan(
-  pets: Array<Pick<ArenaDraftPet, "id" | "speciesId" | "ability" | "abilityRank">>,
+  pets: Array<Pick<ArenaDraftPet, "id" | "speciesId" | "ability" | "abilityRank" | "typeChoice">>,
   activeIds: string[],
   mode: DraftMode,
 ): { lineup: AbilityLineup; states: Record<string, DraftAbilityState> } {
@@ -52,7 +52,7 @@ export function buildDraftAbilityPlan(
     const slug = slugs[index];
     if (!slug) return;
     states[pet.id] = { slug, state: slots[index].state, factor: slots[index].factor, reason: slots[index].reason };
-    if (slots[index].factor > 0) lineup[pet.id] = { slug, factor: slots[index].factor };
+    if (slots[index].factor > 0) lineup[pet.id] = { slug, factor: slots[index].factor, ...(pet.typeChoice && getAbilityInfo(slug)?.effectCode === "TIPO_ESCOLHIDO" ? { typeChoice: pet.typeChoice } : {}) };
   });
   return { lineup, states };
 }

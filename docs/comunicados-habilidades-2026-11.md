@@ -85,6 +85,10 @@ A Sala de Treino com Habilidades some nesse dia (vira treino comum). Suas equipe
   - Download (Genesect e outros): compara Vitalidade x Carisma dos rivais e sobe Força ou Instinto
   - Os bônus se acumulam até +40% por atributo na luta
 
+• Ditto (Transform/Imposter): na 1ª ação vira o rival mais forte (sprite e tipos, com os atributos dele mesmo), com efeito no replay
+• Mew (nova habilidade Mimic): copia a habilidade do mascote que ele atacar, pelo resto da luta
+• Arceus (Multitype) e Silvally (RKS System): você escolhe o tipo no card do mascote (aba Habilidades). Equipar outra habilidade remove a escolha
+
 🔜 Ainda em andamento
 • Ruin (Beads → Carisma), Berserk, Steadfast, Unburden, Frisk/Forewarn
 • Ditto/Mew copiando sprite e tipos do rival; Arceus e Silvally escolhendo o tipo no card

@@ -22,7 +22,7 @@ import { defaultCombatRoleFor, normalizeCombatRole } from "@/lib/combat-roles";
 import { canSelectTrainingStance } from "@/lib/training-journey-state";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { MEGA_FORM_IDS } from "@/lib/mega-evolution";
-import { availableAbilities, resolveAbilitySlug } from "@/lib/abilities";
+import { availableAbilities, getAbilityInfo, resolveAbilitySlug } from "@/lib/abilities";
 import { buildDraftAbilityPlan, validateDraftAbilities, type DraftAbilityState } from "@/lib/abilities/draft";
 import { getBondCombatModifier } from "@/lib/mascot-bonds";
 import { trackGachaObjective } from "@/lib/gacha";
@@ -171,6 +171,7 @@ export async function saveRealRosterAction(input: {
         megaEvolvedFromPokemonId: true,
         hiddenAbilityUnlocked: true,
         abilityChoice: true,
+        abilityTypeChoice: true,
       },
     });
     if (mascots.length !== uniqueIds.length)
@@ -209,6 +210,7 @@ export async function saveRealRosterAction(input: {
       return {
         ...(ability ? { ability } : {}),
         ...(abilityRank.has(mascot.id) ? { abilityRank: abilityRank.get(mascot.id)! } : {}),
+        ...(mascot.abilityTypeChoice && ability && getAbilityInfo(ability)?.effectCode === "TIPO_ESCOLHIDO" ? { typeChoice: mascot.abilityTypeChoice } : {}),
         id: mascot.id,
         slot,
         speciesId: mascot.pokemonId,

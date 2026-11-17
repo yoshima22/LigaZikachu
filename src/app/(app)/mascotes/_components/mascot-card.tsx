@@ -92,6 +92,7 @@ interface MascotData {
   megaStoneName?: string | null;
   hiddenAbilityUnlocked?: boolean;
   abilityChoice?: string | null;
+  abilityTypeChoice?: string | null;
   pokedexLink?: { url: string | null; note: string | null } | null;
   lastInteractedAt: Date | null;
   lastPlayedAt?: Date | null;  // presente após migração SQL
@@ -1205,6 +1206,7 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
                     pokemonId={mascot.pokemonId}
                     hiddenAbilityUnlocked={mascot.hiddenAbilityUnlocked}
                     abilityChoice={mascot.abilityChoice ?? null}
+                    abilityTypeChoice={mascot.abilityTypeChoice ?? null}
                     stats={{ force: mascot.statForce, agility: mascot.statAgility, charisma: mascot.statCharisma, instinct: mascot.statInstinct, vitality: mascot.statVitality }}
                     pokedex={mascot.pokedexLink ?? null}
                   />

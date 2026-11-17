@@ -1570,6 +1570,13 @@ export default async function ManualPage() {
             rows={GLOSSARY.filter((e) => e.group !== "Estados alterados").map((e) => [e.term, e.body])}
           />
         </Sub>
+        <Sub title="Habilidades exclusivas de alguns mascotes">
+          <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
+            <li><strong className="text-slate-200">Ditto (Transform/Imposter):</strong> na primeira ação ele se transforma no rival mais forte (maior soma de atributos), assumindo o <strong className="text-slate-200">sprite e os tipos</strong> dele até o fim da luta. Os atributos continuam os do Ditto. O replay mostra a transformação.</li>
+            <li><strong className="text-slate-200">Mew (Mimic):</strong> ao atacar um rival pela primeira vez, copia a <strong className="text-slate-200">habilidade</strong> dele pelo resto da luta.</li>
+            <li><strong className="text-slate-200">Arceus (Multitype) e Silvally (RKS System):</strong> você escolhe o <strong className="text-slate-200">tipo</strong> do mascote no card (aba Habilidades). O tipo escolhido vale em combate enquanto a habilidade estiver equipada; equipar outra habilidade remove a escolha.</li>
+          </ul>
+        </Sub>
         <Sub title="Debuffs">
           <p className="text-xs leading-6 text-slate-400">
             Um debuff reduz um atributo (Força, Agilidade, Instinto ou Vitalidade) e dura a luta inteira, a não ser que uma habilidade o remova.

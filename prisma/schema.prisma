@@ -2896,6 +2896,7 @@ model Mascot {
   labStars                  Int                       @default(0)
   // Habilidade escolhida pelo jogador (slug do PokeAPI); se null, vale a padrão da espécie.
   abilityChoice             String?
+  abilityTypeChoice         String? // tipo escolhido com habilidades de tipo à escolha (Multitype, RKS System)
   player                    Player                    @relation(fields: [playerId], references: [id], onDelete: Cascade)
   expeditions               MascotExpedition[]
   arenaTeamMembers          ArenaTeamMember[]

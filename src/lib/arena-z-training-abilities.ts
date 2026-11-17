@@ -1,4 +1,4 @@
-import { abilityPriorityIndices, evaluateTeamAbilities, resolveAbilitySlug, type AbilitySlot } from "@/lib/abilities";
+import { abilityPriorityIndices, evaluateTeamAbilities, getAbilityInfo, resolveAbilitySlug, type AbilitySlot } from "@/lib/abilities";
 import type { AbilityLineup } from "@/lib/abilities/combat";
 
 export type TrainingAbilityMember = {
@@ -6,6 +6,7 @@ export type TrainingAbilityMember = {
   pokemonId: number;
   abilityChoice?: string | null;
   hiddenAbilityUnlocked?: boolean | null;
+  abilityTypeChoice?: string | null;
 };
 export type TrainingAbilityState = { slug: string; state: AbilitySlot["state"]; factor: number; reason: string | null };
 
@@ -24,7 +25,7 @@ export function buildTrainingAbilityPlan(members: TrainingAbilityMember[], order
     const slug = slugs[i];
     if (!slug) return;
     states[m.id] = { slug, state: slots[i].state, factor: slots[i].factor, reason: slots[i].reason };
-    if (slots[i].factor > 0) lineup[m.id] = { slug, factor: slots[i].factor };
+    if (slots[i].factor > 0) lineup[m.id] = { slug, factor: slots[i].factor, ...(m.abilityTypeChoice && getAbilityInfo(slug)?.effectCode === "TIPO_ESCOLHIDO" ? { typeChoice: m.abilityTypeChoice } : {}) };
   });
   return { lineup, states };
 }
