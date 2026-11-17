@@ -31,6 +31,7 @@ export type TurnLog = {
   advantageApplied: boolean;
   typeStep?: number;
   typeDelta?: number;
+  critical?: boolean;
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -496,6 +497,7 @@ export function LeagueBattleReplayModal({
                       <span className="font-bold text-red-400">-{current.damage} HP</span>
                       {d > 0 && <span className="ml-1 text-[10px] text-amber-300">(+{d} por vantagem)</span>}
                       {d < 0 && <span className="ml-1 text-[10px] text-sky-300">({d} por resistência)</span>}
+                      {current.critical && <span className="ml-1.5 text-yellow-300 text-[10px] font-black">💥 CRÍTICO! +15%</span>}
                       {step >= 2 && <span className="ml-1.5 text-amber-300 text-[10px] font-bold">✦ Super efetivo! ×4</span>}
                       {step === 1 && <span className="ml-1.5 text-amber-300 text-[10px] font-bold">✦ Super efetivo!</span>}
                       {step === -1 && <span className="ml-1.5 text-sky-300 text-[10px]">Resistiu</span>}

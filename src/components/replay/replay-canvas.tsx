@@ -29,6 +29,7 @@ export type ReplayTurn = {
   advantageApplied?: boolean;
   typeStep?: number; // −2..+2 (vantagem/resistência de tipo)
   typeDelta?: number; // pontos de dano somados(+)/removidos(−) pelo tipo
+  critical?: boolean; // acerto crítico (+15% de dano)
   targetHpAfter: number; // HP absoluto do alvo após o golpe
   actorRole?: string;
   targetRole?: string;
@@ -279,6 +280,7 @@ function CurrentActionCaption({ turn, teams }: { turn?: ReplayTurn; teams: Comba
             <span className="font-bold text-red-400">-{turn.damage} HP</span>
             {d > 0 && <span className="ml-1 text-[10px] text-amber-300">(+{d} por vantagem)</span>}
             {d < 0 && <span className="ml-1 text-[10px] text-sky-300">({d} por resistência)</span>}
+            {turn.critical && <span className="ml-1.5 text-[10px] font-black text-yellow-300">💥 CRÍTICO! +15%</span>}
             {step >= 2 && <span className="ml-1.5 text-[10px] font-bold text-amber-300">✦ Super efetivo! ×4</span>}
             {step === 1 && <span className="ml-1.5 text-[10px] font-bold text-amber-300">✦ Super efetivo!</span>}
             {step === -1 && <span className="ml-1.5 text-[10px] text-sky-300">Resistiu</span>}
@@ -626,6 +628,13 @@ function fireVfx(st: St, sc: Scene, actor: Actor, target: Actor) {
     else if (step <= -2) { st.shake = 5; pushFx(st, "ring", target.x, target.y - 4, 340, "#8fd3ff", { max: 46 }); st.pops.push({ x: target.x, y: target.y - 62, text: "MUITO RESISTENTE", color: "#8fd3ff", life: 1050, vy: -0.6 }); }
     else if (step === -1) { st.shake = 5; st.pops.push({ x: target.x, y: target.y - 62, text: "RESISTIU", color: "#8fd3ff", life: 1000, vy: -0.6 }); }
     else st.shake = 6;
+    // Acerto crítico: estrela de impacto dourada, tremor extra e selo "CRÍTICO!".
+    if (sc.turn.critical) {
+      st.shake = Math.max(st.shake, 20); st.flashCol = "#fde047"; st.flashA = Math.max(st.flashA, 0.3);
+      pushFx(st, "ring", target.x, target.y - 4, 420, "#fde047", { max: 70 });
+      for (let i = 0; i < 18; i++) { const ang = Math.random() * Math.PI * 2, sp = 3 + Math.random() * 5; st.particles.push({ x: target.x, y: target.y - 6, vx: Math.cos(ang) * sp, vy: Math.sin(ang) * sp - 1.5, life: 560, max: 560, color: ["#fde047", "#ffffff", "#f59e0b"][(Math.random() * 3) | 0], size: 2 + Math.random() * 2.5, g: 0.05 }); }
+      st.pops.push({ x: target.x, y: target.y - 84, text: "💥 CRÍTICO!", color: "#fde047", life: 1100, vy: -0.8 });
+    }
     // Último ato / Sobrevivente: resistiu a um golpe fatal (ficou com 1 HP).
     const eff = sc.turn.effect ?? "";
     if (/resistiu ao golpe fatal/i.test(eff)) lastStand(st, target, "#ffd166", "✦ SOBREVIVENTE");

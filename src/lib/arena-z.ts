@@ -65,6 +65,7 @@ import { createAbilityEngine, type AbilityEngine, type AbilityLineup, type Abili
 import { TRAINING_ABILITY_ROOM, isAbilityTrainingTeam } from "@/lib/arena-z-training";
 import { buildTrainingAbilityPlan, type TrainingAbilityMember } from "@/lib/arena-z-training-abilities";
 import { arenaZAbilitiesLive } from "@/lib/abilities/schedule";
+import { CRIT_DAMAGE_BONUS, criticalNote, rollCritical } from "@/lib/critical";
 
 /**
  * Habilidades na Arena Z: a partir de 23/11/2026 valem em toda a Arena Z; antes disso, só na
@@ -382,6 +383,8 @@ export type ArenaTurnLog = {
   typeStep?: number;
   /** Pontos de dano adicionados por vantagem (+) ou removidos por resistência (−). */
   typeDelta?: number;
+  /** Acerto crítico (+15% de dano). Ausente em combates antigos. */
+  critical?: boolean;
   actorRole?: string;
   targetRole?: string;
   effect?: string;
@@ -1271,6 +1274,12 @@ function runArenaCombatInternal(
           damageNeutral += Math.max(1, Math.round(damageNeutral * abilityAtk.extraHit));
         }
 
+        // Acerto crítico (mecânica padrão): Instinto + Carisma, +15% de dano.
+        const crit = rollCritical(instinct, actor.charisma ?? 0, arenaRandom);
+        if (crit.hit) {
+          damage = Math.max(1, Math.round(damage * (1 + CRIT_DAMAGE_BONUS)));
+          damageNeutral = Math.max(1, Math.round(damageNeutral * (1 + CRIT_DAMAGE_BONUS)));
+        }
         // PROVOKER: attacker deals less damage when redirected
         if (provoked) { damage = Math.round(damage * 0.92); damageNeutral = Math.round(damageNeutral * 0.92); }
         const typeDelta = damage - damageNeutral;
@@ -1409,6 +1418,7 @@ function runArenaCombatInternal(
               ? `Batedor ativo: +${Math.round(scoutBonus * 100)}% precisão.`
               : null,
             loyalNote,
+            crit.hit ? criticalNote(actor.name, crit.chance) : null,
             persOffNote,
             debuffEffect,
             travessoEffect,
@@ -1447,6 +1457,7 @@ function runArenaCombatInternal(
           advantageApplied: typeStep > 0,
           typeStep,
           typeDelta,
+          ...(crit.hit ? { critical: true } : {}),
           actorRole: getCombatRoleLabel(actor.combatRole),
           targetRole: getCombatRoleLabel(target.combatRole),
           effect: effects,

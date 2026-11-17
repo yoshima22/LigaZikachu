@@ -15,6 +15,7 @@ export type ReplayLogEntry = {
   advantageApplied?: boolean;
   typeStep?: number;
   typeDelta?: number;
+  critical?: boolean;
   multiplier?: number;
   actorRole?: string;
   targetRole?: string;
@@ -100,6 +101,7 @@ export function buildModernReplay(
       advantageApplied: e.advantageApplied,
       typeStep: e.typeStep,
       typeDelta: e.typeDelta,
+      critical: e.critical,
       multiplier: e.multiplier,
       targetHpAfter,
       actorRole: e.actorRole,

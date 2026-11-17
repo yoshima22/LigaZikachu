@@ -96,6 +96,7 @@ type AnimTurn = {
   attackerType?: string;
   typeStep?: number;
   typeDelta?: number;
+  critical?: boolean;
   guardianIntercept?: { mascotId: string; damage: number } | null;
   debuffEvents?: unknown[];
 };
@@ -239,7 +240,7 @@ function BattleAnimationModal({
     const turnsOut: ReplayLogEntry[] = turns.map((t) => ({
       turn: t.turn, actorId: t.attackerId, targetId: t.defenderId, action: t.action ?? "ATTACK",
       attackerType: t.attackerType, damage: t.damage, advantageApplied: t.advantageApplied,
-      typeStep: t.typeStep, typeDelta: t.typeDelta, actorRole: t.actorRole, targetRole: t.targetRole,
+      typeStep: t.typeStep, typeDelta: t.typeDelta, critical: t.critical, actorRole: t.actorRole, targetRole: t.targetRole,
       effect: t.effect, guardianIntercept: t.guardianIntercept ?? null, debuffEvents: t.debuffEvents,
     }));
     return buildModernReplay(playerMascots.map(toLine), botMascots.map(toLine), turnsOut, { winnerName, sideNames: playerTeamName === botName ? { A: `${playerTeamName} · ataque`, B: `${botName} · defesa` } : { A: playerTeamName, B: botName } });

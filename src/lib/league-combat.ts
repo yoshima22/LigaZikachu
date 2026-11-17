@@ -1,4 +1,5 @@
 import type { ArenaTurnLog } from "./arena-z";
+import { CRIT_DAMAGE_BONUS, criticalNote, rollCritical } from "./critical";
 import { getPokemonElement, getPokemonTypes, getTypeAdvantageMultiplier, getTypeAdvantageStep, getPokemonName, PERSONALITY_LABEL, formatTypeNote } from "./mascot-data";
 import { PERSONALITY_AFFINITY } from "./personality-design";
 import { debuffResistanceFactor } from "./personality-combat";
@@ -698,6 +699,9 @@ export function runLeagueCombat(
         opposingBondHits.set(key, hits + 1);
       }
       if (chaosCritical) { damage = Math.max(1, Math.round(damage * 1.5)); damageNeutral = Math.max(1, Math.round(damageNeutral * 1.5)); }
+      // Acerto crítico (mecânica padrão): Instinto + Carisma, +15% de dano.
+      const crit = rollCritical(instinct, actor.charisma ?? 0, Math.random);
+      if (crit.hit) { damage = Math.max(1, Math.round(damage * (1 + CRIT_DAMAGE_BONUS))); damageNeutral = Math.max(1, Math.round(damageNeutral * (1 + CRIT_DAMAGE_BONUS))); }
       if (provoked) { damage = Math.round(damage * 0.92); damageNeutral = Math.round(damageNeutral * 0.92); }
       // Quanto o tipo somou (+) ou removeu (−) do dano deste golpe.
       const typeDelta = damage - damageNeutral;
@@ -801,6 +805,7 @@ export function runLeagueCombat(
         debuffEffect, guardianEffect, survivorEffect, dramaticEffect, dramaticRechargeEffect, travessoEffect,
         provoked ? `Provocador desviou o ataque!` : null,
         chaosCritical ? "Instinto Confuso: acerto crítico de +50% de dano!" : null,
+        crit.hit ? criticalNote(actor.name, crit.chance) : null,
         loyalNote,
         persOff !== 1 && actor.personality ? `Personalidade ${PERSONALITY_LABEL[actor.personality] ?? actor.personality}: ${persOff > 1 ? "+" : ""}${Math.round((persOff - 1) * 100)}% de dano.` : null,
         persDef !== 1 && target.personality ? `Personalidade ${PERSONALITY_LABEL[target.personality] ?? target.personality}: ${Math.round((persDef - 1) * 100)}% de dano recebido.` : null,
@@ -812,6 +817,7 @@ export function runLeagueCombat(
         action: "ATTACK", damage, attackerType, defenderType, multiplier, advantageApplied: typeStep > 0, typeStep, typeDelta,
         actorRole: getCombatRoleLabel(actor.combatRole), targetRole: getCombatRoleLabel(target.combatRole),
         effect: effects,
+        ...(crit.hit ? { critical: true } : {}),
         ...(guardianIntercept ? { guardianIntercept } : {}),
       });
       actionNum++;

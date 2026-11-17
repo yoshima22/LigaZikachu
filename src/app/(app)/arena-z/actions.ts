@@ -445,7 +445,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
           actorId: string; actorName: string; actorOwnerId?: string | null; actorRole?: string;
           targetId: string; targetName: string; targetOwnerId?: string | null; targetRole?: string;
           damage: number; advantageApplied?: boolean; effect?: string; targetHpAfter?: number;
-          attackerType?: string; typeStep?: number; typeDelta?: number;
+          attackerType?: string; typeStep?: number; typeDelta?: number; critical?: boolean;
           guardianIntercept?: { mascotId: string; damage: number } | null;
           debuffEvents?: unknown[];
         }>)
@@ -548,6 +548,7 @@ export async function getArenaBattleDetailsAction(battleId: string, perspectiveP
       attackerType: turn.attackerType,
       typeStep: turn.typeStep,
       typeDelta: turn.typeDelta,
+      critical: turn.critical,
       guardianIntercept: turn.guardianIntercept ?? undefined,
       debuffEvents: turn.debuffEvents,
     }));

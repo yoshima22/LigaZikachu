@@ -1476,8 +1476,10 @@ export default async function ManualPage() {
             Os nomes ficam em inglês, como na Pokédex; as descrições e os efeitos estão em português.
           </p>
           <Note>
-            Por enquanto as habilidades valem <strong className="text-slate-200">somente no Arena Draft</strong>. Liga Semanal, Liga Rush, Arena Z, World Mode e Torre
-            continuam como antes. Consulte tudo na aba <a href="/habilidades" className="text-cyan-400 underline">Habilidades</a> (menu Coleção).
+            As habilidades valem no <strong className="text-slate-200">Arena Draft</strong> e no <strong className="text-slate-200">Rei do Rio</strong>. Na{" "}
+            <strong className="text-slate-200">Arena Z</strong> elas passam a valer em <strong className="text-slate-200">todas as salas (PvE, PvP e treino) a partir de 23/11/2026</strong>,
+            e a Sala de Treinamento com Habilidades deixa de existir nesse dia (vira treino comum). Liga Semanal, Liga Rush, World Mode e Torre
+            continuam como antes por enquanto. Consulte tudo na aba <a href="/habilidades" className="text-cyan-400 underline">Habilidades</a> (menu Coleção).
           </Note>
         </Sub>
         <Sub title="Características de cada habilidade">
@@ -1514,11 +1516,56 @@ export default async function ManualPage() {
           />
           <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
             <li>Em <strong className="text-slate-200">Sobrevivência</strong> só o 1º mascote liga a habilidade.</li>
-            <li>Exemplo: os slots 1, 2 e 3 têm habilidades de Dano — o 1 usa 100%, o 2 usa 70% e o 3 fica desligado.</li>
-            <li>A posição é estratégia: na janela estratégica há setas para subir e descer cada mascote e escolher quem fica ligado.</li>
+            <li>Exemplo: três mascotes têm habilidades de Dano — a 1ª da sua lista de prioridade usa 100%, a 2ª usa 70% e a 3ª fica desligada, não importa em que slot cada mascote esteja.</li>
+            <li>A <strong className="text-slate-200">montagem de habilidades</strong> é a mesma em todos os modos: uma lista em ordem de prioridade (arraste ou use ▲▼) com a habilidade escolhida de cada mascote e o estado de cada uma (100%, 70% ou desligada).</li>
             <li>O estado é recalculado a cada janela (turnos 20, 35 e 45) e fica fixo durante o trecho seguinte. Se o 1º mascote cair, a habilidade do 3º não liga no meio do trecho.</li>
             <li>Você vê o estado (ligada, 70% ou desligada, com o motivo) na montagem do time, na janela estratégica e no replay. A montagem tem um resumo por categoria.</li>
           </ul>
+        </Sub>
+        <Sub title="Acerto crítico (todos os combates)">
+          <p className="text-xs leading-6 text-slate-400">
+            O <strong className="text-slate-200">crítico</strong> é uma mecânica padrão de combate: vale em <strong className="text-slate-200">todos os modos</strong>, com ou sem habilidades.
+            Um acerto crítico causa <strong className="text-slate-200">+15% de dano</strong> no golpe. Isso é menos que um passo de vantagem de tipo (±20%), então o crítico nunca supera a vantagem de tipo.
+          </p>
+          <Table
+            headers={["Instinto + Carisma", "Chance de crítico por golpe"]}
+            rows={[
+              ["130", "4,2%"],
+              ["200", "6,5%"],
+              ["260", "8,5%"],
+              ["400", "13%"],
+              ["480 ou mais", "15,6% (teto natural)"],
+            ]}
+          />
+          <ul className="list-disc space-y-1.5 pl-5 text-xs leading-6 text-slate-400">
+            <li>A chance vem somente de <strong className="text-slate-200">Instinto + Carisma</strong> do atacante: (Instinto + Carisma) ÷ 40 em %, mais 30%.</li>
+            <li>Habilidades (nos modos em que estão ligadas) somam pontos percentuais por cima, e a chance total nunca passa de <strong className="text-slate-200">20%</strong>.</li>
+            <li>O crítico aparece no <strong className="text-slate-200">replay moderno</strong> (selo “CRÍTICO!”, brilho dourado e tremor) e no <strong className="text-slate-200">log</strong> (“💥 Crítico! … +15% de dano”).</li>
+            <li>Habilidades que interagem com crítico (ex.: impedir críticos, aumentar a chance) entram junto da liberação das habilidades em cada modo.</li>
+          </ul>
+        </Sub>
+        <Sub title="Estados alterados">
+          <p className="text-xs leading-6 text-slate-400">
+            Alguns estados são aplicados por habilidades (nos modos com habilidades). Os números abaixo são os valores atuais do combate.
+          </p>
+          <Table
+            headers={["Estado", "O que faz", "Duração", "Imunes"]}
+            rows={[
+              ["☠️ Envenenado", "Perde 5% do HP máximo no fim do turno", "3 rodadas", "Veneno e Metal"],
+              ["🔥 Queimado", "Perde 7% do HP máximo no início do turno", "2 rodadas", "Fogo"],
+              ["⚡ Paralisado", "30% de chance de perder a ação", "1 rodada", "Elétrico"],
+              ["💤 Dormindo", "A cada ação, 70% de chance de acordar; senão perde a ação", "1 a 2 rodadas", "—"],
+              ["😵 Confuso", "20% de chance de se ferir (5% do HP máximo) em vez de atacar; 80% de chance de passar a cada ação", "1 a 3 rodadas", "Psíquico"],
+              ["❄️ Congelado", "Reduz a Agilidade em 20%", "2 rodadas", "Gelo"],
+              ["👻 Maldito", "Quem ataca o mascote perde 5% do HP máximo, até quem o amaldiçoou cair", "Até o causador cair", "Fantasma e Sombrio"],
+            ]}
+          />
+          <Note>
+            <strong className="text-slate-200">Em breve</strong> (junto da liberação das habilidades por modo): <strong className="text-slate-200">Amendrontado</strong> (só vale se o alvo ainda não agiu
+            na rodada: ele perde a ação dessa rodada), <strong className="text-slate-200">Apaixonado</strong> (50% de chance de perder a ação, só contra quem o encantou),
+            <strong className="text-slate-200"> Condenado</strong> (o primeiro que ataca o mascote fica condenado e cai 1 rodada depois que o mascote cair; imunes Fantasma e Sombrio, pode ser curado) e o novo
+            <strong className="text-slate-200"> Congelado</strong> em acúmulos (até 3; cada um reduz 10% de Agilidade e 5% de Força por 2 rodadas; no 3º o alvo fica paralisado por 1 rodada e o congelamento sai com todos os acúmulos).
+          </Note>
         </Sub>
         <Sub title="Debuffs">
           <p className="text-xs leading-6 text-slate-400">
