@@ -1,3 +1,4 @@
+import { memoTtl } from "@/lib/memo-ttl";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { sendNotificationToUsers } from "@/lib/notifications";
@@ -116,17 +117,14 @@ export async function prepareJohtoInvitationCampaign(input: { publish?: boolean;
 const JOHTO_CAMPAIGN_TAG = "johto-invitation-campaign";
 
 // Campanha é global; datas voltam como string do cache (JSON). Publicar invalida a tag.
-const getCachedCampaign = unstable_cache(
+const getCachedCampaign = memoTtl(
   async () => {
     const c = await prisma.johtoInvitationCampaign.findUnique({
       where: { slug: JOHTO_INVITATION_CAMPAIGN_SLUG },
       select: { id: true, publishedAt: true, launchAt: true },
     });
     return c && { id: c.id, publishedAt: c.publishedAt?.toISOString() ?? null, launchAt: c.launchAt.toISOString() };
-  },
-  ["johto-invitation-campaign-v1"],
-  { revalidate: 60, tags: [JOHTO_CAMPAIGN_TAG] },
-);
+  }, 30000);
 
 /** Caminho quente do layout (toda navegação). Se o convite já foi aberto o portal não renderiza nada,
  * então basta 1 leitura do destinatário: sem upsert (escrita) e sem a lista de candidatos do torneio.

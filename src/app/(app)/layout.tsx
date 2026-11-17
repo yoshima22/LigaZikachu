@@ -1,3 +1,4 @@
+import { memoTtl } from "@/lib/memo-ttl";
 import type { ReactNode } from "react";
 import { isJohtoRaidVisibleToPlayers } from "@/lib/johto-raid";
 import Link from "next/link";
@@ -126,26 +127,20 @@ const getNavData = (userId: string) =>
   )();
 
 // Lista de testers da Torre: global e quase estática; as actions do admin invalidam a tag.
-const getTowerTesterSetting = unstable_cache(
-  () => prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }),
-  ["tower-testers-nav-v1"],
-  { revalidate: 60, tags: ["tower-testers-nav"] },
-);
+const getTowerTesterSetting = memoTtl(
+  () => prisma.appSetting.findUnique({ where: { key: "tower_rebels_tester_user_ids" }, select: { value: true } }), 30000);
 
 // Um único sinal compartilhado por todos os usuários. O cache curto evita uma
 // consulta por navegação e o corte por heartbeat impede que uma live abandonada
 // mantenha o selo aceso indefinidamente.
-const getZikaTvLiveStatus = unstable_cache(
+const getZikaTvLiveStatus = memoTtl(
   async () => Boolean(await prisma.specStream.findFirst({
     where: {
       status: "LIVE",
       lastSeenAt: { gte: new Date(Date.now() - 3 * 60_000) },
     },
     select: { id: true },
-  })),
-  ["zika-tv-live-nav-v1"],
-  { revalidate: 20, tags: [ZIKA_TV_LIVE_TAG] },
-);
+  })), 10000);
 
 export default async function AppLayout({
   children,

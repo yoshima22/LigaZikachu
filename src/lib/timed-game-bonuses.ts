@@ -1,3 +1,4 @@
+import { memoTtl } from "@/lib/memo-ttl";
 import { unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import type { ExpeditionDuration, ExpeditionMode } from "@/lib/mascot-data";
@@ -52,7 +53,7 @@ export function normalizeTimedGameBonusEvent(value: unknown): TimedGameBonusEven
   };
 }
 
-export const getTimedGameBonusEvents = unstable_cache(
+export const getTimedGameBonusEvents = memoTtl(
   async (): Promise<TimedGameBonusEvent[]> => {
     const setting = await prisma.appSetting.findUnique({
       where: { key: TIMED_GAME_BONUSES_KEY },
@@ -61,10 +62,7 @@ export const getTimedGameBonusEvents = unstable_cache(
     const raw = setting?.value;
     if (!Array.isArray(raw)) return [];
     return raw.map(normalizeTimedGameBonusEvent).filter((event): event is TimedGameBonusEvent => event !== null);
-  },
-  [TIMED_GAME_BONUSES_KEY],
-  { revalidate: 60, tags: [TIMED_GAME_BONUSES_TAG] },
-);
+  }, 30000);
 
 export async function getActiveTimedGameBonuses(now = new Date()) {
   const timestamp = now.getTime();

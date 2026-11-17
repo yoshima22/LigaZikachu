@@ -1,3 +1,4 @@
+import { memoTtl } from "@/lib/memo-ttl";
 import { unstable_cache, revalidateTag } from "next/cache";
 import { prisma } from "@/lib/prisma";
 
@@ -9,7 +10,7 @@ type GlobalNoticeValue = {
   updatedAt?: string;
 };
 
-export const getGlobalNotice = unstable_cache(
+export const getGlobalNotice = memoTtl(
   async () => {
     try {
       const setting = await prisma.appSetting.findUnique({
@@ -25,10 +26,7 @@ export const getGlobalNotice = unstable_cache(
     } catch {
       return { message: "", updatedAt: null };
     }
-  },
-  [GLOBAL_NOTICE_KEY],
-  { revalidate: 600, tags: [GLOBAL_NOTICE_TAG] },
-);
+  }, 30000);
 
 export function revalidateGlobalNotice() {
   revalidateTag(GLOBAL_NOTICE_TAG);
@@ -120,7 +118,7 @@ export type AckNoticeValue = {
 
 const EMPTY_ACK: AckNoticeValue = { version: 0, title: "", content: "", buttonText: "Entendi", active: false };
 
-export const getAckNotice = unstable_cache(
+export const getAckNotice = memoTtl(
   async (): Promise<AckNoticeValue> => {
     try {
       const setting = await prisma.appSetting.findUnique({ where: { key: ACK_NOTICE_KEY }, select: { value: true } });
@@ -136,10 +134,7 @@ export const getAckNotice = unstable_cache(
     } catch {
       return EMPTY_ACK;
     }
-  },
-  [ACK_NOTICE_KEY],
-  { revalidate: 600, tags: [ACK_NOTICE_TAG] },
-);
+  }, 30000);
 
 export function revalidateAckNotice() {
   revalidateTag(ACK_NOTICE_TAG);

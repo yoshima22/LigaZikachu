@@ -1,4 +1,5 @@
 // Raid dos Líderes de Johto: estado, ataque atômico, prêmios por líder e escolha de mascote. Dados/simulação em johto-raid-sim.ts.
+import { memoTtl } from "@/lib/memo-ttl";
 import { revalidateTag, unstable_cache } from "next/cache";
 import { MascotPersonality, Prisma, ZikaCoinTxType } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
@@ -24,11 +25,11 @@ const DAY_MS = 86_400_000;
 // ── Visibilidade ─────────────────────────────────────────────────────────────
 
 // Cache curto: o layout consulta isto em toda página; o toggle do admin invalida a tag na hora.
-export const isJohtoRaidVisibleToPlayers = unstable_cache(async (): Promise<boolean> => {
+export const isJohtoRaidVisibleToPlayers = memoTtl(async (): Promise<boolean> => {
   if (JOHTO_ADMIN_ONLY) return false;
   const setting = await prisma.appSetting.findUnique({ where: { key: JOHTO_VISIBLE_KEY }, select: { value: true } }).catch(() => null);
   return setting?.value === true;
-}, ["johto-raid-visible"], { revalidate: 60, tags: ["johto-raid-visible"] });
+}, 30000);
 
 export async function setJohtoRaidVisible(visible: boolean) {
   await prisma.appSetting.upsert({ where: { key: JOHTO_VISIBLE_KEY }, create: { key: JOHTO_VISIBLE_KEY, value: visible }, update: { value: visible } });
