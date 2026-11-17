@@ -176,6 +176,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
   const ORDER_STORAGE_KEY = "mascot-item-order-v1";
   const [itemOrder, setItemOrder] = useState<string[]>([]);
   const [reorderMode, setReorderMode] = useState(false);
+  const [itemQuery, setItemQuery] = useState("");
   const [page, setPage] = useState(0);
   const [draggingId, setDraggingId] = useState<string | null>(null);
   const rowRefs = useRef<(HTMLDivElement | null)[]>([]);
@@ -312,10 +313,15 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     for (const b of buffs) if (!seen.has(b.id)) out.push(b);
     return out;
   })();
-  const totalPages = Math.max(1, Math.ceil(orderedBuffs.length / ITEMS_PER_PAGE));
+  // Busca nos itens (nome/descrição). Em "Reorganizar" a lista completa é usada para não bagunçar a ordem.
+  const nq = itemQuery.trim().normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
+  const visibleBuffs = reorderMode || !nq
+    ? orderedBuffs
+    : orderedBuffs.filter((b) => `${b.name} ${b.description ?? ""}`.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase().includes(nq));
+  const totalPages = Math.max(1, Math.ceil(visibleBuffs.length / ITEMS_PER_PAGE));
   const safePage = Math.min(page, totalPages - 1);
   const pageStart = safePage * ITEMS_PER_PAGE;
-  const pageBuffs = orderedBuffs.slice(pageStart, pageStart + ITEMS_PER_PAGE);
+  const pageBuffs = visibleBuffs.slice(pageStart, pageStart + ITEMS_PER_PAGE);
 
   const moveItemTo = (id: string, globalIndex: number) => {
     const ids = orderedBuffs.map((b) => b.id).filter((x) => x !== id);
@@ -488,6 +494,20 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
           </button>
         )}
       </div>
+
+      {!reorderMode && orderedBuffs.length > 1 && (
+        <label className="flex items-center gap-2 rounded-xl border border-border bg-slate-900/40 px-3 py-2">
+          <Search size={14} className="text-slate-500" />
+          <input
+            type="search"
+            value={itemQuery}
+            onChange={(e) => { setItemQuery(e.target.value); setPage(0); }}
+            placeholder="Buscar nos seus itens (nome ou descrição)…"
+            className="w-full bg-transparent text-sm text-slate-200 outline-none placeholder:text-slate-600"
+          />
+        </label>
+      )}
+      {!reorderMode && nq && visibleBuffs.length === 0 && <p className="text-xs text-slate-500">Nenhum item encontrado.</p>}
 
       {reorderMode ? (
         /* Modo de reorganização: lista arrastável (mouse e toque) com ajuste fino */
