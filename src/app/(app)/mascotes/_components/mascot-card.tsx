@@ -1,6 +1,7 @@
 "use client";
 
 import { MascotAbilityPanel } from "./mascot-ability-panel";
+import { criticalChance } from "@/lib/critical";
 import Link from "next/link";
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
@@ -1422,6 +1423,21 @@ export function MascotCard({ mascot, isAdmin = false, compactView = false, onRef
             </Tip>
             );
           })}
+          {(() => {
+            const chance = criticalChance(mascot.statInstinct, mascot.statCharisma);
+            const pctText = (Math.round(chance * 1000) / 10).toString().replace(".", ",");
+            return (
+              <Tip text={`Chance base de acerto crítico em combate: (Instinto ${mascot.statInstinct} + Carisma ${mascot.statCharisma}) ÷ 40 %, +30%, teto natural de 15,6%. Um crítico causa +15% de dano. Habilidades podem somar por cima (teto total 20%).`} wide>
+                <div className="flex items-center gap-2">
+                  <span className="w-4 text-center text-xs shrink-0">💥</span>
+                  <span className="w-16 text-[10px] text-slate-500 shrink-0">Crítico</span>
+                  <div className="flex-1" />
+                  <span className="min-w-[5.5rem] text-right text-[11px] font-bold tabular-nums shrink-0 text-amber-200">{pctText}%</span>
+                  <Info size={9} className="text-slate-700 shrink-0" />
+                </div>
+              </Tip>
+            );
+          })()}
         </div>}
 
         {/* ── Expedição ativa ── */}
