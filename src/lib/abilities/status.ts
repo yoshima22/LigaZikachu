@@ -1,7 +1,7 @@
 // Estados alterados do sistema de habilidades (só no Arena Draft): dados puros, sem motor.
 // Regras definidas pelos GMs na planilha "Novos status".
 
-export type StatusKind = "POISON" | "BURN" | "FREEZE" | "SLEEP" | "PARALYSIS" | "CONFUSION";
+export type StatusKind = "POISON" | "BURN" | "FREEZE" | "SLEEP" | "PARALYSIS" | "CONFUSION" | "FLINCH" | "CHARM";
 
 export type StatusInfo = {
   label: string;
@@ -23,7 +23,14 @@ export const STATUS_INFO: Record<StatusKind, StatusInfo> = {
   SLEEP: { label: "Dormindo", adjective: "dormindo", emoji: "💤", duration: [1, 2], immuneTypes: [], words: ["dormindo", "sono", "adormecido"] },
   PARALYSIS: { label: "Paralisado", adjective: "paralisado", emoji: "⚡", duration: [1, 1], immuneTypes: ["electric"], words: ["paralisado", "paralisia"] },
   CONFUSION: { label: "Confuso", adjective: "confuso", emoji: "😵", duration: [1, 3], immuneTypes: ["psychic"], words: ["confuso", "confusao"] },
+  // Amendrontado: perde a ação da rodada, mas só se ainda não tinha agido nela (não ocupa o "um estado por vez").
+  FLINCH: { label: "Amendrontado", adjective: "amendrontado", emoji: "😨", duration: [1, 1], immuneTypes: [], words: ["amendrontado", "amedrontado", "acovardado"] },
+  // Apaixonado: 50% de chance de perder a ação, só quando o alvo da ação é quem o encantou.
+  CHARM: { label: "Apaixonado", adjective: "apaixonado", emoji: "💘", duration: [1, 2], immuneTypes: [], words: ["apaixonado", "paixao"] },
 };
+
+/** Condenado: o 1º que ataca o portador fica condenado e cai 1 rodada depois que o portador cair (HP vai a zero). Pode ser curado. */
+export const DOOM_INFO = { label: "Condenado", emoji: "💀", immuneTypes: ["ghost", "dark"], delayRounds: 1 };
 
 /** Maldito: acumula com os demais estados e dura até o mascote que o causou cair. */
 export const CURSE_INFO = { label: "Maldito", emoji: "👻", immuneTypes: ["ghost", "dark"], selfDamagePct: 0.05 };
@@ -32,12 +39,17 @@ export const CURSE_INFO = { label: "Maldito", emoji: "👻", immuneTypes: ["ghos
 export const STATUS_RULES = {
   poisonPct: 0.05, // fim do turno
   burnPct: 0.07, // início do turno
-  freezeAgility: 0.2,
+  // Congelado acumula até 3 vezes: cada acúmulo dura 2 rodadas; no 3º o alvo perde a rodada seguinte e tudo se desfaz.
+  freezeAgilityPerStack: 0.1,
+  freezeForcePerStack: 0.05,
+  freezeMaxStacks: 3,
+  freezeStackRounds: 2,
   paralysisSkip: 0.3,
   sleepWake: 0.7,
   confusionSelfHit: 0.2,
   confusionSelfPct: 0.05,
   confusionCure: 0.8,
+  charmSkip: 0.5,
   sandPct: 0.03,
 } as const;
 

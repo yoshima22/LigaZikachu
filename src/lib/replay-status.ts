@@ -10,15 +10,17 @@ import { classify, splitEffect, type EffectKind } from "@/components/replay-effe
 import type { ReplayData } from "@/components/replay/replay-canvas";
 
 /** Condições (estados alterados das habilidades) que mudam a aparência do mascote no campo. */
-export type CondKind = "FREEZE" | "SLEEP" | "PARALYSIS" | "CONFUSION" | "POISON" | "BURN" | "CURSE";
+export type CondKind = "FREEZE" | "SLEEP" | "PARALYSIS" | "CONFUSION" | "POISON" | "BURN" | "CURSE" | "FLINCH" | "CHARM" | "DOOM";
 const COND_BY_ADJ: Record<string, CondKind> = {
   congelado: "FREEZE", dormindo: "SLEEP", paralisado: "PARALYSIS", confuso: "CONFUSION", envenenado: "POISON", queimado: "BURN",
+  amendrontado: "FLINCH", apaixonado: "CHARM", condenado: "DOOM",
 };
 const COND_LABEL: Record<CondKind, string> = {
   FREEZE: "❄️ Congelado", SLEEP: "💤 Dormindo", PARALYSIS: "⚡ Paralisado", CONFUSION: "😵 Confuso",
   POISON: "☠️ Envenenado", BURN: "🔥 Queimado", CURSE: "👻 Maldito",
+  FLINCH: "😨 Amendrontado", CHARM: "💘 Apaixonado", DOOM: "💀 Condenado",
 };
-const ADJ = "(congelado|dormindo|paralisado|confuso|envenenado|queimado)";
+const ADJ = "(congelado|dormindo|paralisado|confuso|envenenado|queimado|amendrontado|apaixonado|condenado)";
 
 export type ActiveStatus = {
   key: string;
@@ -66,6 +68,46 @@ export function statusesAt(data: ReplayData, idx: number): Map<string, ActiveSta
 
   /** Condições vêm como frases fixas do motor (abilities/combat.ts). Retorna true se tratou a frase. */
   const applyCondition = (sentence: string, i: number): boolean => {
+    // Congelado em acúmulos (até 3): cada acúmulo e o congelamento total.
+    let fm = sentence.match(/ganhou 1 acúmulo de Congelado \((\d)\/(\d)/);
+    if (fm) {
+      const id = whoBefore(sentence, "ganhou 1 acúmulo");
+      if (id) setCond(id, "FREEZE", i, `${fm[1]}/${fm[2]} acúmulos (−10% Agilidade e −5% Força por acúmulo)`, null);
+      return Boolean(id);
+    }
+    fm = sentence.match(/chegou a (\d)\/(\d) acúmulos de Congelado/);
+    if (fm) {
+      const id = whoBefore(sentence, "chegou a");
+      if (id) setCond(id, "FREEZE", i, "Totalmente congelado: perde a próxima rodada", null);
+      return Boolean(id);
+    }
+    fm = sentence.match(/O congelamento de (.+?) acabou/);
+    if (fm) {
+      const id = byLongestName.find((c) => c.name === fm![1])?.id;
+      if (id) bucket(id).delete("cond:FREEZE");
+      return Boolean(id);
+    }
+    if (/ficou amendrontado e perde/.test(sentence)) {
+      const id = whoBefore(sentence, "ficou amendrontado");
+      if (id) setCond(id, "FLINCH", i, "Perde a ação desta rodada", null);
+      return Boolean(id);
+    }
+    if (/está amendrontado e perdeu/.test(sentence)) {
+      const id = whoBefore(sentence, "está amendrontado");
+      if (id) bucket(id).delete("cond:FLINCH");
+      return false;
+    }
+    fm = sentence.match(/está condenado por (.+?):/);
+    if (fm) {
+      const id = whoBefore(sentence, "está condenado");
+      if (id) setCond(id, "DOOM", i, `Cai 1 rodada depois de ${fm[1]}`, fm[1]);
+      return Boolean(id);
+    }
+    if (/estava condenado \(por .+?\) e caiu/.test(sentence)) {
+      const id = byLongestName.find((c) => sentence.includes(`${c.name} estava condenado`))?.id;
+      if (id) bucket(id).delete("cond:DOOM");
+      return false;
+    }
     let m = sentence.match(new RegExp(`ficou ${ADJ} por (\\d+) rodada`));
     if (m) {
       const id = whoBefore(sentence, `ficou ${m[1]}`);

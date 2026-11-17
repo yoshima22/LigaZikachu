@@ -1,6 +1,6 @@
 // GERADO por scripts/generate-ability-data.py a partir de docs/habilidades-passivas-mascotes.xlsx. Não editar à mão.
 export type AbilityEffectDef = { name: string; category: string; trigger: string; text: string; activations: number; scale: string | null; min: number | null; max: number | null };
-export type AbilityDef = { name: string; dex?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number; scale?: string } };
+export type AbilityDef = { name: string; dex?: string; x?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number; scale?: string } };
 
 export const ABILITY_EFFECTS: Record<string, AbilityEffectDef> = {
   FURIA_TIPO: {"name":"Fúria elemental","category":"Dano","trigger":"HP baixo (abaixo de 33%)","text":"Se o mascote tem o tipo {T}, seus golpes causam {rng} mais dano.","activations":2,"scale":"Força","min":8,"max":20},
@@ -90,6 +90,8 @@ export const ABILITY_EFFECTS: Record<string, AbilityEffectDef> = {
   VENTOSA: {"name":"Ventosa","category":"Controle","trigger":"Início da luta","text":"Reduz em {rng} a Agilidade do rival com maior Agilidade.","activations":1,"scale":"Vitalidade","min":6,"max":20},
   BONUS_CHANCE: {"name":"Sorte do time","category":"Suporte","trigger":"Passivo","text":"Soma {rng} (pontos percentuais) à chance de todos os efeitos de habilidade dos aliados que dependem de sorte.","activations":0,"scale":"Instinto","min":2,"max":5},
   GUARDA_ABSOLUTA: {"name":"Guarda absoluta","category":"Defesa","trigger":"Ao ser atingido","text":"Golpes sem vantagem de tipo causam {rng} menos dano, mas golpes super efetivos causam 50% a mais.","activations":0,"scale":"Vitalidade","min":30,"max":40},
+  CONDENACAO: {"name":"Condenação","category":"Reflexo","trigger":"Ao ser atingido (1ª vez)","text":"Ao ser atingido pela primeira vez, o atacante fica Condenado: quando este mascote cair, o condenado cai 1 rodada depois (o HP vai a zero). Imunes: Fantasma e Sombrio. Pode ser curado.","activations":1,"scale":null,"min":null,"max":null},
+  DOBRA_ESTADO: {"name":"Sorte dos estados","category":"Suporte","trigger":"Passivo","text":"Dobra a chance dos estados alterados aplicados pelas habilidades dos aliados (Static, Flame Body, Poison Point…), com teto de 50%.","activations":0,"scale":null,"min":null,"max":null},
 };
 
 export const ABILITIES: Record<string, AbilityDef> = {
@@ -103,7 +105,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "anticipation": {"name":"Anticipation","dex":"Avisa se o rival tem um golpe super efetivo.","effect":"ARMADURA"},
   "arena-trap": {"name":"Arena Trap","dex":"Impede os rivais de fugir ou trocar.","effect":"INTIMIDACAO","param":"Agilidade"},
   "armor-tail": {"name":"Armor Tail","dex":"Impede os rivais de usar golpes com prioridade.","effect":"INTIMIDACAO","param":"Agilidade"},
-  "aroma-veil": {"name":"Aroma Veil","dex":"Protege aliados de efeitos que afetam a mente.","effect":"VEU"},
+  "aroma-veil": {"name":"Aroma Veil","dex":"Protege aliados de efeitos que afetam a mente.","effect":"IMUNE_ESTADO","param":"Apaixonado, Confuso e Maldito (também aliados)"},
   "as-one-glastrier": {"name":"As One","dex":"Combina Unnerve (impede frutas) e Chilling Neigh (Ataque sobe ao derrotar).","effect":"EMBALO"},
   "as-one-spectrier": {"name":"As One","dex":"Combina Unnerve (impede frutas) e Grim Neigh (Ataque Especial sobe ao derrotar).","effect":"EMBALO"},
   "aura-break": {"name":"Aura Break","dex":"Inverte e enfraquece as auras Sombria e de Fada.","effect":"ANULAR_BONUS"},
@@ -135,7 +137,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "cotton-down": {"name":"Cotton Down","dex":"Reduz a Velocidade de todos quando atingido.","effect":"REACAO","param":"Agilidade"},
   "cud-chew": {"name":"Cud Chew","dex":"Reaproveita uma fruta já comida.","effect":"CURA_GRADUAL"},
   "cursed-body": {"name":"Cursed Body","dex":"30% de chance de bloquear o golpe que o atingiu.","effect":"ESTADO_CONTATO","param":"maldito","o":{"activations":2,"min":5}},
-  "cute-charm": {"name":"Cute Charm","dex":"30% de chance de causar paixão em quem faz contato.","effect":"REACAO","param":"Força"},
+  "cute-charm": {"name":"Cute Charm","dex":"30% de chance de causar paixão em quem faz contato.","effect":"ESTADO_CONTATO","param":"apaixonado","o":{"max":20}},
   "damp": {"name":"Damp","dex":"Impede explosões em campo.","effect":"IMUNE_INDIRETO"},
   "dancer": {"name":"Dancer","dex":"Repete golpes de dança que vê.","effect":"GOLPE_DUPLO"},
   "dark-aura": {"name":"Dark Aura","dex":"Golpes Sombrios de todos ficam mais fortes.","effect":"AURA","param":"Sombrio"},
@@ -206,7 +208,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "imposter": {"name":"Imposter","dex":"Transforma-se no Pokémon rival ao entrar.","effect":"COPIA_TIPO_RIVAL"},
   "infiltrator": {"name":"Infiltrator","dex":"Atravessa barreiras como Reflect e Light Screen.","effect":"QUEBRA_GUARDA"},
   "innards-out": {"name":"Innards Out","dex":"Ao cair, causa dano igual ao HP que tinha.","effect":"ULTIMO_SUSPIRO"},
-  "inner-focus": {"name":"Inner Focus","dex":"Impede recuar (flinch) e, nas gerações novas, também a Intimidação.","effect":"CORPO_LIMPO"},
+  "inner-focus": {"name":"Inner Focus","dex":"Impede recuar (flinch) e, nas gerações novas, também a Intimidação.","effect":"IMUNE_ESTADO","param":"Amendrontado e Intimidação"},
   "insomnia": {"name":"Insomnia","dex":"Impede o sono.","effect":"IMUNE_ESTADO","param":"Dormindo"},
   "intimidate": {"name":"Intimidate","dex":"Reduz o Ataque dos rivais ao entrar em combate.","effect":"INTIMIDACAO","param":"Força"},
   "intrepid-sword": {"name":"Intrepid Sword","dex":"Aumenta o Ataque ao entrar em combate.","effect":"PODER_BRUTO"},
@@ -252,14 +254,14 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "neutralizing-gas": {"name":"Neutralizing Gas","dex":"Neutraliza as habilidades de todos em campo.","effect":"ANULAR_BONUS"},
   "no-guard": {"name":"No Guard","dex":"Todos os golpes (dele e contra ele) acertam.","effect":"ATACA_APESAR_ESTADO"},
   "normalize": {"name":"Normalize","dex":"Todos os seus golpes viram Normais.","effect":"MAESTRIA_TIPO","param":"Normal"},
-  "oblivious": {"name":"Oblivious","dex":"Impede paixão e provocação.","effect":"CORPO_LIMPO"},
+  "oblivious": {"name":"Oblivious","dex":"Impede paixão e provocação.","effect":"IMUNE_ESTADO","param":"Apaixonado"},
   "opportunist": {"name":"Opportunist","dex":"Copia os aumentos de atributo do rival.","effect":"REVIDE"},
   "orichalcum-pulse": {"name":"Orichalcum Pulse","dex":"Invoca sol forte e aumenta o Ataque.","effect":"AMBIENTE","param":"Fogo e Planta"},
   "overcoat": {"name":"Overcoat","dex":"Protege de dano de clima e de golpes de pó.","effect":"CASCO"},
   "overgrow": {"name":"Overgrow","dex":"Golpes de Planta ficam mais fortes com HP baixo.","effect":"FURIA_TIPO","param":"Planta"},
   "own-tempo": {"name":"Own Tempo","dex":"Impede confusão.","effect":"IMUNE_ESTADO","param":"Confuso"},
   "parental-bond": {"name":"Parental Bond","dex":"Golpes batem duas vezes (a segunda com metade da força).","effect":"GOLPE_DUPLO"},
-  "perish-body": {"name":"Perish Body","dex":"Quem o atinge com contato cai em três turnos.","effect":"ULTIMO_SUSPIRO","o":{"max":15}},
+  "perish-body": {"name":"Perish Body","dex":"Quem o atinge com contato cai em três turnos.","effect":"CONDENACAO"},
   "pickpocket": {"name":"Pickpocket","dex":"Rouba o item de quem o atinge com contato.","effect":"VAMPIRISMO"},
   "pickup": {"name":"Pickup","dex":"Pega itens usados ou largados.","effect":"CURA_GRADUAL"},
   "piercing-drill": {"name":"Piercing Drill","dex":"Golpes de contato atravessam a proteção do alvo.","effect":"QUEBRA_GUARDA"},
@@ -308,7 +310,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "scrappy": {"name":"Scrappy","dex":"Golpes Normais e Lutadores acertam Fantasmas.","effect":"QUEBRA_GUARDA"},
   "screen-cleaner": {"name":"Screen Cleaner","dex":"Anula barreiras como Reflect e Light Screen.","effect":"ANULAR_BONUS"},
   "seed-sower": {"name":"Seed Sower","dex":"Cria terreno de grama ao ser atingido.","effect":"AMBIENTE","param":"Planta"},
-  "serene-grace": {"name":"Serene Grace","dex":"Dobra a chance dos efeitos extras dos golpes.","effect":"GOLPE_FELIZ"},
+  "serene-grace": {"name":"Serene Grace","dex":"Dobra a chance dos efeitos extras dos golpes.","effect":"DOBRA_ESTADO"},
   "shadow-shield": {"name":"Shadow Shield","dex":"Com HP cheio, reduz pela metade o dano recebido.","effect":"ESCAMAS"},
   "shadow-tag": {"name":"Shadow Tag","dex":"Impede os rivais de fugir ou trocar.","effect":"INTIMIDACAO","param":"Agilidade"},
   "sharpness": {"name":"Sharpness","dex":"Golpes cortantes ficam mais fortes.","effect":"MAESTRIA_GOLPE","param":"cortantes"},
@@ -323,7 +325,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "slush-rush": {"name":"Slush Rush","dex":"Dobra a Velocidade no granizo.","effect":"IMPULSO"},
   "sniper": {"name":"Sniper","dex":"Golpes críticos causam ainda mais dano.","effect":"QUEBRA_GUARDA"},
   "snow-cloak": {"name":"Snow Cloak","dex":"Aumenta a esquiva no granizo.","effect":"EVASIVA"},
-  "snow-warning": {"name":"Snow Warning","dex":"Invoca granizo ao entrar.","effect":"AMBIENTE","param":"Gelo"},
+  "snow-warning": {"name":"Snow Warning","dex":"Invoca granizo ao entrar.","x":"No granizo, nas 3 primeiras rodadas, cada rival que não é do tipo Gelo tem de 10% a 20% de chance por rodada de ganhar 1 acúmulo de Congelado.","effect":"AMBIENTE","param":"Gelo"},
   "solar-power": {"name":"Solar Power","dex":"Ataque Especial maior sob sol forte, com custo de HP.","effect":"PODER_BRUTO"},
   "solid-rock": {"name":"Solid Rock","dex":"Reduz o dano de golpes super efetivos.","effect":"ARMADURA"},
   "soul-heart": {"name":"Soul-Heart","dex":"Ataque Especial sobe sempre que qualquer Pokémon cai.","effect":"VINGANCA"},
@@ -340,7 +342,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "steam-engine": {"name":"Steam Engine","dex":"Velocidade sobe muito ao ser atingido por Fogo ou Água.","effect":"REVIDE"},
   "steelworker": {"name":"Steelworker","dex":"Golpes de Metal ficam mais fortes.","effect":"MAESTRIA_TIPO","param":"Metal"},
   "steely-spirit": {"name":"Steely Spirit","dex":"Golpes de Metal dos aliados ficam mais fortes.","effect":"AURA","param":"Metal"},
-  "stench": {"name":"Stench","dex":"10% de chance de fazer o alvo recuar.","effect":"TOQUE","param":"Instinto"},
+  "stench": {"name":"Stench","dex":"10% de chance de fazer o alvo recuar.","effect":"ESTADO_TOQUE","param":"amendrontado","o":{"max":12}},
   "sticky-hold": {"name":"Sticky Hold","dex":"Impede que lhe roubem o item.","effect":"CORPO_LIMPO"},
   "storm-drain": {"name":"Storm Drain","dex":"Atrai golpes de Água e ganha Ataque Especial.","effect":"PARARAIO","param":"Água"},
   "strong-jaw": {"name":"Strong Jaw","dex":"Golpes de mordida ficam mais fortes.","effect":"MAESTRIA_GOLPE","param":"de mordida"},
@@ -363,7 +365,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "tera-shift": {"name":"Tera Shift","dex":"Assume a forma Terastal ao entrar.","effect":"ARMADURA"},
   "teraform-zero": {"name":"Teraform Zero","dex":"Neutraliza clima e terreno ao assumir a forma Estelar.","effect":"ANULAR_BONUS"},
   "teravolt": {"name":"Teravolt","dex":"Ignora habilidades do alvo que atrapalhariam o golpe.","effect":"QUEBRA_GUARDA"},
-  "thermal-exchange": {"name":"Thermal Exchange","dex":"Ataque sobe ao ser atingido por Fogo e não queima.","effect":"REVIDE"},
+  "thermal-exchange": {"name":"Thermal Exchange","dex":"Ataque sobe ao ser atingido por Fogo e não queima.","x":"Não pode ser queimado.","effect":"REVIDE"},
   "thick-fat": {"name":"Thick Fat","dex":"Reduz pela metade o dano de Fogo e Gelo.","effect":"PELAGEM","param":"do tipo Fogo ou Gelo"},
   "tinted-lens": {"name":"Tinted Lens","dex":"Golpes pouco efetivos causam o dobro de dano.","effect":"LENTE"},
   "torrent": {"name":"Torrent","dex":"Golpes de Água ficam mais fortes com HP baixo.","effect":"FURIA_TIPO","param":"Água"},
@@ -386,7 +388,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "volt-absorb": {"name":"Volt Absorb","dex":"Recupera HP ao ser atingido por golpes Elétricos.","effect":"ABSORCAO","param":"Elétrico"},
   "wandering-spirit": {"name":"Wandering Spirit","dex":"Troca de habilidade com quem faz contato.","effect":"REACAO","param":"Instinto"},
   "water-absorb": {"name":"Water Absorb","dex":"Recupera HP ao ser atingido por golpes de Água.","effect":"ABSORCAO","param":"Água"},
-  "water-bubble": {"name":"Water Bubble","dex":"Reduz o dano de Fogo, dobra o de Água e impede queimaduras.","effect":"PELAGEM","param":"do tipo Fogo"},
+  "water-bubble": {"name":"Water Bubble","dex":"Reduz o dano de Fogo, dobra o de Água e impede queimaduras.","x":"Não pode ser queimado.","effect":"PELAGEM","param":"do tipo Fogo"},
   "water-compaction": {"name":"Water Compaction","dex":"Defesa sobe muito ao ser atingido por Água.","effect":"PREPARO"},
   "water-veil": {"name":"Water Veil","dex":"Impede queimaduras.","effect":"IMUNE_ESTADO","param":"Queimado"},
   "weak-armor": {"name":"Weak Armor","dex":"Ao ser atingido por golpe físico, perde Defesa e ganha Velocidade.","effect":"ARMADURA_FRACA"},
@@ -405,6 +407,7 @@ export const ABILITIES: Record<string, AbilityDef> = {
   "air-balloon": {"name":"Air Balloon","dex":"Flutua com um balão: esquiva parcial.","effect":"EVASIVA","o":{"activations":1,"min":12,"max":20,"scale":"Carisma"}},
   "lum-protection": {"name":"Lum Protection","dex":"Protege aliados com a força das aves.","effect":"GUARDA_TIPO","param":"Voador"},
   "quick-claw": {"name":"Quick Claw","dex":"Às vezes age primeiro.","effect":"ATAQUE_RAPIDO"},
+  "pastel-veil": {"name":"Pastel Veil","dex":"Protege o mascote e os aliados de envenenamento.","effect":"IMUNE_ESTADO","param":"Envenenado (também aliados)"},
 };
 
 // pokemonId -> [habilidades comuns, habilidade oculta]

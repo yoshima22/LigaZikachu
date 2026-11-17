@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { KeywordText } from "@/components/keyword-text";
 import { ExternalLink, Lock, Search } from "lucide-react";
 import { getStaticSpriteUrl } from "@/lib/mascot-data";
 import {
@@ -37,7 +38,7 @@ function AbilityBlock({ info, badge }: { info: AbilityInfo; badge?: React.ReactN
         {info.effectName && <span className="text-[10px] text-slate-500">Efeito: {info.effectName}</span>}
       </div>
       {info.dex && <p className="mt-1.5 text-[10px] text-slate-500">Na Pokédex: {info.dex}</p>}
-      <p className="mt-1 leading-relaxed text-slate-300">{info.hasEffect ? "No combate: " : ""}{describeAbility(info)}</p>
+      <p className="mt-1 leading-relaxed text-slate-300">{info.hasEffect ? "No combate: " : ""}<KeywordText text={describeAbility(info)} /></p>
       {info.hasEffect && (
         <p className="mt-1 text-[10px] text-slate-500">
           Gatilho: <b className="text-slate-400">{info.trigger}</b>

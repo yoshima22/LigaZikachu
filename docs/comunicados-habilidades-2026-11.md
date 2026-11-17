@@ -24,10 +24,18 @@ O crítico passou a ser uma mecânica padrão de combate, em **todos os modos**,
 - as habilidades que interagem com crítico entram junto da liberação das habilidades em cada modo.
 
 **🧪 O que vem por aí (nos próximos dias)**
-- novos estados alterados: **Amendrontado**, **Apaixonado**, **Condenado** e um **Congelado em acúmulos** (até 3; no 3º o alvo fica paralisado por 1 rodada);
 - habilidades revisadas para usar o atributo que a Pokédex cita (Força, Instinto, Vitalidade, Agilidade) em vez de só “mais dano”;
 - habilidades exclusivas por mascote (Ditto copia o sprite e os tipos do rival; Arceus e Silvally escolhem o próprio tipo);
-- **palavras-chave nas descrições**: passe o mouse (ou toque) em um termo como “Queimado”, “Instinto” ou “Ativação” para ver a explicação detalhada.
+
+**🧪 Novos estados alterados (já no jogo, nos modos com habilidades)**
+- **Amendrontado:** perde a ação da rodada, só se ainda não tinha agido (Stench);
+- **Apaixonado:** 50% de perder a ação, só contra quem o encantou (Cute Charm);
+- **Condenado:** o 1º que ataca o portador cai 1 rodada depois dele (Perish Body); imunes Fantasma e Sombrio, dá para curar;
+- **Congelado em acúmulos:** até 3 (cada um: −10% Agilidade e −5% Força por 2 rodadas); no 3º o alvo perde a rodada seguinte e o gelo some com tudo (Snow Warning).
+Todos aparecem no log e no replay moderno.
+
+**📖 Palavras-chave nas descrições**
+Passe o mouse (ou toque) em termos como “Queimado”, “Instinto”, “Ativação” ou “Crítico” nas descrições das habilidades para ver a explicação detalhada, com números e cálculos. O Manual ganhou um glossário de combate.
 
 Tudo isso já está no **Manual** (seção Habilidades Passivas). Qualquer dúvida, é só chamar a staff!
 
@@ -53,7 +61,7 @@ A Sala de Treino com Habilidades some nesse dia (vira treino comum). Suas equipe
 • Aparece no replay moderno (selo CRÍTICO!) e no log
 • Habilidades que mexem com crítico entram junto da liberação por modo
 
-❄️ Estados alterados (chegando)
+❄️ Estados alterados (NOVOS, nos modos com habilidades)
 • Amendrontado: perde a ação da rodada, só se o alvo ainda não agiu
 • Apaixonado: 50% de perder a ação, só contra quem o encantou
 • Condenado: o 1º que ataca o mascote fica condenado e cai 1 rodada depois dele. Imunes: Fantasma e Sombrio. Dá para curar
@@ -65,7 +73,8 @@ A Sala de Treino com Habilidades some nesse dia (vira treino comum). Suas equipe
 • Suction Cups: imune a reduções de Agilidade e à anulação de habilidade
 • Pressure: rivais perdem 1 ativação; Unnerve/As One: desligam curas de fruta dos rivais
 • Ruin (Sword/Tablets/Vessel/Beads): Vitalidade / Força / Instinto / Carisma
-• Cute Charm, Oblivious, Aroma Veil, Stench, Inner Focus, Steadfast: ligados aos novos estados
+• Cute Charm (Apaixonado), Stench (Amendrontado), Perish Body (Condenado), Snow Warning (Congelado) já aplicam os novos estados
+• Oblivious imune a Apaixonado; Aroma Veil: aliados imunes a Apaixonado/Confuso/Maldito; Inner Focus imune a Amendrontado e à Intimidação
 • Serene Grace: dobra a chance dos estados aplicados pelas habilidades dos seus aliados (teto 50%)
 • Thermal Exchange e Water Bubble: imunes a queimadura. Pastel Veil entra no jogo
 • Huge Power, Defiant, Moxie, Competitive, Berserk, Steadfast, Unburden e outras passam a aumentar o atributo da Pokédex (Força, Instinto, Vitalidade, Agilidade) em vez de só dano
@@ -73,6 +82,6 @@ A Sala de Treino com Habilidades some nesse dia (vira treino comum). Suas equipe
 • Ditto/Mew: copiam o sprite e os tipos do rival mais forte (atributos próprios). Arceus e Silvally: escolhem o tipo no card
 • Habilidades de item (Pickup, Honey Gather, Harvest, etc.) serão passivas de expedição (mascotes nos favoritos); em combate não fazem nada
 
-📖 Palavras-chave nas descrições (em breve): passe o mouse/toque em Queimado, Instinto, Ativação... para ver a explicação completa.
+📖 Palavras-chave nas descrições (JÁ NO AR): passe o mouse/toque em Queimado, Instinto, Ativação, Crítico... para ver a explicação completa. Glossário novo no Manual.
 Tudo no Manual > Habilidades Passivas.
 ```

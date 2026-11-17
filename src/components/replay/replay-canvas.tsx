@@ -1224,6 +1224,7 @@ function conditionTint(conds: CondKind[], now: number): { color: string; alpha: 
   if (conds.includes("BURN")) return { color: "#fb923c", alpha: 0.18 + 0.12 * Math.abs(Math.sin(now * 0.012)) };
   if (conds.includes("POISON")) return { color: "#a855f7", alpha: 0.14 + 0.14 * (0.5 + 0.5 * Math.sin(now * 0.004)) };
   if (conds.includes("CURSE")) return { color: "#4c1d95", alpha: 0.28 };
+  if (conds.includes("DOOM")) return { color: "#1f2937", alpha: 0.3 };
   return null;
 }
 
@@ -1306,6 +1307,27 @@ function drawConditionFront(ctx: CanvasRenderingContext2D, conds: CondKind[], x:
       ctx.globalAlpha = 0.6 + 0.4 * Math.sin(ang);
       ctx.fillText("✦", x + Math.cos(ang) * 16 * dz, y - 34 * dz + Math.sin(ang) * 5 * dz);
     }
+  }
+  if (conds.includes("CHARM")) {
+    // corações subindo
+    ctx.textAlign = "center";
+    for (let i = 0; i < 3; i++) {
+      const p = ((now / 1700) + i / 3) % 1;
+      ctx.globalAlpha = Math.sin(p * Math.PI);
+      ctx.font = `${Math.round((10 + p * 6) * dz)}px system-ui`;
+      ctx.fillText("💘", x + (i - 1) * 14 * dz, y - (24 + p * 36) * dz);
+    }
+  }
+  if (conds.includes("DOOM")) {
+    // caveira pulsando sobre a cabeça
+    ctx.textAlign = "center"; ctx.globalAlpha = 0.65 + 0.35 * Math.sin(now * 0.005);
+    ctx.font = `${Math.round(16 * dz)}px system-ui`;
+    ctx.fillText("💀", x, y - 42 * dz);
+  }
+  if (conds.includes("FLINCH")) {
+    ctx.textAlign = "center"; ctx.globalAlpha = 0.9;
+    ctx.font = `${Math.round(15 * dz)}px system-ui`;
+    ctx.fillText("😨", x + Math.sin(now * 0.03) * 2 * dz, y - 40 * dz);
   }
   if (conds.includes("POISON")) {
     ctx.fillStyle = "#c084fc";

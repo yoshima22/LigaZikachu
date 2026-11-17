@@ -4,7 +4,7 @@ import type { ArenaMascot } from "@/lib/arena-z";
 import { TYPE_ADVANTAGE } from "@/lib/mascot-data";
 import { abilityDebuffStat, abilityTypes, abilityValue, getAbilityInfo, type AbilityInfo } from "./index";
 import {
-  CURSE_INFO, STATUS_INFO, STATUS_RULES, paramIncludesAllies, paramIsAllStatuses, paramIsRandom, paramMentionsCurse, paramNeedsSun, statusesInParam,
+  CURSE_INFO, DOOM_INFO, STATUS_INFO, STATUS_RULES, paramIncludesAllies, paramIsAllStatuses, paramIsRandom, paramMentionsCurse, paramNeedsSun, statusesInParam,
   type StatusKind,
 } from "./status";
 
@@ -62,6 +62,15 @@ export type AbilityRuntime = {
   swings: Record<string, number>;
   /** Habilidade anulada até a rodada indicada (Múmia). */
   silenced: Record<string, number>;
+  /** Congelado em acúmulos: cada acúmulo vale (since, until]; no 3º, `lockRound` é a rodada em que o alvo não age. */
+  freeze: Record<string, { stacks: Array<{ since: number; until: number }>; lockRound: number | null; sourceName: string }>;
+  /** Amendrontado: rodada em que o alvo perde a ação. */
+  flinch: Record<string, number>;
+  /** Última rodada em que cada mascote começou uma ação (Amendrontado só pega quem ainda não agiu). */
+  acted: Record<string, number>;
+  /** Condenado (portador -> quem foi marcado) e o marcado (-> rodada em que cai, depois que o portador cair). */
+  doom: Record<string, { markedId: string; markedName: string }>;
+  doomed: Record<string, { holderName: string; dieRound: number | null }>;
 };
 
 export type AbilityStandalone = {
@@ -92,6 +101,7 @@ export function emptyAbilityRuntime(): AbilityRuntime {
   return {
     started: false, uses: {}, pending: {}, agility: {}, ambient: { A: null, D: null }, armed: [], origins: {}, anular: { A: false, D: false },
     status: {}, curse: {}, field: { sol: false, chuva: false, areia: false, sandUntil: 0 }, tempAgility: {}, tempShield: {}, types: {}, disguised: [], weak: [], traced: {}, swings: {}, silenced: {},
+    freeze: {}, flinch: {}, acted: {}, doom: {}, doomed: {},
   };
 }
 
@@ -158,13 +168,20 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
 
   // ── Estados alterados ──────────────────────────────────────────────────────
   const statusLabel = (kind: StatusKind) => STATUS_INFO[kind].label;
-  const hasAnyStatus = (m: ArenaMascot) => Boolean(rt.status[m.id]);
+  const freezeStacks = (id: string) => {
+    const fz = rt.freeze[id];
+    if (!fz) return 0;
+    const round = host.getRound();
+    return fz.lockRound !== null ? STATUS_RULES.freezeMaxStacks : fz.stacks.filter((s) => round > s.since && round <= s.until).length;
+  };
+  const hasAnyStatus = (m: ArenaMascot) => Boolean(rt.status[m.id]) || Boolean(rt.freeze[m.id]) || Boolean(rt.doomed[m.id]);
   /** O estado atual do mascote bate com o parâmetro ("envenenado", "qualquer estado alterado"...)? */
   const matchesStatus = (m: ArenaMascot, param: string | null) => {
     const current = rt.status[m.id];
-    if (!current) return false;
-    if (paramIsAllStatuses(param)) return true;
-    return statusesInParam(param).includes(current.kind);
+    if (paramIsAllStatuses(param)) return Boolean(current) || Boolean(rt.freeze[m.id]);
+    const wanted = statusesInParam(param);
+    if (wanted.includes("FREEZE") && rt.freeze[m.id]) return true;
+    return Boolean(current) && wanted.includes(current!.kind);
   };
   const randInt = (min: number, max: number) => min + Math.floor(host.rand() * (max - min + 1));
   /** Estrela da vitória: bônus à chance de TODOS os efeitos de habilidade que dependem de sorte dos aliados. */
@@ -186,19 +203,32 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     }
     return bonus;
   };
+  /** Sorteio de um estado aplicado por habilidade de `owner`: soma os bônus e, com Serene Grace num aliado, dobra a chance (teto 50%). */
+  const statusRoll = (owner: ArenaMascot, base: number) => {
+    let p = base + statusChanceBonus(owner);
+    if (alive(teamOf(owner)).some((x) => heldAs(x, "DOBRA_ESTADO"))) p *= 2;
+    return host.rand() < Math.min(0.5, p);
+  };
   const highestStat = (m: ArenaMascot): Stat4 => {
     const s = stats(m);
     return (["force", "instinct", "agility", "vitality"] as Stat4[]).reduce((best, k) => (s[k] > s[best] ? k : best), "force" as Stat4);
   };
 
   /** Imunidade por tipo ou habilidade (do próprio mascote ou de um aliado "protetor"). */
-  const statusBlockedBy = (target: ArenaMascot, kind: StatusKind | "CURSE"): { by: ArenaMascot; h: Held } | null => {
+  const SLUG_IMMUNITY: Record<string, StatusKind[]> = { "thermal-exchange": ["BURN"], "water-bubble": ["BURN"] };
+  const immuneToIntimidate = (x: ArenaMascot) => {
+    const g = heldAs(x, "IMUNE_ESTADO");
+    return Boolean(g && /intimida/i.test(g.info.param ?? ""));
+  };
+  const statusBlockedBy = (target: ArenaMascot, kind: StatusKind | "CURSE" | "DOOM"): { by: ArenaMascot; h: Held } | null => {
+    const own = held(target);
+    if (own && kind !== "CURSE" && kind !== "DOOM" && SLUG_IMMUNITY[own.info.slug]?.includes(kind)) return { by: target, h: own };
     for (const holder of alive(teamOf(target))) {
       const h = heldAs(holder, "IMUNE_ESTADO");
       if (!h) continue;
       if (holder.id !== target.id && !paramIncludesAllies(h.info.param)) continue;
       if (paramNeedsSun(h.info.param) && !rt.field.sol) continue;
-      const covers = paramIsAllStatuses(h.info.param) || (kind !== "CURSE" && statusesInParam(h.info.param).includes(kind)) || (kind === "CURSE" && paramMentionsCurse(h.info.param));
+      const covers = paramIsAllStatuses(h.info.param) || (kind !== "CURSE" && kind !== "DOOM" && statusesInParam(h.info.param).includes(kind)) || (kind === "CURSE" && paramMentionsCurse(h.info.param));
       if (covers) return { by: holder, h };
     }
     return null;
@@ -208,7 +238,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
    * Ponto único de aplicação de estado alterado. Respeita imunidades (tipo e habilidade), a regra de um estado por vez
    * (Maldito acumula), "só um paralisado por autor" e devolve notas de log. `chance` já deve incluir os bônus.
    */
-  function applyStatus(args: { target: ArenaMascot; source: ArenaMascot; kind: StatusKind | "CURSE"; label: string; allowReturn?: boolean }): string[] {
+  function applyStatus(args: { target: ArenaMascot; source: ArenaMascot; kind: StatusKind | "CURSE" | "DOOM"; label: string; allowReturn?: boolean }): string[] {
     const { target, source, kind } = args;
     const notes: string[] = [];
     if (hpOf(target) <= 0) return notes;
@@ -220,10 +250,11 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         return notes;
       }
     }
-    const name = kind === "CURSE" ? CURSE_INFO.label : statusLabel(kind);
-    const emoji = kind === "CURSE" ? CURSE_INFO.emoji : STATUS_INFO[kind].emoji;
+    const special = kind === "CURSE" ? CURSE_INFO : kind === "DOOM" ? DOOM_INFO : null;
+    const name = special ? special.label : statusLabel(kind as StatusKind);
+    const emoji = special ? special.emoji : STATUS_INFO[kind as StatusKind].emoji;
     // Imunidade por tipo (Corrosão dos aliados pode ignorar a de Veneno/Metal).
-    const immuneTypes = kind === "CURSE" ? CURSE_INFO.immuneTypes : STATUS_INFO[kind].immuneTypes;
+    const immuneTypes = special ? special.immuneTypes : STATUS_INFO[kind as StatusKind].immuneTypes;
     const targetTypes = host.typesOf(target);
     if (immuneTypes.some((t) => targetTypes.includes(t))) {
       let ignored = false;
@@ -247,6 +278,23 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       notes.push(say(blocker.by, blocker.h, `${target.name} não pode ficar ${name.toLowerCase()}.`));
       return notes;
     }
+    if (kind === "DOOM") {
+      if (rt.doom[source.id]) return notes; // só o primeiro que atacar fica condenado
+      rt.doom[source.id] = { markedId: target.id, markedName: target.name };
+      rt.doomed[target.id] = { holderName: source.name, dieRound: null };
+      notes.push(`${emoji} ${target.name} está condenado por ${source.name}: quando ${source.name} cair, ${target.name} cai 1 rodada depois (o HP vai a zero).`);
+      return notes;
+    }
+    if (kind === "FLINCH") {
+      if (rt.acted[target.id] === host.getRound()) {
+        notes.push(`${emoji} ${target.name} já tinha agido nesta rodada: o susto não adiantou.`);
+        return notes;
+      }
+      rt.flinch[target.id] = host.getRound();
+      notes.push(`${emoji} ${target.name} ficou amendrontado e perde a ação desta rodada (${args.label}, de ${source.name}).`);
+      return notes;
+    }
+    if (kind === "FREEZE") return [...notes, ...applyFreeze(target, source, args.label)];
     if (kind === "CURSE") {
       if (rt.curse[target.id]) return notes;
       rt.curse[target.id] = { sourceId: source.id, sourceName: source.name };
@@ -270,7 +318,6 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     const round = host.getRound();
     rt.status[target.id] = { kind, since: round, until: round + duration, sourceId: source.id, sourceName: source.name };
     notes.push(`${emoji} ${target.name} ficou ${STATUS_INFO[kind].adjective} por ${duration} rodada${duration > 1 ? "s" : ""} (${args.label}, de ${source.name}).`);
-    if (kind === "FREEZE") notes.push(...applyDebuff({ target, source, stat: "agility", pct: STATUS_RULES.freezeAgility, label: "Congelado" }));
     // Sincronia: devolve o estado recebido a quem o causou.
     if (args.allowReturn !== false) {
       const sync = heldAs(target, "ESTADO_DEVOLVE");
@@ -281,19 +328,38 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     return notes;
   }
 
-  function clearStatus(m: ArenaMascot, byName: string): string | null {
-    const st = rt.status[m.id];
-    if (!st) return null;
-    delete rt.status[m.id];
-    if (st.kind === "FREEZE") {
-      const d = { ...(host.debuffs.get(m.id) ?? {}) };
-      if ((d.agility ?? 0) > 0) {
-        delete d.agility;
-        host.debuffs.set(m.id, d);
-        delete rt.origins[m.id]?.agility;
-      }
+  /** Congelado em acúmulos (até 3). Cada acúmulo: Agilidade -10% e Força -5% por 2 rodadas; no 3º, o alvo perde a rodada seguinte e o gelo some com tudo. */
+  function applyFreeze(target: ArenaMascot, source: ArenaMascot, label: string): string[] {
+    const round = host.getRound();
+    const fz = (rt.freeze[target.id] ??= { stacks: [], lockRound: null, sourceName: source.name });
+    if (fz.lockRound !== null) return [`❄️ ${target.name} já está totalmente congelado.`];
+    fz.stacks = fz.stacks.filter((st) => round <= st.until);
+    fz.stacks.push({ since: round, until: round + STATUS_RULES.freezeStackRounds });
+    const n = fz.stacks.length;
+    if (n >= STATUS_RULES.freezeMaxStacks) {
+      fz.lockRound = round + 1;
+      return [`❄️ ${target.name} chegou a ${n}/${STATUS_RULES.freezeMaxStacks} acúmulos de Congelado (${label}, de ${source.name}): fica totalmente congelado e não age na rodada ${round + 1}; depois o gelo se desfaz.`];
     }
-    return `${STATUS_INFO[st.kind].emoji} ${m.name} deixou de estar ${STATUS_INFO[st.kind].adjective} (${byName}).`;
+    return [`❄️ ${target.name} ganhou 1 acúmulo de Congelado (${n}/${STATUS_RULES.freezeMaxStacks}; ${label}, de ${source.name}): Agilidade -${Math.round(STATUS_RULES.freezeAgilityPerStack * 100)}% e Força -${Math.round(STATUS_RULES.freezeForcePerStack * 100)}% por ${STATUS_RULES.freezeStackRounds} rodadas.`];
+  }
+
+  function clearStatus(m: ArenaMascot, byName: string): string | null {
+    const parts: string[] = [];
+    const st = rt.status[m.id];
+    if (st) {
+      delete rt.status[m.id];
+      parts.push(`${STATUS_INFO[st.kind].emoji} ${m.name} deixou de estar ${STATUS_INFO[st.kind].adjective} (${byName}).`);
+    }
+    if (rt.freeze[m.id]) {
+      delete rt.freeze[m.id];
+      parts.push(`❄️ ${m.name} deixou de estar congelado (${byName}).`);
+    }
+    if (rt.doomed[m.id]) {
+      delete rt.doomed[m.id];
+      for (const [holderId, d] of Object.entries(rt.doom)) if (d.markedId === m.id) delete rt.doom[holderId];
+      parts.push(`${DOOM_INFO.emoji} ${m.name} deixou de estar condenado (${byName}).`);
+    }
+    return parts.length ? parts.join(" ") : null;
   }
 
   /** Perda de HP direta (queimadura, veneno, areia...): trata quedas. */
@@ -362,7 +428,10 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
       const v = value(m, h);
       const head = say(m, h, `reduz ${statLabel[stat]} dos rivais em ${pct(v)}.`);
       const notes: string[] = [];
-      for (const foe of alive(foesOf(m))) notes.push(...applyDebuff({ target: foe, source: m, stat, pct: v, label: `Habilidade ${h.info.name}` }));
+      for (const foe of alive(foesOf(m))) {
+        if (immuneToIntimidate(foe)) { notes.push(`${foe.name} é imune à Intimidação.`); continue; }
+        notes.push(...applyDebuff({ target: foe, source: m, stat, pct: v, label: `Habilidade ${h.info.name}` }));
+      }
       standalone.push({ actor: m, text: [head, ...notes].join(" "), events: flushEvents() });
     }
     // Ventosa (Suction Cups): reduz a Agilidade do rival mais ágil.
@@ -413,6 +482,26 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     rt.field.sol = false;
     rt.field.chuva = false;
     rt.field.areia = false;
+    for (const [id, fz] of Object.entries(rt.freeze)) {
+      if (fz.lockRound !== null && round > fz.lockRound) {
+        delete rt.freeze[id];
+        const m = byId.get(id);
+        if (m && hpOf(m) > 0) standalone.push({ actor: m, text: `❄️ O congelamento de ${m.name} acabou e levou todos os acúmulos.` });
+      } else if (fz.lockRound === null) {
+        fz.stacks = fz.stacks.filter((st) => round <= st.until);
+        if (fz.stacks.length === 0) delete rt.freeze[id];
+      }
+    }
+    for (const [id, d] of Object.entries(rt.doomed)) {
+      if (d.dieRound === null || round < d.dieRound) continue;
+      delete rt.doomed[id];
+      const m = byId.get(id);
+      if (m && hpOf(m) > 0) {
+        const notes: string[] = [];
+        loseHp(m, hpOf(m), null, notes);
+        standalone.push({ actor: m, target: m, hpAfter: 0, text: [`${DOOM_INFO.emoji} ${m.name} estava condenado (por ${d.holderName}) e caiu.`, ...notes].join(" ") });
+      }
+    }
     for (const id of Object.keys(rt.tempAgility)) if (rt.tempAgility[id].until < round) delete rt.tempAgility[id];
     for (const id of Object.keys(rt.tempShield)) if (rt.tempShield[id].until < round) delete rt.tempShield[id];
     for (const side of ["A", "D"] as const) {
@@ -427,6 +516,14 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
           if (!rt.ambient[side] || v > rt.ambient[side]!.v) rt.ambient[side] = { types: abilityTypes(h.info), v };
           if (abilityTypes(h.info).includes("fire")) rt.field.sol = true;
           standalone.push({ actor: m, text: say(m, h, `aliados do tipo ${h.info.param} causam ${pct(v)} mais dano nesta rodada.`) });
+          // Snow Warning: o granizo pode congelar (1 acúmulo) rivais que não sejam do tipo Gelo.
+          if (h.info.slug === "snow-warning") {
+            const chance = 0.1 + 0.1 * Math.min(1, stats(m).instinct / 250);
+            for (const foe of alive(foesOf(m))) {
+              if (host.typesOf(foe).includes("ice") || !roll(m, chance)) continue;
+              standalone.push({ actor: m, target: foe, text: [`🌨️ O granizo de ${m.name} atinge ${foe.name}.`, ...applyStatus({ target: foe, source: m, kind: "FREEZE", label: `Habilidade ${h.info.name}` })].join(" ") });
+            }
+          }
         } else if (code === "CLIMA_CHUVA" && round <= 3 && hasLeft(m, h)) {
           const v = value(m, h);
           rt.field.chuva = true;
@@ -775,6 +872,21 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   }
 
   function onFall(fallen: ArenaMascot, killer: ArenaMascot | null, notes: string[]) {
+    // Condenado: o marcado cai 1 rodada depois do portador; se o marcado cair antes, a marca some.
+    const doomMark = rt.doom[fallen.id];
+    if (doomMark) {
+      delete rt.doom[fallen.id];
+      const marked = byId.get(doomMark.markedId);
+      const rec = rt.doomed[doomMark.markedId];
+      if (marked && rec && hpOf(marked) > 0) {
+        rec.dieRound = host.getRound() + DOOM_INFO.delayRounds;
+        notes.push(`${DOOM_INFO.emoji} ${fallen.name} caiu: ${marked.name}, condenado, cai na rodada ${rec.dieRound}.`);
+      }
+    }
+    if (rt.doomed[fallen.id]) {
+      delete rt.doomed[fallen.id];
+      for (const [holderId, d] of Object.entries(rt.doom)) if (d.markedId === fallen.id) delete rt.doom[holderId];
+    }
     // Vingança: aliados do caído carregam o próximo golpe.
     for (const ally of alive(teamOf(fallen))) {
       const h = heldAs(ally, "VINGANCA");
@@ -860,10 +972,10 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         const before = hpOf(a.target);
         healTarget(a.target, gain);
         notes.push(say(a.target, t, `recuperou ${hpOf(a.target) - before} HP.`));
-      } else if (code === "ESTADO_CONTATO" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && host.rand() < value(a.target, t) + statusChanceBonus(a.target)) {
+      } else if (code === "ESTADO_CONTATO" && targetAlive && hasLeft(a.target, t) && hpOf(a.actor) > 0 && statusRoll(a.target, value(a.target, t))) {
         const kind = pickStatus(t.info.param);
         if (kind) notes.push(say(a.target, t, `reagiu ao golpe.`), ...applyStatus({ target: a.actor, source: a.target, kind, label: `Habilidade ${t.info.name}` }));
-      } else if (code === "ESTADO_ALEATORIO" && hasLeft(a.target, t) && host.rand() < value(a.target, t) + statusChanceBonus(a.target)) {
+      } else if (code === "ESTADO_ALEATORIO" && hasLeft(a.target, t) && statusRoll(a.target, value(a.target, t))) {
         const foes = alive(foesOf(a.target));
         const kind = pickStatus(t.info.param);
         const victim = foes[Math.floor(host.rand() * foes.length)];
@@ -875,6 +987,8 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         const theirs = getAbilityInfo(config[a.actor.id]?.slug)?.name ?? "habilidade";
         rt.silenced[a.actor.id] = host.getRound() + 2; // esta rodada e as 2 seguintes
         notes.push(say(a.target, t, `anulou ${theirs} de ${a.actor.name} por 3 rodadas.`));
+      } else if (code === "CONDENACAO" && hasLeft(a.target, t) && hpOf(a.actor) > 0 && !rt.doom[a.target.id]) {
+        notes.push(say(a.target, t, `condenou ${a.actor.name}.`), ...applyStatus({ target: a.actor, source: a.target, kind: "DOOM", label: `Habilidade ${t.info.name}` }));
       } else if (code === "ARMADURA_FRACA" && targetAlive && hasLeft(a.target, t) && !rt.weak.includes(a.target.id)) {
         const v = value(a.target, t);
         rt.weak.push(a.target.id);
@@ -901,7 +1015,7 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
         notes.push(say(a.actor, h, `debilitou o alvo.`), ...applyDebuff({ target: a.target, source: a.actor, stat, pct: v, label: `Habilidade ${h.info.name}` }));
       }
     }
-    if (h && h.info.effectCode === "ESTADO_TOQUE" && targetAlive && hasLeft(a.actor, h) && hpOf(a.actor) > 0 && host.rand() < value(a.actor, h) + statusChanceBonus(a.actor)) {
+    if (h && h.info.effectCode === "ESTADO_TOQUE" && targetAlive && hasLeft(a.actor, h) && hpOf(a.actor) > 0 && statusRoll(a.actor, value(a.actor, h))) {
       const kind = pickStatus(h.info.param);
       if (kind) notes.push(say(a.actor, h, `o toque afetou o alvo.`), ...applyStatus({ target: a.target, source: a.actor, kind, label: `Habilidade ${h.info.name}` }));
     }
@@ -983,6 +1097,19 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
    */
   function onActionStart(actor: ArenaMascot, actionIndex: number): { skip: boolean } {
     if (hpOf(actor) <= 0) return { skip: true };
+    {
+      const rnd = host.getRound();
+      rt.acted[actor.id] = rnd;
+      if (rt.flinch[actor.id] === rnd) {
+        delete rt.flinch[actor.id];
+        standalone.push({ actor, text: `${STATUS_INFO.FLINCH.emoji} ${actor.name} está amendrontado e perdeu a ação desta rodada.` });
+        return { skip: true };
+      }
+      if (rt.freeze[actor.id]?.lockRound === rnd) {
+        standalone.push({ actor, text: `❄️ ${actor.name} está totalmente congelado e não agiu.` });
+        return { skip: true };
+      }
+    }
     const round = host.getRound();
     const h = held(actor);
 
@@ -1073,6 +1200,16 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
     return { skip: skip || hpOf(actor) <= 0 };
   }
 
+  /** Apaixonado: 50% de chance de não atacar quem o encantou (contra os outros age normalmente). */
+  function onTargetChosen(actor: ArenaMascot, target: ArenaMascot): { cancel: boolean } {
+    const st = rt.status[actor.id];
+    const round = host.getRound();
+    if (!st || st.kind !== "CHARM" || !(round > st.since && round <= st.until) || st.sourceId !== target.id) return { cancel: false };
+    if (host.rand() >= STATUS_RULES.charmSkip) return { cancel: false };
+    standalone.push({ actor, target, text: `${STATUS_INFO.CHARM.emoji} ${actor.name} está apaixonado por ${target.name} e não conseguiu atacá-lo.` });
+    return { cancel: true };
+  }
+
   /** Propeller Tail/Stalwart: chance de ignorar o Provocador que desviaria o golpe. */
   function ignoresProvoker(actor: ArenaMascot): string | null {
     const h = heldAs(actor, "IGNORA_PROVOCADOR");
@@ -1083,10 +1220,12 @@ export function createAbilityEngine(config: AbilityLineup, host: AbilityHost, pr
   return {
     onBattleStart, onRoundStart, onActionStart, onLifesteal, ignoresProvoker, attackBonus, buffMods, maybeRedirect, onDefend, defense, guardianExtra, survive, afterHit,
     applyDebuff, flushEvents, flushStandalone, flushHpChanges, healTarget,
+    onTargetChosen,
+    forceMult: (id: string) => 1 - STATUS_RULES.freezeForcePerStack * freezeStacks(id),
     agilityMult: (id: string) => {
       const m = byId.get(id);
       const round = host.getRound();
-      let v = rt.agility[id] ?? 0;
+      let v = (rt.agility[id] ?? 0) - STATUS_RULES.freezeAgilityPerStack * freezeStacks(id);
       const temp = rt.tempAgility[id];
       if (temp && temp.until >= round) v += temp.v;
       const trace = rt.traced[id];

@@ -40,6 +40,8 @@ for r in rows(wb['Habilidades']):
     ent = {'name': r['Habilidade']}
     if r.get('Na Pokédex (resumo)'):
         ent['dex'] = r['Na Pokédex (resumo)']
+    if r.get('Efeito extra'):
+        ent['x'] = r['Efeito extra']
     if code:
         ent['effect'] = code
         if r['Parâmetro (tipo/atributo)']:
@@ -77,7 +79,7 @@ if unknown:
 def j(v): return json.dumps(v, ensure_ascii=False, separators=(',', ':'))
 lines = ['// GERADO por scripts/generate-ability-data.py a partir de docs/habilidades-passivas-mascotes.xlsx. Não editar à mão.',
          'export type AbilityEffectDef = { name: string; category: string; trigger: string; text: string; activations: number; scale: string | null; min: number | null; max: number | null };',
-         'export type AbilityDef = { name: string; dex?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number; scale?: string } };',
+         'export type AbilityDef = { name: string; dex?: string; x?: string; effect?: string; param?: string; o?: { activations?: number; min?: number; max?: number; scale?: string } };',
          '', 'export const ABILITY_EFFECTS: Record<string, AbilityEffectDef> = {']
 for k, v in effects.items(): lines.append(f'  {k}: {j(v)},')
 lines += ['};', '', 'export const ABILITIES: Record<string, AbilityDef> = {']

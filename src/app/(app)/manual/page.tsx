@@ -1,4 +1,5 @@
 import { BookOpen } from "lucide-react";
+import { GLOSSARY } from "@/lib/glossary";
 import { getAppSession } from "@/lib/session";
 import { isAdmin } from "@/lib/auth/permissions";
 import { getManualContent } from "@/lib/manual-content";
@@ -1546,26 +1547,28 @@ export default async function ManualPage() {
         </Sub>
         <Sub title="Estados alterados">
           <p className="text-xs leading-6 text-slate-400">
-            Alguns estados são aplicados por habilidades (nos modos com habilidades). Os números abaixo são os valores atuais do combate.
+            Estados são aplicados por habilidades (nos modos com habilidades). Cada mascote tem no máximo <strong className="text-slate-200">um estado comum por vez</strong>;
+            Congelado, Maldito, Amendrontado e Condenado têm regras próprias. Nas descrições das habilidades, os nomes dos estados são <strong className="text-slate-200">palavras-chave</strong>:
+            passe o mouse (ou toque) para ver o efeito, a duração e os cálculos. Os números abaixo vêm direto do combate.
           </p>
           <Table
-            headers={["Estado", "O que faz", "Duração", "Imunes"]}
-            rows={[
-              ["☠️ Envenenado", "Perde 5% do HP máximo no fim do turno", "3 rodadas", "Veneno e Metal"],
-              ["🔥 Queimado", "Perde 7% do HP máximo no início do turno", "2 rodadas", "Fogo"],
-              ["⚡ Paralisado", "30% de chance de perder a ação", "1 rodada", "Elétrico"],
-              ["💤 Dormindo", "A cada ação, 70% de chance de acordar; senão perde a ação", "1 a 2 rodadas", "—"],
-              ["😵 Confuso", "20% de chance de se ferir (5% do HP máximo) em vez de atacar; 80% de chance de passar a cada ação", "1 a 3 rodadas", "Psíquico"],
-              ["❄️ Congelado", "Reduz a Agilidade em 20%", "2 rodadas", "Gelo"],
-              ["👻 Maldito", "Quem ataca o mascote perde 5% do HP máximo, até quem o amaldiçoou cair", "Até o causador cair", "Fantasma e Sombrio"],
-            ]}
+            headers={["Estado", "Como funciona"]}
+            rows={GLOSSARY.filter((e) => e.group === "Estados alterados" && e.term !== "Estado alterado").map((e) => [e.term, e.body])}
           />
           <Note>
-            <strong className="text-slate-200">Em breve</strong> (junto da liberação das habilidades por modo): <strong className="text-slate-200">Amendrontado</strong> (só vale se o alvo ainda não agiu
-            na rodada: ele perde a ação dessa rodada), <strong className="text-slate-200">Apaixonado</strong> (50% de chance de perder a ação, só contra quem o encantou),
-            <strong className="text-slate-200"> Condenado</strong> (o primeiro que ataca o mascote fica condenado e cai 1 rodada depois que o mascote cair; imunes Fantasma e Sombrio, pode ser curado) e o novo
-            <strong className="text-slate-200"> Congelado</strong> em acúmulos (até 3; cada um reduz 10% de Agilidade e 5% de Força por 2 rodadas; no 3º o alvo fica paralisado por 1 rodada e o congelamento sai com todos os acúmulos).
+            Quem aplica estados: habilidades de contato e de toque (Static, Flame Body, Poison Point, Cute Charm, Stench…), Effect Spore (sorteia entre sono, paralisia e veneno),
+            Snow Warning (congelamento no granizo) e Perish Body (condena quem o ataca primeiro). <strong className="text-slate-200">Serene Grace</strong> dobra a chance dos estados aplicados pelas
+            habilidades dos seus <strong className="text-slate-200">aliados</strong> (os outros mascotes do seu time em campo), e Prankster soma pontos percentuais a essa chance.
           </Note>
+        </Sub>
+        <Sub title="Glossário de combate">
+          <p className="text-xs leading-6 text-slate-400">
+            As mesmas palavras-chave que aparecem nas descrições das habilidades.
+          </p>
+          <Table
+            headers={["Termo", "Explicação"]}
+            rows={GLOSSARY.filter((e) => e.group !== "Estados alterados").map((e) => [e.term, e.body])}
+          />
         </Sub>
         <Sub title="Debuffs">
           <p className="text-xs leading-6 text-slate-400">

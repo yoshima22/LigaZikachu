@@ -47,6 +47,8 @@ export type AbilityInfo = {
   template: string | null;
   /** O que a habilidade faz na Pokédex (resumo em português). */
   dex: string | null;
+  /** Efeito extra próprio da habilidade, descrito em texto (ex.: não pode ser queimado). */
+  extra: string | null;
 };
 
 const cache = new Map<string, AbilityInfo | null>();
@@ -76,6 +78,7 @@ export function getAbilityInfo(slug: string | null | undefined): AbilityInfo | n
       param: def.param ?? null,
       template: eff?.text ?? null,
       dex: def.dex ?? null,
+      extra: def.x ?? null,
     };
   }
   cache.set(slug, info);
@@ -117,6 +120,12 @@ function fill(template: string, rng: { em: string; ate: string; de: string } | n
 /** Descrição em português com o intervalo do efeito. */
 export function describeAbility(info: AbilityInfo): string {
   if (!info.hasEffect || !info.template) return "Sem efeito em combate nesta versão.";
+  return withExtra(describeBase({ ...info, template: info.template }), info);
+}
+
+const withExtra = (text: string, info: AbilityInfo) => (info.extra ? `${text} ${info.extra}` : text);
+
+function describeBase(info: AbilityInfo & { template: string }): string {
   const rng = info.min != null && info.max != null
     ? { em: `${pct(info.min)} a ${pct(info.max)}`, ate: pct(info.max), de: `de ${pct(info.min)} a ${pct(info.max)}` }
     : null;
@@ -128,7 +137,7 @@ export function describeAbilityAt(info: AbilityInfo, stats: Stats, factor = 1): 
   if (!info.hasEffect || !info.template) return describeAbility(info);
   if (info.min == null || info.max == null) return describeAbility(info);
   const v = pct(abilityValue(info, stats, factor));
-  return fill(info.template, { em: v, ate: v, de: v }, info);
+  return withExtra(fill(info.template, { em: v, ate: v, de: v }, info), info);
 }
 
 // ── Mascotes e espécies ───────────────────────────────────────────────────────

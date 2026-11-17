@@ -16,6 +16,7 @@ import {
 } from "@/lib/abilities";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
 import { getSpriteUrl } from "@/lib/mascot-data";
+import { KeywordText } from "@/components/keyword-text";
 
 const STATE_STYLE: Record<AbilitySlotState, { label: string; cls: string }> = {
   ACTIVE: { label: "100% ligada", cls: "border-emerald-400/40 bg-emerald-500/10 text-emerald-300" },
@@ -167,11 +168,11 @@ export function AbilityAllocator({
                       </div>
                       {info.hasEffect && (
                         <p className="mt-0.5 text-[10px] leading-snug text-slate-400">
-                          {reserve
+                          <KeywordText text={reserve
                             ? describeAbility(info)
                             : slot.factor > 0
                               ? m.stats ? describeAbilityAt(info, m.stats, slot.factor) : describeAbility(info)
-                              : "Neste ponto da lista a habilidade não entra em ação."}
+                              : "Neste ponto da lista a habilidade não entra em ação."} />
                         </p>
                       )}
                       {slot?.reason && <p className="mt-0.5 text-[10px] text-amber-200/90">⚠ {slot.reason}</p>}

@@ -1,5 +1,6 @@
 "use client";
 
+import { KeywordText } from "@/components/keyword-text";
 import { useState } from "react";
 import { recommendCombatRole } from "@/lib/combat-roles";
 import { describeAbilityAt, getAbilityInfo, getSpeciesAbilities } from "@/lib/abilities";
@@ -81,7 +82,7 @@ export function AbilityField({ m, f, onChange, state, readOnly = false }: { m: M
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="mt-1 text-[10px] font-bold text-violet-300 hover:underline">{open ? "▾ ocultar o que faz" : "▸ ver o que faz"}</button>
       {open && (
         <div className="mt-1 space-y-1">
-          <p className="text-[11px] leading-snug text-slate-300">{info.hasEffect ? describeAbilityAt(info, stats) : "Esta habilidade não tem efeito em combate nesta versão."}</p>
+          <p className="text-[11px] leading-snug text-slate-300"><KeywordText text={info.hasEffect ? describeAbilityAt(info, stats) : "Esta habilidade não tem efeito em combate nesta versão."} /></p>
           {info.hasEffect && <p className="text-[10px] text-slate-500">{info.activations > 0 ? `${info.activations} ativação(ões) por luta` : "passiva"} · {info.trigger}</p>}
           {hidden && !m.hiddenUnlocked && !options.includes(hidden) && <p className="text-[10px] text-violet-200/70">A habilidade oculta ({getAbilityInfo(hidden)?.name}) é liberada com o TM dela (ZikaShop/Bazar).</p>}
         </div>
