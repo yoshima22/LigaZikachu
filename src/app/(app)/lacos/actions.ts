@@ -183,9 +183,9 @@ const BOND_DISTANCE_DELAY_MS = 24 * 60 * 60_000;
 async function notifyBondDispute(playerIds: string[], title: string, body: string, eventKey: string) {
   const unique = [...new Set(playerIds)];
   if (!unique.length) return;
-  const inGame = await filterInGameRecipients(unique, "MASCOTES");
+  const inGame = await filterInGameRecipients(unique, "LACOS");
   if (inGame.length) await prisma.playerNotification.createMany({ data: inGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_DISPUTE", title, body, href: "/lacos", entityId: eventKey, eventKey: `${eventKey}:${playerId}` })), skipDuplicates: true });
-  await sendNotificationToPlayers(unique, { title, body, url: "/lacos", data: { eventKey }, category: "MASCOTES" }).catch(() => undefined);
+  await sendNotificationToPlayers(unique, { title, body, url: "/lacos", data: { eventKey }, category: "LACOS" }).catch(() => undefined);
 }
 
 export async function updateActiveBondV2Action(relationId: string, operation: "START_DISTANCE" | "CANCEL_DISTANCE") {

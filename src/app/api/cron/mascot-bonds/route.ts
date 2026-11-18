@@ -57,9 +57,9 @@ export async function GET(req: NextRequest) {
     if (!resolved) continue;
     const players = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
     if (players.length) {
-      const charmInGame = await filterInGameRecipients(players, "MASCOTES");
+      const charmInGame = await filterInGameRecipients(players, "LACOS");
       if (charmInGame.length) await prisma.playerNotification.createMany({ data: charmInGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_CHARM_RESOLVED", title: "O vínculo foi preservado", body: "O Amuleto de Promessa completou 6 horas e cancelou o afastamento.", href: "/lacos", eventKey: `bond-charm-resolved:${relation.mascotAId}:${relation.mascotBId}:${playerId}` })), skipDuplicates: true });
-      await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos", category: "MASCOTES" }).catch(() => undefined);
+      await sendNotificationToPlayers(players, { title: "Laços: vínculo preservado", body: "O Amuleto de Promessa concluiu sua ação e cancelou o afastamento.", url: "/lacos", category: "LACOS" }).catch(() => undefined);
     }
   }
   // Afastamentos têm peso e tempo. Ao fim do prazo, as duas direções da
@@ -79,9 +79,9 @@ export async function GET(req: NextRequest) {
     notifiedDistancePairs.add(key);
     const affected = [...new Set([relation.mascotA.playerId, relation.mascotB.playerId])];
     if (affected.length) {
-      const distanceInGame = await filterInGameRecipients(affected, "MASCOTES");
+      const distanceInGame = await filterInGameRecipients(affected, "LACOS");
       if (distanceInGame.length) await prisma.playerNotification.createMany({ data: distanceInGame.map((playerId) => ({ playerId, category: "BONDS", type: "BOND_DISTANCE_COMPLETE", title: "Afastamento concluído", body: "As 24 horas restantes terminaram e o vínculo foi removido dos dois mascotes. As memórias continuam no histórico.", href: "/lacos", eventKey: `bond-distance-complete:${key}:${playerId}` })), skipDuplicates: true });
-      await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos", category: "MASCOTES" }).catch(() => undefined);
+      await sendNotificationToPlayers(affected, { title: "Laços: afastamento concluído", body: "O prazo terminou e o vínculo foi encerrado.", url: "/lacos", category: "LACOS" }).catch(() => undefined);
     }
   }
   // Limpa dados do desenho anterior. Relação inativa não é reserva nem fila.
@@ -168,7 +168,7 @@ export async function GET(req: NextRequest) {
         if (result.importantEventId && result.affectedPlayerIds.length) {
           importantRefugeMoments += 1;
           const recipients = [...new Set(result.affectedPlayerIds)];
-          const refugeInGame = await filterInGameRecipients(recipients, "MASCOTES");
+          const refugeInGame = await filterInGameRecipients(recipients, "LACOS");
           const notificationBody = (affectedPlayerId: string) => result.reward && result.rewardOwnerPlayerId !== affectedPlayerId
             ? `${result.storyDescription} ${result.rewardMascotName} encontrou um recurso para o próprio treinador. Você não tem item para resgatar neste acontecimento.`
             : result.description;
@@ -191,7 +191,7 @@ export async function GET(req: NextRequest) {
               body: notificationBody(recipient),
               url: "/lacos",
               data: { eventKey: `bonds:refuge:${result.importantEventId}` },
-              category: "MASCOTES",
+              category: "LACOS",
             });
           }
         }

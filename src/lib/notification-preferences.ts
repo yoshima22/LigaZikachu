@@ -9,6 +9,7 @@ export type NotifCategory =
   | "LIGA_SEMANAL"
   | "LIGA_RUSH"
   | "MASCOTES"
+  | "LACOS"
   | "ANUNCIOS"
   | "OUTROS";
 
@@ -26,7 +27,8 @@ export const NOTIF_CATEGORIES: { key: NotifCategory; label: string; hint: string
   { key: "ARENA",        label: "Arena",             hint: "Arena Z e Arena Draft: desafios e resultados." },
   { key: "LIGA_SEMANAL", label: "Liga Semanal",      hint: "Partidas e atualizações da Liga Semanal." },
   { key: "LIGA_RUSH",    label: "Liga Rush",         hint: "Partidas e atualizações da Liga Rush." },
-  { key: "MASCOTES",     label: "Mascotes",          hint: "Expedições, Laços, cuidado e afins." },
+  { key: "MASCOTES",     label: "Mascotes",          hint: "Expedições, cuidado dos mascotes e afins." },
+  { key: "LACOS",        label: "Laços",             hint: "Marcos de vínculo, afastamentos e momentos do Refúgio." },
   { key: "ANUNCIOS",     label: "Anúncios da Liga",  hint: "Comunicados enviados pela administração." },
   { key: "OUTROS",       label: "Outros",            hint: "Torneios, ZikaLoot, Álbum e demais avisos." },
 ];
@@ -71,6 +73,9 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings {
       }
     }
   }
+  // Laços era parte de "Mascotes": quem ainda não salvou a nova opção herda a escolha antiga.
+  const saved = cats && typeof cats === "object" && !Array.isArray(cats) ? (cats as Record<string, unknown>) : {};
+  if (!saved.LACOS && saved.MASCOTES) base.categories.LACOS = { ...base.categories.MASCOTES };
   return base;
 }
 
@@ -78,7 +83,7 @@ export function parseNotificationSettings(raw: unknown): NotificationSettings {
 export function dbCategoryToNotif(dbCategory: string): NotifCategory {
   switch (dbCategory) {
     case "BAZAR": return "BAZAR";
-    case "BONDS":
+    case "BONDS": return "LACOS";
     case "MASCOT": return "MASCOTES";
     case "MESSAGE": return "MENSAGENS";
     case "ARENA": return "ARENA";

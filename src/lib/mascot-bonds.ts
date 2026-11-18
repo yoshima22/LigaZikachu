@@ -495,7 +495,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
           await tx.playerInventory.upsert({ where: { playerId_itemId: { playerId: milestone.playerId, itemId: rewardItem.id } }, update: { quantity: { increment: 1 } }, create: { playerId: milestone.playerId, itemId: rewardItem.id, quantity: 1, source: "BONDS_MILESTONE" } });
         }
         const prefPlayer = await tx.player.findUnique({ where: { id: milestone.playerId }, select: { notificationSettings: true } });
-        if (isInGameAllowed(prefPlayer?.notificationSettings, "MASCOTES")) {
+        if (isInGameAllowed(prefPlayer?.notificationSettings, "LACOS")) {
           await tx.playerNotification.upsert({
             where: { eventKey: `bonds:tier:${event.id}:${milestone.direction}:${milestone.threshold}` },
             update: {},
@@ -625,7 +625,7 @@ export async function applyBondOption(eventId: string, playerId: string, optionI
     return { option, resultJson, eventType: event.eventType, mascotAId: event.mascotAId, ownerId: event.ownerId, milestones };
   }).then(async (result) => {
     for (const milestone of result.milestones) {
-      await sendNotificationToPlayers([milestone.playerId], { title: `Laços: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier}. Abra Laços para ver os efeitos deste marco.`, url: "/lacos", data: { eventKey: `bonds:tier:${eventId}:${milestone.direction}:${milestone.threshold}` }, category: "MASCOTES" }).catch(() => undefined);
+      await sendNotificationToPlayers([milestone.playerId], { title: `Laços: ${milestone.tier}`, body: `Uma relação alcançou ${milestone.tier}. Abra Laços para ver os efeitos deste marco.`, url: "/lacos", data: { eventKey: `bonds:tier:${eventId}:${milestone.direction}:${milestone.threshold}` }, category: "LACOS" }).catch(() => undefined);
     }
     if (result.eventType === RUNAWAY_WARNING_TYPE && result.option.id === "let_run") {
       await createRunawayRescueEvent(result.mascotAId, result.ownerId).catch(() => null);
