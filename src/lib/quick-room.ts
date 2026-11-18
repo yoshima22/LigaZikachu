@@ -75,6 +75,12 @@ export async function refreshQuickRoomLease(input: { code: string; participantTo
   return room;
 }
 
+/** O token de participante pertence a alguém que está de fato na sala? (usado pelas rotas de transmissão SFU) */
+export async function hasQuickRoomLease(roomId: string, participantToken: unknown): Promise<boolean> {
+  if (typeof participantToken !== "string" || !participantToken) return false;
+  return Boolean(await prisma.quickRoomParticipantLease.findFirst({ where: { roomId, tokenHash: tokenHash(participantToken) }, select: { id: true } }));
+}
+
 export async function leaveQuickRoom(code: string, participantToken: string) {
   const room = await getActiveRoom(code); if (!room) return false;
   return (await prisma.quickRoomParticipantLease.deleteMany({ where: { roomId: room.id, tokenHash: tokenHash(participantToken) } })).count > 0;

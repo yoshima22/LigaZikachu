@@ -5,14 +5,15 @@ import Link from "next/link";
 import { createClient, type RealtimeChannel, type SupabaseClient } from "@supabase/supabase-js";
 import {
   ArrowLeft, Camera, CameraOff, Copy, Eye, EyeOff, Maximize2, Mic, MicOff, Minimize2, MonitorUp, MonitorX,
-  PhoneOff, Send, SlidersHorizontal, Users, Volume2, VolumeX, X,
+  PhoneOff, Radio, Send, SlidersHorizontal, Users, Volume2, VolumeX, X,
 } from "lucide-react";
-import { specDisplayMediaOptions } from "@/lib/spec/webrtc-client";
+import { specDisplayMediaOptions, waitForIceGathering } from "@/lib/spec/webrtc-client";
 import { microphoneConstraints } from "@/lib/quick-room-audio";
 import { formatRoomCode } from "@/lib/quick-room-code";
 import { activeLiveSources, participantActivityLabel } from "@/lib/quick-room-live";
 
-type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string };
+type SfuInfo = { sessionId: string; video: string; audio?: string; ticket: string };
+type Member = { id: string; name: string; mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string; sfu?: SfuInfo };
 type ChatLine = { id: string; name: string; text: string; ts: number; mine?: boolean };
 type SignalPayload = { from: string; to: string; description?: RTCSessionDescriptionInit; candidate?: RTCIceCandidateInit };
 type MediaKind = "screen" | "camera";
@@ -152,6 +153,11 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const [relayCode, setRelayCode] = useState("");
   const [relayBusy, setRelayBusy] = useState(false);
   const [relayMsg, setRelayMsg] = useState<string | null>(null);
+  const [sfuSharing, setSfuSharing] = useState(false);
+  const [sfuAsk, setSfuAsk] = useState(false);
+  const [sfuCode, setSfuCode] = useState("");
+  const [sfuBusy, setSfuBusy] = useState(false);
+  const [sfuMsg, setSfuMsg] = useState<string | null>(null);
   const [, setVersion] = useState(0); // força re-render quando faixas remotas mudam
   const version = useRef(0);
 
@@ -170,12 +176,18 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
   const lastChatAt = useRef(0);
   const beat = useRef<number | null>(null);
   const chatEnd = useRef<HTMLDivElement | null>(null);
-  const memberState = useRef<{ mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string }>({ mic: false, sharing: false, camera: false });
+  const memberState = useRef<{ mic: boolean; sharing: boolean; screenId?: string; camera: boolean; cameraId?: string; sfu?: SfuInfo }>({ mic: false, sharing: false, camera: false });
   const relayOn = useRef(false);
   const watchingRef = useRef<string[]>([]);
   const knownSharers = useRef(new Set<string>());
   const knownSources = useRef(new Set<string>());
   const screenBusy = useRef(false);
+  // Transmissão via Cloudflare SFU: a minha (publicar) e as que estou assistindo (puxar).
+  const sfuStream = useRef<MediaStream | null>(null);
+  const sfuPc = useRef<RTCPeerConnection | null>(null);
+  const sfuInviteCode = useRef("");
+  const sfuPulls = useRef(new Map<string, { pc: RTCPeerConnection; sessionId: string; stream: MediaStream }>());
+  const sfuFailed = useRef(new Map<string, string>()); // id -> sessionId que falhou (nao retenta sozinho)
 
   const bump = useCallback(() => { version.current += 1; setVersion(version.current); }, []);
   const updateWatching = useCallback((next: string[]) => { watchingRef.current = next; setWatching(next); }, []);
@@ -353,6 +365,16 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     micStream.current?.getTracks().forEach((t) => t.stop());
     screenStream.current?.getTracks().forEach((t) => t.stop());
     cameraStream.current?.getTracks().forEach((t) => t.stop());
+    sfuStream.current?.getTracks().forEach((t) => t.stop());
+    sfuStream.current = null;
+    sfuPc.current?.close();
+    sfuPc.current = null;
+    for (const pull of sfuPulls.current.values()) pull.pc.close();
+    sfuPulls.current.clear();
+    sfuFailed.current.clear();
+    setSfuSharing(false);
+    setSfuAsk(false);
+    setSfuMsg(null);
     micStream.current = null;
     screenStream.current = null;
     cameraStream.current = null;
@@ -432,11 +454,11 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
       });
       let firstSync = true;
       ch.on("presence", { event: "sync" }, () => {
-        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean; screenId?: string; camera?: boolean; cameraId?: string }>>;
+        const state = ch.presenceState() as Record<string, Array<{ name?: string; mic?: boolean; sharing?: boolean; screenId?: string; camera?: boolean; cameraId?: string; sfu?: SfuInfo }>>;
         // Cada track() novo acrescenta uma meta: vale a mais recente (a última).
         const list: Member[] = Object.entries(state).map(([id, metas]) => {
           const meta = metas[metas.length - 1];
-          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing, screenId: meta?.screenId, camera: !!meta?.camera, cameraId: meta?.cameraId };
+          return { id, name: meta?.name ?? "Visitante", mic: !!meta?.mic, sharing: !!meta?.sharing, screenId: meta?.screenId, camera: !!meta?.camera, cameraId: meta?.cameraId, sfu: meta?.sfu };
         });
         if (firstSync) {
           firstSync = false;
@@ -550,8 +572,161 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
     publishPresence();
   }, [publishPresence, updateWatching]);
 
+  const stopSfuShare = useCallback(() => {
+    sfuStream.current?.getTracks().forEach((t) => t.stop());
+    sfuStream.current = null;
+    sfuPc.current?.close();
+    sfuPc.current = null;
+    setSfuSharing(false);
+    if (!memberState.current.sfu) return;
+    memberState.current.sfu = undefined;
+    memberState.current.sharing = false;
+    const own = sourceKey(myId.current, "screen");
+    if (watchingRef.current.includes(own)) updateWatching(watchingRef.current.filter((id) => id !== own));
+    publishPresence();
+    bump();
+  }, [bump, publishPresence, updateWatching]);
+
+  /** Transmite a tela pelo SFU da Cloudflare (um upload só, todos assistem de lá). Exige login ou código de convite. */
+  const startSfuShare = async () => {
+    if (screenBusy.current) return;
+    if (screenStream.current) stopScreen();
+    screenBusy.current = true;
+    setSfuMsg(null);
+    let stream: MediaStream | null = null;
+    try {
+      stream = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(1280, 720, 30));
+      const pc = new RTCPeerConnection({ iceServers: iceServers.current });
+      sfuPc.current = pc;
+      sfuStream.current = stream;
+      const meta: Array<{ transceiver: RTCRtpTransceiver; trackName: string; kind: "video" | "audio" }> = [];
+      for (const track of stream.getTracks()) {
+        const kind = track.kind === "audio" ? "audio" : "video";
+        meta.push({ transceiver: pc.addTransceiver(track, { direction: "sendonly" }), trackName: `${kind}-${crypto.randomUUID().replace(/-/g, "").slice(0, 10)}`, kind });
+      }
+      const videoSender = pc.getSenders().find((s) => s.track?.kind === "video");
+      if (videoSender) {
+        const params = videoSender.getParameters();
+        if (!params.encodings?.length) params.encodings = [{}];
+        params.encodings[0].maxBitrate = 2_500_000;
+        params.encodings[0].maxFramerate = 30;
+        await videoSender.setParameters(params).catch(() => null);
+      }
+      await pc.setLocalDescription(await pc.createOffer());
+      await waitForIceGathering(pc);
+      const res = await fetch(`/api/salas/${code}/sfu/publish`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          topic: topic.current, participantToken: participantToken.current, inviteCode: sfuInviteCode.current || undefined,
+          offerSdp: pc.localDescription?.sdp, tracks: meta.map((m) => ({ mid: m.transceiver.mid ?? "", trackName: m.trackName, kind: m.kind })),
+        }),
+      });
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        if (data.needsCode) { sfuInviteCode.current = ""; setSfuAsk(true); }
+        throw new Error(data.error ?? "Não foi possível transmitir.");
+      }
+      await pc.setRemoteDescription({ type: "answer", sdp: data.answerSdp });
+      const captured = stream;
+      captured.getVideoTracks()[0]?.addEventListener("ended", () => { if (sfuStream.current === captured) stopSfuShare(); });
+      pc.onconnectionstatechange = () => {
+        if (pc.connectionState === "failed" && sfuPc.current === pc) { stopSfuShare(); setError("A transmissão via Cloudflare caiu."); }
+      };
+      memberState.current.sharing = true;
+      memberState.current.screenId = undefined;
+      memberState.current.sfu = { sessionId: data.sessionId, video: data.video, audio: data.audio ?? undefined, ticket: data.ticket };
+      setSfuSharing(true);
+      publishPresence();
+    } catch (e) {
+      stream?.getTracks().forEach((t) => t.stop());
+      sfuPc.current?.close();
+      sfuPc.current = null;
+      sfuStream.current = null;
+      if (!(e instanceof DOMException && e.name === "NotAllowedError")) setSfuMsg(e instanceof Error ? e.message : "Falha ao transmitir.");
+    } finally { screenBusy.current = false; }
+  };
+
+  const toggleSfu = () => {
+    if (sfuStream.current) { stopSfuShare(); return; }
+    if (!isMember && !sfuInviteCode.current) { setSfuAsk(true); return; }
+    void startSfuShare();
+  };
+
+  const submitSfuCode = async () => {
+    setSfuBusy(true);
+    setSfuMsg(null);
+    const res = await fetch(`/api/salas/${code}/sfu/publish`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ topic: topic.current, participantToken: participantToken.current, inviteCode: sfuCode.trim(), checkOnly: true }),
+    }).catch(() => null);
+    const data = res ? await res.json().catch(() => ({})) : {};
+    setSfuBusy(false);
+    if (!res?.ok) { setSfuMsg(data.error ?? "Não foi possível validar o código."); return; }
+    sfuInviteCode.current = sfuCode.trim();
+    setSfuAsk(false);
+    setSfuCode("");
+    void startSfuShare();
+  };
+
+  /** Assiste a tela de alguém que transmite pelo SFU: o servidor valida o ticket e devolve a oferta do SFU. */
+  const pullSfu = useCallback(async (id: string, info: SfuInfo) => {
+    const pc = new RTCPeerConnection({ iceServers: iceServers.current });
+    const stream = new MediaStream();
+    const entry = { pc, sessionId: info.sessionId, stream };
+    sfuPulls.current.set(id, entry);
+    pc.ontrack = (event) => {
+      stream.addTrack(event.track);
+      event.track.onmute = bump;
+      event.track.onunmute = bump;
+      bump();
+    };
+    const fail = (message: string) => {
+      pc.close();
+      if (sfuPulls.current.get(id) !== entry) return; // já foi fechada por quem parou de assistir
+      sfuPulls.current.delete(id);
+      sfuFailed.current.set(id, info.sessionId);
+      setError(message);
+      bump();
+    };
+    pc.onconnectionstatechange = () => { if (pc.connectionState === "failed") fail("A transmissão via Cloudflare caiu. Clique em assistir de novo."); };
+    try {
+      const base = { topic: topic.current, participantToken: participantToken.current };
+      const post = (path: string, body: object) => fetch(`/api/salas/${code}/sfu/${path}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...base, ...body }) });
+      const sub = await post("subscribe", { remoteSessionId: info.sessionId, trackNames: [info.video, ...(info.audio ? [info.audio] : [])], ticket: info.ticket });
+      const subData = await sub.json().catch(() => ({}));
+      if (!sub.ok) throw new Error(subData.error ?? "Não foi possível conectar à transmissão.");
+      await pc.setRemoteDescription({ type: "offer", sdp: subData.offerSdp });
+      await pc.setLocalDescription(await pc.createAnswer());
+      await waitForIceGathering(pc);
+      const ren = await post("renegotiate", { spectatorSessionId: subData.spectatorSessionId, answerSdp: pc.localDescription?.sdp });
+      if (!ren.ok) throw new Error("Falha ao finalizar a conexão com a transmissão.");
+    } catch (e) {
+      fail(e instanceof Error ? e.message : "Falha ao assistir a transmissão.");
+    }
+  }, [bump, code]);
+
+  // Mantém uma conexão de recebimento para cada tela SFU que estou assistindo (e fecha as que deixei de assistir).
+  useEffect(() => {
+    if (phase !== "in") return;
+    const wanted = new Map<string, SfuInfo>();
+    for (const value of watching) {
+      const source = parseSourceKey(value);
+      if (!source || source.source !== "screen" || source.id === myId.current) continue;
+      const sfu = members.find((m) => m.id === source.id)?.sfu;
+      if (sfu) wanted.set(source.id, sfu);
+    }
+    for (const [id, pull] of [...sfuPulls.current]) {
+      if (wanted.get(id)?.sessionId !== pull.sessionId) { pull.pc.close(); sfuPulls.current.delete(id); bump(); }
+    }
+    for (const id of [...sfuFailed.current.keys()]) if (!wanted.has(id)) sfuFailed.current.delete(id);
+    for (const [id, info] of wanted) if (!sfuPulls.current.has(id) && sfuFailed.current.get(id) !== info.sessionId) void pullSfu(id, info);
+  }, [watching, members, phase, pullSfu, bump]);
+
   const toggleScreen = async () => {
     if (screenStream.current) { stopScreen(); return; }
+    if (sfuStream.current) stopSfuShare();
     if (screenBusy.current) return; // evita dois seletores/compartilhamentos num duplo clique
     screenBusy.current = true;
     try {
@@ -709,6 +884,20 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
 
       {liveAlert && <button onClick={() => { toggleWatch(liveAlert.id, liveAlert.source); setLiveAlert(null); }} className="flex w-full items-center justify-between gap-4 rounded-2xl border border-[#FFCB05]/50 bg-[#FFCB05] px-5 py-4 text-left text-slate-950 shadow-[0_18px_45px_-22px_rgba(255,203,5,.95)] transition hover:-translate-y-0.5"><span className="flex items-center gap-3"><span className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-950 text-[#FFCB05]">{liveAlert.source === "camera" ? <Camera size={20} /> : <MonitorUp size={20} />}</span><span><strong className="block text-sm">{liveAlert.name} ligou {liveAlert.source === "camera" ? "a câmera" : "uma transmissão"}</strong><span className="text-xs text-slate-700">Toque para assistir agora.</span></span></span><span className="rounded-full bg-slate-950 px-4 py-2 text-xs font-black text-white">Assistir</span></button>}
 
+      {(sfuAsk || sfuMsg) && (
+        <div className="space-y-2 rounded-xl border border-cyan-400/30 bg-cyan-950/20 px-4 py-3 text-sm text-cyan-100">
+          {sfuAsk && <p>Para transmitir pela Cloudflare, cole o código de convite da sua conta da Liga (aparece no seu perfil).</p>}
+          {sfuAsk && (
+            <form onSubmit={(e) => { e.preventDefault(); if (!sfuBusy && sfuCode.trim()) void submitSfuCode(); }} className="flex gap-2">
+              <input value={sfuCode} onChange={(e) => setSfuCode(e.target.value)} inputMode="numeric" maxLength={12} placeholder="Código de convite" aria-label="Código de convite da conta" className="min-w-0 flex-1 rounded-lg border border-slate-700 bg-slate-950 px-3 py-2 text-sm text-white" />
+              <button type="submit" disabled={sfuBusy || !sfuCode.trim()} className="rounded-lg bg-cyan-300 px-3 py-2 text-sm font-bold text-slate-950 disabled:opacity-50">{sfuBusy ? "..." : "Validar e transmitir"}</button>
+              <button type="button" onClick={() => { setSfuAsk(false); setSfuMsg(null); }} className="rounded-lg border border-slate-600 px-3 py-2 text-sm text-slate-200">Cancelar</button>
+            </form>
+          )}
+          {sfuMsg && <p className="text-xs text-amber-300">{sfuMsg}</p>}
+        </div>
+      )}
+
       {(needsCode || relayMsg) && (
         <div className="space-y-2 rounded-xl border border-amber-400/30 bg-amber-950/20 px-4 py-3 text-sm text-amber-100">
           <p>{needsCode ? "Não foi possível conectar direto com alguém na sala. Para ativar a conexão reforçada, informe um código de convite da Liga." : relayMsg}</p>
@@ -732,7 +921,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
             {sharers.length === 0 ? <div className="px-5 py-5 text-sm text-slate-400">Nenhuma tela compartilhada ainda. Use <strong className="font-semibold text-slate-200">Compartilhar tela</strong> para colocar uma transmissão na mesa.</div> : <div className="grid gap-2 p-3 sm:grid-cols-2">{sharers.map((m) => {
               const isMe = m.id === myId.current;
               const on = watching.includes(sourceKey(m.id, "screen"));
-              return <button key={m.id} onClick={() => toggleWatch(m.id, "screen")} aria-pressed={on} className={`group flex min-h-24 items-center justify-between gap-3 rounded-xl border p-4 text-left transition ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 shadow-[0_12px_28px_-20px_rgba(255,203,5,.85)]" : "border-slate-700 bg-slate-950/60 hover:-translate-y-0.5 hover:border-[#FFCB05]/60"}`}><span className="flex items-center gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-full ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-cyan-200"}`}><MonitorUp size={18} /></span><span><strong className="block text-sm text-white">{isMe ? "Sua tela" : m.name}</strong><span className="text-xs text-slate-400">Tela compartilhada</span></span></span><span className={`rounded-full px-3 py-1.5 text-xs font-black ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-slate-100 group-hover:bg-slate-700"}`}>{on ? "Assistindo" : "Assistir"}</span></button>;
+              return <button key={m.id} onClick={() => toggleWatch(m.id, "screen")} aria-pressed={on} className={`group flex min-h-24 items-center justify-between gap-3 rounded-xl border p-4 text-left transition ${on ? "border-[#FFCB05] bg-[#FFCB05]/15 shadow-[0_12px_28px_-20px_rgba(255,203,5,.85)]" : "border-slate-700 bg-slate-950/60 hover:-translate-y-0.5 hover:border-[#FFCB05]/60"}`}><span className="flex items-center gap-3"><span className={`flex h-10 w-10 items-center justify-center rounded-full ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-cyan-200"}`}><MonitorUp size={18} /></span><span><strong className="block text-sm text-white">{isMe ? "Sua tela" : m.name}</strong><span className="text-xs text-slate-400">{m.sfu ? "Transmissão via Cloudflare" : "Tela compartilhada"}</span></span></span><span className={`rounded-full px-3 py-1.5 text-xs font-black ${on ? "bg-[#FFCB05] text-slate-950" : "bg-slate-800 text-slate-100 group-hover:bg-slate-700"}`}>{on ? "Assistindo" : "Assistir"}</span></button>;
             })}</div>}
           </section>
 
@@ -749,7 +938,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
                     key={m.id}
                     title={isMe ? "Sua tela" : m.name}
                     ownPreview={isMe}
-                    stream={isMe ? screenStream.current ?? undefined : peers.current.get(m.id)?.streams.get(m.screenId ?? "")}
+                    stream={isMe ? screenStream.current ?? sfuStream.current ?? undefined : m.sfu ? sfuPulls.current.get(m.id)?.stream : peers.current.get(m.id)?.streams.get(m.screenId ?? "")}
                     version={version.current}
                     onClose={() => toggleWatch(m.id, "screen")}
                   />
@@ -811,6 +1000,7 @@ export function QuickRoomClient({ code, label, hasPassword, isMember }: { code: 
           <button onClick={() => void toggleNoiseReduction()} aria-pressed={noiseReduction} aria-label="Alternar redução de ruído" title={noiseReduction ? "Redução de ruído ativada" : "Redução de ruído desativada"} className={`inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-semibold ${noiseReduction ? "border border-cyan-300/40 bg-cyan-300/15 text-cyan-100" : "bg-slate-800 text-slate-300"}`}><SlidersHorizontal size={16} /><span>{noiseReduction ? "Ruído reduzido" : "Ruído natural"}</span></button>
           <button onClick={toggleCamera} aria-pressed={cameraOn} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${cameraOn ? "bg-cyan-300 text-slate-950" : "bg-slate-800 text-slate-200"}`}>{cameraOn ? <Camera size={16} /> : <CameraOff size={16} />}<span className="hidden sm:inline">{cameraOn ? "Parar câmera" : "Ligar câmera"}</span></button>
           <button onClick={toggleScreen} aria-pressed={sharing} className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sharing ? "bg-[#FFCB05] text-slate-900" : "bg-slate-800 text-slate-200"}`}>{sharing ? <MonitorX size={16} /> : <MonitorUp size={16} />}<span className="hidden sm:inline">{sharing ? "Parar tela" : "Compartilhar tela"}</span></button>
+          <button onClick={toggleSfu} aria-pressed={sfuSharing} title="Transmitir a tela pela Cloudflare (exige conta da Liga ou código de convite)" className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-semibold ${sfuSharing ? "bg-cyan-300 text-slate-950" : "border border-cyan-300/40 bg-cyan-300/10 text-cyan-100"}`}><Radio size={16} /><span className="hidden sm:inline">{sfuSharing ? "Parar transmissão" : "Transmitir (Cloudflare)"}</span></button>
           <button onClick={() => { leave(); setPhase("form"); }} className="inline-flex items-center gap-2 rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white"><PhoneOff size={16} /><span className="hidden sm:inline">Sair</span></button>
         </div>
       </footer>
