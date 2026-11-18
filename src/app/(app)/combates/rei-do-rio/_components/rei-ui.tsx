@@ -155,16 +155,36 @@ export function PhaseStepper({ phase, restDay }: { phase: string; restDay: numbe
 export const CAT_ORDER: PointCategory[] = ["damage", "ko", "support", "resilience", "win", "leadership"];
 export const CAT_COLORS: Record<PointCategory, string> = { damage: "#f97316", ko: "#ef4444", support: "#22c55e", resilience: "#38bdf8", win: "#facc15", leadership: "#a78bfa" };
 
-/** Barra empilhada por categoria de pontos (com legenda numérica opcional). */
-export function StackBar({ parts, labels = false, thin = false }: { parts: { key: PointCategory; value: number }[]; labels?: boolean; thin?: boolean }) {
+export const CAT_EMOJI: Record<PointCategory, string> = { damage: "⚔️", ko: "💥", support: "💚", resilience: "🛡️", win: "🏆", leadership: "👑" };
+
+/**
+ * Barra de COMPOSIÇÃO dos pontos: cada cor é uma categoria (⚔️ dano, 💥 KO, 💚 suporte, 🛡️ resistência, 🏆 vitória, 👑 topo).
+ * `scale` (0–1) encurta a barra inteira em relação a uma referência (ex.: o líder), então o comprimento mostra
+ * QUANTO foi somado e as cores mostram DE ONDE vieram. `labels` mostra uma legenda com emoji, valor e %.
+ */
+export function StackBar({ parts, labels = false, thin = false, scale = 1 }: { parts: { key: PointCategory; value: number }[]; labels?: boolean; thin?: boolean; scale?: number }) {
   const total = parts.reduce((a, p) => a + Math.max(0, p.value), 0);
-  if (total <= 0) return <div className={`${thin ? "h-1.5" : "h-2.5"} rounded-full bg-slate-800`} />;
+  const h = thin ? "h-2" : "h-3.5";
+  if (total <= 0) return <div className={`${h} rounded-full bg-slate-800`} />;
+  const shown = parts.filter((p) => p.value > 0);
   return (
     <div>
-      <div className={`flex overflow-hidden rounded-full bg-slate-800 ${thin ? "h-1.5" : "h-2.5"}`} role="img" aria-label="Composição dos pontos">
-        {parts.map((p) => p.value > 0 && <span key={p.key} title={CATEGORY_LABELS[p.key]} style={{ width: `${(p.value / total) * 100}%`, background: CAT_COLORS[p.key] }} />)}
+      <div className={`overflow-hidden rounded-full bg-slate-800/90 ring-1 ring-slate-700/60 ${h}`} role="img" aria-label="De onde vieram os pontos">
+        <div className="flex h-full gap-px transition-all duration-700" style={{ width: `${Math.max(4, Math.min(1, scale) * 100)}%` }}>
+          {shown.map((p) => <span key={p.key} title={`${CATEGORY_LABELS[p.key]}: ${fmtPts(p.value)} (${Math.round((p.value / total) * 100)}%)`} className="h-full first:rounded-l-full last:rounded-r-full" style={{ flexGrow: p.value, flexBasis: 0, minWidth: 3, background: CAT_COLORS[p.key] }} />)}
+        </div>
       </div>
-      {labels && <ul className="mt-1.5 flex flex-wrap gap-x-3 gap-y-0.5">{parts.filter((p) => p.value > 0).map((p) => <li key={p.key} className="flex items-center gap-1 text-[10px] text-slate-400"><i className="h-2 w-2 rounded-full" style={{ background: CAT_COLORS[p.key] }} />{CATEGORY_LABELS[p.key]} <b className="text-white">{fmtPts(p.value)}</b> <span className="text-slate-600">({Math.round((p.value / total) * 100)}%)</span></li>)}</ul>}
+      {labels && (
+        <ul className="mt-2 flex flex-wrap gap-1.5">
+          {shown.map((p) => (
+            <li key={p.key} className="flex items-center gap-1.5 rounded-full border border-slate-700/70 bg-slate-900/70 py-0.5 pl-1.5 pr-2 text-[11px] text-slate-300">
+              <i className="h-2.5 w-2.5 rounded-full" style={{ background: CAT_COLORS[p.key] }} />
+              <span aria-hidden>{CAT_EMOJI[p.key]}</span>{CATEGORY_LABELS[p.key]} <b className="tabular-nums text-white">{fmtPts(p.value)}</b>
+              <span className="tabular-nums text-slate-500">{Math.round((p.value / total) * 100)}%</span>
+            </li>
+          ))}
+        </ul>
+      )}
     </div>
   );
 }

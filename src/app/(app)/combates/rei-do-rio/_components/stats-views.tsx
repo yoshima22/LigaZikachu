@@ -82,7 +82,7 @@ export function StandingsTable({ rows, cfg, meId, breakdown, avatars }: { rows: 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[720px] text-sm">
           <caption className="sr-only">Classificação geral</caption>
-          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2 pl-2">#</th><th>Jogador</th><th className="w-44">Pontos</th><th className="text-right">Pts/luta</th><th className="text-right">V·D·E</th><th className="text-right">Aprov.</th><th className="text-right">Sequência</th><th className="pr-2 text-right">Ajuste</th></tr></thead>
+          <thead><tr className="text-left text-[10px] uppercase tracking-wider text-slate-500"><th className="py-2 pl-2">#</th><th>Jogador</th><th className="w-44" title="A barra compara com o líder: cheia = pontos do 1º colocado">Pontos <span className="normal-case tracking-normal text-slate-600">(barra: % do líder)</span></th><th className="text-right">Pts/luta</th><th className="text-right">V·D·E</th><th className="text-right">Aprov.</th><th className="text-right">Sequência</th><th className="pr-2 text-right">Ajuste</th></tr></thead>
           <tbody>
             {rows.map((r) => {
               const mod = modifierPct(r, cfg);
@@ -148,7 +148,9 @@ export function MascotRanking({ rows, meId }: { rows: EditionView["mascotRanking
               <Sprite id={m.pokemonId} size={44} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-black text-white">{m.name} <span className="text-xs font-normal text-slate-500">· {m.owner}</span></p>
-                <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-amber-300/80 transition-all duration-700" style={{ width: `${(s.val(m) / best) * 100}%` }} /></div>
+                {sort === "total"
+                  ? <div className="mt-1.5"><StackBar parts={CAT_ORDER.map((k) => ({ key: k, value: m.points[k] ?? 0 }))} scale={s.val(m) / best} labels /></div>
+                  : <div className="mt-1 h-1.5 overflow-hidden rounded-full bg-slate-800"><div className="h-full rounded-full bg-amber-300/80 transition-all duration-700" style={{ width: `${(s.val(m) / best) * 100}%` }} /></div>}
               </div>
               <div className="text-right"><p className="font-mono text-lg font-black leading-none text-amber-200">{s.fmt(s.val(m))}</p><p className="text-[10px] text-slate-500">{s.label.toLowerCase()}</p></div>
             </div>
@@ -157,11 +159,10 @@ export function MascotRanking({ rows, meId }: { rows: EditionView["mascotRanking
                 <div key={l} className="rounded-lg bg-slate-950/60 px-1 py-1"><p className="text-[9px] uppercase tracking-wider text-slate-500">{l}</p><p className="text-xs font-bold tabular-nums text-white">{v}</p></div>
               ))}
             </div>
-            <div className="mt-2"><StackBar parts={CAT_ORDER.map((k) => ({ key: k, value: m.points[k] ?? 0 }))} thin /></div>
           </li>
         ))}
       </ol>
-      <div className="mt-3 flex flex-wrap gap-2">{CAT_ORDER.map((k) => <span key={k} className="flex items-center gap-1 text-[10px] text-slate-400"><i className="h-2 w-2 rounded-full" style={{ background: CAT_COLORS[k] }} />{CATEGORY_LABELS[k]}</span>)}</div>
+      <p className="mt-3 text-[11px] text-slate-500">{sort === "total" ? "Na aba Pontos: o comprimento da barra compara com o 1º colocado e as cores mostram de onde vieram os pontos (passe o mouse ou leia a legenda). Nas outras abas a barra âmbar só compara com o 1º." : "A barra âmbar compara cada mascote com o 1º colocado nesta aba."}</p>
     </div>
   );
 }
