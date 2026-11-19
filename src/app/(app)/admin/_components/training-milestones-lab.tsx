@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { StanceCompleteCard } from "../../_components/stance-complete-gate";
 import { buildTrainingLabView } from "@/lib/training-milestones-lab-view";
 import {
   evaluateTrainingEvent,
@@ -31,6 +32,7 @@ export function TrainingMilestonesLab() {
   const [arenaCooldown, setArenaCooldown] = useState<"none" | "early" | "ready">("none");
   const [eventResult, setEventResult] = useState<string | null>(null);
   const [arenaResult, setArenaResult] = useState<string | null>(null);
+  const [showCelebration, setShowCelebration] = useState(false);
   const view = useMemo(() => buildTrainingLabView({ stance, personality, seed, focusA, focusB }), [stance, personality, seed, focusA, focusB]);
 
   function simulateProgress() {
@@ -61,6 +63,8 @@ export function TrainingMilestonesLab() {
           <h2 className="text-sm font-black text-amber-200">🏳️ Laboratório — Marcos de Postura</h2>
           <p className="mt-1 max-w-3xl text-xs text-amber-50/70">{view.persistenceNotice}</p>
           <p className="mt-2 text-xs font-bold text-amber-100">Item simulado: {view.itemName}</p>
+          <button type="button" onClick={() => setShowCelebration(true)} className="mt-2 rounded-lg bg-amber-300 px-3 py-1.5 text-xs font-black text-slate-950 hover:bg-amber-200">▶ Pré-visualizar animação de conclusão</button>
+          {showCelebration && <StanceCompleteCard n={{ id: "preview", mascotName: "Mascote de teste", pokemonId: 25, stanceLabel: TRAINING_STANCES[stance].label, effect: TRAINING_STANCES[stance].effect }} onClose={() => setShowCelebration(false)} />}
         </div>
       </div>
 

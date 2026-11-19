@@ -42,6 +42,11 @@ export function StanceCompleteGate() {
   if (!n) return null;
   const close = () => { markSeen(n.id); setQueue((prev) => prev.slice(1)); };
 
+  return <StanceCompleteCard n={n} onClose={close} more={queue.length - 1} />;
+}
+
+/** Cartão da animação; exportado para o preview do admin. */
+export function StanceCompleteCard({ n, onClose, more = 0 }: { n: StanceCompleteNotice; onClose: () => void; more?: number }) {
   return (
     <div className="fixed inset-0 z-[125] flex items-center justify-center overflow-hidden bg-black/85 p-4 backdrop-blur-sm" role="dialog" aria-modal="true">
       <style>{`
@@ -71,8 +76,8 @@ export function StanceCompleteGate() {
         <p className="font-semibold text-slate-100">{n.mascotName}</p>
         <p className="mt-1 text-sm text-slate-300">Todas as missões foram cumpridas. A postura já pode ser equipada.</p>
         {n.effect && <p className="mx-auto mt-3 rounded-xl border border-amber-300/30 bg-amber-400/10 px-3 py-2 text-xs leading-relaxed text-amber-100">{n.effect}</p>}
-        <button onClick={close} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-amber-200">Incrível!</button>
-        {queue.length > 1 && <p className="mt-2 text-[10px] text-slate-500">+{queue.length - 1} conclusão(ões) a seguir</p>}
+        <button onClick={onClose} className="mt-5 w-full rounded-xl bg-amber-300 px-4 py-3 text-xs font-black uppercase tracking-widest text-slate-950 transition-colors hover:bg-amber-200">Incrível!</button>
+        {more > 0 && <p className="mt-2 text-[10px] text-slate-500">+{more} conclusão(ões) a seguir</p>}
       </div>
     </div>
   );
