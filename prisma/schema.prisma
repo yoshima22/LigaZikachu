@@ -5658,6 +5658,42 @@ model ReiRioEdition {
   @@map("rdr_editions")
 }
 
+// Pontos do ranking viram "moeda" ao fim de cada semana (centésimos) e acumulam entre edições; gastos em caixas (1 por caixa).
+model ReiRioWallet {
+  playerId  String   @id
+  balance   Int      @default(0)
+  earned    Int      @default(0)
+  spent     Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("rdr_wallets")
+}
+
+model ReiRioCredit {
+  id        String   @id @default(cuid())
+  editionId String
+  playerId  String
+  amount    Int
+  createdAt DateTime @default(now())
+
+  @@unique([editionId, playerId])
+  @@index([playerId])
+  @@map("rdr_credits")
+}
+
+model ReiRioBoxClaim {
+  id        String   @id @default(cuid())
+  playerId  String
+  boxKey    String
+  optionKey String
+  cost      Int
+  giftId    String?
+  createdAt DateTime @default(now())
+
+  @@unique([playerId, boxKey])
+  @@map("rdr_box_claims")
+}
+
 model ReiRioParticipant {
   id           String    @id @default(cuid())
   editionId    String

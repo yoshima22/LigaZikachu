@@ -5,7 +5,7 @@ import { LeagueBattleReplayModal } from "@/app/(app)/combates/liga-semanal/_comp
 import { DAY_LABELS } from "@/lib/rei-do-rio/schedule";
 import type { Formation } from "@/lib/rei-do-rio/team";
 import type { EditionSummary, EditionView } from "@/lib/rei-do-rio/view";
-import { clearRestPlanAction, loadEditionAction, loadReplayAction, registerAction, saveRestPlanAction, withdrawAction } from "../actions";
+import { adminSendInviteAction, clearRestPlanAction, loadEditionAction, loadReplayAction, registerAction, saveRestPlanAction, withdrawAction } from "../actions";
 import { AdminPanel } from "./admin-panel";
 import { ReportView } from "./report-view";
 import { TeamBuilder } from "./team-builder";
@@ -15,24 +15,25 @@ import { EditionNotice, HighlightsCard, Podium, TodayCard } from "./home-panels"
 import { HistoryView } from "./history-view";
 import { ReiIntro } from "./rei-intro";
 import { Manual } from "./manual";
+import { BoxesView } from "./boxes-view";
 import { MascotRanking, ScoringExplainer, StandingsTable, TeamsGrid } from "./stats-views";
 
-type Tab = "evento" | "equipe" | "ranking" | "mascotes" | "equipes" | "batalhas" | "relatorio" | "manual" | "admin";
+type Tab = "evento" | "equipe" | "ranking" | "mascotes" | "equipes" | "batalhas" | "relatorio" | "caixas" | "manual" | "admin";
 const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "evento", label: "Evento", icon: "🏰" }, { key: "equipe", label: "Minha equipe", icon: "🛡️" }, { key: "ranking", label: "Ranking", icon: "🏆" },
   { key: "mascotes", label: "Mascotes", icon: "🐾" }, { key: "equipes", label: "Equipes", icon: "👥" }, { key: "batalhas", label: "Batalhas", icon: "⚔️" },
-  { key: "relatorio", label: "Relatório", icon: "📜" }, { key: "manual", label: "Manual", icon: "📖" }, { key: "admin", label: "Admin", icon: "🔧" },
+  { key: "relatorio", label: "Relatório", icon: "📜" }, { key: "caixas", label: "Caixas", icon: "🎁" }, { key: "manual", label: "Manual", icon: "📖" }, { key: "admin", label: "Admin", icon: "🔧" },
 ];
 
 type ReplayData = Extract<Awaited<ReturnType<typeof loadReplayAction>>, { ok: true }>["replay"];
 
-export function ReiClient({ editions: initialEditions, banner = null }: { editions: EditionSummary[]; banner?: string | null }) {
+export function ReiClient({ editions: initialEditions, banner = null, isAdmin = true }: { editions: EditionSummary[]; banner?: string | null; isAdmin?: boolean }) {
   const [editions, setEditions] = useState(initialEditions);
   const [editionId, setEditionId] = useState<string | null>(initialEditions.find((e) => e.phase !== "FINISHED")?.id ?? initialEditions[0]?.id ?? null);
   const [view, setView] = useState<EditionView | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(!!initialEditions.length);
-  const [tab, setTab] = useState<Tab>(initialEditions.length ? "evento" : "admin");
+  const [tab, setTab] = useState<Tab>(initialEditions.length || !isAdmin ? "evento" : "admin");
   const [replay, setReplay] = useState<ReplayData | null>(null);
   const [toast, setToast] = useState<{ ok: boolean; text: string } | null>(null);
   const [saving, start] = useTransition();
@@ -100,7 +101,7 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
       )}
 
       <nav className="-mx-1 flex gap-1 overflow-x-auto px-1 pb-1" role="tablist" aria-label="Seções do Rei do Rio">
-        {TABS.map((t) => (
+        {TABS.filter((t) => isAdmin || t.key !== "admin").map((t) => (
           <button key={t.key} role="tab" aria-selected={tab === t.key} onClick={() => setTab(t.key)} className={`shrink-0 rounded-full px-3.5 py-2 text-xs font-bold transition ${tab === t.key ? "bg-amber-400 text-slate-900 shadow-lg shadow-amber-500/20" : "bg-slate-800/80 text-slate-300 hover:text-white"}`}>
             <span aria-hidden>{t.icon}</span> {t.label}
           </button>
@@ -112,8 +113,15 @@ export function ReiClient({ editions: initialEditions, banner = null }: { editio
       {toast && <div role="status" className={`rounded-xl border p-3 text-sm ${toast.ok ? "border-emerald-400/30 bg-emerald-500/10 text-emerald-200" : "border-red-400/30 bg-red-500/10 text-red-200"}`}>{toast.text}</div>}
       {error && <div role="alert" className="rounded-xl border border-red-400/30 bg-red-500/10 p-3 text-sm text-red-200">{error} <button className="underline" onClick={() => void refresh()}>Tentar de novo</button></div>}
 
-      {tab === "admin" ? (
+      {tab === "caixas" ? <BoxesView onToast={flash} /> : tab === "admin" && isAdmin ? (
+        <div className="space-y-4">
+          {ed && !ed.isTest && ed.phase === "PREPARATION" && (
+            <Card><Title sub="Envia 1 push de convite a TODOS os jogadores (respeita as preferências de anúncios). Só uma vez por edição. Use só quando o modo estiver aberto aos jogadores.">📣 Convite de inscrição</Title>
+              <button disabled={saving} onClick={() => confirm("Enviar o convite para todos os jogadores agora?") && start(async () => { const r = await adminSendInviteAction(ed.id); flash(r.ok, r.ok ? r.message : r.error ?? "Falha ao enviar."); })} className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-black text-slate-900 hover:bg-amber-300 disabled:opacity-40">Enviar convite para todos</button>
+            </Card>
+          )}
         <AdminPanel view={view} onChanged={() => { void refresh(); }} onCreated={(id) => { setEditions((p) => [{ id, name: "Nova edição", isTest: true, phase: "PREPARATION", mondayDate: "", participants: 0, autoRun: false, createdAt: new Date().toISOString() }, ...p]); setEditionId(id); setTab("evento"); }} />
+        </div>
       ) : loading && !view ? <Skeleton rows={6} /> : !view || !ed ? (
         <Empty icon="🎄" title="Nenhuma edição criada">Abra a aba Admin e crie uma edição de teste para começar a montar o Trono de Natal.</Empty>
       ) : (

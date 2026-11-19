@@ -11,7 +11,7 @@ type Cfg = EditionView["edition"]["cfg"];
 const SECTIONS = [
   ["visao", "Visão geral"], ["calendario", "Calendário"], ["equipe", "Montando a equipe"], ["habilidades", "Habilidades"], ["dia", "Seus mascotes durante o dia"],
   ["exemplo", "Exemplo passo a passo"], ["noite", "Descanso e recuperação"], ["pareamento", "Quem enfrenta quem"],
-  ["pontos", "Pontuação e classificação"], ["contribuicao", "Como cada mascote contribui"], ["equilibrio", "Pressão do Trono e Calor da Lareira"], ["relatorio", "Relatório e replays"], ["faq", "Perguntas frequentes"],
+  ["pontos", "Pontuação e classificação"], ["caixas", "Caixas de recompensa"], ["contribuicao", "Como cada mascote contribui"], ["equilibrio", "Pressão do Trono e Calor da Lareira"], ["relatorio", "Relatório e replays"], ["faq", "Perguntas frequentes"],
 ] as const;
 
 function Sec({ id, title, children }: { id: string; title: string; children: ReactNode }) {
@@ -46,7 +46,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
         <Sec id="visao" title="Visão geral">
           <p>É uma disputa de <B>sobrevivência por equipes</B>, de terça a sexta. Você monta <B>18 mascotes</B> na segunda e, depois disso, <B>não precisa entrar no site</B>: os combates acontecem sozinhos, cinco por dia. Quanto mais seus mascotes lutam, sobrevivem e ajudam o time, mais pontos a sua equipe soma. Ao fim da sexta, quem tiver mais pontos é coroado.</p>
           <p>Seus mascotes continuam livres para os outros modos da Liga (expedições, Arena, treinos). Participar aqui não ocupa nem prejudica nenhum deles, e o contrário também vale: o HP deste modo é só deste modo.</p>
-          <Note>O modo está em teste e visível apenas para administradores. Ainda não há recompensas reais.</Note>
+          <Note>Os pontos que você faz no ranking viram <B>saldo para trocar por caixas de prêmios</B> (veja “Caixas de recompensa”). A temporada de dezembro tem uma edição por semana, começando na primeira segunda-feira do mês (07/12).</Note>
         </Sec>
 
         <Sec id="calendario" title="Calendário (horário de Brasília)">
@@ -145,6 +145,16 @@ export function Manual({ cfg }: { cfg: Cfg }) {
           </ul>
         </Sec>
 
+        <Sec id="caixas" title="Caixas de recompensa">
+          <p>Ao fim de cada edição (sexta, 21h) <B>todos os pontos que você fez no ranking</B> entram no seu saldo. O saldo <B>acumula entre as semanas</B> e é gasto na aba <B>Caixas</B>.</p>
+          <ul className="list-disc space-y-1.5 pl-5">
+            <li>São <B>8 caixas</B>, da <B>Bengala Doce</B> (400 pontos) ao <B>Trono de Gelo</B> (5.500 pontos). Quanto mais cara, melhor o prêmio: as de cima trazem Pedras de Mega, TMs, Ovos de Laboratório e penas potentes.</li>
+            <li>Cada caixa pode ser resgatada <B>uma única vez</B> por jogador e deixa <B>escolher 1 entre 3 prêmios</B>.</li>
+            <li>Uma semana rende em média <B>~800 pontos</B> (de ~450 a ~1.500). Em 4 semanas, um jogador médio junta ~3.300: dá para abrir várias caixas do meio; o topo é de quem joga bem e todas as semanas.</li>
+            <li>O prêmio chega na sua <B>Caixa de Presentes</B>. Só edições reais geram saldo (testes não).</li>
+          </ul>
+        </Sec>
+
         <Sec id="contribuicao" title="Como cada mascote contribui">
           <p>Cada mascote que entra em campo recebe sua parte do orçamento do combate conforme o que <B>ele</B> fez. Nada é automático: sem ação efetiva, sem pontos.</p>
           <ul className="list-disc space-y-1.5 pl-5">
@@ -185,7 +195,8 @@ export function Manual({ cfg }: { cfg: Cfg }) {
               ["Os atributos dos meus mascotes mudam durante a semana?", "Não neste modo: eles são fotografados no fechamento de segunda."],
               ["Meu mascote pode ser usado em outros modos ao mesmo tempo?", "Sim. O HP e a derrota daqui existem só neste evento."],
               ["Habilidades passivas funcionam?", "Sim. Cada mascote usa a habilidade padrão dele ou a que você escolher na montagem (a oculta exige o TM). Veja a seção Habilidades."],
-              ["Há recompensas?", "Ainda não. Serão definidas depois, e todas as colocações receberão algo."],
+              ["Há recompensas?", "Sim. Ao fim de cada semana seus pontos do ranking viram saldo, que acumula entre as edições e paga caixas de prêmios (aba Caixas): cada caixa abre uma vez e você escolhe 1 entre 3 prêmios."],
+              ["Preciso jogar todas as semanas?", "Não. O saldo acumula, então quem joga só algumas semanas também chega às caixas — só leva mais tempo para as mais caras."],
             ] as [string, string][]).map(([q, a]) => <div key={q}><dt className="font-black text-white">{q}</dt><dd className="text-slate-400">{a}</dd></div>)}
           </dl>
         </Sec>

@@ -1,6 +1,13 @@
 // Modo semanal (Trono de Natal) — constantes fixas do evento e parâmetros de balanceamento ajustáveis.
 // Os fixos (18 mascotes, 6 slots, calendário) só mudam com decisão explícita.
 
+/**
+ * Abertura do modo aos jogadores. false = só ADMIN/SUPER_ADMIN (padrão). Ao virar true: o menu aparece para todos
+ * (app-nav), a página e as ações de JOGADOR aceitam qualquer jogador logado (getReiPlayer) e as ações de ADMIN
+ * continuam restritas a admins (getReiAdmin).
+ */
+export const REI_DO_RIO_PUBLIC = false;
+
 export const SLOT_COUNT = 6;
 export const SQUAD_SIZE = 3;
 export const TEAM_SIZE = SLOT_COUNT * SQUAD_SIZE; // 18

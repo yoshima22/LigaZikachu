@@ -23,6 +23,20 @@ export async function loadPackages(kits?: Record<string, PackageItem[]>): Promis
   }));
 }
 
+// Resolve uma lista de itens soltos (ex.: opções de caixa) com tipo e imagem da loja; itens da loja inexistentes são omitidos.
+export async function resolveItems(lists: PackageItem[][]): Promise<ResolvedItem[][]> {
+  const names = [...new Set(lists.flat().filter((i) => !i.egg && !i.fx).map((i) => i.name))];
+  const rows = names.length ? await prisma.shopItem.findMany({ where: { name: { in: names }, active: true }, select: { name: true, type: true, imageUrl: true } }) : [];
+  const byName = new Map<string, (typeof rows)[number]>();
+  for (const r of rows) if (!byName.has(r.name)) byName.set(r.name, r);
+  return lists.map((items) => items.flatMap((i): ResolvedItem[] => {
+    if (i.egg) return [{ ...i, type: null, imageUrl: eggImageUrl(i.egg) }];
+    if (i.fx) return [{ ...i, type: null, imageUrl: null }];
+    const r = byName.get(i.name);
+    return r ? [{ ...i, type: r.type as string, imageUrl: r.imageUrl }] : [];
+  }));
+}
+
 // Presente do Papai Noel (constância) sorteado pelo índice, já com imagem/tipo da loja.
 export async function resolveMimo(index: number): Promise<ResolvedItem> {
   const i = MIMO_OPTIONS[index % MIMO_OPTIONS.length];

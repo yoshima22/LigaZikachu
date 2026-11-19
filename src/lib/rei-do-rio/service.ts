@@ -6,7 +6,10 @@ import { Prisma } from "@prisma/client";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, isAdmin } from "@/lib/auth/permissions";
 import { getSessionPlayer } from "@/lib/session";
-import { COMPETITION_DAYS, TOTAL_ROUNDS, mergeConfig, type ReiConfig } from "./config";
+import { COMPETITION_DAYS, REI_DO_RIO_PUBLIC, TOTAL_ROUNDS, mergeConfig, type ReiConfig } from "./config";
+import { SEASON_MONDAYS } from "./rewards";
+import { creditEditionPoints } from "./wallet";
+import { notifyParticipants } from "./notify";
 import { buildRoundPlan, canTransition, freezeAt, isLastRoundOfDay, lockAt, type Phase } from "./schedule";
 import { autoBuild, type Preset } from "./auto-build";
 import { initialStandings, runRound, type MatchSummary, type Runtime } from "./engine";
@@ -24,6 +27,17 @@ export async function getReiAdmin() {
   if (!user || !isAdmin(user.role)) return null;
   const player = await getSessionPlayer(user.id);
   return player ? { userId: user.id, playerId: player.id, displayName: player.displayName } : null;
+}
+
+/** Jogador logado com acesso ao modo: admins sempre; demais só quando REI_DO_RIO_PUBLIC. Ações de admin seguem em getReiAdmin. */
+export async function getReiPlayer() {
+  const admin = await getReiAdmin();
+  if (admin) return { ...admin, isAdmin: true as const };
+  if (!REI_DO_RIO_PUBLIC) return null;
+  const user = await getSessionUser();
+  if (!user) return null;
+  const player = await getSessionPlayer(user.id);
+  return player ? { userId: user.id, playerId: player.id, displayName: player.displayName, isAdmin: false as const } : null;
 }
 
 // ── Coleção do jogador -> snapshots ───────────────────────────────────────────
@@ -131,10 +145,12 @@ export async function lockEdition(editionId: string) {
   if (remaining < min) {
     // Poucos inscritos: o evento da semana é cancelado (nada é processado, ninguém perde nada).
     await setPhase(editionId, "PREPARATION", "CANCELED", { lockedAt: new Date(), registrationOpen: false, finishedAt: new Date(), configJson: J({ ...cfg, lockDropped: dropped, canceledReason: `Apenas ${remaining} de ${min} inscritos necessários.` }) });
+    void notifyParticipants(editionId, "canceled", { title: "👑 Rei do Rio cancelado esta semana", body: `Poucos inscritos (${remaining} de ${min}). Nada foi descontado — a próxima edição já abre.` });
     return { dropped, canceled: true as const };
   }
   await setPhase(editionId, "PREPARATION", "LOCKED", { lockedAt: new Date(), registrationOpen: false, configJson: J({ ...cfg, lockDropped: dropped }) });
   await ensureDayStates(editionId, 1);
+  void notifyParticipants(editionId, "locked", { title: "👑 Rei do Rio: equipes reveladas!", body: "Inscrições encerradas e os 18 mascotes travados. As lutas começam terça às 09h — acompanhe a classificação." });
   return { dropped, canceled: false as const };
 }
 
@@ -270,11 +286,14 @@ export async function processNextRound(editionId: string, now = new Date()): Pro
       await tx.reiRioRound.update({ where: { id: next.id }, data: { status: "DONE", finishedAt: new Date(), snapshotJson: J(snapshot), standingsJson: J(res.standings), claimToken: null } });
       if (next.roundIndex >= TOTAL_ROUNDS) {
         await tx.reiRioEdition.update({ where: { id: editionId }, data: { phase: "FINISHED", finishedAt: new Date(), championKey: res.standings[0]?.pid ?? null, restDay: null } });
+        await creditEditionPoints(tx, editionId); // pontos do ranking viram saldo para as caixas
       } else if (lastOfDay) {
         // Só abre o descanso DEPOIS de a última rodada do dia estar consolidada (mesma transação).
         await tx.reiRioEdition.update({ where: { id: editionId }, data: { phase: "REST", restDay: next.dayIndex + 1 } });
       }
     }, { timeout: 120_000, maxWait: 15_000 });
+    if (next.roundIndex >= TOTAL_ROUNDS) void notifyParticipants(editionId, "final", { title: "🏆 Rei do Rio: resultado final!", body: "O Trono tem dono. Seus pontos da semana viraram saldo: confira as caixas de prêmios." });
+    else if (lastOfDay) void notifyParticipants(editionId, `day${next.dayIndex}`, { title: `👑 Rei do Rio: relatório do dia ${next.dayIndex}`, body: "As 5 lutas de hoje terminaram. Veja sua posição, o relatório e os replays — e ajuste a equipe até as 08h." });
     return { status: "done", round: next.roundIndex };
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
@@ -319,8 +338,37 @@ export async function tick(editionId: string, opts: { now?: Date; force?: boolea
   return { processed, log };
 }
 
+/**
+ * Temporada de dezembro: cria sozinha a edição real de cada segunda (SEASON_MONDAYS), com inscrições abertas.
+ * A 1ª abre assim que possível; as seguintes abrem quando a anterior fecha as inscrições (seg 21h). Nunca cria edição
+ * depois do prazo da própria segunda; em janeiro só termina a última iniciada em dezembro (sexta 01/01).
+ */
+export async function ensureSeasonEditions(now = new Date()) {
+  return prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('rdr:season'))`;
+    const have = new Set((await tx.reiRioEdition.findMany({ where: { isTest: false, mondayDate: { in: [...SEASON_MONDAYS] } }, select: { mondayDate: true } })).map((e) => e.mondayDate));
+    const idx = SEASON_MONDAYS.findIndex((m) => !have.has(m));
+    if (idx < 0) return null;
+    const monday = SEASON_MONDAYS[idx];
+    if (now >= lockAt(monday)) return null; // semana já passou: não cria edição atrasada
+    if (idx > 0 && now < lockAt(SEASON_MONDAYS[idx - 1])) return null; // só abre depois do fechamento da anterior
+    const plan = buildRoundPlan(monday);
+    const e = await tx.reiRioEdition.create({
+      data: {
+        name: `Trono de Natal — Semana ${idx + 1}`, isTest: false, autoRun: true, mondayDate: monday, configJson: J({}),
+        rounds: { create: plan.map((r) => ({ roundIndex: r.roundIndex, dayIndex: r.dayIndex, slotInDay: r.slotInDay, scheduledAt: r.at })) },
+      },
+    });
+    return e.id;
+  }, { timeout: 30_000 });
+}
+
 /** Cron: só edições com relógio real ligado. */
 export async function tickAutoEditions(now = new Date()) {
+  await ensureSeasonEditions(now).catch((e) => console.error("[ReiDoRio] temporada", e));
+  // Rede de segurança: edições finalizadas há pouco sem crédito (idempotente: 1 crédito por jogador/edição).
+  const recent = await prisma.reiRioEdition.findMany({ where: { isTest: false, phase: "FINISHED", finishedAt: { gte: new Date(now.getTime() - 14 * 86_400_000) } }, select: { id: true } });
+  for (const r of recent) await prisma.$transaction((tx) => creditEditionPoints(tx, r.id)).catch((e) => console.error("[ReiDoRio] crédito", e));
   const eds = await prisma.reiRioEdition.findMany({ where: { autoRun: true, phase: { notIn: ["FINISHED", "CANCELED"] } }, select: { id: true } });
   const out: Record<string, string[]> = {};
   for (const e of eds) out[e.id] = (await tick(e.id, { now })).log;

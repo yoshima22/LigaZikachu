@@ -60,6 +60,8 @@ import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
 import { AmigoOcultoInviteGate } from "./_components/amigo-oculto-invite-gate";
 import { getAmigoInviteState } from "@/lib/amigo-oculto/invite";
+import { ReiDoRioInviteGate } from "./_components/rei-do-rio-invite-gate";
+import { getReiInviteState } from "@/lib/rei-do-rio/invite";
 import { getOccurrenceNoticesForPlayer } from "@/lib/mascot-occurrences";
 
 const ACCESS_OBSERVATION_USER_IDS = new Set([
@@ -307,8 +309,11 @@ export default async function AppLayout({
 
   const amigoInvite = !isPlatformAdmin && player?.id ? await getAmigoInviteState(player.id).catch(() => null) : null;
 
+  const reiInvite = player?.id ? await getReiInviteState(player.id).catch(() => null) : null;
+
   return (
     <>
+      {reiInvite && !amigoInvite && <ReiDoRioInviteGate editionId={reiInvite.editionId} name={reiInvite.name} closesAt={reiInvite.closesAt} />}
       {amigoInvite && <AmigoOcultoInviteGate editionId={amigoInvite.editionId} />}
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />

@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
+import { REI_DO_RIO_PUBLIC } from "@/lib/rei-do-rio/config";
 import Link from "next/link";
 import { JOURNAL_PUBLIC } from "@/journal-data/config";
 import {
@@ -142,8 +143,8 @@ const combatLinks = [
     href: "/combates/rei-do-rio",
     label: "Rei do Rio",
     icon: Crown,
-    adminOnly: true,
-    platformAdminOnly: true, // protótipo fechado: só ADMIN, nunca GM
+    adminOnly: !REI_DO_RIO_PUBLIC, // abrir ao público = REI_DO_RIO_PUBLIC = true em lib/rei-do-rio/config.ts
+    platformAdminOnly: !REI_DO_RIO_PUBLIC, // protótipo fechado: só ADMIN, nunca GM
     beta: true,
   },
 ];

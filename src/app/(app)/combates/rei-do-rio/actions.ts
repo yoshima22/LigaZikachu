@@ -7,11 +7,13 @@ import type { Formation, Strategy } from "@/lib/rei-do-rio/team";
 import { arenaFight } from "@/lib/rei-do-rio/fight-arena";
 import { makeSimPlayer, simulateWeek, type BotTier } from "@/lib/rei-do-rio/simulate";
 import {
-  addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, loadPlayerPool, lockEdition, processNextRound,
+  addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, getReiPlayer, loadPlayerPool, lockEdition, processNextRound,
   resetTestEdition, saveDayPlan, saveRegistration, tick, verifyEdition, withdraw,
 } from "@/lib/rei-do-rio/service";
 import { getEditionView, listEditions, loadDayMatches, loadReplay, loadReport } from "@/lib/rei-do-rio/view";
 import { prisma } from "@/lib/prisma";
+import { claimBox, loadBoxesView } from "@/lib/rei-do-rio/wallet";
+import { sendRegistrationInvite } from "@/lib/rei-do-rio/notify";
 
 const DENIED = { ok: false as const, error: "Acesso restrito à equipe ADMIN." };
 const PATH = "/combates/rei-do-rio";
@@ -20,18 +22,18 @@ const fail = (e: unknown) => ({ ok: false as const, error: e instanceof Error ? 
 // ── Leitura ───────────────────────────────────────────────────────────────────
 
 export async function loadEditionAction(editionId: string) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try { const view = await getEditionView(editionId, me.playerId); return view ? { ok: true as const, view } : { ok: false as const, error: "Edição não encontrada." }; } catch (e) { return fail(e); }
 }
 
 export async function listEditionsAction() {
-  if (!(await getReiAdmin())) return DENIED;
+  if (!(await getReiPlayer())) return DENIED;
   try { return { ok: true as const, editions: await listEditions() }; } catch (e) { return fail(e); }
 }
 
 export async function loadDayMatchesAction(editionId: string, day: number, opts: { round?: number | null; mine?: boolean; page?: number } = {}) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try {
     let participantId: string | null = null;
@@ -46,19 +48,19 @@ export async function loadDayMatchesAction(editionId: string, day: number, opts:
 }
 
 export async function loadReportAction(editionId: string, participantId: string, day: number) {
-  if (!(await getReiAdmin())) return DENIED;
+  if (!(await getReiPlayer())) return DENIED;
   try { const report = await loadReport(editionId, participantId, day); return report ? { ok: true as const, report } : { ok: false as const, error: "Relatório indisponível." }; } catch (e) { return fail(e); }
 }
 
 export async function loadReplayAction(matchId: string) {
-  if (!(await getReiAdmin())) return DENIED;
+  if (!(await getReiPlayer())) return DENIED;
   try { const replay = await loadReplay(matchId); return replay ? { ok: true as const, replay } : { ok: false as const, error: "Replay indisponível." }; } catch (e) { return fail(e); }
 }
 
 // ── Jogador (admin) ───────────────────────────────────────────────────────────
 
 export async function autoBuildAction(preset: Preset, strategy: Strategy) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try {
     const pool = await loadPlayerPool(me.playerId);
@@ -68,7 +70,7 @@ export async function autoBuildAction(preset: Preset, strategy: Strategy) {
 }
 
 export async function registerAction(editionId: string, formation: Formation) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try {
     const r = await saveRegistration(editionId, me.playerId, me.displayName, formation);
@@ -78,13 +80,13 @@ export async function registerAction(editionId: string, formation: Formation) {
 }
 
 export async function withdrawAction(editionId: string) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try { const ok = await withdraw(editionId, me.playerId); revalidatePath(PATH); return ok ? { ok: true as const } : { ok: false as const, error: "Não é mais possível cancelar a inscrição." }; } catch (e) { return fail(e); }
 }
 
 export async function saveRestPlanAction(editionId: string, formation: Formation) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try {
     const r = await saveDayPlan(editionId, me.playerId, formation);
@@ -94,9 +96,25 @@ export async function saveRestPlanAction(editionId: string, formation: Formation
 }
 
 export async function clearRestPlanAction(editionId: string) {
-  const me = await getReiAdmin();
+  const me = await getReiPlayer();
   if (!me) return DENIED;
   try { await clearDayPlan(editionId, me.playerId); revalidatePath(PATH); return { ok: true as const }; } catch (e) { return fail(e); }
+}
+
+// ── Carteira e caixas de recompensa ─────────────────────────────────────────
+
+export async function loadBoxesAction() {
+  const me = await getReiPlayer();
+  if (!me) return DENIED;
+  try { return { ok: true as const, boxes: await loadBoxesView(me.playerId) }; } catch (e) { return fail(e); }
+}
+
+export async function claimBoxAction(boxKey: string, optionKey: string) {
+  const me = await getReiPlayer();
+  if (!me) return DENIED;
+  const r = await claimBox(me.playerId, boxKey, optionKey);
+  revalidatePath(PATH);
+  return r.ok ? { ok: true as const } : { ok: false as const, error: r.error };
 }
 
 // ── Administração / testes ────────────────────────────────────────────────────
@@ -208,4 +226,10 @@ export async function adminSimulateAction(input: { players: number; weeks: numbe
     }
     return { ok: true as const, runs: out };
   } catch (e) { return fail(e); }
+}
+
+/** Convite de inscrição para todos os jogadores (push). Só admin, 1 vez por edição. */
+export async function adminSendInviteAction(editionId: string) {
+  if (!(await getReiAdmin())) return DENIED;
+  try { const r = await sendRegistrationInvite(editionId); return r.ok ? { ok: true as const, message: r.message } : { ok: false as const, error: r.message }; } catch (e) { return fail(e); }
 }
