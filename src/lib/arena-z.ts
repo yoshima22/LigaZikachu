@@ -205,7 +205,10 @@ export function estimateVaultClaim(
   memberCount: number,
   pveEarnedToday = 0,
   pveDailyCoinsCap = PVE_DAILY_COINS_CAP,
+  pvpStolenCoins = 0,
 ): { coins: number; exp: number; food: number; sweet: number } {
+  const stolen = Math.min(vault.coins, pvpStolenCoins);
+  vault = { ...vault, coins: vault.coins - stolen };
   const mult = getTeamTimeMultiplier(new Date(enteredAt));
   const hoursActive = (Date.now() - new Date(enteredAt).getTime()) / 3_600_000;
   const cappedHours = Math.min(hoursActive, PASSIVE_MAX_HOURS);
@@ -224,7 +227,7 @@ export function estimateVaultClaim(
   const pveAvailable = Math.max(0, pveDailyCoinsCap - pveEarnedToday);
   const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
   return {
-    coins: pveCoinsCapped + pvpCoinsFinal,
+    coins: pveCoinsCapped + pvpCoinsFinal + stolen,
     exp: pveExp + pvpExpFinal,
     food: vault.food,
     sweet: vault.sweet,
@@ -2819,6 +2822,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   });
   if (refreshed) {
     team.vaultCoins = refreshed.vaultCoins;
+    team.vaultPvpCoins = refreshed.vaultPvpCoins;
     team.vaultExp = refreshed.vaultExp;
     team.vaultFood = refreshed.vaultFood;
     team.vaultSweet = refreshed.vaultSweet;
@@ -2844,9 +2848,11 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   const estimatedPvpExp = Math.floor(
     cappedHours * memberCount * PASSIVE_EXP_PER_MASCOT_PER_H,
   );
-  const pvpCoins = Math.min(team.vaultCoins, estimatedPvpCoins);
+  // Roubo/defesa PvP: fora do limite diário PvE e sem multiplicador de tempo
+  const stolenCoins = Math.min(team.vaultCoins, team.vaultPvpCoins ?? 0);
+  const pvpCoins = Math.min(team.vaultCoins - stolenCoins, estimatedPvpCoins);
   const pvpExp = Math.min(team.vaultExp, estimatedPvpExp);
-  const pveCoins = Math.max(0, team.vaultCoins - pvpCoins);
+  const pveCoins = Math.max(0, team.vaultCoins - stolenCoins - pvpCoins);
   const pveExp = Math.max(0, team.vaultExp - pvpExp);
   const pvpPart = applyMultiplierToVault(
     { coins: pvpCoins, exp: pvpExp, food: 0, sweet: 0 },
@@ -2875,7 +2881,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
   const pveCoinsCapped = Math.min(pveCoins, pveAvailable);
 
   const vaultFinal = {
-    coins: team.player.casualMode ? 0 : pveCoinsCapped + pvpPart.coins,
+    coins: team.player.casualMode ? 0 : pveCoinsCapped + pvpPart.coins + stolenCoins,
     exp: team.player.casualMode ? 0 : pveExp + pvpPart.exp,
     food: team.vaultFood,
     sweet: team.vaultSweet,
@@ -2944,6 +2950,7 @@ export async function retireArenaTeam(playerId: string, teamId: string) {
       data: {
         status: "RETIRED",
         vaultCoins: 0,
+        vaultPvpCoins: 0,
         vaultExp: 0,
         vaultFood: 0,
         vaultSweet: 0,
@@ -4546,6 +4553,7 @@ export async function runPvpBattle(
         where: { id: winnerTeam.id },
         data: {
           vaultCoins: { increment: lootSplit.stolen.coins },
+          vaultPvpCoins: { increment: lootSplit.stolen.coins },
           vaultExp: { increment: lootSplit.stolen.exp },
           vaultFood: { increment: lootSplit.stolen.food },
           vaultSweet: { increment: lootSplit.stolen.sweet },
@@ -4574,7 +4582,10 @@ export async function runPvpBattle(
     ) {
       await tx.arenaTeam.update({
         where: { id: defenseTeam.id },
-        data: { vaultCoins: { increment: defenseRewardCoins } },
+        data: {
+          vaultCoins: { increment: defenseRewardCoins },
+          vaultPvpCoins: { increment: defenseRewardCoins },
+        },
       });
     }
 
@@ -4627,6 +4638,7 @@ export async function runPvpBattle(
           where: { id: loserTeam.id },
           data: {
             vaultCoins: preserved.coins,
+            vaultPvpCoins: Math.min(loserTeam.vaultPvpCoins, preserved.coins),
             vaultExp: preserved.exp,
             vaultFood: preserved.food,
             vaultSweet: preserved.sweet,

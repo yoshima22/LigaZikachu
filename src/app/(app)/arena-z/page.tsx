@@ -17,7 +17,7 @@ import {
   AdminMascotStateButton, AdminArenaTeamManager, BotBattleButton, DeleteTeamButton,
   BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
-  PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge,
+  PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow,
   RetireTeamButton, SusButton, SusShieldButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
 import { PvpVaultLive } from "./_components/pvp-vault-live";
@@ -417,8 +417,8 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     }));
   }));
   const pvpCooldowns = new Map<string, Date | null>();
-  // Só usado nos botões de ataque da tab "salas"
-  (needsRoomsData ? readyActiveTeams : []).forEach((team) => {
+  // Usado nos botões de ataque da tab "salas" e nos cooldowns da tab "equipes"
+  (needsRoomsData || activeTab === "equipes" ? readyActiveTeams : []).forEach((team) => {
     const lastPvpAt = latestBattlesByTeamAndType.get(`${team.id}:PVP`) ?? null;
     pvpCooldowns.set(team.id, lastPvpAt
       ? new Date(lastPvpAt.getTime() + ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000)
@@ -989,7 +989,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             const multPct = Math.round((mult - 1) * 100);
             const vaultNow = estimateVaultClaim(
               { coins: team.vaultCoins, exp: team.vaultExp, food: team.vaultFood, sweet: team.vaultSweet },
-              team.enteredAt, team.members.length, pveEarnedToday, pveDailyCoinsCap,
+              team.enteredAt, team.members.length, pveEarnedToday, pveDailyCoinsCap, team.vaultPvpCoins,
             );
             return (
               <div key={team.id} className="rounded-2xl border border-border bg-slate-950/60 p-4">
@@ -1025,6 +1025,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                     <DeleteTeamButton teamId={team.id} isAdmin={admin} teamStatus={team.status} />
                   </div>
                 </div>
+
+                {team.status === "ACTIVE" && !team.isTraining && (
+                  <TeamCooldownsRow
+                    pveUntil={botPreviews.get(team.id)?.cooldownUntil ?? null}
+                    pvpUntil={pvpCooldowns.get(team.id) ?? null}
+                  />
+                )}
 
                 {/* Cofre */}
                 {(team.vaultCoins > 0 || team.vaultExp > 0) && (

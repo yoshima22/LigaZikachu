@@ -73,6 +73,26 @@ export function PvpCooldownIndicator({ until }: { until: Date | null }) {
   );
 }
 
+// Cooldowns PvE e PvP de uma equipe, lado a lado
+function CooldownChip({ label, until }: { label: string; until: Date | string | null }) {
+  const { expired } = useTimerExpiry(until);
+  const on = !expired && !!until;
+  return (
+    <span className="inline-flex items-center gap-1.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300">
+      {label}
+      {on ? <CooldownBadge until={until} /> : <span className="text-green-300">Liberado</span>}
+    </span>
+  );
+}
+export function TeamCooldownsRow({ pveUntil, pvpUntil }: { pveUntil: Date | string | null; pvpUntil: Date | string | null }) {
+  return (
+    <div className="mt-3 flex flex-wrap items-center gap-x-4 gap-y-1.5 rounded-xl border border-border/60 bg-slate-900/40 px-3 py-2">
+      <CooldownChip label="PvE" until={pveUntil} />
+      <CooldownChip label="PvP" until={pvpUntil} />
+    </div>
+  );
+}
+
 type BotBattleResult = NonNullable<Awaited<ReturnType<typeof runBotBattleAction>>["result"]>;
 type ArenaPveBatchReport = NonNullable<Awaited<ReturnType<typeof runArenaPveBatchAction>>["reports"]>;
 type ArenaStaleNotice = NonNullable<Awaited<ReturnType<typeof lockBotAction>>["stale"]>;

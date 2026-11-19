@@ -3305,6 +3305,8 @@ model ArenaTeam {
   name                 String
   status               ArenaTeamStatus @default(ACTIVE)
   vaultCoins           Int             @default(0)
+  // Parte de vaultCoins vinda de PvP (roubo + recompensa de defesa): não conta no limite diário PvE
+  vaultPvpCoins        Int             @default(0)
   vaultExp             Int             @default(0)
   vaultFood            Int             @default(0)
   vaultSweet           Int             @default(0)
