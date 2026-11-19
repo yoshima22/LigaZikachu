@@ -37,7 +37,7 @@ export function PvpVaultLive({
   const [updatedAt] = useState(Date.now());
   const [sinceUpdate, setSinceUpdate] = useState("agora");
   const projectedCoins = Math.floor(initialCoins * initialMultiplier);
-  const stolen30 = Math.floor(projectedCoins * 0.30);
+  const stolen30 = Math.floor(projectedCoins * 0.27);
   const multBonus = initialMultiplier > 1;
 
   useEffect(() => {

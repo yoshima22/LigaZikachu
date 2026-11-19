@@ -74,7 +74,7 @@ export function PvpCooldownIndicator({ until }: { until: Date | null }) {
 }
 
 // Cooldowns PvE e PvP de uma equipe, lado a lado
-function CooldownChip({ label, until }: { label: string; until: Date | string | null }) {
+export function CooldownChip({ label, until }: { label: string; until: Date | string | null }) {
   const { expired } = useTimerExpiry(until);
   const on = !expired && !!until;
   return (

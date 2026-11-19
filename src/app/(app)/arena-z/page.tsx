@@ -17,10 +17,10 @@ import {
   AdminMascotStateButton, AdminArenaTeamManager, BotBattleButton, DeleteTeamButton,
   BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
-  PvpCooldownIndicator, RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow,
+  RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow, CooldownChip,
   RetireTeamButton, SusButton, SusShieldButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
-import { PvpVaultLive } from "./_components/pvp-vault-live";
+import { PvpAttackPanel } from "./_components/pvp-attack-panel";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { CombatRoleSelect } from "./_components/combat-role-select";
@@ -417,11 +417,16 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     }));
   }));
   const pvpCooldowns = new Map<string, Date | null>();
+  const pveCooldowns = new Map<string, Date | null>();
   // Usado nos botões de ataque da tab "salas" e nos cooldowns da tab "equipes"
   (needsRoomsData || activeTab === "equipes" ? readyActiveTeams : []).forEach((team) => {
     const lastPvpAt = latestBattlesByTeamAndType.get(`${team.id}:PVP`) ?? null;
     pvpCooldowns.set(team.id, lastPvpAt
       ? new Date(lastPvpAt.getTime() + ARENA_Z_CONFIG.pvpCooldownMinutes * 60_000)
+      : null);
+    const lastPveAt = latestBattlesByTeamAndType.get(`${team.id}:BOT`) ?? null;
+    pveCooldowns.set(team.id, lastPveAt
+      ? new Date(lastPveAt.getTime() + ARENA_Z_CONFIG.botCooldownMinutes * 60_000)
       : null);
   });
 
@@ -761,136 +766,73 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       {/* ── Conteúdo expandido ── */}
                       <div className="border-t border-border/50 px-5 py-4 space-y-4">
 
-                        {/* Minhas equipes nesta sala */}
+                        {/* Seus times nesta sala: uma linha por time, com cofre e cooldowns */}
                         {myTeams.length > 0 && (
                           <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]/80 mb-2">Suas equipes nesta sala</p>
-                            <div className="grid gap-2 sm:grid-cols-2">
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-[#FFCB05]/80">Seus times nesta sala</p>
+                            <ul className="divide-y divide-[#FFCB05]/10 overflow-hidden rounded-xl border border-[#FFCB05]/25 bg-[#FFCB05]/[0.04]">
                               {myTeams.map(t => (
-                                <div key={t.id} className="rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 p-3">
-                                  <p className="mb-1 text-[9px] font-black uppercase tracking-[.16em] text-[#FFCB05]/75">Seu time · defensor nesta sala</p>
-                                  <div className="flex items-start justify-between gap-2">
-                                    <div className="min-w-0">
-                                      <p className="truncate text-xs font-bold text-[#FFCB05]">{t.name}</p>
-                                      <p className="text-[10px] text-slate-500 mt-0.5">
-                                        {t.members.length} mascote{t.members.length !== 1 ? "s" : ""} · na arena há {Math.floor((Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000)}h
-                                      </p>
-                                    </div>
-                                    {t.vaultCoins !== null && t.vaultCoins > 0 && (
-                                      <span className="shrink-0 rounded-lg border border-[#FFCB05]/30 bg-[#FFCB05]/10 px-2 py-1 text-[10px] font-bold text-[#FFCB05]">
-                                        {t.vaultCoins} ZC
-                                      </span>
-                                    )}
-                                  </div>
-                                  <div className="mt-2 flex flex-wrap gap-1">
-                                    {t.members.map((m, i) => (
-                                      <span key={i} className="flex items-center gap-1 rounded-full border border-[#FFCB05]/20 bg-slate-900/60 px-2 py-0.5 text-[9px] text-slate-300">
-                                        <span className="font-semibold">Nv.{m.level}</span>
-                                        <span className="text-slate-500">{m.name ?? "—"}</span>
-                                      </span>
-                                    ))}
-                                  </div>
-                                </div>
-                              ))}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* Equipes de outros jogadores */}
-                        {otherTeams.length > 0 && (
-                          <div>
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 mb-2">
-                              Outros jogadores nesta sala
-                            </p>
-                            <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
-                              {otherTeams.map(t => {
-                                const isAttackable = opponents.some(o => o.id === t.id) && readyActiveTeams.length > 0;
-                                return (
-                                  <div key={t.id} className={`rounded-xl border p-3 ${isAttackable ? "border-red-500/25 bg-red-500/5" : "border-slate-700/50 bg-slate-900/30"}`}>
-                                    <p className={`mb-1 text-[9px] font-black uppercase tracking-[.16em] ${isAttackable ? "text-red-300" : "text-slate-500"}`}>{isAttackable ? "Alvo disponível" : "Equipe observada"}</p>
-                                    <div className="flex items-start justify-between gap-2">
-                                      <div className="min-w-0">
-                                        <p className="truncate text-xs font-semibold text-slate-200">{t.name}</p>
-                                        <p className="text-[10px] text-slate-500 flex items-center gap-1.5">
-                                          {t.playerName}
-                                          {t.isCasual && (
-                                            <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-bold text-sky-300" title="Jogador Casual: sem movimentação de cofre ou cooldown nestas batalhas">
-                                              Casual
-                                            </span>
-                                          )}
-                                        </p>
-                                      </div>
-                                      {isAttackable && (
-                                        <span className="shrink-0 rounded-full border border-red-500/40 bg-red-500/10 px-1.5 py-0.5 text-[9px] font-bold text-red-300">
-                                          ⚔️ atacável
-                                        </span>
-                                      )}
-                                    </div>
-                                    <div className="mt-2 flex flex-wrap gap-1">
-                                      {t.members.map((m, i) => (
-                                        <span key={i} className="rounded border border-slate-700/60 bg-slate-800/50 px-1.5 py-0.5 text-[9px] text-slate-400">
-                                          {m.name ? <>{m.name} <span className="text-slate-600">Nv.{m.level}</span></> : <span className="text-slate-600">??? Nv.{m.level}</span>}
-                                        </span>
-                                      ))}
-                                    </div>
-                                  </div>
-                                );
-                              })}
-                            </div>
-                          </div>
-                        )}
-
-                        {/* PvP: atacar equipes desta sala */}
-                        {hasOpponents && (
-                          <div className="rounded-xl border border-red-500/20 bg-red-500/5 p-3 space-y-3">
-                            <p className="text-[10px] font-bold uppercase tracking-widest text-red-400">⚔️ Atacar nesta sala</p>
-                            {readyActiveTeams.map(attackTeam => {
-                              const pvpCooldownUntil = pvpCooldowns.get(attackTeam.id) ?? null;
-                              return (
-                                <div key={attackTeam.id}>
-                                  <div className="mb-2 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#FFCB05]/20 bg-[#FFCB05]/5 px-3 py-2">
-                                    <p className="text-[11px] font-semibold text-slate-300">
-                                      <span className="mr-1 text-[9px] font-black uppercase tracking-wider text-[#FFCB05]">Você ataca com</span>
-                                      <span className="text-slate-100">{attackTeam.name}</span>
+                                <li key={t.id} className="flex flex-wrap items-center gap-x-4 gap-y-1.5 px-3 py-2.5">
+                                  <div className="min-w-0 flex-1 basis-40">
+                                    <p className="truncate text-xs font-bold text-[#FFCB05]">{t.name}</p>
+                                    <p className="text-[10px] text-slate-500">
+                                      {t.members.length} mascote{t.members.length !== 1 ? "s" : ""} · na arena há {Math.floor((Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000)}h
                                     </p>
-                                    <PvpCooldownIndicator until={pvpCooldownUntil} />
                                   </div>
-                                  <div className="grid gap-2 sm:grid-cols-2">
-                                    {opponents.map(defenseTeam => {
-                                      const debuff = Math.round(getArenaDebuffPct(defenseTeam.enteredAt) * 100);
-                                      return (
-                                        <div key={defenseTeam.id} className="rounded-xl border border-slate-700/60 bg-slate-950/60 p-3">
-                                          <p className="mb-1 text-[9px] font-black uppercase tracking-[.16em] text-red-300">Alvo · {defenseTeam.roomLevel ? `sala Nv.${defenseTeam.roomLevel}` : "treino"}</p>
-                                          <div className="flex items-start justify-between gap-2 mb-2">
-                                            <div>
-                                              <p className="text-[11px] font-bold text-slate-100">{defenseTeam.name}</p>
-                                              <p className="text-[10px] text-slate-500">
-                                                {defenseTeam.player.displayName ?? defenseTeam.player.ptcglNick}
-                                                {debuff > 0 && <span className="ml-1 text-orange-400"> · -{debuff}% stats</span>}
-                                              </p>
-                                            </div>
-                                            <PvpBattleButton
-                                              attackTeamId={attackTeam.id}
-                                              defenseTeamId={defenseTeam.id}
-                                              attackTeamUpdatedAt={attackTeam.updatedAt.toISOString()}
-                                              pvpCooldownUntil={pvpCooldownUntil}
-                                            />
-                                          </div>
-                                          <PvpVaultLive
-                                            teamId={defenseTeam.id}
-                                            initialCoins={defenseTeam.vaultCoins}
-                                            initialExp={defenseTeam.vaultExp}
-                                            initialFood={defenseTeam.vaultFood}
-                                            initialSweet={defenseTeam.vaultSweet}
-                                            initialMultiplier={parseFloat(getTeamTimeMultiplier(defenseTeam.enteredAt).toFixed(1))}
-                                          />
-                                        </div>
-                                      );
-                                    })}
+                                  <span className="text-[11px] font-bold text-[#FFCB05]">💰 {t.vaultCoins ?? 0} ZC</span>
+                                  <div className="flex gap-3">
+                                    <CooldownChip label="PvP" until={pvpCooldowns.get(t.id) ?? null} />
+                                    <CooldownChip label="PvE" until={pveCooldowns.get(t.id) ?? null} />
                                   </div>
-                                </div>
-                              );
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {/* Ataque PvP: escolher time atacante → escolher alvo */}
+                        {hasOpponents ? (
+                          <PvpAttackPanel
+                            stolenPct={ARENA_Z_CONFIG.defeatedLootStolenPct}
+                            attackers={readyActiveTeams.filter(t => !t.isTraining).map(t => ({
+                              id: t.id,
+                              name: t.name,
+                              updatedAt: t.updatedAt.toISOString(),
+                              memberCount: t.members.length,
+                              vaultCoins: t.vaultCoins,
+                              pveUntil: pveCooldowns.get(t.id)?.toISOString() ?? null,
+                              pvpUntil: pvpCooldowns.get(t.id)?.toISOString() ?? null,
+                            }))}
+                            targets={opponents.map(d => {
+                              const view = room.teams.find(x => x.id === d.id);
+                              return {
+                                id: d.id,
+                                name: d.name,
+                                playerId: d.playerId,
+                                playerName: d.player.displayName ?? d.player.ptcglNick ?? "—",
+                                isCasual: !!view?.isCasual,
+                                debuffPct: Math.round(getArenaDebuffPct(d.enteredAt) * 100),
+                                coins: d.vaultCoins,
+                                mult: getTeamTimeMultiplier(d.enteredAt),
+                                members: (view?.members ?? []).map(m => ({ name: m.name, level: m.level })),
+                              };
                             })}
+                          />
+                        ) : otherTeams.length > 0 && (
+                          <div>
+                            <p className="mb-2 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+                              Outros jogadores nesta sala{readyActiveTeams.length === 0 ? " · nenhum time seu está pronto para atacar" : ""}
+                            </p>
+                            <ul className="divide-y divide-slate-800 overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/30">
+                              {otherTeams.map(t => (
+                                <li key={t.id} className="flex flex-wrap items-center gap-x-3 px-3 py-2 text-[11px]">
+                                  <span className="font-semibold text-slate-200">{t.name}</span>
+                                  <span className="text-slate-500">{t.playerName}</span>
+                                  {t.isCasual && <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-bold text-sky-300">Casual</span>}
+                                  <span className="ml-auto text-[10px] text-slate-600">{t.members.length} mascote{t.members.length !== 1 ? "s" : ""}</span>
+                                </li>
+                              ))}
+                            </ul>
                           </div>
                         )}
                       </div>
