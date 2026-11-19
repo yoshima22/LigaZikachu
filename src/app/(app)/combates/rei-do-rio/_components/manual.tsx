@@ -148,7 +148,7 @@ export function Manual({ cfg }: { cfg: Cfg }) {
         <Sec id="caixas" title="Caixas de recompensa">
           <p>Ao fim de cada edição (sexta, 21h) <B>todos os pontos que você fez no ranking</B> entram no seu saldo. O saldo <B>acumula entre as semanas</B> e é gasto na aba <B>Caixas</B>.</p>
           <ul className="list-disc space-y-1.5 pl-5">
-            <li>São <B>8 caixas</B>, da <B>Bengala Doce</B> (100 pontos) ao <B>Trono de Gelo</B> (5.200 pontos). Quanto mais cara, melhor o prêmio: as de cima trazem Pedras de Mega, TMs, Ovos de Laboratório e penas potentes.</li>
+            <li>São <B>8 caixas</B>, da <B>Bengala Doce</B> (250 pontos) ao <B>Trono de Gelo</B> (5.350 pontos). Quanto mais cara, melhor o prêmio: as de cima trazem Pedras de Mega, TMs, Ovos de Laboratório e penas potentes.</li>
             <li>Cada caixa pode ser resgatada <B>uma única vez</B> por jogador e deixa <B>escolher 1 entre 3 prêmios</B>.</li>
             <li>Uma semana rende em média <B>~800 pontos</B> (de ~450 a ~1.500). Em 4 semanas, um jogador médio junta ~3.300: dá para abrir várias caixas do meio; o topo é de quem joga bem e todas as semanas.</li>
             <li>O prêmio chega na sua <B>Caixa de Presentes</B>. Só edições reais geram saldo (testes não).</li>

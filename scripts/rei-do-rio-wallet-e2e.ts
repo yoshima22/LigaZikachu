@@ -33,8 +33,8 @@ import { creditEditionPoints, claimBox, loadBoxesView } from "../src/lib/rei-do-
     assert.equal((await claimBox(pid, "bengala", "mel")).ok, false);          // 1 vez por caixa
     assert.equal((await claimBox(pid, "bengala", "nao-existe")).ok, false);
     w = await prisma.reiRioWallet.findUniqueOrThrow({ where: { playerId: pid } });
-    assert.equal(w.balance, 123_456 - 10_000);
-    assert.equal(w.spent, 10_000);
+    assert.equal(w.balance, 123_456 - 25_000);
+    assert.equal(w.spent, 25_000);
     const g = await prisma.playerGift.findUniqueOrThrow({ where: { id: giftId! } });
     const pl = g.payload as { eggs?: unknown[]; rareSweet?: number; food?: number };
     assert.ok((pl.eggs?.length ?? 0) === 1 && pl.rareSweet === 3 && pl.food === 20, JSON.stringify(pl));
