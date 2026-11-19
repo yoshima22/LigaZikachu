@@ -3,6 +3,7 @@ const BASE = `${process.env.NEXT_PUBLIC_SUPABASE_URL ?? ""}/storage/v1/object/pu
 
 export const REI_ASSETS = {
   banner: `${BASE}/banner.webp`, // 2000x667
+  invite: `${BASE}/convite.webp`, // 1400x788 — convite com o Jotapê (popup de convite)
   cover: `${BASE}/cover.webp`, // 1122x1402 (apresentação)
   background: `${BASE}/background.webp`, // 1536x1024
   ornaments: {

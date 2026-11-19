@@ -16,6 +16,8 @@ import { HistoryView } from "./history-view";
 import { ReiIntro } from "./rei-intro";
 import { Manual } from "./manual";
 import { BoxesView } from "./boxes-view";
+import { InviteModal } from "@/app/(app)/amigo-oculto/_components/invite-modal";
+import { REI_ASSETS } from "@/lib/rei-do-rio/assets";
 import { MascotRanking, ScoringExplainer, StandingsTable, TeamsGrid } from "./stats-views";
 
 type Tab = "evento" | "equipe" | "ranking" | "mascotes" | "equipes" | "batalhas" | "relatorio" | "caixas" | "manual" | "admin";
@@ -40,6 +42,7 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
   const [builderKey, setBuilderKey] = useState(0);
   const [introKey, setIntroKey] = useState(0);
   const [restInit, setRestInit] = useState<Formation | null>(null);
+  const [showInvite, setShowInvite] = useState(false);
 
   const refresh = useCallback(async (id = editionId) => {
     if (!id) { setView(null); setLoading(false); return; }
@@ -115,6 +118,9 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
 
       {tab === "caixas" ? <BoxesView onToast={flash} /> : tab === "admin" && isAdmin ? (
         <div className="space-y-4">
+          <Card><Title sub="Pré-visualiza o convite com efeito que os jogadores verão quando o modo for aberto (clicar na imagem leva a esta página). Hoje não aparece para ninguém.">🎬 Convite (debug)</Title>
+            <button onClick={() => setShowInvite(true)} className="rounded-xl border border-amber-300/40 bg-amber-300/10 px-4 py-2 text-sm font-black text-amber-200 hover:bg-amber-300/20">▶ Mostrar convite</button>
+          </Card>
           {ed && !ed.isTest && ed.phase === "PREPARATION" && (
             <Card><Title sub="Envia 1 push de convite a TODOS os jogadores (respeita as preferências de anúncios). Só uma vez por edição. Use só quando o modo estiver aberto aos jogadores.">📣 Convite de inscrição</Title>
               <button disabled={saving} onClick={() => confirm("Enviar o convite para todos os jogadores agora?") && start(async () => { const r = await adminSendInviteAction(ed.id); flash(r.ok, r.ok ? r.message : r.error ?? "Falha ao enviar."); })} className="rounded-xl bg-amber-400 px-4 py-2 text-sm font-black text-slate-900 hover:bg-amber-300 disabled:opacity-40">Enviar convite para todos</button>
@@ -140,6 +146,16 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
                   ))}
                 </div>
                 <EditionNotice ed={ed} />
+                {ed.phase === "PREPARATION" && (
+                  <Card>
+                    <Title sub={ed.lockAt ? `Inscrições até ${new Date(ed.lockAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", hour: "2-digit", minute: "2-digit" })}. As lutas começam terça às 09h.` : "As lutas começam terça às 09h."}>👥 Inscritos aguardando o início ({view.standings.length})</Title>
+                    {view.standings.length === 0 ? <p className="text-sm text-slate-400">Ninguém se inscreveu ainda. Seja o primeiro: aba “Minha equipe”.</p> : (
+                      <ul className="flex flex-wrap gap-2">
+                        {view.standings.map((r) => <li key={r.pid} className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 py-1 pl-1 pr-3 text-sm text-slate-200"><Avatar src={view.avatars[r.pid]} name={r.name} size={26} />{r.name}{r.pid === me?.participantId && <span className="text-[10px] font-bold text-emerald-300">você</span>}</li>)}
+                      </ul>
+                    )}
+                  </Card>
+                )}
                 {ed.phase === "FINISHED" && ed.championName && <Card glow><div className="flex items-center justify-center gap-3"><Ornament k="crown" size={56} /><p className="text-center text-2xl font-black text-amber-200">{ed.championName} é o campeão!</p></div></Card>}
                 <Card><Title orn="crown" sub="Líder atual e os principais participantes.">Trono</Title><Podium rows={view.standings} avatars={view.avatars} /><div className="mt-4"><StandingsTable rows={view.standings.slice(0, 8)} cfg={ed.cfg} meId={me?.participantId} breakdown={view.breakdown} avatars={view.avatars} /></div></Card>
                 {view.today && <TodayCard today={view.today} meId={me?.participantId} avatars={view.avatars} onReplay={openReplay} onSeeAll={() => setTab("batalhas")} />}
@@ -212,6 +228,8 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
           {tab === "relatorio" && (me ? <ReportView editionId={ed.id} participantId={me.participantId} doneDays={doneDays} onReplay={openReplay} /> : <Empty icon="📜" title="Sem relatório">Só participantes recebem o relatório diário.</Empty>)}
         </>
       )}
+
+      {showInvite && <InviteModal onClose={() => setShowInvite(false)} href="/combates/rei-do-rio" image={REI_ASSETS.invite} alt="Convite: Rei do Rio — Trono de Natal" label="Conhecer o Rei do Rio — Trono de Natal" />}
 
       {ed && <ReiIntro cfg={ed.cfg} forceKey={introKey} />}
 

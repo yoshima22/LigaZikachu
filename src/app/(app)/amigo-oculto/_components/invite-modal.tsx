@@ -24,7 +24,7 @@ const CSS = `
 `;
 
 // Convite do Amigo Oculto: aparece com efeito de entrada, confete e brilho; clicar na imagem leva à página.
-export function InviteModal({ onClose, href = "/amigo-oculto" }: { onClose: () => void; href?: string }) {
+export function InviteModal({ onClose, href = "/amigo-oculto", image = INVITE_IMAGE, alt = "Convite: Amigo Oculto da Liga Zikachu — Participar Agora", label = "Participar do Amigo Oculto da Liga" }: { onClose: () => void; href?: string; image?: string; alt?: string; label?: string }) {
   const router = useRouter();
   const bits = useMemo(() => Array.from({ length: 36 }, (_, i) => {
     const a = (i / 36) * Math.PI * 2 + Math.random() * 0.4, d = 140 + Math.random() * 260;
@@ -54,9 +54,9 @@ export function InviteModal({ onClose, href = "/amigo-oculto" }: { onClose: () =
         <div className="pointer-events-none absolute inset-x-0 -top-2 h-full" aria-hidden>
           {sparks.map((s, i) => <span key={i} className="absolute bottom-2 text-2xl" style={{ left: `${s.left}%`, animation: `ao-rise 3.5s ease-out ${1 + s.delay}s infinite` }}>{s.s}</span>)}
         </div>
-        <button type="button" onClick={() => { onClose(); router.push(href); }} className="ao-card relative block w-full overflow-hidden rounded-2xl border-2 border-amber-300/70 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300" aria-label="Participar do Amigo Oculto da Liga">
+        <button type="button" onClick={() => { onClose(); router.push(href); }} className="ao-card relative block w-full overflow-hidden rounded-2xl border-2 border-amber-300/70 text-left focus:outline-none focus-visible:ring-4 focus-visible:ring-amber-300" aria-label={label}>
           {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img src={INVITE_IMAGE} alt="Convite: Amigo Oculto da Liga Zikachu — Participar Agora" className="block h-auto w-full" />
+          <img src={image} alt={alt} className="block h-auto w-full" />
           <span className="ao-shine pointer-events-none absolute inset-y-0 left-0 w-1/3 bg-gradient-to-r from-transparent via-white/35 to-transparent" aria-hidden />
         </button>
         <button type="button" onClick={onClose} className="absolute -right-1 -top-3 flex h-9 w-9 items-center justify-center rounded-full bg-white text-lg font-bold text-slate-900 shadow-lg hover:bg-amber-300 sm:-right-3" aria-label="Fechar convite">✕</button>

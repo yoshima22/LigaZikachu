@@ -313,7 +313,7 @@ export default async function AppLayout({
 
   return (
     <>
-      {reiInvite && !amigoInvite && <ReiDoRioInviteGate editionId={reiInvite.editionId} name={reiInvite.name} closesAt={reiInvite.closesAt} />}
+      {reiInvite && !amigoInvite && <ReiDoRioInviteGate editionId={reiInvite.editionId} />}
       {amigoInvite && <AmigoOcultoInviteGate editionId={amigoInvite.editionId} />}
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
