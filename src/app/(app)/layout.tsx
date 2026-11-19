@@ -58,6 +58,7 @@ import { AccountAccessObserver } from "@/components/account-access-observer";
 import { getJohtoInvitationGateState } from "@/lib/johto-invitation";
 import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
+import { StanceCompleteGate } from "./_components/stance-complete-gate";
 import { AmigoOcultoInviteGate } from "./_components/amigo-oculto-invite-gate";
 import { getAmigoInviteState } from "@/lib/amigo-oculto/invite";
 import { ReiDoRioInviteGate } from "./_components/rei-do-rio-invite-gate";
@@ -317,6 +318,7 @@ export default async function AppLayout({
       {amigoInvite && <AmigoOcultoInviteGate editionId={amigoInvite.editionId} />}
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
+      {player?.id && <StanceCompleteGate />}
       <Toaster
         position="top-right"
         theme="dark"
