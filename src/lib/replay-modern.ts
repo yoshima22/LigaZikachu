@@ -30,7 +30,7 @@ export function buildModernReplay(
   lineupA: ReplayLineMon[],
   lineupB: ReplayLineMon[],
   log: ReplayLogEntry[],
-  opts: { bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string } } = {},
+  opts: { bgUrl?: string; tv?: { name: string; points: number }[]; winnerName?: string | null; sideNames?: { A: string; B: string } } = {},
 ): ReplayData {
   const bgUrl = opts.bgUrl ?? "/replay-lab/arena.webp";
   // Postura de quem não a trouxe no lineup (ex.: Arena Z): o log grava em cada turno.
@@ -119,5 +119,5 @@ export function buildModernReplay(
     });
   }
 
-  return { teams, turns, bgUrl, winnerName: opts.winnerName ?? null, sideNames: opts.sideNames };
+  return { teams, turns, bgUrl, winnerName: opts.winnerName ?? null, sideNames: opts.sideNames, tv: opts.tv };
 }

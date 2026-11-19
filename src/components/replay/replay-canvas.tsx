@@ -44,7 +44,10 @@ export type ReplayTurn = {
   debuff?: boolean; // Oportunista aplicou debuff
   debuffEvents?: unknown[]; // debuffs de habilidade (origem/valores) p/ a faixa de efeitos
 };
-export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string } };
+export type ReplayData = { teams: Combatant[]; turns: ReplayTurn[]; bgUrl?: string; winnerName?: string | null; sideNames?: { A: string; B: string };
+  /** Top-3 do ranking exibido nas TVs do topo da arena (só a arena da Liga Semanal tem as telas). */
+  tv?: { name: string; points: number }[];
+};
 
 // Postura → faixa do campo: "front" (perto do centro) ou "back" (perto da borda).
 const FRONT_ROLES = new Set(["Defensor", "Guardião", "Atacante", "Duelista", "Provocador", "Sobrevivente"]);
@@ -181,7 +184,7 @@ export function ReplayCanvas({ data, compact = false, hideLabels = false, loop: 
       try {
         if (playRef.current && !st.done) step(st, dt, data, (i) => setCurrentLog(i));
         if (st.requestPause) { st.requestPause = false; playRef.current = false; setPlaying(false); }
-        draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null, hideLabels);
+        draw(ctx, st, spritesRef.current, bgRef.current, playRef.current ? dt : 0, texRef.current, tintRef.current, data.winnerName ?? null, hideLabels, data.tv);
       } catch (err) {
         // Nunca deixa um frame ruim matar o replay: descarta o transitório e segue.
         console.error("[replay] frame error, pulando cena", err);
@@ -714,7 +717,7 @@ function applyInstant(st: St, t: ReplayTurn, _data: ReplayData) {
 const ease = (p: number) => 1 - Math.pow(1 - p, 3);
 
 // ────────────────────────── desenho ──────────────────────────
-function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>, winnerName: string | null, hideLabels: boolean) {
+function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTMLImageElement>, bg: HTMLImageElement | null, dt: number, tex: Record<string, HTMLImageElement>, tintCache: Record<string, HTMLCanvasElement>, winnerName: string | null, hideLabels: boolean, tv?: ReplayData["tv"]) {
   const { W, H } = st;
   ctx.save();
   if (st.shake > 0) ctx.translate((Math.random() - 0.5) * st.shake, (Math.random() - 0.5) * st.shake);
@@ -725,6 +728,7 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
     const iw = bg.naturalWidth * s, ih = bg.naturalHeight * s;
     ctx.drawImage(bg, (W - iw) / 2, (H - ih) / 2, iw, ih);
     ctx.fillStyle = "rgba(7,11,24,0.28)"; ctx.fillRect(-20, -20, W + 40, H + 40); // leve escurecida p/ contraste
+    if (tv?.length) drawArenaTvs(ctx, W, H, bg, tv, performance.now());
   } else {
     // fallback: arena procedural
     const g = ctx.createRadialGradient(W / 2, H / 2, 60, W / 2, H / 2, W * 0.7);
@@ -853,6 +857,92 @@ function draw(ctx: CanvasRenderingContext2D, st: St, sprites: Record<string, HTM
 }
 
 // Barra de NOCAUTE no topo: desliza, mostra sprite + nome, e some.
+// ── TVs do topo da arena da Liga Semanal: pódio do ranking atual ──
+// Cantos medidos na arte (1815×867), em fração da imagem: TL, TR, BL de cada tela.
+const TV_SCREENS = [
+  { place: 1, w: 300, h: 115, q: [[758, 16], [1057, 16], [758, 131]] },
+  { place: 2, w: 180, h: 100, q: [[523, 81], [691, 52], [523, 176]] },
+  { place: 3, w: 180, h: 100, q: [[1125, 52], [1291, 80], [1125, 142]] },
+] as const;
+const TV_COL = { 1: "#ffd54a", 2: "#d7e3f4", 3: "#e8a164" } as const;
+const TV_FONT = (px: number) => `bold ${px}px 'Jost', system-ui, sans-serif`;
+
+function drawArenaTvs(ctx: CanvasRenderingContext2D, W: number, H: number, bg: HTMLImageElement, tv: NonNullable<ReplayData["tv"]>, now: number) {
+  // mesma geometria "cover" do fundo (draw)
+  const s = Math.max((W + 40) / bg.naturalWidth, (H + 40) / bg.naturalHeight);
+  const iw = bg.naturalWidth * s, ih = bg.naturalHeight * s, ox = (W - iw) / 2, oy = (H - ih) / 2;
+  const map = ([x, y]: readonly [number, number] | readonly number[]) => [ox + (x / 1815) * iw, oy + (y / 867) * ih];
+  for (const sc of TV_SCREENS) {
+    const [tl, tr, bl] = sc.q.map(map);
+    ctx.save();
+    ctx.transform((tr[0] - tl[0]) / sc.w, (tr[1] - tl[1]) / sc.w, (bl[0] - tl[0]) / sc.h, (bl[1] - tl[1]) / sc.h, tl[0], tl[1]);
+    ctx.beginPath(); ctx.rect(0, 0, sc.w, sc.h); ctx.clip();
+    drawTvScreen(ctx, sc.w, sc.h, sc.place, tv[sc.place - 1], now);
+    ctx.restore();
+  }
+}
+
+function drawTvScreen(ctx: CanvasRenderingContext2D, w: number, h: number, place: 1 | 2 | 3, entry: { name: string; points: number } | undefined, now: number) {
+  const col = TV_COL[place], big = place === 1;
+  // fundo de TV
+  const g = ctx.createLinearGradient(0, 0, w, h);
+  g.addColorStop(0, "#0a1038"); g.addColorStop(0.6, "#1a1470"); g.addColorStop(1, "#0b1f5c");
+  ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+  const glow = ctx.createRadialGradient(w / 2, h * 0.55, 4, w / 2, h * 0.55, w * 0.6);
+  glow.addColorStop(0, col + "30"); glow.addColorStop(1, "transparent");
+  ctx.fillStyle = glow; ctx.fillRect(0, 0, w, h);
+
+  ctx.textAlign = "center"; ctx.textBaseline = "middle";
+  // cabeçalho: medalha/coroa + "Nº LUGAR"
+  const hy = big ? 15 : 17;
+  if (big) {
+    drawCrown(ctx, w / 2, 17, 15 + Math.sin(now / 500) * 0.8, col);
+    ctx.textAlign = "left"; ctx.fillStyle = "#9db4ff"; ctx.font = TV_FONT(11);
+    ctx.fillText("RANKING · LIGA SEMANAL", 12, hy);
+    ctx.textAlign = "right"; ctx.fillStyle = Math.floor(now / 700) % 2 ? "#ff5a5a" : "#7a2a35"; ctx.fillText("● AO VIVO", w - 12, hy);
+  } else {
+    ctx.fillStyle = col; ctx.beginPath(); ctx.arc(w / 2 - 38, hy, 10, 0, Math.PI * 2); ctx.fill();
+    ctx.fillStyle = "#14123a"; ctx.font = TV_FONT(14); ctx.fillText(String(place), w / 2 - 38, hy + 1);
+    ctx.textAlign = "left"; ctx.fillStyle = col; ctx.font = TV_FONT(14); ctx.fillText(`${place}º LUGAR`, w / 2 - 22, hy + 1);
+  }
+
+  // nome (marquee se não couber) + pontos
+  const nameY = big ? 66 : 57, avail = w - (big ? 40 : 24);
+  const name = entry?.name ?? "—";
+  ctx.font = TV_FONT(big ? 36 : 22);
+  ctx.shadowColor = col; ctx.shadowBlur = big ? 10 : 6; ctx.fillStyle = entry ? "#fff" : "#6f7fb8";
+  const tw = ctx.measureText(name).width;
+  ctx.save(); ctx.beginPath(); ctx.rect((w - avail) / 2, nameY - 24, avail, 48); ctx.clip();
+  if (tw <= avail) { ctx.textAlign = "center"; ctx.fillText(name, w / 2, nameY); }
+  else {
+    const gap = 50, period = tw + gap, off = ((now / 1000) * 34) % period, x0 = (w - avail) / 2;
+    ctx.textAlign = "left"; ctx.fillText(name, x0 - off, nameY); ctx.fillText(name, x0 - off + period, nameY);
+  }
+  ctx.restore(); ctx.shadowBlur = 0;
+  ctx.textAlign = "center"; ctx.fillStyle = col; ctx.font = TV_FONT(big ? 20 : 14);
+  ctx.fillText(entry ? `${entry.points} pts` : "aguardando", w / 2, big ? 98 : 84);
+
+  // efeito de TV: scanlines, brilho que varre a tela, leve oscilação
+  ctx.fillStyle = "rgba(0,0,20,0.16)";
+  for (let y = 0; y < h; y += 4) ctx.fillRect(0, y, w, 1.5);
+  const sweep = ((now / 4200) + place * 0.31) % 1.6 - 0.3;
+  const sg = ctx.createLinearGradient((sweep - 0.12) * w, 0, (sweep + 0.12) * w, h * 0.4);
+  sg.addColorStop(0, "transparent"); sg.addColorStop(0.5, "rgba(255,255,255,0.13)"); sg.addColorStop(1, "transparent");
+  ctx.fillStyle = sg; ctx.fillRect(0, 0, w, h);
+  const vg = ctx.createRadialGradient(w / 2, h / 2, h * 0.4, w / 2, h / 2, w * 0.65);
+  vg.addColorStop(0, "transparent"); vg.addColorStop(1, "rgba(0,0,15,0.45)");
+  ctx.fillStyle = vg; ctx.fillRect(0, 0, w, h);
+  ctx.fillStyle = `rgba(160,190,255,${0.03 + 0.02 * Math.sin(now / 90 + place)})`; ctx.fillRect(0, 0, w, h);
+}
+
+function drawCrown(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, col: string) {
+  ctx.save(); ctx.translate(cx, cy); ctx.fillStyle = col; ctx.shadowColor = col; ctx.shadowBlur = 8;
+  ctx.beginPath();
+  ctx.moveTo(-r, r * 0.6); ctx.lineTo(-r, -r * 0.5); ctx.lineTo(-r * 0.5, 0); ctx.lineTo(0, -r * 0.8);
+  ctx.lineTo(r * 0.5, 0); ctx.lineTo(r, -r * 0.5); ctx.lineTo(r, r * 0.6); ctx.closePath(); ctx.fill();
+  ctx.restore();
+}
+
 function drawKoBanner(ctx: CanvasRenderingContext2D, W: number, c: Combatant, img: HTMLImageElement | undefined, t: number, life: number, idx: number, hideLabel: boolean) {
   const p = t / life;
   const slide = Math.min(1, t / 220);          // entrada deslizando
