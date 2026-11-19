@@ -84,8 +84,8 @@ export const ARENA_Z_CONFIG = {
   susCost: 10,
   restAfterSusHours: 1.5, // 90 min base; reduzível por vitality+happiness+amigos
   restAfterWinMinutes: 30,
-  defeatedLootPreservedPct: 0.6,
-  defeatedLootStolenPct: 0.3,
+  defeatedLootPreservedPct: 0.63,
+  defeatedLootStolenPct: 0.27,
   defeatedLootBurnPct: 0.1,
   botCooldownMinutes: 5, // cooldown PvE separado por equipe
   pvpCooldownMinutes: 5,
@@ -2073,8 +2073,10 @@ async function creditArenaLoot(
   loot: ArenaLoot,
   description: string,
   pveDailyCoinsCap = PVE_DAILY_COINS_CAP,
+  pvpCoins = 0, // parte de loot.coins vinda de PvP: não entra no limite diário PvE
 ) {
-  let payableCoins = loot.coins;
+  const exempt = Math.min(loot.coins, pvpCoins);
+  let payableCoins = loot.coins - exempt;
   if (payableCoins > 0) {
     const todayBRT = new Date().toLocaleDateString("sv-SE", {
       timeZone: "America/Sao_Paulo",
@@ -2099,6 +2101,7 @@ async function creditArenaLoot(
       });
     }
   }
+  payableCoins += exempt;
 
   if (payableCoins > 0) {
     await creditCoins(tx, {
@@ -4631,6 +4634,7 @@ export async function runPvpBattle(
           preserved,
           "Cofre restante Arena Z apos K.O. total em PvP",
           pveDailyCoinsCap,
+          Math.min(loserTeam.vaultPvpCoins, preserved.coins),
         );
         await tx.arenaTeam.delete({ where: { id: loserTeam.id } });
       } else {
