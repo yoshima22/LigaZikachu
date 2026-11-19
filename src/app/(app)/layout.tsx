@@ -59,6 +59,10 @@ import { getJohtoInvitationGateState } from "@/lib/johto-invitation";
 import { JohtoInvitationGate } from "./_components/johto-invitation-gate";
 import { OccurrenceNoticeGate } from "./_components/occurrence-notice-gate";
 import { StanceCompleteGate } from "./_components/stance-complete-gate";
+import { isSantaActive } from "@/lib/papai-noel";
+import dynamic from "next/dynamic";
+
+const PapaiNoelGate = dynamic(() => import("./_components/papai-noel-gate").then((m) => m.PapaiNoelGate));
 import { AmigoOcultoInviteGate } from "./_components/amigo-oculto-invite-gate";
 import { getAmigoInviteState } from "@/lib/amigo-oculto/invite";
 import { ReiDoRioInviteGate } from "./_components/rei-do-rio-invite-gate";
@@ -310,6 +314,8 @@ export default async function AppLayout({
 
   const amigoInvite = !isPlatformAdmin && player?.id ? await getAmigoInviteState(player.id).catch(() => null) : null;
 
+  const santaOn = player?.id ? await isSantaActive().catch(() => false) : false;
+
   const reiInvite = player?.id ? await getReiInviteState(player.id).catch(() => null) : null;
 
   return (
@@ -319,6 +325,7 @@ export default async function AppLayout({
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
       {player?.id && <StanceCompleteGate />}
+      {santaOn && <PapaiNoelGate />}
       <Toaster
         position="top-right"
         theme="dark"

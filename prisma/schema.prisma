@@ -261,6 +261,7 @@ model Player {
   rankingSnapshots            RankingSnapshot[]
   tournamentRegistrations     TournamentRegistration[]
   gifts                       PlayerGift[]
+  santaClaim                  SantaClaim?
   tournamentDayRewards        TournamentDayReward[]
   tournamentPostseasonEntries TournamentPostseasonEntry[]
   activityLogs                PlayerActivityLog[]
@@ -5828,4 +5829,16 @@ model SecretSantaParticipant {
   @@unique([editionId, recipientId]) // ninguém é tirado duas vezes na mesma edição
   @@index([editionId])
   @@map("ss_participants")
+}
+
+/// Evento de Natal: último resgate do Papai Noel por jogador (cooldown sorteado de 4–6 h).
+model SantaClaim {
+  playerId        String   @id
+  lastClaimAt     DateTime
+  nextAvailableAt DateTime
+  totalClaims     Int      @default(1)
+  lastPrize       String?
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@map("santa_claims")
 }

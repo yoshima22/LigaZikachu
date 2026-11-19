@@ -43,6 +43,8 @@ import { Card, CardDescription, CardTitle } from "@/components/ui/card";
 import { StatCard } from "@/components/ui/stat-card";
 import { Button } from "@/components/ui/button";
 import { getTimedGameBonusEvents } from "@/lib/timed-game-bonuses";
+import { getSantaSettingFresh } from "@/lib/papai-noel";
+import { SantaPanel } from "./_components/santa-panel";
 import { listManagedForms } from "./actions";
 import { FormsPoolManager } from "./_components/forms-pool-manager";
 import { EvolutionDebug } from "./_components/evolution-debug";
@@ -130,6 +132,7 @@ export default async function AdminPage() {
     globalNotice,
     gamemasters,
     timedGameBonusEvents,
+    santaSetting,
   ] = await Promise.all([
     prisma.user.count({ where: { status: UserStatus.PENDING_APPROVAL } }),
     prisma.tournament.count({ where: { status: { in: [TournamentStatus.REGISTRATION_OPEN, TournamentStatus.IN_PROGRESS] } } }),
@@ -153,6 +156,7 @@ export default async function AdminPage() {
         })
       : Promise.resolve([]),
     getTimedGameBonusEvents(),
+    getSantaSettingFresh().catch(() => ({ enabled: true, ignoreWindow: false })),
   ]);
 
   // Lote 2 (independentes) — tudo que era sequencial agora roda em paralelo.
@@ -373,6 +377,7 @@ export default async function AdminPage() {
         nextReservations={nextReservations}
       />
       <TimedGameBonusPanel initialEvents={timedGameBonusEvents} />
+      <SantaPanel initial={santaSetting} windowLabel="01/12/2026 00:00 a 26/12/2026 00:00 (BRT)" />
       <VipSchedulePanel
         allSchedules={allSchedules}
         activeVips={(vipsResult.passes ?? []).map(p => ({
