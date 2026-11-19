@@ -240,7 +240,7 @@ function Matches({matches,names,playerId,mascots,today,initialHideResults,times}
     </>;})()}
   </section>
   {analysis&&<OpponentAnalysisModal analysis={analysis} myMascots={mascots as any[]} contextLabel="Liga Rush" onClose={()=>setAnalysis(null)}/>}
-  {replay&&replay.playerBId&&<LeagueBattleReplayModal playerAName={names[replay.playerAId]??replay.playerAId} playerBName={names[replay.playerBId]??replay.playerBId} playerAId={replay.playerAId} winnerId={replay.winnerId} isDraw={replay.isDraw} replay={replay.replayJson??[]} playerASurvivors={replay.playerASurvivors} playerBSurvivors={replay.playerBSurvivors} lineupA={replay.resultJson?.lineupA??[]} lineupB={replay.resultJson?.lineupB??[]} onFinish={()=>setReplay(null)}/>}</>;
+  {replay&&replay.playerBId&&<LeagueBattleReplayModal playerAName={names[replay.playerAId]??replay.playerAId} playerBName={names[replay.playerBId]??replay.playerBId} playerAId={replay.playerAId} winnerId={replay.winnerId} isDraw={replay.isDraw} replay={replay.replayJson??[]} playerASurvivors={replay.playerASurvivors} playerBSurvivors={replay.playerBSurvivors} lineupA={replay.resultJson?.lineupA??[]} lineupB={replay.resultJson?.lineupB??[]} onFinish={()=>setReplay(null)} arenaBg="https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/arenas/liga-rush-v1.webp"/>}</>;
 }
 
 function RuleFields({form,setForm,presets,rewardPlans}:{form:any;setForm:(v:any)=>void;presets:Preset[];rewardPlans:RushRewardPlan[]}){

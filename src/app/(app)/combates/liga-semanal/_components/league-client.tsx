@@ -1669,6 +1669,7 @@ function ResultsTab({ data, replayStyle }: { data: PageData; replayStyle: "class
           orderSabotage={data.orderSabotage}
           onFinish={() => setReplayMatch(null)}
           defaultStyle={replayStyle}
+          arenaBg="https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/arenas/liga-semanal-v1.webp"
         />
       )}
       {opponentAnalysis && <OpponentAnalysisModal analysis={opponentAnalysis} myMascots={data.availableMascots} onClose={() => setOpponentAnalysis(null)} />}

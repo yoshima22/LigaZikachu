@@ -255,6 +255,7 @@ export function LeagueBattleReplayModal({
   reserveLineupA = EMPTY_LINEUP,
   onFinish,
   defaultStyle,
+  arenaBg,
 }: {
   playerAName: string;
   playerBName: string;
@@ -274,6 +275,8 @@ export function LeagueBattleReplayModal({
   onFinish: () => void;
   /** Estilo inicial; se ausente, usa a preferência salva (localStorage) ou clássico. */
   defaultStyle?: ReplayStyle;
+  /** Fundo da arena no replay moderno; ausente = arena padrão. */
+  arenaBg?: string;
 }) {
   const [mode, setMode] = useState<ReplayStyle>(() => defaultStyle ?? preferredReplayStyle());
   const canModern = towerReplayCanUseModern(replay.length, lineupA.length, lineupB.length, reserveLineupA.length);
@@ -282,8 +285,8 @@ export function LeagueBattleReplayModal({
   // replay do zero toda vez que o componente re-renderiza (bug "repete 2 ataques").
   const modernData = useMemo(
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    () => (canModern ? buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName: modernWinnerName, sideNames: { A: playerAName, B: playerBName } }) : null),
-    [canModern, lineupA, lineupB, replay, modernWinnerName, playerAName, playerBName],
+    () => (canModern ? buildModernReplay(lineupA as any, lineupB as any, replay as unknown as ReplayLogEntry[], { winnerName: modernWinnerName, sideNames: { A: playerAName, B: playerBName }, bgUrl: arenaBg }) : null),
+    [canModern, lineupA, lineupB, replay, modernWinnerName, playerAName, playerBName, arenaBg],
   );
   const [turnIdx, setTurnIdx] = useState(-1);
   const [autoPlay, setAutoPlay] = useState(true);

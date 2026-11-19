@@ -221,6 +221,7 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
           replay={replay.replay} playerASurvivors={replay.survivorsA} playerBSurvivors={replay.survivorsB}
           specialRule={replay.modifiers.length ? { name: "Equilíbrio do Rei do Rio", description: replay.modifiers.join(" · ") } : null}
           lineupA={replay.lineupA} lineupB={replay.lineupB} onFinish={() => setReplay(null)}
+          arenaBg="https://fwxqywivezsixamietps.supabase.co/storage/v1/object/public/assets/arenas/rei-do-rio-v1.webp"
         />
       )}
     </div>
