@@ -90,7 +90,7 @@ export const AFFINITY_LABELS: Record<TrainingPersonality, string> = {
   PROUD: "Vença 20 combates terminando com este mascote acima de 70% de HP.",
   MISCHIEVOUS: "Em 20 combates, acerte o 1º ataque contra um inimigo reduzindo o atributo dele (efeito do Travesso).",
   LAZY: "Conclua 20 expedições de 3h ou 6h com este mascote.",
-  COMPETITIVE: "Vença 20 combates contra oponentes com status total maior que o do mascote.",
+  COMPETITIVE: "Vença 20 combates contra oponentes com status total acima de 550.",
   DRAMATIC: "Em 20 combates, derrote um inimigo ou sobreviva a um golpe fatal estando abaixo de 35% de HP.",
   PLAYFUL: "Interaja com este mascote 20 vezes, brincando ou fazendo carinho (botões Brincar e Carinho).",
   ELECTRIC: "Conclua 20 expedições curtas (30min ou 1h) com este mascote.",
@@ -138,7 +138,7 @@ export function resolveObjectiveLabel(type: string, template: string, seed: numb
 
 function affinity(stance: TrainingStanceKey, personality: TrainingPersonality): TrainingObjective {
   if (stance === "PURIFIER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Proteja 30 vezes o aliado que o Leal protege (o de maior Carisma da equipe) quando ele estiver abaixo de 50% de HP: cure-o ou intercepte o golpe com a postura Guardião.", target: 30, progress: 0, perBattleCap: 2 };
-  if (stance === "EXECUTOR" && personality === "COMPETITIVE") return { id: "affinity", type: "AFFINITY", label: "Aplique 20 K.O.s em inimigos com status total maior que o seu.", target: 20, progress: 0, perBattleCap: 2 };
+  if (stance === "EXECUTOR" && personality === "COMPETITIVE") return { id: "affinity", type: "AFFINITY", label: "Aplique 20 K.O.s em inimigos com status total acima de 550.", target: 20, progress: 0, perBattleCap: 2 };
   if (stance === "COMMANDER" && personality === "LOYAL") return { id: "affinity", type: "AFFINITY", label: "Aplique 15 K.O.s em inimigos que atacaram o aliado que o Leal protege (o de maior Carisma da equipe) quando ele estava abaixo de 50% de HP.", target: 15, progress: 0, perBattleCap: 1 };
   const label = affinityLabel(personality);
   return { id: "affinity", type: "AFFINITY", label, target: 20, progress: 0, perBattleCap: 1 };

@@ -129,8 +129,8 @@ export function extractBattleStats(input: {
       if (role === "Batedor" && /Batedor: \+/.test(e.effect ?? "")) bh.scout++;
       buffHits.set(id, bh);
     }
-    const aStat = statTotal(actor), tStat = statTotal(target);
-    if (aStat != null && tStat != null && tStat > aStat) hitHigherStat.add(actor);
+    const tStat = statTotal(target);
+    if (tStat != null && tStat > 550) hitHigherStat.add(actor);
 
     // dano efetivo (não passa do HP que restava) + Guardião
     const before = hp.get(target) ?? 0;
@@ -155,8 +155,8 @@ export function extractBattleStats(input: {
     if (before > 0 && (hp.get(target) ?? 0) <= 0) {
       kosByTeamBattle[side]++;
       bump(actor, "KOS");
-      const kaStat = statTotal(actor), ktStat = statTotal(target);
-      if (kaStat != null && ktStat != null && ktStat > kaStat) koHigherStat.set(actor, (koHigherStat.get(actor) ?? 0) + 1);
+      const ktStat = statTotal(target);
+      if (ktStat != null && ktStat > 550) koHigherStat.set(actor, (koHigherStat.get(actor) ?? 0) + 1);
       if (round != null) deathRound.set(target, round);
       const types = getPokemonTypes(info.get(target)!.pokemonId ?? 0).map(getTypeLabelPt);
       const role = e.targetRole ?? info.get(target)!.role ?? "";

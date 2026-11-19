@@ -42,7 +42,7 @@ test("buffs de apoio, Leal, Caótico e Competitivo", () => {
     { id: "s", name: "Sup", pokemonId: 25, maxHp: 100, force: 10, agility: 10, instinct: 10, vitality: 10, charisma: 10 },
     { id: "l", name: "Leo", pokemonId: 94, maxHp: 100, force: 10, agility: 10, instinct: 10, vitality: 10, charisma: 5 },
   ];
-  const B = [{ id: "e", name: "Boss", pokemonId: 6, maxHp: 100, force: 99, agility: 99, instinct: 99, vitality: 99, charisma: 99 }];
+  const B = [{ id: "e", name: "Boss", pokemonId: 6, maxHp: 100, force: 120, agility: 120, instinct: 120, vitality: 120, charisma: 120 }];
   const log = [
     { turn: 1, round: 1, action: "ATTACK", actorId: "l", targetId: "e", damage: 40, actorName: "Leo", targetName: "Boss", actorRole: "Atacante", targetRole: "Defensor", typeStep: 0, effect: "Encorajador: +10%. 🤝 Leal Leo protege Sup." },
     { turn: 2, round: 1, action: "ATTACK", actorId: "e", targetId: "l", damage: 10, actorName: "Boss", targetName: "Leo", actorRole: "Defensor", targetRole: "Atacante", typeStep: 0, effect: "Oportunista reduziu Agilidade de Leo (resistência aplicada)." },
