@@ -6,7 +6,7 @@
  * (app-nav), a página e as ações de JOGADOR aceitam qualquer jogador logado (getReiPlayer) e as ações de ADMIN
  * continuam restritas a admins (getReiAdmin).
  */
-export const REI_DO_RIO_PUBLIC = false;
+export const REI_DO_RIO_PUBLIC = true; // aberto aos jogadores em 2026-11-18
 
 export const SLOT_COUNT = 6;
 export const SQUAD_SIZE = 3;

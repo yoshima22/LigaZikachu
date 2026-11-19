@@ -1,6 +1,7 @@
 // Caixas de recompensa do Rei do Rio (puro, sem banco). Cada caixa custa PONTOS DO RANKING, pode ser resgatada 1 vez
 // por jogador e deixa escolher 1 entre 3 opções. Do topo à base o valor cai gradualmente.
 //
+// Custos reduzidos em 300 pts cada em 18/11 (pedido do admin).
 // Calibragem (simulação de 12 jogadores, 5 combates ≈ 208 pts em média; faixa 110–386): uma SEMANA (20 combates) rende
 // em média ≈ 830 pts (fracos ≈ 440, fortes ≈ 1.550). Em 4 semanas de dezembro: médio ≈ 3.300, fraco ≈ 1.750, forte ≈ 6.200.
 // Assim todo mundo resgata as caixas de baixo logo na 1ª semana e só quem joga bem (ou todas as semanas) chega ao topo.
@@ -28,42 +29,42 @@ const O = (key: string, label: string, items: PackageItem[]): RewardOption => ({
 
 // `cost` em PONTOS (a carteira guarda centésimos: ver PT em config.ts).
 export const REWARD_BOXES: RewardBox[] = [
-  { key: "trono", name: "Trono de Gelo", emoji: "👑", tier: 8, cost: 5500, blurb: "O prêmio máximo da temporada.", options: [
+  { key: "trono", name: "Trono de Gelo", emoji: "👑", tier: 8, cost: 5200, blurb: "O prêmio máximo da temporada.", options: [
     O("mega", "Mega & Laboratório", [pedraMega(3), ovoLab(2), penaLabP(2), proteina(3)]),
     O("tms", "Trio de TMs", [tmPoder(), tmRegen(), tmProtean(), ovoEspecial(2), reversor(2)]),
     O("ninhada", "Ninhada Suprema", [ovoLab(5), penaLabP(3), doceRaro(60)]),
   ] },
-  { key: "coroa", name: "Coroa Real", emoji: "💎", tier: 7, cost: 4200, blurb: "Quase no topo: ainda com Mega e Laboratório.", options: [
+  { key: "coroa", name: "Coroa Real", emoji: "💎", tier: 7, cost: 3900, blurb: "Quase no topo: ainda com Mega e Laboratório.", options: [
     O("mega", "Mega & Poder", [pedraMega(2), ovoLab(), penaLabP(), proteina(2)]),
     O("tms", "Dupla de TMs", [tmPoder(), tmRegen(), ovoEspecial(2)]),
     O("ninhada", "Ninhada Real", [ovoLab(3), penaEspecialP(2), doceRaro(40)]),
   ] },
-  { key: "noel", name: "Presente do Noel", emoji: "🎅", tier: 6, cost: 3200, blurb: "Ovo de Laboratório e uma Pedra de Mega.", options: [
+  { key: "noel", name: "Presente do Noel", emoji: "🎅", tier: 6, cost: 2900, blurb: "Ovo de Laboratório e uma Pedra de Mega.", options: [
     O("mega", "Pedra do Noel", [pedraMega(), ovoLab(), proteina(2), vitamina(3)]),
     O("tm", "TM + Especial", [tmProtean(), ovoEspecial(2), penaEspecialP()]),
     O("lab", "Laboratório do Noel", [ovoLab(2), penaLab(2), doceRaro(30)]),
   ] },
-  { key: "treno", name: "Trenó das Renas", emoji: "🦌", tier: 5, cost: 2400, blurb: "Ovos especiais e de evento, penas potentes.", options: [
+  { key: "treno", name: "Trenó das Renas", emoji: "🦌", tier: 5, cost: 2100, blurb: "Ovos especiais e de evento, penas potentes.", options: [
     O("especial", "Especial Potente", [ovoEspecial(2), penaEspecialP(), proteina(), doceRaro(20)]),
     O("mega", "Pedra & Vigor", [pedraMega(), vitamina(2), amuleto(2)]),
     O("evento", "Trio de Evento", [ovoEvento(3), penaEventoP(2), doceRaro(20)]),
   ] },
-  { key: "lareira", name: "Lareira Acesa", emoji: "🔥", tier: 4, cost: 1700, blurb: "Ovos especiais/de evento e bons consumíveis.", options: [
+  { key: "lareira", name: "Lareira Acesa", emoji: "🔥", tier: 4, cost: 1400, blurb: "Ovos especiais/de evento e bons consumíveis.", options: [
     O("ovos", "Ninho Aquecido", [ovoEspecial(), ovoRaro(2), penaRaraP(), doceRaro(15)]),
     O("loot", "Sorte e Vitaminas", [ticket(5), vitamina(3), amuleto(2), cesta(2)]),
     O("evento", "Evento Brilhante", [ovoEvento(2), penaEvento(2), doceRaro(15)]),
   ] },
-  { key: "ceia", name: "Ceia da Liga", emoji: "🍽️", tier: 3, cost: 1100, blurb: "Ovos raros, penas e consumíveis.", options: [
+  { key: "ceia", name: "Ceia da Liga", emoji: "🍽️", tier: 3, cost: 800, blurb: "Ovos raros, penas e consumíveis.", options: [
     O("ovos", "Ninho da Ceia", [ovoRaro(2), penaRara(2), doceRaro(10)]),
     O("vigor", "Banquete de Vigor", [vitamina(3), proteina(), amuleto(), cesta()]),
     O("evento", "Sobremesa de Evento", [ovoEvento(), penaEvento(), ticket(3)]),
   ] },
-  { key: "meia", name: "Meia de Natal", emoji: "🧦", tier: 2, cost: 700, blurb: "Um ovo raro e mimos para o dia a dia.", options: [
+  { key: "meia", name: "Meia de Natal", emoji: "🧦", tier: 2, cost: 400, blurb: "Um ovo raro e mimos para o dia a dia.", options: [
     O("ovo", "Ovo na Meia", [ovoRaro(), penaComum(2), doceRaro(5)]),
     O("cuidados", "Kit Cuidados", [vitamina(2), agua(3), antidoto(2), socorros()]),
     O("sorte", "Sorte na Meia", [ticket(3), comida(30), doce(15)]),
   ] },
-  { key: "bengala", name: "Bengala Doce", emoji: "🍬", tier: 1, cost: 400, blurb: "Para começar: ao alcance de quem jogou uma semana.", options: [
+  { key: "bengala", name: "Bengala Doce", emoji: "🍬", tier: 1, cost: 100, blurb: "Para começar: ao alcance de quem jogou uma semana.", options: [
     O("ovo", "Ovinho Doce", [ovoComum(2), doceRaro(3), comida(20)]),
     O("mel", "Mel e Vigor", [bala(3), vitamina(), doce(15)]),
     O("sorte", "Primeira Sorte", [ticket(2), penaComum(), comida(15)]),
