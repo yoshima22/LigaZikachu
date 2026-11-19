@@ -27,6 +27,9 @@ const TABS: { key: Tab; label: string; icon: string }[] = [
   { key: "relatorio", label: "Relatório", icon: "📜" }, { key: "caixas", label: "Caixas", icon: "🎁" }, { key: "manual", label: "Manual", icon: "📖" }, { key: "admin", label: "Admin", icon: "🔧" },
 ];
 
+/** "dd/mm" de (segunda + n dias); mondayDate = YYYY-MM-DD. */
+const dayDm = (monday: string, n: number) => { const d = new Date(Date.parse(`${monday}T12:00:00Z`) + n * 86_400_000); return `${String(d.getUTCDate()).padStart(2, "0")}/${String(d.getUTCMonth() + 1).padStart(2, "0")}`; };
+
 type ReplayData = Extract<Awaited<ReturnType<typeof loadReplayAction>>, { ok: true }>["replay"];
 
 export function ReiClient({ editions: initialEditions, banner = null, isAdmin = true }: { editions: EditionSummary[]; banner?: string | null; isAdmin?: boolean }) {
@@ -148,7 +151,7 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
                 <EditionNotice ed={ed} />
                 {ed.phase === "PREPARATION" && (
                   <Card>
-                    <Title sub={ed.lockAt ? `Inscrições até ${new Date(ed.lockAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo", weekday: "long", hour: "2-digit", minute: "2-digit" })}. As lutas começam terça às 09h.` : "As lutas começam terça às 09h."}>👥 Inscritos aguardando o início ({view.standings.length})</Title>
+                    <Title sub={`Inscrições até segunda, ${dayDm(ed.mondayDate, 0)} às 21h. As lutas começam na terça, ${dayDm(ed.mondayDate, 1)}, às 09h.`}>👥 Inscritos aguardando o início ({view.standings.length})</Title>
                     {view.standings.length === 0 ? <p className="text-sm text-slate-400">Ninguém se inscreveu ainda. Seja o primeiro: aba “Minha equipe”.</p> : (
                       <ul className="flex flex-wrap gap-2">
                         {view.standings.map((r) => <li key={r.pid} className="flex items-center gap-2 rounded-full border border-slate-700 bg-slate-900/70 py-1 pl-1 pr-3 text-sm text-slate-200"><Avatar src={view.avatars[r.pid]} name={r.name} size={26} />{r.name}{r.pid === me?.participantId && <span className="text-[10px] font-bold text-emerald-300">você</span>}</li>)}
@@ -164,11 +167,12 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
               <div className="space-y-4">
                 <Card>
                   <Title orn="snowflake" sub="Horários em Brasília.">Calendário</Title>
+                  <div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/10 p-2.5 text-sm"><p className="text-[10px] font-black uppercase tracking-widest text-amber-200/80">🚀 Início das lutas</p><p className="font-black text-white">Terça, {dayDm(ed.mondayDate, 1)} às 09h</p><p className="text-[11px] text-slate-400">Semana de {dayDm(ed.mondayDate, 0)} a {dayDm(ed.mondayDate, 4)} · coroação na sexta às 21h</p></div>
                   <ol className="space-y-1.5 text-sm">
-                    <li className="flex items-center gap-2"><Pill tone={ed.phase === "PREPARATION" ? "gold" : "green"}>Seg</Pill><span className="text-slate-200">Inscrição e montagem até 21h</span></li>
+                    <li className="flex items-center gap-2"><Pill tone={ed.phase === "PREPARATION" ? "gold" : "green"}>Seg</Pill><span className="text-slate-200"><b className="tabular-nums text-white">{dayDm(ed.mondayDate, 0)}</b> · Inscrição e montagem até 21h</span></li>
                     {[1, 2, 3, 4].map((d) => {
                       const rs = view.rounds.filter((r) => r.dayIndex === d); const done = rs.filter((r) => r.status === "DONE").length;
-                      return <li key={d} className="flex items-center gap-2"><Pill tone={done === 5 ? "green" : done > 0 ? "gold" : "slate"}>{DAY_LABELS[d].slice(0, 3)}</Pill><span className="text-slate-200">5 rodadas (09·12·15·18·21h)</span><span className="ml-auto text-xs tabular-nums text-slate-500">{done}/5</span></li>;
+                      return <li key={d} className="flex items-center gap-2"><Pill tone={done === 5 ? "green" : done > 0 ? "gold" : "slate"}>{DAY_LABELS[d].slice(0, 3)}</Pill><span className="text-slate-200"><b className="tabular-nums text-white">{dayDm(ed.mondayDate, d)}</b> · 5 rodadas (09h · 12h · 15h · 18h · 21h)</span><span className="ml-auto text-xs tabular-nums text-slate-500">{done}/5</span></li>;
                     })}
                     <li className="text-[11px] text-slate-500">Descanso entre 21h e 08h: edite ordem e posturas do dia seguinte.</li>
                   </ol>
