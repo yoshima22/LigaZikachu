@@ -18,7 +18,7 @@ import {
   BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow, CooldownChip,
-  RetireTeamButton, SusButton, SusShieldButton, ArenaHistoryReplayButton,
+  RetireTeamButton, SusButton, SusAllButton, SusShieldButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
 import { PvpAttackPanel } from "./_components/pvp-attack-panel";
 import { ArenaTutorial } from "./_components/arena-tutorial";
@@ -779,7 +779,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                       {t.members.length} mascote{t.members.length !== 1 ? "s" : ""} · na arena há {Math.floor((Date.now() - new Date(t.enteredAt).getTime()) / 3_600_000)}h
                                     </p>
                                   </div>
-                                  <span className="text-[11px] font-bold text-[#FFCB05]">💰 {t.vaultCoins ?? 0} ZC</span>
+                                  <span className="text-[11px] font-bold text-[#FFCB05]">💰 {t.vaultCoins ?? 0} ZC · ✨ {t.vaultExp ?? 0} EXP</span>
                                   <div className="flex gap-3">
                                     <CooldownChip label="PvP" until={pvpCooldowns.get(t.id) ?? null} />
                                     <CooldownChip label="PvE" until={pveCooldowns.get(t.id) ?? null} />
@@ -800,6 +800,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                               updatedAt: t.updatedAt.toISOString(),
                               memberCount: t.members.length,
                               vaultCoins: t.vaultCoins,
+                              vaultExp: t.vaultExp,
                               pveUntil: pveCooldowns.get(t.id)?.toISOString() ?? null,
                               pvpUntil: pvpCooldowns.get(t.id)?.toISOString() ?? null,
                             }))}
@@ -813,6 +814,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                 isCasual: !!view?.isCasual,
                                 debuffPct: Math.round(getArenaDebuffPct(d.enteredAt) * 100),
                                 coins: d.vaultCoins,
+                                exp: d.vaultExp,
                                 mult: getTeamTimeMultiplier(d.enteredAt),
                                 members: (view?.members ?? []).map(m => ({ name: m.name, level: m.level })),
                               };
@@ -1221,6 +1223,12 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
             <p className="mt-1 text-xs text-slate-500">
               Custo: {ARENA_Z_CONFIG.susCost} ZC. Repouso base: {ARENA_Z_CONFIG.restAfterSusHours}h (reduzível por felicidade, vitalidade e amigos).
             </p>
+            {injuredMascots.length > 1 && (
+              <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-xl border border-[#FFCB05]/30 bg-[#FFCB05]/5 px-3 py-2">
+                <p className="text-xs text-slate-300">{injuredMascots.length} mascotes feridos · total <b className="text-[#FFCB05]">{injuredMascots.length * ARENA_Z_CONFIG.susCost} ZC</b></p>
+                <SusAllButton mascotIds={injuredMascots.map(m => m.id)} cost={injuredMascots.length * ARENA_Z_CONFIG.susCost} />
+              </div>
+            )}
             <div className="mt-4 space-y-2">
               {injuredMascots.length === 0 ? (
                 <p className="text-xs text-slate-500 p-4 text-center">Nenhum mascote ferido. 🎉</p>

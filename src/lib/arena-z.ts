@@ -1821,6 +1821,7 @@ const getActiveArenaTeams = unstable_cache(
         roomLevel: true,
         isTraining: true,
         vaultCoins: true,
+        vaultExp: true,
         enteredAt: true,
         playerId: true,
         player: { select: { id: true, displayName: true, casualMode: true } },
@@ -1877,6 +1878,7 @@ export async function getRoomsData(viewerPlayerId?: string) {
       isTraining: t.isTraining,
       isOwn,
       vaultCoins: isOwn ? t.vaultCoins : null,
+      vaultExp: isOwn ? t.vaultExp : null,
       enteredAt: t.enteredAt,
       members: t.members.map((m) => ({
         slot: m.slot,

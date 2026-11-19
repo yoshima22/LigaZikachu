@@ -16,6 +16,7 @@ import {
   getTeamTimeMultiplier,
   applyMultiplierToVault,
   healMascotSus,
+  healMascotsSus,
   lockBotForTeam,
   purgeAdminArenaData,
   listAllArenaTeamsForAdmin,
@@ -590,6 +591,16 @@ export async function healMascotSusAction(mascotId: string): Promise<{ error?: s
   try {
     const playerId = await getCurrentPlayerId();
     await healMascotSus(playerId, mascotId);
+    return {};
+  } catch (err) {
+    return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };
+  }
+}
+
+export async function healAllMascotsSusAction(mascotIds: string[]): Promise<{ error?: string }> {
+  try {
+    const playerId = await getCurrentPlayerId();
+    await healMascotsSus(playerId, mascotIds);
     return {};
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro no Atendimento SUS." };

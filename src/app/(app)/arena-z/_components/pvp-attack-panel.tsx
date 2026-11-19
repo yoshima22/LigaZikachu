@@ -10,6 +10,7 @@ export type PanelAttacker = {
   updatedAt: string;
   memberCount: number;
   vaultCoins: number;
+  vaultExp: number;
   pveUntil: string | null;
   pvpUntil: string | null;
 };
@@ -22,6 +23,7 @@ export type PanelTarget = {
   isCasual: boolean;
   debuffPct: number;
   coins: number;
+  exp: number;
   mult: number;
   members: { name: string | null; level: number }[];
 };
@@ -58,7 +60,7 @@ export function PvpAttackPanel({ attackers, targets, stolenPct }: { attackers: P
                   {on && <span className="shrink-0 rounded-full bg-[#FFCB05] px-1.5 py-0.5 text-[9px] font-black text-[#1A1A2E]">ATACA</span>}
                 </div>
                 <p className="mt-1 flex items-center gap-1 text-[10px] text-slate-400">
-                  <Coins size={10} className="text-[#FFCB05]" /> {a.vaultCoins} ZC · {a.memberCount} mascote{a.memberCount !== 1 ? "s" : ""}
+                  <Coins size={10} className="text-[#FFCB05]" /> {a.vaultCoins} ZC · {a.vaultExp} EXP · {a.memberCount} mascote{a.memberCount !== 1 ? "s" : ""}
                 </p>
                 <div className="mt-1.5 flex flex-wrap gap-x-3 gap-y-1">
                   <CooldownChip label="PvP" until={a.pvpUntil} />
@@ -101,7 +103,7 @@ export function PvpAttackPanel({ attackers, targets, stolenPct }: { attackers: P
                       </p>
                     </div>
                     <div className="text-right text-[10px] leading-4">
-                      <p className="flex items-center justify-end gap-1 font-bold text-[#FFCB05]"><Coins size={10} /> {t.coins} ZC no cofre</p>
+                      <p className="flex items-center justify-end gap-1 font-bold text-[#FFCB05]"><Coins size={10} /> {t.coins} ZC · {t.exp} EXP no cofre</p>
                       <p className="text-green-400">K.O. total: +{Math.floor(t.coins * t.mult * stolenPct)} ZC</p>
                     </div>
                     <PvpBattleButton

@@ -18,6 +18,7 @@ import {
   deleteArenaTeamAction,
   getArenaBattleDetailsAction,
   healMascotSusAction,
+  healAllMascotsSusAction,
   lockBotAction,
   markPvpDefenseSeenAction,
   purgeAdminArenaDataAction,
@@ -1335,6 +1336,23 @@ export function SusButton({ mascotId }: { mascotId: string }) {
       className="rounded-lg bg-[#FFCB05] px-2 py-1 text-[10px] font-bold text-[#1A1A2E] disabled:opacity-50"
     >
       Atendimento SUS
+    </button>
+  );
+}
+
+export function SusAllButton({ mascotIds, cost }: { mascotIds: string[]; cost: number }) {
+  const { pending, run } = useArenaAction();
+  return (
+    <button
+      type="button"
+      disabled={pending || mascotIds.length === 0}
+      onClick={() => {
+        if (!confirm(`Reviver ${mascotIds.length} mascote(s) por ${cost} ZC?`)) return;
+        run(() => healAllMascotsSusAction(mascotIds), "Todos os mascotes feridos foram atendidos.");
+      }}
+      className="rounded-lg bg-[#FFCB05] px-3 py-1.5 text-xs font-bold text-[#1A1A2E] disabled:opacity-50"
+    >
+      Reviver todos · {cost} ZC
     </button>
   );
 }
