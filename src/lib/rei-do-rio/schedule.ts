@@ -18,6 +18,9 @@ export function mondayOf(now: Date): string {
   return mon.toISOString().slice(0, 10);
 }
 
+/** 00:00 da segunda: abre a MONTAGEM do time (a inscrição em si abre antes e só adiciona o jogador à edição). */
+export const buildOpensAt = (monday: string) => brtInstant(monday, 0);
+
 /** 21h de segunda: fecha inscrições e congela os 18 mascotes. */
 export const lockAt = (monday: string) => brtInstant(monday, LOCK_HOUR);
 

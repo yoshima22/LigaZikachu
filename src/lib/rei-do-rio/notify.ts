@@ -32,7 +32,7 @@ export async function sendRegistrationInvite(editionId: string): Promise<{ ok: b
   if (!(await once(`rdr:${editionId}:invite`))) return { ok: false, message: "O convite desta edição já foi enviado." };
   const r = await sendNotificationToUsers(null, {
     title: "👑 Rei do Rio — Trono de Natal",
-    body: "Inscrições abertas! Monte seus 18 mascotes até segunda 21h, dispute o Trono e troque seus pontos por caixas de prêmios.",
+    body: "Inscrições abertas! Entre agora; na segunda você monta seus 18 mascotes (até 21h) e disputa o Trono para trocar pontos por caixas de prêmios.",
     url: URL, category: "ANUNCIOS", data: { eventKey: `rdr:${editionId}:invite` },
   });
   if (!r.configured) {

@@ -10,14 +10,14 @@ import { COMPETITION_DAYS, REI_DO_RIO_PUBLIC, TOTAL_ROUNDS, mergeConfig, type Re
 import { SEASON_MONDAYS } from "./rewards";
 import { creditEditionPoints } from "./wallet";
 import { notifyParticipants } from "./notify";
-import { buildRoundPlan, canTransition, freezeAt, isLastRoundOfDay, lockAt, type Phase } from "./schedule";
+import { buildOpensAt, buildRoundPlan, canTransition, freezeAt, isLastRoundOfDay, lockAt, type Phase } from "./schedule";
 import { autoBuild, type Preset } from "./auto-build";
 import { initialStandings, runRound, type MatchSummary, type Runtime } from "./engine";
 import { arenaFight } from "./fight-arena";
 import { makeBotRoster, type BotTier } from "./simulate";
 import type { StandRow } from "./standings";
 import { sumAggs, type MascotAgg } from "./scoring";
-import { freshDayState, validateFormation, type DayState, type Formation, type MascotSnap, type Strategy } from "./team";
+import { emptyFormation, freshDayState, validateFormation, type DayState, type Formation, type MascotSnap, type Strategy } from "./team";
 
 const J = (v: unknown) => v as Prisma.InputJsonValue;
 
@@ -103,9 +103,23 @@ export async function addBots(editionId: string, count: number, mix?: { tier?: B
 }
 
 /** Inscrição/atualização (antes das 21h de segunda). Valida no servidor, nunca só na tela. */
+/** Inscrição: só ADICIONA o jogador à edição (sem time). O time é montado na segunda (saveRegistration) até as 21h. Idempotente. */
+export async function joinEdition(editionId: string, playerId: string, displayName: string) {
+  const ed = await prisma.reiRioEdition.findUniqueOrThrow({ where: { id: editionId } });
+  if (ed.phase !== "PREPARATION" || !ed.registrationOpen) return { ok: false as const, error: "As inscrições estão encerradas." };
+  await prisma.reiRioParticipant.upsert({
+    where: { editionId_playerKey: { editionId, playerKey: playerId } },
+    create: { editionId, playerKey: playerId, displayName, originalJson: J(emptyFormation()) },
+    update: { displayName },
+  });
+  return { ok: true as const };
+}
+
+/** Salva a formação (montagem do time). Só na segunda a partir de 00:00 (edições de teste ignoram a data) e antes do fechamento. */
 export async function saveRegistration(editionId: string, playerId: string, displayName: string, formation: Formation) {
   const ed = await prisma.reiRioEdition.findUniqueOrThrow({ where: { id: editionId } });
   if (ed.phase !== "PREPARATION" || !ed.registrationOpen) return { ok: false as const, errors: ["As inscrições estão encerradas."] };
+  if (!ed.isTest && new Date() < buildOpensAt(ed.mondayDate)) return { ok: false as const, errors: ["A montagem do time só abre na segunda-feira da semana do evento, a partir das 00:00."] };
   const pool = await loadPlayerPool(playerId);
   const errors = validateFormation(formation, new Map(pool.map((m) => [m.id, m])));
   if (errors.length) return { ok: false as const, errors };
@@ -132,9 +146,14 @@ export async function lockEdition(editionId: string) {
   const dropped: string[] = [];
   for (const p of parts) {
     if (p.isBot) { await prisma.reiRioParticipant.update({ where: { id: p.id }, data: { lockedAt: new Date() } }); continue; }
-    const f = p.originalJson as unknown as Formation;
+    let f = p.originalJson as unknown as Formation;
     const pool = await loadPlayerPool(p.playerKey);
-    const errors = validateFormation(f, new Map(pool.map((m) => [m.id, m])));
+    let errors = validateFormation(f, new Map(pool.map((m) => [m.id, m])));
+    if (errors.length) {
+      // Inscrito que não montou (ou montou algo que ficou inválido): monta automático equilibrado para ele não ficar de fora.
+      const auto = autoBuild(pool, "BALANCED", "KEEP");
+      if (auto.ok) { f = auto.formation; errors = validateFormation(f, new Map(pool.map((m) => [m.id, m]))); if (!errors.length) await prisma.reiRioParticipant.update({ where: { id: p.id }, data: { originalJson: J(f) } }); }
+    }
     if (errors.length) { dropped.push(`${p.displayName}: ${errors[0]}`); await prisma.reiRioParticipant.delete({ where: { id: p.id } }); continue; }
     const ids = new Set(f.slots.flatMap((s) => s.mascotIds));
     await prisma.reiRioParticipant.update({ where: { id: p.id }, data: { rosterJson: J(pool.filter((m) => ids.has(m.id))), lockedAt: new Date() } });

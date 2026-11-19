@@ -7,7 +7,7 @@ import type { Formation, Strategy } from "@/lib/rei-do-rio/team";
 import { arenaFight } from "@/lib/rei-do-rio/fight-arena";
 import { makeSimPlayer, simulateWeek, type BotTier } from "@/lib/rei-do-rio/simulate";
 import {
-  addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, getReiPlayer, loadPlayerPool, lockEdition, processNextRound,
+  addBots, clearDayPlan, createEdition, deleteTestEdition, getReiAdmin, getReiPlayer, joinEdition, loadPlayerPool, lockEdition, processNextRound,
   resetTestEdition, saveDayPlan, saveRegistration, tick, verifyEdition, withdraw,
 } from "@/lib/rei-do-rio/service";
 import { getEditionView, listEditions, loadDayMatches, loadReplay, loadReport } from "@/lib/rei-do-rio/view";
@@ -66,6 +66,16 @@ export async function autoBuildAction(preset: Preset, strategy: Strategy) {
     const pool = await loadPlayerPool(me.playerId);
     const r = autoBuild(pool, preset, strategy);
     return r.ok ? { ok: true as const, formation: r.formation, explanation: r.explanation } : { ok: false as const, error: r.error, missing: r.missing };
+  } catch (e) { return fail(e); }
+}
+
+export async function joinAction(editionId: string) {
+  const me = await getReiPlayer();
+  if (!me) return DENIED;
+  try {
+    const r = await joinEdition(editionId, me.playerId, me.displayName);
+    revalidatePath(PATH);
+    return r.ok ? { ok: true as const } : { ok: false as const, error: r.error };
   } catch (e) { return fail(e); }
 }
 

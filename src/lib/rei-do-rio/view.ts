@@ -6,7 +6,7 @@ import { getPokemonName } from "@/lib/mascot-data";
 import { mergeConfig, type ReiConfig } from "./config";
 import { initialStandings, type MatchSummary } from "./engine";
 import { buildDailyReport, type DailyReport, type ReportMatch } from "./report";
-import { freezeAt, lockAt } from "./schedule";
+import { buildOpensAt, freezeAt, lockAt } from "./schedule";
 import type { MascotAgg, MascotMatchStats } from "./scoring";
 import { effectiveFormation, loadPlayerPool } from "./service";
 import { pairRound, type StandRow } from "./standings";
@@ -42,7 +42,7 @@ export type TodayRound = {
 export type EditionView = {
   edition: {
     id: string; name: string; isTest: boolean; phase: string; restDay: number | null; mondayDate: string; registrationOpen: boolean; autoRun: boolean;
-    lockAt: string; freezeAt: string | null; doneRounds: number; nextRoundAt: string | null; championName: string | null; cfg: ReiConfig; lockDropped: string[];
+    lockAt: string; buildOpensAt: string; freezeAt: string | null; doneRounds: number; nextRoundAt: string | null; championName: string | null; cfg: ReiConfig; lockDropped: string[];
     participantCount: number; minParticipants: number; canceledReason: string | null;
   };
   /** Foto de perfil por participante (null = sem foto; bots nunca têm). */
@@ -58,7 +58,7 @@ export type EditionView = {
   mascotRanking: { pid: string; owner: string; id: string; name: string; pokemonId: number; total: number; kos: number; assists: number; healing: number; mitigated: number; damageDealt: number; matches: number; wins: number; survivedBattles: number; points: MascotAgg["points"]; byRole: Record<string, number> }[];
   teams: TeamView[];
   me: null | {
-    participantId: string; registered: boolean; original: Formation | null; formation: Formation | null; state: DayState | null; day: number | null;
+    participantId: string; registered: boolean; /** o time (18 mascotes) já foi montado? */ formationReady: boolean; original: Formation | null; formation: Formation | null; state: DayState | null; day: number | null;
     roster: MascotSnap[]; restPlan: Formation | null; yesterday: Formation | null; stats: { total: number; wins: number; losses: number; draws: number; byes: number };
   };
   /** Coleção do jogador (só antes do fechamento): base do montador manual. */
@@ -109,7 +109,7 @@ export async function getEditionView(editionId: string, playerId: string): Promi
     const prevDay = ed.phase === "REST" && day ? await prisma.reiRioDayState.findUnique({ where: { participantId_dayIndex: { participantId: mine.id, dayIndex: Math.max(1, day - 1) } } }) : null;
     const plans = (mine.dayPlansJson ?? {}) as Record<string, { formation: Formation }>;
     meView = {
-      participantId: mine.id, registered: true, original: mine.originalJson as unknown as Formation,
+      participantId: mine.id, registered: true, formationReady: ((mine.originalJson as unknown as Formation).slots ?? []).reduce((n, s) => n + s.mascotIds.filter(Boolean).length, 0) >= 18, original: mine.originalJson as unknown as Formation,
       formation: ds ? (ds.formationJson as unknown as Formation) : (mine.originalJson as unknown as Formation),
       state: ds ? (ds.stateJson as unknown as DayState) : null, day,
       roster: (mine.rosterJson as MascotSnap[] | null) ?? [],
@@ -168,7 +168,7 @@ export async function getEditionView(editionId: string, playerId: string): Promi
   return {
     edition: {
       id: ed.id, name: ed.name, isTest: ed.isTest, phase: ed.phase, restDay: ed.restDay, mondayDate: ed.mondayDate, registrationOpen: ed.registrationOpen, autoRun: ed.autoRun,
-      lockAt: lockAt(ed.mondayDate).toISOString(), freezeAt: ed.restDay ? freezeAt(ed.mondayDate, ed.restDay).toISOString() : null,
+      lockAt: lockAt(ed.mondayDate).toISOString(), buildOpensAt: buildOpensAt(ed.mondayDate).toISOString(), freezeAt: ed.restDay ? freezeAt(ed.mondayDate, ed.restDay).toISOString() : null,
       doneRounds: done.length, nextRoundAt: nextRound?.scheduledAt.toISOString() ?? null, championName: ed.championKey ? nm.get(ed.championKey) ?? null : null, cfg, lockDropped: cfgJson.lockDropped ?? [],
       participantCount: parts.length, minParticipants: cfg.minParticipants, canceledReason: cfgJson.canceledReason ?? null,
     },

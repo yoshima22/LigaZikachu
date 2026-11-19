@@ -5,7 +5,7 @@ import { LeagueBattleReplayModal } from "@/app/(app)/combates/liga-semanal/_comp
 import { DAY_LABELS } from "@/lib/rei-do-rio/schedule";
 import type { Formation } from "@/lib/rei-do-rio/team";
 import type { EditionSummary, EditionView } from "@/lib/rei-do-rio/view";
-import { adminSendInviteAction, clearRestPlanAction, loadEditionAction, loadReplayAction, registerAction, saveRestPlanAction, withdrawAction } from "../actions";
+import { adminSendInviteAction, clearRestPlanAction, joinAction, loadEditionAction, loadReplayAction, registerAction, saveRestPlanAction, withdrawAction } from "../actions";
 import { AdminPanel } from "./admin-panel";
 import { ReportView } from "./report-view";
 import { TeamBuilder } from "./team-builder";
@@ -46,6 +46,8 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
   const [introKey, setIntroKey] = useState(0);
   const [restInit, setRestInit] = useState<Formation | null>(null);
   const [showInvite, setShowInvite] = useState(false);
+  const [, setTick] = useState(0);
+  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 30_000); return () => clearInterval(t); }, []);
 
   const refresh = useCallback(async (id = editionId) => {
     if (!id) { setView(null); setLoading(false); return; }
@@ -60,6 +62,9 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
 
   const ed = view?.edition;
   const me = view?.me ?? null;
+  // A inscrição só adiciona o jogador; a montagem do time abre na segunda (00:00) e vai até as 21h. Testes ignoram a data.
+  const buildOpen = !!ed && (ed.isTest || Date.now() >= new Date(ed.buildOpensAt).getTime());
+  const join = () => start(async () => { const r = await joinAction(ed!.id); flash(r.ok, r.ok ? "Inscrição confirmada! Você monta o time na segunda-feira." : r.error ?? "Não foi possível se inscrever."); void refresh(); });
   const doneDays = useMemo(() => {
     if (!view) return [] as number[];
     const days = new Set<number>();
@@ -138,18 +143,31 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
           {tab === "evento" && (
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="space-y-4 lg:col-span-2">
-                {ed.phase === "PREPARATION" && ed.registrationOpen && (
-                  <div className={`relative overflow-hidden rounded-3xl border-2 p-5 shadow-[0_0_40px_rgba(251,191,36,.25)] sm:p-6 ${me ? "border-emerald-400/50 bg-gradient-to-br from-emerald-500/15 to-slate-950" : "border-amber-300/70 bg-gradient-to-br from-amber-400/25 via-amber-300/10 to-slate-950"}`}>
-                    <div className="flex flex-wrap items-center justify-between gap-4">
-                      <div className="min-w-0">
-                        <p className={`text-[10px] font-black uppercase tracking-[.3em] ${me ? "text-emerald-300" : "text-amber-200"}`}>{me ? "✓ Inscrição confirmada" : "Inscrições abertas"}</p>
-                        <h2 className="mt-1 font-serif text-2xl font-black text-white sm:text-3xl">{me ? "Você está na disputa pelo Trono!" : `Entre na disputa pelo Trono`}</h2>
-                        <p className="mt-1 text-sm text-slate-300">{me ? "Pode mudar sua equipe quantas vezes quiser até segunda às 21h." : `Monte 18 mascotes até segunda, ${dayDm(ed.mondayDate, 0)} às 21h. As lutas começam terça, ${dayDm(ed.mondayDate, 1)}, e rodam sozinhas.`}</p>
+                {ed.phase === "PREPARATION" && ed.registrationOpen && (() => {
+                  const ready = !!me?.formationReady;
+                  const tone = !me ? "border-amber-300/70 bg-gradient-to-br from-amber-400/25 via-amber-300/10 to-slate-950" : ready ? "border-emerald-400/50 bg-gradient-to-br from-emerald-500/15 to-slate-950" : buildOpen ? "border-amber-300/70 bg-gradient-to-br from-amber-400/25 via-amber-300/10 to-slate-950" : "border-sky-300/40 bg-gradient-to-br from-sky-500/15 to-slate-950";
+                  const eyebrow = !me ? "Inscrições abertas" : ready ? "✓ Time confirmado" : buildOpen ? "⏰ Falta montar o time" : "✓ Inscrição confirmada";
+                  const title = !me ? "Entre na disputa pelo Trono" : ready ? "Você está pronto para o Trono!" : buildOpen ? "Hora de montar seu time!" : "Você está na lista!";
+                  const text = !me
+                    ? `Inscrição rápida: é só entrar na lista. O time de 18 mascotes você monta na segunda, ${dayDm(ed.mondayDate, 0)}, a partir das 00:00 e até as 21h. As lutas começam terça, ${dayDm(ed.mondayDate, 1)}.`
+                    : ready ? "Pode ajustar sua equipe quantas vezes quiser até segunda às 21h."
+                    : buildOpen ? `A montagem está aberta até hoje às 21h. Quem não montar recebe um time equilibrado automático, mas escolher você mesmo é melhor!`
+                    : `A montagem do time abre segunda, ${dayDm(ed.mondayDate, 0)}, às 00:00 e vai até as 21h. Até lá, é só esperar — veja quem já entrou abaixo.`;
+                  return (
+                    <div className={`relative overflow-hidden rounded-3xl border-2 p-5 shadow-[0_0_40px_rgba(251,191,36,.25)] sm:p-6 ${tone}`}>
+                      <div className="flex flex-wrap items-center justify-between gap-4">
+                        <div className="min-w-0">
+                          <p className="text-[10px] font-black uppercase tracking-[.3em] text-amber-200">{eyebrow}</p>
+                          <h2 className="mt-1 font-serif text-2xl font-black text-white sm:text-3xl">{title}</h2>
+                          <p className="mt-1 text-sm text-slate-300">{text}</p>
+                          {me && !buildOpen && <Countdown to={ed.buildOpensAt} label="Montagem abre em" className="mt-3 max-w-xs" />}
+                        </div>
+                        {!me && <button disabled={saving} onClick={join} className="shrink-0 animate-pulse rounded-2xl bg-amber-400 px-8 py-3.5 text-base font-black text-slate-900 shadow-lg transition hover:scale-[1.03] hover:animate-none active:scale-95 disabled:opacity-50">👑 Quero me inscrever</button>}
+                        {me && buildOpen && <button onClick={() => setTab("equipe")} className={`shrink-0 rounded-2xl px-8 py-3.5 text-base font-black shadow-lg transition hover:scale-[1.03] active:scale-95 ${ready ? "bg-emerald-400 text-emerald-950" : "animate-pulse bg-amber-400 text-slate-900 hover:animate-none"}`}>{ready ? "Ajustar minha equipe" : "🛡️ Montar meu time"}</button>}
                       </div>
-                      <button onClick={() => setTab("equipe")} className={`shrink-0 rounded-2xl px-8 py-3.5 text-base font-black shadow-lg transition hover:scale-[1.03] active:scale-95 ${me ? "bg-emerald-400 text-emerald-950" : "animate-pulse bg-amber-400 text-slate-900 hover:animate-none"}`}>{me ? "Ajustar minha equipe" : "👑 Quero me inscrever"}</button>
                     </div>
-                  </div>
-                )}
+                  );
+                })()}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {([
                     ["Participantes", view.standings.length, "🧑‍🤝‍🧑"],
@@ -181,7 +199,7 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
                   <Title orn="snowflake" sub="Horários em Brasília.">Calendário</Title>
                   <div className="mb-3 rounded-xl border border-amber-300/40 bg-amber-300/10 p-2.5 text-sm"><p className="text-[10px] font-black uppercase tracking-widest text-amber-200/80">🚀 Início das lutas</p><p className="font-black text-white">Terça, {dayDm(ed.mondayDate, 1)} às 09h</p><p className="text-[11px] text-slate-400">Semana de {dayDm(ed.mondayDate, 0)} a {dayDm(ed.mondayDate, 4)} · coroação na sexta às 21h</p></div>
                   <ol className="space-y-1.5 text-sm">
-                    <li className="flex items-center gap-2"><Pill tone={ed.phase === "PREPARATION" ? "gold" : "green"}>Seg</Pill><span className="text-slate-200"><b className="tabular-nums text-white">{dayDm(ed.mondayDate, 0)}</b> · Inscrição e montagem até 21h</span></li>
+                    <li className="flex items-center gap-2"><Pill tone={ed.phase === "PREPARATION" ? "gold" : "green"}>Seg</Pill><span className="text-slate-200"><b className="tabular-nums text-white">{dayDm(ed.mondayDate, 0)}</b> · Montagem do time (00:00–21h)</span></li>
                     {[1, 2, 3, 4].map((d) => {
                       const rs = view.rounds.filter((r) => r.dayIndex === d); const done = rs.filter((r) => r.status === "DONE").length;
                       return <li key={d} className="flex items-center gap-2"><Pill tone={done === 5 ? "green" : done > 0 ? "gold" : "slate"}>{DAY_LABELS[d].slice(0, 3)}</Pill><span className="text-slate-200"><b className="tabular-nums text-white">{dayDm(ed.mondayDate, d)}</b> · 5 rodadas (09h · 12h · 15h · 18h · 21h)</span><span className="ml-auto text-xs tabular-nums text-slate-500">{done}/5</span></li>;
@@ -197,11 +215,13 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
             <div className="space-y-4">
               {ed.phase === "PREPARATION" && view.pool && (
                 <>
-                  <Card><Title sub="Inscrever → Montar automaticamente → Conferir → Confirmar. Você pode mudar tudo até as 21h de segunda.">{me ? "✓ Você está inscrito" : "Entre na disputa"}</Title>
-                    {me && <div className="flex flex-wrap items-center gap-2"><Pill tone="green">Inscrição registrada</Pill><button onClick={() => start(async () => { const r = await withdrawAction(ed.id); flash(r.ok, r.ok ? "Inscrição cancelada." : r.error ?? ""); void refresh(); })} className="text-xs text-red-300 underline">Cancelar inscrição</button></div>}
+                  <Card><Title sub={me ? (buildOpen ? "Monte (ou deixe o montador automático), confira e confirme. Você pode mudar tudo até as 21h de segunda." : `A montagem do time abre segunda, ${dayDm(ed.mondayDate, 0)}, às 00:00 e vai até as 21h.`) : "A inscrição só coloca você na lista. O time é montado na segunda-feira da semana do evento."}>{me ? "✓ Você está inscrito" : "Entre na disputa"}</Title>
+                    {me && <div className="flex flex-wrap items-center gap-2"><Pill tone="green">Inscrição registrada</Pill>{me.formationReady && <Pill tone="gold">Time montado</Pill>}<button onClick={() => start(async () => { const r = await withdrawAction(ed.id); flash(r.ok, r.ok ? "Inscrição cancelada." : r.error ?? ""); void refresh(); })} className="text-xs text-red-300 underline">Cancelar inscrição</button></div>}
+                    {me && !buildOpen && <Countdown to={ed.buildOpensAt} label="Montagem abre em" className="mt-3 max-w-xs" />}
+                    {!me && ed.registrationOpen && <button disabled={saving} onClick={join} className="mt-2 rounded-2xl bg-amber-400 px-6 py-2.5 text-sm font-black text-slate-900 hover:bg-amber-300 disabled:opacity-50">👑 Quero me inscrever</button>}
                     {!ed.registrationOpen && <p className="mt-2 text-sm text-amber-300">As inscrições estão fechadas pelo admin.</p>}
                   </Card>
-                  {ed.registrationOpen && <TeamBuilder key={`reg-${builderKey}-${me?.participantId ?? "new"}`} pool={view.pool} lockedIds={null} initial={me?.original ?? null} mode="register" hpMult={ed.cfg.hpMultiplier} onSave={saveRegistration} saving={saving} />}
+                  {me && buildOpen && ed.registrationOpen && <TeamBuilder key={`reg-${builderKey}-${me?.participantId ?? "new"}`} pool={view.pool} lockedIds={null} initial={me?.formationReady ? me.original : null} mode="register" hpMult={ed.cfg.hpMultiplier} onSave={saveRegistration} saving={saving} />}
                 </>
               )}
               {ed.phase !== "PREPARATION" && !me && <Empty icon="🚪" title="Você não está nesta edição">A inscrição é voluntária e encerrou às 21h de segunda. Ainda dá para acompanhar tudo pelas outras abas.</Empty>}
