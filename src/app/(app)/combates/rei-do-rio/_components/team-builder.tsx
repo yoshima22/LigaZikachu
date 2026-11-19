@@ -39,6 +39,14 @@ export function TeamBuilder({
   const [sel, setSel] = useState<Sel>(null);
   const [q, setQ] = useState("");
   const [sort, setSort] = useState<SortKey>("power");
+  const [dir, setDir] = useState<"desc" | "asc">("desc");
+  const [minLevel, setMinLevel] = useState(0);
+  const [role, setRole] = useState("");
+  const [personality, setPersonality] = useState("");
+  const [abilityF, setAbilityF] = useState("");
+  const [perPage, setPerPage] = useState(12);
+  const [page, setPage] = useState(0);
+  const resetPage = () => setPage(0);
   const [detail, setDetail] = useState(true);
   const [preset, setPreset] = useState<Preset>("BALANCED");
   const [notes, setNotes] = useState<string[]>([]);
@@ -46,11 +54,30 @@ export function TeamBuilder({
 
   const used = useMemo(() => new Set(f.slots.flatMap((s) => s.mascotIds)), [f]);
   const errors = useMemo(() => validateFormation(f, poolMap, lockedIds), [f, poolMap, lockedIds]);
-  const bench = useMemo(() => {
+  const filterOpts = useMemo(() => ({
+    roles: [...new Set(pool.map((m) => m.preferredCombatRole).filter((x): x is string => !!x))].sort(),
+    personalities: [...new Set(pool.map((m) => m.personality).filter((x): x is string => !!x))].sort(),
+    abilities: [...new Set(pool.map((m) => abilityName(f, m)))].sort(),
+    maxLevel: Math.max(1, ...pool.map((m) => m.level)),
+  }), [pool, f]);
+  // Coleção filtrada (fora da equipe) e ordenada; a paginação fatia o resultado.
+  const filtered = useMemo(() => {
     const term = q.trim().toLowerCase();
     const val = (m: MascotSnap) => (sort === "power" ? power(m) : m[sort]);
-    return pool.filter((m) => !used.has(m.id) && (!term || mascotName(m).toLowerCase().includes(term))).sort((a, b) => val(b) - val(a)).slice(0, 60);
-  }, [pool, used, q, sort]);
+    const sign = dir === "desc" ? -1 : 1;
+    return pool.filter((m) => !used.has(m.id)
+      && (!term || mascotName(m).toLowerCase().includes(term))
+      && m.level >= minLevel
+      && (!role || (role === "__none" ? !m.preferredCombatRole : m.preferredCombatRole === role))
+      && (!personality || m.personality === personality)
+      && (!abilityF || abilityName(f, m) === abilityF))
+      .sort((x, y) => sign * (val(x) - val(y)));
+  }, [pool, used, q, sort, dir, minLevel, role, personality, abilityF, f]);
+  const pages = Math.max(1, Math.ceil(filtered.length / perPage));
+  const curPage = Math.min(page, pages - 1);
+  const bench = filtered.slice(curPage * perPage, curPage * perPage + perPage);
+  const activeFilters = (minLevel ? 1 : 0) + (role ? 1 : 0) + (personality ? 1 : 0) + (abilityF ? 1 : 0) + (q.trim() ? 1 : 0);
+  const clearFilters = () => { setQ(""); setMinLevel(0); setRole(""); setPersonality(""); setAbilityF(""); setPage(0); };
   const selMascot = sel ? poolMap.get(sel.id) : null;
 
   // Montagem de habilidades: todos da equipe, em ordem de prioridade (independe do slot); só os titulares contam no 1º combate.
@@ -216,15 +243,32 @@ export function TeamBuilder({
 
           {mode === "register" && (
             <Card>
-              <Title sub={sel ? "Agora toque no lugar do time onde quer colocá-lo." : "Toque num mascote e depois no slot (ou arraste). A lista mostra os 60 primeiros do filtro."} right={
+              <Title sub={sel ? "Agora toque no lugar do time onde quer colocá-lo." : "Toque num mascote e depois no slot (ou arraste). Use os filtros e as páginas para navegar na coleção."} right={
                 <div className="flex flex-wrap gap-2">
-                  <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Buscar mascote…" className="w-36 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white" aria-label="Buscar na coleção" />
-                  <select value={sort} onChange={(e) => setSort(e.target.value as SortKey)} aria-label="Ordenar coleção" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">{SORTS.map((s) => <option key={s.key} value={s.key}>Ordenar: {s.label}</option>)}</select>
+                  <input value={q} onChange={(e) => { setQ(e.target.value); resetPage(); }} placeholder="Buscar mascote…" className="w-36 rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white" aria-label="Buscar na coleção" />
+                  <select value={sort} onChange={(e) => { setSort(e.target.value as SortKey); resetPage(); }} aria-label="Ordenar coleção" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">{SORTS.map((s) => <option key={s.key} value={s.key}>Ordenar: {s.label}</option>)}</select>
                 </div>
               }>
                 Sua coleção <span className="text-xs font-normal text-slate-500">({pool.length} mascotes · {used.size}/{TEAM_SIZE} escolhidos)</span>
               </Title>
-              {bench.length === 0 ? <Empty orn="gift" title="Nada para mostrar">Todos os mascotes visíveis já estão na equipe ou a busca não encontrou nada.</Empty> : (
+              <div className="mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Filtros da coleção">
+                <select value={minLevel} onChange={(e) => { setMinLevel(Number(e.target.value)); resetPage(); }} aria-label="Nível mínimo" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                  <option value={0}>Nível: todos</option>{[10, 20, 30, 40, 50, 60].filter((n) => n < filterOpts.maxLevel).map((n) => <option key={n} value={n}>Nível {n}+</option>)}
+                </select>
+                <select value={role} onChange={(e) => { setRole(e.target.value); resetPage(); }} aria-label="Papel de combate" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                  <option value="">Papel: todos</option>{filterOpts.roles.map((r) => <option key={r} value={r}>{roleLabel(r)}</option>)}<option value="__none">Sem papel definido</option>
+                </select>
+                <select value={personality} onChange={(e) => { setPersonality(e.target.value); resetPage(); }} aria-label="Personalidade" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                  <option value="">Personalidade: todas</option>{filterOpts.personalities.map((p) => <option key={p} value={p}>{p}</option>)}
+                </select>
+                <select value={abilityF} onChange={(e) => { setAbilityF(e.target.value); resetPage(); }} aria-label="Habilidade" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs text-white">
+                  <option value="">Habilidade: todas</option>{filterOpts.abilities.map((a) => <option key={a} value={a}>{a}</option>)}
+                </select>
+                <button onClick={() => { setDir(dir === "desc" ? "asc" : "desc"); resetPage(); }} aria-label="Inverter ordem" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1.5 text-xs font-bold text-white hover:border-sky-300/40">{dir === "desc" ? "↓ Maior primeiro" : "↑ Menor primeiro"}</button>
+                {activeFilters > 0 && <button onClick={clearFilters} className="rounded-lg border border-amber-300/40 bg-amber-300/10 px-2 py-1.5 text-xs font-bold text-amber-200 hover:bg-amber-300/20">Limpar filtros ({activeFilters})</button>}
+                <span className="ml-auto text-[11px] text-slate-400">{filtered.length} de {pool.length - used.size} disponíveis</span>
+              </div>
+              {bench.length === 0 ? <Empty orn="gift" title="Nada para mostrar">Todos os mascotes já estão na equipe ou nenhum bate com os filtros.</Empty> : (
                 <ul className="grid gap-2 sm:grid-cols-2 xl:grid-cols-3">
                   {bench.map((m) => (
                     <li key={m.id}>
@@ -237,6 +281,21 @@ export function TeamBuilder({
                     </li>
                   ))}
                 </ul>
+              )}
+              {filtered.length > 0 && (
+                <nav className="mt-3 flex flex-wrap items-center justify-between gap-2" aria-label="Paginação da coleção">
+                  <div className="flex items-center gap-1.5 text-xs text-slate-400">
+                    <span>Por página</span>
+                    <select value={perPage} onChange={(e) => { setPerPage(Number(e.target.value)); resetPage(); }} aria-label="Mascotes por página" className="rounded-lg border border-slate-700 bg-slate-900 px-2 py-1 text-xs text-white">{[12, 24, 48].map((n) => <option key={n} value={n}>{n}</option>)}</select>
+                  </div>
+                  <div className="flex items-center gap-1">
+                    <button disabled={curPage === 0} onClick={() => setPage(0)} className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 disabled:opacity-30" aria-label="Primeira página">«</button>
+                    <button disabled={curPage === 0} onClick={() => setPage(curPage - 1)} className="rounded-lg border border-slate-700 px-3 py-1 text-xs font-bold text-slate-200 disabled:opacity-30">Anterior</button>
+                    <span className="px-2 text-xs tabular-nums text-slate-300">Página <b className="text-white">{curPage + 1}</b> de {pages}</span>
+                    <button disabled={curPage >= pages - 1} onClick={() => setPage(curPage + 1)} className="rounded-lg bg-amber-400 px-3 py-1 text-xs font-black text-slate-900 disabled:opacity-30">Próxima</button>
+                    <button disabled={curPage >= pages - 1} onClick={() => setPage(pages - 1)} className="rounded-lg border border-slate-700 px-2 py-1 text-xs text-slate-300 disabled:opacity-30" aria-label="Última página">»</button>
+                  </div>
+                </nav>
               )}
             </Card>
           )}

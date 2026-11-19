@@ -138,6 +138,18 @@ export function ReiClient({ editions: initialEditions, banner = null, isAdmin = 
           {tab === "evento" && (
             <div className="grid gap-4 lg:grid-cols-3">
               <div className="space-y-4 lg:col-span-2">
+                {ed.phase === "PREPARATION" && ed.registrationOpen && (
+                  <div className={`relative overflow-hidden rounded-3xl border-2 p-5 shadow-[0_0_40px_rgba(251,191,36,.25)] sm:p-6 ${me ? "border-emerald-400/50 bg-gradient-to-br from-emerald-500/15 to-slate-950" : "border-amber-300/70 bg-gradient-to-br from-amber-400/25 via-amber-300/10 to-slate-950"}`}>
+                    <div className="flex flex-wrap items-center justify-between gap-4">
+                      <div className="min-w-0">
+                        <p className={`text-[10px] font-black uppercase tracking-[.3em] ${me ? "text-emerald-300" : "text-amber-200"}`}>{me ? "✓ Inscrição confirmada" : "Inscrições abertas"}</p>
+                        <h2 className="mt-1 font-serif text-2xl font-black text-white sm:text-3xl">{me ? "Você está na disputa pelo Trono!" : `Entre na disputa pelo Trono`}</h2>
+                        <p className="mt-1 text-sm text-slate-300">{me ? "Pode mudar sua equipe quantas vezes quiser até segunda às 21h." : `Monte 18 mascotes até segunda, ${dayDm(ed.mondayDate, 0)} às 21h. As lutas começam terça, ${dayDm(ed.mondayDate, 1)}, e rodam sozinhas.`}</p>
+                      </div>
+                      <button onClick={() => setTab("equipe")} className={`shrink-0 rounded-2xl px-8 py-3.5 text-base font-black shadow-lg transition hover:scale-[1.03] active:scale-95 ${me ? "bg-emerald-400 text-emerald-950" : "animate-pulse bg-amber-400 text-slate-900 hover:animate-none"}`}>{me ? "Ajustar minha equipe" : "👑 Quero me inscrever"}</button>
+                    </div>
+                  </div>
+                )}
                 <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
                   {([
                     ["Participantes", view.standings.length, "🧑‍🤝‍🧑"],
