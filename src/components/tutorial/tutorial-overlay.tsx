@@ -4,6 +4,12 @@ import { useState, useEffect, useCallback, useRef } from "react";
 import { X, ChevronRight } from "lucide-react";
 import type { TutorialStep } from "@/lib/tutorial-config";
 
+// Menu desktop e mobile compartilham os mesmos data-tutorial: usa o primeiro alvo realmente visível.
+function findTarget(selector: string): HTMLElement | null {
+  const all = Array.from(document.querySelectorAll<HTMLElement>(selector));
+  return all.find((el) => el.offsetParent !== null) ?? all[0] ?? null;
+}
+
 interface TutorialOverlayProps {
   steps: TutorialStep[];
   onComplete: () => void;
@@ -23,7 +29,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
       setTargetRect(null);
       return;
     }
-    const el = document.querySelector(step.target) as HTMLElement | null;
+    const el = findTarget(step.target);
     if (!el) {
       setTargetRect(null);
       return;
@@ -41,7 +47,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
     const timeout = setTimeout(() => {
       setVisible(true);
       if (step?.target && step.position !== "center") {
-        const el = document.querySelector(step.target);
+        const el = findTarget(step.target);
         el?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
       }
       updateTargetRect();
@@ -51,7 +57,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
 
   useEffect(() => {
     if (!visible || !step?.target || step.position === "center") return;
-    const el = document.querySelector(step.target);
+    const el = findTarget(step.target);
     el?.scrollIntoView({ behavior: "smooth", block: "center", inline: "nearest" });
     const timeout = setTimeout(updateTargetRect, 360);
     return () => clearTimeout(timeout);

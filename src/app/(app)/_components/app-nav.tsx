@@ -54,7 +54,7 @@ const mainLinks = [
     label: "Dashboard",
     icon: LayoutDashboard,
     adminOnly: false,
-    tutorialId: undefined,
+    tutorialId: "nav-dashboard",
   },
   {
     href: "/torneios",
@@ -68,7 +68,7 @@ const mainLinks = [
     label: "Noticias",
     icon: Newspaper,
     adminOnly: false,
-    tutorialId: undefined,
+    tutorialId: "nav-noticias",
   },
 ];
 
@@ -541,6 +541,7 @@ export function AppNav({
             ))}
           <NavDropdown
             id="combates"
+            tutorialId="nav-combates"
             label="Combates"
             icon={Swords}
             links={combatLinks}
@@ -554,6 +555,7 @@ export function AppNav({
           />
           <NavDropdown
             id="ranking"
+            tutorialId="nav-ranking"
             label="Ranking"
             icon={BarChart3}
             links={rankingLinks}
@@ -563,6 +565,7 @@ export function AppNav({
           />
           <NavDropdown
             id="mercado"
+            tutorialId="nav-mercado"
             label="Mercado"
             icon={ShoppingCart}
             links={mercadoLinks}
@@ -576,6 +579,7 @@ export function AppNav({
           />
           <NavDropdown
             id="colecao"
+            tutorialId="nav-colecao"
             label="Coleção"
             icon={ShoppingBag}
             links={colecaoLinks}
@@ -653,6 +657,7 @@ export function AppNav({
               ))}
             <MobileNavGroup
               id="mobile-combates"
+              tutorialId="nav-combates"
               label="Combates"
               icon={Swords}
               links={combatLinks}
@@ -666,6 +671,7 @@ export function AppNav({
             />
             <MobileNavGroup
               id="mobile-ranking"
+              tutorialId="nav-ranking"
               label="Ranking"
               icon={BarChart3}
               links={rankingLinks}
@@ -675,6 +681,7 @@ export function AppNav({
             />
             <MobileNavGroup
               id="mobile-mercado"
+              tutorialId="nav-mercado"
               label="Mercado"
               icon={ShoppingCart}
               links={mercadoLinks}
@@ -688,6 +695,7 @@ export function AppNav({
             />
             <MobileNavGroup
               id="mobile-colecao"
+              tutorialId="nav-colecao"
               label="Coleção"
               icon={ShoppingBag}
               links={colecaoLinks}
@@ -701,6 +709,7 @@ export function AppNav({
             />
             <MobileNavGroup
               id="mobile-perfil"
+              tutorialId="nav-perfil"
               label="Perfil"
               icon={User}
               links={profileLinks}
@@ -884,6 +893,7 @@ function MobileNavGroup({
   alerts = [],
   onAlertClick,
   onClearAll,
+  tutorialId,
 }: {
   id: string;
   label: string;
@@ -900,6 +910,7 @@ function MobileNavGroup({
   alerts?: NavAlert[];
   onAlertClick?: (alert: NavAlert) => void;
   onClearAll?: (category: NavAlert["category"]) => void;
+  tutorialId?: string;
 }) {
   const buttonRef = useRef<HTMLButtonElement>(null);
   const [popupGeometry, setPopupGeometry] = useState({ left: 12, width: 240 });
@@ -934,7 +945,7 @@ function MobileNavGroup({
   };
 
   return (
-    <div className="static min-w-0">
+    <div className="static min-w-0" {...(tutorialId ? { "data-tutorial": tutorialId } : {})}>
       <button
         ref={buttonRef}
         type="button"
