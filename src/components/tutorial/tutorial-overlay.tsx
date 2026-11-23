@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useCallback, useRef } from "react";
+import { createPortal } from "react-dom";
 import { X, ChevronRight } from "lucide-react";
 import type { TutorialStep } from "@/lib/tutorial-config";
 
@@ -212,8 +213,9 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
     if (e.target === e.currentTarget) onSkip();
   };
 
-  return (
-    <div className="fixed inset-0 z-[9999]" style={{ pointerEvents: "auto" }} onClick={handleBackdropClick}>
+  // Portal no body: temas equipados usam transform/filter em ancestrais, o que quebra position: fixed.
+  return createPortal(
+    <div className="fixed inset-0 z-[99999]" style={{ pointerEvents: "auto" }} onClick={handleBackdropClick}>
       {/* Overlay */}
       {hasTarget && spotlightRect ? (
         // Spotlight overlay using SVG clip path
@@ -265,7 +267,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
       {/* Tutorial card — stopPropagation so clicks inside don't skip */}
       <div
         style={cardStyle}
-        className="z-[10000] rounded-2xl border border-[#FFCB05]/40 bg-[#1A1A2E] shadow-2xl p-4 sm:p-5 space-y-2.5 sm:space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200"
+        className="z-[100000] rounded-2xl border border-[#FFCB05]/40 bg-[#1A1A2E] shadow-2xl p-4 sm:p-5 space-y-2.5 sm:space-y-3 animate-in fade-in slide-in-from-bottom-2 duration-200"
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -322,6 +324,7 @@ export function TutorialOverlay({ steps, onComplete, onSkip }: TutorialOverlayPr
           </div>
         </div>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
