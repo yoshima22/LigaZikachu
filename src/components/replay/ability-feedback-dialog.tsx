@@ -6,7 +6,7 @@ import { ABILITY_FEEDBACK_MAX_COMMENT, ABILITY_VERDICTS, ABILITY_VERDICT_KEYS, t
 import { getMyAbilityFeedbackAction, submitAbilityFeedbackAction } from "@/lib/abilities/feedback-actions";
 
 /** Janelinha (dentro do card de habilidades) para o jogador votar no equilíbrio da habilidade. */
-export function AbilityFeedbackDialog({ slug, name, onClose }: { slug: string; name: string; onClose: () => void }) {
+export function AbilityFeedbackDialog({ slug, name, onClose, fixed = false }: { slug: string; name: string; onClose: () => void; fixed?: boolean }) {
   const [verdict, setVerdict] = useState<AbilityVerdict | null>(null);
   const [comment, setComment] = useState("");
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
@@ -27,7 +27,7 @@ export function AbilityFeedbackDialog({ slug, name, onClose }: { slug: string; n
   };
 
   return (
-    <div className="absolute inset-0 z-20 flex items-center justify-center bg-black/70 p-3" onClick={onClose}>
+    <div className={`${fixed ? "fixed z-[70]" : "absolute z-20"} inset-0 flex items-center justify-center bg-black/70 p-3`} onClick={(e) => { e.stopPropagation(); onClose(); }}>
       <div role="dialog" aria-label={`Opinar sobre ${name}`} onClick={(e) => e.stopPropagation()}
         className="w-full max-w-xs rounded-xl border border-white/15 bg-slate-950 p-3 shadow-xl">
         <div className="flex items-start gap-2">
@@ -62,5 +62,17 @@ export function AbilityFeedbackDialog({ slug, name, onClose }: { slug: string; n
         </div>
       </div>
     </div>
+  );
+}
+
+/** Link discreto "Opinar" que abre a janelinha de voto sobre a habilidade (fora do card de replay). */
+export function AbilityFeedbackLink({ slug, name, className = "" }: { slug: string; name: string; className?: string }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} title="Dar sua opinião sobre esta habilidade"
+        className={`text-[10px] text-slate-500 underline-offset-2 hover:text-fuchsia-200 hover:underline ${className}`}>💬 Opinar</button>
+      {open && <AbilityFeedbackDialog fixed slug={slug} name={name} onClose={() => setOpen(false)} />}
+    </>
   );
 }

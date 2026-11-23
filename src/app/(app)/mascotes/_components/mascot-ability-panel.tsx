@@ -1,6 +1,7 @@
 "use client";
 
 import { KeywordText } from "@/components/keyword-text";
+import { AbilityFeedbackLink } from "@/components/replay/ability-feedback-dialog";
 import Link from "next/link";
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
@@ -75,6 +76,7 @@ export function MascotAbilityPanel({
       </div>
       {info?.dex && <p className="mt-1 text-[9px] text-slate-500">Na Pokédex: {info.dex}</p>}
       {info && <p className="mt-0.5 leading-snug text-slate-300"><KeywordText text={info.hasEffect ? describeAbilityAt(info, stats) : describeAbility(info)} /></p>}
+      {info && <AbilityFeedbackLink slug={info.slug} name={info.name} className="mt-0.5 block" />}
       {info?.hasEffect && info.scale && (
         <p className="mt-0.5 text-[9px] text-slate-600">O efeito cresce com o atributo {info.scale} (máximo em 250). Vale nos modos com habilidades.</p>
       )}

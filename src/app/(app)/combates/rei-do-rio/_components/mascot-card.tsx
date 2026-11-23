@@ -2,6 +2,7 @@
 
 import { KeywordText } from "@/components/keyword-text";
 import { useState } from "react";
+import { AbilityFeedbackLink } from "@/components/replay/ability-feedback-dialog";
 import { recommendCombatRole } from "@/lib/combat-roles";
 import { describeAbilityAt, getAbilityInfo, getSpeciesAbilities } from "@/lib/abilities";
 import { ABILITY_CATEGORY_STYLE } from "@/lib/abilities/style";
@@ -83,6 +84,7 @@ export function AbilityField({ m, f, onChange, state, readOnly = false }: { m: M
       {open && (
         <div className="mt-1 space-y-1">
           <p className="text-[11px] leading-snug text-slate-300"><KeywordText text={info.hasEffect ? describeAbilityAt(info, stats) : "Esta habilidade não tem efeito em combate nesta versão."} /></p>
+          <AbilityFeedbackLink slug={info.slug} name={info.name} />
           {info.hasEffect && <p className="text-[10px] text-slate-500">{info.activations > 0 ? `${info.activations} ativação(ões) por luta` : "passiva"} · {info.trigger}</p>}
           {hidden && !m.hiddenUnlocked && !options.includes(hidden) && <p className="text-[10px] text-violet-200/70">A habilidade oculta ({getAbilityInfo(hidden)?.name}) é liberada com o TM dela (ZikaShop/Bazar).</p>}
         </div>
