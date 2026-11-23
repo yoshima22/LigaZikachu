@@ -8,7 +8,6 @@ import { useEffect, useMemo, useRef, useState, useTransition } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
-import { useRealtimeSignal } from "@/hooks/use-realtime-signal";
 import {
   resolveArenaDraftBattleAction,
   advanceArenaDraftTimeoutAction,
@@ -253,10 +252,6 @@ export function DraftRoomClient({
     grace?: number;
   } | null>(null);
   const [selected, setSelected] = useState<string[]>([]);
-  const tickRef = useRef<() => void>(() => {});
-  const realtimeOk = useRealtimeSignal(`draft:${matchId}`, (name) => {
-    if (name === "sync") tickRef.current();
-  });
   // Poll leve estilo Batalha de Terreno: recarrega só quando a versão muda.
   useEffect(() => {
     if (["FINISHED", "CANCELLED"].includes(state)) return;
@@ -265,14 +260,9 @@ export function DraftRoomClient({
     // mantinha um WebSocket aberto à toa.
     let lastVersion = stateVersion;
     let busy = false;
-    let again = false; // sinal que chegou com um tick em andamento
-    let lastBeat = 0;
+    let ticks = 0;
     const tick = async () => {
-      if (document.hidden) return;
-      if (busy) {
-        again = true;
-        return;
-      }
+      if (busy || document.hidden) return;
       busy = true;
       try {
         // Prioridade: detectar a mudança de estado o mais rápido possível.
@@ -294,8 +284,7 @@ export function DraftRoomClient({
           router.refresh();
         }
         // Presença/desconexão em cadência menor e sem bloquear a sincronização.
-        if (Date.now() - lastBeat >= 4500) {
-          lastBeat = Date.now();
+        if (ticks % 5 === 0) {
           void heartbeatArenaDraftAction(matchId)
             .then((presence) => {
               if (presence.active)
@@ -307,36 +296,22 @@ export function DraftRoomClient({
             })
             .catch(() => {});
         }
+        ticks += 1;
       } finally {
         busy = false;
-        if (again) {
-          again = false;
-          void tick();
-        }
       }
     };
-    tickRef.current = () => void tick();
     void tick();
-    // Com realtime conectado o polling é só reserva (5s); sem ele, mantém 1s.
-    const poll = window.setInterval(tick, realtimeOk ? 5000 : 1000);
-    // Prazo da fase: dispara o avanço no instante certo (sem depender do polling).
-    const deadlineMs = deadlineAt ? new Date(deadlineAt).getTime() : 0;
-    const timers = deadlineMs
-      ? [300, 1500].map((extra) =>
-          window.setTimeout(tick, Math.max(0, deadlineMs - Date.now()) + extra),
-        )
-      : [];
+    const poll = window.setInterval(tick, 1000);
     const onVisible = () => {
       if (!document.hidden) void tick();
     };
     document.addEventListener("visibilitychange", onVisible);
     return () => {
-      tickRef.current = () => {};
       window.clearInterval(poll);
-      timers.forEach((t) => window.clearTimeout(t));
       document.removeEventListener("visibilitychange", onVisible);
     };
-  }, [matchId, router, state, stateVersion, deadlineAt, realtimeOk]);
+  }, [matchId, router, state, stateVersion]);
   // Bans e picks entram no servidor um alvo por vez (ordem A B B A A B B A A B
   // B A). Quando o jogador tem dois picks seguidos, deixamos escolher os dois e
   // enviamos em sequência num único "Confirmar".

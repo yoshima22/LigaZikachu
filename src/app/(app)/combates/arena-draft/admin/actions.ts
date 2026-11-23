@@ -2,7 +2,6 @@
 import { revalidatePath } from "next/cache";
 import { requireAdmin } from "@/lib/auth/permissions";
 import { prisma } from "@/lib/prisma";
-import { signalRealtime } from "@/lib/realtime-signal";
 export async function cancelArenaDraftMatchAdminAction(matchId: string) {
   await requireAdmin();
   await prisma.arenaDraftMatch.updateMany({
@@ -15,7 +14,6 @@ export async function cancelArenaDraftMatchAdminAction(matchId: string) {
   });
   revalidatePath("/combates/arena-draft/admin");
   revalidatePath(`/combates/arena-draft/${matchId}`);
-  signalRealtime(`draft:${matchId}`, "sync");
 }
 export async function expireArenaDraftPhaseAdminAction(matchId: string) {
   await requireAdmin();
@@ -28,5 +26,4 @@ export async function expireArenaDraftPhaseAdminAction(matchId: string) {
   });
   revalidatePath("/combates/arena-draft/admin");
   revalidatePath(`/combates/arena-draft/${matchId}`);
-  signalRealtime(`draft:${matchId}`, "sync");
 }
