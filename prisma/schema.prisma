@@ -262,6 +262,7 @@ model Player {
   tournamentRegistrations     TournamentRegistration[]
   gifts                       PlayerGift[]
   santaClaim                  SantaClaim?
+  abilityFeedback             AbilityFeedback[]
   tournamentDayRewards        TournamentDayReward[]
   tournamentPostseasonEntries TournamentPostseasonEntry[]
   activityLogs                PlayerActivityLog[]
@@ -5841,4 +5842,20 @@ model SantaClaim {
   player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
   @@map("santa_claims")
+}
+
+/// Voto do jogador sobre uma habilidade passiva (forte/fraca/mudar efeito). Um voto por jogador e habilidade.
+model AbilityFeedback {
+  id          String   @id @default(cuid())
+  playerId    String
+  abilitySlug String
+  verdict     String // TOO_STRONG | TOO_WEAK | BALANCED | CHANGE_EFFECT
+  comment     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  player      Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
+
+  @@unique([playerId, abilitySlug])
+  @@index([abilitySlug])
+  @@map("ability_feedback")
 }

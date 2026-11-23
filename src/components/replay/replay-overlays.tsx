@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Sparkles, X } from "lucide-react";
 import { describeAbility, getAbilityInfo } from "@/lib/abilities";
 import { TYPE_LABELS_PT } from "@/lib/mascot-data";
+import { AbilityFeedbackDialog } from "./ability-feedback-dialog";
 import { COMBAT_ROLE_DESCRIPTIONS, COMBAT_ROLE_LABELS } from "@/lib/combat-roles";
 
 // O log grava a postura pelo rótulo ("Defensor"); a descrição é indexada pelo código.
@@ -102,6 +103,7 @@ const STATE_PT: Record<string, { label: string; cls: string }> = {
 export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }: { teams: Combatant[]; sideNames: { A: string; B: string }; onClose: () => void; unrecorded?: boolean }) {
   const [side, setSide] = useState<"A" | "B">("A");
   const [i, setI] = useState(0);
+  const [feedbackOpen, setFeedbackOpen] = useState(false);
   const list = teams.filter((c) => c.side === side);
   const c = list[Math.min(i, list.length - 1)];
   const info = getAbilityInfo(c?.ability?.slug);
@@ -110,6 +112,7 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
+      if (feedbackOpen) { if (e.key === "Escape") setFeedbackOpen(false); return; }
       if (e.key === "Escape") onClose();
       if (e.key === "ArrowRight") go(1);
       if (e.key === "ArrowLeft") go(-1);
@@ -123,7 +126,7 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
       style={{ animation: "zcCardIn .25s ease-out both" }}>
       <style>{`@keyframes zcCardIn{from{opacity:0}to{opacity:1}}@keyframes zcCardPop{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}`}</style>
       <div role="dialog" aria-label="Habilidades das equipes" onClick={(e) => e.stopPropagation()}
-        className="flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-fuchsia-300/25 bg-slate-950/95 shadow-[0_0_40px_rgba(217,70,239,.18)]"
+        className="relative flex max-h-full w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-fuchsia-300/25 bg-slate-950/95 shadow-[0_0_40px_rgba(217,70,239,.18)]"
         style={{ animation: "zcCardPop .3s cubic-bezier(.2,.9,.3,1.2) both" }}>
         <div className="flex items-center gap-2 border-b border-white/10 px-3 py-2">
           <Sparkles size={15} className="text-fuchsia-300" />
@@ -184,6 +187,8 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
                   {[info.category, info.effectName, info.activations > 0 ? `${info.activations}× por luta` : "Passiva"].filter(Boolean).join(" · ")}
                 </p>
                 <p className="mt-2 text-xs leading-relaxed text-slate-200">{describeAbility(info)}</p>
+                <button type="button" onClick={() => setFeedbackOpen(true)} title="Dar sua opinião sobre esta habilidade"
+                  className="mt-2 ml-auto block text-[10px] text-slate-500 underline-offset-2 hover:text-fuchsia-200 hover:underline">💬 Opinar</button>
                 {c.ability?.reason && <p className="mt-2 text-[11px] text-amber-200/90">{c.ability.reason}</p>}
               </div>
             ) : (
@@ -196,6 +201,7 @@ export function AbilitiesCard({ teams, sideNames, onClose, unrecorded = false }:
             <p className="mt-2 text-center text-[10px] text-slate-600">{Math.min(i, list.length - 1) + 1} de {list.length} · use ‹ › para navegar</p>
           </div>
         )}
+        {feedbackOpen && info && <AbilityFeedbackDialog key={info.slug} slug={info.slug} name={info.name} onClose={() => setFeedbackOpen(false)} />}
       </div>
     </div>
   );

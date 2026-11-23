@@ -50,6 +50,7 @@ import { FormsPoolManager } from "./_components/forms-pool-manager";
 import { EvolutionDebug } from "./_components/evolution-debug";
 import { MascotSpriteViewer } from "./_components/mascot-sprite-viewer";
 import { AdminTabs } from "./_components/admin-tabs";
+import { AbilityFeedbackPanel } from "./_components/ability-feedback-panel";
 import { LigaCashPanel } from "./_components/liga-cash-panel";
 import { TrainingJourneyAdminPanel } from "./_components/training-journey-admin-panel";
 
@@ -453,6 +454,7 @@ export default async function AdminPage() {
       </div>
       </>
     ) },
+    { id: "habilidades", label: "Habilidades", content: <AbilityFeedbackPanel /> },
     { id: "sistema", label: "Sistema", content: (
       <>
       <MigrateImagesPanel />
