@@ -13,26 +13,40 @@ const isShown = (el: HTMLElement) => {
   return el.offsetParent !== null && r.width > 4 && r.height > 4;
 };
 
-// Acha o alvo do passo: seletor (menu desktop/mobile repetem ids: pega o visível) ou texto de um
-// título/botão da página (títulos expandem para o card que os contém).
+// Sobe do elemento até o "card" que o contém (primeiro ancestral visivelmente maior).
+function expandToCard(el: HTMLElement, root: HTMLElement): HTMLElement {
+  const base = el.getBoundingClientRect().height;
+  let node: HTMLElement | null = el.parentElement;
+  for (let i = 0; i < 7 && node && node !== root && node !== document.body; i++, node = node.parentElement) {
+    if (node.getBoundingClientRect().height > base + 50) return node;
+  }
+  return el;
+}
+
+const INTERACTIVE = "button,a,summary,[role='tab'],label";
+
+// Acha o alvo do passo: seletor (menu desktop/mobile repetem ids: pega o visível) ou texto da página.
+// Texto: prefere abas/botões (destaca só o botão); senão o elemento mais interno com o texto, expandido
+// para o card. "@h1" destaca o cabeçalho (card do título) da página.
 function findTarget(step: TutorialStep): HTMLElement | null {
   if (step.target) {
     const all = Array.from(document.querySelectorAll<HTMLElement>(step.target));
     return all.find((el) => el.offsetParent !== null) ?? all[0] ?? null;
   }
   if (!step.find) return null;
-  const q = norm(step.find);
   const root = document.querySelector<HTMLElement>("[data-tutorial='page-content']") ?? document.body;
-  const els = Array.from(root.querySelectorAll<HTMLElement>("h1,h2,h3,h4,button,a,summary,[role='tab'],label,legend"));
-  const hit = els.find((el) => isShown(el) && (el.textContent ?? "").length < 120 && norm(el.textContent ?? "").includes(q));
-  if (!hit) return null;
-  if (!/^H[1-4]$/.test(hit.tagName)) return hit;
-  const base = hit.getBoundingClientRect().height;
-  let node: HTMLElement | null = hit.parentElement;
-  for (let i = 0; i < 6 && node && node !== root; i++, node = node.parentElement) {
-    if (node.getBoundingClientRect().height > base + 60) return node;
+  if (step.find === "@h1") {
+    const h = Array.from(root.querySelectorAll<HTMLElement>("h1")).find(isShown);
+    return h ? expandToCard(h, root) : null;
   }
-  return hit;
+  const q = norm(step.find);
+  const matches = (el: HTMLElement) => isShown(el) && (el.textContent ?? "").length < 140 && norm(el.textContent ?? "").includes(q);
+  const button = Array.from(root.querySelectorAll<HTMLElement>(INTERACTIVE)).find(matches);
+  if (button) return button;
+  const deepest = Array.from(root.querySelectorAll<HTMLElement>("*")).find(
+    (el) => matches(el) && !Array.from(el.children).some((c) => c instanceof HTMLElement && matches(c)),
+  );
+  return deepest ? expandToCard(deepest, root) : null;
 }
 
 // No celular o card fica embaixo: rola o alvo para a parte de cima da tela.
