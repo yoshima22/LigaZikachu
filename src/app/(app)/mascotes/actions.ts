@@ -16,6 +16,7 @@ import {
   claimVacation, applyXpShare, removeXpShare, mascotHasXpShare, applyRainbowFeather,
   rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds, isFeedInteraction } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
+import { NEUTRALIZATION_ZONE_HOURS, NEUTRALIZATION_ZONE_TYPE, brtDayKey } from "@/lib/arena-neutralization";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getEggPityProgress } from "@/lib/egg-pity";
@@ -1907,6 +1908,42 @@ export async function usePicnicBasketAction(bound = false): Promise<{ error?: st
     const count = await applyPicnicBasket(player.id);
     await prisma.playerInventory.update({ where: { id: inv.id }, data: consumeOne(bound) });
     revalidate(player.id); return { mascotCount: count };
+  } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
+}
+
+export async function useNeutralizationZoneAction(bound = false): Promise<{ error?: string; until?: string }> {
+  try {
+    const user = await getSessionUser(); if (!user) return { error: "Nao autenticado." };
+    const player = await getSessionPlayer(user.id);
+    if (!player) return { error: "Perfil nao encontrado." };
+    const shopItem = await prisma.shopItem.findFirst({ where: { type: NEUTRALIZATION_ZONE_TYPE as never, active: true }, select: { id: true } });
+    if (!shopItem) return { error: "Item nao encontrado na loja." };
+    const inv = await prisma.playerInventory.findUnique({ where: { playerId_itemId: { playerId: player.id, itemId: shopItem.id } } });
+    if (!inv || inv.quantity < 1) return { error: "Você não tem Zona de Neutralização no inventário." };
+    const now = new Date();
+    const today = brtDayKey(now);
+    const until = new Date(now.getTime() + NEUTRALIZATION_ZONE_HOURS * 3_600_000);
+    const boundUsed = bound && inv.boundQuantity > 0;
+    await prisma.$transaction(async (tx) => {
+      // Guarda atômica: só ativa se não houve uso hoje (BRT) e não há proteção em curso. Duas abas = um uso.
+      const activated = await tx.player.updateMany({
+        where: {
+          id: player.id,
+          AND: [
+            { OR: [{ arenaNeutralizationDay: null }, { arenaNeutralizationDay: { not: today } }] },
+            { OR: [{ arenaNeutralizedUntil: null }, { arenaNeutralizedUntil: { lte: now } }] },
+          ],
+        },
+        data: { arenaNeutralizedUntil: until, arenaNeutralizationDay: today },
+      });
+      if (activated.count !== 1) throw new Error("A Zona de Neutralização só pode ser usada 1 vez por dia. Ela volta a ficar disponível à meia-noite (horário de Brasília).");
+      const consumed = await tx.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: consumeOne(boundUsed) });
+      if (consumed.count !== 1) throw new Error("Você não tem Zona de Neutralização no inventário.");
+    });
+    revalidateTag("arena-active-teams");
+    revalidatePath("/arena-z");
+    revalidate(player.id);
+    return { until: until.toISOString() };
   } catch (err) { return { error: err instanceof Error ? err.message : "Erro." }; }
 }
 

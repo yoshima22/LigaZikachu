@@ -4,7 +4,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { ArrowRight, ChevronDown, ChevronLeft, ChevronRight, ChevronUp, GripVertical, Loader2, Search, Sparkles, X, Zap } from "lucide-react";
-import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useMegaReverterAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
+import { useMascotBuffAction, useLuckyEggAction, useWeaknessPolicyAction, usePicnicBasketAction, useNeutralizationZoneAction, useVacationTicketAction, useXpShareAction, removeXpShareAction, useRainbowFeatherAction, useMegaStoneAction, useMegaReverterAction, useAbilityTmAction, searchOwnedMascotsForItemAction } from "../actions";
 import { MEGA_FORM_IDS, getMegaStoneByType, isMegaStoneType } from "@/lib/mega-evolution";
 import { PERSONALITY_LABEL, PERSONALITY_DESCRIPTION, getMascotStatusGrowthMultiplier, shortMascotCode } from "@/lib/mascot-data";
 import { FRESH_WATER_IMAGE } from "@/lib/item-image-assets";
@@ -72,6 +72,7 @@ const BUFF_EMOJI: Record<string, string> = {
   MEGA_REVERTER:     "↩️",
   ANTIDOTE:          "🧪",
   FIRST_AID_KIT:     "🩹",
+  NEUTRALIZATION_ZONE: "🛡️",
   ABILITY_TM:        "💿",
 };
 
@@ -98,7 +99,7 @@ const EXP_BUFF_AREAS: Record<string, { label: string; applies: boolean }[]> = {
 };
 
 // Itens que não precisam de seleção de mascote (aplicados globalmente ou com lógica especial)
-const PLAYER_LEVEL_ITEMS = new Set(["PICNIC_BASKET"]);
+const PLAYER_LEVEL_ITEMS = new Set(["PICNIC_BASKET", "NEUTRALIZATION_ZONE"]);
 // Itens irreversíveis que precisam de confirmação extra
 const DESTRUCTIVE_ITEMS = new Set(["RAINBOW_FEATHER", "MEGA_REVERTER"]);
 
@@ -377,6 +378,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       confirmMsg = `⚠️ ATENÇÃO: Usar ${selectedBuffItem.name} em ${mascotName} vai voltar o mascote ao nível 1 e sortear novamente personalidade e atributos. Esta ação é IRREVERSÍVEL.${featherWarning ? `\n\n${featherWarning}` : ""}\n\nTem certeza?`;
     } else if (isExpBuff && mascotHasExpBoost) {
       confirmMsg = `${mascotName} já tem uma Vitamina Elétrica ativa. Usar outra irá REMOVER o buff atual e aplicar um novo. Deseja continuar?`;
+    } else if (selectedBuffItem.type === "NEUTRALIZATION_ZONE") {
+      confirmMsg = "Ativar a Zona de Neutralização? Por 4h ninguém ataca suas equipes no PvP da Arena Z, e você também não ataca no PvP nesse período. Só pode ser usada 1 vez por dia.";
     } else if (isPlayerLevel) {
       confirmMsg = `Usar ${selectedBuffItem.name}? A próxima expedição terá -30% de duração e as iniciadas nas próximas 3h receberão bônus por modo.`;
     } else {
@@ -409,6 +412,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         if (t === "LUCKY_EGG") r = await useLuckyEggAction(selectedMascot, bound);
         else if (t === "WEAKNESS_POLICY") r = await useWeaknessPolicyAction(selectedMascot, bound);
         else if (t === "PICNIC_BASKET") r = await usePicnicBasketAction(bound);
+        else if (t === "NEUTRALIZATION_ZONE") r = await useNeutralizationZoneAction(bound);
         else if (t === "VACATION_TICKET") r = await useVacationTicketAction(selectedMascot, bound);
         else if (t === "XP_SHARE" || t === "XP_SHARE_TEAM") r = await useXpShareAction(selectedMascot, selectedBuff);
         else if (t === "RAINBOW_FEATHER") r = await useRainbowFeatherAction(selectedMascot, selectedBuff);
@@ -429,6 +433,8 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         setInlineError(null);
         if (r.replacedExistingBuff) {
           toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
+        } else if (t === "NEUTRALIZATION_ZONE") {
+          toast.success("Zona de Neutralização ativada: você está protegido do PvP por 4h. 🛡️");
         } else if (t === "PICNIC_BASKET") {
           toast.success("Piquenique ativado: próxima expedição -30% e bônus por modo durante 3h. 🧺");
         } else if (t === "VACATION_TICKET") {
@@ -680,7 +686,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
           {selectedBuffItem && PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type) ? (
-            <p className="text-xs text-slate-400">Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres.</p>
+            <p className="text-xs text-slate-400">{selectedBuffItem.type === "NEUTRALIZATION_ZONE" ? "Protege toda a sua conta do PvP da Arena Z por 4h. Uso: 1 vez por dia (reinicia à meia-noite, horário de Brasília)." : "Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres."}</p>
           ) : selectedMascotObj ? (
             <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-3 py-2 text-xs text-slate-100">
               <span className="font-semibold">{selectedMascotObj.name}</span>

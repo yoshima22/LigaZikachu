@@ -351,6 +351,9 @@ model Player {
   traceRoomsAsHunter          TraceRoom[]                    @relation("TraceRoomHunter")
   goldenPawTransactions       GoldenPawTransaction[]
   casualMode                  Boolean                        @default(false)
+  // Zona de Neutralização: protege do PvP da Arena Z até este instante; 1 uso por dia (dia BRT, AAAA-MM-DD).
+  arenaNeutralizedUntil       DateTime?
+  arenaNeutralizationDay      String?
   replayStyle                 String                         @default("classic") // "classic" | "modern"
   adminLabFeatherUsedAt       DateTime?
   auctionBids                 BazarAuctionBid[]
@@ -1963,6 +1966,7 @@ enum ShopItemType {
   WEAKNESS_POLICY
   PICNIC_BASKET
   FIRST_AID_KIT
+  NEUTRALIZATION_ZONE
   VACATION_TICKET
   XP_SHARE
   XP_SHARE_TEAM

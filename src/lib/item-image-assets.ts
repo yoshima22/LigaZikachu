@@ -8,4 +8,5 @@ export const EVENT_EGG_IMAGE = `${ITEM_ASSET_BASE}/event-egg-v1.webp${ITEM_TRANS
 export const RAINBOW_FEATHER_POTENT_IMAGE = `${ITEM_ASSET_BASE}/rainbow-feather-potent-v1.webp${ITEM_TRANSFORM}`;
 export const RAINBOW_FEATHER_IMAGE = `${ITEM_ASSET_BASE}/rainbow-feather-v1.webp${ITEM_TRANSFORM}`;
 export const LUCK_CHARM_IMAGE = `${ITEM_ASSET_BASE}/luck-charm-v1.webp${ITEM_TRANSFORM}`;
+export const NEUTRALIZATION_ZONE_IMAGE = `${ITEM_ASSET_BASE}/neutralization-zone-v1.webp${ITEM_TRANSFORM}`;
 export const FRESH_WATER_IMAGE = `${ITEM_ASSET_BASE}/fresh-water-v1.webp${ITEM_TRANSFORM}`;

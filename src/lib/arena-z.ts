@@ -56,6 +56,7 @@ import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
+import { isNeutralized } from "@/lib/arena-neutralization";
 import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
@@ -1824,7 +1825,7 @@ const getActiveArenaTeams = unstable_cache(
         vaultExp: true,
         enteredAt: true,
         playerId: true,
-        player: { select: { id: true, displayName: true, casualMode: true } },
+        player: { select: { id: true, displayName: true, casualMode: true, arenaNeutralizedUntil: true } },
         members: {
           select: {
             slot: true,
@@ -1875,6 +1876,8 @@ export async function getRoomsData(viewerPlayerId?: string) {
       playerName: t.player.displayName,
       playerId: t.player.id,
       isCasual: t.player.casualMode,
+      // Proteção ativa (Zona de Neutralização); a UI mostra o timer e bloqueia o ataque.
+      neutralizedUntil: isNeutralized(t.player.arenaNeutralizedUntil) ? new Date(t.player.arenaNeutralizedUntil!).toISOString() : null,
       isTraining: t.isTraining,
       isOwn,
       vaultCoins: isOwn ? t.vaultCoins : null,
@@ -3927,7 +3930,7 @@ export const getCachedOpponentTeams = unstable_cache(
     prisma.arenaTeam.findMany({
       where: { status: "ACTIVE" },
       include: {
-        player: { select: { displayName: true, ptcglNick: true } },
+        player: { select: { displayName: true, ptcglNick: true, arenaNeutralizedUntil: true } },
         members: {
           include: {
             mascot: {
@@ -3961,7 +3964,7 @@ export async function runOpportunisticAttack(
   const targetMascot = await prisma.mascot.findUnique({
     where: { id: targetMascotId },
     include: {
-      player: { select: { id: true, displayName: true } },
+      player: { select: { id: true, displayName: true, arenaNeutralizedUntil: true } },
       relationsAsA: { where: { mascotBId: { not: undefined } } },
       relationsAsB: { where: { relationshipScore: { lte: -15 } } },
     },
@@ -3969,6 +3972,8 @@ export async function runOpportunisticAttack(
   if (!targetMascot) throw new Error("Mascote nao encontrado.");
   if (targetMascot.arenaState !== "INJURED")
     throw new Error("Mascote nao esta ferido.");
+  if (isNeutralized(targetMascot.player.arenaNeutralizedUntil))
+    throw new Error("Este jogador está protegido pela Zona de Neutralização.");
 
   // Verifica se o atacante tem um mascote com relação RIVAL com o mascote alvo
   const rivalRelation = await prisma.mascotRelation.findFirst({
@@ -3990,6 +3995,7 @@ export async function runOpportunisticAttack(
     where: { id: attackerPlayerId },
     select: {
       displayName: true,
+      arenaNeutralizedUntil: true,
       arenaTeams: {
         where: { status: "ACTIVE" },
         orderBy: { updatedAt: "desc" },
@@ -4004,6 +4010,8 @@ export async function runOpportunisticAttack(
     },
   });
   if (!attackerPlayer) throw new Error("Atacante nao encontrado.");
+  if (isNeutralized(attackerPlayer.arenaNeutralizedUntil))
+    throw new Error("Sua Zona de Neutralização está ativa: enquanto ela durar você não pode atacar.");
   const attackerTeam = attackerPlayer.arenaTeams[0];
   if (!attackerTeam)
     throw new Error(
@@ -4304,6 +4312,15 @@ export async function runPvpBattle(
     if (isAdminBattle)
       throw new Error(
         "Contas admin nao participam de PvP real. Use o modo debug para testes.",
+      );
+    // Zona de Neutralização: quem está protegido não é atacado — e também não ataca (sem escudo de ataque).
+    if (isNeutralized(defenseUser?.arenaNeutralizedUntil))
+      throw new Error(
+        `${defenseTeam.player.displayName} está protegido pela Zona de Neutralização e não pode ser atacado agora.`,
+      );
+    if (isNeutralized(attackUser?.arenaNeutralizedUntil))
+      throw new Error(
+        "Sua Zona de Neutralização está ativa: enquanto ela durar você não pode atacar no PvP.",
       );
   }
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE")

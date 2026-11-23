@@ -1191,6 +1191,7 @@ export function PvpBattleButton({
   defenseTeamId,
   attackTeamUpdatedAt,
   pvpCooldownUntil,
+  protectedUntil,
   label,
   confirmMessage,
 }: {
@@ -1198,6 +1199,8 @@ export function PvpBattleButton({
   defenseTeamId: string;
   attackTeamUpdatedAt?: string;
   pvpCooldownUntil?: Date | null;
+  /** Alvo sob Zona de Neutralização: o ataque fica bloqueado até esse instante. */
+  protectedUntil?: string | null;
   label?: string;
   confirmMessage?: string;
 }) {
@@ -1208,6 +1211,8 @@ export function PvpBattleButton({
   const [staleNotice, setStaleNotice] = useState<ArenaStaleNotice | null>(null);
   const { expired: cooldownExpired } = useTimerExpiry(pvpCooldownUntil);
   const onCooldown = !!pvpCooldownUntil && !cooldownExpired;
+  const { expired: protectionExpired } = useTimerExpiry(protectedUntil);
+  const targetProtected = !!protectedUntil && !protectionExpired;
 
   const handleClose = () => { setResult(null); router.refresh(); };
 
@@ -1215,8 +1220,8 @@ export function PvpBattleButton({
     <>
       <button
         type="button"
-        disabled={pending || onCooldown}
-        title={onCooldown ? "Cooldown PvP desta equipe ainda ativo." : undefined}
+        disabled={pending || onCooldown || targetProtected}
+        title={targetProtected ? "Jogador protegido pela Zona de Neutralização." : onCooldown ? "Cooldown PvP desta equipe ainda ativo." : undefined}
         onClick={() => {
           const msg = confirmMessage ?? "Atacar esta equipe? Você pode ganhar ou perder loot do cofre.";
           if (!confirm(msg)) return;
@@ -1240,7 +1245,7 @@ export function PvpBattleButton({
         }}
         className={`rounded-xl border px-3 py-2 text-xs font-bold disabled:opacity-50 ${label ? "border-sky-400/40 bg-sky-500/10 text-sky-200 hover:border-sky-300" : "border-red-400/40 bg-red-500/10 text-red-200 hover:border-red-300"}`}
       >
-        {pending ? "Combatendo..." : onCooldown ? "Cooldown" : (label ?? "⚔️ Atacar")}
+        {pending ? "Combatendo..." : targetProtected ? "🛡️ Protegido" : onCooldown ? "Cooldown" : (label ?? "⚔️ Atacar")}
       </button>
 
       {animatingResult && (

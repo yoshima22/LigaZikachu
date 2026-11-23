@@ -21,6 +21,8 @@ import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
 import {suggestedLigaCashPrice} from "@/lib/liga-cash-wallet";
 import { getTrainingMilestoneShopItems } from "@/lib/shop-training-items";
+import { NEUTRALIZATION_ZONE_HOURS, NEUTRALIZATION_ZONE_PRICE } from "@/lib/arena-neutralization";
+import { NEUTRALIZATION_ZONE_IMAGE } from "@/lib/item-image-assets";
 
 export const dynamic = "force-dynamic";
 
@@ -39,19 +41,23 @@ async function ensureCoreMascotItems() {
   const items = [
     { type: "ANTIDOTE", name: "Antídoto", description: "Cura imediatamente um mascote doente. A doença reduz todos os atributos em 40% e pode se espalhar entre seus mascotes.", price: 300 },
     { type: "FIRST_AID_KIT", name: "Kit de Primeiros Socorros", description: "Cura a doença de todos os mascotes da conta de uma vez. Eles voltam saudáveis, porém com fome.", price: 3000 },
-  ];
+    { type: "NEUTRALIZATION_ZONE", name: "Zona de Neutralização", description: `Por ${NEUTRALIZATION_ZONE_HOURS}h, nenhum jogador pode atacar suas equipes no PvP da Arena Z — você farma o PvE em paz. Uso: 1 vez por dia (reinicia à meia-noite, horário de Brasília). Enquanto protegido, você também não ataca no PvP.`, price: NEUTRALIZATION_ZONE_PRICE, imageUrl: NEUTRALIZATION_ZONE_IMAGE, seedOnly: true },
+  ] as { type: string; name: string; description: string; price: number; imageUrl?: string; seedOnly?: boolean }[];
   // Uma consulta para os dois itens (antes: 1 findFirst por item a cada render da loja).
   const found = await prisma.shopItem.findMany({
     where: { type: { in: items.map((item) => item.type) as never[] } },
-    select: { id: true, type: true, name: true, description: true, price: true, active: true, inventoryEnabled: true },
+    select: { id: true, type: true, name: true, description: true, price: true, imageUrl: true, active: true, inventoryEnabled: true },
   });
   for (const item of items) {
     const existing = found.find((row) => row.type === item.type);
+    const { seedOnly, ...data } = item;
     if (!existing) {
-      await prisma.shopItem.create({ data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+      await prisma.shopItem.create({ data: { ...data, type: item.type as never, active: true, inventoryEnabled: true } });
       await invalidateShopCache();
-    } else if (existing.name !== item.name || existing.description !== item.description || existing.price !== item.price || !existing.active || !existing.inventoryEnabled) {
-      await prisma.shopItem.update({ where: { id: existing.id }, data: { ...item, type: item.type as never, active: true, inventoryEnabled: true } });
+    } else if (seedOnly) {
+      continue; // criado uma vez; depois preço, texto e visibilidade são do painel de admin
+    } else if (existing.name !== item.name || existing.description !== item.description || existing.price !== item.price || (item.imageUrl !== undefined && existing.imageUrl !== item.imageUrl) || !existing.active || !existing.inventoryEnabled) {
+      await prisma.shopItem.update({ where: { id: existing.id }, data: { ...data, type: item.type as never, active: true, inventoryEnabled: true } });
       await invalidateShopCache();
     }
   }

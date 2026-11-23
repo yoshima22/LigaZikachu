@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Coins, Shield, Swords } from "lucide-react";
 import { CooldownChip, PvpBattleButton } from "./arena-z-buttons";
+import { NeutralizedBadge } from "./neutralization-badge";
 
 export type PanelAttacker = {
   id: string;
@@ -21,6 +22,7 @@ export type PanelTarget = {
   playerId: string;
   playerName: string;
   isCasual: boolean;
+  neutralizedUntil: string | null;
   debuffPct: number;
   coins: number;
   exp: number;
@@ -84,6 +86,7 @@ export function PvpAttackPanel({ attackers, targets, stolenPct }: { attackers: P
                 <Shield size={11} className="text-slate-500" />
                 <span className="text-[11px] font-bold text-slate-200">{list[0].playerName}</span>
                 <span className="text-[10px] text-slate-600">· {list.length} time{list.length !== 1 ? "s" : ""}</span>
+                <NeutralizedBadge until={list[0].neutralizedUntil} />
                 {list[0].isCasual && (
                   <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-bold text-sky-300" title="Jogador Casual: sem movimentação de cofre ou cooldown nestas batalhas">Casual</span>
                 )}
@@ -111,6 +114,7 @@ export function PvpAttackPanel({ attackers, targets, stolenPct }: { attackers: P
                       defenseTeamId={t.id}
                       attackTeamUpdatedAt={selected.updatedAt}
                       pvpCooldownUntil={selected.pvpUntil ? new Date(selected.pvpUntil) : null}
+                      protectedUntil={t.neutralizedUntil}
                       label="⚔️ Atacar"
                       confirmMessage={`Atacar o time "${t.name}" de ${t.playerName} com o seu time "${selected.name}"? Você pode ganhar ou perder loot do cofre.`}
                     />

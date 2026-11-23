@@ -21,6 +21,8 @@ import {
   RetireTeamButton, SusButton, SusAllButton, SusShieldButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
 import { PvpAttackPanel } from "./_components/pvp-attack-panel";
+import { NeutralizedBadge } from "./_components/neutralization-badge";
+import { isNeutralized } from "@/lib/arena-neutralization";
 import { ArenaTutorial } from "./_components/arena-tutorial";
 import { AddMascotToTeamForm, CreateTeamForm } from "./_components/create-team-form";
 import { CombatRoleSelect } from "./_components/combat-role-select";
@@ -152,7 +154,7 @@ export default async function ArenaZPage({
   // Colunas novas (adicionadas na reformulação Jun/2026) — lidas separadamente para não quebrar se migration ainda não rodou
   const playerArenaData = await prisma.player.findUnique({
     where: { id: player.id },
-    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true, arenaTutorialClaimed: true },
+    select: { arenaPveCoinsDate: true, arenaPveCoinsEarned: true, susShieldDate: true, arenaTutorialClaimed: true, arenaNeutralizedUntil: true, arenaNeutralizationDay: true },
   }).catch(() => null);
 
   const todayBRT = new Date().toLocaleDateString("sv-SE", { timeZone: "America/Sao_Paulo" });
@@ -491,6 +493,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           <span className={`rounded-full border px-2.5 py-1 ${shieldUsedToday ? "border-slate-700 text-slate-500" : "border-blue-500/30 bg-blue-500/10 text-blue-300"}`}>
             🛡️ Escudo SUS: {shieldUsedToday ? "usado hoje" : "disponível"}
           </span>
+          {isNeutralized(playerArenaData?.arenaNeutralizedUntil) ? (
+            <NeutralizedBadge own until={playerArenaData?.arenaNeutralizedUntil?.toISOString()} />
+          ) : (
+            <span className={`rounded-full border px-2.5 py-1 ${playerArenaData?.arenaNeutralizationDay === todayBRT ? "border-slate-700 text-slate-500" : "border-cyan-500/30 bg-cyan-500/10 text-cyan-300"}`}>
+              🛡️ Zona de Neutralização: {playerArenaData?.arenaNeutralizationDay === todayBRT ? "usada hoje" : "disponível"}
+            </span>
+          )}
           <span className="rounded-full border border-slate-700 px-2.5 py-1 text-slate-500">
             Equipes: {activeTeams.length}/{ARENA_MAX_TEAMS}
           </span>
@@ -812,6 +821,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                 playerId: d.playerId,
                                 playerName: d.player.displayName ?? d.player.ptcglNick ?? "—",
                                 isCasual: !!view?.isCasual,
+                                neutralizedUntil: view?.neutralizedUntil ?? null,
                                 debuffPct: Math.round(getArenaDebuffPct(d.enteredAt) * 100),
                                 coins: d.vaultCoins,
                                 exp: d.vaultExp,
@@ -831,6 +841,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                                   <span className="font-semibold text-slate-200">{t.name}</span>
                                   <span className="text-slate-500">{t.playerName}</span>
                                   {t.isCasual && <span className="rounded-full border border-sky-500/40 bg-sky-500/10 px-1.5 py-0.5 text-[8px] font-bold text-sky-300">Casual</span>}
+                                  <NeutralizedBadge until={t.neutralizedUntil} />
                                   <span className="ml-auto text-[10px] text-slate-600">{t.members.length} mascote{t.members.length !== 1 ? "s" : ""}</span>
                                 </li>
                               ))}
