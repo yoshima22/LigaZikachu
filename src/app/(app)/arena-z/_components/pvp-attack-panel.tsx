@@ -105,6 +105,9 @@ export function PvpAttackPanel({ attackers, targets, stolenPct }: { attackers: P
                         ))}
                       </p>
                     </div>
+                    {t.neutralizedUntil && (
+                      <div className="w-full"><NeutralizedBadge until={t.neutralizedUntil} /> <span className="text-[10px] text-cyan-300/80">não pode ser atacado agora</span></div>
+                    )}
                     <div className="text-right text-[10px] leading-4">
                       <p className="flex items-center justify-end gap-1 font-bold text-[#FFCB05]"><Coins size={10} /> {t.coins} ZC · {t.exp} EXP no cofre</p>
                       <p className="text-green-400">K.O. total: +{Math.floor(t.coins * t.mult * stolenPct)} ZC</p>

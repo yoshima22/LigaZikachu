@@ -56,7 +56,7 @@ import { maybeDropSyncTicket } from "@/lib/sync-challenge";
 import { maybeRevealOrderClueFromArenaPvp } from "@/lib/raid-event";
 import { Prisma } from "@prisma/client";
 import type { ArenaBattleResult } from "@prisma/client";
-import { isNeutralized } from "@/lib/arena-neutralization";
+import { formatProtectionLeft, isNeutralized } from "@/lib/arena-neutralization";
 import { unstable_cache } from "next/cache";
 import { LEAGUE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { publishLeagueTicker } from "@/lib/league-ticker";
@@ -3973,7 +3973,7 @@ export async function runOpportunisticAttack(
   if (targetMascot.arenaState !== "INJURED")
     throw new Error("Mascote nao esta ferido.");
   if (isNeutralized(targetMascot.player.arenaNeutralizedUntil))
-    throw new Error("Este jogador está protegido pela Zona de Neutralização.");
+    throw new Error(`Este jogador está protegido pela Zona de Neutralização por mais ${formatProtectionLeft(targetMascot.player.arenaNeutralizedUntil!)}.`);
 
   // Verifica se o atacante tem um mascote com relação RIVAL com o mascote alvo
   const rivalRelation = await prisma.mascotRelation.findFirst({
@@ -4011,7 +4011,7 @@ export async function runOpportunisticAttack(
   });
   if (!attackerPlayer) throw new Error("Atacante nao encontrado.");
   if (isNeutralized(attackerPlayer.arenaNeutralizedUntil))
-    throw new Error("Sua Zona de Neutralização está ativa: enquanto ela durar você não pode atacar.");
+    throw new Error(`Sua Zona de Neutralização está ativa (restam ${formatProtectionLeft(attackerPlayer.arenaNeutralizedUntil!)}): enquanto ela durar você não pode atacar.`);
   const attackerTeam = attackerPlayer.arenaTeams[0];
   if (!attackerTeam)
     throw new Error(
@@ -4316,11 +4316,11 @@ export async function runPvpBattle(
     // Zona de Neutralização: quem está protegido não é atacado — e também não ataca (sem escudo de ataque).
     if (isNeutralized(defenseUser?.arenaNeutralizedUntil))
       throw new Error(
-        `${defenseTeam.player.displayName} está protegido pela Zona de Neutralização e não pode ser atacado agora.`,
+        `🛡️ ${defenseTeam.player.displayName} está protegido pela Zona de Neutralização e não pode ser atacado. Proteção restante: ${formatProtectionLeft(defenseUser!.arenaNeutralizedUntil!)}.`,
       );
     if (isNeutralized(attackUser?.arenaNeutralizedUntil))
       throw new Error(
-        "Sua Zona de Neutralização está ativa: enquanto ela durar você não pode atacar no PvP.",
+        `Sua Zona de Neutralização está ativa (restam ${formatProtectionLeft(attackUser!.arenaNeutralizedUntil!)}): enquanto ela durar você não pode atacar no PvP.`,
       );
   }
   if (attackTeam.status !== "ACTIVE" || defenseTeam.status !== "ACTIVE")
