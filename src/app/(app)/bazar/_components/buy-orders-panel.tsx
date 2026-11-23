@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { Clock, Loader2, PackageSearch, Plus, Search, ShieldAlert, Sparkles, Trash2, X } from "lucide-react";
 import { getSpriteUrl, PERSONALITIES, PERSONALITY_LABEL } from "@/lib/mascot-data";
+import { TypeBadges } from "@/components/mascot/type-badges";
 import { parseEggPrices, BUY_ORDER_DURATIONS, BUY_ORDER_NO_FUNDS_MESSAGE, BUY_ORDER_MAX_ACTIVE, ORDER_EGG_LABEL, ORDER_EGG_TYPES, ORDER_STAT_KEYS, ORDER_STAT_LABEL, type OrderStatKey, type BuyOrderView } from "@/lib/bazar-orders";
 import { cancelBuyOrder, createBuyOrder, getBuyOrderSellOptions, sellToBuyOrder } from "../actions";
 
@@ -66,10 +67,35 @@ function OrderThumb({ order }: { order: BuyOrderView }) {
   );
 }
 
+type SellOption = NonNullable<Awaited<ReturnType<typeof getBuyOrderSellOptions>>["mascots"]>[number];
+
+/** Dados que diferenciam cópias da mesma espécie: código, origem, personalidade, tipos e atributos (3 maiores em destaque). */
+function MascotDetails({ m }: { m: SellOption }) {
+  const top3 = new Set(ORDER_STAT_KEYS.slice().sort((a, b) => m.stats[b] - m.stats[a]).slice(0, 3));
+  return (
+    <div className="mt-1.5 space-y-1.5">
+      <div className="flex flex-wrap items-center gap-1">
+        <span className="rounded-md bg-slate-800 px-1.5 py-0.5 font-mono text-[10px] font-bold text-slate-200" title="Código do mascote">#{m.code}</span>
+        <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">🥚 {m.eggType ? ORDER_EGG_LABEL[m.eggType] ?? m.eggType : "Sem origem"}</span>
+        <span className="rounded-md bg-slate-800 px-1.5 py-0.5 text-[10px] text-slate-300">{PERSONALITY_LABEL[m.personality] ?? m.personality}</span>
+        {m.isShiny && <span className="rounded-md bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-bold text-amber-200">✨ Shiny</span>}
+        <TypeBadges types={m.types} />
+      </div>
+      <div className="flex flex-wrap gap-1">
+        {ORDER_STAT_KEYS.map((k) => (
+          <span key={k} className={`rounded-md px-1.5 py-0.5 text-[10px] ${top3.has(k) ? "bg-[#FFCB05]/15 font-bold text-[#FFCB05]" : "bg-slate-800 text-slate-400"}`}>
+            {ORDER_STAT_LABEL[k]} {m.stats[k]}
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => void }) {
   const router = useRouter();
   const [pending, start] = useTransition();
-  const [mascots, setMascots] = useState<{ id: string; level: number; nickname: string | null; price: number }[] | null>(null);
+  const [mascots, setMascots] = useState<SellOption[] | null>(null);
   const [pick, setPick] = useState<string>("");
   const [notice, setNotice] = useState<{ msg: string; noFunds: boolean } | null>(
     order.covered ? null : { msg: BUY_ORDER_NO_FUNDS_MESSAGE, noFunds: true },
@@ -117,11 +143,14 @@ function SellDialog({ order, onClose }: { order: BuyOrderView; onClose: () => vo
             <div className="space-y-1.5">
               <p className="text-xs font-semibold text-slate-300">Qual mascote você vai vender?</p>
               {mascots.map((m) => (
-                <label key={m.id} className={`flex cursor-pointer items-center gap-3 rounded-xl border px-3 py-2 text-sm ${pick === m.id ? "border-[#FFCB05]/60 bg-[#FFCB05]/10" : "border-border hover:bg-white/5"}`}>
-                  <input type="radio" name="mascot" checked={pick === m.id} onChange={() => setPick(m.id)} className="accent-[#FFCB05]" />
-                  <span className="text-slate-200">{m.nickname || order.label}</span>
-                  <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">Nv. {m.level}</span>
-                  <span className="text-xs font-bold text-[#FFCB05]">{m.price.toLocaleString("pt-BR")} ZC</span>
+                <label key={m.id} className={`block cursor-pointer rounded-xl border px-3 py-2 text-sm ${pick === m.id ? "border-[#FFCB05]/60 bg-[#FFCB05]/10" : "border-border hover:bg-white/5"}`}>
+                  <span className="flex items-center gap-3">
+                    <input type="radio" name="mascot" checked={pick === m.id} onChange={() => setPick(m.id)} className="accent-[#FFCB05]" />
+                    <span className="text-slate-200">{m.nickname || order.label}</span>
+                    <span className="ml-auto rounded-full bg-slate-800 px-2 py-0.5 text-[10px] text-slate-300">Nv. {m.level}</span>
+                    <span className="text-xs font-bold text-[#FFCB05]">{m.price.toLocaleString("pt-BR")} ZC</span>
+                  </span>
+                  <MascotDetails m={m} />
                 </label>
               ))}
               <p className="text-[11px] text-amber-300/80">Atenção: o mascote sai da sua conta para sempre.</p>

@@ -5,7 +5,7 @@ import { revalidatePath, revalidateTag, unstable_cache } from "next/cache";
 import { prisma } from "@/lib/prisma";
 import { getSessionUser, requireAdmin } from "@/lib/auth/permissions";
 import { isOrderableSpecies } from "@/lib/bazar-orders-queries";
-import { getMascotRarity, getPokemonName, PERSONALITIES, type MascotRarity } from "@/lib/mascot-data";
+import { getMascotRarity, getPokemonName, mascotTypes, PERSONALITIES, shortMascotCode, type MascotRarity } from "@/lib/mascot-data";
 import { creditCoins } from "@/lib/zikacoins";
 import { EGG_SHOP_TO_EGG_TYPE, MASCOT_SHOP_ITEM_TYPES, TRAINING_MILESTONE_SHOP_ITEM_TYPES } from "@/lib/shop-config";
 import { canonicalizeReservedInventoryOffer } from "@/lib/bazar-offer-items";
@@ -4846,7 +4846,11 @@ async function _cancelSellerListingsFor(tx: TxClient, sellerId: string, offer: P
 /** Mascotes livres do jogador que atendem a um pedido de espécie (carregado só ao clicar em Vender). */
 export async function getBuyOrderSellOptions(orderId: string): Promise<{
   error?: string;
-  mascots?: { id: string; level: number; nickname: string | null; price: number }[];
+  mascots?: {
+    id: string; code: string; level: number; nickname: string | null; price: number;
+    isShiny: boolean; personality: string; eggType: string | null; types: string[];
+    stats: Record<"statForce" | "statAgility" | "statCharisma" | "statInstinct" | "statVitality", number>;
+  }[];
 }> {
   try {
     const user = await getSessionUser();
@@ -4873,11 +4877,19 @@ export async function getBuyOrderSellOptions(orderId: string): Promise<{
         ...(order.personality ? { personality: order.personality as never } : {}),
         ...(order.eggType ? { hatchedFromEggType: { in: parseEggPrices(order.eggType).map((e) => e.type) as never[] } } : {}),
       },
-      select: { id: true, level: true, nickname: true, personality: true, hatchedFromEggType: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
+      select: { id: true, level: true, nickname: true, isShiny: true, personality: true, hatchedFromEggType: true, primaryTypeOverride: true, secondaryTypeOverride: true, statForce: true, statAgility: true, statCharisma: true, statInstinct: true, statVitality: true },
       orderBy: { level: "asc" },
       take: 60,
     });
-    return { mascots: mascots.filter((m) => matchesMascotRequirements(order, m)).slice(0, 30).map((m) => ({ id: m.id, level: m.level, nickname: m.nickname, price: orderPriceFor(order, m.hatchedFromEggType) })) };
+    // Detalhes para o vendedor escolher com segurança entre cópias da mesma espécie.
+    const pokemonId = order.pokemonId;
+    return {
+      mascots: mascots.filter((m) => matchesMascotRequirements(order, m)).slice(0, 30).map((m) => ({
+        id: m.id, code: shortMascotCode(m.id), level: m.level, nickname: m.nickname, price: orderPriceFor(order, m.hatchedFromEggType),
+        isShiny: m.isShiny, personality: String(m.personality), eggType: m.hatchedFromEggType, types: mascotTypes({ pokemonId, ...m }),
+        stats: { statForce: m.statForce, statAgility: m.statAgility, statCharisma: m.statCharisma, statInstinct: m.statInstinct, statVitality: m.statVitality },
+      })),
+    };
   } catch (err) {
     return { error: err instanceof Error ? err.message : "Erro ao carregar mascotes." };
   }

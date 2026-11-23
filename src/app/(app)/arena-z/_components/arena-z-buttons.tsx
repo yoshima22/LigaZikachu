@@ -31,6 +31,7 @@ import {
   runPvpBattleAction,
   useSusShieldAction,
 } from "../actions";
+import { useWeaknessPolicyAction } from "../../mascotes/actions";
 import type { ArenaDifficulty } from "@/lib/arena-z";
 
 // ── Badge de penalidade de retirada (10 min após coletar recompensas) ──────────
@@ -1373,6 +1374,25 @@ export function SusShieldButton({ mascotId, shieldUsedToday }: { mascotId: strin
       title={shieldUsedToday ? "Você já usou seu escudo hoje" : "Usar escudo diário — recuperação completa e sem repouso"}
     >
       {shieldUsedToday ? "🛡️ Escudo usado" : "🛡️ Usar Escudo"}
+    </button>
+  );
+}
+
+/** Política de Fraqueza em mascote próprio ferido ou em repouso: recupera e libera na hora. */
+export function WeaknessPolicyButton({ mascotId, qty, bound }: { mascotId: string; qty: number; bound: boolean }) {
+  const { pending, run } = useArenaAction();
+  return (
+    <button
+      type="button"
+      disabled={pending || qty < 1}
+      onClick={() => {
+        if (!confirm("Usar 1 Política de Fraqueza? O mascote se recupera por completo e o repouso é removido.")) return;
+        run(() => useWeaknessPolicyAction(mascotId, bound), "🛡️ Política de Fraqueza usada! Mascote recuperado e livre para o combate.");
+      }}
+      className="rounded-lg border border-blue-500/40 bg-blue-500/10 px-2 py-1 text-[10px] font-bold text-blue-300 disabled:opacity-40 disabled:cursor-not-allowed"
+      title={qty < 1 ? "Você não tem Política de Fraqueza no inventário" : `Usar Política de Fraqueza (você tem ${qty})`}
+    >
+      🛡️ Política de Fraqueza{qty > 0 ? ` (${qty})` : ""}
     </button>
   );
 }

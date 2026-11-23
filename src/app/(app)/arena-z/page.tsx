@@ -18,7 +18,7 @@ import {
   BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow, CooldownChip,
-  RetireTeamButton, SusButton, SusAllButton, SusShieldButton, ArenaHistoryReplayButton,
+  RetireTeamButton, SusButton, SusAllButton, SusShieldButton, WeaknessPolicyButton, ArenaHistoryReplayButton,
 } from "./_components/arena-z-buttons";
 import { PvpAttackPanel } from "./_components/pvp-attack-panel";
 import { NeutralizedBadge } from "./_components/neutralization-badge";
@@ -188,6 +188,15 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
   // Salas, ranking e times oponentes só aparecem na tab "salas" — evita
   // buscar esses dados (alguns não cacheados) nas outras 5 tabs.
   const needsRoomsData = activeTab === "salas";
+  // Política de Fraqueza no inventário: libera mascote ferido ou em repouso na hora.
+  const policyInv = needsSusData
+    ? await prisma.playerInventory.findFirst({
+        where: { playerId: player.id, quantity: { gt: 0 }, item: { type: "WEAKNESS_POLICY" } },
+        select: { quantity: true, boundQuantity: true },
+      }).catch(() => null)
+    : null;
+  // Usa o vinculado só quando todas as unidades restantes são vinculadas (mantém boundQuantity <= quantity).
+  const policyBound = policyInv ? policyInv.boundQuantity >= policyInv.quantity : false;
 
   const [wallet, mascots, injuredMascotCount, teams, allActiveTeams, battles, recentIncomingBattle, arenaRankingData, lastRetiredTeam, injuredRivalData, roomsData, topPlayers] = await Promise.all([
     prisma.zikaCoinWallet.findUnique({ where: { playerId: player.id }, select: { balance: true } }),
@@ -379,6 +388,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
     !mascotIdsInActiveTeams.has(m.id)
   );
   const injuredMascots = mascots.filter(m => m.arenaState === "INJURED");
+  const restingMascots = mascots.filter(m => m.arenaState !== "INJURED" && m.restingUntil && m.restingUntil > now);
   const activeTeams = teams.filter(t => t.status === "ACTIVE");
   const teamBlockReasons = new Map(activeTeams.map(t => [t.id, getTeamBlockedReason(t)]));
   const readyActiveTeams = activeTeams.filter(t => !teamBlockReasons.get(t.id));
@@ -1255,11 +1265,41 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
                       </span>
                     </span>
                   </div>
-                  <SusButton mascotId={m.id} />
+                  <span className="flex flex-wrap items-center justify-end gap-1.5">
+                    <WeaknessPolicyButton mascotId={m.id} qty={policyInv?.quantity ?? 0} bound={policyBound} />
+                    <SusButton mascotId={m.id} />
+                  </span>
                 </div>
               ))}
             </div>
           </div>
+
+          {/* Meus mascotes em repouso — Política de Fraqueza levanta na hora */}
+          {restingMascots.length > 0 && (
+            <div className="rounded-2xl border border-blue-500/20 bg-blue-500/5 p-5">
+              <h2 className="font-semibold text-blue-200 mb-1">💤 Meus mascotes em repouso</h2>
+              <p className="text-xs text-slate-500 mb-3">
+                A Política de Fraqueza recupera o mascote por completo e remove o repouso. Você tem <b className="text-slate-300">{policyInv?.quantity ?? 0}</b> no inventário.
+              </p>
+              <div className="space-y-2">
+                {restingMascots.map(m => (
+                  <div key={m.id} className="flex items-center justify-between gap-3 rounded-xl border border-blue-500/15 bg-slate-950/50 p-3">
+                    <div className="flex items-center gap-2">
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img loading="lazy" decoding="async" src={getSpriteUrl(m.pokemonId, true)} alt="" className="h-10 w-10 object-contain" style={{ imageRendering: "pixelated" }} />
+                      <span>
+                        <span className="block text-xs font-semibold text-slate-200">{m.nickname ?? getPokemonName(m.pokemonId)} (Nv.{m.level})</span>
+                        <span className="text-[10px] text-slate-500">
+                          repouso restante: {Math.max(1, Math.ceil((m.restingUntil!.getTime() - Date.now()) / 60_000))} min · até {m.restingUntil!.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", timeZone: "America/Sao_Paulo" })}
+                        </span>
+                      </span>
+                    </div>
+                    <WeaknessPolicyButton mascotId={m.id} qty={policyInv?.quantity ?? 0} bound={policyBound} />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Rivais feridos */}
           {/* Aliados feridos — usar escudo */}
