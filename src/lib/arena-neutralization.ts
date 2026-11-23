@@ -1,7 +1,7 @@
 /** Zona de Neutralização: protege o jogador do PvP da Arena Z enquanto ele farma o PvE. Sem "use server". */
 
 export const NEUTRALIZATION_ZONE_TYPE = "NEUTRALIZATION_ZONE";
-export const NEUTRALIZATION_ZONE_HOURS = 4;
+export const NEUTRALIZATION_ZONE_HOURS = 1;
 export const NEUTRALIZATION_ZONE_PRICE = 600;
 
 /** Dia civil em BRT (UTC-3, sem horário de verão) — o limite diário reinicia à meia-noite daqui. */

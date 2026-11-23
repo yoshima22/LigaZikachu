@@ -379,7 +379,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
     } else if (isExpBuff && mascotHasExpBoost) {
       confirmMsg = `${mascotName} já tem uma Vitamina Elétrica ativa. Usar outra irá REMOVER o buff atual e aplicar um novo. Deseja continuar?`;
     } else if (selectedBuffItem.type === "NEUTRALIZATION_ZONE") {
-      confirmMsg = "Ativar a Zona de Neutralização? Por 4h ninguém ataca suas equipes no PvP da Arena Z, e você também não ataca no PvP nesse período. Só pode ser usada 1 vez por dia.";
+      confirmMsg = "Ativar a Zona de Neutralização? Por 1h ninguém ataca suas equipes no PvP da Arena Z, e você também não ataca no PvP nesse período. Só pode ser usada 1 vez por dia.";
     } else if (isPlayerLevel) {
       confirmMsg = `Usar ${selectedBuffItem.name}? A próxima expedição terá -30% de duração e as iniciadas nas próximas 3h receberão bônus por modo.`;
     } else {
@@ -434,7 +434,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
         if (r.replacedExistingBuff) {
           toast.success(`Vitamina Elétrica anterior removida. Novo buff aplicado em ${mascotName}! ⚡`);
         } else if (t === "NEUTRALIZATION_ZONE") {
-          toast.success("Zona de Neutralização ativada: você está protegido do PvP por 4h. 🛡️");
+          toast.success("Zona de Neutralização ativada: você está protegido do PvP por 1h. 🛡️");
         } else if (t === "PICNIC_BASKET") {
           toast.success("Piquenique ativado: próxima expedição -30% e bônus por modo durante 3h. 🧺");
         } else if (t === "VACATION_TICKET") {
@@ -686,7 +686,7 @@ export function BuffPanel({ buffs, mascots, proteinDoses = {}, activeBuffsByMasc
       {selectedBuff && (
         <div className="flex flex-wrap items-center gap-3">
           {selectedBuffItem && PLAYER_LEVEL_ITEMS.has(selectedBuffItem.type) ? (
-            <p className="text-xs text-slate-400">{selectedBuffItem.type === "NEUTRALIZATION_ZONE" ? "Protege toda a sua conta do PvP da Arena Z por 4h. Uso: 1 vez por dia (reinicia à meia-noite, horário de Brasília)." : "Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres."}</p>
+            <p className="text-xs text-slate-400">{selectedBuffItem.type === "NEUTRALIZATION_ZONE" ? "Protege toda a sua conta do PvP da Arena Z por 1h. Uso: 1 vez por dia (reinicia à meia-noite, horário de Brasília)." : "Aplica-se automaticamente à Equipe Favorita, com até 6 mascotes livres."}</p>
           ) : selectedMascotObj ? (
             <div className="flex items-center gap-2 rounded-xl border border-[#FFCB05]/40 bg-[#FFCB05]/10 px-3 py-2 text-xs text-slate-100">
               <span className="font-semibold">{selectedMascotObj.name}</span>
