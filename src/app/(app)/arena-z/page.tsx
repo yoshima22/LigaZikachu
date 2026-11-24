@@ -18,7 +18,7 @@ import {
   BatchPveButton,
   OpportunisticAttackButton, PurgeAdminArenaButton, PvpBattleButton,
   RepairArenaButton, RetirePenaltyBadge, TeamCooldownsRow, CooldownChip,
-  RetireTeamButton, SusButton, SusAllButton, SusShieldButton, WeaknessPolicyButton, ArenaHistoryReplayButton,
+  RetireTeamButton, SusButton, SusAllButton, SusShieldButton, WeaknessPolicyButton, ArenaHistoryReplayButton, DismissAttackNoticeButton,
 } from "./_components/arena-z-buttons";
 import { PvpAttackPanel } from "./_components/pvp-attack-panel";
 import { NeutralizedBadge } from "./_components/neutralization-badge";
@@ -281,11 +281,13 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
       where: {
         type: "PVP",
         defenderPlayerId: player.id,
+        seenByDefender: false,
         createdAt: { gt: new Date(Date.now() - 30 * 60_000) },
       },
       select: {
         id: true,
         type: true,
+        defenseTeamId: true,
         defenderPlayerId: true,
         createdAt: true,
         attackerPlayer: { select: { displayName: true } },
@@ -523,6 +525,7 @@ ALTER TABLE arena_teams ADD COLUMN IF NOT EXISTS "lastPveBattleAt" TIMESTAMPTZ;`
           <p className="mt-1 text-sm text-red-50">
             {recentIncomingName} atacou uma das suas equipes em {recentIncomingBattle.createdAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}.
           </p>
+          {recentIncomingBattle.defenseTeamId && <DismissAttackNoticeButton teamId={recentIncomingBattle.defenseTeamId} />}
         </div>
       )}
 

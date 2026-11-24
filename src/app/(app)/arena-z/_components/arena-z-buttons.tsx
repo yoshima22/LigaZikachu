@@ -763,6 +763,20 @@ export function ArenaHistoryReplayButton({
   );
 }
 
+/** Dispensa o aviso vermelho de ataque recebido (marca como visto e recarrega). */
+export function DismissAttackNoticeButton({ teamId }: { teamId: string }) {
+  const router = useRouter();
+  return (
+    <button
+      type="button"
+      onClick={async () => { await markPvpDefenseSeenAction(teamId).catch(() => null); router.refresh(); }}
+      className="mt-2 rounded-lg border border-red-400/40 px-3 py-1 text-[11px] font-semibold text-red-200 hover:bg-red-500/20"
+    >
+      Dispensar aviso
+    </button>
+  );
+}
+
 function ArenaStaleModal({ notice, onClose }: { notice: ArenaStaleNotice; onClose: () => void }) {
   const router = useRouter();
   const [loadingBattle, setLoadingBattle] = useState(false);

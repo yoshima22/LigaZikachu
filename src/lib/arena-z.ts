@@ -3096,6 +3096,9 @@ export async function getUnseenPvpAttack(teamId: string): Promise<{
       },
     });
     if (!battle) return null;
+    // O aviso é entregue uma única vez: ao devolvê-lo o ataque já conta como visto, assim
+    // fechar/atualizar a página sem abrir o replay não trava a equipe para sempre.
+    await markPvpDefenseSeenForTeam(teamId);
     return {
       battleId: battle.id,
       attackerName:
