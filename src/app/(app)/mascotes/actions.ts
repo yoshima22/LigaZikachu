@@ -16,7 +16,7 @@ import {
   claimVacation, applyXpShare, removeXpShare, mascotHasXpShare, applyRainbowFeather,
   rollEggChoicesForPlayer, getEggRollContext, getOwnedBaseCounts, getDisabledEggPokemonIds, isFeedInteraction } from "@/lib/mascot";
 import { cleanupExpiredArenaResting, healMascotSus } from "@/lib/arena-z";
-import { NEUTRALIZATION_ZONE_HOURS, NEUTRALIZATION_ZONE_TYPE, brtDayKey } from "@/lib/arena-neutralization";
+import { NEUTRALIZATION_ZONE_HOURS, NEUTRALIZATION_ZONE_TYPE, brtDayKey, formatProtectionLeft, isNeutralized } from "@/lib/arena-neutralization";
 import { clearRunawayWarningIfRecovered, defaultBondOptions } from "@/lib/mascot-bonds";
 import type { InteractionType, ExpeditionDuration } from "@/lib/mascot";
 import { getEggPityProgress } from "@/lib/egg-pity";
@@ -1936,7 +1936,12 @@ export async function useNeutralizationZoneAction(bound = false): Promise<{ erro
         },
         data: { arenaNeutralizedUntil: until, arenaNeutralizationDay: today },
       });
-      if (activated.count !== 1) throw new Error("A Zona de Neutralização só pode ser usada 1 vez por dia. Ela volta a ficar disponível à meia-noite (horário de Brasília).");
+      if (activated.count !== 1) {
+        const cur = await tx.player.findUnique({ where: { id: player.id }, select: { arenaNeutralizedUntil: true } });
+        if (isNeutralized(cur?.arenaNeutralizedUntil, now))
+          throw new Error(`Você já está protegido! A Zona de Neutralização está ativa e termina em ${formatProtectionLeft(cur!.arenaNeutralizedUntil!, now)}. Nenhum item foi gasto.`);
+        throw new Error("Você já usou a Zona de Neutralização hoje (1 uso por dia). Ela volta a ficar disponível à meia-noite, horário de Brasília. Nenhum item foi gasto.");
+      }
       const consumed = await tx.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: consumeOne(boundUsed) });
       if (consumed.count !== 1) throw new Error("Você não tem Zona de Neutralização no inventário.");
     });
