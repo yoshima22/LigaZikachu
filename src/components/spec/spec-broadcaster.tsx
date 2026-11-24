@@ -28,7 +28,16 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
   const [switchingSource, setSwitchingSource] = useState(false);
   useSpecBroadcastLifecycle(streamId, state === "live");
 
+  const liveRef = useRef(false);
+  const fallbackRef = useRef<MediaStream | null>(null);
+  const watchRef = useRef<(track: MediaStreamTrack) => void>(() => {});
+  const [hasFallback, setHasFallback] = useState(false);
+  const [sourceLost, setSourceLost] = useState(false);
+
   const teardown = useCallback(() => {
+    liveRef.current = false;
+    fallbackRef.current?.getTracks().forEach((t) => t.stop());
+    fallbackRef.current = null;
     streamRef.current?.getTracks().forEach((t) => t.stop());
     streamRef.current = null;
     pcRef.current?.close();
@@ -61,7 +70,8 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       if (previewRef.current) previewRef.current.srcObject = stream;
 
       // Encerra a live se o usuário parar o compartilhamento pelo navegador.
-      stream.getVideoTracks()[0]?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === stream.getVideoTracks()[0]) void end(true); });
+      const firstVideo = stream.getVideoTracks()[0];
+      firstVideo?.addEventListener("ended", () => watchRef.current(firstVideo));
 
       setState("connecting");
       const pc = new RTCPeerConnection({ iceServers: SPEC_ICE_SERVERS });
@@ -106,6 +116,7 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
       }
       const { answerSdp } = await res.json() as { answerSdp: string };
       await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
+      liveRef.current = true;
       setState("live");
       onLive?.();
       toast.success("Transmissão ao vivo!");
@@ -121,31 +132,80 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     }
   }, [streamId, maxVideoBitrate, teardown, end, onLive]);
 
+  // Põe `next` no ar no lugar da fonte atual, sem renegociar nem encerrar a live.
+  const adopt = useCallback(async (next: MediaStream) => {
+    const pc = pcRef.current;
+    if (!pc) return;
+    const previous = streamRef.current;
+    const nextVideo = next.getVideoTracks()[0] ?? null;
+    const nextAudio = next.getAudioTracks()[0] ?? null;
+    const senders = pc.getSenders();
+    const videoSender = senders.find((sender) => sender.track?.kind === "video");
+    const audioSender = senders.find((sender) => sender.track?.kind === "audio");
+    if (videoSender) await videoSender.replaceTrack(nextVideo);
+    if (audioSender) await audioSender.replaceTrack(nextAudio);
+    else if (nextAudio) toast.warning("A live começou sem áudio. Para adicionar áudio agora, reinicie a transmissão.");
+    streamRef.current = next;
+    if (previewRef.current) previewRef.current.srcObject = next;
+    setHasAudio(Boolean(nextAudio));
+    setAudioEnabled(Boolean(nextAudio?.enabled));
+    if (nextVideo) {
+      try { nextVideo.contentHint = hints.contentHint; } catch { /* ok */ }
+      nextVideo.addEventListener("ended", () => watchRef.current(nextVideo));
+    }
+    previous?.getTracks().forEach((track) => track.stop());
+    setSourceLost(false);
+  }, [hints.contentHint]);
+
+  // A janela compartilhada fechou (ex.: launcher do LoL → jogo → fim da partida).
+  // Durante a live NÃO encerra: usa o compartilhamento reserva ou espera uma nova janela.
+  useEffect(() => {
+    watchRef.current = (track) => {
+      if (streamRef.current?.getVideoTracks()[0] !== track) return;
+      if (!liveRef.current) { void end(true); return; }
+      const fb = fallbackRef.current;
+      if (fb && fb.getVideoTracks()[0]?.readyState === "live") {
+        fallbackRef.current = null;
+        setHasFallback(false);
+        void adopt(fb).then(() => toast.info("A janela fechou: usando o compartilhamento reserva."));
+        return;
+      }
+      setSourceLost(true);
+      toast.warning("A janela compartilhada fechou. A live continua: escolha a nova janela.", { duration: 9_000 });
+    };
+  }, [end, adopt]);
+
   const switchSource = useCallback(async () => {
     if (state !== "live" || switchingSource || !pcRef.current) return;
     setSwitchingSource(true);
     try {
       const next = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
-      const previous = streamRef.current;
-      const nextVideo = next.getVideoTracks()[0] ?? null;
-      const nextAudio = next.getAudioTracks()[0] ?? null;
-      const senders = pcRef.current.getSenders();
-      const videoSender = senders.find((sender) => sender.track?.kind === "video");
-      const audioSender = senders.find((sender) => sender.track?.kind === "audio");
-      if (videoSender) await videoSender.replaceTrack(nextVideo);
-      if (audioSender) await audioSender.replaceTrack(nextAudio);
-      else if (nextAudio) toast.warning("A live começou sem áudio. Para adicionar áudio agora, reinicie a transmissão.");
-      streamRef.current = next;
-      if (previewRef.current) previewRef.current.srcObject = next;
-      setHasAudio(Boolean(nextAudio));
-      setAudioEnabled(Boolean(nextAudio?.enabled));
-      nextVideo?.addEventListener("ended", () => { if (streamRef.current?.getVideoTracks()[0] === nextVideo) void end(true); });
-      previous?.getTracks().forEach((track) => track.stop());
+      await adopt(next);
       toast.success("Janela compartilhada trocada sem encerrar a live.");
     } catch (error) {
       if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error("Não foi possível trocar a janela.");
     } finally { setSwitchingSource(false); }
-  }, [state, switchingSource, width, height, fps, end]);
+  }, [state, switchingSource, width, height, fps, adopt]);
+
+  // Escolhe de antemão uma segunda janela/tela: assume sozinha se a principal fechar.
+  const pickFallback = useCallback(async () => {
+    try {
+      const fb = await navigator.mediaDevices.getDisplayMedia(specDisplayMediaOptions(width, height, fps));
+      fallbackRef.current?.getTracks().forEach((t) => t.stop());
+      fallbackRef.current = fb;
+      setHasFallback(true);
+      fb.getVideoTracks()[0]?.addEventListener("ended", () => { if (fallbackRef.current === fb) { fallbackRef.current = null; setHasFallback(false); } });
+      toast.success("Compartilhamento reserva definido.");
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === "NotAllowedError")) toast.error("Não foi possível definir o reserva.");
+    }
+  }, [width, height, fps]);
+
+  const clearFallback = useCallback(() => {
+    fallbackRef.current?.getTracks().forEach((t) => t.stop());
+    fallbackRef.current = null;
+    setHasFallback(false);
+  }, []);
 
   const toggleOutgoingAudio = useCallback(() => {
     const tracks = streamRef.current?.getAudioTracks() ?? [];
@@ -183,6 +243,12 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
         Para jogos externos, escolha <strong>Janela</strong> e, se disponível, <strong>áudio desta janela</strong>. Se o Windows entregar Discord e jogo já misturados, o navegador não consegue separá-los: use “Cortar áudio” abaixo ou envie o Discord para outro dispositivo de saída.
       </p>
 
+      {state === "live" && sourceLost && (
+        <p className="rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+          A janela compartilhada fechou, mas a live continua no ar. Clique em <strong>Escolher nova janela</strong> quando a próxima abrir (ex.: o jogo após o launcher). Dica: defina um <strong>compartilhamento reserva</strong> (tela inteira, por exemplo) para a troca ser automática.
+        </p>
+      )}
+
       {error && <p className="rounded-lg border border-red-500/25 bg-red-500/10 px-3 py-2 text-xs text-red-200">{error}</p>}
 
       <div className="flex flex-wrap gap-2">
@@ -196,7 +262,10 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
             Encerrar transmissão
           </button>
         )}
-        {state === "live" && <button onClick={switchSource} disabled={switchingSource} className="rounded-xl border border-cyan-400/40 px-5 py-2.5 text-sm font-bold text-cyan-300 hover:bg-cyan-500/10 disabled:opacity-50">{switchingSource ? "Escolhendo…" : "Trocar janela"}</button>}
+        {state === "live" && <button onClick={switchSource} disabled={switchingSource} className={`rounded-xl border px-5 py-2.5 text-sm font-bold disabled:opacity-50 ${sourceLost ? "border-amber-400 bg-amber-500/20 text-amber-100" : "border-cyan-400/40 text-cyan-300 hover:bg-cyan-500/10"}`}>{switchingSource ? "Escolhendo…" : sourceLost ? "Escolher nova janela" : "Trocar janela"}</button>}
+        {state === "live" && (hasFallback
+          ? <button onClick={clearFallback} className="rounded-xl border border-emerald-400/40 px-5 py-2.5 text-sm font-bold text-emerald-300 hover:bg-emerald-500/10">Reserva definido ✓ (remover)</button>
+          : <button onClick={pickFallback} className="rounded-xl border border-emerald-400/40 px-5 py-2.5 text-sm font-bold text-emerald-300 hover:bg-emerald-500/10">Definir compartilhamento reserva</button>)}
         {state === "live" && hasAudio && <button onClick={toggleOutgoingAudio} className="rounded-xl border border-amber-400/40 px-5 py-2.5 text-sm font-bold text-amber-200 hover:bg-amber-500/10">{audioEnabled ? "Cortar áudio" : "Restaurar áudio"}</button>}
       </div>
     </div>
