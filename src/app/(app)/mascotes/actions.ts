@@ -1938,8 +1938,8 @@ export async function useNeutralizationZoneAction(bound = false): Promise<{ erro
       });
       if (activated.count !== 1) {
         const cur = await tx.player.findUnique({ where: { id: player.id }, select: { arenaNeutralizedUntil: true } });
-        if (isNeutralized(cur?.arenaNeutralizedUntil, now))
-          throw new Error(`Você já está protegido! A Zona de Neutralização está ativa e termina em ${formatProtectionLeft(cur!.arenaNeutralizedUntil!, now)}. Nenhum item foi gasto.`);
+        if (isNeutralized(cur?.arenaNeutralizedUntil, now.getTime()))
+          throw new Error(`Você já está protegido! A Zona de Neutralização está ativa e termina em ${formatProtectionLeft(cur!.arenaNeutralizedUntil!, now.getTime())}. Nenhum item foi gasto.`);
         throw new Error("Você já usou a Zona de Neutralização hoje (1 uso por dia). Ela volta a ficar disponível à meia-noite, horário de Brasília. Nenhum item foi gasto.");
       }
       const consumed = await tx.playerInventory.updateMany({ where: { id: inv.id, quantity: { gt: 0 } }, data: consumeOne(boundUsed) });
