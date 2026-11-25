@@ -88,6 +88,19 @@ function resolveMascotRole(mascot: RoleRecommendMascot, roles?: Record<string, s
   return stored && canSelectTrainingStance(stored, unlocked) ? stored : defaultCombatRoleFor(mascot, unlocked);
 }
 
+// Preenchimento automático: favoritos primeiro, depois os mais fortes (status totais), nível só desempata.
+type AutoFillSortable = RoleRecommendMascot & { isFavorite?: boolean | null; level?: number | null };
+const statTotal = (m: AutoFillSortable) =>
+  (m.statForce ?? 0) + (m.statAgility ?? 0) + (m.statVitality ?? 0) + (m.statInstinct ?? 0) + (m.statCharisma ?? 0);
+function sortForAutoFill<T extends AutoFillSortable>(mascots: T[]) {
+  return [...mascots].sort(
+    (a, b) =>
+      Number(!!b.isFavorite) - Number(!!a.isFavorite) ||
+      statTotal(b) - statTotal(a) ||
+      (b.level ?? 0) - (a.level ?? 0),
+  );
+}
+
 function buildDivisionValidTeam<T extends MegaCandidate>(preferred: T[], fallback: T[], maxSize = 6, maxMegas = 2) {
   const selected: T[] = [];
   const seen = new Set<string>();
@@ -1283,11 +1296,10 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
 
           // Revalida também equipes herdadas/antigas. Formas Mega históricas podem
           // estar gravadas apenas no pokemonId, por isso a checagem é autoritativa.
-          const fillers = await prisma.mascot.findMany({
+          const fillers = sortForAutoFill(await prisma.mascot.findMany({
             where: { playerId, id: { notIn: [...alreadyUsedToday] } },
-            orderBy: [{ isFavorite: "desc" }, { level: "desc" }],
             include: { stanceUnlocks: { select: { stanceKey: true } } },
-          });
+          }));
           const validTeam = limitedDivision
             ? buildDivisionValidTeam(ordered.filter(Boolean) as typeof mascots, fillers, 6, 2)
             : buildDivisionValidTeam(ordered.filter(Boolean) as typeof mascots, fillers, 6, Number.POSITIVE_INFINITY);
@@ -1296,22 +1308,12 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
         }
       }
 
-      // 3. Auto-fill: favorites first, then by level
-      const favs = await prisma.mascot.findMany({
-        where: { playerId, isFavorite: true, id: { notIn: [...alreadyUsedToday] } },
-        orderBy: { level: "desc" },
-        take: 6,
+      // 3. Auto-fill: favoritos primeiro, depois os mais fortes por status totais
+      const pool = sortForAutoFill(await prisma.mascot.findMany({
+        where: { playerId, id: { notIn: [...alreadyUsedToday] } },
         include: { stanceUnlocks: { select: { stanceKey: true } } },
-      });
-      const usedIds = new Set(favs.map(m => m.id));
-      const rest = await prisma.mascot.findMany({
-        where: { playerId, id: { notIn: [...new Set([...alreadyUsedToday, ...usedIds])] } },
-        orderBy: { level: "desc" },
-        include: { stanceUnlocks: { select: { stanceKey: true } } },
-      });
-      const all = limitedDivision
-        ? buildDivisionValidTeam(favs, rest, 6, 2)
-        : buildDivisionValidTeam(favs, rest, 6, Number.POSITIVE_INFINITY);
+      }));
+      const all = buildDivisionValidTeam([], pool, 6, limitedDivision ? 2 : Number.POSITIVE_INFINITY);
       return all.map((m, i) => toLeagueMascot(m, i + 1, resolveMascotRole(m)));
     }
 
@@ -2165,8 +2167,8 @@ export async function runWeeklyLeagueAutomation(automationSecret: string, nowIso
             const mascot = mascotById.get(id);
             return mascot && !used.has(mascot.id) ? [mascot] : [];
           });
-          const available = (mascotsByPlayer.get(participant.playerId) ?? [])
-            .filter((mascot) => !used.has(mascot.id));
+          const available = sortForAutoFill((mascotsByPlayer.get(participant.playerId) ?? [])
+            .filter((mascot) => !used.has(mascot.id)));
           const selected = limitedDivision
             ? buildDivisionValidTeam(inherited, available, 6, 2)
             : buildDivisionValidTeam(inherited, available, 6, Number.POSITIVE_INFINITY);
