@@ -1268,6 +1268,18 @@ export async function simulateRoundAction(leagueId: string, battleSlot: number, 
       const alreadyUsedToday = new Set(
         earlierTeams.flatMap((team) => (team.mascotIdsJson as string[] | null) ?? []),
       );
+      // Slots limpos/preenchidos na hora da luta não gravam time: considera também quem já lutou hoje.
+      const earlierMatches = await prisma.weeklyMascotLeagueMatch.findMany({
+        where: {
+          leagueId, battleDate: today, battleSlot: { lt: battleSlot }, status: "RESOLVED",
+          OR: [{ playerAId: playerId }, { playerBId: playerId }],
+        },
+        select: { playerAId: true, resultJson: true },
+      });
+      for (const match of earlierMatches) {
+        const rj = match.resultJson as { lineupA?: { id: string }[]; lineupB?: { id: string }[] } | null;
+        for (const m of (match.playerAId === playerId ? rj?.lineupA : rj?.lineupB) ?? []) alreadyUsedToday.add(m.id);
+      }
 
       // 1. Time de hoje
       let dailyTeam = await prisma.weeklyMascotLeagueDailyTeam.findUnique({
