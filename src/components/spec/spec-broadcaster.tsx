@@ -219,7 +219,11 @@ export function SpecBroadcaster({ streamId, matchLabel, maxVideoBitrate, width, 
     toast.success(next ? "Áudio da transmissão ativado." : "Áudio da transmissão cortado. O Discord não será ouvido.");
   }, [audioEnabled]);
 
-  useEffect(() => teardown, [teardown]);
+  // Saiu da página com a live no ar: a mídia morre junto, então encerra no servidor.
+  useEffect(() => () => {
+    if (liveRef.current) void endSpecStreamAction(streamId).catch(() => null);
+    teardown();
+  }, [teardown, streamId]);
 
   return (
     <div className="space-y-4">

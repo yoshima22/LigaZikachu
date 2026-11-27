@@ -3,11 +3,13 @@
 import { useEffect, useState } from "react";
 import { usePathname } from "next/navigation";
 import { Pause, Play, Radio, Square, ExternalLink } from "lucide-react";
+import { endSpecStreamAction } from "@/app/(app)/spec/actions";
 import {
   sendSpecBroadcastCommand,
   SPEC_BROADCAST_CHANNEL,
   SPEC_BROADCAST_CONTROL_EVENT,
   SPEC_BROADCAST_CONTROL_KEY,
+  isSpecBroadcastStale,
   type SpecBroadcastControlState,
 } from "./spec-broadcast-control";
 
@@ -16,16 +18,21 @@ export function SpecBroadcastControlDock() {
   const [broadcast, setBroadcast] = useState<SpecBroadcastControlState | null>(null);
 
   useEffect(() => {
+    const apply = (next: SpecBroadcastControlState | null | undefined) => {
+      if (!next || next.state === "ended" || isSpecBroadcastStale(next)) {
+        // Transmissor sumiu sem avisar (aba fechada/navegou): limpa o resto.
+        if (next && next.state !== "ended") { try { localStorage.removeItem(SPEC_BROADCAST_CONTROL_KEY); } catch { /* ok */ } }
+        setBroadcast(null);
+      } else setBroadcast(next);
+    };
     const read = () => {
       try {
         const raw = localStorage.getItem(SPEC_BROADCAST_CONTROL_KEY);
-        setBroadcast(raw ? JSON.parse(raw) as SpecBroadcastControlState : null);
+        apply(raw ? JSON.parse(raw) as SpecBroadcastControlState : null);
       } catch { setBroadcast(null); }
     };
-    const local = (event: Event) => {
-      const next = (event as CustomEvent<SpecBroadcastControlState>).detail;
-      setBroadcast(next?.state === "ended" ? null : next);
-    };
+    const local = (event: Event) => apply((event as CustomEvent<SpecBroadcastControlState>).detail);
+    const recheck = window.setInterval(read, 30_000);
     const storage = (event: StorageEvent) => {
       if (event.key === SPEC_BROADCAST_CONTROL_KEY) read();
     };
@@ -34,8 +41,7 @@ export function SpecBroadcastControlDock() {
       channel = new BroadcastChannel(SPEC_BROADCAST_CHANNEL);
       channel.onmessage = (event) => {
         if (event.data?.type === "state") {
-          const next = event.data.state as SpecBroadcastControlState;
-          setBroadcast(next.state === "ended" ? null : next);
+          apply(event.data.state as SpecBroadcastControlState);
         }
       };
     } catch { /* fallback por storage */ }
@@ -43,6 +49,7 @@ export function SpecBroadcastControlDock() {
     window.addEventListener(SPEC_BROADCAST_CONTROL_EVENT, local);
     window.addEventListener("storage", storage);
     return () => {
+      window.clearInterval(recheck);
       channel?.close();
       window.removeEventListener(SPEC_BROADCAST_CONTROL_EVENT, local);
       window.removeEventListener("storage", storage);
@@ -51,6 +58,20 @@ export function SpecBroadcastControlDock() {
 
   if (!broadcast || pathname.startsWith(`/spec/${broadcast.streamId}/transmitir`)) return null;
   const paused = broadcast.state === "paused";
+  // Se ninguém responder ao "stop" (aba do transmissor já foi embora), encerra
+  // a live no servidor e limpa o dock em vez de ficar preso.
+  const stop = () => {
+    const { streamId } = broadcast;
+    sendSpecBroadcastCommand("stop");
+    window.setTimeout(() => {
+      let still = false;
+      try { still = Boolean(localStorage.getItem(SPEC_BROADCAST_CONTROL_KEY)); } catch { /* ok */ }
+      if (!still) return;
+      try { localStorage.removeItem(SPEC_BROADCAST_CONTROL_KEY); } catch { /* ok */ }
+      setBroadcast(null);
+      void endSpecStreamAction(streamId).catch(() => null);
+    }, 1500);
+  };
   const focusTransmitter = () => {
     sendSpecBroadcastCommand("focus");
     try { window.open("", `zika-tv-broadcast-${broadcast.streamId}`)?.focus(); } catch { /* comando já enviado */ }
@@ -73,7 +94,7 @@ export function SpecBroadcastControlDock() {
         <button onClick={focusTransmitter} className="flex items-center justify-center gap-1 rounded-lg border border-cyan-400/30 px-2 py-2 text-[10px] font-bold text-cyan-200 hover:bg-cyan-500/10">
           <ExternalLink size={13} /> Painel
         </button>
-        <button onClick={() => sendSpecBroadcastCommand("stop")} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/30 px-2 py-2 text-[10px] font-bold text-red-200 hover:bg-red-500/10">
+        <button onClick={stop} className="flex items-center justify-center gap-1 rounded-lg border border-red-400/30 px-2 py-2 text-[10px] font-bold text-red-200 hover:bg-red-500/10">
           <Square size={12} /> Encerrar
         </button>
       </div>

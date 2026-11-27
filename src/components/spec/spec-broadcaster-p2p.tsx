@@ -295,11 +295,21 @@ export function SpecBroadcasterP2P({ streamId, matchLabel, maxVideoBitrate, widt
   useEffect(() => {
     if (state !== "live") return;
     const clearDock = () => publishSpecBroadcastState({ streamId, title: matchLabel, state: "ended" });
+    // Pulso: o dock descarta o estado se o transmissor parar de dar sinal.
+    const pulse = window.setInterval(() => publishSpecBroadcastState({ streamId, title: matchLabel, state: broadcastPaused ? "paused" : "live" }), 30_000);
     window.addEventListener("pagehide", clearDock);
-    return () => window.removeEventListener("pagehide", clearDock);
-  }, [state, streamId, matchLabel]);
+    return () => { window.clearInterval(pulse); window.removeEventListener("pagehide", clearDock); };
+  }, [state, streamId, matchLabel, broadcastPaused]);
 
-  useEffect(() => teardown, [teardown]);
+  // Saiu da página (navegação interna) com a live no ar: a mídia morre junto,
+  // então encerra de verdade em vez de deixar dock/live fantasmas.
+  useEffect(() => () => {
+    if (liveRef.current) {
+      publishSpecBroadcastState({ streamId, title: matchLabel, state: "ended" });
+      void endSpecStreamAction(streamId).catch(() => null);
+    }
+    teardown();
+  }, [teardown, streamId, matchLabel]);
 
   return (
     <div className="space-y-4">
