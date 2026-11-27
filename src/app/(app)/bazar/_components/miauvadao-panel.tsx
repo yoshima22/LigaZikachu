@@ -1,5 +1,6 @@
 "use client";
 
+import { bfActive } from "@/lib/black-friday-core";
 import { useState, useTransition, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
@@ -153,6 +154,7 @@ function MiauvadaoCard({
             text-[10px] font-black text-white shadow-lg leading-none">
             -{offer.discountPct}%
           </div>
+          {bfActive() && <div className="absolute top-8 right-7 z-10 rounded-full bg-black px-2 py-0.5 text-[9px] font-black leading-none text-amber-300 shadow-lg ring-1 ring-amber-300/60">🖤 +5% Black Friday</div>}
 
           <ItemDisplay itemType={offer.itemType} imageUrl={offer.imageUrl} />
         </div>
@@ -482,6 +484,7 @@ export function MiauvadaoPanel({ offers, vaultBalance, balance, ligaCashBalance 
             </div>
           </div>
 
+          {bfActive() && <p className="mb-2 rounded-xl border border-amber-300/40 bg-black/60 px-3 py-2 text-center text-xs font-black text-amber-300">🖤 Black Friday do Miauvadão: todos os slots com 5% a mais de desconto, já incluído nos preços abaixo!</p>}
           {/* Cards */}
           {offers.length === 0 ? (
             <div className="py-12 text-center space-y-2">
