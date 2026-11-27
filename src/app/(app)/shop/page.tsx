@@ -175,8 +175,8 @@ export default async function ShopPage() {
   const activeGlobalPromotions = promotions.filter((promotion) =>
     promotion.scope === "GLOBAL"
     && promotion.active
-    && promotion.startsAt <= now
-    && promotion.endsAt > now,
+    && new Date(promotion.startsAt) <= now
+    && new Date(promotion.endsAt) > now,
   ).sort((left, right) => right.discountPct - left.discountPct).slice(0, 1);
 
   const [gacha, gachaPlayers] = platformAdmin && player
@@ -276,7 +276,7 @@ export default async function ShopPage() {
           {activeGlobalPromotions.map((promotion) => (
             <div key={promotion.id} className="mt-1 flex flex-wrap items-center justify-between gap-2">
               <p className="text-sm font-bold text-white">{promotion.name}: {promotion.discountPct}% de desconto</p>
-              <p className="text-[10px] text-slate-400">Até {promotion.endsAt.toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
+              <p className="text-[10px] text-slate-400">Até {new Date(promotion.endsAt).toLocaleString("pt-BR", { timeZone: "America/Sao_Paulo" })}</p>
             </div>
           ))}
         </div>

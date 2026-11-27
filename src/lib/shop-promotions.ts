@@ -33,14 +33,15 @@ export function resolveShopPromotionPrice(
   const applicable = promotions
     .filter((promotion) =>
       promotion.active
-      && promotion.startsAt <= now
-      && promotion.endsAt > now
+      // unstable_cache devolve as datas como string: sempre converter antes de comparar.
+      && new Date(promotion.startsAt) <= now
+      && new Date(promotion.endsAt) > now
       && (promotion.scope === "GLOBAL" || promotion.itemId === itemId || promotion.items?.some((entry) => entry.itemId === itemId)),
     )
     .sort((left, right) =>
       right.discountPct - left.discountPct
       || Number(right.scope === "ITEM") - Number(left.scope === "ITEM")
-      || left.endsAt.getTime() - right.endsAt.getTime(),
+      || new Date(left.endsAt).getTime() - new Date(right.endsAt).getTime(),
     );
   const promotion = applicable[0];
   if (!promotion) {
@@ -61,7 +62,7 @@ export function resolveShopPromotionPrice(
     discountPct,
     promotionId: promotion.id,
     promotionName: promotion.name,
-    promotionEndsAt: promotion.endsAt,
+    promotionEndsAt: new Date(promotion.endsAt),
   };
 }
 
