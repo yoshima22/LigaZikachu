@@ -3863,6 +3863,9 @@ model LigaCashOrder {
   fulfilledAt       DateTime?
   passScheduleKey   String?
   passOfferSlot     String?
+  eventKey          String?
+  eventBonusLc      Int                 @default(0)
+  eventSavedCents   Int                 @default(0)
   createdAt         DateTime            @default(now())
   updatedAt         DateTime            @updatedAt
 
@@ -5862,4 +5865,44 @@ model AbilityFeedback {
   @@unique([playerId, abilitySlug])
   @@index([abilitySlug])
   @@map("ability_feedback")
+}
+
+// Black Friday do Miauvadão: faixa de cupons (números startNumber..startNumber+quantity-1) por pedido de LC pago.
+model BlackFridayTicket {
+  id          String   @id @default(cuid())
+  playerId    String
+  orderId     String   @unique
+  startNumber Int
+  quantity    Int
+  createdAt   DateTime @default(now())
+
+  @@index([playerId])
+  @@map("black_friday_tickets")
+}
+
+// Log de quem aproveitou cada promoção (kind: SHOP | MIAUVADAO | LC_PACKAGE).
+model BlackFridayUsage {
+  id          String   @id @default(cuid())
+  playerId    String
+  kind        String
+  label       String
+  currency    String
+  savedAmount Int
+  bonusLc     Int      @default(0)
+  createdAt   DateTime @default(now())
+
+  @@index([kind, createdAt])
+  @@index([playerId])
+  @@map("black_friday_usages")
+}
+
+model BlackFridayDraw {
+  id            String   @id
+  winningNumber Int
+  winnerPlayerId String
+  totalTickets  Int
+  prizeLc       Int
+  drawnAt       DateTime @default(now())
+
+  @@map("black_friday_draws")
 }

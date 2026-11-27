@@ -24,14 +24,14 @@ const CSS = `
 `;
 
 // Convite do Amigo Oculto: aparece com efeito de entrada, confete e brilho; clicar na imagem leva à página.
-export function InviteModal({ onClose, href = "/amigo-oculto", image = INVITE_IMAGE, alt = "Convite: Amigo Oculto da Liga Zikachu — Participar Agora", label = "Participar do Amigo Oculto da Liga" }: { onClose: () => void; href?: string; image?: string; alt?: string; label?: string }) {
+export function InviteModal({ onClose, href = "/amigo-oculto", image = INVITE_IMAGE, alt = "Convite: Amigo Oculto da Liga Zikachu — Participar Agora", label = "Participar do Amigo Oculto da Liga", snow = true, emojis = ["✨", "🎁", "⭐", "❄️", "🎄", "✨"] }: { onClose: () => void; href?: string; image?: string; alt?: string; label?: string; snow?: boolean; emojis?: string[] }) {
   const router = useRouter();
   const bits = useMemo(() => Array.from({ length: 36 }, (_, i) => {
     const a = (i / 36) * Math.PI * 2 + Math.random() * 0.4, d = 140 + Math.random() * 260;
     return { dx: Math.cos(a) * d, dy: Math.sin(a) * d - 60, rot: (Math.random() - 0.5) * 720, c: COLORS[i % COLORS.length], delay: Math.random() * 0.25, w: 6 + Math.random() * 6 };
   }), []);
   const flakes = useMemo(() => Array.from({ length: 22 }, () => ({ left: Math.random() * 100, size: 8 + Math.random() * 10, dur: 6 + Math.random() * 6, delay: -Math.random() * 8, op: 0.4 + Math.random() * 0.5 })), []);
-  const sparks = useMemo(() => ["✨", "🎁", "⭐", "❄️", "🎄", "✨"].map((s, i) => ({ s, left: 8 + i * 16, delay: i * 0.5 })), []);
+  const sparks = useMemo(() => emojis.map((s, i) => ({ s, left: 8 + i * 16, delay: i * 0.5 })), [emojis]);
 
   useEffect(() => {
     const k = (e: KeyboardEvent) => e.key === "Escape" && onClose();
@@ -42,10 +42,10 @@ export function InviteModal({ onClose, href = "/amigo-oculto", image = INVITE_IM
   }, [onClose]);
 
   return (
-    <div className="ao-back fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onClick={onClose} role="dialog" aria-label="Convite do Amigo Oculto">
+    <div className="ao-back fixed inset-0 z-[100] flex items-center justify-center bg-black/75 p-3 backdrop-blur-sm sm:p-6" onClick={onClose} role="dialog" aria-label="Convite">
       <style>{CSS}</style>
       <div className="pointer-events-none absolute inset-0 overflow-hidden" aria-hidden>
-        {flakes.map((f, i) => <span key={i} className="absolute top-0 rounded-full bg-white" style={{ left: `${f.left}%`, width: f.size, height: f.size, opacity: f.op, animation: `ao-snow ${f.dur}s linear ${f.delay}s infinite` }} />)}
+        {snow && flakes.map((f, i) => <span key={i} className="absolute top-0 rounded-full bg-white" style={{ left: `${f.left}%`, width: f.size, height: f.size, opacity: f.op, animation: `ao-snow ${f.dur}s linear ${f.delay}s infinite` }} />)}
       </div>
       <div className="ao-wrap relative w-full max-w-4xl" onClick={(e) => e.stopPropagation()}>
         <div className="pointer-events-none absolute left-1/2 top-1/2" aria-hidden>

@@ -1,0 +1,10 @@
+import assert from "node:assert";
+import { bfPackage, bfOffer, bfActive } from "../src/lib/black-friday-core";
+const t = new Date("2026-11-28T12:00:00-03:00");
+assert(bfActive(t) && !bfActive(new Date("2026-12-01T00:00:00-03:00")) && !bfActive(new Date("2026-11-26T23:00:00-03:00")));
+const p = bfPackage({ base: 1700, bonus: 200, cents: 1999 }, t);
+assert.deepStrictEqual(p, { cents: 1699, eventBonus: 190, savedCents: 300, tickets: 1900 });
+assert.strictEqual(bfPackage({ base: 850, bonus: 0, cents: 999 }, new Date("2026-12-02")).eventBonus, 0);
+const o = bfOffer({ originalPrice: 1000, discountPct: 20, finalPrice: 800 }, t);
+assert(o.discountPct === 25 && o.finalPrice === 750);
+console.log("ok");

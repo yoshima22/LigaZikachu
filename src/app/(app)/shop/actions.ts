@@ -18,6 +18,7 @@ import { filterAvailableTmItems } from "@/lib/ability-tm-shop";
 import { publishLeagueTicker } from "@/lib/league-ticker";
 import { recordPlayerActivity } from "@/lib/player-activity";
 import { getCurrentShopPromotionPrice } from "@/lib/shop-promotions";
+import { BF_PROMO_ID, bfRecordUsage } from "@/lib/black-friday";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { LAB_EGG_IMAGE } from "@/lib/item-image-assets";
 
@@ -576,7 +577,9 @@ export async function purchaseItem(
       : promotionPrice.price;
     const economy=await getEconomySettings();
     const {suggestedLigaCashPrice}=await import("@/lib/liga-cash-wallet");
-    const effectiveLigaCashPrice=item.ligaCashPrice??suggestedLigaCashPrice(effectiveUnitPrice,economy.shopLcValueMultiplier,economy.zcPerLcReference);
+    // Black Friday: preço LC definido à mão também recebe o desconto da promoção (o automático já parte do ZC com desconto).
+    const bfOnItem=promotionPrice.promotionId===BF_PROMO_ID;
+    const effectiveLigaCashPrice=item.ligaCashPrice!=null?(bfOnItem?Math.max(1,Math.floor(item.ligaCashPrice*(1-promotionPrice.discountPct/100))):item.ligaCashPrice):suggestedLigaCashPrice(effectiveUnitPrice,economy.shopLcValueMultiplier,economy.zcPerLcReference);
     const selectedUnitPrice=currency==="LC"?effectiveLigaCashPrice:effectiveUnitPrice;
     if(currency==="LC"&&!economy.allowLcShop)return{error:"Pagamentos em LigaCash estão temporariamente desativados na ZikaShop."};
     if (expectedUnitPrice !== undefined && expectedUnitPrice !== selectedUnitPrice) {
@@ -690,6 +693,10 @@ export async function purchaseItem(
         });
       } else {
         await tx.playerInventory.create({ data: { playerId: player.id, itemId } });
+      }
+      if (bfOnItem) {
+        const lcOriginal = item.ligaCashPrice ?? suggestedLigaCashPrice(item.price, economy.shopLcValueMultiplier, economy.zcPerLcReference);
+        await bfRecordUsage(tx, { playerId: player.id, kind: "SHOP", label: `${item.name}${quantity > 1 ? ` x${quantity}` : ""}`, currency, saved: ((currency === "LC" ? lcOriginal : item.price) - selectedUnitPrice) * quantity });
       }
       await recordPlayerActivity(tx, {
         playerId: player.id,

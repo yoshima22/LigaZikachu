@@ -6,6 +6,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { CASH_PRODUCTS, cardPriceCents, fulfillLigaCashOrder, professorEnguicaThankYou } from "@/lib/liga-cash";
 import { changeLigaCash } from "@/lib/liga-cash-wallet";
+import { BF_KEY, bfPackage } from "@/lib/black-friday";
 
 const ligaCashGiftSchema = z.object({
   recipientPlayerId: z.string().min(1),
@@ -114,8 +115,12 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
   if(pendingCount>=3)return {error:"Você já possui 3 pedidos em aberto. Pague, cancele ou aguarde a expiração."};
   const isCard=Boolean(parsedCard?.success);
   const expiresAt=new Date(Date.now()+30*60_000);
-  const amountCents=isCard?cardPriceCents(product.cents):product.cents;
-  const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:giftRecipient?`${product.label} — presente para ${giftRecipient.displayName}`:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus,amountCents,expiresAt,provider:isCard?"MERCADO_PAGO_CARD":"MERCADO_PAGO",passScheduleKey,passOfferSlot,giftRecipientPlayerId:giftRecipient?.id,giftTitle:parsedGift?.success?parsedGift.data.title:null,giftMessage:parsedGift?.success?parsedGift.data.content:null}});
+  // Black Friday: pacotes de LC com 15% off no Pix e +10% de LC (o cartão mantém os 5% sobre o valor já com desconto).
+  const bf=product.type==="LIGA_COINS"&&!("adminOnly" in product&&product.adminOnly)?bfPackage(product):null;
+  const eventOn=Boolean(bf&&bf.eventBonus>0);
+  const pixCents=bf?bf.cents:product.cents;
+  const amountCents=isCard?cardPriceCents(pixCents):pixCents;
+  const order=await prisma.ligaCashOrder.create({data:{playerId:player.id,productType:product.type,productCode:product.code,productLabel:giftRecipient?`${product.label} — presente para ${giftRecipient.displayName}`:product.label,ligaCoins:product.base,bonusLigaCoins:product.bonus+(eventOn?bf!.eventBonus:0),eventKey:eventOn?BF_KEY:null,eventBonusLc:eventOn?bf!.eventBonus:0,eventSavedCents:eventOn?bf!.savedCents:0,amountCents,expiresAt,provider:isCard?"MERCADO_PAGO_CARD":"MERCADO_PAGO",passScheduleKey,passOfferSlot,giftRecipientPlayerId:giftRecipient?.id,giftTitle:parsedGift?.success?parsedGift.data.title:null,giftMessage:parsedGift?.success?parsedGift.data.content:null}});
   const paymentData=isCard?{
     transaction_amount:amountCents/100,description:`Liga Zikachu - ${product.label}`,token:parsedCard!.data.token,
     installments:parsedCard!.data.installments,payment_method_id:parsedCard!.data.paymentMethodId,

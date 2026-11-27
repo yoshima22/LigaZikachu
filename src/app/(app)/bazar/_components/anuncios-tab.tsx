@@ -1,3 +1,4 @@
+import { bfOffer } from "@/lib/black-friday-core";
 import { getEconomySettings } from "@/lib/economy-settings";
 import { Suspense } from "react";
 import Link from "next/link";
@@ -136,7 +137,7 @@ export async function AnunciosTab({ searchParams, playerId, platformAdmin, balan
 
       {/* Miauvadão */}
       <MiauvadaoPanel
-        offers={dailyOffers as never}
+        offers={dailyOffers.map((o) => bfOffer(o as never)) as never}
         vaultBalance={freshMiauvadao.vaultBalance}
         balance={wallet?.balance ?? 0}
         ligaCashBalance={ligaWallet?.balance ?? 0}

@@ -65,6 +65,8 @@ import dynamic from "next/dynamic";
 const PapaiNoelGate = dynamic(() => import("./_components/papai-noel-gate").then((m) => m.PapaiNoelGate));
 import { AmigoOcultoInviteGate } from "./_components/amigo-oculto-invite-gate";
 import { getAmigoInviteState } from "@/lib/amigo-oculto/invite";
+import { BlackFridayInviteGate } from "./_components/black-friday-invite-gate";
+import { bfActive } from "@/lib/black-friday-core";
 import { ReiDoRioInviteGate } from "./_components/rei-do-rio-invite-gate";
 import { getReiInviteState } from "@/lib/rei-do-rio/invite";
 import { getOccurrenceNoticesForPlayer } from "@/lib/mascot-occurrences";
@@ -322,6 +324,7 @@ export default async function AppLayout({
     <>
       {reiInvite && <ReiDoRioInviteGate editionId={reiInvite.editionId} waitForKey={amigoInvite ? `ao-invite-seen-${amigoInvite.editionId}` : undefined} />}
       {amigoInvite && <AmigoOcultoInviteGate editionId={amigoInvite.editionId} />}
+      {player?.id && bfActive() && <BlackFridayInviteGate />}
       {johtoInvitation?.available && <JohtoInvitationGate initialState={johtoInvitation} />}
       <OccurrenceNoticeGate initialNotices={occurrenceNotices} />
       {player?.id && <StanceCompleteGate />}

@@ -6,6 +6,7 @@ import { publishLeagueTicker } from "@/lib/league-ticker";
 import { sendNotificationToUser } from "@/lib/notifications";
 import { PAID_PASS_GRACE_DAYS } from "@/lib/pass-store-activation";
 import { revalidateServerCostGoal } from "@/lib/app-settings";
+import { bfGrantTickets, bfRecordUsage } from "@/lib/black-friday";
 
 // ── Professor Enguiça: agradecimento público por apoiar a Liga ─────────────────
 // Variações na voz do Professor Enguiça (elétrico, caloroso, um tanto elétrico
@@ -89,6 +90,10 @@ export async function fulfillLigaCashOrder(orderId:string, providerPaymentId:str
         fulfilledAt=now;
       }
     }
+    if(order.productType==="LIGA_COINS"){
+      await bfGrantTickets(tx,order);
+      if(order.eventKey)await bfRecordUsage(tx,{playerId:order.playerId,kind:"LC_PACKAGE",label:order.productLabel,currency:"BRL",saved:order.eventSavedCents,bonusLc:order.eventBonusLc});
+    }
     return tx.ligaCashOrder.update({ where:{id:order.id}, data:{status:"PAID",paidAt:new Date(),fulfilledAt} });
   });
 
@@ -163,6 +168,8 @@ export async function refundLigaCashOrder(orderId:string, providerPaymentId:stri
       const pass=await tx.supporterPass.findFirst({where:{playerId:order.playerId,passLabel:label,active:true,revokedAt:null,startsAt:{gte:new Date(order.paidAt.getTime()-windowMs),lte:new Date(order.paidAt.getTime()+windowMs)}},orderBy:{startsAt:"desc"},select:{id:true}});
       if(pass)await tx.supporterPass.update({where:{id:pass.id},data:{active:false,revokedAt:new Date(),revokeReason:kind==="CHARGEBACK"?"Pagamento contestado":"Pagamento estornado"}});
     }
+    // Estorno antes do sorteio tira os cupons do pedido (depois do sorteio, o resultado não muda).
+    await tx.blackFridayTicket.deleteMany({where:{orderId:order.id}});
     return tx.ligaCashOrder.update({where:{id:order.id},data:{status:"REFUNDED"}});
   });
 }

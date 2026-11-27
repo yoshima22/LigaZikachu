@@ -198,6 +198,7 @@ const mercadoLinks = [
   { href: "/zikabet", label: "ZikaBet", icon: Swords, adminOnly: false },
   { href: "/zikaloot", label: "ZikaLoot", icon: Ticket, adminOnly: false },
   { href: "/amigo-oculto", label: "Amigo Oculto", icon: Gift, adminOnly: false },
+  { href: "/black-friday", label: "Black Friday", icon: Ticket, adminOnly: false },
   {
     href: "/laboratorio",
     label: "Laboratório",

@@ -19,6 +19,7 @@ import { LEAGUE_ITEMS } from "@/app/(app)/combates/liga-semanal/constants";
 import type { EggType } from "@prisma/client";
 import { getActiveRaidSabotages, readSabotageNumber } from "@/lib/raid-event";
 import { resolveShopPromotionPrice } from "@/lib/shop-promotions";
+import { BF_PROMO_ID } from "@/lib/black-friday";
 import {suggestedLigaCashPrice} from "@/lib/liga-cash-wallet";
 import { getTrainingMilestoneShopItems } from "@/lib/shop-training-items";
 import { NEUTRALIZATION_ZONE_HOURS, NEUTRALIZATION_ZONE_PRICE } from "@/lib/arena-neutralization";
@@ -167,7 +168,7 @@ export default async function ShopPage() {
         description: `${item.description ?? ""}${item.description ? " " : ""}[Ordem da Trapaça: preço adulterado +${priceIncreasePct}%]`,
       }))
     : promotedItems;
-  const pricedAll=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice??suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
+  const pricedAll=pricedItems.map(item=>({...item,ligaCashPrice:item.ligaCashPrice!=null?(item.promotionId===BF_PROMO_ID?Math.max(1,Math.floor(item.ligaCashPrice*(1-item.discountPct/100))):item.ligaCashPrice):suggestedLigaCashPrice(item.price,economy.shopLcValueMultiplier,economy.zcPerLcReference)}));
   // TMs cujas espécies compatíveis estão todas desligadas no painel não aparecem.
   const items = await filterAvailableTmItems(pricedAll);
   const disabledSpecies = items.some((i) => i.type === "ABILITY_TM" || isMegaStoneType(i.type)) ? await getDisabledSpeciesIds() : new Set<number>();

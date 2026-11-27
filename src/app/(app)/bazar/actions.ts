@@ -43,6 +43,7 @@ import { sendNotificationToPlayers } from "@/lib/notifications";
 import { after } from "next/server";
 import { signalRealtime } from "@/lib/realtime-signal";
 import { changeLigaCash, suggestedLigaCashPrice } from "@/lib/liga-cash-wallet";
+import { bfOffer, bfRecordUsage } from "@/lib/black-friday";
 import { trackGachaObjective } from "@/lib/gacha";
 import { withMascotHealth } from "@/lib/bazar-mascot-health";
 import {
@@ -2550,8 +2551,9 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
       // Lê só o necessário — a linha inteira tem ~270 kB (playerRefreshData).
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" }, select: { dailyOffers: true, purchaseRechargeMinutes: true } });
       const offers = config.dailyOffers as unknown as MiauvadaoOffer[];
-      const offer = offers[offerIndex];
-      if (!offer) throw new Error("Oferta não encontrada.");
+      const stored = offers[offerIndex];
+      if (!stored) throw new Error("Oferta não encontrada.");
+      const offer = bfOffer(stored); // Black Friday: +5% de desconto (o armazenado fica com o preço normal)
       if (offer.sold >= offer.stock) throw new Error("Estoque esgotado.");
       if (now > new Date(offer.validUntil)) throw new Error("Oferta expirada.");
       // Preço em LC na mesma proporção da ZikaShop (definida na economia central).
@@ -2607,7 +2609,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
 
       // Atualizar sold na oferta + adicionar 30% ao cofre (só ZC) + mensagem NPC
       const updatedOffers = [...offers];
-      updatedOffers[offerIndex] = { ...offer, sold: offer.sold + 1 };
+      updatedOffers[offerIndex] = { ...stored, sold: stored.sold + 1 };
       await tx.miauvadaoConfig.update({
         where: { id: "singleton" },
         data: {
@@ -2620,6 +2622,7 @@ export async function buyMiauvadaoOffer(offerIndex: number, currency: "ZC" | "LC
       });
       // O desconto concedido sai do cofre do Miauvadão.
       await settleVaultForPurchase(tx, { coinsToVault, discountZc: offer.originalPrice - offer.finalPrice });
+      await bfRecordUsage(tx, { playerId: player.id, kind: "MIAUVADAO", label: offer.name, currency, saved: currency === "ZC" ? stored.finalPrice - offer.finalPrice : suggestedLigaCashPrice(stored.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference) - price });
 
       // Entregar item (mesmo esquema da shop)
       await _deliverMiauvadaoItem(tx, player.id, offer);
@@ -2911,7 +2914,8 @@ async function _getOrCreatePersonalOffer(playerId: string) {
 export async function getPersonalMiauvadaoOffer(): Promise<{ offer: MiauvadaoOffer; sold: number } | null> {
   const user = await getSessionUser(); if (!user) return null;
   const player = await getSessionPlayer(user.id); if (!player) return null;
-  return _getOrCreatePersonalOffer(player.id);
+  const r = await _getOrCreatePersonalOffer(player.id);
+  return r ? { ...r, offer: bfOffer(r.offer) } : null;
 }
 
 /** Compra 1 unidade da oferta pessoal (até o estoque de 2 por rotação). */
@@ -2930,8 +2934,9 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
       await tx.$executeRaw`SET LOCAL lock_timeout = '4s'`;
       await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext('miauvadao-purchase'))`;
       const config = await tx.miauvadaoConfig.findUniqueOrThrow({ where: { id: "singleton" } });
-      const offer = _storedPersonalOffer(config.playerRefreshData, player.id, rotationIso);
-      if (!offer) throw new Error("Você não tem oferta pessoal disponível agora.");
+      const storedOffer = _storedPersonalOffer(config.playerRefreshData, player.id, rotationIso);
+      if (!storedOffer) throw new Error("Você não tem oferta pessoal disponível agora.");
+      const offer = bfOffer(storedOffer);
       if (new Date() > new Date(offer.validUntil)) throw new Error("Sua oferta pessoal expirou. Recarregue a página.");
       const prd = (config.playerRefreshData as Record<string, PersonalSlotState>) ?? {};
       const already = _personalSoldCount(prd, player.id, rotationIso);
@@ -2977,6 +2982,7 @@ export async function buyPersonalMiauvadaoSlot(currency: "ZC" | "LC" = "ZC"): Pr
         WHERE id = 'singleton'
       `);
       await settleVaultForPurchase(tx, { coinsToVault, discountZc: offer.originalPrice - offer.finalPrice });
+      await bfRecordUsage(tx, { playerId: player.id, kind: "MIAUVADAO", label: `${offer.name} (slot exclusivo)`, currency, saved: currency === "ZC" ? storedOffer.finalPrice - offer.finalPrice : suggestedLigaCashPrice(storedOffer.finalPrice, economy.shopLcValueMultiplier, economy.zcPerLcReference) - price });
       await recordPlayerActivity(tx, {
         playerId: player.id,
         actorUserId: user.id,

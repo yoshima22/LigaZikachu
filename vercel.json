@@ -1,6 +1,10 @@
 {
   "crons": [
     {
+      "path": "/api/cron/black-friday",
+      "schedule": "*/10 * * * *"
+    },
+    {
       "path": "/api/cron/pass-store-activation",
       "schedule": "0 3 * * *"
     },
