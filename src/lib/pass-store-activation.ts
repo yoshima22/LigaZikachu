@@ -6,6 +6,7 @@ export type PassStoreActivationResult = { processed: boolean; scheduleId?: strin
 
 /** Promove o passe de forma atômica e entrega cada pedido isoladamente e de modo retomável. */
 export async function processDuePassStoreActivation(now = new Date()): Promise<PassStoreActivationResult> {
+  let promoted = false;
   const scheduleId = await prisma.$transaction(async (tx) => {
     await tx.$queryRaw`SELECT 1 AS acquired FROM pg_advisory_xact_lock(hashtext('pass-store-automatic-activation'))`;
     const due = await tx.passScheduleConfig.findFirst({
@@ -15,6 +16,7 @@ export async function processDuePassStoreActivation(now = new Date()): Promise<P
     if (due) {
       await tx.passScheduleConfig.updateMany({ where: { isCurrentStorePass: true }, data: { isCurrentStorePass: false } });
       await tx.passScheduleConfig.update({ where: { id: due.id }, data: { isCurrentStorePass: true, isNextStorePass: false, storeActivatedAt: now, storeActivationAt: null } });
+      promoted = true;
       return due.id;
     }
     const pending = await tx.ligaCashOrder.findFirst({
@@ -31,7 +33,9 @@ export async function processDuePassStoreActivation(now = new Date()): Promise<P
   const title = await prisma.shopItem.findFirst({ where: { name: "Pilar da Comunidade", type: "TITLE" }, select: { id: true } });
   if (!title) throw new Error("O título Pilar da Comunidade não está configurado.");
   const reservations = await prisma.ligaCashOrder.findMany({
-    where: { productType: "SUPPORTER_PASS", passOfferSlot: "NEXT", status: "PAID", fulfilledAt: null, passScheduleKey: scheduleId },
+    where: { productType: "SUPPORTER_PASS", passOfferSlot: "NEXT", status: "PAID", fulfilledAt: null,
+      // Compras feitas na fila (sem passe anunciado) entram junto quando o passe é promovido agora.
+      ...(promoted ? { OR: [{ passScheduleKey: scheduleId }, { passScheduleKey: null }] } : { passScheduleKey: scheduleId }) },
     select: { id: true, playerId: true },
   });
 

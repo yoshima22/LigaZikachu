@@ -76,7 +76,9 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
     const config=await prisma.passScheduleConfig.findFirst({where:passOfferSlot==="CURRENT"?{isCurrentStorePass:true}:{isNextStorePass:true},select:{id:true,displayTitle:true}});
     if(code==="PASS_CURRENT"&&!config)return{error:"O passe atual ainda não foi definido pelo administrador."};
     // Página aberta antes da virada do passe: sem "próximo" marcado o pedido ficaria órfão (sem calendário).
-    if(code==="PASS_NEXT"&&!config)return{error:"O passe à venda mudou. Recarregue a página e escolha novamente; nenhuma cobrança foi feita."};
+    // Sem "próximo" marcado, a compra entra na fila (passScheduleKey null) e é entregue quando o próximo passe for ativado.
+    // Presente exige calendário definido (a entrega do presente depende da chave).
+    if(code==="PASS_NEXT"&&!config&&gift)return{error:"O próximo passe ainda não foi anunciado; presentear só fica disponível depois do anúncio."};
     passScheduleKey=config?.id??null;product={code,type:"SUPPORTER_PASS",label:config?.displayTitle?.trim()||(code==="PASS_CURRENT"?"Passe atual":"Passe do mês seguinte"),base:0,bonus:0,cents:2000};
   }
   if(!product) return {error:"Pacote inválido."};
@@ -99,8 +101,8 @@ export async function createLigaCashPayment(code:string,cpf:string,payerEmail:st
     const has=await prisma.supporterPass.findFirst({where:{playerId:passTargetId,passLabel:label,active:true,revokedAt:null,expiresAt:{gt:new Date()}},select:{id:true}});
     if(has)return{error:giftRecipient?"Este jogador já possui este passe.":"Você já possui este passe."};
   }
-  if(passOfferSlot==="NEXT"&&passScheduleKey){
-    const has=await prisma.ligaCashOrder.findFirst({where:{playerId:passTargetId,giftRecipientPlayerId:null,productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",passScheduleKey,status:{in:["PAID","PENDING"]}},select:{id:true}});
+  if(passOfferSlot==="NEXT"){
+    const has=await prisma.ligaCashOrder.findFirst({where:{playerId:passTargetId,giftRecipientPlayerId:null,productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",OR:[{passScheduleKey},{passScheduleKey:null}],status:{in:["PAID","PENDING"]},fulfilledAt:null},select:{id:true}});
     if(has)return{error:giftRecipient?"Este jogador já garantiu este passe.":"Você já garantiu este passe."};
   }
   const document=cpf.replace(/\D/g,"");if(document.length!==11)return{error:"Informe um CPF válido para o pagamento."};

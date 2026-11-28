@@ -21,7 +21,7 @@ export default async function LigaCoinsPage(){
  const currentLabel=currentPass?(currentPass.id==="singleton"?"Passe Apoiador":currentPass.id):null;
  const [currentPassOwned,nextPassOwned]=player?await Promise.all([
    currentLabel?prisma.supporterPass.findFirst({where:{playerId:player.id,passLabel:currentLabel,active:true,revokedAt:null,expiresAt:{gt:now}},select:{id:true}}):Promise.resolve(null),
-   nextPass?prisma.ligaCashOrder.findFirst({where:{OR:[{playerId:player.id,giftRecipientPlayerId:null},{giftRecipientPlayerId:player.id}],productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",passScheduleKey:nextPass.id,status:{in:["PAID","PENDING"]}},select:{id:true}}):Promise.resolve(null),
+   prisma.ligaCashOrder.findFirst({where:{AND:[{OR:[{playerId:player.id,giftRecipientPlayerId:null},{giftRecipientPlayerId:player.id}]},{OR:[{passScheduleKey:nextPass?.id??null},{passScheduleKey:null}]}],productType:"SUPPORTER_PASS",passOfferSlot:"NEXT",status:{in:["PAID","PENDING"]},fulfilledAt:null},select:{id:true}}),
  ]):[null,null];
  const admin=Boolean(user&&isAdmin(user.role));
  const cardPublicKey=process.env.MERCADO_PAGO_PUBLIC_KEY??"";
